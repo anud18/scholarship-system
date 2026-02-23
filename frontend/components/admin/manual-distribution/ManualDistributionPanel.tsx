@@ -7,6 +7,8 @@ import type {
   DistributionStudent,
   QuotaStatus,
   SubTypeYearCol,
+  DistributionHistoryRecord,
+  RestoreRequest,
 } from "@/lib/api/modules/manual-distribution";
 import { User } from "@/types/user";
 import { Button } from "@/components/ui/button";
@@ -29,6 +31,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Download,
+  Clock,
 } from "lucide-react";
 
 interface ManualDistributionPanelProps {
@@ -98,6 +101,10 @@ export function ManualDistributionPanel({
     type: "success" | "error";
     text: string;
   } | null>(null);
+  const [history, setHistory] = useState<DistributionHistoryRecord[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [showHistoryDialog, setShowHistoryDialog] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
 
   /**
    * Flatten quota status into (sub_type × year) columns, ordered by:
@@ -275,6 +282,52 @@ export function ManualDistributionPanel({
     }
   };
 
+  const loadHistory = async () => {
+    if (!scholarshipTypeId || !selectedAcademicYear || !selectedSemester)
+      return;
+    setIsLoadingHistory(true);
+    try {
+      const resp = await apiClient.manualDistribution.getHistory(
+        scholarshipTypeId,
+        selectedAcademicYear,
+        selectedSemester
+      );
+      if (resp.success && resp.data) {
+        setHistory(resp.data);
+        setShowHistoryDialog(true);
+      }
+    } catch {
+      setSaveMessage({ type: "error", text: "載入歷史記錄失敗" });
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  const handleRestore = async (historyId: number) => {
+    if (!scholarshipTypeId) return;
+    setIsRestoring(true);
+    try {
+      const resp = await apiClient.manualDistribution.restoreFromHistory(
+        scholarshipTypeId,
+        { history_id: historyId }
+      );
+      if (resp.success && resp.data) {
+        setSaveMessage({
+          type: "success",
+          text: `成功還原 ${resp.data.restored_count} 筆分配紀錄`,
+        });
+        setShowHistoryDialog(false);
+        await fetchData();
+      } else {
+        setSaveMessage({ type: "error", text: resp.message || "還原失敗" });
+      }
+    } catch {
+      setSaveMessage({ type: "error", text: "還原時發生錯誤" });
+    } finally {
+      setIsRestoring(false);
+    }
+  };
+
   // Apply filters
   const filteredStudents = useMemo(() => {
     return students.filter(s => {
@@ -417,7 +470,7 @@ export function ManualDistributionPanel({
                   <AlertDialogHeader>
                     <AlertDialogTitle>確認執行分發？</AlertDialogTitle>
                     <AlertDialogDescription>
-                      確認後將鎖定分發結果，已分配的申請將標記為「核准」，未分配的將標記為「拒絕」。此操作無法還原。
+                      確認後將鎖定分發結果，已分配的申請將標記為「核准」，未分配的將標記為「拒絕」。您可以在日後透過「查看歷史」功能還原到之前的分配狀態。
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -428,6 +481,19 @@ export function ManualDistributionPanel({
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadHistory}
+                disabled={isLoadingHistory || isLoading}
+              >
+                {isLoadingHistory ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                ) : (
+                  <Clock className="h-4 w-4 mr-1" />
+                )}
+                查看歷史
+              </Button>
             </div>
           </div>
 
@@ -897,6 +963,90 @@ export function ManualDistributionPanel({
           </div>
         </div>
       </div>
+
+      {/* History Dialog */}
+      {showHistoryDialog && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[80vh] flex flex-col">
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                分配歷史記錄
+              </h2>
+              <button
+                onClick={() => setShowHistoryDialog(false)}
+                className="text-slate-400 hover:text-slate-600 text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              {history.length === 0 ? (
+                <p className="text-center text-slate-500 py-8">尚無歷史記錄</p>
+              ) : (
+                <div className="space-y-2">
+                  {history.map(record => (
+                    <div
+                      key={record.id}
+                      className="p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm text-slate-900">
+                            {record.operation_type === "save"
+                              ? "📝 儲存"
+                              : record.operation_type === "finalize"
+                                ? "✓ 確認分發"
+                                : "↶ 還原"}
+                          </div>
+                          <div className="text-xs text-slate-600 mt-1">
+                            {record.change_summary}
+                          </div>
+                          <div className="text-xs text-slate-400 mt-1">
+                            {record.created_at
+                              ? new Date(record.created_at).toLocaleString(
+                                  "zh-TW",
+                                  {
+                                    year: "numeric",
+                                    month: "2-digit",
+                                    day: "2-digit",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    second: "2-digit",
+                                  }
+                                )
+                              : "未知時間"}
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => handleRestore(record.id)}
+                          disabled={isRestoring}
+                          className="shrink-0"
+                        >
+                          {isRestoring ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            "還原"
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-slate-200 flex justify-end">
+              <Button
+                variant="outline"
+                onClick={() => setShowHistoryDialog(false)}
+              >
+                關閉
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
