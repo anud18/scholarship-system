@@ -5,9 +5,9 @@
  * Replaces the automated quota/matrix distribution with a UI-driven workflow.
  */
 
-import { typedClient } from '../typed-client';
-import { toApiResponse } from '../compat';
-import type { ApiResponse } from '../types';
+import { typedClient } from "../typed-client";
+import { toApiResponse } from "../compat";
+import type { ApiResponse } from "../types";
 
 export interface DistributionStudent {
   ranking_item_id: number;
@@ -15,6 +15,7 @@ export interface DistributionStudent {
   rank_position: number;
   applied_sub_types: string[];
   allocated_sub_type: string | null;
+  allocation_year: number | null;
   status: string;
   college_code: string;
   college_name: string;
@@ -33,19 +34,35 @@ export interface CollegeQuota {
   remaining: number;
 }
 
-export interface SubTypeQuotaStatus {
-  display_name: string;
+export interface YearQuota {
   total: number;
   allocated: number;
   remaining: number;
   by_college: Record<string, CollegeQuota>;
 }
 
+export interface SubTypeQuotaStatus {
+  display_name: string;
+  /** Multi-year quota data: year string → quota info */
+  by_year: Record<string, YearQuota>;
+}
+
 export type QuotaStatus = Record<string, SubTypeQuotaStatus>;
+
+/** A flattened (sub_type × year) column descriptor for the distribution table */
+export interface SubTypeYearCol {
+  sub_type: string;
+  year: number;
+  display_name: string; // e.g., "114年 國科會博士生獎學金"
+  total: number;
+  remaining: number; // based on DB-confirmed allocations
+  key: string; // composite key: "nstc:114"
+}
 
 export interface AllocationItem {
   ranking_item_id: number;
   sub_type_code: string | null;
+  allocation_year: number | null;
 }
 
 export interface AllocateRequest {
@@ -72,7 +89,12 @@ export interface FinalizeResult {
 }
 
 export interface AvailableCombinations {
-  scholarship_types: Array<{ id: number; code: string; name: string; name_en?: string }>;
+  scholarship_types: Array<{
+    id: number;
+    code: string;
+    name: string;
+    name_en?: string;
+  }>;
   academic_years: number[];
   semesters: string[];
 }
@@ -82,9 +104,11 @@ export function createManualDistributionApi() {
     /**
      * Get all active scholarship types and configurations for admin distribution.
      */
-    getAvailableCombinations: async (): Promise<ApiResponse<AvailableCombinations>> => {
+    getAvailableCombinations: async (): Promise<
+      ApiResponse<AvailableCombinations>
+    > => {
       const response = await typedClient.raw.GET(
-        '/api/v1/manual-distribution/available-combinations' as any,
+        "/api/v1/manual-distribution/available-combinations" as any,
         {}
       );
       return toApiResponse(response) as ApiResponse<AvailableCombinations>;
@@ -100,7 +124,7 @@ export function createManualDistributionApi() {
       college_code?: string
     ): Promise<ApiResponse<DistributionStudent[]>> => {
       const response = await typedClient.raw.GET(
-        '/api/v1/manual-distribution/students' as any,
+        "/api/v1/manual-distribution/students" as any,
         {
           params: {
             query: {
@@ -124,7 +148,7 @@ export function createManualDistributionApi() {
       semester: string
     ): Promise<ApiResponse<QuotaStatus>> => {
       const response = await typedClient.raw.GET(
-        '/api/v1/manual-distribution/quota-status' as any,
+        "/api/v1/manual-distribution/quota-status" as any,
         {
           params: {
             query: { scholarship_type_id, academic_year, semester } as any,
@@ -137,9 +161,11 @@ export function createManualDistributionApi() {
     /**
      * Save manual allocation selections.
      */
-    allocate: async (request: AllocateRequest): Promise<ApiResponse<AllocateResult>> => {
+    allocate: async (
+      request: AllocateRequest
+    ): Promise<ApiResponse<AllocateResult>> => {
       const response = await typedClient.raw.POST(
-        '/api/v1/manual-distribution/allocate' as any,
+        "/api/v1/manual-distribution/allocate" as any,
         { body: request as any }
       );
       return toApiResponse(response) as ApiResponse<AllocateResult>;
@@ -148,9 +174,11 @@ export function createManualDistributionApi() {
     /**
      * Finalize distribution - lock and update application statuses.
      */
-    finalize: async (request: FinalizeRequest): Promise<ApiResponse<FinalizeResult>> => {
+    finalize: async (
+      request: FinalizeRequest
+    ): Promise<ApiResponse<FinalizeResult>> => {
       const response = await typedClient.raw.POST(
-        '/api/v1/manual-distribution/finalize' as any,
+        "/api/v1/manual-distribution/finalize" as any,
         { body: request as any }
       );
       return toApiResponse(response) as ApiResponse<FinalizeResult>;

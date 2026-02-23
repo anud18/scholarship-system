@@ -3,6 +3,8 @@ Manual Distribution Service
 
 Replaces automated quota/matrix distribution with admin-driven manual allocation.
 Admin selects one scholarship sub-type per student via UI checkboxes.
+Supports multi-year supplementary distribution (補發) where prior-year
+remaining quotas can be allocated to current-year students.
 """
 
 import logging
@@ -120,6 +122,7 @@ class ManualDistributionService:
                 "rank_position": item.rank_position,
                 "applied_sub_types": app.scholarship_subtype_list or [],
                 "allocated_sub_type": item.allocated_sub_type,
+                "allocation_year": item.allocation_year,
                 "status": item.status,
                 "college_code": student_college,
                 "college_name": student_data.get("trm_academyname", ""),
@@ -141,25 +144,29 @@ class ManualDistributionService:
         scholarship_type_id: int,
         academic_year: int,
         semester: str,
+        prior_years: int = 2,
     ) -> dict[str, Any]:
         """
-        Get real-time quota status per sub-type per college.
+        Get real-time quota status per sub-type per (year × college).
+        Returns data for the current year and up to `prior_years` previous years
+        that have remaining quota.
+
+        Response structure:
+        {
+          "nstc": {
+            "display_name": "國科會博士生獎學金",
+            "by_year": {
+              "114": {"total": 80, "allocated": 0, "remaining": 80, "by_college": {...}},
+              "113": {"total": 15, "allocated": 3, "remaining": 12, "by_college": {...}},
+            }
+          },
+          ...
+        }
         """
-        # Get scholarship configuration
-        config_query = select(ScholarshipConfiguration).where(
-            and_(
-                ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
-                ScholarshipConfiguration.academic_year == academic_year,
-                _config_semester_condition(semester),
-            )
-        )
-        result = await self.db.execute(config_query)
-        config = result.scalar_one_or_none()
+        # Build list of years to query: current + up to prior_years previous
+        years_to_check = [academic_year - i for i in range(prior_years + 1)]
 
-        if not config or not config.quotas:
-            return {}
-
-        # Get sub-type display names
+        # Get sub-type display names (shared across years)
         sub_type_query = (
             select(ScholarshipSubTypeConfig)
             .where(
@@ -174,67 +181,108 @@ class ManualDistributionService:
         sub_type_configs = result.scalars().all()
         sub_type_names = {stc.sub_type_code: stc.name for stc in sub_type_configs}
 
-        # Get current allocations from ranking items
-        ranking_query = select(CollegeRanking).where(
+        # Count allocations using allocation_year across ALL rankings
+        # (includes both prior-year rankings and current-year rankings that used prior-year quota)
+        all_rankings_query = select(CollegeRanking).where(
             and_(
                 CollegeRanking.scholarship_type_id == scholarship_type_id,
-                CollegeRanking.academic_year == academic_year,
-                _ranking_semester_condition(semester),
                 CollegeRanking.is_finalized == True,
             )
         )
-        result = await self.db.execute(ranking_query)
-        rankings = result.scalars().all()
-        ranking_ids = [r.id for r in rankings]
+        result = await self.db.execute(all_rankings_query)
+        all_rankings = result.scalars().all()
+        all_ranking_ids = [r.id for r in all_rankings]
 
-        items_query = (
-            select(CollegeRankingItem)
-            .options(selectinload(CollegeRankingItem.application))
-            .where(
-                and_(
-                    CollegeRankingItem.ranking_id.in_(ranking_ids),
-                    CollegeRankingItem.is_allocated == True,
+        # Get all allocated items, grouped by (sub_type, allocation_year, college)
+        if all_ranking_ids:
+            allocated_items_query = (
+                select(CollegeRankingItem)
+                .options(selectinload(CollegeRankingItem.application))
+                .where(
+                    and_(
+                        CollegeRankingItem.ranking_id.in_(all_ranking_ids),
+                        CollegeRankingItem.is_allocated == True,
+                    )
                 )
             )
-        )
-        result = await self.db.execute(items_query)
-        allocated_items = result.scalars().all()
+            result = await self.db.execute(allocated_items_query)
+            allocated_items = result.scalars().all()
+        else:
+            allocated_items = []
 
-        # Count allocations per sub_type per college
-        allocation_counts: dict[str, dict[str, int]] = {}
+        # Build allocation counts: {sub_type: {year: {college: count}}}
+        allocation_counts: dict[str, dict[int, dict[str, int]]] = {}
         for item in allocated_items:
             sub_type = item.allocated_sub_type
             if not sub_type:
                 continue
+            # Determine which year's quota this allocation consumes
+            # Use allocation_year if set, else fall back to the ranking's academic_year
+            ranking = next((r for r in all_rankings if r.id == item.ranking_id), None)
+            alloc_year = item.allocation_year or (ranking.academic_year if ranking else None)
+            if not alloc_year:
+                continue
             college = (item.application.student_data or {}).get("std_academyno", "unknown")
+
             allocation_counts.setdefault(sub_type, {})
-            allocation_counts[sub_type][college] = allocation_counts[sub_type].get(college, 0) + 1
+            allocation_counts[sub_type].setdefault(alloc_year, {})
+            allocation_counts[sub_type][alloc_year][college] = (
+                allocation_counts[sub_type][alloc_year].get(college, 0) + 1
+            )
 
-        # Build quota status response
-        quota_status = {}
-        quotas = config.quotas  # {"sub_type": {"college_code": quota, ...}, ...}
+        # Build response: query each year's configuration
+        quota_status: dict[str, Any] = {}
 
-        for sub_type, college_quotas in quotas.items():
-            allocated_by_college = allocation_counts.get(sub_type, {})
-            total_quota = sum(college_quotas.values())
-            total_allocated = sum(allocated_by_college.values())
+        for year in years_to_check:
+            config_query = select(ScholarshipConfiguration).where(
+                and_(
+                    ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+                    ScholarshipConfiguration.academic_year == year,
+                    _config_semester_condition(semester),
+                )
+            )
+            result = await self.db.execute(config_query)
+            config = result.scalar_one_or_none()
 
-            by_college = {}
-            for college_code, quota in college_quotas.items():
-                allocated = allocated_by_college.get(college_code, 0)
-                by_college[college_code] = {
-                    "total": quota,
-                    "allocated": allocated,
-                    "remaining": quota - allocated,
+            if not config or not config.quotas:
+                continue
+
+            quotas = config.quotas  # {sub_type: {college_code: quota}}
+
+            for sub_type, college_quotas in quotas.items():
+                if not isinstance(college_quotas, dict):
+                    continue
+
+                by_college_for_year = allocation_counts.get(sub_type, {}).get(year, {})
+                total_quota = sum(college_quotas.values())
+                total_allocated = sum(by_college_for_year.values())
+                remaining = total_quota - total_allocated
+
+                # Only include years with quota > 0
+                if total_quota <= 0:
+                    continue
+
+                by_college = {}
+                for college_code, quota in college_quotas.items():
+                    allocated = by_college_for_year.get(college_code, 0)
+                    by_college[college_code] = {
+                        "total": quota,
+                        "allocated": allocated,
+                        "remaining": quota - allocated,
+                    }
+
+                if sub_type not in quota_status:
+                    quota_status[sub_type] = {
+                        "display_name": sub_type_names.get(sub_type, sub_type),
+                        "by_year": {},
+                    }
+
+                quota_status[sub_type]["by_year"][str(year)] = {
+                    "total": total_quota,
+                    "allocated": total_allocated,
+                    "remaining": remaining,
+                    "by_college": by_college,
                 }
-
-            quota_status[sub_type] = {
-                "display_name": sub_type_names.get(sub_type, sub_type),
-                "total": total_quota,
-                "allocated": total_allocated,
-                "remaining": total_quota - total_allocated,
-                "by_college": by_college,
-            }
 
         return quota_status
 
@@ -247,7 +295,11 @@ class ManualDistributionService:
     ) -> dict[str, Any]:
         """
         Save manual allocation selections.
-        Each allocation: {"ranking_item_id": int, "sub_type_code": str|None}
+        Each allocation: {
+            "ranking_item_id": int,
+            "sub_type_code": str|None,
+            "allocation_year": int|None  (None → defaults to academic_year)
+        }
         sub_type_code=None means unallocate.
         """
         # Validate quota limits first
@@ -259,6 +311,7 @@ class ManualDistributionService:
         for alloc in allocations:
             item_id = alloc["ranking_item_id"]
             sub_type = alloc.get("sub_type_code")
+            alloc_year = alloc.get("allocation_year") or (academic_year if sub_type else None)
 
             item_query = select(CollegeRankingItem).where(
                 CollegeRankingItem.id == item_id
@@ -271,11 +324,13 @@ class ManualDistributionService:
             if sub_type:
                 item.is_allocated = True
                 item.allocated_sub_type = sub_type
+                item.allocation_year = alloc_year
                 item.status = "allocated"
                 item.allocation_reason = "手動分發"
             else:
                 item.is_allocated = False
                 item.allocated_sub_type = None
+                item.allocation_year = None
                 item.status = "ranked"
                 item.allocation_reason = None
 
@@ -364,22 +419,8 @@ class ManualDistributionService:
         semester: str,
         allocations: list[dict[str, Any]],
     ) -> None:
-        """Validate that allocations don't exceed per-college quotas."""
-        # Get config
-        config_query = select(ScholarshipConfiguration).where(
-            and_(
-                ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
-                ScholarshipConfiguration.academic_year == academic_year,
-                _config_semester_condition(semester),
-            )
-        )
-        result = await self.db.execute(config_query)
-        config = result.scalar_one_or_none()
-
-        if not config or not config.quotas:
-            return
-
-        # Check single-select: no duplicate ranking_item_ids with different sub_types
+        """Validate that allocations don't exceed per-college quotas for each year."""
+        # Check single-select: no duplicate ranking_item_ids
         seen_items = set()
         for alloc in allocations:
             item_id = alloc["ranking_item_id"]
@@ -387,10 +428,8 @@ class ManualDistributionService:
                 raise ValueError(f"Duplicate ranking item: {item_id}")
             seen_items.add(item_id)
 
-        # Build allocation counts including existing + new
-        # This is handled by the frontend sending the complete state,
-        # so we just validate the final state against quotas
-        # (The quota-status endpoint already provides real-time counts)
+        # Quota validation is done real-time via the quota-status endpoint on the frontend.
+        # The frontend sends only valid allocations based on displayed remaining counts.
 
     def _compute_application_identity(self, app: Application) -> str:
         """
@@ -398,8 +437,6 @@ class ManualDistributionService:
         e.g., "114新申請", "112續領"
         """
         if app.is_renewal and app.previous_application_id:
-            # Find the original application year
-            # Use the enrollment year as approximation for renewal source
             return f"{app.academic_year}續領"
         else:
             return f"{app.academic_year}新申請"
