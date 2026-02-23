@@ -358,7 +358,7 @@ function CollegeManagementContent({ user }: { user: User }) {
 
 export function CollegeManagementShell({ user, locale = "zh" }: CollegeDashboardProps) {
   return (
-    <CollegeManagementProvider locale={locale}>
+    <CollegeManagementProvider locale={locale} userRole={user.role}>
       <CollegeManagementContent user={user} />
     </CollegeManagementProvider>
   );

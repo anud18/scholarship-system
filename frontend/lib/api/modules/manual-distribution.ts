@@ -71,8 +71,25 @@ export interface FinalizeResult {
   total: number;
 }
 
+export interface AvailableCombinations {
+  scholarship_types: Array<{ id: number; code: string; name: string; name_en?: string }>;
+  academic_years: number[];
+  semesters: string[];
+}
+
 export function createManualDistributionApi() {
   return {
+    /**
+     * Get all active scholarship types and configurations for admin distribution.
+     */
+    getAvailableCombinations: async (): Promise<ApiResponse<AvailableCombinations>> => {
+      const response = await typedClient.raw.GET(
+        '/api/v1/manual-distribution/available-combinations' as any,
+        {}
+      );
+      return toApiResponse(response) as ApiResponse<AvailableCombinations>;
+    },
+
     /**
      * Get ranked students with allocation status for manual distribution.
      */
