@@ -271,11 +271,42 @@ export function ManualDistributionPanel({
           type: "success",
           text: `分發完成：核准 ${resp.data.approved_count} 人，拒絕 ${resp.data.rejected_count} 人`,
         });
-        await fetchData();
+        // Reload data directly instead of using fetchData
+        const [studentsResp, quotaResp] = await Promise.all([
+          apiClient.manualDistribution.getStudents(
+            scholarshipTypeId,
+            selectedAcademicYear,
+            selectedSemester
+          ),
+          apiClient.manualDistribution.getQuotaStatus(
+            scholarshipTypeId,
+            selectedAcademicYear,
+            selectedSemester
+          ),
+        ]);
+        if (studentsResp.success && studentsResp.data) {
+          setStudents(studentsResp.data);
+          const initial = new Map<number, LocalAlloc | null>();
+          for (const s of studentsResp.data) {
+            if (s.allocated_sub_type) {
+              initial.set(s.ranking_item_id, {
+                sub_type: s.allocated_sub_type,
+                year: s.allocation_year ?? selectedAcademicYear,
+              });
+            } else {
+              initial.set(s.ranking_item_id, null);
+            }
+          }
+          setLocalAllocations(initial);
+        }
+        if (quotaResp.success && quotaResp.data) {
+          setQuotaStatus(quotaResp.data);
+        }
       } else {
         setSaveMessage({ type: "error", text: resp.message || "確認分發失敗" });
       }
-    } catch {
+    } catch (error) {
+      console.error("Finalize error:", error);
       setSaveMessage({ type: "error", text: "確認分發時發生錯誤" });
     } finally {
       setIsFinalizing(false);
