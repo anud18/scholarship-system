@@ -503,27 +503,23 @@ export function ManualDistributionPanel({
           ) : (
             <div className="overflow-x-auto">
               <table
-                className="w-full text-left border-collapse text-sm"
-                style={{ minWidth: `${900 + subTypeCols.length * 110}px` }}
+                className="w-full text-left border-collapse text-xs"
+                style={{ minWidth: `${950 + subTypeCols.length * 85}px` }}
               >
                 <thead className="bg-slate-50 text-[13px] text-slate-600">
                   {/* Row 1 */}
                   <tr>
                     <th
                       rowSpan={2}
-                      className="px-3 py-2 border border-slate-200 text-center font-semibold w-14 whitespace-nowrap"
+                      className="px-1.5 py-1.5 border border-slate-200 text-center font-semibold w-10 whitespace-nowrap text-[11px]"
                     >
-                      學院
-                      <br />
-                      初審
-                      <br />
                       排序
                     </th>
                     <th
                       rowSpan={2}
-                      className="px-3 py-2 border border-slate-200 font-semibold w-44"
+                      className="px-1.5 py-1.5 border border-slate-200 font-semibold w-32 text-[11px]"
                     >
-                      申請獎學金類別
+                      申請類別
                     </th>
                     {subTypeCols.length > 0 && (
                       <th
@@ -535,53 +531,51 @@ export function ManualDistributionPanel({
                     )}
                     <th
                       rowSpan={2}
-                      className="px-3 py-2 border border-slate-200 font-semibold whitespace-nowrap"
+                      className="px-1.5 py-1.5 border border-slate-200 font-semibold text-[11px] w-16"
                     >
                       學院
                     </th>
                     <th
                       rowSpan={2}
-                      className="px-3 py-2 border border-slate-200 font-semibold whitespace-nowrap"
+                      className="px-1.5 py-1.5 border border-slate-200 font-semibold text-[11px] w-20"
                     >
                       系所
                     </th>
                     <th
                       rowSpan={2}
-                      className="px-3 py-2 border border-slate-200 text-center font-semibold w-14"
+                      className="px-1.5 py-1.5 border border-slate-200 text-center font-semibold text-[11px] w-8"
                     >
-                      年級
+                      年
                     </th>
                     <th
                       rowSpan={2}
-                      className="px-3 py-2 border border-slate-200 font-semibold whitespace-nowrap"
+                      className="px-1.5 py-1.5 border border-slate-200 font-semibold text-[11px] w-20"
                     >
-                      學生姓名
+                      姓名
                     </th>
                     <th
                       rowSpan={2}
-                      className="px-3 py-2 border border-slate-200 font-semibold whitespace-nowrap"
+                      className="px-1.5 py-1.5 border border-slate-200 font-semibold text-[11px] w-10"
                     >
-                      國籍
+                      籍
                     </th>
                     <th
                       rowSpan={2}
-                      className="px-3 py-2 border border-slate-200 font-semibold whitespace-nowrap text-red-600"
+                      className="px-1.5 py-1.5 border border-slate-200 font-semibold text-[11px] text-red-600 w-12"
                     >
-                      入學日期
-                      <br />
-                      (民國年)
+                      入學
                     </th>
                     <th
                       rowSpan={2}
-                      className="px-3 py-2 border border-slate-200 font-semibold whitespace-nowrap"
+                      className="px-1.5 py-1.5 border border-slate-200 font-semibold text-[11px] w-16"
                     >
                       學號
                     </th>
                     <th
                       rowSpan={2}
-                      className="px-3 py-2 border border-slate-200 font-semibold whitespace-nowrap"
+                      className="px-1.5 py-1.5 border border-slate-200 font-semibold text-[11px] w-12"
                     >
-                      申請身份
+                      身份
                     </th>
                   </tr>
                   {/* Row 2 — (year × sub_type) column names */}
@@ -643,10 +637,10 @@ export function ManualDistributionPanel({
                                 key={student.ranking_item_id}
                                 className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
                               >
-                                <td className="px-3 py-2.5 border-r border-slate-100 text-center font-bold text-slate-700">
+                                <td className="px-1.5 py-1.5 border-r border-slate-100 text-center font-bold text-slate-700 text-[11px]">
                                   {student.rank_position}
                                 </td>
-                                <td className="px-3 py-2.5 border-r border-slate-100 leading-snug">
+                                <td className="px-1.5 py-1.5 border-r border-slate-100 leading-snug text-[10px]">
                                   {student.applied_sub_types.length > 0 ? (
                                     student.applied_sub_types.map((t, i) => {
                                       const displayName =
@@ -667,6 +661,10 @@ export function ManualDistributionPanel({
                                   )}
                                 </td>
                                 {subTypeCols.map(col => {
+                                  const isApplied =
+                                    student.applied_sub_types.includes(
+                                      col.sub_type
+                                    );
                                   const isChecked =
                                     curAlloc?.sub_type === col.sub_type &&
                                     curAlloc?.year === col.year;
@@ -676,22 +674,27 @@ export function ManualDistributionPanel({
                                     col.total > 0 &&
                                     localUsed >= col.total &&
                                     !isChecked;
+                                  const disabled = !isApplied || atCapacity;
                                   return (
                                     <td
                                       key={col.key}
-                                      className="px-2 py-2.5 border-r border-slate-100 text-center"
+                                      className={`px-0.5 py-1.5 border-r border-slate-100 text-center ${
+                                        !isApplied ? "opacity-40" : ""
+                                      }`}
                                     >
                                       <input
                                         type="checkbox"
                                         className="h-5 w-5 cursor-pointer rounded accent-blue-600"
                                         checked={isChecked}
-                                        disabled={atCapacity}
+                                        disabled={disabled}
                                         title={
-                                          atCapacity
-                                            ? `${col.display_name} 名額已滿`
-                                            : isChecked
-                                              ? "點擊取消分配"
-                                              : `分配至 ${col.display_name}`
+                                          !isApplied
+                                            ? `未申請 ${col.display_name}`
+                                            : atCapacity
+                                              ? `${col.display_name} 名額已滿`
+                                              : isChecked
+                                                ? "點擊取消分配"
+                                                : `分配至 ${col.display_name}`
                                         }
                                         onChange={() =>
                                           handleCheckbox(
