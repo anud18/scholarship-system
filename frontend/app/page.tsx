@@ -371,7 +371,7 @@ export default function ScholarshipManagementSystem() {
 
     if (user.role === "super_admin") {
       return (
-        <TabsList className="grid w-full grid-cols-5 bg-nycu-blue-50 border border-nycu-blue-200">
+        <TabsList className="grid w-full grid-cols-6 bg-nycu-blue-50 border border-nycu-blue-200">
           <TabsTrigger
             value="dashboard"
             className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
@@ -385,6 +385,13 @@ export default function ScholarshipManagementSystem() {
           >
             <Users className="h-4 w-4" />
             審核管理
+          </TabsTrigger>
+          <TabsTrigger
+            value="distribution"
+            className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
+          >
+            <Award className="h-4 w-4" />
+            獎學金分發
           </TabsTrigger>
           <TabsTrigger
             value="batch-import"
@@ -413,7 +420,7 @@ export default function ScholarshipManagementSystem() {
 
     if (user.role === "admin") {
       return (
-        <TabsList className="grid w-full grid-cols-5 bg-nycu-blue-50 border border-nycu-blue-200">
+        <TabsList className="grid w-full grid-cols-6 bg-nycu-blue-50 border border-nycu-blue-200">
           <TabsTrigger
             value="dashboard"
             className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
@@ -427,6 +434,13 @@ export default function ScholarshipManagementSystem() {
           >
             <Users className="h-4 w-4" />
             審核管理
+          </TabsTrigger>
+          <TabsTrigger
+            value="distribution"
+            className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
+          >
+            <Award className="h-4 w-4" />
+            獎學金分發
           </TabsTrigger>
           <TabsTrigger
             value="batch-import"
@@ -612,6 +626,13 @@ export default function ScholarshipManagementSystem() {
               </>
             )}
           </TabsContent>
+
+          {/* 獎學金分發 - 只有 admin 和 super_admin 可見 */}
+          {(user.role === "admin" || user.role === "super_admin") && (
+            <TabsContent value="distribution" className="space-y-4">
+              <CollegeDashboard user={user} locale={locale} />
+            </TabsContent>
+          )}
 
           {/* 批次匯入 - college 和 super_admin 角色可見 */}
           {(user.role === "college" || user.role === "admin" || user.role === "super_admin") && (
