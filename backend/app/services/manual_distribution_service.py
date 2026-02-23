@@ -457,6 +457,33 @@ class ManualDistributionService:
 
         await self.db.flush()
 
+        # Record finalization in history for undo capability
+        try:
+            # Build snapshot of finalized allocations
+            allocations_snapshot = {}
+            for item in items:
+                if item.is_allocated and item.allocated_sub_type:
+                    allocations_snapshot[item.id] = {
+                        "sub_type": item.allocated_sub_type,
+                        "allocation_year": item.allocation_year,
+                        "status": item.status,
+                    }
+
+            history = ManualDistributionHistory(
+                scholarship_type_id=scholarship_type_id,
+                academic_year=academic_year,
+                semester=semester,
+                allocations_snapshot=allocations_snapshot,
+                operation_type="finalize",
+                change_summary=f"Distribution finalized: {approved_count} approved, {rejected_count} rejected",
+                total_allocated=approved_count,
+            )
+            self.db.add(history)
+            await self.db.flush()
+        except Exception as e:
+            logger.warning(f"Failed to record finalization history: {e}")
+            # Don't fail the finalization if history recording fails
+
         return {
             "approved_count": approved_count,
             "rejected_count": rejected_count,
