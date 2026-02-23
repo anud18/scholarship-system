@@ -34,6 +34,7 @@ from app.api.v1.endpoints import (
     user_profiles,
     users,
 )
+from app.api.v1.endpoints.manual_distribution import router as manual_distribution_router
 
 api_router = APIRouter()
 
@@ -74,3 +75,4 @@ api_router.include_router(roster_schedules.router, prefix="/roster-schedules", t
 api_router.include_router(system_settings.router, prefix="/system-settings", tags=["System Settings"])
 api_router.include_router(student_bank_accounts.router, prefix="/student-bank-accounts", tags=["Student Bank Accounts"])
 api_router.include_router(csp_report.router, prefix="", tags=["Security"])
+api_router.include_router(manual_distribution_router)
