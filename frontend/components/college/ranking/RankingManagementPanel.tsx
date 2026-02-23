@@ -330,28 +330,6 @@ export function RankingManagementPanel({
     }
   }, [selectedRanking, fetchRankingDetails, fetchRankings, fetchCollegeApplications, selectedAcademicYear, selectedSemester, activeScholarshipTab, incrementDataVersion]);
 
-  const handleExecuteDistribution = useCallback(async () => {
-    if (selectedRanking) {
-      try {
-        const response = await apiClient.college.executeMatrixDistribution(selectedRanking);
-        if (response.success) {
-          // Refresh both ranking details and rankings list
-          await Promise.all([
-            fetchRankingDetails(selectedRanking),
-            fetchRankings(),  // Refresh rankings list to update distribution_executed field
-          ]);
-
-          // Increment data version to notify other panels
-          incrementDataVersion();
-          console.log('[RankingManagementPanel] Data version incremented after distribution');
-          setActiveTab("distribution");
-        }
-      } catch (error) {
-        console.error("Failed to execute distribution:", error);
-      }
-    }
-  }, [selectedRanking, fetchRankingDetails, fetchRankings, setActiveTab, incrementDataVersion]);
-
   const handleFinalizeRanking = useCallback(async (targetRankingId?: number) => {
     const rankingId = targetRankingId ?? selectedRanking;
     if (!rankingId) return;
@@ -553,7 +531,6 @@ export function RankingManagementPanel({
               rankingId={selectedRanking}
               onRankingChange={handleRankingChange}
               onReviewApplication={handleReviewApplication}
-              onExecuteDistribution={handleExecuteDistribution}
               onFinalizeRanking={handleFinalizeRanking}
               onImportExcel={handleImportExcel}
               locale={locale}

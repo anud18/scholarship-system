@@ -65,7 +65,6 @@ import {
   Circle,
   FileText,
   Download,
-  Send,
   Upload,
   FileSpreadsheet,
 } from "lucide-react";
@@ -112,7 +111,6 @@ interface CollegeRankingTableProps {
   rankingId?: number;
   onRankingChange: (newOrder: Application[]) => void;
   onReviewApplication: (applicationId: number, action: 'approve' | 'reject', comments?: string) => void;
-  onExecuteDistribution: () => void;
   onFinalizeRanking: () => void;
   onImportExcel?: (data: any[]) => Promise<void>;
   locale?: "zh" | "en";
@@ -337,7 +335,6 @@ export function CollegeRankingTable({
   rankingId,
   onRankingChange,
   onReviewApplication,
-  onExecuteDistribution,
   onFinalizeRanking,
   onImportExcel,
   locale = "zh",
@@ -726,14 +723,6 @@ export function CollegeRankingTable({
                     </DialogContent>
                   </Dialog>
 
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onExecuteDistribution}
-                  >
-                    <Send className="h-4 w-4 mr-2" />
-                    {locale === "zh" ? "執行分配" : "Execute Distribution"}
-                  </Button>
                   <Button
                     variant="default"
                     size="sm"

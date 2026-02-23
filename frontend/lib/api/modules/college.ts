@@ -141,21 +141,6 @@ export function createCollegeApi() {
     },
 
     /**
-     * Execute distribution based on ranking
-     * Type-safe: Path parameter and request body validated against OpenAPI
-     */
-    executeDistribution: async (
-      rankingId: number,
-      distributionRules?: any
-    ): Promise<ApiResponse<any>> => {
-      const response = await typedClient.raw.POST('/api/v1/college-review/rankings/{ranking_id}/distribute', {
-        params: { path: { ranking_id: rankingId } },
-        body: { distribution_rules: distributionRules },
-      });
-      return toApiResponse<any>(response);
-    },
-
-    /**
      * Finalize ranking (lock and approve)
      * Type-safe: Path parameter validated against OpenAPI
      */
@@ -192,17 +177,6 @@ export function createCollegeApi() {
       const response = await typedClient.raw.POST('/api/v1/college-review/rankings/{ranking_id}/import-excel' as any, {
         params: { path: { ranking_id: rankingId } },
         body: importData,
-      });
-      return toApiResponse<any>(response);
-    },
-
-    /**
-     * Execute matrix distribution for a ranking
-     * Type-safe: Path parameter validated against OpenAPI
-     */
-    executeMatrixDistribution: async (rankingId: number): Promise<ApiResponse<any>> => {
-      const response = await typedClient.raw.POST('/api/v1/college-review/rankings/{ranking_id}/execute-matrix-distribution' as any, {
-        params: { path: { ranking_id: rankingId } },
       });
       return toApiResponse<any>(response);
     },
