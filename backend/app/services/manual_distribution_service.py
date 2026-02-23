@@ -9,7 +9,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -19,6 +19,35 @@ from app.models.enums import ApplicationStatus, ReviewStage
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipSubTypeConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _ranking_semester_condition(semester: str):
+    """
+    Build a SQLAlchemy condition for CollegeRanking.semester.
+    The frontend sends "yearly" for annual scholarships, but the DB stores
+    NULL (or occasionally "annual") for those rows.
+    """
+    if semester == "yearly":
+        return or_(
+            CollegeRanking.semester.is_(None),
+            CollegeRanking.semester == "annual",
+            CollegeRanking.semester == "yearly",
+        )
+    return CollegeRanking.semester == semester
+
+
+def _config_semester_condition(semester: str):
+    """
+    Build a SQLAlchemy condition for ScholarshipConfiguration.semester.
+    The frontend sends "yearly" for annual scholarships, but the DB stores
+    NULL (Semester enum null) or Semester.annual for those rows.
+    """
+    if semester == "yearly":
+        return or_(
+            ScholarshipConfiguration.semester.is_(None),
+            ScholarshipConfiguration.semester == "annual",
+        )
+    return ScholarshipConfiguration.semester == semester
 
 
 class ManualDistributionService:
@@ -41,7 +70,7 @@ class ManualDistributionService:
             and_(
                 CollegeRanking.scholarship_type_id == scholarship_type_id,
                 CollegeRanking.academic_year == academic_year,
-                CollegeRanking.semester == semester,
+                _ranking_semester_condition(semester),
                 CollegeRanking.is_finalized == True,
             )
         )
@@ -121,7 +150,7 @@ class ManualDistributionService:
             and_(
                 ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
                 ScholarshipConfiguration.academic_year == academic_year,
-                ScholarshipConfiguration.semester == semester,
+                _config_semester_condition(semester),
             )
         )
         result = await self.db.execute(config_query)
@@ -150,7 +179,7 @@ class ManualDistributionService:
             and_(
                 CollegeRanking.scholarship_type_id == scholarship_type_id,
                 CollegeRanking.academic_year == academic_year,
-                CollegeRanking.semester == semester,
+                _ranking_semester_condition(semester),
                 CollegeRanking.is_finalized == True,
             )
         )
@@ -271,7 +300,7 @@ class ManualDistributionService:
             and_(
                 CollegeRanking.scholarship_type_id == scholarship_type_id,
                 CollegeRanking.academic_year == academic_year,
-                CollegeRanking.semester == semester,
+                _ranking_semester_condition(semester),
                 CollegeRanking.is_finalized == True,
             )
         )
@@ -341,7 +370,7 @@ class ManualDistributionService:
             and_(
                 ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
                 ScholarshipConfiguration.academic_year == academic_year,
-                ScholarshipConfiguration.semester == semester,
+                _config_semester_condition(semester),
             )
         )
         result = await self.db.execute(config_query)
