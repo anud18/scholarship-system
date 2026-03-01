@@ -2,6 +2,23 @@
 
 Please use English for git commit messages.
 
+## Development Environment
+
+**Use `docker compose -f docker-compose.dev.yml` for all local development.**
+
+```bash
+# Start all services
+docker compose -f docker-compose.dev.yml up
+
+# View logs
+docker compose -f docker-compose.dev.yml logs -f
+
+# Restart a specific service
+docker compose -f docker-compose.dev.yml restart backend
+```
+
+This spins up the full stack (backend, frontend, database, MinIO, mock student API) with hot-reload enabled.
+
 ## Core Development Principles
 
 ### 1. Error Handling Standards
