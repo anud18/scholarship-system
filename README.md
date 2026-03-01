@@ -84,7 +84,8 @@ All endpoints return consistent format:
 ## Technology Stack
 
 ### Backend
-- **Python 3.11** - Modern async/await support
+- **Python 3.12+** - Modern async/await support
+- **uv** - Ultra-fast Python package installer
 - **FastAPI** - High-performance async web framework
 - **PostgreSQL 15** - Primary relational database with async support
 - **Redis** - Caching and session management
@@ -94,6 +95,7 @@ All endpoints return consistent format:
 - **Pydantic v2** - Data validation and serialization
 
 ### Frontend
+- **Bun** - Fast all-in-one JavaScript runtime & toolkit
 - **Next.js 15** - React framework with App Router
 - **React 18** - UI library with TypeScript
 - **shadcn/ui** - Component library built on Radix UI
@@ -175,9 +177,11 @@ scholarship-system/
 ### Prerequisites
 
 - **Docker Engine** & **Docker Compose v2** (recommended for fastest setup)
-- **Python 3.11+** (if running backend locally)
-- **Node.js 22+** and **npm 10+** (if running frontend locally)
+- **Python 3.12+** and **uv** (if running backend locally) - [Install uv](https://github.com/astral-sh/uv)
+- **Bun** (if running frontend locally) - [Install Bun](https://bun.sh)
 - **Make** (optional, for Makefile commands)
+
+> **New in this version:** We've upgraded to **Bun** for frontend development (replacing npm) and **uv** for backend (replacing pip) for significantly faster dependency installation and better developer experience. See [DEV_SETUP.md](DEV_SETUP.md) for detailed setup instructions.
 
 ### Option A: Complete Setup with Makefile (Recommended)
 

@@ -1,10 +1,10 @@
-FROM python:3.12-slim
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy
 
 # Set work directory
 WORKDIR /app
@@ -12,8 +12,8 @@ WORKDIR /app
 # Install system dependencies
 # Security: Use trusted Debian repositories with package authentication
 # Allows automatic security updates while maintaining repository trust
-RUN echo "deb http://deb.debian.org/debian trixie main" > /etc/apt/sources.list && \
-    echo "deb http://deb.debian.org/debian-security trixie-security main" >> /etc/apt/sources.list && \
+RUN echo "deb http://deb.debian.org/debian bookworm main" > /etc/apt/sources.list && \
+    echo "deb http://deb.debian.org/debian-security bookworm-security main" >> /etc/apt/sources.list && \
     apt-get update && \
     apt-get install -y --no-install-recommends --allow-unauthenticated=false \
     curl \
@@ -26,11 +26,11 @@ RUN echo "deb http://deb.debian.org/debian trixie main" > /etc/apt/sources.list 
     && rm -rf /var/lib/apt/lists/* \
     && dpkg --get-selections > /installed-packages.list
 
-# Copy requirements
-COPY requirements.txt .
+# Copy project files
+COPY pyproject.toml .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies using uv
+RUN uv pip install --system -r pyproject.toml
 
 # Copy application code
 COPY . .
