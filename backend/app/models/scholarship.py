@@ -592,6 +592,16 @@ class ScholarshipConfiguration(Base):
         JSON, nullable=True
     )  # 配額配置，矩陣格式 {"nstc": {"EE": 5, "EN": 4}, "moe_1w": {"EE": 6, "EN": 5}}
 
+    # 計畫編號設定（矩陣模式）
+    project_numbers = Column(
+        JSON, nullable=True
+    )  # 計畫編號，依子類型及學年度 {"nstc": {"115": "115RXXXXXXX", "114": "114RXXXXXXX"}, "moe_1w": {"115": "115CXXXXXX"}}
+
+    # 各子類型可使用的前年度配額
+    prior_quota_years = Column(
+        JSON, nullable=True
+    )  # {"nstc": [113, 112], "moe_1w": []}
+
     # 金額設定 (從 ScholarshipType 移至此處)
     amount = Column(Integer, nullable=False)  # 獎學金金額（整數）
     currency = Column(String(10), default="TWD")

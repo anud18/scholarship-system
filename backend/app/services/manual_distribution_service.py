@@ -144,12 +144,11 @@ class ManualDistributionService:
         scholarship_type_id: int,
         academic_year: int,
         semester: str,
-        prior_years: int = 2,
     ) -> dict[str, Any]:
         """
         Get real-time quota status per sub-type per (year × college).
-        Returns data for the current year and up to `prior_years` previous years
-        that have remaining quota.
+        Uses prior_quota_years from the current year's config to determine
+        which prior years' quotas are available per sub-type.
 
         Response structure:
         {
@@ -160,13 +159,53 @@ class ManualDistributionService:
               "113": {"total": 15, "allocated": 3, "remaining": 12, "by_college": {...}},
             }
           },
-          ...
+          "moe_1w": {
+            "display_name": "教育部博士生獎學金",
+            "by_year": {
+              "114": {"total": 55, ...}    // no 113 — moe_1w has no prior years
+            }
+          }
         }
         """
-        # Build list of years to query: current + up to prior_years previous
-        years_to_check = [academic_year - i for i in range(prior_years + 1)]
+        # 1. Load current year's config to get prior_quota_years
+        current_config = await self._load_config(
+            scholarship_type_id, academic_year, semester
+        )
 
-        # Get sub-type display names (shared across years)
+        prior_years_map: dict[str, list[int]] = {}
+        if current_config and current_config.prior_quota_years:
+            prior_years_map = current_config.prior_quota_years
+
+        # Determine all years to check: current year + union of all prior years
+        all_prior_years: set[int] = set()
+        for sub_type, years_list in prior_years_map.items():
+            if isinstance(years_list, list):
+                all_prior_years.update(years_list)
+            else:
+                logger.warning("Invalid prior_quota_years for %s: expected list, got %s", sub_type, type(years_list))
+        years_to_check = sorted([academic_year] + list(all_prior_years), reverse=True)
+
+        # 2. Load configs for all years in a single query
+        configs_by_year: dict[int, Optional[ScholarshipConfiguration]] = {}
+        if years_to_check:
+            configs_stmt = (
+                select(ScholarshipConfiguration)
+                .where(
+                    and_(
+                        ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+                        ScholarshipConfiguration.academic_year.in_(years_to_check),
+                        _config_semester_condition(semester),
+                    )
+                )
+                .order_by(ScholarshipConfiguration.id.desc())
+            )
+            configs_result = await self.db.execute(configs_stmt)
+            for cfg in configs_result.scalars().all():
+                # Keep only the first (latest) config per year
+                if cfg.academic_year not in configs_by_year:
+                    configs_by_year[cfg.academic_year] = cfg
+
+        # 3. Get sub-type display names (shared across years)
         sub_type_query = (
             select(ScholarshipSubTypeConfig)
             .where(
@@ -181,8 +220,7 @@ class ManualDistributionService:
         sub_type_configs = result.scalars().all()
         sub_type_names = {stc.sub_type_code: stc.name for stc in sub_type_configs}
 
-        # Count allocations using allocation_year across ALL rankings
-        # (includes both prior-year rankings and current-year rankings that used prior-year quota)
+        # 4. Count allocations using allocation_year across ALL finalized rankings
         all_rankings_query = select(CollegeRanking).where(
             and_(
                 CollegeRanking.scholarship_type_id == scholarship_type_id,
@@ -193,7 +231,6 @@ class ManualDistributionService:
         all_rankings = result.scalars().all()
         all_ranking_ids = [r.id for r in all_rankings]
 
-        # Get all allocated items, grouped by (sub_type, allocation_year, college)
         if all_ranking_ids:
             allocated_items_query = (
                 select(CollegeRankingItem)
@@ -216,8 +253,6 @@ class ManualDistributionService:
             sub_type = item.allocated_sub_type
             if not sub_type:
                 continue
-            # Determine which year's quota this allocation consumes
-            # Use allocation_year if set, else fall back to the ranking's academic_year
             ranking = next((r for r in all_rankings if r.id == item.ranking_id), None)
             alloc_year = item.allocation_year or (ranking.academic_year if ranking else None)
             if not alloc_year:
@@ -230,35 +265,32 @@ class ManualDistributionService:
                 allocation_counts[sub_type][alloc_year].get(college, 0) + 1
             )
 
-        # Build response: query each year's configuration
+        # 5. Build response: for each year's config, filtered by prior_quota_years
         quota_status: dict[str, Any] = {}
 
         for year in years_to_check:
-            config_query = select(ScholarshipConfiguration).where(
-                and_(
-                    ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
-                    ScholarshipConfiguration.academic_year == year,
-                    _config_semester_condition(semester),
-                )
-            )
-            result = await self.db.execute(config_query)
-            config = result.scalar_one_or_none()
-
-            if not config or not config.quotas:
+            year_config = configs_by_year.get(year)
+            if not year_config or not year_config.quotas:
                 continue
 
-            quotas = config.quotas  # {sub_type: {college_code: quota}}
+            quotas = year_config.quotas  # {sub_type: {college_code: quota}}
 
             for sub_type, college_quotas in quotas.items():
                 if not isinstance(college_quotas, dict):
                     continue
+
+                # Skip this (sub_type, year) if year != academic_year
+                # and not in prior_quota_years for this sub_type
+                if year != academic_year:
+                    allowed_years = prior_years_map.get(sub_type, [])
+                    if year not in allowed_years:
+                        continue
 
                 by_college_for_year = allocation_counts.get(sub_type, {}).get(year, {})
                 total_quota = sum(college_quotas.values())
                 total_allocated = sum(by_college_for_year.values())
                 remaining = total_quota - total_allocated
 
-                # Only include years with quota > 0
                 if total_quota <= 0:
                     continue
 
@@ -285,6 +317,29 @@ class ManualDistributionService:
                 }
 
         return quota_status
+
+    async def _load_config(
+        self,
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: str,
+    ) -> Optional[ScholarshipConfiguration]:
+        """Load a ScholarshipConfiguration for a given year.
+        If multiple configs exist, returns the latest (highest id).
+        """
+        stmt = (
+            select(ScholarshipConfiguration)
+            .where(
+                and_(
+                    ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+                    ScholarshipConfiguration.academic_year == academic_year,
+                    _config_semester_condition(semester),
+                )
+            )
+            .order_by(ScholarshipConfiguration.id.desc())
+        )
+        result = await self.db.execute(stmt)
+        return result.scalars().first()
 
     async def allocate(
         self,

@@ -92,6 +92,43 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             "effective_end_date": now + timedelta(days=90),
             "version": "1.0",
         },
+        # 博士生獎學金配置 (113學年) - 前年度剩餘配額 (for prior-year quota testing)
+        {
+            "scholarship_type_id": phd_scholarship.id,
+            "config_code": "phd_113",
+            "config_name": "博士生獎學金 113學年",
+            "academic_year": 113,
+            "semester": None,  # 學年制
+            "description": "113學年度博士生獎學金配置（剩餘配額）",
+            "description_en": "PhD Scholarship Configuration for Academic Year 113 (Remaining Quota)",
+            "has_quota_limit": True,
+            "has_college_quota": True,
+            "quota_management_mode": QuotaManagementMode.matrix_based,
+            "total_quota": 30,
+            "quotas": {
+                "nstc": {
+                    "E": 3,
+                    "C": 2,
+                    "I": 2,
+                    "S": 1,
+                    "B": 1,
+                    "O": 1,
+                    "D": 1,
+                    "1": 1,
+                    "6": 1,
+                    "7": 1,
+                    "M": 1,
+                    "A": 1,
+                    "K": 1,
+                },
+            },
+            "amount": 40000,
+            "currency": "TWD",
+            "is_active": False,
+            "effective_start_date": now - timedelta(days=480),
+            "effective_end_date": now - timedelta(days=120),
+            "version": "1.0",
+        },
         # 博士生獎學金配置 (114學年) - Matrix Quota
         {
             "scholarship_type_id": phd_scholarship.id,
@@ -137,6 +174,7 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
                     "K": 1,
                 },
             },
+            "prior_quota_years": {"nstc": [113], "moe_1w": []},
             "amount": 40000,
             "currency": "TWD",
             "renewal_application_start_date": now - timedelta(days=90),
@@ -197,6 +235,11 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             config = ScholarshipConfiguration(**config_data)
             session.add(config)
             logger.info(f"Created configuration: {config_data['config_code']}")
+        else:
+            # Update prior_quota_years on existing configs if provided in seed data
+            if "prior_quota_years" in config_data and existing.prior_quota_years != config_data["prior_quota_years"]:
+                existing.prior_quota_years = config_data["prior_quota_years"]
+                logger.info(f"Updated prior_quota_years for: {config_data['config_code']}")
 
     await session.commit()
     logger.info("Scholarship configurations initialized successfully!")
