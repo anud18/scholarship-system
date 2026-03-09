@@ -17,7 +17,6 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
-    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -80,6 +79,11 @@ class PaymentRoster(Base):
     academic_year = Column(Integer, nullable=False)  # 113
     roster_cycle = Column(Enum(RosterCycle, values_callable=lambda obj: [e.value for e in obj]), nullable=False)
 
+    # 矩陣分發造冊欄位（多年補發支援）
+    sub_type = Column(String(50), nullable=True)  # 獎學金子類型 (e.g. nstc, moe_1w)，非矩陣模式為 NULL
+    allocation_year = Column(Integer, nullable=True)  # 消耗配額的學年度，補發時與 academic_year 不同
+    project_number = Column(String(100), nullable=True)  # 計畫編號 e.g. 115RXXXXXXX
+
     # 造冊狀態與觸發方式
     status = Column(
         Enum(RosterStatus, values_callable=lambda obj: [e.value for e in obj]),
@@ -128,10 +132,10 @@ class PaymentRoster(Base):
     items = relationship("PaymentRosterItem", back_populates="roster", cascade="all, delete-orphan")
     audit_logs = relationship("RosterAuditLog", back_populates="roster", cascade="all, delete-orphan")
 
-    # 唯一約束：每個獎學金配置+期間標記只能有一個造冊（除非明確覆蓋）
-    __table_args__ = (
-        UniqueConstraint("scholarship_configuration_id", "period_label", name="uq_roster_scholarship_period"),
-    )
+    # 唯一約束：每個獎學金配置+期間+子類型+配額學年度只能有一個造冊
+    # 實際約束由 migration 建立的 functional unique index 實施：
+    # UNIQUE(scholarship_configuration_id, period_label, COALESCE(allocation_year, -1), COALESCE(sub_type, ''))
+    __table_args__ = ()
 
     def __repr__(self):
         return f"<PaymentRoster(id={self.id}, code={self.roster_code}, status={self.status})>"
@@ -197,6 +201,9 @@ class PaymentRosterItem(Base):
     scholarship_name = Column(String(200), nullable=False)
     scholarship_amount = Column(Numeric(10, 2), nullable=False)
     scholarship_subtype = Column(String(50))
+    allocation_year = Column(Integer, nullable=True)  # 消耗哪一年的配額（補發時不同於 academic_year）
+    allocated_sub_type = Column(String(50), nullable=True)  # 分發到的子類型快照 (e.g. nstc, moe_1w)
+    application_identity = Column(String(50), nullable=True)  # 申請身分快照 (e.g. "114新申請", "114續領")
 
     # 學籍驗證結果
     verification_status = Column(

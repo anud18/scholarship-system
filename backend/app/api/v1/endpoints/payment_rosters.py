@@ -763,8 +763,10 @@ async def get_roster_cycle_status(
         result = await db.execute(stmt)
         existing_rosters = result.scalars().all()
 
-        # Create a map of period_label -> roster
-        roster_map = {roster.period_label: roster for roster in existing_rosters}
+        # Create a map of period_label -> [rosters] (supports multiple rosters per period for matrix distribution)
+        roster_groups: dict = {}
+        for roster in existing_rosters:
+            roster_groups.setdefault(roster.period_label, []).append(roster)
 
         # Generate period list based on roster_cycle
         periods = []
@@ -784,7 +786,7 @@ async def get_roster_cycle_status(
 
             for month in month_sequence:
                 period_label = f"{academic_year}-{month:02d}"
-                roster = roster_map.get(period_label)
+                rosters_for_period = roster_groups.get(period_label, [])
 
                 # Calculate period dates
                 period_dates = get_roster_period_dates(
@@ -800,55 +802,40 @@ async def get_roster_cycle_status(
                 western_date = f"{calendar_year}-{month:02d}"
                 display_label = f"{period_label} ({calendar_year}年{month}月)"
 
-                # 根據造冊的實際狀態決定期間狀態
-                if roster and roster.status in [RosterStatus.COMPLETED, RosterStatus.LOCKED]:
-                    periods.append(
-                        {
+                if rosters_for_period:
+                    for roster in rosters_for_period:
+                        entry = {
                             "label": period_label,
                             "western_date": western_date,
                             "display_label": display_label,
-                            "status": "completed",
                             "roster_id": roster.id,
                             "roster_code": roster.roster_code,
                             "roster_status": roster.status.value,
-                            "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
-                            "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                            "qualified_count": roster.qualified_count,
+                            "sub_type": roster.sub_type,
+                            "allocation_year": roster.allocation_year,
+                            "project_number": roster.project_number,
                             "period_start_date": period_dates["start_date"].isoformat(),
                             "period_end_date": period_dates["end_date"].isoformat(),
                         }
-                    )
-                elif roster and roster.status == RosterStatus.FAILED:
-                    periods.append(
-                        {
-                            "label": period_label,
-                            "western_date": western_date,
-                            "display_label": display_label,
-                            "status": "failed",
-                            "roster_id": roster.id,
-                            "roster_code": roster.roster_code,
-                            "roster_status": roster.status.value,
-                            "error_message": roster.notes,
-                            "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                            "qualified_count": roster.qualified_count,
-                            "period_start_date": period_dates["start_date"].isoformat(),
-                            "period_end_date": period_dates["end_date"].isoformat(),
-                        }
-                    )
-                elif roster and roster.status == RosterStatus.PROCESSING:
-                    periods.append(
-                        {
-                            "label": period_label,
-                            "western_date": western_date,
-                            "display_label": display_label,
-                            "status": "processing",
-                            "roster_id": roster.id,
-                            "roster_code": roster.roster_code,
-                            "roster_status": roster.status.value,
-                            "period_start_date": period_dates["start_date"].isoformat(),
-                            "period_end_date": period_dates["end_date"].isoformat(),
-                        }
-                    )
+                        if roster.status in [RosterStatus.COMPLETED, RosterStatus.LOCKED]:
+                            entry.update({
+                                "status": "completed",
+                                "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
+                                "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                                "qualified_count": roster.qualified_count,
+                            })
+                        elif roster.status == RosterStatus.FAILED:
+                            entry.update({
+                                "status": "failed",
+                                "error_message": roster.notes,
+                                "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                                "qualified_count": roster.qualified_count,
+                            })
+                        elif roster.status == RosterStatus.PROCESSING:
+                            entry["status"] = "processing"
+                        else:
+                            entry["status"] = "draft"
+                        periods.append(entry)
                 else:
                     periods.append(
                         {
@@ -867,7 +854,7 @@ async def get_roster_cycle_status(
             # Generate 2 half-year periods
             for half in ["H1", "H2"]:
                 period_label = f"{academic_year}-{half}"
-                roster = roster_map.get(period_label)
+                rosters_for_period = roster_groups.get(period_label, [])
 
                 # Calculate period dates
                 period_dates = get_roster_period_dates(
@@ -877,49 +864,38 @@ async def get_roster_cycle_status(
                     period_label=period_label,
                 )
 
-                # 根據造冊的實際狀態決定期間狀態
-                if roster and roster.status in [RosterStatus.COMPLETED, RosterStatus.LOCKED]:
-                    periods.append(
-                        {
+                if rosters_for_period:
+                    for roster in rosters_for_period:
+                        entry = {
                             "label": period_label,
-                            "status": "completed",
                             "roster_id": roster.id,
                             "roster_code": roster.roster_code,
                             "roster_status": roster.status.value,
-                            "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
-                            "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                            "qualified_count": roster.qualified_count,
+                            "sub_type": roster.sub_type,
+                            "allocation_year": roster.allocation_year,
+                            "project_number": roster.project_number,
                             "period_start_date": period_dates["start_date"].isoformat(),
                             "period_end_date": period_dates["end_date"].isoformat(),
                         }
-                    )
-                elif roster and roster.status == RosterStatus.FAILED:
-                    periods.append(
-                        {
-                            "label": period_label,
-                            "status": "failed",
-                            "roster_id": roster.id,
-                            "roster_code": roster.roster_code,
-                            "roster_status": roster.status.value,
-                            "error_message": roster.notes,
-                            "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                            "qualified_count": roster.qualified_count,
-                            "period_start_date": period_dates["start_date"].isoformat(),
-                            "period_end_date": period_dates["end_date"].isoformat(),
-                        }
-                    )
-                elif roster and roster.status == RosterStatus.PROCESSING:
-                    periods.append(
-                        {
-                            "label": period_label,
-                            "status": "processing",
-                            "roster_id": roster.id,
-                            "roster_code": roster.roster_code,
-                            "roster_status": roster.status.value,
-                            "period_start_date": period_dates["start_date"].isoformat(),
-                            "period_end_date": period_dates["end_date"].isoformat(),
-                        }
-                    )
+                        if roster.status in [RosterStatus.COMPLETED, RosterStatus.LOCKED]:
+                            entry.update({
+                                "status": "completed",
+                                "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
+                                "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                                "qualified_count": roster.qualified_count,
+                            })
+                        elif roster.status == RosterStatus.FAILED:
+                            entry.update({
+                                "status": "failed",
+                                "error_message": roster.notes,
+                                "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                                "qualified_count": roster.qualified_count,
+                            })
+                        elif roster.status == RosterStatus.PROCESSING:
+                            entry["status"] = "processing"
+                        else:
+                            entry["status"] = "draft"
+                        periods.append(entry)
                 else:
                     periods.append(
                         {
@@ -933,9 +909,9 @@ async def get_roster_cycle_status(
                     )
 
         elif schedule.roster_cycle.value == "yearly":
-            # Generate 1 yearly period
+            # Generate 1 yearly period (may expand to multiple rows for matrix distribution)
             period_label = str(academic_year)
-            roster = roster_map.get(period_label)
+            rosters_for_period = roster_groups.get(period_label, [])
 
             # Calculate period dates
             period_dates = get_roster_period_dates(
@@ -945,49 +921,38 @@ async def get_roster_cycle_status(
                 period_label=period_label,
             )
 
-            # 根據造冊的實際狀態決定期間狀態
-            if roster and roster.status in [RosterStatus.COMPLETED, RosterStatus.LOCKED]:
-                periods.append(
-                    {
+            if rosters_for_period:
+                for roster in rosters_for_period:
+                    entry = {
                         "label": period_label,
-                        "status": "completed",
                         "roster_id": roster.id,
                         "roster_code": roster.roster_code,
                         "roster_status": roster.status.value,
-                        "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
-                        "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                        "qualified_count": roster.qualified_count,
+                        "sub_type": roster.sub_type,
+                        "allocation_year": roster.allocation_year,
+                        "project_number": roster.project_number,
                         "period_start_date": period_dates["start_date"].isoformat(),
                         "period_end_date": period_dates["end_date"].isoformat(),
                     }
-                )
-            elif roster and roster.status == RosterStatus.FAILED:
-                periods.append(
-                    {
-                        "label": period_label,
-                        "status": "failed",
-                        "roster_id": roster.id,
-                        "roster_code": roster.roster_code,
-                        "roster_status": roster.status.value,
-                        "error_message": roster.notes,
-                        "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                        "qualified_count": roster.qualified_count,
-                        "period_start_date": period_dates["start_date"].isoformat(),
-                        "period_end_date": period_dates["end_date"].isoformat(),
-                    }
-                )
-            elif roster and roster.status == RosterStatus.PROCESSING:
-                periods.append(
-                    {
-                        "label": period_label,
-                        "status": "processing",
-                        "roster_id": roster.id,
-                        "roster_code": roster.roster_code,
-                        "roster_status": roster.status.value,
-                        "period_start_date": period_dates["start_date"].isoformat(),
-                        "period_end_date": period_dates["end_date"].isoformat(),
-                    }
-                )
+                    if roster.status in [RosterStatus.COMPLETED, RosterStatus.LOCKED]:
+                        entry.update({
+                            "status": "completed",
+                            "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
+                            "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                            "qualified_count": roster.qualified_count,
+                        })
+                    elif roster.status == RosterStatus.FAILED:
+                        entry.update({
+                            "status": "failed",
+                            "error_message": roster.notes,
+                            "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                            "qualified_count": roster.qualified_count,
+                        })
+                    elif roster.status == RosterStatus.PROCESSING:
+                        entry["status"] = "processing"
+                    else:
+                        entry["status"] = "draft"
+                    periods.append(entry)
             else:
                 periods.append(
                     {
@@ -999,6 +964,41 @@ async def get_roster_cycle_status(
                         "period_end_date": period_dates["end_date"].isoformat(),
                     }
                 )
+
+        # Append any distribution-generated rosters whose period_label was not covered
+        # by the schedule template (e.g., yearly period_label "114" when cycle is monthly)
+        covered_roster_ids = {p["roster_id"] for p in periods if p.get("roster_id")}
+        for period_label, rosters_list in roster_groups.items():
+            for roster in rosters_list:
+                if roster.id not in covered_roster_ids:
+                    entry = {
+                        "label": period_label,
+                        "roster_id": roster.id,
+                        "roster_code": roster.roster_code,
+                        "roster_status": roster.status.value,
+                        "sub_type": roster.sub_type,
+                        "allocation_year": roster.allocation_year,
+                        "project_number": roster.project_number,
+                    }
+                    if roster.status in [RosterStatus.COMPLETED, RosterStatus.LOCKED]:
+                        entry.update({
+                            "status": "completed",
+                            "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
+                            "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                            "qualified_count": roster.qualified_count,
+                        })
+                    elif roster.status == RosterStatus.FAILED:
+                        entry.update({
+                            "status": "failed",
+                            "error_message": roster.notes,
+                            "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                            "qualified_count": roster.qualified_count,
+                        })
+                    elif roster.status == RosterStatus.PROCESSING:
+                        entry["status"] = "processing"
+                    else:
+                        entry["status"] = "draft"
+                    periods.append(entry)
 
         return ApiResponse(
             success=True,
@@ -1092,7 +1092,11 @@ async def get_roster_items(
         if not roster:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定的造冊")
 
-        stmt = select(PaymentRosterItem).where(PaymentRosterItem.roster_id == roster_id)
+        stmt = (
+            select(PaymentRosterItem)
+            .where(PaymentRosterItem.roster_id == roster_id)
+            .options(selectinload(PaymentRosterItem.application))
+        )
 
         # 套用篩選條件
         if verification_status:
@@ -1105,11 +1109,21 @@ async def get_roster_items(
         result = await db.execute(stmt)
         items = result.scalars().all()
 
-        items_data = [RosterItemResponse.from_orm(item) for item in items]
+        items_data = []
+        for item in items:
+            item_dict = RosterItemResponse.model_validate(item).model_dump()
+            # 從 application.student_data 補充學院/系所資訊
+            if item.application and item.application.student_data:
+                sd = item.application.student_data
+                item_dict["college_code"] = sd.get("std_academyno") or sd.get("trm_academyno")
+                item_dict["college_name"] = sd.get("trm_academyname")
+                item_dict["department_name"] = sd.get("trm_depname")
+            items_data.append(item_dict)
+
         return ApiResponse(
             success=True,
             message="查詢成功",
-            data=[item.model_dump() if hasattr(item, "model_dump") else item.dict() for item in items_data],
+            data=items_data,
         )
 
     except HTTPException:
@@ -1473,7 +1487,7 @@ async def download_roster_excel(
                 logger.warning(f"MinIO download failed, falling back to local file: {e}")
                 use_minio = False
 
-        if not use_minio:
+        if not use_minio or not (hasattr(roster, "minio_object_name") and roster.minio_object_name):
             # 本地檔案下載或MinIO失敗後的回退方案
             if hasattr(roster, "excel_file_path") and roster.excel_file_path and os.path.exists(roster.excel_file_path):
                 # 記錄下載日誌

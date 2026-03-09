@@ -214,7 +214,7 @@ export interface ScholarshipType {
     priority: number;
     is_warning: boolean;
     is_hard_rule: boolean;
-    status?: 'data_unavailable' | 'passed' | 'failed';
+    status?: "data_unavailable" | "passed" | "failed";
     system_message?: string;
   }>;
   warnings?: Array<{
@@ -228,7 +228,7 @@ export interface ScholarshipType {
     priority: number;
     is_warning: boolean;
     is_hard_rule: boolean;
-    status?: 'data_unavailable' | 'passed' | 'failed';
+    status?: "data_unavailable" | "passed" | "failed";
     system_message?: string;
   }>;
   errors?: Array<{
@@ -242,7 +242,7 @@ export interface ScholarshipType {
     priority: number;
     is_warning: boolean;
     is_hard_rule: boolean;
-    status?: 'data_unavailable' | 'passed' | 'failed';
+    status?: "data_unavailable" | "passed" | "failed";
     system_message?: string;
   }>;
   created_at?: string;
@@ -268,7 +268,6 @@ export interface WhitelistResponse {
   students: WhitelistStudentInfo[];
   total: number;
 }
-
 
 // ============================================
 // Additional types for backward compatibility
@@ -296,6 +295,8 @@ export interface ScholarshipConfiguration {
   quota_management_mode?: string;
   total_quota?: number;
   quotas?: Record<string, any>;
+  project_numbers?: Record<string, Record<string, string>>;
+  prior_quota_years?: Record<string, number[]>;
   whitelist_student_ids?: Record<string, number[]>;
   hasWhitelist?: boolean;
   renewal_application_start_date?: string;

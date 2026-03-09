@@ -105,6 +105,55 @@ export interface RestoreResult {
   restored_count: number;
 }
 
+export interface RosterSummary {
+  id: number;
+  roster_code: string;
+  sub_type: string;
+  allocation_year: number;
+  project_number: string | null;
+  period_label: string;
+  status: string;
+  qualified_count: number;
+  disqualified_count: number;
+  total_amount: string;
+}
+
+export interface GenerateRostersRequest {
+  scholarship_type_id: number;
+  academic_year: number;
+  semester: string;
+  student_verification_enabled?: boolean;
+  force_regenerate?: boolean;
+}
+
+export interface GenerateRostersResult {
+  rosters_created: number;
+  rosters: RosterSummary[];
+}
+
+export interface DistributionSummaryStudent {
+  ranking_item_id: number;
+  application_id: number;
+  student_name: string;
+  student_id: string;
+  college_code: string;
+  college_name: string;
+  department_name: string;
+  rank_position: number;
+}
+
+export interface DistributionSummaryGroup {
+  sub_type: string;
+  allocation_year: number;
+  count: number;
+  students: DistributionSummaryStudent[];
+}
+
+export interface DistributionSummaryResult {
+  groups: DistributionSummaryGroup[];
+  total_allocated: number;
+}
+
 export interface AvailableCombinations {
   scholarship_types: Array<{
     id: number;
@@ -234,6 +283,39 @@ export function createManualDistributionApi() {
         { body: request as any }
       );
       return toApiResponse(response) as ApiResponse<RestoreResult>;
+    },
+
+    /**
+     * Get distribution summary: all allocated students grouped by sub_type × allocation_year.
+     */
+    getDistributionSummary: async (
+      scholarship_type_id: number,
+      academic_year: number,
+      semester: string
+    ): Promise<ApiResponse<DistributionSummaryResult>> => {
+      const response = await typedClient.raw.GET(
+        "/api/v1/manual-distribution/distribution-summary" as any,
+        {
+          params: {
+            query: { scholarship_type_id, academic_year, semester } as any,
+          },
+        }
+      );
+      return toApiResponse(response) as ApiResponse<DistributionSummaryResult>;
+    },
+
+    /**
+     * Generate payment rosters from a finalized+distributed ranking.
+     * Creates one roster per (allocation_year, sub_type) combination.
+     */
+    generateRostersFromDistribution: async (
+      request: GenerateRostersRequest
+    ): Promise<ApiResponse<GenerateRostersResult>> => {
+      const response = await typedClient.raw.POST(
+        "/api/v1/manual-distribution/generate-rosters-from-distribution" as any,
+        { body: request as any }
+      );
+      return toApiResponse(response) as ApiResponse<GenerateRostersResult>;
     },
   };
 }

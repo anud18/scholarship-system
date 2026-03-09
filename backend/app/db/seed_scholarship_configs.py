@@ -92,6 +92,43 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             "effective_end_date": now + timedelta(days=90),
             "version": "1.0",
         },
+        # 博士生獎學金配置 (112學年) - 前年度剩餘配額
+        {
+            "scholarship_type_id": phd_scholarship.id,
+            "config_code": "phd_112",
+            "config_name": "博士生獎學金 112學年",
+            "academic_year": 112,
+            "semester": None,  # 學年制
+            "description": "112學年度博士生獎學金配置（剩餘配額）",
+            "description_en": "PhD Scholarship Configuration for Academic Year 112 (Remaining Quota)",
+            "has_quota_limit": True,
+            "has_college_quota": True,
+            "quota_management_mode": QuotaManagementMode.matrix_based,
+            "total_quota": 15,
+            "quotas": {
+                "nstc": {
+                    "E": 2,
+                    "C": 1,
+                    "I": 1,
+                    "S": 1,
+                    "B": 1,
+                    "O": 1,
+                    "D": 1,
+                    "1": 1,
+                    "6": 1,
+                    "7": 1,
+                    "M": 1,
+                    "A": 1,
+                    "K": 1,
+                },
+            },
+            "amount": 40000,
+            "currency": "TWD",
+            "is_active": False,
+            "effective_start_date": now - timedelta(days=840),
+            "effective_end_date": now - timedelta(days=480),
+            "version": "1.0",
+        },
         # 博士生獎學金配置 (113學年) - 前年度剩餘配額 (for prior-year quota testing)
         {
             "scholarship_type_id": phd_scholarship.id,
@@ -174,7 +211,17 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
                     "K": 1,
                 },
             },
-            "prior_quota_years": {"nstc": [113], "moe_1w": []},
+            "prior_quota_years": {"nstc": [113, 112], "moe_1w": []},
+            "project_numbers": {
+                "nstc": {
+                    "114": "114R000001",
+                    "113": "113R000001",
+                    "112": "112R000001",
+                },
+                "moe_1w": {
+                    "114": "114E000001",
+                },
+            },
             "amount": 40000,
             "currency": "TWD",
             "renewal_application_start_date": now - timedelta(days=90),
@@ -240,6 +287,10 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             if "prior_quota_years" in config_data and existing.prior_quota_years != config_data["prior_quota_years"]:
                 existing.prior_quota_years = config_data["prior_quota_years"]
                 logger.info(f"Updated prior_quota_years for: {config_data['config_code']}")
+            # Update project_numbers on existing configs if provided in seed data
+            if "project_numbers" in config_data and existing.project_numbers != config_data["project_numbers"]:
+                existing.project_numbers = config_data["project_numbers"]
+                logger.info(f"Updated project_numbers for: {config_data['config_code']}")
 
     await session.commit()
     logger.info("Scholarship configurations initialized successfully!")

@@ -9,6 +9,8 @@ import type {
   SubTypeYearCol,
   DistributionHistoryRecord,
   RestoreRequest,
+  DistributionSummaryResult,
+  DistributionSummaryGroup,
 } from "@/lib/api/modules/manual-distribution";
 import { User } from "@/types/user";
 import { Button } from "@/components/ui/button";
@@ -32,6 +34,7 @@ import {
   AlertCircle,
   Download,
   Clock,
+  Eye,
 } from "lucide-react";
 
 interface ManualDistributionPanelProps {
@@ -105,6 +108,22 @@ export function ManualDistributionPanel({
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [showHistoryDialog, setShowHistoryDialog] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [isGeneratingRosters, setIsGeneratingRosters] = useState(false);
+  const [showDistributionSummary, setShowDistributionSummary] = useState(false);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+  const [distributionSummary, setDistributionSummary] =
+    useState<DistributionSummaryResult | null>(null);
+  const [rosterResult, setRosterResult] = useState<{
+    rosters_created: number;
+    rosters: Array<{
+      roster_code: string;
+      sub_type: string;
+      allocation_year: number;
+      project_number: string | null;
+      qualified_count: number;
+      total_amount: string;
+    }>;
+  } | null>(null);
 
   /**
    * Flatten quota status into (sub_type × year) columns, ordered by:
@@ -310,6 +329,65 @@ export function ManualDistributionPanel({
       setSaveMessage({ type: "error", text: "確認分發時發生錯誤" });
     } finally {
       setIsFinalizing(false);
+    }
+  };
+
+  const handleGenerateRosters = async () => {
+    if (!scholarshipTypeId || !selectedAcademicYear || !selectedSemester)
+      return;
+    setIsGeneratingRosters(true);
+    setSaveMessage(null);
+    setRosterResult(null);
+    try {
+      const resp =
+        await apiClient.manualDistribution.generateRostersFromDistribution({
+          scholarship_type_id: scholarshipTypeId,
+          academic_year: selectedAcademicYear,
+          semester: selectedSemester,
+          student_verification_enabled: false,
+        });
+      if (resp.success && resp.data) {
+        setRosterResult(resp.data);
+        setSaveMessage({
+          type: "success",
+          text: `已產生 ${resp.data.rosters_created} 個造冊`,
+        });
+      } else {
+        setSaveMessage({ type: "error", text: resp.message || "造冊產生失敗" });
+      }
+    } catch (error) {
+      console.error("Generate rosters error:", error);
+      setSaveMessage({ type: "error", text: "造冊產生時發生錯誤" });
+    } finally {
+      setIsGeneratingRosters(false);
+    }
+  };
+
+  const loadDistributionSummary = async () => {
+    if (!scholarshipTypeId || !selectedAcademicYear || !selectedSemester)
+      return;
+    setIsLoadingSummary(true);
+    setDistributionSummary(null);
+    setShowDistributionSummary(true);
+    try {
+      const resp = await apiClient.manualDistribution.getDistributionSummary(
+        scholarshipTypeId,
+        selectedAcademicYear,
+        selectedSemester
+      );
+      if (resp.success && resp.data) {
+        setDistributionSummary(resp.data);
+      } else {
+        setSaveMessage({
+          type: "error",
+          text: resp.message || "無法載入分發名單",
+        });
+      }
+    } catch (error) {
+      console.error("Load distribution summary error:", error);
+      setSaveMessage({ type: "error", text: "載入分發名單時發生錯誤" });
+    } finally {
+      setIsLoadingSummary(false);
     }
   };
 
@@ -562,6 +640,50 @@ export function ManualDistributionPanel({
                 )}
                 查看歷史
               </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isGeneratingRosters || isLoading}
+                  >
+                    {isGeneratingRosters ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                    ) : (
+                      <Download className="h-4 w-4 mr-1" />
+                    )}
+                    生成造冊
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>確認產生造冊？</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      系統將依據已完成分發的結果，針對每個（子類型 ×
+                      配額年度）組合各產生一份造冊。此操作需要分發已完成（已確認分發）。
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>取消</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleGenerateRosters}>
+                      確認產生
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadDistributionSummary}
+                disabled={isLoadingSummary || isLoading}
+              >
+                {isLoadingSummary ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                ) : (
+                  <Eye className="h-4 w-4 mr-1" />
+                )}
+                查看分發名單
+              </Button>
             </div>
           </div>
 
@@ -644,6 +766,36 @@ export function ManualDistributionPanel({
           </div>
         )}
 
+        {/* Roster generation result */}
+        {rosterResult && rosterResult.rosters.length > 0 && (
+          <div className="bg-blue-50 border border-blue-200 rounded px-4 py-3">
+            <p className="text-sm font-semibold text-blue-800 mb-2">
+              已產生 {rosterResult.rosters_created} 個造冊：
+            </p>
+            <div className="space-y-1">
+              {rosterResult.rosters.map(r => (
+                <div
+                  key={r.roster_code}
+                  className="text-xs text-blue-700 flex gap-3"
+                >
+                  <span className="font-mono">{r.roster_code}</span>
+                  <span>
+                    {r.sub_type} {r.allocation_year} 年度
+                  </span>
+                  {r.project_number && (
+                    <span className="text-blue-500">
+                      計畫：{r.project_number}
+                    </span>
+                  )}
+                  <span className="text-blue-600">
+                    合格 {r.qualified_count} 人，${r.total_amount}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Table */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="p-3 border-b border-slate-200 flex items-center justify-between">
@@ -712,27 +864,27 @@ export function ManualDistributionPanel({
                     </th>
                     <th
                       rowSpan={2}
-                      className="px-1.5 py-1.5 border border-slate-200 text-center font-semibold text-[11px] w-8"
+                      className="px-1.5 py-1.5 border border-slate-200 text-center font-semibold text-[11px] w-12"
                     >
-                      年
+                      年級
                     </th>
                     <th
                       rowSpan={2}
-                      className="px-1.5 py-1.5 border border-slate-200 font-semibold text-[11px] w-20"
+                      className="px-1.5 py-1.5 border border-slate-200 font-semibold text-[11px] w-24"
                     >
                       姓名
                     </th>
                     <th
                       rowSpan={2}
-                      className="px-1.5 py-1.5 border border-slate-200 font-semibold text-[11px] w-10"
+                      className="px-1.5 py-1.5 border border-slate-200 font-semibold text-[11px] w-20"
                     >
-                      籍
+                      國籍
                     </th>
                     <th
                       rowSpan={2}
-                      className="px-1.5 py-1.5 border border-slate-200 font-semibold text-[11px] text-red-600 w-12"
+                      className="px-1.5 py-1.5 border border-slate-200 font-semibold text-[11px] text-red-600 w-20"
                     >
-                      入學
+                      入學日期
                     </th>
                     <th
                       rowSpan={2}
@@ -1033,6 +1185,116 @@ export function ManualDistributionPanel({
       </div>
 
       {/* History Dialog */}
+      {/* Distribution Summary Dialog */}
+      {showDistributionSummary && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full max-h-[85vh] flex flex-col">
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <Eye className="h-5 w-5" />
+                分發結果名單
+              </h2>
+              <button
+                onClick={() => setShowDistributionSummary(false)}
+                className="text-slate-400 hover:text-slate-600 text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              {isLoadingSummary ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                </div>
+              ) : !distributionSummary ||
+                distributionSummary.groups.length === 0 ? (
+                <p className="text-center text-slate-500 py-8">
+                  尚未完成分發，或無已分配的學生
+                </p>
+              ) : (
+                <div className="space-y-6">
+                  <div className="text-sm text-slate-600">
+                    共 {distributionSummary.total_allocated} 位學生已分發到{" "}
+                    {distributionSummary.groups.length} 個獎學金類別
+                  </div>
+                  {distributionSummary.groups.map(group => (
+                    <div
+                      key={`${group.sub_type}-${group.allocation_year}`}
+                      className="border border-slate-200 rounded-lg overflow-hidden"
+                    >
+                      <div className="bg-slate-50 px-4 py-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-sm text-slate-800">
+                            {getSubTypeShortName(
+                              group.sub_type,
+                              group.sub_type
+                            )}
+                          </span>
+                          <span className="text-xs text-slate-500 font-mono">
+                            ({group.sub_type})
+                          </span>
+                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                            {group.allocation_year} 年度配額
+                          </span>
+                        </div>
+                        <span className="text-sm font-medium text-slate-700">
+                          {group.count} 人
+                        </span>
+                      </div>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-100 text-xs text-slate-500">
+                            <th className="text-left px-4 py-2">排名</th>
+                            <th className="text-left px-4 py-2">學號</th>
+                            <th className="text-left px-4 py-2">姓名</th>
+                            <th className="text-left px-4 py-2">學院</th>
+                            <th className="text-left px-4 py-2">系所</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {group.students
+                            .sort((a, b) => a.rank_position - b.rank_position)
+                            .map(student => (
+                              <tr
+                                key={student.ranking_item_id}
+                                className="border-b border-slate-50 hover:bg-slate-50"
+                              >
+                                <td className="px-4 py-1.5 text-slate-400">
+                                  {student.rank_position}
+                                </td>
+                                <td className="px-4 py-1.5 font-mono text-xs">
+                                  {student.student_id}
+                                </td>
+                                <td className="px-4 py-1.5 font-medium">
+                                  {student.student_name}
+                                </td>
+                                <td className="px-4 py-1.5">
+                                  {student.college_name || student.college_code}
+                                </td>
+                                <td className="px-4 py-1.5 text-slate-600">
+                                  {student.department_name}
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-slate-200 flex justify-end">
+              <Button
+                variant="outline"
+                onClick={() => setShowDistributionSummary(false)}
+              >
+                關閉
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showHistoryDialog && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[80vh] flex flex-col">

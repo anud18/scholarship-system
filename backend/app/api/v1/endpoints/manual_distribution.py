@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_admin_user, get_db
+from app.db.deps import get_sync_db
 from app.models.college_review import ManualDistributionHistory
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.services.manual_distribution_service import ManualDistributionService
@@ -298,4 +299,183 @@ async def restore_from_history(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to restore from history",
+        )
+
+
+@router.get("/distribution-summary")
+async def get_distribution_summary(
+    scholarship_type_id: int = Query(...),
+    academic_year: int = Query(...),
+    semester: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_admin_user),
+):
+    """
+    取得分發結果摘要：所有被分發的學生及其分配到的獎學金子類型。
+    回傳所有已分配學生，按 sub_type × allocation_year 分組。
+    """
+    from sqlalchemy import and_, or_
+    from sqlalchemy.orm import selectinload
+    from app.models.college_review import CollegeRanking, CollegeRankingItem
+    from app.models.application import Application
+
+    try:
+        # 取得已完成分發的排名
+        if semester in ("annual", "yearly", ""):
+            sem_filter = or_(
+                CollegeRanking.semester.is_(None),
+                CollegeRanking.semester == "annual",
+                CollegeRanking.semester == "yearly",
+            )
+        else:
+            sem_filter = CollegeRanking.semester == semester
+
+        ranking_stmt = select(CollegeRanking).where(
+            and_(
+                CollegeRanking.scholarship_type_id == scholarship_type_id,
+                CollegeRanking.academic_year == academic_year,
+                sem_filter,
+                CollegeRanking.is_finalized == True,
+                CollegeRanking.distribution_executed == True,
+            )
+        )
+        ranking_result = await db.execute(ranking_stmt)
+        rankings = ranking_result.scalars().all()
+
+        if not rankings:
+            return {
+                "success": True,
+                "message": "尚未完成分發",
+                "data": {"groups": [], "total_allocated": 0},
+            }
+
+        ranking_ids = [r.id for r in rankings]
+
+        # 取得所有已分配的 ranking items
+        items_stmt = (
+            select(CollegeRankingItem)
+            .where(
+                and_(
+                    CollegeRankingItem.ranking_id.in_(ranking_ids),
+                    CollegeRankingItem.is_allocated == True,
+                )
+            )
+            .options(selectinload(CollegeRankingItem.application))
+        )
+        items_result = await db.execute(items_stmt)
+        allocated_items = items_result.scalars().all()
+
+        # 按 (sub_type, allocation_year) 分組
+        groups: dict[tuple, list] = {}
+        for item in allocated_items:
+            sub_type = item.allocated_sub_type or "general"
+            alloc_year = item.allocation_year or academic_year
+            key = (sub_type, alloc_year)
+            groups.setdefault(key, []).append(item)
+
+        group_data = []
+        total_allocated = 0
+        for (sub_type, alloc_year), items in sorted(groups.items()):
+            students = []
+            for item in items:
+                app = item.application
+                sd = (app.student_data or {}) if app else {}
+                students.append({
+                    "ranking_item_id": item.id,
+                    "application_id": item.application_id,
+                    "student_name": sd.get("std_cname", ""),
+                    "student_id": sd.get("std_stdcode", ""),
+                    "college_code": sd.get("std_academyno") or sd.get("trm_academyno", ""),
+                    "college_name": sd.get("trm_academyname", ""),
+                    "department_name": sd.get("trm_depname", ""),
+                    "rank_position": item.rank_position,
+                })
+            total_allocated += len(students)
+            group_data.append({
+                "sub_type": sub_type,
+                "allocation_year": alloc_year,
+                "count": len(students),
+                "students": students,
+            })
+
+        return {
+            "success": True,
+            "message": f"共 {total_allocated} 位學生已分發",
+            "data": {
+                "groups": group_data,
+                "total_allocated": total_allocated,
+            },
+        }
+    except Exception as e:
+        logger.error(f"Error getting distribution summary: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="取得分發摘要失敗",
+        )
+
+
+class GenerateRostersRequest(BaseModel):
+    scholarship_type_id: int
+    academic_year: int
+    semester: str
+    student_verification_enabled: bool = False  # 預設不驗證，加快速度
+    force_regenerate: bool = False
+
+
+@router.post("/generate-rosters-from-distribution")
+async def generate_rosters_from_distribution(
+    request: GenerateRostersRequest,
+    sync_db=Depends(get_sync_db),
+    current_user=Depends(get_current_admin_user),
+):
+    """
+    從矩陣分發結果批次產生造冊。
+
+    針對每個唯一的 (allocation_year, sub_type) 組合建立獨立的造冊。
+    例如：115 年度分發後，可能產生 nstc-115、nstc-114、moe_1w-115 等多個造冊。
+    """
+    from app.services.roster_service import RosterService
+
+    service = RosterService(sync_db)
+    try:
+        rosters = service.generate_rosters_from_distribution(
+            scholarship_type_id=request.scholarship_type_id,
+            academic_year=request.academic_year,
+            semester=request.semester,
+            created_by_user_id=current_user.id,
+            student_verification_enabled=request.student_verification_enabled,
+            force_regenerate=request.force_regenerate,
+        )
+
+        roster_summaries = [
+            {
+                "id": r.id,
+                "roster_code": r.roster_code,
+                "sub_type": r.sub_type,
+                "allocation_year": r.allocation_year,
+                "project_number": r.project_number,
+                "period_label": r.period_label,
+                "status": r.status.value,
+                "qualified_count": r.qualified_count,
+                "disqualified_count": r.disqualified_count,
+                "total_amount": str(r.total_amount),
+            }
+            for r in rosters
+        ]
+
+        return {
+            "success": True,
+            "message": f"成功產生 {len(rosters)} 個造冊",
+            "data": {
+                "rosters_created": len(rosters),
+                "rosters": roster_summaries,
+            },
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error generating rosters from distribution: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"造冊產生失敗: {str(e)}",
         )
