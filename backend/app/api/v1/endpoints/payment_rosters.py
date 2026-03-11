@@ -528,6 +528,29 @@ async def preview_roster_students(
         )
         logger.info(f"Found {len(applications)} eligible applications")
 
+        # 查詢分發資訊：從同學年度排名中取得各 application 的分配結果
+        from app.models.college_review import CollegeRankingItem
+        app_ids = [a.id for a in applications]
+        allocation_map: dict = {}
+        if app_ids:
+            alloc_items = (
+                db.query(CollegeRankingItem)
+                .join(CollegeRanking, CollegeRankingItem.ranking_id == CollegeRanking.id)
+                .filter(
+                    and_(
+                        CollegeRankingItem.application_id.in_(app_ids),
+                        CollegeRankingItem.is_allocated == True,
+                        CollegeRanking.academic_year == academic_year,
+                    )
+                )
+                .all()
+            )
+            for ri in alloc_items:
+                allocation_map[ri.application_id] = {
+                    "allocated_sub_type": ri.allocated_sub_type,
+                    "allocation_year": ri.allocation_year,
+                }
+
         # Initialize summary statistics
         students = []
         summary = {
@@ -570,6 +593,8 @@ async def preview_roster_students(
                 "amount": float(application.amount or config.amount or 0),
                 "rank_position": None,
                 "backup_info": [],
+                "allocated_sub_type": allocation_map.get(application.id, {}).get("allocated_sub_type"),
+                "allocation_year": allocation_map.get(application.id, {}).get("allocation_year"),
                 # Validation fields
                 "is_included": False,
                 "exclusion_reason": None,

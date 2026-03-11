@@ -59,7 +59,7 @@ class ExcelExportService:
 
                 # Extract headers from template
                 self.template_columns = []
-                for col in range(1, 31):  # 30 columns max
+                for col in range(1, 33):  # 32 columns max
                     cell_value = ws.cell(row=1, column=col).value
                     if cell_value:
                         self.template_columns.append(str(cell_value))
@@ -106,6 +106,8 @@ class ExcelExportService:
             "E-MAIL",  # 26. 選填
             "個人身分別(1:本國人,2:外國人,3:大陸人)",  # 27. 本國人=1
             "居留天數是否滿183天(是/否)",  # 28. 本國人預設"是"
+            "申請身分",  # 29. 申請身分別 (e.g. 114新申請, 114續領)
+            "分發獎學金",  # 30. 分發到的獎學金 (e.g. 114年 國科會)
         ]
 
         # Field mapping for easy access
@@ -356,6 +358,21 @@ class ExcelExportService:
         logger.warning("Template %s not found. Falling back to default template.", candidate)
         return self.template_path
 
+    @staticmethod
+    def _format_allocation_display(item: PaymentRosterItem) -> str:
+        """Format allocated sub-type + year for Excel display"""
+        if not item.allocated_sub_type:
+            return ""
+        sub_type_map = {
+            "nstc": "國科會",
+            "moe_1w": "教育部(1萬)",
+            "moe_2w": "教育部(2萬)",
+        }
+        display = sub_type_map.get(item.allocated_sub_type, item.allocated_sub_type)
+        if item.allocation_year:
+            return f"{item.allocation_year}年 {display}"
+        return display
+
     def _get_filtered_roster_items(self, roster: PaymentRoster, include_excluded: bool) -> List[PaymentRosterItem]:
         """Compatibility helper for legacy calls that expect filtered roster items"""
         return self._get_roster_items(roster, include_excluded)
@@ -375,11 +392,24 @@ class ExcelExportService:
                 )
                 continue
 
-            # 生成備註 (第25欄) - 包含期間標籤、獎學金名稱和狀態
+            # 生成備註 (第25欄) - 包含期間標籤、獎學金名稱、分發資訊和狀態
             remarks_parts = []
             if hasattr(roster, "period_label") and roster.period_label:
                 remarks_parts.append(f"期間:{roster.period_label}")
             remarks_parts.append(f"獎學金:{item.scholarship_name}")
+            # 分發資訊（從快照欄位取得）
+            if item.application_identity:
+                remarks_parts.append(f"身分:{item.application_identity}")
+            if item.allocated_sub_type:
+                sub_type_display = {
+                    "nstc": "國科會",
+                    "moe_1w": "教育部(1萬)",
+                    "moe_2w": "教育部(2萬)",
+                }.get(item.allocated_sub_type, item.allocated_sub_type)
+                alloc_label = sub_type_display
+                if item.allocation_year:
+                    alloc_label = f"{item.allocation_year}年 {sub_type_display}"
+                remarks_parts.append(f"分發:{alloc_label}")
             if not item.is_included:
                 remarks_parts.append("狀態:不合格")
             if not item.bank_account:
@@ -434,6 +464,10 @@ class ExcelExportService:
                 "個人身分別(1:本國人,2:外國人,3:大陸人)": "1",
                 # 28. 居留天數是否滿183天(是/否) (本國人預設"是")
                 "居留天數是否滿183天(是/否)": "是",
+                # 29. 申請身分 (快照欄位)
+                "申請身分": item.application_identity or "",
+                # 30. 分發獎學金 (快照欄位)
+                "分發獎學金": self._format_allocation_display(item),
             }
 
             # 儲存Excel行資料到資料庫
@@ -442,7 +476,7 @@ class ExcelExportService:
 
             excel_data.append(row_data)
 
-        logger.info(f"Prepared {len(excel_data)} rows for 28-column format export")
+        logger.info(f"Prepared {len(excel_data)} rows for 30-column format export")
         return excel_data
 
     def _validate_export_data(self, excel_data: List[Dict]) -> Dict[str, Any]:
@@ -656,6 +690,8 @@ class ExcelExportService:
             "審核狀態": 8,
             "備註": 20,
             "驗證狀態": 10,
+            "申請身分": 14,
+            "分發獎學金": 18,
         }
 
         for col_idx, column_name in enumerate(self.template_columns, start=1):
