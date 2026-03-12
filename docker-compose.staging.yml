@@ -17,7 +17,7 @@ services:
 
   # FastAPI Backend
   backend:
-    image: ghcr.io/jotpalch/scholarship-system-backend:${TAG:-latest}
+    image: ghcr.io/anud18/scholarship-system-backend:${TAG:-latest}
     container_name: scholarship_backend_staging
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     ports:
@@ -87,7 +87,7 @@ services:
 
   # Next.js Frontend
   frontend:
-    image: ghcr.io/jotpalch/scholarship-system-frontend:${TAG:-latest}
+    image: ghcr.io/anud18/scholarship-system-frontend:${TAG:-latest}
     container_name: scholarship_frontend_staging
     ports:
       - "3000:3000"
