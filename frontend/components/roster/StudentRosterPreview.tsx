@@ -1,9 +1,9 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -11,145 +11,161 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Users, DollarSign, Building2, InfoIcon } from "lucide-react"
-import { apiClient } from "@/lib/api"
-import { useReferenceData, getAcademyName, getDepartmentName } from "@/hooks/use-reference-data"
-import { useScholarshipData } from "@/hooks/use-scholarship-data"
-import { StudentValidationDetail } from "./StudentValidationDetail"
+} from "@/components/ui/table";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Users, DollarSign, Building2, InfoIcon } from "lucide-react";
+import { apiClient } from "@/lib/api";
+import {
+  useReferenceData,
+  getAcademyName,
+  getDepartmentName,
+} from "@/hooks/use-reference-data";
+import { useScholarshipData } from "@/hooks/use-scholarship-data";
+import { StudentValidationDetail } from "./StudentValidationDetail";
 
 interface StudentInfo {
-  application_id: number
-  student_name: string
-  student_id: string
-  student_id_number: string
-  email: string
-  college: string
-  department: string
-  term_count: number | string
-  sub_type: string
-  amount: number
-  rank_position: number | null
-  backup_info: any[]
+  application_id: number;
+  student_name: string;
+  student_id: string;
+  student_id_number: string;
+  email: string;
+  college: string;
+  department: string;
+  term_count: number | string;
+  sub_type: string;
+  amount: number;
+  rank_position: number | null;
+  backup_info: any[];
+  allocated_sub_type?: string | null;
+  allocation_year?: number | null;
   // Validation fields
-  is_included: boolean
-  exclusion_reason: string | null
-  verification_status: string
-  verification_message: string | null
-  has_fresh_data: boolean
-  is_eligible: boolean
-  failed_rules: string[]
-  warning_rules: string[]
-  has_bank_account: boolean
-  bank_account_field: string | null
+  is_included: boolean;
+  exclusion_reason: string | null;
+  verification_status: string;
+  verification_message: string | null;
+  has_fresh_data: boolean;
+  is_eligible: boolean;
+  failed_rules: string[];
+  warning_rules: string[];
+  has_bank_account: boolean;
+  bank_account_field: string | null;
 }
 
 interface PreviewData {
-  has_matrix_distribution: boolean
-  ranking_id: number | null
-  students: StudentInfo[]
+  has_matrix_distribution: boolean;
+  ranking_id: number | null;
+  students: StudentInfo[];
   summary: {
-    total_students: number
-    included_count: number
-    excluded_count: number
+    total_students: number;
+    included_count: number;
+    excluded_count: number;
     exclusion_breakdown: {
-      missing_data: number
-      verification_failed: number
-      rules_failed: number
-      no_bank_account: number
-    }
-    total_amount: number
+      missing_data: number;
+      verification_failed: number;
+      rules_failed: number;
+      no_bank_account: number;
+    };
+    total_amount: number;
     verification_stats: {
-      verified: number
-      api_errors: number
-      not_verified: number
-    }
-    by_college: Record<string, { included: number; excluded: number; total_amount: number }>
-  }
+      verified: number;
+      api_errors: number;
+      not_verified: number;
+    };
+    by_college: Record<
+      string,
+      { included: number; excluded: number; total_amount: number }
+    >;
+  };
 }
 
 interface StudentRosterPreviewProps {
-  configId: number
-  rankingId?: number | null
+  configId: number;
+  rankingId?: number | null;
 }
 
-export function StudentRosterPreview({ configId, rankingId }: StudentRosterPreviewProps) {
-  const [data, setData] = useState<PreviewData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [selectedCollege, setSelectedCollege] = useState<string>("")
+export function StudentRosterPreview({
+  configId,
+  rankingId,
+}: StudentRosterPreviewProps) {
+  const [data, setData] = useState<PreviewData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedCollege, setSelectedCollege] = useState<string>("");
 
   // Fetch reference data for translations
-  const { academies, departments, isLoading: refLoading } = useReferenceData()
-  const { subTypeTranslations, isLoading: subTypeLoading } = useScholarshipData()
+  const { academies, departments, isLoading: refLoading } = useReferenceData();
+  const { subTypeTranslations, isLoading: subTypeLoading } =
+    useScholarshipData();
 
   useEffect(() => {
-    loadStudentData()
-  }, [configId, rankingId])
+    loadStudentData();
+  }, [configId, rankingId]);
 
   const loadStudentData = async () => {
-    setLoading(true)
-    setError(null)
+    setLoading(true);
+    setError(null);
 
     try {
-      const params: any = { config_id: configId }
+      const params: any = { config_id: configId };
       if (rankingId) {
-        params.ranking_id = rankingId
+        params.ranking_id = rankingId;
       }
 
-      const response = await apiClient.request("/payment-rosters/preview-students", {
-        method: "GET",
-        params,
-      })
+      const response = await apiClient.request(
+        "/payment-rosters/preview-students",
+        {
+          method: "GET",
+          params,
+        }
+      );
 
       if (response.success && response.data) {
-        setData(response.data)
+        setData(response.data);
 
         // Set default selected college
         if (response.data.has_matrix_distribution) {
-          const colleges = Object.keys(response.data.summary.by_college)
+          const colleges = Object.keys(response.data.summary.by_college);
           if (colleges.length > 0) {
-            setSelectedCollege(colleges[0])
+            setSelectedCollege(colleges[0]);
           }
         }
       } else {
-        setError("無法載入學生資料")
+        setError("無法載入學生資料");
       }
     } catch (err) {
-      console.error("Failed to load student data:", err)
+      console.error("Failed to load student data:", err);
       // Try to extract error message from different error sources
-      let errorMessage = "載入學生資料時發生錯誤"
+      let errorMessage = "載入學生資料時發生錯誤";
 
       if (err instanceof Error) {
-        errorMessage = err.message
+        errorMessage = err.message;
       } else if (typeof err === "object" && err !== null) {
         if ("detail" in err) {
-          errorMessage = (err as any).detail
+          errorMessage = (err as any).detail;
         } else if ("message" in err) {
-          errorMessage = (err as any).message
+          errorMessage = (err as any).message;
         }
       }
 
-      setError(errorMessage)
+      setError(errorMessage);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const getStudentsByCollege = (college: string): StudentInfo[] => {
-    if (!data) return []
+    if (!data) return [];
     // Filter by college and only show included students
-    return data.students.filter((s) => s.college === college && s.is_included)
-  }
+    return data.students.filter(s => s.college === college && s.is_included);
+  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("zh-TW", {
       style: "currency",
       currency: "TWD",
       minimumFractionDigits: 0,
-    }).format(amount)
-  }
+    }).format(amount);
+  };
 
   const renderStudentTable = (students: StudentInfo[]) => {
     if (students.length === 0) {
@@ -157,7 +173,7 @@ export function StudentRosterPreview({ configId, rankingId }: StudentRosterPrevi
         <div className="text-center py-12 text-muted-foreground">
           此學院無正取學生
         </div>
-      )
+      );
     }
 
     return (
@@ -172,30 +188,62 @@ export function StudentRosterPreview({ configId, rankingId }: StudentRosterPrevi
             <TableHead className="whitespace-nowrap">系所</TableHead>
             <TableHead className="whitespace-nowrap">在學學期數</TableHead>
             <TableHead className="whitespace-nowrap">獎學金子類型</TableHead>
+            <TableHead className="whitespace-nowrap">分發獎學金</TableHead>
             <TableHead className="whitespace-nowrap">狀態</TableHead>
             <TableHead className="text-right whitespace-nowrap">金額</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {students.map((student) => (
+          {students.map(student => (
             <TableRow key={student.application_id}>
               <TableCell className="font-medium whitespace-nowrap">
                 {student.rank_position ?? "-"}
               </TableCell>
-              <TableCell className="whitespace-nowrap">{student.student_name}</TableCell>
-              <TableCell className="whitespace-nowrap">{student.student_id}</TableCell>
+              <TableCell className="whitespace-nowrap">
+                {student.student_name}
+              </TableCell>
+              <TableCell className="whitespace-nowrap">
+                {student.student_id}
+              </TableCell>
               <TableCell className="font-mono text-sm whitespace-nowrap">
                 {student.student_id_number}
               </TableCell>
-              <TableCell className="text-sm whitespace-nowrap">{student.email}</TableCell>
-              <TableCell className="whitespace-nowrap">{getDepartmentName(student.department, departments)}</TableCell>
-              <TableCell className="whitespace-nowrap">{student.term_count}</TableCell>
+              <TableCell className="text-sm whitespace-nowrap">
+                {student.email}
+              </TableCell>
+              <TableCell className="whitespace-nowrap">
+                {getDepartmentName(student.department, departments)}
+              </TableCell>
+              <TableCell className="whitespace-nowrap">
+                {student.term_count}
+              </TableCell>
               <TableCell className="whitespace-nowrap">
                 <Badge variant="outline">
                   {student.sub_type
-                    ? (subTypeTranslations.zh[student.sub_type] || student.sub_type)
+                    ? subTypeTranslations.zh[student.sub_type] ||
+                      student.sub_type
                     : "一般"}
                 </Badge>
+              </TableCell>
+              <TableCell className="whitespace-nowrap">
+                {student.allocated_sub_type ? (
+                  <span className="text-sm">
+                    {student.allocation_year && (
+                      <span className="font-medium">
+                        {student.allocation_year}年{" "}
+                      </span>
+                    )}
+                    {student.allocated_sub_type === "nstc"
+                      ? "國科會"
+                      : student.allocated_sub_type === "moe_1w"
+                        ? "教育部(1萬)"
+                        : student.allocated_sub_type === "moe_2w"
+                          ? "教育部(2萬)"
+                          : student.allocated_sub_type}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">-</span>
+                )}
               </TableCell>
               <TableCell className="min-w-[200px]">
                 <StudentValidationDetail student={student} />
@@ -212,8 +260,8 @@ export function StudentRosterPreview({ configId, rankingId }: StudentRosterPrevi
           ))}
         </TableBody>
       </Table>
-    )
-  }
+    );
+  };
 
   const renderExcludedStudentTable = (students: StudentInfo[]) => {
     if (students.length === 0) {
@@ -221,7 +269,7 @@ export function StudentRosterPreview({ configId, rankingId }: StudentRosterPrevi
         <div className="text-center py-12 text-muted-foreground">
           沒有被排除的學生
         </div>
-      )
+      );
     }
 
     return (
@@ -238,19 +286,28 @@ export function StudentRosterPreview({ configId, rankingId }: StudentRosterPrevi
           </TableRow>
         </TableHeader>
         <TableBody>
-          {students.map((student) => (
+          {students.map(student => (
             <TableRow key={student.application_id}>
-              <TableCell className="whitespace-nowrap">{student.student_name}</TableCell>
-              <TableCell className="whitespace-nowrap">{student.student_id}</TableCell>
-              <TableCell className="text-sm whitespace-nowrap">{student.email}</TableCell>
-              <TableCell className="whitespace-nowrap">{getAcademyName(student.college, academies)}</TableCell>
+              <TableCell className="whitespace-nowrap">
+                {student.student_name}
+              </TableCell>
+              <TableCell className="whitespace-nowrap">
+                {student.student_id}
+              </TableCell>
+              <TableCell className="text-sm whitespace-nowrap">
+                {student.email}
+              </TableCell>
+              <TableCell className="whitespace-nowrap">
+                {getAcademyName(student.college, academies)}
+              </TableCell>
               <TableCell className="whitespace-nowrap">
                 {getDepartmentName(student.department, departments)}
               </TableCell>
               <TableCell className="whitespace-nowrap">
                 <Badge variant="outline">
                   {student.sub_type
-                    ? (subTypeTranslations.zh[student.sub_type] || student.sub_type)
+                    ? subTypeTranslations.zh[student.sub_type] ||
+                      student.sub_type
                     : "一般"}
                 </Badge>
               </TableCell>
@@ -261,8 +318,8 @@ export function StudentRosterPreview({ configId, rankingId }: StudentRosterPrevi
           ))}
         </TableBody>
       </Table>
-    )
-  }
+    );
+  };
 
   if (loading) {
     return (
@@ -272,7 +329,7 @@ export function StudentRosterPreview({ configId, rankingId }: StudentRosterPrevi
           <p className="mt-4 text-muted-foreground">載入學生名單中...</p>
         </CardContent>
       </Card>
-    )
+    );
   }
 
   if (error) {
@@ -284,7 +341,7 @@ export function StudentRosterPreview({ configId, rankingId }: StudentRosterPrevi
           </Alert>
         </CardContent>
       </Card>
-    )
+    );
   }
 
   if (!data || data.students.length === 0) {
@@ -292,12 +349,10 @@ export function StudentRosterPreview({ configId, rankingId }: StudentRosterPrevi
       <Card>
         <CardContent className="p-12 text-center">
           <InfoIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <p className="text-muted-foreground">
-            目前沒有預計分發的學生
-          </p>
+          <p className="text-muted-foreground">目前沒有預計分發的學生</p>
         </CardContent>
       </Card>
-    )
+    );
   }
 
   return (
@@ -310,7 +365,9 @@ export function StudentRosterPreview({ configId, rankingId }: StudentRosterPrevi
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data.summary.included_count}</div>
+            <div className="text-2xl font-bold">
+              {data.summary.included_count}
+            </div>
             <p className="text-xs text-muted-foreground">
               {data.summary.excluded_count > 0
                 ? `符合條件學生（排除 ${data.summary.excluded_count} 位）`
@@ -358,17 +415,31 @@ export function StudentRosterPreview({ configId, rankingId }: StudentRosterPrevi
         <CardContent>
           {data.has_matrix_distribution ? (
             <Tabs value={selectedCollege} onValueChange={setSelectedCollege}>
-              <TabsList className="grid w-full" style={{ gridTemplateColumns: `repeat(${Object.keys(data.summary.by_college).length + 1}, 1fr)` }}>
-                {Object.entries(data.summary.by_college).map(([college, stats]) => (
-                  <TabsTrigger key={college} value={college} className="flex items-center gap-2">
-                    <span>{getAcademyName(college, academies)}</span>
-                    <Badge variant="secondary" className="ml-1">
-                      {stats.included}
-                    </Badge>
-                  </TabsTrigger>
-                ))}
+              <TabsList
+                className="grid w-full"
+                style={{
+                  gridTemplateColumns: `repeat(${Object.keys(data.summary.by_college).length + 1}, 1fr)`,
+                }}
+              >
+                {Object.entries(data.summary.by_college).map(
+                  ([college, stats]) => (
+                    <TabsTrigger
+                      key={college}
+                      value={college}
+                      className="flex items-center gap-2"
+                    >
+                      <span>{getAcademyName(college, academies)}</span>
+                      <Badge variant="secondary" className="ml-1">
+                        {stats.included}
+                      </Badge>
+                    </TabsTrigger>
+                  )
+                )}
                 {data.summary.excluded_count > 0 && (
-                  <TabsTrigger value="excluded" className="flex items-center gap-2">
+                  <TabsTrigger
+                    value="excluded"
+                    className="flex items-center gap-2"
+                  >
                     <span>已排除學生</span>
                     <Badge variant="destructive" className="ml-1">
                       {data.summary.excluded_count}
@@ -377,19 +448,29 @@ export function StudentRosterPreview({ configId, rankingId }: StudentRosterPrevi
                 )}
               </TabsList>
 
-              {Object.keys(data.summary.by_college).map((college) => (
+              {Object.keys(data.summary.by_college).map(college => (
                 <TabsContent key={college} value={college} className="mt-4">
                   <div className="mb-4 flex items-center justify-between">
                     <div>
-                      <h3 className="text-lg font-semibold">{getAcademyName(college, academies)}</h3>
+                      <h3 className="text-lg font-semibold">
+                        {getAcademyName(college, academies)}
+                      </h3>
                       <p className="text-sm text-muted-foreground">
-                        符合條件 {data.summary.by_college[college].included} 位學生
+                        符合條件 {data.summary.by_college[college].included}{" "}
+                        位學生
                         {data.summary.by_college[college].excluded > 0 && (
                           <span className="text-orange-600">
-                            {" "}（排除 {data.summary.by_college[college].excluded} 位）
+                            {" "}
+                            （排除 {
+                              data.summary.by_college[college].excluded
+                            }{" "}
+                            位）
                           </span>
                         )}
-                        ，總金額 {formatCurrency(data.summary.by_college[college].total_amount)}
+                        ，總金額{" "}
+                        {formatCurrency(
+                          data.summary.by_college[college].total_amount
+                        )}
                       </p>
                     </div>
                   </div>
@@ -408,23 +489,33 @@ export function StudentRosterPreview({ configId, rankingId }: StudentRosterPrevi
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                       <div className="p-2 bg-gray-50 rounded border">
                         <div className="text-xs text-gray-600">缺少資料</div>
-                        <div className="text-lg font-semibold">{data.summary.exclusion_breakdown.missing_data}</div>
+                        <div className="text-lg font-semibold">
+                          {data.summary.exclusion_breakdown.missing_data}
+                        </div>
                       </div>
                       <div className="p-2 bg-gray-50 rounded border">
                         <div className="text-xs text-gray-600">驗證失敗</div>
-                        <div className="text-lg font-semibold">{data.summary.exclusion_breakdown.verification_failed}</div>
+                        <div className="text-lg font-semibold">
+                          {data.summary.exclusion_breakdown.verification_failed}
+                        </div>
                       </div>
                       <div className="p-2 bg-gray-50 rounded border">
                         <div className="text-xs text-gray-600">規則失敗</div>
-                        <div className="text-lg font-semibold">{data.summary.exclusion_breakdown.rules_failed}</div>
+                        <div className="text-lg font-semibold">
+                          {data.summary.exclusion_breakdown.rules_failed}
+                        </div>
                       </div>
                       <div className="p-2 bg-gray-50 rounded border">
                         <div className="text-xs text-gray-600">無銀行帳戶</div>
-                        <div className="text-lg font-semibold">{data.summary.exclusion_breakdown.no_bank_account}</div>
+                        <div className="text-lg font-semibold">
+                          {data.summary.exclusion_breakdown.no_bank_account}
+                        </div>
                       </div>
                     </div>
                   </div>
-                  {renderExcludedStudentTable(data.students.filter(s => !s.is_included))}
+                  {renderExcludedStudentTable(
+                    data.students.filter(s => !s.is_included)
+                  )}
                 </TabsContent>
               )}
             </Tabs>
@@ -438,11 +529,11 @@ export function StudentRosterPreview({ configId, rankingId }: StudentRosterPrevi
                   </AlertDescription>
                 </Alert>
               </div>
-              {renderStudentTable(data.students.filter((s) => s.is_included))}
+              {renderStudentTable(data.students.filter(s => s.is_included))}
             </>
           )}
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

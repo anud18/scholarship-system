@@ -34,10 +34,10 @@ help: ## Show this help message
 # Setup Commands
 install: ## Setup - Install all dependencies (backend + frontend)
 	@echo "$(GREEN)Installing dependencies...$(NC)"
-	@echo "$(CYAN)Installing backend dependencies...$(NC)"
-	cd backend && pip install -r requirements.txt && pip install -r requirements-dev.txt || pip install -r requirements.txt
-	@echo "$(CYAN)Installing frontend dependencies...$(NC)"
-	cd frontend && npm ci
+	@echo "$(CYAN)Installing backend dependencies with uv...$(NC)"
+	cd backend && uv pip install -r pyproject.toml --extra dev
+	@echo "$(CYAN)Installing frontend dependencies with bun...$(NC)"
+	cd frontend && bun install
 	@echo "$(GREEN)✅ Dependencies installed successfully!$(NC)"
 
 setup: install ## Setup - Complete project setup (install deps + setup env)
@@ -61,7 +61,7 @@ dev: ## Development - Start both backend and frontend in development mode
 	@echo "$(GREEN)Starting development servers...$(NC)"
 	@trap 'kill 0' SIGINT; \
 	(cd backend && echo "$(CYAN)Starting backend on http://localhost:8000$(NC)" && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000) & \
-	(cd frontend && echo "$(CYAN)Starting frontend on http://localhost:3000$(NC)" && npm run dev) & \
+	(cd frontend && echo "$(CYAN)Starting frontend on http://localhost:3000$(NC)" && bun run dev) & \
 	wait
 
 dev-backend: ## Development - Start only backend server
@@ -70,11 +70,11 @@ dev-backend: ## Development - Start only backend server
 
 dev-frontend: ## Development - Start only frontend server
 	@echo "$(GREEN)Starting frontend server...$(NC)"
-	cd frontend && npm run dev
+	cd frontend && bun run dev
 
 dev-safe: ## Development - Test API connection then start frontend
 	@echo "$(GREEN)Testing API connection before starting frontend...$(NC)"
-	cd frontend && npm run dev:safe
+	cd frontend && bun run dev:safe
 
 # Testing Commands
 test: ## Test - Run all tests (backend + frontend)
@@ -82,7 +82,7 @@ test: ## Test - Run all tests (backend + frontend)
 	@echo "$(CYAN)Running backend tests...$(NC)"
 	cd backend && python -m pytest app/tests -v
 	@echo "$(CYAN)Running frontend tests...$(NC)"
-	cd frontend && npm run test:ci
+	cd frontend && bun test
 	@echo "$(GREEN)✅ All tests completed!$(NC)"
 
 test-backend: ## Test - Run backend tests only
@@ -91,7 +91,7 @@ test-backend: ## Test - Run backend tests only
 
 test-frontend: ## Test - Run frontend tests only
 	@echo "$(GREEN)Running frontend tests...$(NC)"
-	cd frontend && npm run test:ci
+	cd frontend && bun test
 
 test-e2e: ## Test - Run end-to-end tests
 	@echo "$(GREEN)Running E2E tests...$(NC)"

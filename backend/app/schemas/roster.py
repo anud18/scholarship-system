@@ -47,13 +47,25 @@ class RosterItemResponse(BaseModel):
     application_id: int
     student_id_number: str
     student_name: str
+    student_email: Optional[str] = None
+    scholarship_name: Optional[str] = None
     scholarship_amount: Decimal
+    scholarship_subtype: Optional[str] = None
+    allocation_year: Optional[int] = None
+    bank_account: Optional[str] = None
     verification_status: StudentVerificationStatus
-    verification_snapshot: Optional[Dict[str, Any]] = None  # 對應 model 欄位名稱
-    is_included: bool  # 對應 model 欄位名稱
-    exclusion_reason: Optional[str] = None  # 對應 model 欄位名稱
+    verification_snapshot: Optional[Dict[str, Any]] = None
+    is_included: bool
+    exclusion_reason: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
+    # 學生學院/系所資訊（從 application.student_data 取得，非 ORM 欄位）
+    college_code: Optional[str] = None
+    college_name: Optional[str] = None
+    department_name: Optional[str] = None
+    # 分發資訊（造冊產生時快照，儲存於 DB）
+    application_identity: Optional[str] = None  # e.g. "114新申請", "114續領"
+    allocated_sub_type: Optional[str] = None  # 分發到的子類型 e.g. "nstc"
 
 
 class RosterAuditLogResponse(BaseModel):
@@ -84,6 +96,9 @@ class RosterResponse(BaseModel):
     period_label: str
     roster_cycle: RosterCycle
     academic_year: int
+    sub_type: Optional[str] = None  # 獎學金子類型 (e.g. nstc, moe_1w)
+    allocation_year: Optional[int] = None  # 消耗配額的學年度
+    project_number: Optional[str] = None  # 計畫編號
     status: RosterStatus
     trigger_type: RosterTriggerType
     qualified_count: int

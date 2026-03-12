@@ -21,6 +21,12 @@ const nextConfig = {
     removeConsole: process.env.NODE_ENV === 'production' ? true : false,
   },
 
+  // Experimental features for better performance
+  experimental: {
+    // Enable optimizePackageImports for faster dev builds
+    optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
+  },
+
   // Webpack optimization for development performance
   webpack: (config, { dev, isServer }) => {
     if (dev) {
@@ -33,6 +39,12 @@ const nextConfig = {
         removeAvailableModules: false,
         removeEmptyChunks: false,
         // Keep default splitChunks for code splitting
+      };
+
+      // Speed up development builds
+      config.cache = {
+        type: 'filesystem',
+        compression: false, // Disable compression for faster caching
       };
 
       // Increase chunk loading timeout to handle large chunks

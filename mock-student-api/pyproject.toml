@@ -1,0 +1,15 @@
+[project]
+name = "mock-student-api"
+version = "1.0.0"
+description = "Mock Student Database API for Development"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.129.0",
+    "uvicorn[standard]==0.38.0",
+    "pydantic==2.10.0",
+    "requests==2.32.5",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

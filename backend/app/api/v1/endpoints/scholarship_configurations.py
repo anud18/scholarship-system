@@ -770,6 +770,7 @@ async def create_scholarship_configuration(
             effective_start_date=config_data.get("effective_start_date"),
             effective_end_date=config_data.get("effective_end_date"),
             version=config_data.get("version", "1.0"),
+            prior_quota_years=config_data.get("prior_quota_years"),
             created_by=current_user.id,
         )
 
@@ -839,6 +840,8 @@ async def get_scholarship_configuration(
             "quota_management_mode": config.quota_management_mode.value if config.quota_management_mode else "none",
             "total_quota": config.total_quota,
             "quotas": config.quotas,
+            "project_numbers": config.project_numbers,
+            "prior_quota_years": config.prior_quota_years,
             "renewal_application_start_date": (
                 config.renewal_application_start_date.isoformat() if config.renewal_application_start_date else None
             ),
@@ -1002,6 +1005,9 @@ async def update_scholarship_configuration(
         if "quotas" in config_data:
             config.quotas = config_data["quotas"]
             flag_modified(config, "quotas")
+        if "prior_quota_years" in config_data:
+            config.prior_quota_years = config_data["prior_quota_years"]
+            flag_modified(config, "prior_quota_years")
 
         config.updated_by = current_user.id
 
@@ -1223,6 +1229,8 @@ async def list_scholarship_configurations(
                 "quota_management_mode": config.quota_management_mode.value if config.quota_management_mode else "none",
                 "total_quota": config.total_quota,
                 "quotas": config.quotas,
+                "project_numbers": config.project_numbers,
+                "prior_quota_years": config.prior_quota_years,
                 "is_active": config.is_active,
                 "renewal_application_start_date": (
                     config.renewal_application_start_date.isoformat() if config.renewal_application_start_date else None

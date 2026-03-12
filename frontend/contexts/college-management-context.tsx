@@ -151,9 +151,11 @@ const CollegeManagementContext = createContext<CollegeManagementContextType | un
 export function CollegeManagementProvider({
   children,
   locale = "zh",
+  userRole,
 }: {
   children: React.ReactNode;
   locale?: "zh" | "en";
+  userRole?: string;
 }) {
   const {
     applications,
@@ -319,7 +321,10 @@ export function CollegeManagementProvider({
       let currentAvailableOptions = availableOptions;
       if (!currentAvailableOptions) {
         console.log("Available options not loaded yet, fetching now...");
-        const response = await apiClient.college.getAvailableCombinations();
+        const isAdmin = userRole === "admin" || userRole === "super_admin";
+        const response = isAdmin
+          ? await apiClient.manualDistribution.getAvailableCombinations()
+          : await apiClient.college.getAvailableCombinations();
         console.log("Available combinations API response:", response);
 
         if (response.success && response.data) {
@@ -403,12 +408,15 @@ export function CollegeManagementProvider({
       );
       return [];
     }
-  }, [scholarshipConfig, availableOptions]);
+  }, [scholarshipConfig, availableOptions, userRole]);
 
   const fetchAvailableOptions = useCallback(async () => {
     try {
       console.log("Fetching available combinations...");
-      const response = await apiClient.college.getAvailableCombinations();
+      const isAdmin = userRole === "admin" || userRole === "super_admin";
+      const response = isAdmin
+        ? await apiClient.manualDistribution.getAvailableCombinations()
+        : await apiClient.college.getAvailableCombinations();
       console.log("fetchAvailableOptions response:", response);
 
       if (response.success && response.data) {
@@ -443,7 +451,7 @@ export function CollegeManagementProvider({
       );
       setAvailableOptions(null); // Clear availableOptions on error
     }
-  }, []);
+  }, [userRole]);
 
   const fetchRankings = useCallback(async () => {
     try {

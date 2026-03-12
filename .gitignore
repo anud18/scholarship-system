@@ -171,3 +171,6 @@ minio_data/
 # Test results
 test-results/
 playwright-report/
+
+# Git worktrees
+.worktrees/

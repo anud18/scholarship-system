@@ -1,9 +1,9 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -11,85 +11,106 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
-import { Download, Eye, PlayCircle, Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react"
-import { RosterDetailDialog } from "./RosterDetailDialog"
-import { apiClient } from "@/lib/api"
-import { toast } from "sonner"
+} from "@/components/ui/table";
+import {
+  Download,
+  Eye,
+  PlayCircle,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+} from "lucide-react";
+import { RosterDetailDialog } from "./RosterDetailDialog";
+import { apiClient } from "@/lib/api";
+import { toast } from "sonner";
 
 interface Period {
-  label: string
-  status: "completed" | "waiting" | "failed" | "processing" | "draft" | "locked"
-  roster_id?: number
-  roster_code?: string
-  roster_status?: string
-  error_message?: string
-  completed_at?: string
-  total_amount?: number
-  qualified_count?: number
-  next_schedule?: string
-  period_start_date?: string
-  period_end_date?: string
+  label: string;
+  status:
+    | "completed"
+    | "waiting"
+    | "failed"
+    | "processing"
+    | "draft"
+    | "locked";
+  roster_id?: number;
+  roster_code?: string;
+  roster_status?: string;
+  error_message?: string;
+  completed_at?: string;
+  total_amount?: number;
+  qualified_count?: number;
+  next_schedule?: string;
+  period_start_date?: string;
+  period_end_date?: string;
+  sub_type?: string | null;
+  allocation_year?: number | null;
+  project_number?: string | null;
 }
 
 interface RosterListTableProps {
-  periods: Period[]
-  configId: number
-  onRosterGenerated?: () => void
+  periods: Period[];
+  configId: number;
+  onRosterGenerated?: () => void;
 }
 
-export function RosterListTable({ periods, configId, onRosterGenerated }: RosterListTableProps) {
-  const [selectedPeriod, setSelectedPeriod] = useState<Period | null>(null)
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [generating, setGenerating] = useState<string | null>(null)
-  const [downloading, setDownloading] = useState<number | null>(null)
+export function RosterListTable({
+  periods,
+  configId,
+  onRosterGenerated,
+}: RosterListTableProps) {
+  const [selectedPeriod, setSelectedPeriod] = useState<Period | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [generating, setGenerating] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState<number | null>(null);
 
   const formatDate = (dateStr: string | null | undefined) => {
-    if (!dateStr) return "-"
+    if (!dateStr) return "-";
     try {
-      const date = new Date(dateStr)
+      const date = new Date(dateStr);
       return date.toLocaleString("zh-TW", {
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
         hour: "2-digit",
         minute: "2-digit",
-      })
+      });
     } catch {
-      return dateStr
+      return dateStr;
     }
-  }
+  };
 
   const formatDateOnly = (dateStr: string | null | undefined) => {
-    if (!dateStr) return "-"
+    if (!dateStr) return "-";
     try {
-      const date = new Date(dateStr)
+      const date = new Date(dateStr);
       return date.toLocaleDateString("zh-TW", {
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
-      })
+      });
     } catch {
-      return dateStr
+      return dateStr;
     }
-  }
+  };
 
   const formatPeriodRange = (startDate?: string, endDate?: string) => {
-    if (!startDate || !endDate) return "-"
-    return `${formatDateOnly(startDate)} - ${formatDateOnly(endDate)}`
-  }
+    if (!startDate || !endDate) return "-";
+    return `${formatDateOnly(startDate)} - ${formatDateOnly(endDate)}`;
+  };
 
   const handleViewRoster = (period: Period) => {
-    setSelectedPeriod(period)
-    setDialogOpen(true)
-  }
+    setSelectedPeriod(period);
+    setDialogOpen(true);
+  };
 
   const handleDownload = async (period: Period) => {
-    if (!period.roster_id) return
+    if (!period.roster_id) return;
 
-    setDownloading(period.roster_id)
+    setDownloading(period.roster_id);
     try {
-      const token = apiClient.getToken()
+      const token = apiClient.getToken();
       const response = await fetch(
         `/api/v1/payment-rosters/${period.roster_id}/download`,
         {
@@ -97,33 +118,39 @@ export function RosterListTable({ periods, configId, onRosterGenerated }: Roster
             Authorization: `Bearer ${token}`,
           },
         }
-      )
+      );
 
       if (!response.ok) {
-        throw new Error("Download failed")
+        throw new Error("Download failed");
       }
 
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement("a")
-      link.href = url
-      link.setAttribute("download", `${period.roster_code || period.label}.xlsx`)
-      document.body.appendChild(link)
-      link.click()
-      link.parentNode?.removeChild(link)
-      window.URL.revokeObjectURL(url)
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute(
+        "download",
+        `${period.roster_code || period.label}.xlsx`
+      );
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
 
-      toast.success("造冊檔案已下載")
+      toast.success("造冊檔案已下載");
     } catch (error) {
-      console.error("Failed to download roster:", error)
-      toast.error("下載失敗: 無法下載造冊檔案")
+      console.error("Failed to download roster:", error);
+      toast.error("下載失敗: 無法下載造冊檔案");
     } finally {
-      setDownloading(null)
+      setDownloading(null);
     }
-  }
+  };
 
-  const handleGenerateNow = async (period: Period, isRegeneration: boolean = false) => {
-    setGenerating(period.label)
+  const handleGenerateNow = async (
+    period: Period,
+    isRegeneration: boolean = false
+  ) => {
+    setGenerating(period.label);
     try {
       const response = await apiClient.request("/payment-rosters/generate", {
         method: "POST",
@@ -139,37 +166,37 @@ export function RosterListTable({ periods, configId, onRosterGenerated }: Roster
         headers: {
           "Content-Type": "application/json",
         },
-      })
+      });
 
       if (response.success) {
-        toast.success(`已成功產生 ${period.label} 的造冊`)
-        onRosterGenerated?.()
+        toast.success(`已成功產生 ${period.label} 的造冊`);
+        onRosterGenerated?.();
       } else {
-        throw new Error(response.message || "產生造冊失敗")
+        throw new Error(response.message || "產生造冊失敗");
       }
     } catch (error: any) {
-      console.error("Failed to generate roster:", error)
-      toast.error(`產生造冊失敗: ${error.message || "無法產生造冊"}`)
+      console.error("Failed to generate roster:", error);
+      toast.error(`產生造冊失敗: ${error.message || "無法產生造冊"}`);
     } finally {
-      setGenerating(null)
+      setGenerating(null);
     }
-  }
+  };
 
   const getRowClassName = (status: string) => {
     switch (status) {
       case "completed":
       case "locked":
-        return "bg-green-50 hover:bg-green-100"
+        return "bg-green-50 hover:bg-green-100";
       case "failed":
-        return "bg-red-50 hover:bg-red-100"
+        return "bg-red-50 hover:bg-red-100";
       case "processing":
-        return "bg-blue-50 hover:bg-blue-100"
+        return "bg-blue-50 hover:bg-blue-100";
       case "draft":
       case "waiting":
       default:
-        return "bg-gray-50 hover:bg-gray-100"
+        return "bg-gray-50 hover:bg-gray-100";
     }
-  }
+  };
 
   return (
     <>
@@ -187,22 +214,69 @@ export function RosterListTable({ periods, configId, onRosterGenerated }: Roster
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[120px] whitespace-nowrap">期間</TableHead>
+                  <TableHead className="w-[100px] whitespace-nowrap">
+                    期間
+                  </TableHead>
+                  <TableHead className="whitespace-nowrap">子類型</TableHead>
+                  <TableHead className="whitespace-nowrap">配額年度</TableHead>
                   <TableHead className="whitespace-nowrap">造冊期間</TableHead>
-                  <TableHead className="w-[120px] whitespace-nowrap">狀態</TableHead>
-                  <TableHead className="whitespace-nowrap">完成時間 / 下次排程</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">操作</TableHead>
+                  <TableHead className="w-[120px] whitespace-nowrap">
+                    狀態
+                  </TableHead>
+                  <TableHead className="whitespace-nowrap">
+                    完成時間 / 下次排程
+                  </TableHead>
+                  <TableHead className="text-right whitespace-nowrap">
+                    操作
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {periods.map((period) => (
-                  <TableRow key={period.label} className={getRowClassName(period.status)}>
+                {periods.map(period => (
+                  <TableRow
+                    key={`${period.label}-${period.sub_type ?? ""}-${period.allocation_year ?? ""}`}
+                    className={getRowClassName(period.status)}
+                  >
                     {/* 期間 */}
-                    <TableCell className="font-medium whitespace-nowrap">{period.label}</TableCell>
+                    <TableCell className="font-medium whitespace-nowrap">
+                      {period.label}
+                    </TableCell>
+
+                    {/* 子類型 */}
+                    <TableCell className="whitespace-nowrap">
+                      {period.sub_type ? (
+                        <span className="font-mono text-sm text-blue-700">
+                          {period.sub_type}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+
+                    {/* 配額年度 */}
+                    <TableCell className="whitespace-nowrap">
+                      {period.allocation_year ? (
+                        <div>
+                          <span className="font-medium">
+                            {period.allocation_year}
+                          </span>
+                          {period.project_number && (
+                            <div className="text-xs text-muted-foreground">
+                              {period.project_number}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
 
                     {/* 造冊期間 */}
                     <TableCell className="whitespace-nowrap">
-                      {formatPeriodRange(period.period_start_date, period.period_end_date)}
+                      {formatPeriodRange(
+                        period.period_start_date,
+                        period.period_end_date
+                      )}
                     </TableCell>
 
                     {/* 狀態 */}
@@ -223,7 +297,10 @@ export function RosterListTable({ periods, configId, onRosterGenerated }: Roster
                           失敗
                         </Badge>
                       ) : period.status === "processing" ? (
-                        <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+                        <Badge
+                          variant="secondary"
+                          className="bg-blue-100 text-blue-700"
+                        >
                           <Loader2 className="mr-1 h-3 w-3 animate-spin" />
                           處理中
                         </Badge>
@@ -242,7 +319,8 @@ export function RosterListTable({ periods, configId, onRosterGenerated }: Roster
 
                     {/* 完成時間 / 下次排程 */}
                     <TableCell>
-                      {period.status === "completed" || period.status === "locked" ? (
+                      {period.status === "completed" ||
+                      period.status === "locked" ? (
                         <div className="text-sm">
                           <div>{formatDate(period.completed_at)}</div>
                           {period.qualified_count !== undefined && (
@@ -255,7 +333,10 @@ export function RosterListTable({ periods, configId, onRosterGenerated }: Roster
                         <div className="text-sm text-red-600">
                           <div>產生失敗</div>
                           {period.error_message && (
-                            <div className="text-xs line-clamp-2" title={period.error_message}>
+                            <div
+                              className="text-xs line-clamp-2"
+                              title={period.error_message}
+                            >
                               {period.error_message}
                             </div>
                           )}
@@ -277,7 +358,8 @@ export function RosterListTable({ periods, configId, onRosterGenerated }: Roster
 
                     {/* 操作 */}
                     <TableCell className="text-right">
-                      {period.status === "completed" || period.status === "locked" ? (
+                      {period.status === "completed" ||
+                      period.status === "locked" ? (
                         <div className="flex justify-end gap-2">
                           <Button
                             size="sm"
@@ -294,7 +376,9 @@ export function RosterListTable({ periods, configId, onRosterGenerated }: Roster
                             disabled={downloading === period.roster_id}
                           >
                             <Download className="mr-1 h-4 w-4" />
-                            {downloading === period.roster_id ? "下載中..." : "下載Excel"}
+                            {downloading === period.roster_id
+                              ? "下載中..."
+                              : "下載Excel"}
                           </Button>
                         </div>
                       ) : period.status === "failed" ? (
@@ -305,14 +389,12 @@ export function RosterListTable({ periods, configId, onRosterGenerated }: Roster
                           disabled={generating === period.label}
                         >
                           <PlayCircle className="mr-1 h-4 w-4" />
-                          {generating === period.label ? "產生中..." : "重新產生"}
+                          {generating === period.label
+                            ? "產生中..."
+                            : "重新產生"}
                         </Button>
                       ) : period.status === "processing" ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled
-                        >
+                        <Button size="sm" variant="outline" disabled>
                           <Loader2 className="mr-1 h-4 w-4 animate-spin" />
                           處理中...
                         </Button>
@@ -324,7 +406,9 @@ export function RosterListTable({ periods, configId, onRosterGenerated }: Roster
                           disabled={generating === period.label}
                         >
                           <PlayCircle className="mr-1 h-4 w-4" />
-                          {generating === period.label ? "產生中..." : "立即產生"}
+                          {generating === period.label
+                            ? "產生中..."
+                            : "立即產生"}
                         </Button>
                       )}
                     </TableCell>
@@ -346,5 +430,5 @@ export function RosterListTable({ periods, configId, onRosterGenerated }: Roster
         />
       )}
     </>
-  )
+  );
 }
