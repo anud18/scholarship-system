@@ -404,7 +404,7 @@ async def seed_scholarships(session: AsyncSession):
             "application_cycle": ApplicationCycle.yearly.value,
             "sub_type_list": ["nstc", "moe_1w"],
             "whitelist_enabled": False,
-            "sub_type_selection_mode": SubTypeSelectionMode.hierarchical.value,
+            "sub_type_selection_mode": SubTypeSelectionMode.multiple.value,
             "status": ScholarshipStatus.active.value,
         },
         {
