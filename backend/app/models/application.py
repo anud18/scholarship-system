@@ -87,6 +87,7 @@ class Application(Base):
     sub_type_selection_mode = Column(
         Enum(SubTypeSelectionMode, values_callable=lambda obj: [e.value for e in obj]), nullable=False
     )
+    sub_type_preferences = Column(JSON, nullable=True)  # Ordered preference list: ["nstc", "moe_1w"]
 
     # New fields for comprehensive scholarship system (Issue #10)
     # Sub type is configuration-driven (dynamic), use String for flexibility
