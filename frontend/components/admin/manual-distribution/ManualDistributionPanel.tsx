@@ -199,7 +199,7 @@ export function ManualDistributionPanel({
           if (s.allocated_sub_type) {
             allocMap.set(s.ranking_item_id, {
               sub_type: s.allocated_sub_type,
-              year: s.allocation_year ?? selectedAcademicYear,
+              year: s.allocation_year ?? selectedAcademicYear!,
             });
           } else {
             allocMap.set(s.ranking_item_id, null);
@@ -347,7 +347,7 @@ export function ManualDistributionPanel({
             if (s.allocated_sub_type) {
               initial.set(s.ranking_item_id, {
                 sub_type: s.allocated_sub_type,
-                year: s.allocation_year ?? selectedAcademicYear,
+                year: s.allocation_year ?? selectedAcademicYear!,
               });
             } else {
               initial.set(s.ranking_item_id, null);
@@ -489,7 +489,7 @@ export function ManualDistributionPanel({
             if (s.allocated_sub_type) {
               initial.set(s.ranking_item_id, {
                 sub_type: s.allocated_sub_type,
-                year: s.allocation_year ?? selectedAcademicYear,
+                year: s.allocation_year ?? selectedAcademicYear!,
               });
             } else {
               initial.set(s.ranking_item_id, null);
