@@ -6,7 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.application import ApplicationStatus
 
@@ -187,6 +187,17 @@ class ApplicationCreate(BaseModel):
         if len(v) != len(set(v)):
             raise ValueError("sub_type_preferences must not contain duplicates")
         return v
+
+    @model_validator(mode="after")
+    def validate_preferences_match_subtype_list(self):
+        prefs = self.sub_type_preferences
+        subtype_list = self.scholarship_subtype_list
+        if prefs and subtype_list:
+            if set(prefs) != set(subtype_list):
+                raise ValueError(
+                    "sub_type_preferences must be a permutation of scholarship_subtype_list"
+                )
+        return self
 
     model_config = ConfigDict(
         json_encoders={datetime: lambda v: v.isoformat()},
