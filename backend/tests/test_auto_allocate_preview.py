@@ -16,15 +16,16 @@ from unittest.mock import MagicMock
 
 import pytest
 
+
 # ---------------------------------------------------------------------------
-# Import _compute_suggestions directly from the source file, bypassing the
-# app package __init__.py chain (which requires the full FastAPI app stack).
+# Fixture-based module isolation: mock only when not already imported,
+# and restore on teardown to avoid poisoning other test modules.
 # ---------------------------------------------------------------------------
+
 _SERVICE_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "app", "services", "manual_distribution_service.py")
 )
 
-# Provide mock stubs for all transitive imports the module needs at top-level
 _MOCK_MODULES = [
     "sqlalchemy",
     "sqlalchemy.ext",
@@ -37,34 +38,51 @@ _MOCK_MODULES = [
     "app.models.enums",
     "app.models.scholarship",
 ]
-for _mod_name in _MOCK_MODULES:
-    if _mod_name not in sys.modules:
-        sys.modules[_mod_name] = MagicMock()
 
-# Ensure sub-packages resolve correctly via their parents
-sys.modules["sqlalchemy"].ext = sys.modules["sqlalchemy.ext"]
-sys.modules["sqlalchemy.ext"].asyncio = sys.modules["sqlalchemy.ext.asyncio"]
-sys.modules["sqlalchemy.ext.asyncio"].AsyncSession = object
 
-sys.modules["sqlalchemy.orm"].selectinload = MagicMock()
+@pytest.fixture(scope="module")
+def _compute_suggestions():
+    """
+    Import _compute_suggestions with mocked dependencies, then clean up
+    sys.modules on teardown to avoid poisoning other test files.
+    """
+    originals = {}
+    for mod_name in _MOCK_MODULES:
+        originals[mod_name] = sys.modules.get(mod_name)
+        if mod_name not in sys.modules:
+            sys.modules[mod_name] = MagicMock()
 
-sys.modules["app.models.enums"].ApplicationStatus = MagicMock()
-sys.modules["app.models.enums"].ReviewStage = MagicMock()
+    # Ensure sub-packages resolve correctly via their parents
+    sys.modules["sqlalchemy"].ext = sys.modules["sqlalchemy.ext"]
+    sys.modules["sqlalchemy.ext"].asyncio = sys.modules["sqlalchemy.ext.asyncio"]
+    sys.modules["sqlalchemy.ext.asyncio"].AsyncSession = object
 
-sys.modules["app.models.college_review"].CollegeRanking = MagicMock()
-sys.modules["app.models.college_review"].CollegeRankingItem = MagicMock()
-sys.modules["app.models.college_review"].ManualDistributionHistory = MagicMock()
+    sys.modules["sqlalchemy.orm"].selectinload = MagicMock()
 
-sys.modules["app.models.scholarship"].ScholarshipConfiguration = MagicMock()
-sys.modules["app.models.scholarship"].ScholarshipSubTypeConfig = MagicMock()
+    sys.modules["app.models.enums"].ApplicationStatus = MagicMock()
+    sys.modules["app.models.enums"].ReviewStage = MagicMock()
 
-sys.modules["app.models.application"].Application = MagicMock()
+    sys.modules["app.models.college_review"].CollegeRanking = MagicMock()
+    sys.modules["app.models.college_review"].CollegeRankingItem = MagicMock()
+    sys.modules["app.models.college_review"].ManualDistributionHistory = MagicMock()
 
-_spec = importlib.util.spec_from_file_location("manual_distribution_service_direct", _SERVICE_PATH)
-_module = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_module)
+    sys.modules["app.models.scholarship"].ScholarshipConfiguration = MagicMock()
+    sys.modules["app.models.scholarship"].ScholarshipSubTypeConfig = MagicMock()
 
-_compute_suggestions = _module._compute_suggestions
+    sys.modules["app.models.application"].Application = MagicMock()
+
+    spec = importlib.util.spec_from_file_location("manual_distribution_service_direct", _SERVICE_PATH)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    yield module._compute_suggestions
+
+    # Restore original sys.modules state
+    for mod_name in _MOCK_MODULES:
+        if originals[mod_name] is None:
+            sys.modules.pop(mod_name, None)
+        else:
+            sys.modules[mod_name] = originals[mod_name]
 
 
 # ---------------------------------------------------------------------------
@@ -124,7 +142,7 @@ def _build_quota_tracker(entries: dict) -> dict:
 class TestNewApplicantsAllocatedToCurrentYearNstcFirst:
     """Test 1: 2 new applicants with prefs ["nstc", "moe_1w"], both get nstc at current year."""
 
-    def test_new_applicants_allocated_to_current_year_nstc_first(self):
+    def test_new_applicants_allocated_to_current_year_nstc_first(self, _compute_suggestions):
         academic_year = 114
         default_prefs = ["nstc", "moe_1w"]
         prior_years_map = {"nstc": [113], "moe_1w": []}
@@ -156,7 +174,7 @@ class TestNewApplicantsAllocatedToCurrentYearNstcFirst:
 class TestRenewalStudentsSortedBeforeNew:
     """Test 2: 1 renewal + 1 new, both rank 1, verify renewal processed first."""
 
-    def test_renewal_students_sorted_before_new(self):
+    def test_renewal_students_sorted_before_new(self, _compute_suggestions):
         academic_year = 114
         default_prefs = ["nstc", "moe_1w"]
         prior_years_map = {"nstc": [113], "moe_1w": []}
@@ -193,7 +211,7 @@ class TestRenewalStudentsSortedBeforeNew:
 class TestRenewalTargetsPreviousAllocationYear:
     """Test 3: Renewal student with prev alloc year 113, verify suggestion is (nstc, 113)."""
 
-    def test_renewal_targets_previous_allocation_year(self):
+    def test_renewal_targets_previous_allocation_year(self, _compute_suggestions):
         academic_year = 114
         default_prefs = ["nstc", "moe_1w"]
         prior_years_map = {"nstc": [113], "moe_1w": []}
@@ -224,7 +242,7 @@ class TestRenewalTargetsPreviousAllocationYear:
 class TestRenewalFallbackToCurrentYearWhenPriorExhausted:
     """Test 4: Prior year quota = 0, verify falls back to current year."""
 
-    def test_renewal_fallback_to_current_year_when_prior_exhausted(self):
+    def test_renewal_fallback_to_current_year_when_prior_exhausted(self, _compute_suggestions):
         academic_year = 114
         default_prefs = ["nstc", "moe_1w"]
         prior_years_map = {"nstc": [113], "moe_1w": []}
@@ -255,7 +273,7 @@ class TestRenewalFallbackToCurrentYearWhenPriorExhausted:
 class TestQuotaExhaustedFallsToNextPreference:
     """Test 5: nstc quota = 0, verify student gets moe_1w."""
 
-    def test_quota_exhausted_falls_to_next_preference(self):
+    def test_quota_exhausted_falls_to_next_preference(self, _compute_suggestions):
         academic_year = 114
         default_prefs = ["nstc", "moe_1w"]
         prior_years_map = {"nstc": [113], "moe_1w": []}
@@ -284,7 +302,7 @@ class TestQuotaExhaustedFallsToNextPreference:
 class TestAllQuotasExhaustedReturnsNull:
     """Test 6: No quota remaining, verify null suggestion."""
 
-    def test_all_quotas_exhausted_returns_null(self):
+    def test_all_quotas_exhausted_returns_null(self, _compute_suggestions):
         academic_year = 114
         default_prefs = ["nstc", "moe_1w"]
         prior_years_map = {"nstc": [113], "moe_1w": []}
@@ -313,7 +331,7 @@ class TestAllQuotasExhaustedReturnsNull:
 class TestNullPreferencesUsesConfigDefaults:
     """Test 7: sub_type_preferences is None, verify uses ScholarshipSubTypeConfig order."""
 
-    def test_null_preferences_uses_config_defaults(self):
+    def test_null_preferences_uses_config_defaults(self, _compute_suggestions):
         academic_year = 114
         default_prefs = ["nstc", "moe_1w"]  # Config-driven defaults
         prior_years_map = {"nstc": [113], "moe_1w": []}
@@ -343,7 +361,7 @@ class TestNullPreferencesUsesConfigDefaults:
 class TestAlreadyAllocatedStudentsSkipped:
     """Test 8: Student with existing allocation, verify skipped."""
 
-    def test_already_allocated_students_skipped(self):
+    def test_already_allocated_students_skipped(self, _compute_suggestions):
         academic_year = 114
         default_prefs = ["nstc", "moe_1w"]
         prior_years_map = {"nstc": [113], "moe_1w": []}
@@ -381,7 +399,7 @@ class TestAlreadyAllocatedStudentsSkipped:
 class TestPerCollegeQuotaRespected:
     """Test 9: College A quota=1, 2 students from college A, only 1 gets allocated."""
 
-    def test_per_college_quota_respected(self):
+    def test_per_college_quota_respected(self, _compute_suggestions):
         academic_year = 114
         default_prefs = ["nstc", "moe_1w"]
         prior_years_map = {"nstc": [113], "moe_1w": []}
@@ -415,7 +433,7 @@ class TestPerCollegeQuotaRespected:
 class TestRenewalWithPriorYearNotConfigured:
     """Bonus test: Renewal targets prior year not in prior_years_map, should try current year."""
 
-    def test_renewal_with_prior_year_not_in_config_uses_current(self):
+    def test_renewal_with_prior_year_not_in_config_uses_current(self, _compute_suggestions):
         """
         Renewal student's prev alloc year is 112, but prior_years_map only has 113.
         Should try current year (114) as fallback.
@@ -446,10 +464,10 @@ class TestRenewalWithPriorYearNotConfigured:
         assert results[0] == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_year": 114}
 
 
-class TestDeduplicationByApplicationId:
-    """Test that duplicate application_ids across multiple rankings are deduplicated."""
+class TestNoDedupInComputeSuggestions:
+    """Verify _compute_suggestions does not re-deduplicate (caller's responsibility)."""
 
-    def test_duplicate_app_ids_deduplicated(self):
+    def test_both_items_get_suggestions(self, _compute_suggestions):
         academic_year = 114
         default_prefs = ["nstc"]
         prior_years_map = {"nstc": [113]}
@@ -476,3 +494,76 @@ class TestDeduplicationByApplicationId:
         # (deduplication is done before calling this function)
         # So both get their own result
         assert len(results) == 2
+
+
+class TestEmptyItemsList:
+    """Empty input returns empty output."""
+
+    def test_empty_items_returns_empty(self, _compute_suggestions):
+        results = _compute_suggestions(
+            unique_items=[],
+            default_prefs=["nstc"],
+            prev_alloc_years={},
+            prior_years_map={},
+            quota_tracker={},
+            academic_year=114,
+        )
+        assert results == []
+
+
+class TestRenewalWithNoPreviousApplicationId:
+    """Renewal student with no previous_application_id uses current year."""
+
+    def test_renewal_no_prev_app_id_uses_current_year(self, _compute_suggestions):
+        academic_year = 114
+        default_prefs = ["nstc"]
+        prior_years_map = {"nstc": [113]}
+        quota_tracker = _build_quota_tracker({
+            ("nstc", 114, "A"): 5,
+        })
+        prev_alloc_years: dict[int, int] = {}
+
+        # is_renewal=True but prev_app_id=None
+        app = _make_app(1, college="A", is_renewal=True, prev_app_id=None)
+        item = _make_item(101, rank_position=1, app=app)
+
+        results = _compute_suggestions(
+            unique_items=[item],
+            default_prefs=default_prefs,
+            prev_alloc_years=prev_alloc_years,
+            prior_years_map=prior_years_map,
+            quota_tracker=quota_tracker,
+            academic_year=academic_year,
+        )
+
+        assert len(results) == 1
+        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_year": 114}
+
+
+class TestUnknownCollegeGetsNoAllocation:
+    """Student from college not in quota tracker gets null allocation."""
+
+    def test_unknown_college_no_allocation(self, _compute_suggestions):
+        academic_year = 114
+        default_prefs = ["nstc"]
+        prior_years_map = {}
+        # Only college A has quota
+        quota_tracker = _build_quota_tracker({
+            ("nstc", 114, "A"): 5,
+        })
+        prev_alloc_years: dict[int, int] = {}
+
+        app = _make_app(1, college="B")  # College B not in tracker
+        item = _make_item(101, rank_position=1, app=app)
+
+        results = _compute_suggestions(
+            unique_items=[item],
+            default_prefs=default_prefs,
+            prev_alloc_years=prev_alloc_years,
+            prior_years_map=prior_years_map,
+            quota_tracker=quota_tracker,
+            academic_year=academic_year,
+        )
+
+        assert len(results) == 1
+        assert results[0] == {"ranking_item_id": 101, "sub_type_code": None, "allocation_year": None}

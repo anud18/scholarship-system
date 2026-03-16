@@ -7,6 +7,7 @@ Supports multi-year supplementary distribution (補發) where prior-year
 remaining quotas can be allocated to current-year students.
 """
 
+import json as _json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -284,7 +285,7 @@ class ManualDistributionService:
             raw = current_config.prior_quota_years
             # Handle case where JSON column stored as string instead of dict
             if isinstance(raw, str):
-                import json as _json
+
                 try:
                     raw = _json.loads(raw)
                 except (ValueError, TypeError):
@@ -810,7 +811,7 @@ class ManualDistributionService:
 
     async def _batch_load_previous_allocation_years(
         self, previous_app_ids: list[int]
-    ) -> dict[int, Optional[int]]:
+    ) -> dict[int, int]:
         """
         For renewal students, find the allocation_year from their previous application's
         CollegeRankingItem.
@@ -831,7 +832,7 @@ class ManualDistributionService:
         items = result.scalars().all()
 
         # If a previous app appears in multiple ranking items, use the first one
-        mapping: dict[int, Optional[int]] = {}
+        mapping: dict[int, int] = {}
         for item in items:
             if item.application_id not in mapping:
                 mapping[item.application_id] = item.allocation_year
@@ -906,14 +907,14 @@ class ManualDistributionService:
         ]
         prev_alloc_years = await self._batch_load_previous_allocation_years(previous_app_ids)
 
-        # --- Step 0b: Build quota tracker ---
+        # --- Step 1: Build quota tracker ---
         current_config = await self._load_config(scholarship_type_id, academic_year, semester)
 
         prior_years_map: dict[str, list[int]] = {}
         if current_config and current_config.prior_quota_years:
             raw = current_config.prior_quota_years
             if isinstance(raw, str):
-                import json as _json
+
                 try:
                     raw = _json.loads(raw)
                 except (ValueError, TypeError):

@@ -170,17 +170,21 @@ async def auto_allocate_preview(
     current_user=Depends(get_current_admin_user),
 ):
     """Generate auto-allocation suggestions without persisting."""
-    service = ManualDistributionService(db)
-    suggestions = await service.auto_allocate_preview(
-        scholarship_type_id=scholarship_type_id,
-        academic_year=academic_year,
-        semester=semester,
-    )
-    return {
-        "success": True,
-        "message": "Auto-allocation preview generated",
-        "data": {"suggestions": suggestions},
-    }
+    try:
+        service = ManualDistributionService(db)
+        suggestions = await service.auto_allocate_preview(
+            scholarship_type_id=scholarship_type_id,
+            academic_year=academic_year,
+            semester=semester,
+        )
+        return {
+            "success": True,
+            "message": "Auto-allocation preview generated",
+            "data": {"suggestions": suggestions},
+        }
+    except Exception as e:
+        logger.error("Error generating auto-allocation preview: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to generate auto-allocation preview")
 
 
 @router.post("/allocate")
