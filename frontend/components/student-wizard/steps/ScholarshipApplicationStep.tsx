@@ -35,7 +35,11 @@ import {
   FileText,
   Eye,
 } from "lucide-react";
-import api, { ScholarshipType, ApplicationCreate, Application } from "@/lib/api";
+import api, {
+  ScholarshipType,
+  ApplicationCreate,
+  Application,
+} from "@/lib/api";
 import { clsx } from "@/lib/utils";
 import { useApplications } from "@/hooks/use-applications";
 
@@ -56,11 +60,19 @@ export function ScholarshipApplicationStep({
 }: ScholarshipApplicationStepProps) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [eligibleScholarships, setEligibleScholarships] = useState<ScholarshipType[]>([]);
-  const [selectedScholarship, setSelectedScholarship] = useState<ScholarshipType | null>(null);
+  const [eligibleScholarships, setEligibleScholarships] = useState<
+    ScholarshipType[]
+  >([]);
+  const [selectedScholarship, setSelectedScholarship] =
+    useState<ScholarshipType | null>(null);
   const [selectedSubTypes, setSelectedSubTypes] = useState<string[]>([]);
-  const [dynamicFormData, setDynamicFormData] = useState<Record<string, any>>({});
-  const [dynamicFileData, setDynamicFileData] = useState<Record<string, File[]>>({});
+  const [subTypePreferences, setSubTypePreferences] = useState<string[]>([]);
+  const [dynamicFormData, setDynamicFormData] = useState<Record<string, any>>(
+    {}
+  );
+  const [dynamicFileData, setDynamicFileData] = useState<
+    Record<string, File[]>
+  >({});
   const [formProgress, setFormProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
@@ -136,7 +148,8 @@ export function ScholarshipApplicationStep({
       draftSaved: "Draft saved successfully",
       singleSelection: "Single selection",
       multipleSelection: "Multiple selections allowed",
-      hierarchicalSelection: "Please select items in order (sequential selection required)",
+      hierarchicalSelection:
+        "Please select items in order (sequential selection required)",
       selectPrevious: "Select previous items first",
       eligible: "Eligible",
       notEligible: "Not Eligible",
@@ -159,6 +172,14 @@ export function ScholarshipApplicationStep({
     calculateProgress();
   }, [selectedScholarship, selectedSubTypes, dynamicFormData, dynamicFileData]);
 
+  useEffect(() => {
+    setSubTypePreferences(prev => {
+      const kept = prev.filter(st => selectedSubTypes.includes(st));
+      const newOnes = selectedSubTypes.filter(st => !prev.includes(st));
+      return [...kept, ...newOnes];
+    });
+  }, [selectedSubTypes]);
+
   // Load editing application data
   useEffect(() => {
     if (editingApplication && eligibleScholarships.length > 0) {
@@ -171,22 +192,35 @@ export function ScholarshipApplicationStep({
       }
 
       // Load sub-types
-      if (editingApplication.scholarship_subtype_list && editingApplication.scholarship_subtype_list.length > 0) {
-        const validSubTypes = editingApplication.scholarship_subtype_list.filter(
-          st => st !== "general"
-        );
+      if (
+        editingApplication.scholarship_subtype_list &&
+        editingApplication.scholarship_subtype_list.length > 0
+      ) {
+        const validSubTypes =
+          editingApplication.scholarship_subtype_list.filter(
+            st => st !== "general"
+          );
         setSelectedSubTypes(validSubTypes);
       }
 
       // Load form data
-      const formData = editingApplication.submitted_form_data || editingApplication.form_data || {};
+      const formData =
+        editingApplication.submitted_form_data ||
+        editingApplication.form_data ||
+        {};
       if (formData.fields) {
         const existingFormData: Record<string, any> = {};
-        Object.entries(formData.fields).forEach(([fieldId, fieldData]: [string, any]) => {
-          if (fieldData && typeof fieldData === "object" && "value" in fieldData) {
-            existingFormData[fieldId] = fieldData.value;
+        Object.entries(formData.fields).forEach(
+          ([fieldId, fieldData]: [string, any]) => {
+            if (
+              fieldData &&
+              typeof fieldData === "object" &&
+              "value" in fieldData
+            ) {
+              existingFormData[fieldId] = fieldData.value;
+            }
           }
-        });
+        );
         setDynamicFormData(existingFormData);
       }
 
@@ -232,12 +266,17 @@ export function ScholarshipApplicationStep({
       const response = await api.scholarships.getEligible();
       if (response.success && response.data) {
         // Filter to only show eligible scholarships (no common errors)
-        const eligible = response.data.filter((scholarship: ScholarshipType) => {
-          const hasCommonErrors = scholarship.errors?.some(rule => !rule.sub_type) || false;
-          return Array.isArray(scholarship.eligible_sub_types) &&
-            scholarship.eligible_sub_types.length > 0 &&
-            !hasCommonErrors;
-        });
+        const eligible = response.data.filter(
+          (scholarship: ScholarshipType) => {
+            const hasCommonErrors =
+              scholarship.errors?.some(rule => !rule.sub_type) || false;
+            return (
+              Array.isArray(scholarship.eligible_sub_types) &&
+              scholarship.eligible_sub_types.length > 0 &&
+              !hasCommonErrors
+            );
+          }
+        );
         setEligibleScholarships(eligible);
       } else {
         setError(response.message || text.loadError);
@@ -256,7 +295,9 @@ export function ScholarshipApplicationStep({
     }
 
     try {
-      const response = await api.applicationFields.getFormConfig(selectedScholarship.code);
+      const response = await api.applicationFields.getFormConfig(
+        selectedScholarship.code
+      );
       if (!response.success || !response.data) {
         setFormProgress(0);
         return;
@@ -264,12 +305,15 @@ export function ScholarshipApplicationStep({
 
       const { fields, documents } = response.data;
       const requiredFields = fields.filter(f => f.is_active && f.is_required);
-      const requiredDocuments = documents.filter(d => d.is_active && d.is_required);
+      const requiredDocuments = documents.filter(
+        d => d.is_active && d.is_required
+      );
 
       let totalRequired = requiredFields.length + requiredDocuments.length;
 
       // Add sub-type selection as required if applicable
-      const hasSpecialSubTypes = selectedScholarship.eligible_sub_types &&
+      const hasSpecialSubTypes =
+        selectedScholarship.eligible_sub_types &&
         selectedScholarship.eligible_sub_types.length > 0 &&
         selectedScholarship.eligible_sub_types[0]?.value !== "general" &&
         selectedScholarship.eligible_sub_types[0]?.value !== null;
@@ -289,11 +333,15 @@ export function ScholarshipApplicationStep({
       requiredFields.forEach(field => {
         const fieldValue = dynamicFormData[field.field_name];
         const isFixed = field.is_fixed === true;
-        const hasPrefillValue = field.prefill_value !== undefined &&
+        const hasPrefillValue =
+          field.prefill_value !== undefined &&
           field.prefill_value !== null &&
           field.prefill_value !== "";
 
-        if ((isFixed && hasPrefillValue) || (fieldValue !== undefined && fieldValue !== null && fieldValue !== "")) {
+        if (
+          (isFixed && hasPrefillValue) ||
+          (fieldValue !== undefined && fieldValue !== null && fieldValue !== "")
+        ) {
           completedItems++;
         }
       });
@@ -303,7 +351,10 @@ export function ScholarshipApplicationStep({
         const docFiles = dynamicFileData[doc.document_name];
         const isFixedDocument = doc.is_fixed === true;
 
-        if ((isFixedDocument && doc.existing_file_url) || (docFiles && docFiles.length > 0)) {
+        if (
+          (isFixedDocument && doc.existing_file_url) ||
+          (docFiles && docFiles.length > 0)
+        ) {
           completedItems++;
         }
       });
@@ -322,7 +373,9 @@ export function ScholarshipApplicationStep({
   };
 
   const handleScholarshipChange = (scholarshipCode: string) => {
-    const scholarship = eligibleScholarships.find(s => s.code === scholarshipCode);
+    const scholarship = eligibleScholarships.find(
+      s => s.code === scholarshipCode
+    );
     setSelectedScholarship(scholarship || null);
     setSelectedSubTypes([]);
     setDynamicFormData({});
@@ -334,12 +387,11 @@ export function ScholarshipApplicationStep({
     if (!selectedScholarship || !selectedScholarship.terms_document_url) return;
 
     // Get token from localStorage for authentication
-    const token = typeof window !== 'undefined'
-      ? localStorage.getItem('auth_token')
-      : null;
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
 
     // Append token as query parameter for iframe authentication
-    const previewUrl = `/api/v1/preview-terms?scholarshipType=${selectedScholarship.code}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
+    const previewUrl = `/api/v1/preview-terms?scholarshipType=${selectedScholarship.code}${token ? `&token=${encodeURIComponent(token)}` : ""}`;
 
     setTermsPreviewFile({
       url: previewUrl,
@@ -357,18 +409,24 @@ export function ScholarshipApplicationStep({
   const handleSubTypeSelection = (subTypeValue: string) => {
     if (!selectedScholarship) return;
 
-    const selectionMode = selectedScholarship.sub_type_selection_mode || "multiple";
+    const selectionMode =
+      selectedScholarship.sub_type_selection_mode || "multiple";
     let newSelected: string[] = [];
 
     switch (selectionMode) {
       case "single":
-        newSelected = selectedSubTypes.includes(subTypeValue) ? [] : [subTypeValue];
+        newSelected = selectedSubTypes.includes(subTypeValue)
+          ? []
+          : [subTypeValue];
         break;
       case "hierarchical":
-        const validSubTypes = selectedScholarship.eligible_sub_types?.filter(
-          st => st.value && st.value !== "general"
-        ) || [];
-        const orderedValues = validSubTypes.map(st => st.value!).filter(Boolean);
+        const validSubTypes =
+          selectedScholarship.eligible_sub_types?.filter(
+            st => st.value && st.value !== "general"
+          ) || [];
+        const orderedValues = validSubTypes
+          .map(st => st.value!)
+          .filter(Boolean);
 
         if (selectedSubTypes.includes(subTypeValue)) {
           const indexToRemove = selectedSubTypes.indexOf(subTypeValue);
@@ -394,6 +452,19 @@ export function ScholarshipApplicationStep({
     setSelectedSubTypes(newSelected);
   };
 
+  const handleMovePreference = (index: number, direction: "up" | "down") => {
+    setSubTypePreferences(prev => {
+      const newPrefs = [...prev];
+      const targetIndex = direction === "up" ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= newPrefs.length) return prev;
+      [newPrefs[index], newPrefs[targetIndex]] = [
+        newPrefs[targetIndex],
+        newPrefs[index],
+      ];
+      return newPrefs;
+    });
+  };
+
   const handleSaveDraft = async () => {
     if (!selectedScholarship) return;
 
@@ -409,22 +480,27 @@ export function ScholarshipApplicationStep({
         };
       });
 
-      const documents = Object.entries(dynamicFileData).map(([docType, files]) => {
-        const file = files[0];
-        return {
-          document_id: docType,
-          document_type: docType,
-          file_path: file.name,
-          original_filename: file.name,
-          upload_time: new Date().toISOString(),
-        };
-      });
+      const documents = Object.entries(dynamicFileData).map(
+        ([docType, files]) => {
+          const file = files[0];
+          return {
+            document_id: docType,
+            document_type: docType,
+            file_path: file.name,
+            original_filename: file.name,
+            upload_time: new Date().toISOString(),
+          };
+        }
+      );
 
       const applicationData: ApplicationCreate = {
         scholarship_type: selectedScholarship.code,
         configuration_id: selectedScholarship.configuration_id || 0,
-        scholarship_subtype_list: selectedSubTypes.length > 0 ? selectedSubTypes : ["general"],
+        scholarship_subtype_list:
+          selectedSubTypes.length > 0 ? selectedSubTypes : ["general"],
         agree_terms: agreedToTerms,
+        sub_type_preferences:
+          subTypePreferences.length > 0 ? subTypePreferences : undefined,
         form_data: {
           fields: formFields,
           documents: documents,
@@ -482,22 +558,27 @@ export function ScholarshipApplicationStep({
         };
       });
 
-      const documents = Object.entries(dynamicFileData).map(([docType, files]) => {
-        const file = files[0];
-        return {
-          document_id: docType,
-          document_type: docType,
-          file_path: file.name,
-          original_filename: file.name,
-          upload_time: new Date().toISOString(),
-        };
-      });
+      const documents = Object.entries(dynamicFileData).map(
+        ([docType, files]) => {
+          const file = files[0];
+          return {
+            document_id: docType,
+            document_type: docType,
+            file_path: file.name,
+            original_filename: file.name,
+            upload_time: new Date().toISOString(),
+          };
+        }
+      );
 
       const applicationData: ApplicationCreate = {
         scholarship_type: selectedScholarship.code,
         configuration_id: selectedScholarship.configuration_id || 0,
-        scholarship_subtype_list: selectedSubTypes.length > 0 ? selectedSubTypes : ["general"],
+        scholarship_subtype_list:
+          selectedSubTypes.length > 0 ? selectedSubTypes : ["general"],
         agree_terms: agreedToTerms,
+        sub_type_preferences:
+          subTypePreferences.length > 0 ? subTypePreferences : undefined,
         form_data: {
           fields: formFields,
           documents: documents,
@@ -572,8 +653,10 @@ export function ScholarshipApplicationStep({
   }
 
   const eligibleSubTypes = selectedScholarship?.eligible_sub_types ?? [];
-  const selectionMode = selectedScholarship?.sub_type_selection_mode ?? "multiple";
-  const hasSpecialSubTypes = eligibleSubTypes.length > 0 &&
+  const selectionMode =
+    selectedScholarship?.sub_type_selection_mode ?? "multiple";
+  const hasSpecialSubTypes =
+    eligibleSubTypes.length > 0 &&
     eligibleSubTypes[0]?.value !== "general" &&
     eligibleSubTypes[0]?.value !== null;
 
@@ -612,7 +695,9 @@ export function ScholarshipApplicationStep({
                 ) : (
                   eligibleScholarships.map(scholarship => (
                     <SelectItem key={scholarship.id} value={scholarship.code}>
-                      {locale === "zh" ? scholarship.name : scholarship.name_en || scholarship.name}
+                      {locale === "zh"
+                        ? scholarship.name
+                        : scholarship.name_en || scholarship.name}
                     </SelectItem>
                   ))
                 )}
@@ -629,7 +714,9 @@ export function ScholarshipApplicationStep({
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {eligibleSubTypes.map((subType, index) => {
                   const subTypeValue = subType.value;
-                  const isSelected = subTypeValue ? selectedSubTypes.includes(subTypeValue) : false;
+                  const isSelected = subTypeValue
+                    ? selectedSubTypes.includes(subTypeValue)
+                    : false;
 
                   const isSelectable = (() => {
                     if (!subTypeValue) return false;
@@ -652,7 +739,8 @@ export function ScholarshipApplicationStep({
                         "relative cursor-pointer transition-all duration-200",
                         isSelectable && "hover:border-primary/50",
                         isSelected && "border-primary bg-primary/5",
-                        !isSelectable && "opacity-50 cursor-not-allowed bg-gray-50"
+                        !isSelectable &&
+                          "opacity-50 cursor-not-allowed bg-gray-50"
                       )}
                       onClick={() => {
                         if (isSelectable && subTypeValue) {
@@ -689,6 +777,53 @@ export function ScholarshipApplicationStep({
                   {text.programsRequired}
                 </p>
               )}
+
+              {/* Sub-type preference ordering */}
+              {selectedSubTypes.length >= 2 && (
+                <div className="mt-4">
+                  <h4 className="text-sm font-medium mb-2">
+                    志願排序（第一個為最優先）
+                  </h4>
+                  <div className="space-y-2">
+                    {subTypePreferences.map((subType, index) => {
+                      const config = eligibleSubTypes.find(
+                        c => c.value === subType
+                      );
+                      return (
+                        <div
+                          key={subType}
+                          className="flex items-center gap-2 p-2 bg-gray-50 rounded"
+                        >
+                          <span className="text-sm font-medium w-6">
+                            {index + 1}.
+                          </span>
+                          <span className="flex-1 text-sm">
+                            {locale === "zh"
+                              ? config?.label || subType
+                              : config?.label_en || config?.label || subType}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={index === 0}
+                            onClick={() => handleMovePreference(index, "up")}
+                            className="p-1 text-gray-500 hover:text-gray-700 disabled:opacity-30"
+                          >
+                            ▲
+                          </button>
+                          <button
+                            type="button"
+                            disabled={index === subTypePreferences.length - 1}
+                            onClick={() => handleMovePreference(index, "down")}
+                            className="p-1 text-gray-500 hover:text-gray-700 disabled:opacity-30"
+                          >
+                            ▼
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -721,7 +856,9 @@ export function ScholarshipApplicationStep({
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="font-medium">{text.formProgress}</span>
-                <span className="font-semibold text-nycu-blue-700">{formProgress}%</span>
+                <span className="font-semibold text-nycu-blue-700">
+                  {formProgress}%
+                </span>
               </div>
               <Progress value={formProgress} className="h-2" />
               {formProgress < 100 && (
@@ -764,7 +901,9 @@ export function ScholarshipApplicationStep({
                 <Checkbox
                   id="agree-terms"
                   checked={agreedToTerms}
-                  onCheckedChange={(checked) => setAgreedToTerms(checked === true)}
+                  onCheckedChange={checked =>
+                    setAgreedToTerms(checked === true)
+                  }
                   className="h-5 w-5"
                 />
                 <Label
@@ -807,7 +946,9 @@ export function ScholarshipApplicationStep({
                 disabled={
                   submitting ||
                   formProgress < 100 ||
-                  Boolean(selectedScholarship?.terms_document_url && !agreedToTerms)
+                  Boolean(
+                    selectedScholarship?.terms_document_url && !agreedToTerms
+                  )
                 }
                 size="lg"
                 className="nycu-gradient text-white px-8"
