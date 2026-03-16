@@ -65,6 +65,12 @@ export interface AllocationItem {
   allocation_year: number | null;
 }
 
+export interface AllocationSuggestion {
+  ranking_item_id: number;
+  sub_type_code: string | null;
+  allocation_year: number | null;
+}
+
 export interface AllocateRequest {
   scholarship_type_id: number;
   academic_year: number;
@@ -302,6 +308,31 @@ export function createManualDistributionApi() {
         }
       );
       return toApiResponse(response) as ApiResponse<DistributionSummaryResult>;
+    },
+
+    /**
+     * Get auto-allocation preview suggestions.
+     */
+    getAutoAllocatePreview: async (
+      scholarship_type_id: number,
+      academic_year: number,
+      semester: string
+    ): Promise<ApiResponse<{ suggestions: AllocationSuggestion[] }>> => {
+      const response = await typedClient.raw.GET(
+        "/api/v1/manual-distribution/auto-allocate-preview" as any,
+        {
+          params: {
+            query: {
+              scholarship_type_id,
+              academic_year,
+              semester,
+            } as any,
+          },
+        }
+      );
+      return toApiResponse(response) as ApiResponse<{
+        suggestions: AllocationSuggestion[];
+      }>;
     },
 
     /**

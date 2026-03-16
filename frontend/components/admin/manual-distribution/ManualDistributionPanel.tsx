@@ -11,6 +11,7 @@ import type {
   RestoreRequest,
   DistributionSummaryResult,
   DistributionSummaryGroup,
+  AllocationSuggestion,
 } from "@/lib/api/modules/manual-distribution";
 import { User } from "@/types/user";
 import { Button } from "@/components/ui/button";
@@ -124,6 +125,7 @@ export function ManualDistributionPanel({
       total_amount: string;
     }>;
   } | null>(null);
+  const [previewApplied, setPreviewApplied] = useState(false);
 
   /**
    * Flatten quota status into (sub_type × year) columns, ordered by:
@@ -175,6 +177,7 @@ export function ManualDistributionPanel({
       return;
     setIsLoading(true);
     setSaveMessage(null);
+    setPreviewApplied(false);
     try {
       const [studentsResp, quotaResp] = await Promise.all([
         apiClient.manualDistribution.getStudents(
@@ -191,18 +194,52 @@ export function ManualDistributionPanel({
 
       if (studentsResp.success && studentsResp.data) {
         setStudents(studentsResp.data);
-        const initial = new Map<number, LocalAlloc | null>();
+        const allocMap = new Map<number, LocalAlloc | null>();
         for (const s of studentsResp.data) {
           if (s.allocated_sub_type) {
-            initial.set(s.ranking_item_id, {
+            allocMap.set(s.ranking_item_id, {
               sub_type: s.allocated_sub_type,
               year: s.allocation_year ?? selectedAcademicYear,
             });
           } else {
-            initial.set(s.ranking_item_id, null);
+            allocMap.set(s.ranking_item_id, null);
           }
         }
-        setLocalAllocations(initial);
+
+        // Load preview separately (optional — failure should not break the page)
+        let previewSuggestions: AllocationSuggestion[] = [];
+        try {
+          const previewResp =
+            await apiClient.manualDistribution.getAutoAllocatePreview(
+              scholarshipTypeId,
+              selectedAcademicYear,
+              selectedSemester
+            );
+          if (previewResp.success && previewResp.data) {
+            previewSuggestions = previewResp.data.suggestions;
+          }
+        } catch {
+          // Preview is optional; proceed without it
+        }
+
+        // Apply auto-preview suggestions for unallocated students
+        let hasPreview = false;
+        for (const suggestion of previewSuggestions) {
+          if (
+            suggestion.sub_type_code &&
+            suggestion.allocation_year &&
+            !allocMap.get(suggestion.ranking_item_id)
+          ) {
+            allocMap.set(suggestion.ranking_item_id, {
+              sub_type: suggestion.sub_type_code,
+              year: suggestion.allocation_year,
+            });
+            hasPreview = true;
+          }
+        }
+        setPreviewApplied(hasPreview);
+
+        setLocalAllocations(allocMap);
       }
       if (quotaResp.success && quotaResp.data) {
         setQuotaStatus(quotaResp.data);
@@ -793,6 +830,13 @@ export function ManualDistributionPanel({
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Auto-preview notice */}
+        {previewApplied && (
+          <div className="mb-4 rounded-md bg-blue-50 p-3 text-sm text-blue-700">
+            已自動預設分配，請確認後儲存
           </div>
         )}
 
