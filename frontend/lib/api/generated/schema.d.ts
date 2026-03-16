@@ -4527,52 +4527,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college-review/rankings/{ranking_id}/distribute": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Execute Quota Distribution
-         * @description Execute quota-based distribution for a ranking
-         */
-        post: operations["execute_quota_distribution_api_v1_college_review_rankings__ranking_id__distribute_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/college-review/rankings/{ranking_id}/execute-matrix-distribution": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Execute Matrix Distribution
-         * @description Execute matrix-based quota distribution for a ranking
-         *
-         *     This uses the matrix distribution algorithm which:
-         *     - Processes sub-types in fixed priority order
-         *     - Allocates students to sub-type × college matrix quotas
-         *     - Tracks admitted (正取) and backup (備取) positions
-         *     - Checks eligibility rules before allocation
-         */
-        post: operations["execute_matrix_distribution_api_v1_college_review_rankings__ranking_id__execute_matrix_distribution_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/college-review/quota-status": {
         parameters: {
             query?: never;
@@ -6508,6 +6462,210 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/manual-distribution/available-combinations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Admin Available Combinations
+         * @description Get all active scholarship types and configurations for admin distribution.
+         */
+        get: operations["get_admin_available_combinations_api_v1_manual_distribution_available_combinations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/students": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Students For Distribution
+         * @description Get ranked students with allocation status for manual distribution.
+         */
+        get: operations["get_students_for_distribution_api_v1_manual_distribution_students_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/quota-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Quota Status
+         * @description Get real-time quota status per sub-type per college.
+         */
+        get: operations["get_quota_status_api_v1_manual_distribution_quota_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/auto-allocate-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Auto Allocate Preview
+         * @description Generate auto-allocation suggestions without persisting.
+         */
+        get: operations["auto_allocate_preview_api_v1_manual_distribution_auto_allocate_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/allocate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Allocate
+         * @description Save manual allocation selections.
+         */
+        post: operations["allocate_api_v1_manual_distribution_allocate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/finalize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finalize
+         * @description Finalize distribution - lock and update application statuses.
+         */
+        post: operations["finalize_api_v1_manual_distribution_finalize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/{scholarship_type_id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Distribution History
+         * @description Get allocation history for a scholarship/year/semester combination.
+         */
+        get: operations["get_distribution_history_api_v1_manual_distribution__scholarship_type_id__history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/{scholarship_type_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore From History
+         * @description Restore allocations from a specific history record.
+         */
+        post: operations["restore_from_history_api_v1_manual_distribution__scholarship_type_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/distribution-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Distribution Summary
+         * @description 取得分發結果摘要：所有被分發的學生及其分配到的獎學金子類型。
+         *     回傳所有已分配學生，按 sub_type × allocation_year 分組。
+         */
+        get: operations["get_distribution_summary_api_v1_manual_distribution_distribution_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/generate-rosters-from-distribution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate Rosters From Distribution
+         * @description 從矩陣分發結果批次產生造冊。
+         *
+         *     針對每個唯一的 (allocation_year, sub_type) 組合建立獨立的造冊。
+         *     例如：115 年度分發後，可能產生 nstc-115、nstc-114、moe_1w-115 等多個造冊。
+         */
+        post: operations["generate_rosters_from_distribution_api_v1_manual_distribution_generate_rosters_from_distribution_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -6537,6 +6695,26 @@ export interface components {
              * @description 更新指導教授資訊的原因
              */
             change_reason?: string | null;
+        };
+        /** AllocateRequest */
+        AllocateRequest: {
+            /** Scholarship Type Id */
+            scholarship_type_id: number;
+            /** Academic Year */
+            academic_year: number;
+            /** Semester */
+            semester: string;
+            /** Allocations */
+            allocations: components["schemas"]["AllocationItem"][];
+        };
+        /** AllocationItem */
+        AllocationItem: {
+            /** Ranking Item Id */
+            ranking_item_id: number;
+            /** Sub Type Code */
+            sub_type_code?: string | null;
+            /** Allocation Year */
+            allocation_year?: number | null;
         };
         /** ApiResponse[List[dict]] */
         ApiResponse_List_dict__: {
@@ -6637,6 +6815,11 @@ export interface components {
              * @default false
              */
             is_renewal: boolean | null;
+            /**
+             * Sub Type Preferences
+             * @description Ordered sub-type preference list
+             */
+            sub_type_preferences?: string[] | null;
         };
         /**
          * ApplicationDocumentCreate
@@ -7158,6 +7341,11 @@ export interface components {
              * @description 是否為續領申請
              */
             is_renewal?: boolean | null;
+            /**
+             * Sub Type Preferences
+             * @description Ordered sub-type preference list
+             */
+            sub_type_preferences?: string[] | null;
         };
         /**
          * ApplyTemplateRequest
@@ -7897,6 +8085,15 @@ export interface components {
          * @enum {string}
          */
         EmployeeStatus: "在職" | "退休" | "在學" | "畢業";
+        /** FinalizeRequest */
+        FinalizeRequest: {
+            /** Scholarship Type Id */
+            scholarship_type_id: number;
+            /** Academic Year */
+            academic_year: number;
+            /** Semester */
+            semester: string;
+        };
         /**
          * FormConfigSaveRequest
          * @description Schema for saving form configuration
@@ -7906,6 +8103,25 @@ export interface components {
             fields: Record<string, never>[];
             /** Documents */
             documents: Record<string, never>[];
+        };
+        /** GenerateRostersRequest */
+        GenerateRostersRequest: {
+            /** Scholarship Type Id */
+            scholarship_type_id: number;
+            /** Academic Year */
+            academic_year: number;
+            /** Semester */
+            semester: string;
+            /**
+             * Student Verification Enabled
+             * @default false
+             */
+            student_verification_enabled: boolean;
+            /**
+             * Force Regenerate
+             * @default false
+             */
+            force_regenerate: boolean;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -8054,17 +8270,6 @@ export interface components {
             professor_nycu_id: string;
         };
         /**
-         * QuotaDistributionRequest
-         * @description Schema for quota distribution request
-         */
-        QuotaDistributionRequest: {
-            /**
-             * Distribution Rules
-             * @description Custom distribution rules
-             */
-            distribution_rules?: Record<string, never> | null;
-        };
-        /**
          * RankingImportItem
          * @description Schema for importing ranking data from Excel
          */
@@ -8182,6 +8387,11 @@ export interface components {
              * @description Roster code (if roster exists)
              */
             roster_code?: string | null;
+        };
+        /** RestoreRequest */
+        RestoreRequest: {
+            /** History Id */
+            history_id: number;
         };
         /**
          * ReviewCreate
@@ -9216,6 +9426,10 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+            /** Input */
+            input?: unknown;
+            /** Context */
+            ctx?: Record<string, never>;
         };
         /**
          * WhitelistBatchAddRequest
@@ -17261,72 +17475,6 @@ export interface operations {
             };
         };
     };
-    execute_quota_distribution_api_v1_college_review_rankings__ranking_id__distribute_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ranking_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["QuotaDistributionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    execute_matrix_distribution_api_v1_college_review_rankings__ranking_id__execute_matrix_distribution_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ranking_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_quota_status_api_v1_college_review_quota_status_get: {
         parameters: {
             query: {
@@ -20170,6 +20318,327 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    get_admin_available_combinations_api_v1_manual_distribution_available_combinations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_students_for_distribution_api_v1_manual_distribution_students_get: {
+        parameters: {
+            query: {
+                scholarship_type_id: number;
+                academic_year: number;
+                semester: string;
+                college_code?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_quota_status_api_v1_manual_distribution_quota_status_get: {
+        parameters: {
+            query: {
+                scholarship_type_id: number;
+                academic_year: number;
+                semester: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    auto_allocate_preview_api_v1_manual_distribution_auto_allocate_preview_get: {
+        parameters: {
+            query: {
+                scholarship_type_id: number;
+                academic_year: number;
+                semester: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    allocate_api_v1_manual_distribution_allocate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AllocateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    finalize_api_v1_manual_distribution_finalize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FinalizeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_distribution_history_api_v1_manual_distribution__scholarship_type_id__history_get: {
+        parameters: {
+            query: {
+                academic_year: number;
+                semester: string;
+            };
+            header?: never;
+            path: {
+                scholarship_type_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_from_history_api_v1_manual_distribution__scholarship_type_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scholarship_type_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_distribution_summary_api_v1_manual_distribution_distribution_summary_get: {
+        parameters: {
+            query: {
+                scholarship_type_id: number;
+                academic_year: number;
+                semester: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_rosters_from_distribution_api_v1_manual_distribution_generate_rosters_from_distribution_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerateRostersRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
