@@ -229,6 +229,17 @@ class ApplicationUpdate(BaseModel):
     is_renewal: Optional[bool] = Field(None, description="是否為續領申請")
     sub_type_preferences: Optional[List[str]] = Field(None, description="Ordered sub-type preference list")
 
+    @field_validator("sub_type_preferences")
+    @classmethod
+    def validate_sub_type_preferences(cls, v):
+        if v is None:
+            return v
+        if len(v) == 0:
+            return None
+        if len(v) != len(set(v)):
+            raise ValueError("sub_type_preferences must not contain duplicates")
+        return v
+
     model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})
 
 
