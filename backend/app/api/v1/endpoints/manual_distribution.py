@@ -161,6 +161,28 @@ async def get_quota_status(
     }
 
 
+@router.get("/auto-allocate-preview")
+async def auto_allocate_preview(
+    scholarship_type_id: int = Query(...),
+    academic_year: int = Query(...),
+    semester: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_admin_user),
+):
+    """Generate auto-allocation suggestions without persisting."""
+    service = ManualDistributionService(db)
+    suggestions = await service.auto_allocate_preview(
+        scholarship_type_id=scholarship_type_id,
+        academic_year=academic_year,
+        semester=semester,
+    )
+    return {
+        "success": True,
+        "message": "Auto-allocation preview generated",
+        "data": {"suggestions": suggestions},
+    }
+
+
 @router.post("/allocate")
 async def allocate(
     request: AllocateRequest,
