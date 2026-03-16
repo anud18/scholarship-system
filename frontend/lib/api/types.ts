@@ -387,6 +387,7 @@ export interface ApplicationCreate {
   };
   agree_terms?: boolean;
   is_renewal?: boolean; // 是否為續領申請
+  sub_type_preferences?: string[];
   [key: string]: any; // 允許動態欄位
 }
 
