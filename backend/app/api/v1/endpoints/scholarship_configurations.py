@@ -1006,7 +1006,15 @@ async def update_scholarship_configuration(
             config.quotas = config_data["quotas"]
             flag_modified(config, "quotas")
         if "prior_quota_years" in config_data:
-            config.prior_quota_years = config_data["prior_quota_years"]
+            pqy = config_data["prior_quota_years"]
+            # Frontend textarea may send as string; parse to dict
+            if isinstance(pqy, str):
+                import json as _json
+                try:
+                    pqy = _json.loads(pqy)
+                except (ValueError, TypeError):
+                    pqy = {}
+            config.prior_quota_years = pqy
             flag_modified(config, "prior_quota_years")
 
         config.updated_by = current_user.id
