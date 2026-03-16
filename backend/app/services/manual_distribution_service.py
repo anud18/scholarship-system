@@ -174,7 +174,16 @@ class ManualDistributionService:
 
         prior_years_map: dict[str, list[int]] = {}
         if current_config and current_config.prior_quota_years:
-            prior_years_map = current_config.prior_quota_years
+            raw = current_config.prior_quota_years
+            # Handle case where JSON column stored as string instead of dict
+            if isinstance(raw, str):
+                import json as _json
+                try:
+                    raw = _json.loads(raw)
+                except (ValueError, TypeError):
+                    raw = {}
+            if isinstance(raw, dict):
+                prior_years_map = raw
 
         # Determine all years to check: current year + union of all prior years
         all_prior_years: set[int] = set()
