@@ -966,8 +966,9 @@ class ManualDistributionService:
                 for college_code, quota in college_quotas.items():
                     quota_tracker[(sub_type, year, college_code)] = quota
 
-        # Subtract existing allocations from tracker
-        for item in unique_items:
+        # Subtract existing allocations from tracker (use all_items, not unique_items,
+        # because a student's allocation may be on a ranking item that was deduplicated away)
+        for item in all_items:
             if item.is_allocated and item.allocated_sub_type and item.allocation_year:
                 college = (item.application.student_data or {}).get("std_academyno", "")
                 key = (item.allocated_sub_type, item.allocation_year, college)
