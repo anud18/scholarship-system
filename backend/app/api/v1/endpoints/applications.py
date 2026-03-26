@@ -2,10 +2,12 @@
 Application management API endpoints
 """
 
+import enum
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, Path, Query, Request, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Path, Query, Request, Response, UploadFile, status
+from sqlalchemy import inspect as sa_inspect
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +32,25 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _serialize_result(result):
+    """Serialize a Pydantic model, dict, or SQLAlchemy model to dict."""
+    if isinstance(result, dict):
+        return result
+    if hasattr(result, "model_dump"):
+        return result.model_dump()
+    if hasattr(result, "dict"):
+        return result.dict()
+    # SQLAlchemy model fallback — extract column values only (no relationship loading)
+    try:
+        mapper = sa_inspect(type(result))
+        return {
+            c.key: (v.value if isinstance(v := getattr(result, c.key), enum.Enum) else v)
+            for c in mapper.column_attrs
+        }
+    except Exception as exc:
+        raise TypeError(f"Cannot serialize {type(result).__name__}: {exc}") from exc
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_application(
     application_data: ApplicationCreate,
@@ -37,6 +58,7 @@ async def create_application(
     current_user: User = Depends(require_student),
     db: AsyncSession = Depends(get_db),
     request: Request = None,
+    response: Response = None,  # Injected by FastAPI
 ):
     """Create a new scholarship application (draft or submitted)"""
     logger.debug(f"Received application creation request from user: {current_user.id}, is_draft: {is_draft}")
@@ -137,10 +159,10 @@ async def create_application(
 
         # 排除已撤回/拒絕/取消/刪除的申請
         excluded_statuses = [
-            ApplicationStatus.withdrawn.value,
-            ApplicationStatus.rejected.value,
-            ApplicationStatus.cancelled.value,
-            ApplicationStatus.deleted.value,  # 允許刪除後重新申請
+            ApplicationStatus.withdrawn,
+            ApplicationStatus.rejected,
+            ApplicationStatus.cancelled,
+            ApplicationStatus.deleted,
         ]
 
         # 查詢是否已有申請 - using values from scholarship configuration
@@ -157,11 +179,34 @@ async def create_application(
         existing_application = duplicate_result.scalar_one_or_none()
 
         if existing_application:
+            existing_status = existing_application.status
+            existing_status_str = existing_status.value if hasattr(existing_status, "value") else existing_status
+
+            # If existing application is a draft, return it so frontend can continue
+            if existing_status == ApplicationStatus.draft:
+                logger.info(
+                    f"Returning existing draft application: user_id={current_user.id}, "
+                    f"app_id={existing_application.app_id}"
+                )
+                response.status_code = 200
+                return {
+                    "success": True,
+                    "message": "已返回現有草稿",
+                    "data": {
+                        "id": existing_application.id,
+                        "app_id": existing_application.app_id,
+                        "status": existing_status_str,
+                        "scholarship_type_id": existing_application.scholarship_type_id,
+                        "academic_year": existing_application.academic_year,
+                        "semester": existing_application.semester.value if hasattr(existing_application.semester, "value") else existing_application.semester,
+                    },
+                }
+
             logger.warning(
                 f"Duplicate application detected: user_id={current_user.id}, "
                 f"scholarship_type_id={scholarship_config.scholarship_type_id}, "
                 f"existing_app_id={existing_application.app_id}, "
-                f"status={existing_application.status}"
+                f"status={existing_status}"
             )
             return {
                 "success": False,
@@ -170,7 +215,7 @@ async def create_application(
                     "error_code": "DUPLICATE_APPLICATION",
                     "existing_application_id": existing_application.id,
                     "existing_app_id": existing_application.app_id,
-                    "existing_status": existing_application.status,
+                    "existing_status": existing_status_str,
                     "scholarship_name": existing_application.scholarship_name,
                 },
             }
@@ -273,7 +318,7 @@ async def get_my_applications(
     return {
         "success": True,
         "message": "查詢成功",
-        "data": [item.dict() if hasattr(item, "dict") else item.model_dump() for item in result],
+        "data": [_serialize_result(item) for item in result],
     }
 
 
@@ -285,7 +330,7 @@ async def get_dashboard_stats(current_user: User = Depends(require_student), db:
     return {
         "success": True,
         "message": "查詢成功",
-        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+        "data": _serialize_result(result),
     }
 
 
@@ -312,7 +357,7 @@ async def get_application(
     return {
         "success": True,
         "message": "查詢成功",
-        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+        "data": _serialize_result(result),
     }
 
 
@@ -347,7 +392,7 @@ async def update_application(
     return {
         "success": True,
         "message": "更新成功",
-        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+        "data": _serialize_result(result),
     }
 
 
@@ -374,7 +419,7 @@ async def submit_application(
     return {
         "success": True,
         "message": "申請已提交",
-        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+        "data": _serialize_result(result),
     }
 
 
@@ -452,7 +497,7 @@ async def withdraw_application(
     return {
         "success": True,
         "message": "申請已撤回",
-        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+        "data": _serialize_result(result),
     }
 
 
@@ -612,7 +657,7 @@ async def get_applications_for_review(
     return {
         "success": True,
         "message": "查詢成功",
-        "data": [item.dict() if hasattr(item, "dict") else item.model_dump() for item in result],
+        "data": [_serialize_result(item) for item in result],
     }
 
 
@@ -701,7 +746,7 @@ async def submit_professor_review(
     return {
         "success": True,
         "message": "審查已提交",
-        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+        "data": _serialize_result(result),
     }
 
 
@@ -731,7 +776,7 @@ async def get_college_applications_for_review(
     return {
         "success": True,
         "message": "查詢成功",
-        "data": [item.dict() if hasattr(item, "dict") else item.model_dump() for item in result],
+        "data": [_serialize_result(item) for item in result],
     }
 
 
