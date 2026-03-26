@@ -270,6 +270,8 @@ async def get_distribution_details(
                 "student_name": student_name,
                 "application_id": app.id,
                 "app_id": app.app_id,
+                "is_renewal": app.is_renewal,
+                "renewal_year": app.renewal_year,
             }
 
             # 優先處理被駁回的學生

@@ -1119,17 +1119,23 @@ export function ManualDistributionPanel({
                                   {student.student_id}
                                 </td>
                                 <td className="px-3 py-2.5 text-xs font-semibold whitespace-nowrap">
-                                  <span
-                                    className={
-                                      student.application_identity.includes(
-                                        "新申請"
-                                      )
-                                        ? "text-amber-600"
-                                        : "text-blue-600"
-                                    }
-                                  >
-                                    {student.application_identity}
-                                  </span>
+                                  {student.is_renewal ? (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-300">
+                                      {student.renewal_year || ""}續領
+                                    </span>
+                                  ) : (
+                                    <span
+                                      className={
+                                        student.application_identity.includes(
+                                          "新申請"
+                                        )
+                                          ? "text-amber-600"
+                                          : "text-blue-600"
+                                      }
+                                    >
+                                      {student.application_identity}
+                                    </span>
+                                  )}
                                 </td>
                               </tr>
                             );

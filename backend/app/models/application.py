@@ -99,6 +99,7 @@ class Application(Base):
         nullable=False,
     )
     is_renewal = Column(Boolean, default=False, nullable=False)  # 是否為續領申請
+    renewal_year = Column(Integer, nullable=True)  # 續領年份 (e.g. 113)，用於批次匯入時直接指定
     previous_application_id = Column(Integer, ForeignKey("applications.id"))
     review_deadline = Column(DateTime(timezone=True))
     decision_date = Column(DateTime(timezone=True))

@@ -106,8 +106,11 @@ def _compute_suggestions(
         college = (app.student_data or {}).get("std_academyno", "")
 
         # Determine target allocation year for this student
+        # Priority: 1) previous_application_id lookup, 2) renewal_year field, 3) current academic_year
         prev_app_id = app.previous_application_id if app.is_renewal else None
         target_year: Optional[int] = prev_alloc_years.get(prev_app_id) if prev_app_id else None
+        if target_year is None and app.is_renewal and app.renewal_year:
+            target_year = app.renewal_year
         if target_year is None:
             target_year = academic_year
 
@@ -241,6 +244,8 @@ class ManualDistributionService:
                 "enrollment_date": enrollment_date,
                 "student_id": student_data.get("std_stdcode", ""),
                 "application_identity": identity,
+                "is_renewal": app.is_renewal,
+                "renewal_year": app.renewal_year,
             })
 
         # Sort by college_code, then rank_position

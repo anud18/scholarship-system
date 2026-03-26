@@ -415,6 +415,8 @@ async def get_distribution_summary(
                     "college_name": sd.get("trm_academyname", ""),
                     "department_name": sd.get("trm_depname", ""),
                     "rank_position": item.rank_position,
+                    "is_renewal": app.is_renewal if app else False,
+                    "renewal_year": app.renewal_year if app else None,
                 })
             total_allocated += len(students)
             group_data.append({

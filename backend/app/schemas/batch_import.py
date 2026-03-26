@@ -108,6 +108,10 @@ class ApplicationDataRow(BaseModel):
     # 郵局帳戶資訊
     postal_account: Optional[str] = Field(None, description="郵局帳號", max_length=20)
 
+    # 續領
+    is_renewal: bool = Field(default=False, description="是否為續領申請")
+    renewal_year: Optional[int] = Field(default=None, description="續領年份，例如 113")
+
     # 其他動態欄位
     custom_fields: Optional[Dict[str, Any]] = Field(default={}, description="其他自定義欄位")
 

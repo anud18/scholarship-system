@@ -94,9 +94,11 @@ interface Application {
       reviewed_at: string;
     };
     rejection_reason?: string;
-  }>;  // Eligible sub-scholarship types with review status
+  }>; // Eligible sub-scholarship types with review status
   rank_position: number;
   is_allocated: boolean;
+  is_renewal?: boolean;
+  renewal_year?: number | null;
   status: string;
   review_status?: string;
 }
@@ -110,12 +112,19 @@ interface CollegeRankingTableProps {
   isFinalized: boolean;
   rankingId?: number;
   onRankingChange: (newOrder: Application[]) => void;
-  onReviewApplication: (applicationId: number, action: 'approve' | 'reject', comments?: string) => void;
+  onReviewApplication: (
+    applicationId: number,
+    action: "approve" | "reject",
+    comments?: string
+  ) => void;
   onFinalizeRanking: () => void;
   onImportExcel?: (data: any[]) => Promise<void>;
   locale?: "zh" | "en";
-  subTypeMeta?: Record<string, { label: string; label_en: string; code?: string }>;
-  saveStatus?: 'idle' | 'saving' | 'saved' | 'error';
+  subTypeMeta?: Record<
+    string,
+    { label: string; label_en: string; code?: string }
+  >;
+  saveStatus?: "idle" | "saving" | "saved" | "error";
 }
 
 // SortableItem component for drag and drop
@@ -137,10 +146,17 @@ function SortableItem({
   totalQuota: number;
   locale: "zh" | "en";
   isFinalized: boolean;
-  onReviewApplication: (applicationId: number, action: 'approve' | 'reject', comments?: string) => void;
+  onReviewApplication: (
+    applicationId: number,
+    action: "approve" | "reject",
+    comments?: string
+  ) => void;
   reviewScores: { [key: number]: any };
   handleScoreUpdate: (appId: number, field: string, value: any) => void;
-  subTypeMeta?: Record<string, { label: string; label_en: string; code?: string }>;
+  subTypeMeta?: Record<
+    string,
+    { label: string; label_en: string; code?: string }
+  >;
   academicYear: number;
   onViewDetails: (app: Application) => void;
 }) {
@@ -173,7 +189,7 @@ function SortableItem({
 
   const getStatusBadge = (app: Application) => {
     // Check for rejected status first (highest priority)
-    if (app.status === 'rejected') {
+    if (app.status === "rejected") {
       return (
         <Badge variant="destructive" className="bg-red-100 text-red-800">
           <XCircle className="w-3 h-3 mr-1" />
@@ -183,9 +199,12 @@ function SortableItem({
     }
 
     // Check for partial approval status
-    if (app.status === 'partial_approved') {
+    if (app.status === "partial_approved") {
       return (
-        <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300">
+        <Badge
+          variant="outline"
+          className="bg-blue-100 text-blue-700 border-blue-300"
+        >
           <Circle className="w-3 h-3 mr-1 fill-blue-700" />
           {locale === "zh" ? "部分核准" : "Partial Approval"}
         </Badge>
@@ -232,7 +251,9 @@ function SortableItem({
     if (!meta) {
       return subtype.toUpperCase();
     }
-    return (locale === "zh" ? meta.label : meta.label_en || meta.label) || subtype;
+    return (
+      (locale === "zh" ? meta.label : meta.label_en || meta.label) || subtype
+    );
   };
 
   return (
@@ -254,7 +275,19 @@ function SortableItem({
 
       <TableCell>
         <div className="space-y-1">
-          <p className="font-medium text-sm">{application.student_name}</p>
+          <div className="flex items-center gap-1.5">
+            <p className="font-medium text-sm">{application.student_name}</p>
+            {application.is_renewal && (
+              <Badge
+                variant="outline"
+                className="text-xs bg-amber-50 text-amber-700 border-amber-300"
+              >
+                {locale === "zh"
+                  ? `${application.renewal_year || ""}續領`
+                  : `Renewal${application.renewal_year ? ` ${application.renewal_year}` : ""}`}
+              </Badge>
+            )}
+          </div>
           <p className="text-xs text-gray-400">{application.app_id}</p>
         </div>
       </TableCell>
@@ -276,7 +309,8 @@ function SortableItem({
 
       <TableCell className="text-center">
         <div className="flex flex-wrap justify-center gap-1">
-          {application.eligible_subtypes && application.eligible_subtypes.length > 0 ? (
+          {application.eligible_subtypes &&
+          application.eligible_subtypes.length > 0 ? (
             application.eligible_subtypes.map((subtype, idx) => {
               const isRejected = subtype.is_rejected;
               const badgeClass = isRejected
@@ -284,9 +318,10 @@ function SortableItem({
                 : getSubtypeBadgeColor(subtype.code);
 
               // Build tooltip text for rejected subtypes
-              const tooltipText = isRejected && subtype.rejected_by
-                ? `被 ${subtype.rejected_by.role === 'professor' ? '教授' : subtype.rejected_by.role === 'college' ? '學院' : '管理員'} (${subtype.rejected_by.name}) 拒絕${subtype.rejection_reason ? ': ' + subtype.rejection_reason : ''}`
-                : undefined;
+              const tooltipText =
+                isRejected && subtype.rejected_by
+                  ? `被 ${subtype.rejected_by.role === "professor" ? "教授" : subtype.rejected_by.role === "college" ? "學院" : "管理員"} (${subtype.rejected_by.name}) 拒絕${subtype.rejection_reason ? ": " + subtype.rejection_reason : ""}`
+                  : undefined;
 
               return (
                 <Badge
@@ -339,7 +374,7 @@ export function CollegeRankingTable({
   onImportExcel,
   locale = "zh",
   subTypeMeta,
-  saveStatus = 'idle',
+  saveStatus = "idle",
 }: CollegeRankingTableProps) {
   const t = (key: string) => getTranslation(locale, key);
   const formatSemesterLabel = (value?: string | null) => {
@@ -424,12 +459,14 @@ export function CollegeRankingTable({
     }));
   };
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     // Validate file type
-    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+    if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
       toast.error("請上傳 Excel 檔案 (.xlsx 或 .xls)");
       return;
     }
@@ -440,16 +477,20 @@ export function CollegeRankingTable({
       // Read Excel file
       const data = await file.arrayBuffer();
       const uint8Array = new Uint8Array(data);
-      const workbook = XLSX.read(uint8Array, { type: 'array' });
+      const workbook = XLSX.read(uint8Array, { type: "array" });
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
       // Parse Excel data - expected columns: 學號, 姓名, 排名
-      const importData = jsonData.map((row: any) => ({
-        student_id: row['學號'] || row['student_id'] || '',
-        student_name: row['姓名'] || row['student_name'] || row['name'] || '',
-        rank_position: parseInt(row['排名'] || row['rank_position'] || row['rank'] || '0'),
-      })).filter(item => item.student_id && item.rank_position > 0);
+      const importData = jsonData
+        .map((row: any) => ({
+          student_id: row["學號"] || row["student_id"] || "",
+          student_name: row["姓名"] || row["student_name"] || row["name"] || "",
+          rank_position: parseInt(
+            row["排名"] || row["rank_position"] || row["rank"] || "0"
+          ),
+        }))
+        .filter(item => item.student_id && item.rank_position > 0);
 
       if (importData.length === 0) {
         toast.error("Excel 檔案中沒有找到有效的排名資料");
@@ -464,37 +505,39 @@ export function CollegeRankingTable({
         setIsImportDialogOpen(false);
       }
     } catch (error) {
-      console.error('Excel import error:', error);
-      toast.error(error instanceof Error ? error.message : "無法讀取 Excel 檔案");
+      console.error("Excel import error:", error);
+      toast.error(
+        error instanceof Error ? error.message : "無法讀取 Excel 檔案"
+      );
     } finally {
       setIsImporting(false);
       // Reset file input
-      event.target.value = '';
+      event.target.value = "";
     }
   };
 
   const handleTemplateDownload = () => {
     try {
       // Extract current students from localApplications with blank rankings
-      const templateData = localApplications.map((app) => ({
-        '學號': app.student_id || '',
-        '姓名': app.student_name || '',
-        '排名': '',  // Blank for user to fill
+      const templateData = localApplications.map(app => ({
+        學號: app.student_id || "",
+        姓名: app.student_name || "",
+        排名: "", // Blank for user to fill
       }));
 
       // Create worksheet
       const worksheet = XLSX.utils.json_to_sheet(templateData);
 
       // Set column widths for better readability
-      worksheet['!cols'] = [
-        { wch: 15 },  // 學號
-        { wch: 20 },  // 姓名
-        { wch: 10 },  // 排名
+      worksheet["!cols"] = [
+        { wch: 15 }, // 學號
+        { wch: 20 }, // 姓名
+        { wch: 10 }, // 排名
       ];
 
       // Create workbook
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, '排名範本');
+      XLSX.utils.book_append_sheet(workbook, worksheet, "排名範本");
 
       // Generate filename
       const filename = `排名範本_${subTypeCode}_${academicYear}.xlsx`;
@@ -504,7 +547,7 @@ export function CollegeRankingTable({
 
       toast.success(`已下載範本檔案：${filename}`);
     } catch (error) {
-      console.error('Template download error:', error);
+      console.error("Template download error:", error);
       toast.error(error instanceof Error ? error.message : "無法產生範本檔案");
     }
   };
@@ -512,30 +555,30 @@ export function CollegeRankingTable({
   const handleExportRanking = () => {
     try {
       // Prepare export data with all columns
-      const exportData = localApplications.map((app) => {
+      const exportData = localApplications.map(app => {
         // Format eligible subtypes
         const eligibleSubtypes = app.eligible_subtypes
-          ? app.eligible_subtypes.join(', ')
-          : '-';
+          ? app.eligible_subtypes.join(", ")
+          : "-";
 
         // Format status
-        let statusText = '';
-        if (app.status === 'rejected') {
-          statusText = locale === 'zh' ? '駁回' : 'Rejected';
+        let statusText = "";
+        if (app.status === "rejected") {
+          statusText = locale === "zh" ? "駁回" : "Rejected";
         } else if (app.is_allocated) {
-          statusText = locale === 'zh' ? '獲分配' : 'Allocated';
+          statusText = locale === "zh" ? "獲分配" : "Allocated";
         } else {
-          statusText = locale === 'zh' ? '未分配' : 'Not Allocated';
+          statusText = locale === "zh" ? "未分配" : "Not Allocated";
         }
 
         return {
-          '排名': app.rank_position,
-          '學號': app.student_id || '',
-          '姓名': app.student_name || '',
-          '學院': app.academy_name || '-',
-          '系所': app.department_name || '-',
-          '符合子類別': eligibleSubtypes,
-          '狀態': statusText,
+          排名: app.rank_position,
+          學號: app.student_id || "",
+          姓名: app.student_name || "",
+          學院: app.academy_name || "-",
+          系所: app.department_name || "-",
+          符合子類別: eligibleSubtypes,
+          狀態: statusText,
         };
       });
 
@@ -543,22 +586,22 @@ export function CollegeRankingTable({
       const worksheet = XLSX.utils.json_to_sheet(exportData);
 
       // Set column widths for better readability
-      worksheet['!cols'] = [
-        { wch: 8 },   // 排名
-        { wch: 15 },  // 學號
-        { wch: 20 },  // 姓名
-        { wch: 20 },  // 學院
-        { wch: 25 },  // 系所
-        { wch: 30 },  // 符合子類別
-        { wch: 12 },  // 狀態
+      worksheet["!cols"] = [
+        { wch: 8 }, // 排名
+        { wch: 15 }, // 學號
+        { wch: 20 }, // 姓名
+        { wch: 20 }, // 學院
+        { wch: 25 }, // 系所
+        { wch: 30 }, // 符合子類別
+        { wch: 12 }, // 狀態
       ];
 
       // Create workbook
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, '排名匯出');
+      XLSX.utils.book_append_sheet(workbook, worksheet, "排名匯出");
 
       // Generate filename with timestamp
-      const timestamp = new Date().toISOString().split('T')[0];
+      const timestamp = new Date().toISOString().split("T")[0];
       const filename = `排名匯出_${subTypeCode}_${academicYear}_${timestamp}.xlsx`;
 
       // Download file
@@ -566,7 +609,7 @@ export function CollegeRankingTable({
 
       toast.success(`已匯出 ${exportData.length} 筆排名資料`);
     } catch (error) {
-      console.error('Export error:', error);
+      console.error("Export error:", error);
       toast.error(error instanceof Error ? error.message : "無法匯出排名資料");
     }
   };
@@ -628,29 +671,29 @@ export function CollegeRankingTable({
             </div>
 
             <div className="flex gap-2">
-              {!isFinalized && saveStatus !== 'idle' && (
+              {!isFinalized && saveStatus !== "idle" && (
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-gray-50 border">
-                  {saveStatus === 'saving' && (
+                  {saveStatus === "saving" && (
                     <>
                       <div className="h-2 w-2 bg-blue-500 rounded-full animate-pulse" />
                       <span className="text-sm text-blue-700">
-                        {locale === 'zh' ? '儲存中...' : 'Saving...'}
+                        {locale === "zh" ? "儲存中..." : "Saving..."}
                       </span>
                     </>
                   )}
-                  {saveStatus === 'saved' && (
+                  {saveStatus === "saved" && (
                     <>
                       <div className="h-2 w-2 bg-green-500 rounded-full" />
                       <span className="text-sm text-green-700">
-                        {locale === 'zh' ? '已儲存' : 'Saved'}
+                        {locale === "zh" ? "已儲存" : "Saved"}
                       </span>
                     </>
                   )}
-                  {saveStatus === 'error' && (
+                  {saveStatus === "error" && (
                     <>
                       <div className="h-2 w-2 bg-red-500 rounded-full" />
                       <span className="text-sm text-red-700">
-                        {locale === 'zh' ? '儲存失敗' : 'Save Failed'}
+                        {locale === "zh" ? "儲存失敗" : "Save Failed"}
                       </span>
                     </>
                   )}
@@ -658,7 +701,10 @@ export function CollegeRankingTable({
               )}
               {!isFinalized && (
                 <>
-                  <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+                  <Dialog
+                    open={isImportDialogOpen}
+                    onOpenChange={setIsImportDialogOpen}
+                  >
                     <DialogTrigger asChild>
                       <Button variant="outline" size="sm">
                         <Upload className="h-4 w-4 mr-2" />
@@ -668,7 +714,9 @@ export function CollegeRankingTable({
                     <DialogContent>
                       <DialogHeader>
                         <DialogTitle>
-                          {locale === "zh" ? "匯入排名資料" : "Import Ranking Data"}
+                          {locale === "zh"
+                            ? "匯入排名資料"
+                            : "Import Ranking Data"}
                         </DialogTitle>
                         <DialogDescription>
                           {locale === "zh"
@@ -681,26 +729,52 @@ export function CollegeRankingTable({
                         {/* Instructions */}
                         <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                           <h4 className="text-sm font-semibold text-blue-900 mb-2">
-                            {locale === "zh" ? "檔案格式要求" : "File Format Requirements"}
+                            {locale === "zh"
+                              ? "檔案格式要求"
+                              : "File Format Requirements"}
                           </h4>
                           <ul className="text-sm text-blue-800 space-y-1">
-                            <li>• {locale === "zh" ? "Excel 格式 (.xlsx 或 .xls)" : "Excel format (.xlsx or .xls)"}</li>
-                            <li>• {locale === "zh" ? "必需欄位：學號、姓名、排名" : "Required columns: Student ID, Name, Rank"}</li>
-                            <li>• {locale === "zh" ? "排名必須為正整數 (1, 2, 3...)" : "Rank must be positive integers (1, 2, 3...)"}</li>
+                            <li>
+                              •{" "}
+                              {locale === "zh"
+                                ? "Excel 格式 (.xlsx 或 .xls)"
+                                : "Excel format (.xlsx or .xls)"}
+                            </li>
+                            <li>
+                              •{" "}
+                              {locale === "zh"
+                                ? "必需欄位：學號、姓名、排名"
+                                : "Required columns: Student ID, Name, Rank"}
+                            </li>
+                            <li>
+                              •{" "}
+                              {locale === "zh"
+                                ? "排名必須為正整數 (1, 2, 3...)"
+                                : "Rank must be positive integers (1, 2, 3...)"}
+                            </li>
                           </ul>
                         </div>
 
                         {/* Template Download */}
                         <div className="flex items-center gap-2">
                           <FileSpreadsheet className="h-5 w-5 text-gray-500" />
-                          <Button variant="link" className="text-sm p-0" onClick={handleTemplateDownload}>
-                            {locale === "zh" ? "下載範本檔案" : "Download Template"}
+                          <Button
+                            variant="link"
+                            className="text-sm p-0"
+                            onClick={handleTemplateDownload}
+                          >
+                            {locale === "zh"
+                              ? "下載範本檔案"
+                              : "Download Template"}
                           </Button>
                         </div>
 
                         {/* File Upload */}
                         <div>
-                          <label htmlFor="excel-upload" className="block text-sm font-medium mb-2">
+                          <label
+                            htmlFor="excel-upload"
+                            className="block text-sm font-medium mb-2"
+                          >
                             {locale === "zh" ? "選擇檔案" : "Select File"}
                           </label>
                           <Input
@@ -715,7 +789,9 @@ export function CollegeRankingTable({
                         {isImporting && (
                           <div className="text-center py-4">
                             <p className="text-sm text-gray-600">
-                              {locale === "zh" ? "正在處理檔案..." : "Processing file..."}
+                              {locale === "zh"
+                                ? "正在處理檔案..."
+                                : "Processing file..."}
                             </p>
                           </div>
                         )}
@@ -835,11 +911,15 @@ export function CollegeRankingTable({
           application={selectedAppForDialog as unknown as ApplicationType}
           role="college"
           open={!!selectedAppForDialog}
-          onOpenChange={(open) => !open && setSelectedAppForDialog(null)}
+          onOpenChange={open => !open && setSelectedAppForDialog(null)}
           locale={locale}
           academicYear={academicYear}
-          onApprove={(id, comments) => onReviewApplication(id, 'approve', comments)}
-          onReject={(id, comments) => onReviewApplication(id, 'reject', comments)}
+          onApprove={(id, comments) =>
+            onReviewApplication(id, "approve", comments)
+          }
+          onReject={(id, comments) =>
+            onReviewApplication(id, "reject", comments)
+          }
         />
       )}
     </div>
