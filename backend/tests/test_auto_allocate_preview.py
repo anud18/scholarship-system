@@ -95,15 +95,18 @@ def _make_app(
     is_renewal: bool = False,
     prev_app_id: Optional[int] = None,
     sub_type_preferences: Optional[list] = None,
+    renewal_year: Optional[int] = None,
+    scholarship_subtype_list: Optional[list] = None,
 ) -> SimpleNamespace:
     """Build a minimal Application-like object."""
     return SimpleNamespace(
         id=app_id,
         is_renewal=is_renewal,
+        renewal_year=renewal_year,
         previous_application_id=prev_app_id,
         sub_type_preferences=sub_type_preferences,
         student_data={"std_academyno": college},
-        scholarship_subtype_list=[],
+        scholarship_subtype_list=scholarship_subtype_list or [],
     )
 
 
