@@ -1130,11 +1130,9 @@ class ApplicationService:
             raise NotFoundError(f"Application {application_id} not found")
 
         if not application.is_editable:
-            from app.models.enums import ApplicationStatus
-
             allowed_statuses = [ApplicationStatus.draft.value, ApplicationStatus.returned.value]
             raise ValidationError(
-                f"Application cannot be submitted in current status '{application.status}'. "
+                f"Application cannot be submitted in current status '{application.status.value}'. "
                 f"Only applications with status {', '.join(repr(s) for s in allowed_statuses)} can be submitted."
             )
 
@@ -1828,7 +1826,7 @@ class ApplicationService:
             raise NotFoundError("Application", application_id)
 
         # Check if already deleted
-        if application.status == ApplicationStatus.deleted.value:
+        if application.status == ApplicationStatus.deleted:
             raise ValidationError("Application is already deleted")
 
         # Check if user has permission to delete this application
@@ -1836,7 +1834,7 @@ class ApplicationService:
             if application.user_id != current_user.id:
                 raise AuthorizationError("You can only delete your own applications")
             # Students can only delete draft applications
-            if application.status != ApplicationStatus.draft.value:
+            if application.status != ApplicationStatus.draft:
                 raise ValidationError("Only draft applications can be deleted by students")
         elif current_user.role in [UserRole.professor, UserRole.college, UserRole.admin, UserRole.super_admin]:
             # Staff can delete any application but must provide a reason
@@ -1846,7 +1844,7 @@ class ApplicationService:
             raise AuthorizationError("You don't have permission to delete applications")
 
         # Determine deletion type based on application status
-        is_draft = application.status == ApplicationStatus.draft.value
+        is_draft = application.status == ApplicationStatus.draft
 
         if is_draft:
             # Hard delete for draft applications
@@ -1918,7 +1916,7 @@ class ApplicationService:
             raise NotFoundError("Application", application_id)
 
         # Check if already deleted
-        if application.status != ApplicationStatus.deleted.value:
+        if application.status != ApplicationStatus.deleted:
             raise ValidationError("Only deleted applications can be restored")
 
         # Check if user has permission to restore this application
