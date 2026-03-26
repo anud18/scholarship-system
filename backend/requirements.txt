@@ -25,7 +25,7 @@ email-validator==2.1.0
 
 # HTTP client and utilities
 httpx==0.28.1  # Updated for Python 3.13 compatibility
-requests==2.32.5  # Security update
+requests==2.33.0  # Security update
 aiofiles==24.1.0  # Updated for Python 3.13 compatibility
 python-dateutil==2.8.2
 tenacity==9.1.2
