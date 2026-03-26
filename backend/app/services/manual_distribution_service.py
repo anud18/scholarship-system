@@ -114,8 +114,10 @@ def _compute_suggestions(
         if target_year is None:
             target_year = academic_year
 
-        # Determine preference order
-        preferences: list[str] = app.sub_type_preferences or default_prefs
+        # Determine preference order, constrained to sub-types the student actually applied for
+        applied = set(app.scholarship_subtype_list or [])
+        raw_prefs: list[str] = app.sub_type_preferences or default_prefs
+        preferences: list[str] = [p for p in raw_prefs if p in applied] if applied else raw_prefs
 
         allocated_sub_type: Optional[str] = None
         allocated_year: Optional[int] = None
