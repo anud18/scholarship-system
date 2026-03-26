@@ -6,7 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.application import ApplicationStatus
 
@@ -175,6 +175,29 @@ class ApplicationCreate(BaseModel):
     form_data: ApplicationFormData = Field(..., description="表單資料")
     agree_terms: Optional[bool] = Field(False, description="同意條款")
     is_renewal: Optional[bool] = Field(False, description="是否為續領申請")
+    sub_type_preferences: Optional[List[str]] = Field(None, description="Ordered sub-type preference list")
+
+    @field_validator("sub_type_preferences")
+    @classmethod
+    def validate_sub_type_preferences(cls, v):
+        if v is None:
+            return v
+        if len(v) == 0:
+            return None  # Empty list treated as null
+        if len(v) != len(set(v)):
+            raise ValueError("sub_type_preferences must not contain duplicates")
+        return v
+
+    @model_validator(mode="after")
+    def validate_preferences_match_subtype_list(self):
+        prefs = self.sub_type_preferences
+        subtype_list = self.scholarship_subtype_list
+        if prefs and subtype_list:
+            if set(prefs) != set(subtype_list):
+                raise ValueError(
+                    "sub_type_preferences must be a permutation of scholarship_subtype_list"
+                )
+        return self
 
     model_config = ConfigDict(
         json_encoders={datetime: lambda v: v.isoformat()},
@@ -215,6 +238,18 @@ class ApplicationUpdate(BaseModel):
     status: Optional[str] = Field(None, description="申請狀態")
     agree_terms: Optional[bool] = Field(None, description="同意條款")
     is_renewal: Optional[bool] = Field(None, description="是否為續領申請")
+    sub_type_preferences: Optional[List[str]] = Field(None, description="Ordered sub-type preference list")
+
+    @field_validator("sub_type_preferences")
+    @classmethod
+    def validate_sub_type_preferences(cls, v):
+        if v is None:
+            return v
+        if len(v) == 0:
+            return None
+        if len(v) != len(set(v)):
+            raise ValueError("sub_type_preferences must not contain duplicates")
+        return v
 
     model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})
 
@@ -274,6 +309,7 @@ class ApplicationResponse(BaseModel):
     amount: Optional[Decimal] = None  # Scholarship amount
     currency: Optional[str] = "TWD"  # Scholarship currency
     scholarship_subtype_list: Optional[List[str]] = []
+    sub_type_preferences: Optional[List[str]] = Field(None, description="Ordered sub-type preference list")
     status: str
     status_name: Optional[str]
     is_renewal: bool = Field(False, description="是否為續領申請")

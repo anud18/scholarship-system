@@ -451,6 +451,8 @@ async def get_ranking(
                         "status": item.application.status,
                         "scholarship_type_id": item.application.scholarship_type_id,
                         "sub_type": item.application.sub_scholarship_type,
+                        "is_renewal": item.application.is_renewal,
+                        "renewal_year": item.application.renewal_year,
                         # Eligible sub-types that student applied for, with review status
                         "eligible_subtypes": (
                             [

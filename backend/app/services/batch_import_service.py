@@ -52,6 +52,21 @@ def _normalize_optional(value: Any) -> Optional[str]:
     return normalized or None
 
 
+def _parse_renewal_year(raw_value: Any) -> Tuple[bool, Optional[int]]:
+    """Parse renewal year from Excel cell value.
+
+    Returns (is_renewal, renewal_year).  A non-empty integer value means
+    the student is a renewal for that academic year.
+    """
+    val = _normalize_optional(raw_value)
+    if val:
+        try:
+            return True, int(val)
+        except (ValueError, TypeError):
+            pass
+    return False, None
+
+
 class BatchImportService:
     """Service for handling batch import operations"""
 
@@ -134,12 +149,15 @@ class BatchImportService:
         for field in custom_fields:
             custom_field_mapping[field.field_label] = field.field_name
 
+        # Pre-compute column set for O(1) membership tests
+        df_columns = set(df.columns)
+
         # Validate required columns (check both Chinese and English names)
         required_columns_chinese = ["學號", "學生姓名"]
         required_columns_english = ["student_id", "student_name"]
 
-        has_chinese = all(col in df.columns for col in required_columns_chinese)
-        has_english = all(col in df.columns for col in required_columns_english)
+        has_chinese = all(col in df_columns for col in required_columns_chinese)
+        has_english = all(col in df_columns for col in required_columns_english)
 
         if not has_chinese and not has_english:
             errors.append(
@@ -201,6 +219,10 @@ class BatchImportService:
             try:
                 # Get values based on column format
                 if use_chinese_columns:
+                    is_renewal, renewal_year = _parse_renewal_year(
+                        row.get("續領年份") if "續領年份" in df_columns else None
+                    )
+
                     data_row = {
                         "student_id": student_id,
                         "student_name": _normalize_identifier(row.get("學生姓名", "")),
@@ -208,19 +230,21 @@ class BatchImportService:
                         "advisor_name": _normalize_optional(row.get("指導教授姓名")),
                         "advisor_email": _normalize_optional(row.get("指導教授Email")),
                         "advisor_nycu_id": _normalize_optional(row.get("指導教授本校人事編號")),
+                        "is_renewal": is_renewal,
+                        "renewal_year": renewal_year,
                         "sub_types": [],
                         "custom_fields": {},
                     }
 
                     # Parse sub_types from Chinese column names
                     for chinese_label, sub_type_code in sub_type_labels.items():
-                        if chinese_label in df.columns:
+                        if chinese_label in df_columns:
                             if row.get(chinese_label) in ["Y", "y", "是", "1", 1, True]:
                                 data_row["sub_types"].append(sub_type_code)
 
                     # Parse custom fields from Chinese column names
                     for chinese_label, field_name in custom_field_mapping.items():
-                        if chinese_label in df.columns and pd.notna(row.get(chinese_label)):
+                        if chinese_label in df_columns and pd.notna(row.get(chinese_label)):
                             value = row.get(chinese_label)
                             # Convert to appropriate type
                             if isinstance(value, (int, float, bool)):
@@ -229,6 +253,10 @@ class BatchImportService:
                                 data_row["custom_fields"][field_name] = str(value).strip()
                 else:
                     # English column format (backward compatibility)
+                    is_renewal, renewal_year = _parse_renewal_year(
+                        row.get("renewal_year") if "renewal_year" in df_columns else None
+                    )
+
                     data_row = {
                         "student_id": student_id,
                         "student_name": _normalize_identifier(row.get("student_name", "")),
@@ -236,19 +264,21 @@ class BatchImportService:
                         "advisor_name": _normalize_optional(row.get("advisor_name")),
                         "advisor_email": _normalize_optional(row.get("advisor_email")),
                         "advisor_nycu_id": _normalize_optional(row.get("advisor_nycu_id")),
+                        "is_renewal": is_renewal,
+                        "renewal_year": renewal_year,
                         "sub_types": [],
                         "custom_fields": {},
                     }
 
                     # Parse sub_types from English column names (sub_type_*)
-                    for col in df.columns:
+                    for col in df_columns:
                         if col.startswith("sub_type_"):
                             sub_type_code = col.replace("sub_type_", "")
                             if row.get(col) in ["Y", "y", "是", "1", 1, True]:
                                 data_row["sub_types"].append(sub_type_code)
 
                     # Parse custom fields from English column names (custom_*)
-                    for col in df.columns:
+                    for col in df_columns:
                         if col.startswith("custom_"):
                             field_name = col.replace("custom_", "")
                             if pd.notna(row.get(col)):
@@ -784,6 +814,8 @@ class BatchImportService:
                     sub_type_selection_mode=scholarship.sub_type_selection_mode,
                     academic_year=academic_year,
                     semester=semester,
+                    is_renewal=row_data.get("is_renewal", False),
+                    renewal_year=row_data.get("renewal_year"),
                     status=ApplicationStatus.under_review.value,
                     imported_by_id=batch_import.importer_id,
                     batch_import_id=batch_import.id,

@@ -11,6 +11,7 @@ import type {
   RestoreRequest,
   DistributionSummaryResult,
   DistributionSummaryGroup,
+  AllocationSuggestion,
 } from "@/lib/api/modules/manual-distribution";
 import { User } from "@/types/user";
 import { Button } from "@/components/ui/button";
@@ -124,6 +125,7 @@ export function ManualDistributionPanel({
       total_amount: string;
     }>;
   } | null>(null);
+  const [previewApplied, setPreviewApplied] = useState(false);
 
   /**
    * Flatten quota status into (sub_type × year) columns, ordered by:
@@ -175,6 +177,7 @@ export function ManualDistributionPanel({
       return;
     setIsLoading(true);
     setSaveMessage(null);
+    setPreviewApplied(false);
     try {
       const [studentsResp, quotaResp] = await Promise.all([
         apiClient.manualDistribution.getStudents(
@@ -191,18 +194,52 @@ export function ManualDistributionPanel({
 
       if (studentsResp.success && studentsResp.data) {
         setStudents(studentsResp.data);
-        const initial = new Map<number, LocalAlloc | null>();
+        const allocMap = new Map<number, LocalAlloc | null>();
         for (const s of studentsResp.data) {
           if (s.allocated_sub_type) {
-            initial.set(s.ranking_item_id, {
+            allocMap.set(s.ranking_item_id, {
               sub_type: s.allocated_sub_type,
-              year: s.allocation_year ?? selectedAcademicYear,
+              year: s.allocation_year ?? selectedAcademicYear!,
             });
           } else {
-            initial.set(s.ranking_item_id, null);
+            allocMap.set(s.ranking_item_id, null);
           }
         }
-        setLocalAllocations(initial);
+
+        // Load preview separately (optional — failure should not break the page)
+        let previewSuggestions: AllocationSuggestion[] = [];
+        try {
+          const previewResp =
+            await apiClient.manualDistribution.getAutoAllocatePreview(
+              scholarshipTypeId,
+              selectedAcademicYear,
+              selectedSemester
+            );
+          if (previewResp.success && previewResp.data) {
+            previewSuggestions = previewResp.data.suggestions;
+          }
+        } catch {
+          // Preview is optional; proceed without it
+        }
+
+        // Apply auto-preview suggestions for unallocated students
+        let hasPreview = false;
+        for (const suggestion of previewSuggestions) {
+          if (
+            suggestion.sub_type_code &&
+            suggestion.allocation_year &&
+            !allocMap.get(suggestion.ranking_item_id)
+          ) {
+            allocMap.set(suggestion.ranking_item_id, {
+              sub_type: suggestion.sub_type_code,
+              year: suggestion.allocation_year,
+            });
+            hasPreview = true;
+          }
+        }
+        setPreviewApplied(hasPreview);
+
+        setLocalAllocations(allocMap);
       }
       if (quotaResp.success && quotaResp.data) {
         setQuotaStatus(quotaResp.data);
@@ -310,7 +347,7 @@ export function ManualDistributionPanel({
             if (s.allocated_sub_type) {
               initial.set(s.ranking_item_id, {
                 sub_type: s.allocated_sub_type,
-                year: s.allocation_year ?? selectedAcademicYear,
+                year: s.allocation_year ?? selectedAcademicYear!,
               });
             } else {
               initial.set(s.ranking_item_id, null);
@@ -452,7 +489,7 @@ export function ManualDistributionPanel({
             if (s.allocated_sub_type) {
               initial.set(s.ranking_item_id, {
                 sub_type: s.allocated_sub_type,
-                year: s.allocation_year ?? selectedAcademicYear,
+                year: s.allocation_year ?? selectedAcademicYear!,
               });
             } else {
               initial.set(s.ranking_item_id, null);
@@ -796,6 +833,13 @@ export function ManualDistributionPanel({
           </div>
         )}
 
+        {/* Auto-preview notice */}
+        {previewApplied && (
+          <div className="mb-4 rounded-md bg-blue-50 p-3 text-sm text-blue-700">
+            已自動預設分配，請確認後儲存
+          </div>
+        )}
+
         {/* Table */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="p-3 border-b border-slate-200 flex items-center justify-between">
@@ -1075,17 +1119,23 @@ export function ManualDistributionPanel({
                                   {student.student_id}
                                 </td>
                                 <td className="px-3 py-2.5 text-xs font-semibold whitespace-nowrap">
-                                  <span
-                                    className={
-                                      student.application_identity.includes(
-                                        "新申請"
-                                      )
-                                        ? "text-amber-600"
-                                        : "text-blue-600"
-                                    }
-                                  >
-                                    {student.application_identity}
-                                  </span>
+                                  {student.is_renewal ? (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-300">
+                                      {student.renewal_year || ""}續領
+                                    </span>
+                                  ) : (
+                                    <span
+                                      className={
+                                        student.application_identity.includes(
+                                          "新申請"
+                                        )
+                                          ? "text-amber-600"
+                                          : "text-blue-600"
+                                      }
+                                    >
+                                      {student.application_identity}
+                                    </span>
+                                  )}
                                 </td>
                               </tr>
                             );

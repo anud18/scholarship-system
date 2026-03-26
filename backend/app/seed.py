@@ -125,9 +125,9 @@ async def seed_test_users(session: AsyncSession):
             "role": UserRole.college,
         },
         {
-            "nycu_id": "stu_under",
+            "nycu_id": "stuunder1",
             "name": "陳小明",
-            "email": "stu_under@nycu.edu.tw",
+            "email": "stuunder1@nycu.edu.tw",
             "user_type": UserType.student,
             "status": EmployeeStatus.student,
             "dept_code": "CS",
@@ -135,9 +135,9 @@ async def seed_test_users(session: AsyncSession):
             "role": UserRole.student,
         },
         {
-            "nycu_id": "stu_phd",
+            "nycu_id": "stuphd001",
             "name": "王博士",
-            "email": "stu_phd@nycu.edu.tw",
+            "email": "stuphd001@nycu.edu.tw",
             "user_type": UserType.student,
             "status": EmployeeStatus.student,
             "dept_code": "CS",
@@ -145,9 +145,9 @@ async def seed_test_users(session: AsyncSession):
             "role": UserRole.student,
         },
         {
-            "nycu_id": "stu_direct",
+            "nycu_id": "studirect",
             "name": "李逕升",
-            "email": "stu_direct@nycu.edu.tw",
+            "email": "studirect@nycu.edu.tw",
             "user_type": UserType.student,
             "status": EmployeeStatus.student,
             "dept_code": "CS",
@@ -155,9 +155,9 @@ async def seed_test_users(session: AsyncSession):
             "role": UserRole.student,
         },
         {
-            "nycu_id": "stu_master",
+            "nycu_id": "stumaster",
             "name": "張碩士",
-            "email": "stu_master@nycu.edu.tw",
+            "email": "stumaster@nycu.edu.tw",
             "user_type": UserType.student,
             "status": EmployeeStatus.student,
             "dept_code": "CS",
@@ -165,9 +165,9 @@ async def seed_test_users(session: AsyncSession):
             "role": UserRole.student,
         },
         {
-            "nycu_id": "phd_china",
+            "nycu_id": "phdchina1",
             "name": "陸生",
-            "email": "phd_china@nycu.edu.tw",
+            "email": "phdchina1@nycu.edu.tw",
             "user_type": UserType.student,
             "status": EmployeeStatus.student,
             "dept_code": "CS",
@@ -197,9 +197,9 @@ async def seed_test_users(session: AsyncSession):
             "role": UserRole.college,
         },
         {
-            "nycu_id": "cs_phd001",
+            "nycu_id": "csphd0001",
             "name": "王博士研究生",
-            "email": "cs_phd001@nycu.edu.tw",
+            "email": "csphd0001@nycu.edu.tw",
             "user_type": UserType.student,
             "status": EmployeeStatus.student,
             "dept_code": "CS",
@@ -207,9 +207,9 @@ async def seed_test_users(session: AsyncSession):
             "role": UserRole.student,
         },
         {
-            "nycu_id": "cs_phd002",
+            "nycu_id": "csphd0002",
             "name": "陳AI博士",
-            "email": "cs_phd002@nycu.edu.tw",
+            "email": "csphd0002@nycu.edu.tw",
             "user_type": UserType.student,
             "status": EmployeeStatus.student,
             "dept_code": "CS",
@@ -217,9 +217,9 @@ async def seed_test_users(session: AsyncSession):
             "role": UserRole.student,
         },
         {
-            "nycu_id": "cs_phd003",
+            "nycu_id": "csphd0003",
             "name": "林機器學習博士",
-            "email": "cs_phd003@nycu.edu.tw",
+            "email": "csphd0003@nycu.edu.tw",
             "user_type": UserType.student,
             "status": EmployeeStatus.student,
             "dept_code": "CS",
@@ -273,10 +273,10 @@ async def seed_professor_student_relationships(session: AsyncSession):
     professor_result = await session.execute(text("SELECT id FROM users WHERE nycu_id = 'professor'"))
     professor_id = professor_result.scalar()
 
-    student_phd_result = await session.execute(text("SELECT id FROM users WHERE nycu_id = 'stu_phd'"))
+    student_phd_result = await session.execute(text("SELECT id FROM users WHERE nycu_id = 'stuphd001'"))
     student_phd_id = student_phd_result.scalar()
 
-    student_under_result = await session.execute(text("SELECT id FROM users WHERE nycu_id = 'stu_under'"))
+    student_under_result = await session.execute(text("SELECT id FROM users WHERE nycu_id = 'stuunder1'"))
     student_under_id = student_under_result.scalar()
 
     if not all([professor_id, student_phd_id, student_under_id]):
@@ -404,7 +404,7 @@ async def seed_scholarships(session: AsyncSession):
             "application_cycle": ApplicationCycle.yearly.value,
             "sub_type_list": ["nstc", "moe_1w"],
             "whitelist_enabled": False,
-            "sub_type_selection_mode": SubTypeSelectionMode.hierarchical.value,
+            "sub_type_selection_mode": SubTypeSelectionMode.multiple.value,
             "status": ScholarshipStatus.active.value,
         },
         {
@@ -617,10 +617,10 @@ async def seed_development():
             print("- Super Admin: super_admin@nycu.edu.tw")
             print("- Professor: professor@nycu.edu.tw")
             print("- College: college@nycu.edu.tw")
-            print("- Student (學士): stu_under@nycu.edu.tw")
-            print("- Student (博士): stu_phd@nycu.edu.tw")
-            print("- Student (逕讀博士): stu_direct@nycu.edu.tw")
-            print("- Student (碩士): stu_master@nycu.edu.tw")
+            print("- Student (學士): stuunder1@nycu.edu.tw")
+            print("- Student (博士): stuphd001@nycu.edu.tw")
+            print("- Student (逕讀博士): studirect@nycu.edu.tw")
+            print("- Student (碩士): stumaster@nycu.edu.tw")
 
             print("\n✅ Development seed completed successfully!")
 

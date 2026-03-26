@@ -7,6 +7,7 @@ Supports multi-year supplementary distribution (補發) where prior-year
 remaining quotas can be allocated to current-year students.
 """
 
+import json as _json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -50,6 +51,118 @@ def _config_semester_condition(semester: str):
             ScholarshipConfiguration.semester == "yearly",
         )
     return ScholarshipConfiguration.semester == semester
+
+
+def _compute_suggestions(
+    unique_items: list,
+    default_prefs: list[str],
+    prev_alloc_years: dict[int, int],
+    prior_years_map: dict[str, list[int]],
+    quota_tracker: dict[tuple, int],
+    academic_year: int,
+) -> list[dict]:
+    """
+    Pure allocation logic (no DB access).  Extracted so it can be unit-tested
+    without mocking async SQLAlchemy sessions.
+
+    Parameters
+    ----------
+    unique_items:
+        CollegeRankingItem objects (with .application pre-loaded) already
+        deduplicated by application_id.  Items that are already allocated
+        (is_allocated=True) are skipped silently.
+    default_prefs:
+        Ordered list of sub_type codes from ScholarshipSubTypeConfig, used
+        when an application has no sub_type_preferences.
+    prev_alloc_years:
+        Mapping of {previous_application_id: allocation_year} for renewal
+        students' prior allocations.
+    prior_years_map:
+        Mapping of {sub_type: [prior_year, ...]} from ScholarshipConfiguration
+        .prior_quota_years.  Determines which prior years are valid for each
+        sub-type.
+    quota_tracker:
+        Mutable dict {(sub_type, year, college_code): remaining_quota}.
+        This function decrements it as it allocates.
+    academic_year:
+        The current academic year being allocated.
+
+    Returns
+    -------
+    list[dict]
+        [{"ranking_item_id": int, "sub_type_code": str|None, "allocation_year": int|None}, ...]
+        One entry per unallocated input item, in allocation order.
+    """
+    # Sort: renewal students first, then by rank_position ascending
+    sorted_items = sorted(
+        [item for item in unique_items if not item.is_allocated],
+        key=lambda i: (0 if i.application.is_renewal else 1, i.rank_position),
+    )
+
+    results: list[dict] = []
+
+    for item in sorted_items:
+        app = item.application
+        college = (app.student_data or {}).get("std_academyno", "")
+
+        # Determine target allocation year for this student
+        # Priority: 1) previous_application_id lookup, 2) renewal_year field, 3) current academic_year
+        prev_app_id = app.previous_application_id if app.is_renewal else None
+        target_year: Optional[int] = prev_alloc_years.get(prev_app_id) if prev_app_id else None
+        if target_year is None and app.is_renewal and app.renewal_year:
+            target_year = app.renewal_year
+        if target_year is None:
+            target_year = academic_year
+
+        # Determine preference order, constrained to sub-types the student actually applied for
+        applied = set(app.scholarship_subtype_list or [])
+        raw_prefs: list[str] = app.sub_type_preferences or default_prefs
+        preferences: list[str] = [p for p in raw_prefs if p in applied] if applied else raw_prefs
+
+        allocated_sub_type: Optional[str] = None
+        allocated_year: Optional[int] = None
+
+        for sub_type in preferences:
+            # Determine the effective year to try first
+            if target_year != academic_year:
+                # Check whether the prior year is a configured prior year for this sub_type
+                allowed_prior_years = prior_years_map.get(sub_type, [])
+                if target_year not in allowed_prior_years:
+                    # Prior year not configured for this sub_type — try current year directly
+                    key_current = (sub_type, academic_year, college)
+                    if quota_tracker.get(key_current, 0) > 0:
+                        quota_tracker[key_current] -= 1
+                        allocated_sub_type = sub_type
+                        allocated_year = academic_year
+                    # Move to next preference regardless
+                    if allocated_sub_type:
+                        break
+                    continue
+
+            # Try the target year (could be a prior year or current year)
+            key_target = (sub_type, target_year, college)
+            if quota_tracker.get(key_target, 0) > 0:
+                quota_tracker[key_target] -= 1
+                allocated_sub_type = sub_type
+                allocated_year = target_year
+                break
+
+            # Fallback for renewal students: try current year if target (prior) year is exhausted
+            if app.is_renewal and target_year != academic_year:
+                key_current = (sub_type, academic_year, college)
+                if quota_tracker.get(key_current, 0) > 0:
+                    quota_tracker[key_current] -= 1
+                    allocated_sub_type = sub_type
+                    allocated_year = academic_year
+                    break
+
+        results.append({
+            "ranking_item_id": item.id,
+            "sub_type_code": allocated_sub_type,
+            "allocation_year": allocated_year,
+        })
+
+    return results
 
 
 class ManualDistributionService:
@@ -133,6 +246,8 @@ class ManualDistributionService:
                 "enrollment_date": enrollment_date,
                 "student_id": student_data.get("std_stdcode", ""),
                 "application_identity": identity,
+                "is_renewal": app.is_renewal,
+                "renewal_year": app.renewal_year,
             })
 
         # Sort by college_code, then rank_position
@@ -177,7 +292,7 @@ class ManualDistributionService:
             raw = current_config.prior_quota_years
             # Handle case where JSON column stored as string instead of dict
             if isinstance(raw, str):
-                import json as _json
+
                 try:
                     raw = _json.loads(raw)
                 except (ValueError, TypeError):
@@ -682,3 +797,196 @@ class ManualDistributionService:
         # Approximate: term 1 = September, term 2 = February
         month = "09" if enroll_term == 1 else "02"
         return f"{enroll_year}.{month}.01" if enroll_year else ""
+
+    async def _get_default_preferences(self, scholarship_type_id: int) -> list[str]:
+        """
+        Return active sub-type codes for a scholarship type, ordered by display_order.
+        Used as the fallback preference list when a student has no sub_type_preferences set.
+        """
+        stmt = (
+            select(ScholarshipSubTypeConfig)
+            .where(
+                and_(
+                    ScholarshipSubTypeConfig.scholarship_type_id == scholarship_type_id,
+                    ScholarshipSubTypeConfig.is_active == True,
+                )
+            )
+            .order_by(ScholarshipSubTypeConfig.display_order)
+        )
+        result = await self.db.execute(stmt)
+        return [row.sub_type_code for row in result.scalars().all()]
+
+    async def _batch_load_previous_allocation_years(
+        self, previous_app_ids: list[int]
+    ) -> dict[int, int]:
+        """
+        For renewal students, find the allocation_year from their previous application's
+        CollegeRankingItem.
+
+        Returns: {previous_application_id: allocation_year}
+        Only includes entries where allocation_year IS NOT NULL.
+        """
+        if not previous_app_ids:
+            return {}
+
+        stmt = select(CollegeRankingItem).where(
+            and_(
+                CollegeRankingItem.application_id.in_(previous_app_ids),
+                CollegeRankingItem.allocation_year.isnot(None),
+            )
+        )
+        result = await self.db.execute(stmt)
+        items = result.scalars().all()
+
+        # If a previous app appears in multiple ranking items, use the first one
+        mapping: dict[int, int] = {}
+        for item in items:
+            if item.application_id not in mapping:
+                mapping[item.application_id] = item.allocation_year
+        return mapping
+
+    async def auto_allocate_preview(
+        self,
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: str,
+    ) -> list[dict]:
+        """
+        Compute auto-allocation suggestions without persisting any changes.
+
+        Algorithm:
+        1. Load finalized CollegeRanking records + their items (with Application eager-loaded).
+        2. Deduplicate items by application_id (keep first seen).
+        3. Load default preferences and previous allocation years for renewal students.
+        4. Build quota tracker from config (current year + prior years per sub-type).
+        5. Subtract already-allocated items from tracker.
+        6. Sort students: renewal first, then by rank_position ascending.
+        7. Allocate sequentially following preference order and quota constraints.
+
+        Returns list of {"ranking_item_id", "sub_type_code", "allocation_year"} dicts.
+        Only unallocated items are included in the output.
+        """
+        # --- Step 0: Load finalized rankings ---
+        ranking_query = select(CollegeRanking).where(
+            and_(
+                CollegeRanking.scholarship_type_id == scholarship_type_id,
+                CollegeRanking.academic_year == academic_year,
+                _ranking_semester_condition(semester),
+                CollegeRanking.is_finalized == True,
+            )
+        )
+        result = await self.db.execute(ranking_query)
+        rankings = result.scalars().all()
+
+        if not rankings:
+            return []
+
+        ranking_ids = [r.id for r in rankings]
+
+        # Load items with eagerly loaded Application
+        items_query = (
+            select(CollegeRankingItem)
+            .options(selectinload(CollegeRankingItem.application))
+            .where(CollegeRankingItem.ranking_id.in_(ranking_ids))
+        )
+        result = await self.db.execute(items_query)
+        all_items = result.scalars().all()
+
+        # Deduplicate by application_id (keep first seen)
+        seen_app_ids: set[int] = set()
+        unique_items = []
+        for item in all_items:
+            if item.application and item.application.id not in seen_app_ids:
+                seen_app_ids.add(item.application.id)
+                unique_items.append(item)
+
+        if not unique_items:
+            return []
+
+        # --- Step 0b: Load default preferences ---
+        default_prefs = await self._get_default_preferences(scholarship_type_id)
+
+        # Load previous allocation years for renewal students
+        previous_app_ids = [
+            item.application.previous_application_id
+            for item in unique_items
+            if item.application.is_renewal and item.application.previous_application_id
+        ]
+        prev_alloc_years = await self._batch_load_previous_allocation_years(previous_app_ids)
+
+        # --- Step 1: Build quota tracker ---
+        current_config = await self._load_config(scholarship_type_id, academic_year, semester)
+
+        prior_years_map: dict[str, list[int]] = {}
+        if current_config and current_config.prior_quota_years:
+            raw = current_config.prior_quota_years
+            if isinstance(raw, str):
+
+                try:
+                    raw = _json.loads(raw)
+                except (ValueError, TypeError):
+                    raw = {}
+            if isinstance(raw, dict):
+                prior_years_map = raw
+
+        # Determine all years to load configs for
+        all_prior_years: set[int] = set()
+        for sub_type, years_list in prior_years_map.items():
+            if isinstance(years_list, list):
+                all_prior_years.update(years_list)
+        years_to_check = sorted([academic_year] + list(all_prior_years), reverse=True)
+
+        # Batch-load configs for all relevant years
+        configs_by_year: dict[int, Optional[ScholarshipConfiguration]] = {}
+        if years_to_check:
+            configs_stmt = (
+                select(ScholarshipConfiguration)
+                .where(
+                    and_(
+                        ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+                        ScholarshipConfiguration.academic_year.in_(years_to_check),
+                        _config_semester_condition(semester),
+                    )
+                )
+                .order_by(ScholarshipConfiguration.id.desc())
+            )
+            configs_result = await self.db.execute(configs_stmt)
+            for cfg in configs_result.scalars().all():
+                if cfg.academic_year not in configs_by_year:
+                    configs_by_year[cfg.academic_year] = cfg
+
+        # Build quota tracker: {(sub_type, year, college_code): remaining}
+        quota_tracker: dict[tuple[str, int, str], int] = {}
+        for year in years_to_check:
+            year_config = configs_by_year.get(year)
+            if not year_config or not year_config.quotas:
+                continue
+            quotas = year_config.quotas  # {sub_type: {college_code: quota}}
+            for sub_type, college_quotas in quotas.items():
+                if not isinstance(college_quotas, dict):
+                    continue
+                # Skip prior year / sub_type combos not configured in prior_quota_years
+                if year != academic_year:
+                    allowed_years = prior_years_map.get(sub_type, [])
+                    if year not in allowed_years:
+                        continue
+                for college_code, quota in college_quotas.items():
+                    quota_tracker[(sub_type, year, college_code)] = quota
+
+        # Subtract existing allocations from tracker (use all_items, not unique_items,
+        # because a student's allocation may be on a ranking item that was deduplicated away)
+        for item in all_items:
+            if item.is_allocated and item.allocated_sub_type and item.allocation_year:
+                college = (item.application.student_data or {}).get("std_academyno", "")
+                key = (item.allocated_sub_type, item.allocation_year, college)
+                if key in quota_tracker:
+                    quota_tracker[key] = max(0, quota_tracker[key] - 1)
+
+        return _compute_suggestions(
+            unique_items=unique_items,
+            default_prefs=default_prefs,
+            prev_alloc_years=prev_alloc_years,
+            prior_years_map=prior_years_map,
+            quota_tracker=quota_tracker,
+            academic_year=academic_year,
+        )
