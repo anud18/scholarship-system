@@ -97,8 +97,8 @@ SAMPLE_STUDENTS = {
         "com_cellphone": "0905169251",
     },
     # 其他測試學生，按照同樣格式
-    "stu_under": {
-        "std_stdcode": "stu_under",
+    "stuunder1": {
+        "std_stdcode": "stuunder1",
         "std_enrollyear": 112,
         "std_enrollterm": 1,
         "std_highestschname": "台北市立建國高級中學",
@@ -120,11 +120,11 @@ SAMPLE_STUDENTS = {
         "mgd_title": "在學",
         "ToDoctor": 0,
         "com_commadd": "新竹市東區大學路1001號",
-        "com_email": "stu_under@nycu.edu.tw",
+        "com_email": "stuunder1@nycu.edu.tw",
         "com_cellphone": "0912345678",
     },
-    "stu_phd": {
-        "std_stdcode": "stu_phd",
+    "stuphd001": {
+        "std_stdcode": "stuphd001",
         "std_enrollyear": 112,
         "std_enrollterm": 1,
         "std_highestschname": "國立交通大學",
@@ -146,11 +146,11 @@ SAMPLE_STUDENTS = {
         "mgd_title": "在學",
         "ToDoctor": 0,
         "com_commadd": "新竹市東區大學路1001號",
-        "com_email": "stu_phd@nycu.edu.tw",
+        "com_email": "stuphd001@nycu.edu.tw",
         "com_cellphone": "0912345678",
     },
-    "stu_master": {
-        "std_stdcode": "stu_master",
+    "stumaster": {
+        "std_stdcode": "stumaster",
         "std_enrollyear": 112,
         "std_enrollterm": 1,
         "std_highestschname": "國立台灣大學",
@@ -172,11 +172,11 @@ SAMPLE_STUDENTS = {
         "mgd_title": "在學",
         "ToDoctor": 0,
         "com_commadd": "新竹市東區大學路1001號",
-        "com_email": "stu_master@nycu.edu.tw",
+        "com_email": "stumaster@nycu.edu.tw",
         "com_cellphone": "0912345678",
     },
-    "stu_direct": {
-        "std_stdcode": "stu_direct",
+    "studirect": {
+        "std_stdcode": "studirect",
         "std_enrollyear": 113,  # 改為113學年入學（較新）
         "std_enrollterm": 1,
         "std_highestschname": "國立清華大學",
@@ -198,11 +198,11 @@ SAMPLE_STUDENTS = {
         "mgd_title": "在學",
         "ToDoctor": 1,  # 逕讀博士
         "com_commadd": "新竹市東區大學路1001號",
-        "com_email": "stu_direct@nycu.edu.tw",
+        "com_email": "studirect@nycu.edu.tw",
         "com_cellphone": "0912345679",
     },
-    "phd_china": {
-        "std_stdcode": "phd_china",
+    "phdchina1": {
+        "std_stdcode": "phdchina1",
         "std_enrollyear": 112,
         "std_enrollterm": 1,
         "std_highestschname": "北京大學",
@@ -224,7 +224,7 @@ SAMPLE_STUDENTS = {
         "mgd_title": "在學",
         "ToDoctor": 0,
         "com_commadd": "新竹市東區大學路1001號國際學舍",
-        "com_email": "phd_china@nycu.edu.tw",
+        "com_email": "phdchina1@nycu.edu.tw",
         "com_cellphone": "0912345680",
     },
     "313612215": {
@@ -254,8 +254,8 @@ SAMPLE_STUDENTS = {
         "com_cellphone": "0900000000",
     },
     # Computer Science College Students
-    "cs_phd001": {
-        "std_stdcode": "cs_phd001",
+    "csphd0001": {
+        "std_stdcode": "csphd0001",
         "std_enrollyear": 112,
         "std_enrollterm": 1,
         "std_highestschname": "國立台灣大學",
@@ -277,11 +277,11 @@ SAMPLE_STUDENTS = {
         "mgd_title": "在學",
         "ToDoctor": 1,
         "com_commadd": "新竹市東區大學路1001號",
-        "com_email": "cs_phd001@nycu.edu.tw",
+        "com_email": "csphd0001@nycu.edu.tw",
         "com_cellphone": "0912345001",
     },
-    "cs_phd002": {
-        "std_stdcode": "cs_phd002",
+    "csphd0002": {
+        "std_stdcode": "csphd0002",
         "std_enrollyear": 111,
         "std_enrollterm": 1,
         "std_highestschname": "國立清華大學",
@@ -303,11 +303,11 @@ SAMPLE_STUDENTS = {
         "mgd_title": "在學",
         "ToDoctor": 1,
         "com_commadd": "新竹市東區大學路1001號",
-        "com_email": "cs_phd002@nycu.edu.tw",
+        "com_email": "csphd0002@nycu.edu.tw",
         "com_cellphone": "0912345002",
     },
-    "cs_phd003": {
-        "std_stdcode": "cs_phd003",
+    "csphd0003": {
+        "std_stdcode": "csphd0003",
         "std_enrollyear": 110,
         "std_enrollterm": 1,
         "std_highestschname": "國立成功大學",
@@ -329,11 +329,11 @@ SAMPLE_STUDENTS = {
         "mgd_title": "在學",
         "ToDoctor": 1,
         "com_commadd": "新竹市東區大學路1001號",
-        "com_email": "cs_phd003@nycu.edu.tw",
+        "com_email": "csphd0003@nycu.edu.tw",
         "com_cellphone": "0912345003",
     },
-    "cs_phd_intl": {
-        "std_stdcode": "cs_phd_intl",
+    "csphdintl": {
+        "std_stdcode": "csphdintl",
         "std_enrollyear": 113,
         "std_enrollterm": 1,
         "std_highestschname": "MIT",
@@ -355,12 +355,12 @@ SAMPLE_STUDENTS = {
         "mgd_title": "在學",
         "ToDoctor": 1,
         "com_commadd": "新竹市東區大學路1001號國際學舍",
-        "com_email": "cs_phd_intl@nycu.edu.tw",
+        "com_email": "csphdintl@nycu.edu.tw",
         "com_cellphone": "0912345004",
     },
     # Electrical Engineering College Students
-    "ee_phd001": {
-        "std_stdcode": "ee_phd001",
+    "eephd0001": {
+        "std_stdcode": "eephd0001",
         "std_enrollyear": 112,
         "std_enrollterm": 2,
         "std_highestschname": "國立台灣科技大學",
@@ -382,11 +382,11 @@ SAMPLE_STUDENTS = {
         "mgd_title": "在學",
         "ToDoctor": 1,
         "com_commadd": "新竹市東區大學路1001號",
-        "com_email": "ee_phd001@nycu.edu.tw",
+        "com_email": "eephd0001@nycu.edu.tw",
         "com_cellphone": "0912345011",
     },
-    "ee_phd002": {
-        "std_stdcode": "ee_phd002",
+    "eephd0002": {
+        "std_stdcode": "eephd0002",
         "std_enrollyear": 111,
         "std_enrollterm": 2,
         "std_highestschname": "國立中央大學",
@@ -408,11 +408,11 @@ SAMPLE_STUDENTS = {
         "mgd_title": "在學",
         "ToDoctor": 1,
         "com_commadd": "新竹市東區大學路1001號",
-        "com_email": "ee_phd002@nycu.edu.tw",
+        "com_email": "eephd0002@nycu.edu.tw",
         "com_cellphone": "0912345012",
     },
-    "ee_phd003": {
-        "std_stdcode": "ee_phd003",
+    "eephd0003": {
+        "std_stdcode": "eephd0003",
         "std_enrollyear": 110,
         "std_enrollterm": 1,
         "std_highestschname": "國立台北科技大學",
@@ -434,11 +434,11 @@ SAMPLE_STUDENTS = {
         "mgd_title": "在學",
         "ToDoctor": 1,
         "com_commadd": "新竹市東區大學路1001號",
-        "com_email": "ee_phd003@nycu.edu.tw",
+        "com_email": "eephd0003@nycu.edu.tw",
         "com_cellphone": "0912345013",
     },
-    "ee_phd_exchange": {
-        "std_stdcode": "ee_phd_exchange",
+    "eephdexch": {
+        "std_stdcode": "eephdexch",
         "std_enrollyear": 113,
         "std_enrollterm": 2,
         "std_highestschname": "Stanford University",
@@ -460,12 +460,12 @@ SAMPLE_STUDENTS = {
         "mgd_title": "在學",
         "ToDoctor": 1,
         "com_commadd": "新竹市東區大學路1001號國際學舍",
-        "com_email": "ee_phd_exchange@nycu.edu.tw",
+        "com_email": "eephdexch@nycu.edu.tw",
         "com_cellphone": "0912345014",
     },
     # Mechanical Engineering College Students
-    "me_phd001": {
-        "std_stdcode": "me_phd001",
+    "mephd0001": {
+        "std_stdcode": "mephd0001",
         "std_enrollyear": 112,
         "std_enrollterm": 1,
         "std_highestschname": "國立台灣大學",
@@ -487,11 +487,11 @@ SAMPLE_STUDENTS = {
         "mgd_title": "在學",
         "ToDoctor": 1,
         "com_commadd": "新竹市東區大學路1001號",
-        "com_email": "me_phd001@nycu.edu.tw",
+        "com_email": "mephd0001@nycu.edu.tw",
         "com_cellphone": "0912345021",
     },
-    "me_phd002": {
-        "std_stdcode": "me_phd002",
+    "mephd0002": {
+        "std_stdcode": "mephd0002",
         "std_enrollyear": 111,
         "std_enrollterm": 1,
         "std_highestschname": "國立中興大學",
@@ -513,11 +513,11 @@ SAMPLE_STUDENTS = {
         "mgd_title": "在學",
         "ToDoctor": 1,
         "com_commadd": "新竹市東區大學路1001號",
-        "com_email": "me_phd002@nycu.edu.tw",
+        "com_email": "mephd0002@nycu.edu.tw",
         "com_cellphone": "0912345022",
     },
-    "me_phd003": {
-        "std_stdcode": "me_phd003",
+    "mephd0003": {
+        "std_stdcode": "mephd0003",
         "std_enrollyear": 110,
         "std_enrollterm": 2,
         "std_highestschname": "國立中山大學",
@@ -539,11 +539,11 @@ SAMPLE_STUDENTS = {
         "mgd_title": "在學",
         "ToDoctor": 1,
         "com_commadd": "新竹市東區大學路1001號",
-        "com_email": "me_phd003@nycu.edu.tw",
+        "com_email": "mephd0003@nycu.edu.tw",
         "com_cellphone": "0912345023",
     },
-    "me_phd_robotics": {
-        "std_stdcode": "me_phd_robotics",
+    "mephdrobo": {
+        "std_stdcode": "mephdrobo",
         "std_enrollyear": 113,
         "std_enrollterm": 1,
         "std_highestschname": "ETH Zurich",
@@ -565,7 +565,7 @@ SAMPLE_STUDENTS = {
         "mgd_title": "在學",
         "ToDoctor": 1,
         "com_commadd": "新竹市東區大學路1001號國際學舍",
-        "com_email": "me_phd_robotics@nycu.edu.tw",
+        "com_email": "mephdrobo@nycu.edu.tw",
         "com_cellphone": "0912345024",
     },
     "312551183": {
@@ -645,6 +645,84 @@ SAMPLE_STUDENTS = {
         "com_commadd": "新竹市東區大學路1001號",
         "com_email": "nctutest@g2.nctu.edu.tw",
         "com_cellphone": "",
+    },
+    "312551184": {
+        "std_stdcode": "312551184",
+        "std_enrollyear": 112,
+        "std_enrollterm": 1,
+        "std_highestschname": "國立交通大學",
+        "std_cname": "陳小華",
+        "std_ename": "CHEN,XIAO-HUA",
+        "std_pid": "TEST092493",
+        "std_bdate": "700515",
+        "std_academyno": "C",
+        "std_depno": "4551",
+        "std_sex": 1,
+        "std_nation": "中華民國",
+        "std_degree": 1,
+        "std_enrolltype": 9,
+        "std_identity": 1,
+        "std_schoolid": 1,
+        "std_overseaplace": "",
+        "std_termcount": 4,
+        "std_studingstatus": 1,
+        "mgd_title": "在學",
+        "ToDoctor": 1,
+        "com_commadd": "新竹市東區大學路1001號",
+        "com_email": "312551184@nycu.edu.tw",
+        "com_cellphone": "0912345001",
+    },
+    "412551013": {
+        "std_stdcode": "412551013",
+        "std_enrollyear": 113,
+        "std_enrollterm": 1,
+        "std_highestschname": "國立清華大學",
+        "std_cname": "林小美",
+        "std_ename": "LIN,XIAO-MEI",
+        "std_pid": "TEST110496",
+        "std_bdate": "710320",
+        "std_academyno": "C",
+        "std_depno": "4551",
+        "std_sex": 2,
+        "std_nation": "中華民國",
+        "std_degree": 1,
+        "std_enrolltype": 1,
+        "std_identity": 1,
+        "std_schoolid": 1,
+        "std_overseaplace": "",
+        "std_termcount": 3,
+        "std_studingstatus": 1,
+        "mgd_title": "在學",
+        "ToDoctor": 0,
+        "com_commadd": "新竹市東區大學路1001號",
+        "com_email": "412551013@nycu.edu.tw",
+        "com_cellphone": "0912345002",
+    },
+    "412551016": {
+        "std_stdcode": "412551016",
+        "std_enrollyear": 113,
+        "std_enrollterm": 1,
+        "std_highestschname": "國立成功大學",
+        "std_cname": "張小強",
+        "std_ename": "ZHANG,XIAO-QIANG",
+        "std_pid": "TEST110497",
+        "std_bdate": "720810",
+        "std_academyno": "C",
+        "std_depno": "4551",
+        "std_sex": 1,
+        "std_nation": "中華民國",
+        "std_degree": 1,
+        "std_enrolltype": 1,
+        "std_identity": 1,
+        "std_schoolid": 1,
+        "std_overseaplace": "",
+        "std_termcount": 3,
+        "std_studingstatus": 1,
+        "mgd_title": "在學",
+        "ToDoctor": 0,
+        "com_commadd": "新竹市東區大學路1001號",
+        "com_email": "412551016@nycu.edu.tw",
+        "com_cellphone": "0912345003",
     },
 }
 
@@ -1049,9 +1127,9 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.3,
         },
     ],
-    "stu_under": [
+    "stuunder1": [
         {
-            "std_stdcode": "stu_under",
+            "std_stdcode": "stuunder1",
             "trm_year": 112,
             "trm_term": 1,
             "trm_termcount": 1,
@@ -1068,7 +1146,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 3.5,
         },
         {
-            "std_stdcode": "stu_under",
+            "std_stdcode": "stuunder1",
             "trm_year": 112,
             "trm_term": 2,
             "trm_termcount": 2,
@@ -1085,7 +1163,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 3.55,
         },
         {
-            "std_stdcode": "stu_under",
+            "std_stdcode": "stuunder1",
             "trm_year": 113,
             "trm_term": 1,
             "trm_termcount": 3,
@@ -1102,7 +1180,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 3.6,
         },
         {
-            "std_stdcode": "stu_under",
+            "std_stdcode": "stuunder1",
             "trm_year": 113,
             "trm_term": 2,
             "trm_termcount": 4,
@@ -1119,7 +1197,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 3.65,
         },
         {
-            "std_stdcode": "stu_under",
+            "std_stdcode": "stuunder1",
             "trm_year": 114,
             "trm_term": 1,
             "trm_termcount": 5,
@@ -1136,7 +1214,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 3.6,
         },
         {
-            "std_stdcode": "stu_under",
+            "std_stdcode": "stuunder1",
             "trm_year": 114,
             "trm_term": 2,
             "trm_termcount": 6,
@@ -1153,9 +1231,9 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 3.62,
         },
     ],
-    "stu_phd": [
+    "stuphd001": [
         {
-            "std_stdcode": "stu_phd",
+            "std_stdcode": "stuphd001",
             "trm_year": 112,
             "trm_term": 1,
             "trm_termcount": 1,
@@ -1172,7 +1250,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.1,
         },
         {
-            "std_stdcode": "stu_phd",
+            "std_stdcode": "stuphd001",
             "trm_year": 112,
             "trm_term": 2,
             "trm_termcount": 2,
@@ -1189,7 +1267,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.05,
         },
         {
-            "std_stdcode": "stu_phd",
+            "std_stdcode": "stuphd001",
             "trm_year": 113,
             "trm_term": 1,
             "trm_termcount": 3,
@@ -1206,7 +1284,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.15,
         },
         {
-            "std_stdcode": "stu_phd",
+            "std_stdcode": "stuphd001",
             "trm_year": 113,
             "trm_term": 2,
             "trm_termcount": 4,
@@ -1223,7 +1301,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.2,
         },
         {
-            "std_stdcode": "stu_phd",
+            "std_stdcode": "stuphd001",
             "trm_year": 114,
             "trm_term": 1,
             "trm_termcount": 5,
@@ -1240,7 +1318,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.2,
         },
         {
-            "std_stdcode": "stu_phd",
+            "std_stdcode": "stuphd001",
             "trm_year": 114,
             "trm_term": 2,
             "trm_termcount": 6,
@@ -1257,9 +1335,9 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.18,
         },
     ],
-    "stu_master": [
+    "stumaster": [
         {
-            "std_stdcode": "stu_master",
+            "std_stdcode": "stumaster",
             "trm_year": 112,
             "trm_term": 1,
             "trm_termcount": 1,
@@ -1276,7 +1354,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 3.7,
         },
         {
-            "std_stdcode": "stu_master",
+            "std_stdcode": "stumaster",
             "trm_year": 112,
             "trm_term": 2,
             "trm_termcount": 2,
@@ -1293,7 +1371,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 3.75,
         },
         {
-            "std_stdcode": "stu_master",
+            "std_stdcode": "stumaster",
             "trm_year": 113,
             "trm_term": 1,
             "trm_termcount": 3,
@@ -1310,7 +1388,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 3.8,
         },
         {
-            "std_stdcode": "stu_master",
+            "std_stdcode": "stumaster",
             "trm_year": 113,
             "trm_term": 2,
             "trm_termcount": 4,
@@ -1327,7 +1405,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 3.85,
         },
         {
-            "std_stdcode": "stu_master",
+            "std_stdcode": "stumaster",
             "trm_year": 114,
             "trm_term": 1,
             "trm_termcount": 5,
@@ -1344,7 +1422,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 3.8,
         },
         {
-            "std_stdcode": "stu_master",
+            "std_stdcode": "stumaster",
             "trm_year": 114,
             "trm_term": 2,
             "trm_termcount": 6,
@@ -1361,9 +1439,9 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 3.82,
         },
     ],
-    "stu_direct": [
+    "studirect": [
         {
-            "std_stdcode": "stu_direct",
+            "std_stdcode": "studirect",
             "trm_year": 113,
             "trm_term": 1,
             "trm_termcount": 1,
@@ -1380,7 +1458,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.2,
         },
         {
-            "std_stdcode": "stu_direct",
+            "std_stdcode": "studirect",
             "trm_year": 114,
             "trm_term": 1,
             "trm_termcount": 2,
@@ -1397,7 +1475,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.1,
         },
         {
-            "std_stdcode": "stu_direct",
+            "std_stdcode": "studirect",
             "trm_year": 114,
             "trm_term": 2,
             "trm_termcount": 3,
@@ -1414,9 +1492,9 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.08,
         },
     ],
-    "phd_china": [
+    "phdchina1": [
         {
-            "std_stdcode": "phd_china",
+            "std_stdcode": "phdchina1",
             "trm_year": 112,
             "trm_term": 1,
             "trm_termcount": 1,
@@ -1433,7 +1511,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 3.9,
         },
         {
-            "std_stdcode": "phd_china",
+            "std_stdcode": "phdchina1",
             "trm_year": 112,
             "trm_term": 2,
             "trm_termcount": 2,
@@ -1450,7 +1528,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.0,
         },
         {
-            "std_stdcode": "phd_china",
+            "std_stdcode": "phdchina1",
             "trm_year": 113,
             "trm_term": 1,
             "trm_termcount": 3,
@@ -1467,7 +1545,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 3.95,
         },
         {
-            "std_stdcode": "phd_china",
+            "std_stdcode": "phdchina1",
             "trm_year": 113,
             "trm_term": 2,
             "trm_termcount": 4,
@@ -1484,7 +1562,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 3.98,
         },
         {
-            "std_stdcode": "phd_china",
+            "std_stdcode": "phdchina1",
             "trm_year": 114,
             "trm_term": 1,
             "trm_termcount": 5,
@@ -1501,7 +1579,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 3.95,
         },
         {
-            "std_stdcode": "phd_china",
+            "std_stdcode": "phdchina1",
             "trm_year": 114,
             "trm_term": 2,
             "trm_termcount": 6,
@@ -1589,9 +1667,9 @@ SAMPLE_TERMS = {
         },
     ],
     # Computer Science College Students
-    "cs_phd001": [
+    "csphd0001": [
         {
-            "std_stdcode": "cs_phd001",
+            "std_stdcode": "csphd0001",
             "trm_year": 112,
             "trm_term": 1,
             "trm_termcount": 1,
@@ -1608,7 +1686,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.1,
         },
         {
-            "std_stdcode": "cs_phd001",
+            "std_stdcode": "csphd0001",
             "trm_year": 112,
             "trm_term": 2,
             "trm_termcount": 2,
@@ -1625,7 +1703,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.05,
         },
         {
-            "std_stdcode": "cs_phd001",
+            "std_stdcode": "csphd0001",
             "trm_year": 113,
             "trm_term": 1,
             "trm_termcount": 3,
@@ -1642,7 +1720,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.2,
         },
         {
-            "std_stdcode": "cs_phd001",
+            "std_stdcode": "csphd0001",
             "trm_year": 113,
             "trm_term": 2,
             "trm_termcount": 4,
@@ -1659,7 +1737,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.15,
         },
         {
-            "std_stdcode": "cs_phd001",
+            "std_stdcode": "csphd0001",
             "trm_year": 114,
             "trm_term": 1,
             "trm_termcount": 5,
@@ -1676,7 +1754,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.0,
         },
         {
-            "std_stdcode": "cs_phd001",
+            "std_stdcode": "csphd0001",
             "trm_year": 114,
             "trm_term": 2,
             "trm_termcount": 6,
@@ -1693,9 +1771,9 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 3.98,
         },
     ],
-    "cs_phd002": [
+    "csphd0002": [
         {
-            "std_stdcode": "cs_phd002",
+            "std_stdcode": "csphd0002",
             "trm_year": 111,
             "trm_term": 1,
             "trm_termcount": 1,
@@ -1712,7 +1790,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.3,
         },
         {
-            "std_stdcode": "cs_phd002",
+            "std_stdcode": "csphd0002",
             "trm_year": 111,
             "trm_term": 2,
             "trm_termcount": 2,
@@ -1729,7 +1807,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.25,
         },
         {
-            "std_stdcode": "cs_phd002",
+            "std_stdcode": "csphd0002",
             "trm_year": 112,
             "trm_term": 1,
             "trm_termcount": 3,
@@ -1746,7 +1824,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.1,
         },
         {
-            "std_stdcode": "cs_phd002",
+            "std_stdcode": "csphd0002",
             "trm_year": 112,
             "trm_term": 2,
             "trm_termcount": 4,
@@ -1763,7 +1841,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.2,
         },
         {
-            "std_stdcode": "cs_phd002",
+            "std_stdcode": "csphd0002",
             "trm_year": 113,
             "trm_term": 1,
             "trm_termcount": 5,
@@ -1780,7 +1858,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.15,
         },
         {
-            "std_stdcode": "cs_phd002",
+            "std_stdcode": "csphd0002",
             "trm_year": 113,
             "trm_term": 2,
             "trm_termcount": 6,
@@ -1797,7 +1875,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.0,
         },
         {
-            "std_stdcode": "cs_phd002",
+            "std_stdcode": "csphd0002",
             "trm_year": 114,
             "trm_term": 1,
             "trm_termcount": 7,
@@ -1814,7 +1892,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.05,
         },
         {
-            "std_stdcode": "cs_phd002",
+            "std_stdcode": "csphd0002",
             "trm_year": 114,
             "trm_term": 2,
             "trm_termcount": 8,
@@ -1831,9 +1909,9 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.02,
         },
     ],
-    "cs_phd003": [
+    "csphd0003": [
         {
-            "std_stdcode": "cs_phd003",
+            "std_stdcode": "csphd0003",
             "trm_year": 110,
             "trm_term": 1,
             "trm_termcount": 1,
@@ -1850,7 +1928,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.2,
         },
         {
-            "std_stdcode": "cs_phd003",
+            "std_stdcode": "csphd0003",
             "trm_year": 110,
             "trm_term": 2,
             "trm_termcount": 2,
@@ -1867,7 +1945,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.1,
         },
         {
-            "std_stdcode": "cs_phd003",
+            "std_stdcode": "csphd0003",
             "trm_year": 111,
             "trm_term": 1,
             "trm_termcount": 3,
@@ -1884,7 +1962,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.3,
         },
         {
-            "std_stdcode": "cs_phd003",
+            "std_stdcode": "csphd0003",
             "trm_year": 111,
             "trm_term": 2,
             "trm_termcount": 4,
@@ -1901,7 +1979,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.25,
         },
         {
-            "std_stdcode": "cs_phd003",
+            "std_stdcode": "csphd0003",
             "trm_year": 112,
             "trm_term": 1,
             "trm_termcount": 5,
@@ -1918,7 +1996,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.15,
         },
         {
-            "std_stdcode": "cs_phd003",
+            "std_stdcode": "csphd0003",
             "trm_year": 112,
             "trm_term": 2,
             "trm_termcount": 6,
@@ -1935,7 +2013,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.1,
         },
         {
-            "std_stdcode": "cs_phd003",
+            "std_stdcode": "csphd0003",
             "trm_year": 113,
             "trm_term": 1,
             "trm_termcount": 7,
@@ -1952,7 +2030,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.2,
         },
         {
-            "std_stdcode": "cs_phd003",
+            "std_stdcode": "csphd0003",
             "trm_year": 113,
             "trm_term": 2,
             "trm_termcount": 8,
@@ -1969,7 +2047,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.0,
         },
         {
-            "std_stdcode": "cs_phd003",
+            "std_stdcode": "csphd0003",
             "trm_year": 114,
             "trm_term": 1,
             "trm_termcount": 9,
@@ -1986,7 +2064,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.1,
         },
         {
-            "std_stdcode": "cs_phd003",
+            "std_stdcode": "csphd0003",
             "trm_year": 114,
             "trm_term": 2,
             "trm_termcount": 10,
@@ -2003,9 +2081,9 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.08,
         },
     ],
-    "cs_phd_intl": [
+    "csphdintl": [
         {
-            "std_stdcode": "cs_phd_intl",
+            "std_stdcode": "csphdintl",
             "trm_year": 113,
             "trm_term": 1,
             "trm_termcount": 1,
@@ -2022,7 +2100,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.3,
         },
         {
-            "std_stdcode": "cs_phd_intl",
+            "std_stdcode": "csphdintl",
             "trm_year": 113,
             "trm_term": 2,
             "trm_termcount": 2,
@@ -2039,7 +2117,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.2,
         },
         {
-            "std_stdcode": "cs_phd_intl",
+            "std_stdcode": "csphdintl",
             "trm_year": 114,
             "trm_term": 1,
             "trm_termcount": 3,
@@ -2056,7 +2134,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.1,
         },
         {
-            "std_stdcode": "cs_phd_intl",
+            "std_stdcode": "csphdintl",
             "trm_year": 114,
             "trm_term": 2,
             "trm_termcount": 4,
@@ -2074,9 +2152,9 @@ SAMPLE_TERMS = {
         },
     ],
     # Electrical Engineering College Students
-    "ee_phd001": [
+    "eephd0001": [
         {
-            "std_stdcode": "ee_phd001",
+            "std_stdcode": "eephd0001",
             "trm_year": 112,
             "trm_term": 2,
             "trm_termcount": 1,
@@ -2093,7 +2171,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.0,
         },
         {
-            "std_stdcode": "ee_phd001",
+            "std_stdcode": "eephd0001",
             "trm_year": 113,
             "trm_term": 1,
             "trm_termcount": 2,
@@ -2110,7 +2188,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.15,
         },
         {
-            "std_stdcode": "ee_phd001",
+            "std_stdcode": "eephd0001",
             "trm_year": 113,
             "trm_term": 2,
             "trm_termcount": 3,
@@ -2127,7 +2205,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.1,
         },
         {
-            "std_stdcode": "ee_phd001",
+            "std_stdcode": "eephd0001",
             "trm_year": 114,
             "trm_term": 1,
             "trm_termcount": 4,
@@ -2144,7 +2222,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.2,
         },
         {
-            "std_stdcode": "ee_phd001",
+            "std_stdcode": "eephd0001",
             "trm_year": 114,
             "trm_term": 2,
             "trm_termcount": 5,
@@ -2161,9 +2239,9 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.0,
         },
     ],
-    "ee_phd002": [
+    "eephd0002": [
         {
-            "std_stdcode": "ee_phd002",
+            "std_stdcode": "eephd0002",
             "trm_year": 111,
             "trm_term": 2,
             "trm_termcount": 1,
@@ -2180,7 +2258,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.25,
         },
         {
-            "std_stdcode": "ee_phd002",
+            "std_stdcode": "eephd0002",
             "trm_year": 112,
             "trm_term": 1,
             "trm_termcount": 2,
@@ -2197,7 +2275,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.15,
         },
         {
-            "std_stdcode": "ee_phd002",
+            "std_stdcode": "eephd0002",
             "trm_year": 112,
             "trm_term": 2,
             "trm_termcount": 3,
@@ -2214,7 +2292,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.3,
         },
         {
-            "std_stdcode": "ee_phd002",
+            "std_stdcode": "eephd0002",
             "trm_year": 113,
             "trm_term": 1,
             "trm_termcount": 4,
@@ -2231,7 +2309,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.1,
         },
         {
-            "std_stdcode": "ee_phd002",
+            "std_stdcode": "eephd0002",
             "trm_year": 113,
             "trm_term": 2,
             "trm_termcount": 5,
@@ -2248,7 +2326,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.2,
         },
         {
-            "std_stdcode": "ee_phd002",
+            "std_stdcode": "eephd0002",
             "trm_year": 114,
             "trm_term": 1,
             "trm_termcount": 6,
@@ -2265,7 +2343,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.0,
         },
         {
-            "std_stdcode": "ee_phd002",
+            "std_stdcode": "eephd0002",
             "trm_year": 114,
             "trm_term": 2,
             "trm_termcount": 7,
@@ -2282,9 +2360,9 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.15,
         },
     ],
-    "ee_phd003": [
+    "eephd0003": [
         {
-            "std_stdcode": "ee_phd003",
+            "std_stdcode": "eephd0003",
             "trm_year": 110,
             "trm_term": 1,
             "trm_termcount": 1,
@@ -2301,7 +2379,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.2,
         },
         {
-            "std_stdcode": "ee_phd003",
+            "std_stdcode": "eephd0003",
             "trm_year": 110,
             "trm_term": 2,
             "trm_termcount": 2,
@@ -2318,7 +2396,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.1,
         },
         {
-            "std_stdcode": "ee_phd003",
+            "std_stdcode": "eephd0003",
             "trm_year": 111,
             "trm_term": 1,
             "trm_termcount": 3,
@@ -2335,7 +2413,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.3,
         },
         {
-            "std_stdcode": "ee_phd003",
+            "std_stdcode": "eephd0003",
             "trm_year": 111,
             "trm_term": 2,
             "trm_termcount": 4,
@@ -2352,7 +2430,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.15,
         },
         {
-            "std_stdcode": "ee_phd003",
+            "std_stdcode": "eephd0003",
             "trm_year": 112,
             "trm_term": 1,
             "trm_termcount": 5,
@@ -2369,7 +2447,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.25,
         },
         {
-            "std_stdcode": "ee_phd003",
+            "std_stdcode": "eephd0003",
             "trm_year": 112,
             "trm_term": 2,
             "trm_termcount": 6,
@@ -2386,7 +2464,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.1,
         },
         {
-            "std_stdcode": "ee_phd003",
+            "std_stdcode": "eephd0003",
             "trm_year": 113,
             "trm_term": 1,
             "trm_termcount": 7,
@@ -2403,7 +2481,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.2,
         },
         {
-            "std_stdcode": "ee_phd003",
+            "std_stdcode": "eephd0003",
             "trm_year": 113,
             "trm_term": 2,
             "trm_termcount": 8,
@@ -2420,7 +2498,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.0,
         },
         {
-            "std_stdcode": "ee_phd003",
+            "std_stdcode": "eephd0003",
             "trm_year": 114,
             "trm_term": 1,
             "trm_termcount": 9,
@@ -2437,7 +2515,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.15,
         },
         {
-            "std_stdcode": "ee_phd003",
+            "std_stdcode": "eephd0003",
             "trm_year": 114,
             "trm_term": 2,
             "trm_termcount": 10,
@@ -2454,9 +2532,9 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.12,
         },
     ],
-    "ee_phd_exchange": [
+    "eephdexch": [
         {
-            "std_stdcode": "ee_phd_exchange",
+            "std_stdcode": "eephdexch",
             "trm_year": 113,
             "trm_term": 2,
             "trm_termcount": 1,
@@ -2473,7 +2551,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.3,
         },
         {
-            "std_stdcode": "ee_phd_exchange",
+            "std_stdcode": "eephdexch",
             "trm_year": 114,
             "trm_term": 1,
             "trm_termcount": 2,
@@ -2490,7 +2568,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.25,
         },
         {
-            "std_stdcode": "ee_phd_exchange",
+            "std_stdcode": "eephdexch",
             "trm_year": 114,
             "trm_term": 2,
             "trm_termcount": 3,
@@ -2508,9 +2586,9 @@ SAMPLE_TERMS = {
         },
     ],
     # Mechanical Engineering College Students
-    "me_phd001": [
+    "mephd0001": [
         {
-            "std_stdcode": "me_phd001",
+            "std_stdcode": "mephd0001",
             "trm_year": 112,
             "trm_term": 1,
             "trm_termcount": 1,
@@ -2527,7 +2605,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.1,
         },
         {
-            "std_stdcode": "me_phd001",
+            "std_stdcode": "mephd0001",
             "trm_year": 112,
             "trm_term": 2,
             "trm_termcount": 2,
@@ -2544,7 +2622,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.0,
         },
         {
-            "std_stdcode": "me_phd001",
+            "std_stdcode": "mephd0001",
             "trm_year": 113,
             "trm_term": 1,
             "trm_termcount": 3,
@@ -2561,7 +2639,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.2,
         },
         {
-            "std_stdcode": "me_phd001",
+            "std_stdcode": "mephd0001",
             "trm_year": 113,
             "trm_term": 2,
             "trm_termcount": 4,
@@ -2578,7 +2656,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.15,
         },
         {
-            "std_stdcode": "me_phd001",
+            "std_stdcode": "mephd0001",
             "trm_year": 114,
             "trm_term": 1,
             "trm_termcount": 5,
@@ -2595,7 +2673,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.05,
         },
         {
-            "std_stdcode": "me_phd001",
+            "std_stdcode": "mephd0001",
             "trm_year": 114,
             "trm_term": 2,
             "trm_termcount": 6,
@@ -2612,9 +2690,9 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.02,
         },
     ],
-    "me_phd002": [
+    "mephd0002": [
         {
-            "std_stdcode": "me_phd002",
+            "std_stdcode": "mephd0002",
             "trm_year": 111,
             "trm_term": 1,
             "trm_termcount": 1,
@@ -2631,7 +2709,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.2,
         },
         {
-            "std_stdcode": "me_phd002",
+            "std_stdcode": "mephd0002",
             "trm_year": 111,
             "trm_term": 2,
             "trm_termcount": 2,
@@ -2648,7 +2726,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.1,
         },
         {
-            "std_stdcode": "me_phd002",
+            "std_stdcode": "mephd0002",
             "trm_year": 112,
             "trm_term": 1,
             "trm_termcount": 3,
@@ -2665,7 +2743,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.25,
         },
         {
-            "std_stdcode": "me_phd002",
+            "std_stdcode": "mephd0002",
             "trm_year": 112,
             "trm_term": 2,
             "trm_termcount": 4,
@@ -2682,7 +2760,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.15,
         },
         {
-            "std_stdcode": "me_phd002",
+            "std_stdcode": "mephd0002",
             "trm_year": 113,
             "trm_term": 1,
             "trm_termcount": 5,
@@ -2699,7 +2777,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.3,
         },
         {
-            "std_stdcode": "me_phd002",
+            "std_stdcode": "mephd0002",
             "trm_year": 113,
             "trm_term": 2,
             "trm_termcount": 6,
@@ -2716,7 +2794,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.1,
         },
         {
-            "std_stdcode": "me_phd002",
+            "std_stdcode": "mephd0002",
             "trm_year": 114,
             "trm_term": 1,
             "trm_termcount": 7,
@@ -2733,7 +2811,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.2,
         },
         {
-            "std_stdcode": "me_phd002",
+            "std_stdcode": "mephd0002",
             "trm_year": 114,
             "trm_term": 2,
             "trm_termcount": 8,
@@ -2750,9 +2828,9 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.18,
         },
     ],
-    "me_phd003": [
+    "mephd0003": [
         {
-            "std_stdcode": "me_phd003",
+            "std_stdcode": "mephd0003",
             "trm_year": 110,
             "trm_term": 2,
             "trm_termcount": 1,
@@ -2769,7 +2847,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.1,
         },
         {
-            "std_stdcode": "me_phd003",
+            "std_stdcode": "mephd0003",
             "trm_year": 111,
             "trm_term": 1,
             "trm_termcount": 2,
@@ -2786,7 +2864,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.2,
         },
         {
-            "std_stdcode": "me_phd003",
+            "std_stdcode": "mephd0003",
             "trm_year": 111,
             "trm_term": 2,
             "trm_termcount": 3,
@@ -2803,7 +2881,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.15,
         },
         {
-            "std_stdcode": "me_phd003",
+            "std_stdcode": "mephd0003",
             "trm_year": 112,
             "trm_term": 1,
             "trm_termcount": 4,
@@ -2820,7 +2898,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.3,
         },
         {
-            "std_stdcode": "me_phd003",
+            "std_stdcode": "mephd0003",
             "trm_year": 112,
             "trm_term": 2,
             "trm_termcount": 5,
@@ -2837,7 +2915,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.1,
         },
         {
-            "std_stdcode": "me_phd003",
+            "std_stdcode": "mephd0003",
             "trm_year": 113,
             "trm_term": 1,
             "trm_termcount": 6,
@@ -2854,7 +2932,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.25,
         },
         {
-            "std_stdcode": "me_phd003",
+            "std_stdcode": "mephd0003",
             "trm_year": 113,
             "trm_term": 2,
             "trm_termcount": 7,
@@ -2871,7 +2949,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.2,
         },
         {
-            "std_stdcode": "me_phd003",
+            "std_stdcode": "mephd0003",
             "trm_year": 114,
             "trm_term": 1,
             "trm_termcount": 8,
@@ -2888,7 +2966,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.1,
         },
         {
-            "std_stdcode": "me_phd003",
+            "std_stdcode": "mephd0003",
             "trm_year": 114,
             "trm_term": 2,
             "trm_termcount": 9,
@@ -2905,9 +2983,9 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.0,
         },
     ],
-    "me_phd_robotics": [
+    "mephdrobo": [
         {
-            "std_stdcode": "me_phd_robotics",
+            "std_stdcode": "mephdrobo",
             "trm_year": 113,
             "trm_term": 1,
             "trm_termcount": 1,
@@ -2924,7 +3002,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.3,
         },
         {
-            "std_stdcode": "me_phd_robotics",
+            "std_stdcode": "mephdrobo",
             "trm_year": 113,
             "trm_term": 2,
             "trm_termcount": 2,
@@ -2941,7 +3019,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.25,
         },
         {
-            "std_stdcode": "me_phd_robotics",
+            "std_stdcode": "mephdrobo",
             "trm_year": 114,
             "trm_term": 1,
             "trm_termcount": 3,
@@ -2958,7 +3036,7 @@ SAMPLE_TERMS = {
             "trm_ascore_gpa": 4.2,
         },
         {
-            "std_stdcode": "me_phd_robotics",
+            "std_stdcode": "mephdrobo",
             "trm_year": 114,
             "trm_term": 2,
             "trm_termcount": 4,
@@ -2973,6 +3051,182 @@ SAMPLE_TERMS = {
             "trm_depplacing": 0,
             "trm_depplacingrate": 0.0,
             "trm_ascore_gpa": 4.18,
+        },
+    ],
+    "312551184": [
+        {
+            "std_stdcode": "312551184",
+            "trm_year": 113,
+            "trm_term": 1,
+            "trm_termcount": 1,
+            "trm_studystatus": 1,
+            "trm_degree": 1,
+            "trm_academyno": "C",
+            "trm_academyname": "資訊學院",
+            "trm_depno": "4551",
+            "trm_depname": "資科工博",
+            "trm_placings": 0,
+            "trm_placingsrate": 0.0,
+            "trm_depplacing": 0,
+            "trm_depplacingrate": 0.0,
+            "trm_ascore_gpa": 3.85,
+        },
+        {
+            "std_stdcode": "312551184",
+            "trm_year": 113,
+            "trm_term": 2,
+            "trm_termcount": 2,
+            "trm_studystatus": 1,
+            "trm_degree": 1,
+            "trm_academyno": "C",
+            "trm_academyname": "資訊學院",
+            "trm_depno": "4551",
+            "trm_depname": "資科工博",
+            "trm_placings": 0,
+            "trm_placingsrate": 0.0,
+            "trm_depplacing": 0,
+            "trm_depplacingrate": 0.0,
+            "trm_ascore_gpa": 3.90,
+        },
+        {
+            "std_stdcode": "312551184",
+            "trm_year": 114,
+            "trm_term": 1,
+            "trm_termcount": 3,
+            "trm_studystatus": 1,
+            "trm_degree": 1,
+            "trm_academyno": "C",
+            "trm_academyname": "資訊學院",
+            "trm_depno": "4551",
+            "trm_depname": "資科工博",
+            "trm_placings": 0,
+            "trm_placingsrate": 0.0,
+            "trm_depplacing": 0,
+            "trm_depplacingrate": 0.0,
+            "trm_ascore_gpa": 3.88,
+        },
+        {
+            "std_stdcode": "312551184",
+            "trm_year": 114,
+            "trm_term": 2,
+            "trm_termcount": 4,
+            "trm_studystatus": 1,
+            "trm_degree": 1,
+            "trm_academyno": "C",
+            "trm_academyname": "資訊學院",
+            "trm_depno": "4551",
+            "trm_depname": "資科工博",
+            "trm_placings": 0,
+            "trm_placingsrate": 0.0,
+            "trm_depplacing": 0,
+            "trm_depplacingrate": 0.0,
+            "trm_ascore_gpa": 3.92,
+        },
+    ],
+    "412551013": [
+        {
+            "std_stdcode": "412551013",
+            "trm_year": 113,
+            "trm_term": 1,
+            "trm_termcount": 1,
+            "trm_studystatus": 1,
+            "trm_degree": 1,
+            "trm_academyno": "C",
+            "trm_academyname": "資訊學院",
+            "trm_depno": "4551",
+            "trm_depname": "資科工博",
+            "trm_placings": 0,
+            "trm_placingsrate": 0.0,
+            "trm_depplacing": 0,
+            "trm_depplacingrate": 0.0,
+            "trm_ascore_gpa": 3.75,
+        },
+        {
+            "std_stdcode": "412551013",
+            "trm_year": 113,
+            "trm_term": 2,
+            "trm_termcount": 2,
+            "trm_studystatus": 1,
+            "trm_degree": 1,
+            "trm_academyno": "C",
+            "trm_academyname": "資訊學院",
+            "trm_depno": "4551",
+            "trm_depname": "資科工博",
+            "trm_placings": 0,
+            "trm_placingsrate": 0.0,
+            "trm_depplacing": 0,
+            "trm_depplacingrate": 0.0,
+            "trm_ascore_gpa": 3.80,
+        },
+        {
+            "std_stdcode": "412551013",
+            "trm_year": 114,
+            "trm_term": 1,
+            "trm_termcount": 3,
+            "trm_studystatus": 1,
+            "trm_degree": 1,
+            "trm_academyno": "C",
+            "trm_academyname": "資訊學院",
+            "trm_depno": "4551",
+            "trm_depname": "資科工博",
+            "trm_placings": 0,
+            "trm_placingsrate": 0.0,
+            "trm_depplacing": 0,
+            "trm_depplacingrate": 0.0,
+            "trm_ascore_gpa": 3.82,
+        },
+    ],
+    "412551016": [
+        {
+            "std_stdcode": "412551016",
+            "trm_year": 113,
+            "trm_term": 1,
+            "trm_termcount": 1,
+            "trm_studystatus": 1,
+            "trm_degree": 1,
+            "trm_academyno": "C",
+            "trm_academyname": "資訊學院",
+            "trm_depno": "4551",
+            "trm_depname": "資科工博",
+            "trm_placings": 0,
+            "trm_placingsrate": 0.0,
+            "trm_depplacing": 0,
+            "trm_depplacingrate": 0.0,
+            "trm_ascore_gpa": 3.70,
+        },
+        {
+            "std_stdcode": "412551016",
+            "trm_year": 113,
+            "trm_term": 2,
+            "trm_termcount": 2,
+            "trm_studystatus": 1,
+            "trm_degree": 1,
+            "trm_academyno": "C",
+            "trm_academyname": "資訊學院",
+            "trm_depno": "4551",
+            "trm_depname": "資科工博",
+            "trm_placings": 0,
+            "trm_placingsrate": 0.0,
+            "trm_depplacing": 0,
+            "trm_depplacingrate": 0.0,
+            "trm_ascore_gpa": 3.65,
+        },
+        {
+            "std_stdcode": "412551016",
+            "trm_year": 114,
+            "trm_term": 1,
+            "trm_termcount": 3,
+            "trm_studystatus": 1,
+            "trm_degree": 1,
+            "trm_academyno": "C",
+            "trm_academyname": "資訊學院",
+            "trm_depno": "4551",
+            "trm_depname": "資科工博",
+            "trm_placings": 0,
+            "trm_placingsrate": 0.0,
+            "trm_depplacing": 0,
+            "trm_depplacingrate": 0.0,
+            "trm_ascore_gpa": 3.68,
         },
     ],
 }

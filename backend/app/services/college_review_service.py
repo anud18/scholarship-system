@@ -311,7 +311,7 @@ class CollegeReviewService:
                 "status": app.status,
                 "created_at": app.created_at,
                 "student_data": student_payload,
-                "is_renewal": app.is_renewal if hasattr(app, "is_renewal") else False,
+                "is_renewal": app.is_renewal,
                 # Check if professor has reviewed (unified review system - check if any reviewer with professor role exists)
                 "professor_review_completed": any(
                     review.reviewer.role == "professor" for review in app.reviews if hasattr(review, "reviewer")
@@ -404,7 +404,6 @@ class CollegeReviewService:
             conditions = [
                 Application.scholarship_type_id == scholarship_type_id,
                 Application.academic_year == academic_year,
-                Application.is_renewal.is_(False),  # Exclude renewal applications
                 Application.deleted_at.is_(None),  # Exclude soft-deleted applications
                 Application.status.in_(  # Whitelist valid statuses
                     [
@@ -443,7 +442,6 @@ class CollegeReviewService:
                 Application.scholarship_type_id == scholarship_type_id,
                 Application.sub_scholarship_type == sub_type_code,
                 Application.academic_year == academic_year,
-                Application.is_renewal.is_(False),  # Exclude renewal applications
                 Application.deleted_at.is_(None),  # Exclude soft-deleted applications
                 Application.status.in_(  # Whitelist valid statuses
                     [
@@ -533,14 +531,15 @@ class CollegeReviewService:
         await self.db.flush()  # Flush within transaction context
         await self.db.refresh(ranking)
 
-        # Create ranking items - sort by final_ranking_position (if available), then by submission date
+        # Create ranking items - renewal students always come first, then by rank/submission date
         def sort_key(app):
+            sort_group = 0 if app.is_renewal else 1  # 0 = renewal (top), 1 = new
             # If application has final_ranking_position, use it; otherwise use a large number (lowest priority)
-            # Lower rank number = higher priority (rank 1 is best)
             rank = app.final_ranking_position if app.final_ranking_position else 999999
             # Use submitted_at as secondary sort (earlier submissions get higher priority if same rank)
             submitted_at = app.submitted_at or app.created_at
             return (
+                sort_group,  # Renewal first, new applications after
                 rank,  # Ascending order: lower rank number comes first
                 submitted_at.timestamp(),  # Ascending: earlier submission comes first
             )
@@ -581,62 +580,77 @@ class CollegeReviewService:
     async def update_ranking_order(self, ranking_id: int, new_order: List[Dict[str, Any]]) -> CollegeRanking:
         """Update the ranking order of applications with transaction safety"""
 
-        try:
-            # Get ranking with pessimistic locking
-            ranking_stmt = (
-                select(CollegeRanking)
-                .options(selectinload(CollegeRanking.items).selectinload(CollegeRankingItem.application))
-                .where(CollegeRanking.id == ranking_id)
-                .with_for_update()
-            )
+        # Get ranking with pessimistic locking
+        ranking_stmt = (
+            select(CollegeRanking)
+            .options(selectinload(CollegeRanking.items).selectinload(CollegeRankingItem.application))
+            .where(CollegeRanking.id == ranking_id)
+            .with_for_update()
+        )
 
-            ranking_result = await self.db.execute(ranking_stmt)
-            ranking = ranking_result.scalar_one_or_none()
+        ranking_result = await self.db.execute(ranking_stmt)
+        ranking = ranking_result.scalar_one_or_none()
 
-            if not ranking:
-                raise RankingNotFoundError(f"Ranking with ID {ranking_id} not found")
+        if not ranking:
+            raise RankingNotFoundError(f"Ranking with ID {ranking_id} not found")
 
-            if ranking.is_finalized:
-                raise RankingModificationError(f"Cannot modify finalized ranking {ranking_id}")
+        if ranking.is_finalized:
+            raise RankingModificationError(f"Cannot modify finalized ranking {ranking_id}")
 
-            # Validate input
-            if not new_order:
-                raise InvalidRankingDataError("New order cannot be empty")
+        # Validate input
+        if not new_order:
+            raise InvalidRankingDataError("New order cannot be empty")
 
-            positions = [item.get("position") for item in new_order]
-            if len(positions) != len(set(positions)):
-                raise InvalidRankingDataError("Duplicate positions found in ranking update")
+        positions = [item.get("position") for item in new_order]
+        if len(positions) != len(set(positions)):
+            raise InvalidRankingDataError("Duplicate positions found in ranking update")
 
-            # Update rank positions with validation
-            updated_count = 0
-            for order_item in new_order:
-                item_id = order_item.get("item_id")
-                new_position = order_item.get("position")
+        # Build a lookup of item_id -> new_position from the request
+        order_lookup = {}
+        for order_item in new_order:
+            item_id = order_item.get("item_id")
+            new_position = order_item.get("position")
+            if item_id and new_position is not None:
+                order_lookup[item_id] = new_position
 
-                if not item_id or new_position is None:
-                    continue
+        # Validate: renewal students must rank before all new applications
+        item_lookup = {item.id: item for item in ranking.items}
+        renewal_positions = []
+        new_positions = []
+        for item_id, pos in order_lookup.items():
+            item = item_lookup.get(item_id)
+            if item and item.application:
+                if item.application.is_renewal:
+                    renewal_positions.append(pos)
+                else:
+                    new_positions.append(pos)
 
-                # Find the ranking item
-                ranking_item = next((item for item in ranking.items if item.id == item_id), None)
+        if renewal_positions and new_positions:
+            max_renewal_pos = max(renewal_positions)
+            min_new_pos = min(new_positions)
+            if max_renewal_pos > min_new_pos:
+                raise InvalidRankingDataError(
+                    "續領學生的排名必須在所有新申請學生之前"
+                )
 
-                if ranking_item and ranking_item.rank_position != new_position:
-                    ranking_item.rank_position = new_position
-                    # Also update the application's ranking position for consistency
-                    if ranking_item.application:
-                        ranking_item.application.final_ranking_position = new_position
-                    updated_count += 1
+        # Update rank positions
+        updated_count = 0
+        for item_id, new_position in order_lookup.items():
+            ranking_item = item_lookup.get(item_id)
+            if ranking_item and ranking_item.rank_position != new_position:
+                ranking_item.rank_position = new_position
+                if ranking_item.application:
+                    ranking_item.application.final_ranking_position = new_position
+                updated_count += 1
 
-            if updated_count == 0:
-                raise InvalidRankingDataError("No valid position updates found in ranking data")
+        if updated_count == 0:
+            raise InvalidRankingDataError("No valid position updates found in ranking data")
 
-            ranking.updated_at = datetime.now(timezone.utc)
-            await self.db.flush()
-            await self.db.refresh(ranking)
+        ranking.updated_at = datetime.now(timezone.utc)
+        await self.db.flush()
+        await self.db.refresh(ranking)
 
-            return ranking
-
-        except Exception as e:
-            raise e
+        return ranking
 
     async def finalize_ranking(self, ranking_id: int, finalizer_id: int) -> CollegeRanking:
         """Finalize a ranking (makes it read-only) with concurrent access protection"""
