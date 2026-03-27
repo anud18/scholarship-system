@@ -570,3 +570,89 @@ class TestUnknownCollegeGetsNoAllocation:
 
         assert len(results) == 1
         assert results[0] == {"ranking_item_id": 101, "sub_type_code": None, "allocation_year": None}
+
+
+class TestPreferenceOrderRespected:
+    """Bug fix: students with sub_type_preferences should be allocated
+    according to their preference order, not default_prefs."""
+
+    def test_moe_preferred_over_nstc(self, _compute_suggestions):
+        """Student applied for both nstc and moe_1w but prefers moe_1w.
+        Should be allocated to moe_1w even though default_prefs has nstc first."""
+        app = _make_app(
+            1,
+            college="C",
+            sub_type_preferences=["moe_1w", "nstc"],
+            scholarship_subtype_list=["moe_1w", "nstc"],
+        )
+        item = _make_item(1, rank_position=1, app=app)
+
+        results = _compute_suggestions(
+            unique_items=[item],
+            default_prefs=["nstc", "moe_1w"],  # System default: nstc first
+            prev_alloc_years={},
+            prior_years_map={},
+            quota_tracker={
+                ("nstc", 114, "C"): 5,
+                ("moe_1w", 114, "C"): 5,
+            },
+            academic_year=114,
+        )
+
+        assert len(results) == 1
+        assert results[0]["sub_type_code"] == "moe_1w"
+        assert results[0]["allocation_year"] == 114
+
+    def test_no_preferences_uses_subtype_list_order(self, _compute_suggestions):
+        """Student has no sub_type_preferences but scholarship_subtype_list
+        is ['moe_1w', 'nstc']. Should use subtype_list order as fallback,
+        not default_prefs."""
+        app = _make_app(
+            1,
+            college="C",
+            sub_type_preferences=None,
+            scholarship_subtype_list=["moe_1w", "nstc"],
+        )
+        item = _make_item(1, rank_position=1, app=app)
+
+        results = _compute_suggestions(
+            unique_items=[item],
+
+            default_prefs=["nstc", "moe_1w"],
+            prev_alloc_years={},
+            prior_years_map={},
+            quota_tracker={
+                ("nstc", 114, "C"): 5,
+                ("moe_1w", 114, "C"): 5,
+            },
+            academic_year=114,
+        )
+
+        assert len(results) == 1
+        assert results[0]["sub_type_code"] == "moe_1w"
+
+    def test_only_moe_applied_not_allocated_to_nstc(self, _compute_suggestions):
+        """Student only applied for moe_1w. Must NOT be allocated to nstc."""
+        app = _make_app(
+            1,
+            college="C",
+            sub_type_preferences=None,
+            scholarship_subtype_list=["moe_1w"],
+        )
+        item = _make_item(1, rank_position=1, app=app)
+
+        results = _compute_suggestions(
+            unique_items=[item],
+
+            default_prefs=["nstc", "moe_1w"],
+            prev_alloc_years={},
+            prior_years_map={},
+            quota_tracker={
+                ("nstc", 114, "C"): 5,
+                ("moe_1w", 114, "C"): 5,
+            },
+            academic_year=114,
+        )
+
+        assert len(results) == 1
+        assert results[0]["sub_type_code"] == "moe_1w"

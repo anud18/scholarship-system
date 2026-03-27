@@ -237,10 +237,18 @@ class BatchImportService:
                     }
 
                     # Parse sub_types from Chinese column names
+                    # Values: 1/2/3 = applied with priority order (1=first choice), blank = not applied
+                    priority_entries: list[tuple[int, str]] = []
                     for chinese_label, sub_type_code in sub_type_labels.items():
                         if chinese_label in df_columns:
-                            if row.get(chinese_label) in ["Y", "y", "是", "1", 1, True]:
-                                data_row["sub_types"].append(sub_type_code)
+                            cell = row.get(chinese_label)
+                            if isinstance(cell, (int, float)) and not pd.isna(cell) and int(cell) > 0:
+                                priority_entries.append((int(cell), sub_type_code))
+                            elif isinstance(cell, str) and cell.strip().isdigit() and int(cell.strip()) > 0:
+                                priority_entries.append((int(cell.strip()), sub_type_code))
+
+                    priority_entries.sort(key=lambda x: x[0])
+                    data_row["sub_types"] = [code for _, code in priority_entries]
 
                     # Parse custom fields from Chinese column names
                     for chinese_label, field_name in custom_field_mapping.items():
@@ -271,11 +279,18 @@ class BatchImportService:
                     }
 
                     # Parse sub_types from English column names (sub_type_*)
+                    priority_entries = []
                     for col in df_columns:
                         if col.startswith("sub_type_"):
                             sub_type_code = col.replace("sub_type_", "")
-                            if row.get(col) in ["Y", "y", "是", "1", 1, True]:
-                                data_row["sub_types"].append(sub_type_code)
+                            cell = row.get(col)
+                            if isinstance(cell, (int, float)) and not pd.isna(cell) and int(cell) > 0:
+                                priority_entries.append((int(cell), sub_type_code))
+                            elif isinstance(cell, str) and cell.strip().isdigit() and int(cell.strip()) > 0:
+                                priority_entries.append((int(cell.strip()), sub_type_code))
+
+                    priority_entries.sort(key=lambda x: x[0])
+                    data_row["sub_types"] = [code for _, code in priority_entries]
 
                     # Parse custom fields from English column names (custom_*)
                     for col in df_columns:
@@ -811,6 +826,7 @@ class BatchImportService:
                         row_data.get("sub_types", [None])[0].lower() if row_data.get("sub_types") else "general"
                     ),  # Lowercase, configuration-driven
                     scholarship_subtype_list=row_data.get("sub_types", []),
+                    sub_type_preferences=row_data.get("sub_types", []) or None,
                     sub_type_selection_mode=scholarship.sub_type_selection_mode,
                     academic_year=academic_year,
                     semester=semester,

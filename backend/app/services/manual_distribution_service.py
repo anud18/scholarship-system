@@ -72,8 +72,8 @@ def _compute_suggestions(
         deduplicated by application_id.  Items that are already allocated
         (is_allocated=True) are skipped silently.
     default_prefs:
-        Ordered list of sub_type codes from ScholarshipSubTypeConfig, used
-        when an application has no sub_type_preferences.
+        Ordered list of sub_type codes from ScholarshipSubTypeConfig.
+        Last-resort fallback: sub_type_preferences → scholarship_subtype_list → default_prefs.
     prev_alloc_years:
         Mapping of {previous_application_id: allocation_year} for renewal
         students' prior allocations.
@@ -115,9 +115,10 @@ def _compute_suggestions(
             target_year = academic_year
 
         # Determine preference order, constrained to sub-types the student actually applied for
-        applied = set(app.scholarship_subtype_list or [])
-        raw_prefs: list[str] = app.sub_type_preferences or default_prefs
-        preferences: list[str] = [p for p in raw_prefs if p in applied] if applied else raw_prefs
+        applied = app.scholarship_subtype_list or []
+        raw_prefs: list[str] = app.sub_type_preferences or applied or default_prefs
+        applied_set = set(applied)
+        preferences: list[str] = [p for p in raw_prefs if p in applied_set] if applied_set else raw_prefs
 
         allocated_sub_type: Optional[str] = None
         allocated_year: Optional[int] = None
