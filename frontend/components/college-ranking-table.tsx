@@ -243,7 +243,18 @@ function SortableItem({
     }
   };
 
+  const shortSubtypeLabels: Record<string, { zh: string; en: string }> = {
+    nstc: { zh: "國科會", en: "NSTC" },
+    moe_1w: { zh: "教育部", en: "MOE" },
+    moe_2w: { zh: "教育部", en: "MOE" },
+  };
+
   const getSubtypeLabel = (subtype: string) => {
+    const key = subtype.toLowerCase();
+    const short = shortSubtypeLabels[key];
+    if (short) {
+      return locale === "zh" ? short.zh : short.en;
+    }
     const meta =
       subTypeMeta?.[subtype] ||
       subTypeMeta?.[subtype.toUpperCase()] ||
@@ -577,7 +588,7 @@ export function CollegeRankingTable({
           姓名: app.student_name || "",
           學院: app.academy_name || "-",
           系所: app.department_name || "-",
-          符合子類別: eligibleSubtypes,
+          獎學金類別: eligibleSubtypes,
           狀態: statusText,
         };
       });
@@ -592,7 +603,7 @@ export function CollegeRankingTable({
         { wch: 20 }, // 姓名
         { wch: 20 }, // 學院
         { wch: 25 }, // 系所
-        { wch: 30 }, // 符合子類別
+        { wch: 30 }, // 獎學金類別
         { wch: 12 }, // 狀態
       ];
 
@@ -851,7 +862,7 @@ export function CollegeRankingTable({
                     {locale === "zh" ? "學院/系所" : "College/Dept"}
                   </TableHead>
                   <TableHead className="text-center">
-                    {locale === "zh" ? "符合子類別" : "Eligible Types"}
+                    {locale === "zh" ? "獎學金類別" : "Eligible Types"}
                   </TableHead>
                   <TableHead className="text-center">
                     {locale === "zh" ? "狀態" : "Status"}

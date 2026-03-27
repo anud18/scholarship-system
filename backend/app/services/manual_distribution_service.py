@@ -268,14 +268,14 @@ class ManualDistributionService:
         Response structure:
         {
           "nstc": {
-            "display_name": "國科會博士生獎學金",
+            "display_name": "國科會",
             "by_year": {
               "114": {"total": 80, "allocated": 0, "remaining": 80, "by_college": {...}},
               "113": {"total": 15, "allocated": 3, "remaining": 12, "by_college": {...}},
             }
           },
           "moe_1w": {
-            "display_name": "教育部博士生獎學金",
+            "display_name": "教育部",
             "by_year": {
               "114": {"total": 55, ...}    // no 113 — moe_1w has no prior years
             }

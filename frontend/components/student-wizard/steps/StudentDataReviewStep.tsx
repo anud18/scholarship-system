@@ -43,7 +43,8 @@ export function StudentDataReviewStep({
   const [confirmed, setConfirmed] = useState(false);
 
   // Use SWR hook for student profile data
-  const { userInfo, studentInfo, isLoading, error, refresh } = useStudentProfile();
+  const { userInfo, studentInfo, isLoading, error, refresh } =
+    useStudentProfile();
 
   const t = {
     zh: {
@@ -65,7 +66,7 @@ export function StudentDataReviewStep({
       semesterCount: "學期數",
       dataNotice: "資料說明",
       dataNoticeContent:
-        "以上資料來自學校資料庫，若發現資料有誤，請聯繫教務處或資訊中心更新。",
+        "以上資料來自學校資料庫，若發現資料有誤，請聯繫教務處註冊組更新。",
       confirmButton: "確認資料無誤，繼續",
       backButton: "返回上一步",
       loading: "正在載入學籍資料...",
@@ -94,7 +95,7 @@ export function StudentDataReviewStep({
       semesterCount: "Semester Count",
       dataNotice: "Data Notice",
       dataNoticeContent:
-        "The above information is from the university database. If you find any errors, please contact the Academic Affairs Office or Information Center.",
+        "The above information is from the university database. If you find any errors, please contact the Office of the Registrar.",
       confirmButton: "Confirm and Continue",
       backButton: "Back",
       loading: "Loading student data...",
@@ -106,6 +107,26 @@ export function StudentDataReviewStep({
   };
 
   const text = t[locale];
+
+  const degreeMap: Record<string, string> = {
+    "1": "博士",
+    "2": "碩士",
+    "3": "學士",
+  };
+
+  const studyingStatusMap: Record<string, string> = {
+    "1": "在學",
+    "2": "應畢",
+    "3": "延畢",
+    "4": "休學",
+    "5": "期中退學",
+    "6": "期末退學",
+    "7": "開除學籍",
+    "8": "死亡",
+    "9": "保留學籍",
+    "10": "放棄入學",
+    "11": "畢業",
+  };
 
   const handleConfirm = () => {
     setConfirmed(true);
@@ -248,9 +269,7 @@ export function StudentDataReviewStep({
                       {text.status}
                     </label>
                     <p>
-                      <Badge variant="outline">
-                        {userInfo.status || "-"}
-                      </Badge>
+                      <Badge variant="outline">{userInfo.status || "-"}</Badge>
                     </p>
                   </div>
                 </div>
@@ -280,7 +299,10 @@ export function StudentDataReviewStep({
                         <div className="flex items-center gap-2">
                           <BookOpen className="h-4 w-4 text-gray-500" />
                           <div className="text-base text-gray-700">
-                            {studentInfo.std_degree || "-"}
+                            {studentInfo.std_degree
+                              ? degreeMap[String(studentInfo.std_degree)] ||
+                                studentInfo.std_degree
+                              : "-"}
                           </div>
                         </div>
                       </div>
@@ -291,7 +313,11 @@ export function StudentDataReviewStep({
                           {text.enrollmentStatus}
                         </label>
                         <div className="text-base font-semibold text-green-700">
-                          {studentInfo.std_studingstatus || "-"}
+                          {studentInfo.std_studingstatus
+                            ? studyingStatusMap[
+                                String(studentInfo.std_studingstatus)
+                              ] || studentInfo.std_studingstatus
+                            : "-"}
                         </div>
                       </div>
 

@@ -63,7 +63,9 @@ export function PersonalInfoStep({
   const [advisorNycuId, setAdvisorNycuId] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [bankDocumentFiles, setBankDocumentFiles] = useState<File[]>([]);
-  const [existingBankDocument, setExistingBankDocument] = useState<string | null>(null);
+  const [existingBankDocument, setExistingBankDocument] = useState<
+    string | null
+  >(null);
 
   // Validation states
   const [advisorErrors, setAdvisorErrors] = useState<string[]>([]);
@@ -76,7 +78,8 @@ export function PersonalInfoStep({
     filename: string;
     type: string;
   } | null>(null);
-  const [showPreview, setShowPreview] = useState(false);  const t = {
+  const [showPreview, setShowPreview] = useState(false);
+  const t = {
     zh: {
       title: "填寫個人資料",
       subtitle: "請填寫指導教授資訊與郵局帳號資料",
@@ -88,7 +91,7 @@ export function PersonalInfoStep({
       advisorId: "指導教授本校人事編號",
       advisorIdPlaceholder: "請輸入指導教授本校人事編號",
       bankInfo: "郵局帳號資訊",
-      accountNumber: "郵局帳號",
+      accountNumber: "郵局局號加帳號共 14 碼",
       accountNumberPlaceholder: "請輸入完整郵局帳號",
       bankDocument: "存摺封面照片",
       uploadBankDocument: "上傳存摺封面",
@@ -136,7 +139,8 @@ export function PersonalInfoStep({
       delete: "Delete",
       fileFormats: "Supported formats: JPG, JPEG, PNG, PDF",
       fileSizeLimit: "File size limit: 10MB",
-      uploadSuggestion: "Recommend uploading passbook cover photo or account details screenshot",
+      uploadSuggestion:
+        "Recommend uploading passbook cover photo or account details screenshot",
       saveButton: "Save and Continue",
       backButton: "Back",
       skipButton: "Skip for Now",
@@ -153,7 +157,8 @@ export function PersonalInfoStep({
       requiredFields: "Required Fields",
       optionalFields: "Optional Fields",
       advisorInfoDesc: "Please provide your advisor's information",
-      bankInfoDesc: "Please provide post office account for scholarship disbursement",
+      bankInfoDesc:
+        "Please provide post office account for scholarship disbursement",
     },
   };
 
@@ -234,7 +239,9 @@ export function PersonalInfoStep({
       });
 
       if (!advisorResponse.success) {
-        throw new Error(advisorResponse.message || "Failed to update advisor info");
+        throw new Error(
+          advisorResponse.message || "Failed to update advisor info"
+        );
       }
 
       // Save bank info
@@ -254,10 +261,13 @@ export function PersonalInfoStep({
       // Upload bank document if new file is selected
       if (bankDocumentFiles.length > 0) {
         const file = bankDocumentFiles[0];
-        const uploadResponse = await api.userProfiles.uploadBankDocumentFile(file);
+        const uploadResponse =
+          await api.userProfiles.uploadBankDocumentFile(file);
 
         if (!uploadResponse.success) {
-          throw new Error(uploadResponse.message || "Failed to upload document");
+          throw new Error(
+            uploadResponse.message || "Failed to upload document"
+          );
         }
 
         toast.success(text.documentUploadSuccess);
@@ -280,7 +290,8 @@ export function PersonalInfoStep({
   const handlePreviewBankDocument = () => {
     if (!existingBankDocument) return;
 
-    const filename = existingBankDocument.split("/").pop()?.split("?")[0] || "bank_document";
+    const filename =
+      existingBankDocument.split("/").pop()?.split("?")[0] || "bank_document";
     const token = localStorage.getItem("auth_token") || "";
 
     const fileId = filename;
@@ -290,7 +301,11 @@ export function PersonalInfoStep({
     let fileTypeDisplay = "other";
     if (filename.toLowerCase().endsWith(".pdf")) {
       fileTypeDisplay = "application/pdf";
-    } else if ([".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"].some(ext => filename.toLowerCase().endsWith(ext))) {
+    } else if (
+      [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"].some(ext =>
+        filename.toLowerCase().endsWith(ext)
+      )
+    ) {
       fileTypeDisplay = "image";
     }
 
@@ -370,7 +385,9 @@ export function PersonalInfoStep({
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span className="font-medium">{text.completionPercentage}</span>
-              <span className="font-semibold text-nycu-blue-700">{completionPercentage}%</span>
+              <span className="font-semibold text-nycu-blue-700">
+                {completionPercentage}%
+              </span>
             </div>
             <Progress value={completionPercentage} className="h-2" />
           </div>
@@ -415,11 +432,17 @@ export function PersonalInfoStep({
                 id="advisor_name"
                 placeholder={text.advisorNamePlaceholder}
                 value={advisorName}
-                onChange={(e) => {
+                onChange={e => {
                   setAdvisorName(e.target.value);
                   if (advisorErrors.length > 0) setAdvisorErrors([]);
                 }}
-                className={advisorErrors.some(e => e.includes("姓名") || e.includes("name")) ? "border-red-500" : ""}
+                className={
+                  advisorErrors.some(
+                    e => e.includes("姓名") || e.includes("name")
+                  )
+                    ? "border-red-500"
+                    : ""
+                }
               />
             </div>
 
@@ -433,8 +456,13 @@ export function PersonalInfoStep({
                 type="email"
                 placeholder={text.advisorEmailPlaceholder}
                 value={advisorEmail}
-                onChange={(e) => handleAdvisorEmailChange(e.target.value)}
-                className={emailValidationError || advisorErrors.some(e => e.includes("Email")) ? "border-red-500" : ""}
+                onChange={e => handleAdvisorEmailChange(e.target.value)}
+                className={
+                  emailValidationError ||
+                  advisorErrors.some(e => e.includes("Email"))
+                    ? "border-red-500"
+                    : ""
+                }
               />
               {emailValidationError && (
                 <div className="text-sm text-red-600 flex items-center gap-2">
@@ -453,11 +481,17 @@ export function PersonalInfoStep({
                 id="advisor_nycu_id"
                 placeholder={text.advisorIdPlaceholder}
                 value={advisorNycuId}
-                onChange={(e) => {
+                onChange={e => {
                   setAdvisorNycuId(e.target.value);
                   if (advisorErrors.length > 0) setAdvisorErrors([]);
                 }}
-                className={advisorErrors.some(e => e.includes("工號") || e.includes("ID")) ? "border-red-500" : ""}
+                className={
+                  advisorErrors.some(
+                    e => e.includes("工號") || e.includes("ID")
+                  )
+                    ? "border-red-500"
+                    : ""
+                }
               />
             </div>
           </div>
@@ -501,11 +535,15 @@ export function PersonalInfoStep({
               id="account_number"
               placeholder={text.accountNumberPlaceholder}
               value={accountNumber}
-              onChange={(e) => {
+              onChange={e => {
                 setAccountNumber(e.target.value);
                 if (bankErrors.length > 0) setBankErrors([]);
               }}
-              className={bankErrors.some(e => e.includes("帳") || e.includes("account")) ? "border-red-500" : ""}
+              className={
+                bankErrors.some(e => e.includes("帳") || e.includes("account"))
+                  ? "border-red-500"
+                  : ""
+              }
             />
           </div>
 
