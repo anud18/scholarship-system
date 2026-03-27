@@ -1008,8 +1008,10 @@ export function ManualDistributionPanel({
                                 <td className="px-1.5 py-1.5 border-r border-slate-100 leading-snug text-[10px]">
                                   {student.applied_sub_types.length > 0 ? (
                                     student.applied_sub_types.map((t, i) => {
-                                      const displayName =
-                                        quotaStatus[t]?.display_name || t;
+                                      const displayName = getSubTypeShortName(
+                                        t,
+                                        quotaStatus[t]?.display_name || t
+                                      );
                                       return (
                                         <div
                                           key={t}
