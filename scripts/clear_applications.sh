@@ -1,12 +1,20 @@
 #!/bin/bash
 # Clear all application data and related records.
-# Usage: ./scripts/clear_applications.sh
+# Usage: ./scripts/clear_applications.sh [--force]
 
 set -e
 
 DB_CONTAINER="scholarship_postgres_dev"
 DB_USER="scholarship_user"
 DB_NAME="scholarship_db"
+
+if [ "$1" != "--force" ]; then
+    read -p "⚠️  This will delete ALL application data. Continue? [y/N] " confirm
+    if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+        echo "Aborted."
+        exit 0
+    fi
+fi
 
 echo "🗑  Clearing all application data..."
 

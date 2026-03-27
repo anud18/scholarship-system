@@ -1145,7 +1145,7 @@ class ApplicationService:
         # 更新狀態為已提交
         from app.utils.i18n import ScholarshipI18n
 
-        application.status = ApplicationStatus.submitted.value
+        application.status = ApplicationStatus.submitted
         application.status_name = ScholarshipI18n.get_application_status_text(ApplicationStatus.submitted.value)
         application.submitted_at = datetime.now(timezone.utc)
         application.updated_at = datetime.now(timezone.utc)
@@ -1875,7 +1875,7 @@ class ApplicationService:
             # Soft delete for submitted applications
             logger.info(f"Performing soft delete for submitted application {application.app_id}")
 
-            application.status = ApplicationStatus.deleted.value
+            application.status = ApplicationStatus.deleted
             application.deleted_at = datetime.now(timezone.utc)
             application.deleted_by_id = current_user.id
             application.deletion_reason = reason or "Application deleted"
@@ -1931,10 +1931,10 @@ class ApplicationService:
         # so it will appear in the college review list
         if application.submitted_at:
             # Application was previously submitted - restore to under_review
-            application.status = ApplicationStatus.under_review.value
+            application.status = ApplicationStatus.under_review
         else:
             # Application was never submitted - restore to draft
-            application.status = ApplicationStatus.draft.value
+            application.status = ApplicationStatus.draft
 
         # Clear deletion metadata
         application.deleted_at = None
@@ -2535,7 +2535,7 @@ class ApplicationService:
                 from app.utils.i18n import ScholarshipI18n
 
                 logger.info("Step 6: Setting status to under_review")
-                application.status = ApplicationStatus.under_review.value
+                application.status = ApplicationStatus.under_review
                 application.status_name = ScholarshipI18n.get_application_status_text(
                     ApplicationStatus.under_review.value
                 )

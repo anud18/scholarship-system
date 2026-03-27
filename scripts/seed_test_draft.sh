@@ -32,7 +32,7 @@ if [ -z "$NYCU_ID" ]; then
 fi
 
 if [ "$CLEAN" = true ]; then
-    "$SCRIPT_DIR/clear_applications.sh"
+    "$SCRIPT_DIR/clear_applications.sh" --force
 fi
 
 echo "🌱 Seeding draft application for $NYCU_ID..."

@@ -58,7 +58,7 @@ async def create_application(
     current_user: User = Depends(require_student),
     db: AsyncSession = Depends(get_db),
     request: Request = None,
-    response: Response = None,  # Injected by FastAPI
+    response: Response = None,
 ):
     """Create a new scholarship application (draft or submitted)"""
     logger.debug(f"Received application creation request from user: {current_user.id}, is_draft: {is_draft}")
@@ -188,7 +188,8 @@ async def create_application(
                     f"Returning existing draft application: user_id={current_user.id}, "
                     f"app_id={existing_application.app_id}"
                 )
-                response.status_code = 200
+                if response:
+                    response.status_code = 200
                 return {
                     "success": True,
                     "message": "已返回現有草稿",

@@ -143,7 +143,7 @@ async def seed(nycu_id: str):
             status_name="草稿",
             review_stage=ReviewStage.student_draft,
             academic_year=config.academic_year,
-            semester=config.semester or "yearly",
+            semester=config.semester,
             is_renewal=False,
             agree_terms=True,
             student_data=student_data,
