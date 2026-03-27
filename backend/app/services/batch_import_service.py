@@ -811,6 +811,7 @@ class BatchImportService:
                         row_data.get("sub_types", [None])[0].lower() if row_data.get("sub_types") else "general"
                     ),  # Lowercase, configuration-driven
                     scholarship_subtype_list=row_data.get("sub_types", []),
+                    sub_type_preferences=row_data.get("sub_types", []) or None,
                     sub_type_selection_mode=scholarship.sub_type_selection_mode,
                     academic_year=academic_year,
                     semester=semester,
