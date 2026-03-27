@@ -85,16 +85,16 @@ class ScholarshipAnalyticsService:
             }
 
         # Status counts
-        approved = len([app for app in applications if app.status == ApplicationStatus.approved.value])
-        rejected = len([app for app in applications if app.status == ApplicationStatus.rejected.value])
+        approved = len([app for app in applications if app.status == ApplicationStatus.approved])
+        rejected = len([app for app in applications if app.status == ApplicationStatus.rejected])
         pending = len(
             [
                 app
                 for app in applications
                 if app.status
                 in [
-                    ApplicationStatus.submitted.value,
-                    ApplicationStatus.under_review.value,
+                    ApplicationStatus.submitted,
+                    ApplicationStatus.under_review,
                 ]
             ]
         )
@@ -126,7 +126,7 @@ class ScholarshipAnalyticsService:
 
         status_counts = {}
         for status in ApplicationStatus:
-            count = len([app for app in applications if app.status == status.value])
+            count = len([app for app in applications if app.status == status])
             if count > 0:
                 status_counts[status.value] = {
                     "count": count,
@@ -146,8 +146,8 @@ class ScholarshipAnalyticsService:
                         for app in applications
                         if app.status
                         in [
-                            ApplicationStatus.approved.value,
-                            ApplicationStatus.rejected.value,
+                            ApplicationStatus.approved,
+                            ApplicationStatus.rejected,
                         ]
                     ]
                 )
@@ -181,8 +181,8 @@ class ScholarshipAnalyticsService:
                     "scholarship_type_id": type_id,
                     "scholarship_type_name": type_name,
                     "total_applications": len(type_apps),
-                    "approved": len([app for app in type_apps if app.status == ApplicationStatus.approved.value]),
-                    "approval_rate": len([app for app in type_apps if app.status == ApplicationStatus.approved.value])
+                    "approved": len([app for app in type_apps if app.status == ApplicationStatus.approved]),
+                    "approval_rate": len([app for app in type_apps if app.status == ApplicationStatus.approved])
                     / len(type_apps)
                     * 100,
                     "sub_types": {},
@@ -197,10 +197,10 @@ class ScholarshipAnalyticsService:
                         type_stats[type_id]["sub_types"][sub_type_value] = {
                             "total": len(sub_apps),
                             "approved": len(
-                                [app for app in sub_apps if app.status == ApplicationStatus.approved.value]
+                                [app for app in sub_apps if app.status == ApplicationStatus.approved]
                             ),
                             "approval_rate": len(
-                                [app for app in sub_apps if app.status == ApplicationStatus.approved.value]
+                                [app for app in sub_apps if app.status == ApplicationStatus.approved]
                             )
                             / len(sub_apps)
                             * 100,
@@ -237,7 +237,7 @@ class ScholarshipAnalyticsService:
                 if month_key not in monthly_submissions:
                     monthly_submissions[month_key] = {"total": 0, "approved": 0}
                 monthly_submissions[month_key]["total"] += 1
-                if app.status == ApplicationStatus.approved.value:
+                if app.status == ApplicationStatus.approved:
                     monthly_submissions[month_key]["approved"] += 1
 
         # Day of week patterns
@@ -289,11 +289,11 @@ class ScholarshipAnalyticsService:
 
         # Renewal success rates
         if renewal_apps:
-            renewal_approved = len([app for app in renewal_apps if app.status == ApplicationStatus.approved.value])
+            renewal_approved = len([app for app in renewal_apps if app.status == ApplicationStatus.approved])
             renewal_analysis["renewal_approval_rate"] = renewal_approved / len(renewal_apps) * 100
 
         if new_apps:
-            new_approved = len([app for app in new_apps if app.status == ApplicationStatus.approved.value])
+            new_approved = len([app for app in new_apps if app.status == ApplicationStatus.approved])
             renewal_analysis["new_application_approval_rate"] = new_approved / len(new_apps) * 100
 
         # Note: Priority score comparison removed (priority_score field removed from Application model)
@@ -312,8 +312,8 @@ class ScholarshipAnalyticsService:
                 and app.review_deadline < datetime.now(timezone.utc)
                 and app.status
                 in [
-                    ApplicationStatus.submitted.value,
-                    ApplicationStatus.under_review.value,
+                    ApplicationStatus.submitted,
+                    ApplicationStatus.under_review,
                 ]
             ]
         )
@@ -342,8 +342,8 @@ class ScholarshipAnalyticsService:
     def _analyze_success_factors(self, applications: List[Application]) -> Dict[str, Any]:
         """Analyze factors that correlate with successful applications"""
 
-        approved_apps = [app for app in applications if app.status == ApplicationStatus.approved.value]
-        rejected_apps = [app for app in applications if app.status == ApplicationStatus.rejected.value]
+        approved_apps = [app for app in applications if app.status == ApplicationStatus.approved]
+        rejected_apps = [app for app in applications if app.status == ApplicationStatus.rejected]
 
         success_factors = {}
 

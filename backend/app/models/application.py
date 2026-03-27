@@ -214,12 +214,12 @@ class Application(Base):
     @property
     def is_editable(self) -> bool:
         """Check if application can be edited"""
-        return bool(self.status in [ApplicationStatus.draft.value, ApplicationStatus.returned.value])
+        return bool(self.status in [ApplicationStatus.draft, ApplicationStatus.returned])
 
     @property
     def is_submitted(self) -> bool:
         """Check if application is submitted"""
-        return bool(self.status != ApplicationStatus.draft.value)
+        return bool(self.status != ApplicationStatus.draft)
 
     @property
     def can_be_reviewed(self) -> bool:
@@ -227,8 +227,8 @@ class Application(Base):
         return bool(
             self.status
             in [
-                ApplicationStatus.submitted.value,
-                ApplicationStatus.under_review.value,
+                ApplicationStatus.submitted,
+                ApplicationStatus.under_review,
             ]
         )
 
@@ -274,14 +274,14 @@ class Application(Base):
     def get_review_stage(self) -> Optional[str]:
         """Get current review stage based on application type and status"""
         if self.is_renewal:
-            if self.status == ApplicationStatus.submitted.value:
+            if self.status == ApplicationStatus.submitted:
                 return "renewal_professor"
-            elif self.status == ApplicationStatus.under_review.value:
+            elif self.status == ApplicationStatus.under_review:
                 return "renewal_college"
         else:
-            if self.status == ApplicationStatus.submitted.value:
+            if self.status == ApplicationStatus.submitted:
                 return "general_professor"
-            elif self.status == ApplicationStatus.under_review.value:
+            elif self.status == ApplicationStatus.under_review:
                 return "general_college"
         return None
 
