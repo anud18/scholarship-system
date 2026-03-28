@@ -26,6 +26,8 @@ export interface DistributionStudent {
   enrollment_date: string;
   student_id: string;
   application_identity: string;
+  is_renewal: boolean;
+  renewal_year: number | null;
 }
 
 export interface CollegeQuota {

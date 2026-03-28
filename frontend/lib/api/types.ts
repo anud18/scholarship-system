@@ -1277,6 +1277,7 @@ export interface ScholarshipConfigurationFormData {
   effective_start_date?: string;
   effective_end_date?: string;
   version?: string;
+  prior_quota_years?: Record<string, number[]>;
 }
 
 // User Profile interfaces
