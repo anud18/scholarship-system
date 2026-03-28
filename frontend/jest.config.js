@@ -10,6 +10,9 @@ const createJestConfig = nextJest({
 const customJestConfig = {
   setupFilesAfterEnv: ["<rootDir>/jest.setup.ts"],
   testEnvironment: "jsdom",
+  // Use V8 coverage provider instead of babel-istanbul to avoid conflicts
+  // with Next.js require-hook (TypeError: "original" must be function)
+  coverageProvider: "v8",
   testTimeout: 10000,
   maxWorkers: 2,
   workerIdleMemoryLimit: "512MB",

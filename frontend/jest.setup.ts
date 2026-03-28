@@ -15,8 +15,44 @@ process.env.NEXT_PUBLIC_API_URL = "http://localhost:8000";
 process.env.NEXTAUTH_SECRET = "test-secret";
 process.env.NEXTAUTH_URL = "http://localhost:3000";
 
-// Load environment setup
-require("./jest.env.js");
+// Environment polyfills (inlined from jest.env.js to avoid require-hook conflicts)
+const { TextEncoder: TE, TextDecoder: TD } = require("util");
+global.TextEncoder = TE;
+global.TextDecoder = TD;
+
+if (typeof global.URL.createObjectURL === "undefined") {
+  global.URL.createObjectURL = jest.fn(() => "mock-url");
+}
+
+if (typeof global.File === "undefined") {
+  (global as any).File = class MockFile {
+    name: string;
+    size: number;
+    type: string;
+    constructor(chunks: any[], filename: string, options?: { type?: string }) {
+      this.name = filename;
+      this.size = chunks.reduce(
+        (acc: number, chunk: any) => acc + chunk.length,
+        0
+      );
+      this.type = options?.type || "";
+    }
+  };
+}
+
+if (typeof global.Blob === "undefined") {
+  (global as any).Blob = class MockBlob {
+    size: number;
+    type: string;
+    constructor(chunks: any[], options?: { type?: string }) {
+      this.size = chunks.reduce(
+        (acc: number, chunk: any) => acc + chunk.length,
+        0
+      );
+      this.type = options?.type || "";
+    }
+  };
+}
 
 // Mock Next.js router
 jest.mock("next/router", () => ({
@@ -178,7 +214,11 @@ Object.defineProperty(window, "localStorage", {
 // Minimal default fetch mock; tests can override per-case
 // Returns proper Response objects for openapi-fetch compatibility
 global.fetch = jest.fn(async () => {
-  const body = JSON.stringify({ success: true, message: "Request completed successfully", data: [] });
+  const body = JSON.stringify({
+    success: true,
+    message: "Request completed successfully",
+    data: [],
+  });
   return new Response(body, {
     status: 200,
     statusText: "OK",
