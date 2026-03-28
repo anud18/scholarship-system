@@ -20,6 +20,7 @@ on:
 # SECURITY: Limit GITHUB_TOKEN permissions to minimum required
 permissions:
   contents: read
+  pull-requests: write
 
 env:
   NODE_VERSION: '22'
