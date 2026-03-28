@@ -196,12 +196,8 @@ class ScholarshipAnalyticsService:
                     if sub_apps:
                         type_stats[type_id]["sub_types"][sub_type_value] = {
                             "total": len(sub_apps),
-                            "approved": len(
-                                [app for app in sub_apps if app.status == ApplicationStatus.approved]
-                            ),
-                            "approval_rate": len(
-                                [app for app in sub_apps if app.status == ApplicationStatus.approved]
-                            )
+                            "approved": len([app for app in sub_apps if app.status == ApplicationStatus.approved]),
+                            "approval_rate": len([app for app in sub_apps if app.status == ApplicationStatus.approved])
                             / len(sub_apps)
                             * 100,
                         }

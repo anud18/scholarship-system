@@ -62,9 +62,7 @@ async def get_admin_available_combinations(
 ):
     """Get all active scholarship types and configurations for admin distribution."""
     try:
-        scholarship_result = await db.execute(
-            select(ScholarshipType).where(ScholarshipType.status == "active")
-        )
+        scholarship_result = await db.execute(select(ScholarshipType).where(ScholarshipType.status == "active"))
         scholarship_types_objs = scholarship_result.scalars().all()
 
         scholarship_types = [
@@ -77,9 +75,7 @@ async def get_admin_available_combinations(
             for st in scholarship_types_objs
         ]
 
-        config_result = await db.execute(
-            select(ScholarshipConfiguration).where(ScholarshipConfiguration.is_active)
-        )
+        config_result = await db.execute(select(ScholarshipConfiguration).where(ScholarshipConfiguration.is_active))
         configs = config_result.scalars().all()
 
         academic_years_set = set()
@@ -131,9 +127,7 @@ async def get_students_for_distribution(
 ):
     """Get ranked students with allocation status for manual distribution."""
     service = ManualDistributionService(db)
-    students = await service.get_students_for_distribution(
-        scholarship_type_id, academic_year, semester, college_code
-    )
+    students = await service.get_students_for_distribution(scholarship_type_id, academic_year, semester, college_code)
     return {
         "success": True,
         "message": "Students retrieved successfully",
@@ -151,9 +145,7 @@ async def get_quota_status(
 ):
     """Get real-time quota status per sub-type per college."""
     service = ManualDistributionService(db)
-    quota_status = await service.get_quota_status(
-        scholarship_type_id, academic_year, semester
-    )
+    quota_status = await service.get_quota_status(scholarship_type_id, academic_year, semester)
     return {
         "success": True,
         "message": "Quota status retrieved successfully",
@@ -406,25 +398,29 @@ async def get_distribution_summary(
             for item in items:
                 app = item.application
                 sd = (app.student_data or {}) if app else {}
-                students.append({
-                    "ranking_item_id": item.id,
-                    "application_id": item.application_id,
-                    "student_name": sd.get("std_cname", ""),
-                    "student_id": sd.get("std_stdcode", ""),
-                    "college_code": sd.get("std_academyno") or sd.get("trm_academyno", ""),
-                    "college_name": sd.get("trm_academyname", ""),
-                    "department_name": sd.get("trm_depname", ""),
-                    "rank_position": item.rank_position,
-                    "is_renewal": app.is_renewal if app else False,
-                    "renewal_year": app.renewal_year if app else None,
-                })
+                students.append(
+                    {
+                        "ranking_item_id": item.id,
+                        "application_id": item.application_id,
+                        "student_name": sd.get("std_cname", ""),
+                        "student_id": sd.get("std_stdcode", ""),
+                        "college_code": sd.get("std_academyno") or sd.get("trm_academyno", ""),
+                        "college_name": sd.get("trm_academyname", ""),
+                        "department_name": sd.get("trm_depname", ""),
+                        "rank_position": item.rank_position,
+                        "is_renewal": app.is_renewal if app else False,
+                        "renewal_year": app.renewal_year if app else None,
+                    }
+                )
             total_allocated += len(students)
-            group_data.append({
-                "sub_type": sub_type,
-                "allocation_year": alloc_year,
-                "count": len(students),
-                "students": students,
-            })
+            group_data.append(
+                {
+                    "sub_type": sub_type,
+                    "allocation_year": alloc_year,
+                    "count": len(students),
+                    "students": students,
+                }
+            )
 
         return {
             "success": True,

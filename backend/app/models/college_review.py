@@ -146,7 +146,9 @@ class CollegeRankingItem(Base):
 
     # Matrix distribution fields
     allocated_sub_type = Column(String(50), nullable=True)  # Sub-type code allocated to (e.g., 'nstc', 'moe_1w')
-    allocation_year = Column(Integer, nullable=True)  # Which academic year's quota was used (e.g., 113 for prior-year supplement)
+    allocation_year = Column(
+        Integer, nullable=True
+    )  # Which academic year's quota was used (e.g., 113 for prior-year supplement)
     backup_position = Column(Integer, nullable=True)  # Backup position (NULL for admitted, 1, 2, 3... for backup)
     backup_allocations = Column(
         JSONB, nullable=True
@@ -260,7 +262,9 @@ class ManualDistributionHistory(Base):
     user = relationship("User", lazy="select", foreign_keys=[created_by])
 
     def __repr__(self):
-        return f"<ManualDistributionHistory(id={self.id}, type_id={self.scholarship_type_id}, year={self.academic_year})>"
+        return (
+            f"<ManualDistributionHistory(id={self.id}, type_id={self.scholarship_type_id}, year={self.academic_year})>"
+        )
 
 
 # PostgreSQL-optimized indexes for college ranking tables

@@ -598,9 +598,7 @@ class ScholarshipConfiguration(Base):
     )  # 計畫編號，依子類型及學年度 {"nstc": {"115": "115RXXXXXXX", "114": "114RXXXXXXX"}, "moe_1w": {"115": "115CXXXXXX"}}
 
     # 各子類型可使用的前年度配額
-    prior_quota_years = Column(
-        JSON, nullable=True
-    )  # {"nstc": [113, 112], "moe_1w": []}
+    prior_quota_years = Column(JSON, nullable=True)  # {"nstc": [113, 112], "moe_1w": []}
 
     # 金額設定 (從 ScholarshipType 移至此處)
     amount = Column(Integer, nullable=False)  # 獎學金金額（整數）

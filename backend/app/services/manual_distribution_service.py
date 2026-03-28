@@ -157,11 +157,13 @@ def _compute_suggestions(
                     allocated_year = academic_year
                     break
 
-        results.append({
-            "ranking_item_id": item.id,
-            "sub_type_code": allocated_sub_type,
-            "allocation_year": allocated_year,
-        })
+        results.append(
+            {
+                "ranking_item_id": item.id,
+                "sub_type_code": allocated_sub_type,
+                "allocation_year": allocated_year,
+            }
+        )
 
     return results
 
@@ -230,26 +232,28 @@ class ManualDistributionService:
             # Format enrollment date (ROC calendar)
             enrollment_date = self._format_enrollment_date(student_data)
 
-            students.append({
-                "ranking_item_id": item.id,
-                "application_id": app.id,
-                "rank_position": item.rank_position,
-                "applied_sub_types": app.scholarship_subtype_list or [],
-                "allocated_sub_type": item.allocated_sub_type,
-                "allocation_year": item.allocation_year,
-                "status": item.status,
-                "college_code": student_college,
-                "college_name": student_data.get("trm_academyname", ""),
-                "department_name": student_data.get("trm_depname", ""),
-                "grade": grade,
-                "student_name": student_data.get("std_cname", ""),
-                "nationality": student_data.get("std_nation", ""),
-                "enrollment_date": enrollment_date,
-                "student_id": student_data.get("std_stdcode", ""),
-                "application_identity": identity,
-                "is_renewal": app.is_renewal,
-                "renewal_year": app.renewal_year,
-            })
+            students.append(
+                {
+                    "ranking_item_id": item.id,
+                    "application_id": app.id,
+                    "rank_position": item.rank_position,
+                    "applied_sub_types": app.scholarship_subtype_list or [],
+                    "allocated_sub_type": item.allocated_sub_type,
+                    "allocation_year": item.allocation_year,
+                    "status": item.status,
+                    "college_code": student_college,
+                    "college_name": student_data.get("trm_academyname", ""),
+                    "department_name": student_data.get("trm_depname", ""),
+                    "grade": grade,
+                    "student_name": student_data.get("std_cname", ""),
+                    "nationality": student_data.get("std_nation", ""),
+                    "enrollment_date": enrollment_date,
+                    "student_id": student_data.get("std_stdcode", ""),
+                    "application_identity": identity,
+                    "is_renewal": app.is_renewal,
+                    "renewal_year": app.renewal_year,
+                }
+            )
 
         # Sort by college_code, then rank_position
         students.sort(key=lambda s: (s["college_code"], s["rank_position"]))
@@ -284,9 +288,7 @@ class ManualDistributionService:
         }
         """
         # 1. Load current year's config to get prior_quota_years
-        current_config = await self._load_config(
-            scholarship_type_id, academic_year, semester
-        )
+        current_config = await self._load_config(scholarship_type_id, academic_year, semester)
 
         prior_years_map: dict[str, list[int]] = {}
         if current_config and current_config.prior_quota_years:
@@ -483,9 +485,7 @@ class ManualDistributionService:
         sub_type_code=None means unallocate.
         """
         # Validate quota limits first
-        await self._validate_allocations(
-            scholarship_type_id, academic_year, semester, allocations
-        )
+        await self._validate_allocations(scholarship_type_id, academic_year, semester, allocations)
 
         updated_count = 0
         for alloc in allocations:
@@ -493,9 +493,7 @@ class ManualDistributionService:
             sub_type = alloc.get("sub_type_code")
             alloc_year = alloc.get("allocation_year") or (academic_year if sub_type else None)
 
-            item_query = select(CollegeRankingItem).where(
-                CollegeRankingItem.id == item_id
-            )
+            item_query = select(CollegeRankingItem).where(CollegeRankingItem.id == item_id)
             result = await self.db.execute(item_query)
             item = result.scalar_one_or_none()
             if not item:
@@ -534,9 +532,7 @@ class ManualDistributionService:
 
             if ranking_ids:
                 # Get current allocations
-                items_query = select(CollegeRankingItem).where(
-                    CollegeRankingItem.ranking_id.in_(ranking_ids)
-                )
+                items_query = select(CollegeRankingItem).where(CollegeRankingItem.ranking_id.in_(ranking_ids))
                 result = await self.db.execute(items_query)
                 items = result.scalars().all()
 
@@ -695,9 +691,7 @@ class ManualDistributionService:
 
         if ranking_ids:
             # Clear all allocations
-            items_query = select(CollegeRankingItem).where(
-                CollegeRankingItem.ranking_id.in_(ranking_ids)
-            )
+            items_query = select(CollegeRankingItem).where(CollegeRankingItem.ranking_id.in_(ranking_ids))
             result = await self.db.execute(items_query)
             items = result.scalars().all()
 
@@ -713,9 +707,7 @@ class ManualDistributionService:
         for item_id_str, alloc_data in allocations_snapshot.items():
             try:
                 item_id = int(item_id_str)
-                item_query = select(CollegeRankingItem).where(
-                    CollegeRankingItem.id == item_id
-                )
+                item_query = select(CollegeRankingItem).where(CollegeRankingItem.id == item_id)
                 result = await self.db.execute(item_query)
                 item = result.scalar_one_or_none()
 
@@ -786,9 +778,7 @@ class ManualDistributionService:
         year = (term_count + 1) // 2  # Convert semester count to year
 
         degree_prefix = {6: "博", 4: "碩", 2: "學"}.get(degree, "")
-        year_suffix = {1: "一", 2: "二", 3: "三", 4: "四", 5: "五", 6: "六", 7: "七"}.get(
-            year, str(year)
-        )
+        year_suffix = {1: "一", 2: "二", 3: "三", 4: "四", 5: "五", 6: "六", 7: "七"}.get(year, str(year))
         return f"{degree_prefix}{year_suffix}" if degree_prefix else f"第{year}年"
 
     def _format_enrollment_date(self, student_data: dict) -> str:
@@ -817,9 +807,7 @@ class ManualDistributionService:
         result = await self.db.execute(stmt)
         return [row.sub_type_code for row in result.scalars().all()]
 
-    async def _batch_load_previous_allocation_years(
-        self, previous_app_ids: list[int]
-    ) -> dict[int, int]:
+    async def _batch_load_previous_allocation_years(self, previous_app_ids: list[int]) -> dict[int, int]:
         """
         For renewal students, find the allocation_year from their previous application's
         CollegeRankingItem.

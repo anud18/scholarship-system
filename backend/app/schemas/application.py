@@ -194,9 +194,7 @@ class ApplicationCreate(BaseModel):
         subtype_list = self.scholarship_subtype_list
         if prefs and subtype_list:
             if set(prefs) != set(subtype_list):
-                raise ValueError(
-                    "sub_type_preferences must be a permutation of scholarship_subtype_list"
-                )
+                raise ValueError("sub_type_preferences must be a permutation of scholarship_subtype_list")
         return self
 
     model_config = ConfigDict(

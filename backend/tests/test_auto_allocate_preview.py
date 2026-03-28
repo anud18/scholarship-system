@@ -16,7 +16,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Fixture-based module isolation: mock only when not already imported,
 # and restore on teardown to avoid poisoning other test modules.
@@ -89,6 +88,7 @@ def _compute_suggestions():
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_app(
     app_id: int,
     college: str = "A",
@@ -149,10 +149,12 @@ class TestNewApplicantsAllocatedToCurrentYearNstcFirst:
         academic_year = 114
         default_prefs = ["nstc", "moe_1w"]
         prior_years_map = {"nstc": [113], "moe_1w": []}
-        quota_tracker = _build_quota_tracker({
-            ("nstc", 114, "A"): 5,
-            ("moe_1w", 114, "A"): 3,
-        })
+        quota_tracker = _build_quota_tracker(
+            {
+                ("nstc", 114, "A"): 5,
+                ("moe_1w", 114, "A"): 3,
+            }
+        )
         prev_alloc_years: dict[int, int] = {}
 
         app1 = _make_app(1, college="A", sub_type_preferences=["nstc", "moe_1w"])
@@ -182,10 +184,12 @@ class TestRenewalStudentsSortedBeforeNew:
         default_prefs = ["nstc", "moe_1w"]
         prior_years_map = {"nstc": [113], "moe_1w": []}
         # Only 1 slot for nstc in college A
-        quota_tracker = _build_quota_tracker({
-            ("nstc", 114, "A"): 1,
-            ("moe_1w", 114, "A"): 5,
-        })
+        quota_tracker = _build_quota_tracker(
+            {
+                ("nstc", 114, "A"): 1,
+                ("moe_1w", 114, "A"): 5,
+            }
+        )
         prev_alloc_years: dict[int, int] = {}
 
         renewal_app = _make_app(1, college="A", is_renewal=True)
@@ -218,11 +222,13 @@ class TestRenewalTargetsPreviousAllocationYear:
         academic_year = 114
         default_prefs = ["nstc", "moe_1w"]
         prior_years_map = {"nstc": [113], "moe_1w": []}
-        quota_tracker = _build_quota_tracker({
-            ("nstc", 113, "A"): 2,  # Prior year quota available
-            ("nstc", 114, "A"): 5,
-            ("moe_1w", 114, "A"): 3,
-        })
+        quota_tracker = _build_quota_tracker(
+            {
+                ("nstc", 113, "A"): 2,  # Prior year quota available
+                ("nstc", 114, "A"): 5,
+                ("moe_1w", 114, "A"): 3,
+            }
+        )
         # Renewal student's previous app (id=99) was allocated to year 113
         prev_alloc_years = {99: 113}
 
@@ -249,11 +255,13 @@ class TestRenewalFallbackToCurrentYearWhenPriorExhausted:
         academic_year = 114
         default_prefs = ["nstc", "moe_1w"]
         prior_years_map = {"nstc": [113], "moe_1w": []}
-        quota_tracker = _build_quota_tracker({
-            ("nstc", 113, "A"): 0,  # Prior year exhausted
-            ("nstc", 114, "A"): 5,  # Current year available
-            ("moe_1w", 114, "A"): 3,
-        })
+        quota_tracker = _build_quota_tracker(
+            {
+                ("nstc", 113, "A"): 0,  # Prior year exhausted
+                ("nstc", 114, "A"): 5,  # Current year available
+                ("moe_1w", 114, "A"): 3,
+            }
+        )
         prev_alloc_years = {99: 113}
 
         renewal_app = _make_app(1, college="A", is_renewal=True, prev_app_id=99)
@@ -280,10 +288,12 @@ class TestQuotaExhaustedFallsToNextPreference:
         academic_year = 114
         default_prefs = ["nstc", "moe_1w"]
         prior_years_map = {"nstc": [113], "moe_1w": []}
-        quota_tracker = _build_quota_tracker({
-            ("nstc", 114, "A"): 0,  # Exhausted
-            ("moe_1w", 114, "A"): 3,
-        })
+        quota_tracker = _build_quota_tracker(
+            {
+                ("nstc", 114, "A"): 0,  # Exhausted
+                ("moe_1w", 114, "A"): 3,
+            }
+        )
         prev_alloc_years: dict[int, int] = {}
 
         app = _make_app(1, college="A", sub_type_preferences=["nstc", "moe_1w"])
@@ -309,10 +319,12 @@ class TestAllQuotasExhaustedReturnsNull:
         academic_year = 114
         default_prefs = ["nstc", "moe_1w"]
         prior_years_map = {"nstc": [113], "moe_1w": []}
-        quota_tracker = _build_quota_tracker({
-            ("nstc", 114, "A"): 0,
-            ("moe_1w", 114, "A"): 0,
-        })
+        quota_tracker = _build_quota_tracker(
+            {
+                ("nstc", 114, "A"): 0,
+                ("moe_1w", 114, "A"): 0,
+            }
+        )
         prev_alloc_years: dict[int, int] = {}
 
         app = _make_app(1, college="A", sub_type_preferences=["nstc", "moe_1w"])
@@ -338,10 +350,12 @@ class TestNullPreferencesUsesConfigDefaults:
         academic_year = 114
         default_prefs = ["nstc", "moe_1w"]  # Config-driven defaults
         prior_years_map = {"nstc": [113], "moe_1w": []}
-        quota_tracker = _build_quota_tracker({
-            ("nstc", 114, "A"): 0,  # nstc exhausted
-            ("moe_1w", 114, "A"): 5,
-        })
+        quota_tracker = _build_quota_tracker(
+            {
+                ("nstc", 114, "A"): 0,  # nstc exhausted
+                ("moe_1w", 114, "A"): 5,
+            }
+        )
         prev_alloc_years: dict[int, int] = {}
 
         app = _make_app(1, college="A", sub_type_preferences=None)  # No preferences set
@@ -368,16 +382,20 @@ class TestAlreadyAllocatedStudentsSkipped:
         academic_year = 114
         default_prefs = ["nstc", "moe_1w"]
         prior_years_map = {"nstc": [113], "moe_1w": []}
-        quota_tracker = _build_quota_tracker({
-            ("nstc", 114, "A"): 5,
-            ("moe_1w", 114, "A"): 3,
-        })
+        quota_tracker = _build_quota_tracker(
+            {
+                ("nstc", 114, "A"): 5,
+                ("moe_1w", 114, "A"): 3,
+            }
+        )
         prev_alloc_years: dict[int, int] = {}
 
         app = _make_app(1, college="A")
         # Item already has an allocation
         item = _make_item(
-            101, rank_position=1, app=app,
+            101,
+            rank_position=1,
+            app=app,
             is_allocated=True,
             allocated_sub_type="nstc",
             allocation_year=114,
@@ -406,10 +424,12 @@ class TestPerCollegeQuotaRespected:
         academic_year = 114
         default_prefs = ["nstc", "moe_1w"]
         prior_years_map = {"nstc": [113], "moe_1w": []}
-        quota_tracker = _build_quota_tracker({
-            ("nstc", 114, "A"): 1,   # Only 1 slot for college A
-            ("moe_1w", 114, "A"): 0,  # No moe_1w for college A either
-        })
+        quota_tracker = _build_quota_tracker(
+            {
+                ("nstc", 114, "A"): 1,  # Only 1 slot for college A
+                ("moe_1w", 114, "A"): 0,  # No moe_1w for college A either
+            }
+        )
         prev_alloc_years: dict[int, int] = {}
 
         app1 = _make_app(1, college="A", sub_type_preferences=["nstc", "moe_1w"])
@@ -444,10 +464,12 @@ class TestRenewalWithPriorYearNotConfigured:
         academic_year = 114
         default_prefs = ["nstc"]
         prior_years_map = {"nstc": [113]}  # Only 113, not 112
-        quota_tracker = _build_quota_tracker({
-            ("nstc", 114, "A"): 3,  # Current year available
-            ("nstc", 113, "A"): 2,  # 113 available but not target
-        })
+        quota_tracker = _build_quota_tracker(
+            {
+                ("nstc", 114, "A"): 3,  # Current year available
+                ("nstc", 113, "A"): 2,  # 113 available but not target
+            }
+        )
         prev_alloc_years = {99: 112}  # Previous year was 112
 
         renewal_app = _make_app(1, college="A", is_renewal=True, prev_app_id=99)
@@ -474,9 +496,11 @@ class TestNoDedupInComputeSuggestions:
         academic_year = 114
         default_prefs = ["nstc"]
         prior_years_map = {"nstc": [113]}
-        quota_tracker = _build_quota_tracker({
-            ("nstc", 114, "A"): 5,
-        })
+        quota_tracker = _build_quota_tracker(
+            {
+                ("nstc", 114, "A"): 5,
+            }
+        )
         prev_alloc_years: dict[int, int] = {}
 
         app = _make_app(1, college="A")
@@ -521,9 +545,11 @@ class TestRenewalWithNoPreviousApplicationId:
         academic_year = 114
         default_prefs = ["nstc"]
         prior_years_map = {"nstc": [113]}
-        quota_tracker = _build_quota_tracker({
-            ("nstc", 114, "A"): 5,
-        })
+        quota_tracker = _build_quota_tracker(
+            {
+                ("nstc", 114, "A"): 5,
+            }
+        )
         prev_alloc_years: dict[int, int] = {}
 
         # is_renewal=True but prev_app_id=None
@@ -551,9 +577,11 @@ class TestUnknownCollegeGetsNoAllocation:
         default_prefs = ["nstc"]
         prior_years_map = {}
         # Only college A has quota
-        quota_tracker = _build_quota_tracker({
-            ("nstc", 114, "A"): 5,
-        })
+        quota_tracker = _build_quota_tracker(
+            {
+                ("nstc", 114, "A"): 5,
+            }
+        )
         prev_alloc_years: dict[int, int] = {}
 
         app = _make_app(1, college="B")  # College B not in tracker
@@ -617,7 +645,6 @@ class TestPreferenceOrderRespected:
 
         results = _compute_suggestions(
             unique_items=[item],
-
             default_prefs=["nstc", "moe_1w"],
             prev_alloc_years={},
             prior_years_map={},
@@ -643,7 +670,6 @@ class TestPreferenceOrderRespected:
 
         results = _compute_suggestions(
             unique_items=[item],
-
             default_prefs=["nstc", "moe_1w"],
             prev_alloc_years={},
             prior_years_map={},

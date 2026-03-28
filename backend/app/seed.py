@@ -55,17 +55,13 @@ async def seed_lookup_tables(session: AsyncSession):
         print("  📖 Initializing lookup tables...")
         # Initialize lookup tables inline
         print("  📖 Initializing degrees...")
-        await session.execute(
-            text(
-                """
+        await session.execute(text("""
             INSERT INTO degrees (id, name) VALUES
             (1, '博士'),
             (2, '碩士'),
             (3, '學士')
             ON CONFLICT (id) DO NOTHING
-        """
-            )
-        )
+        """))
 
         print("  🎓 Initializing student identities...")
         # Add other lookup table initialization as needed
@@ -231,8 +227,7 @@ async def seed_test_users(session: AsyncSession):
     for user_data in test_users_data:
         # 使用原生 SQL 的 ON CONFLICT 實現冪等 upsert
         await session.execute(
-            text(
-                """
+            text("""
             INSERT INTO users (nycu_id, name, email, user_type, status, dept_code, dept_name,
                                college_code, role, created_at, updated_at)
             VALUES (:nycu_id, :name, :email, :user_type, :status, :dept_code, :dept_name, :college_code, :role, NOW(), NOW())
@@ -246,8 +241,7 @@ async def seed_test_users(session: AsyncSession):
                 college_code = EXCLUDED.college_code,
                 role = EXCLUDED.role,
                 updated_at = NOW()
-        """
-            ),
+        """),
             {
                 "nycu_id": user_data["nycu_id"],
                 "name": user_data["name"],
@@ -315,8 +309,7 @@ async def seed_professor_student_relationships(session: AsyncSession):
 
     for rel_data in relationships:
         await session.execute(
-            text(
-                """
+            text("""
                 INSERT INTO professor_student_relationships
                 (professor_id, student_id, relationship_type, department, academic_year,
                  semester, is_active, can_view_applications, can_upload_documents,
@@ -331,8 +324,7 @@ async def seed_professor_student_relationships(session: AsyncSession):
                     can_upload_documents = EXCLUDED.can_upload_documents,
                     can_review_applications = EXCLUDED.can_review_applications,
                     updated_at = NOW()
-            """
-            ),
+            """),
             rel_data,
         )
 
@@ -353,8 +345,7 @@ async def seed_admin_user(session: AsyncSession):
 
     # 使用 UPSERT - 只在用戶不存在時才設定角色
     await session.execute(
-        text(
-            """
+        text("""
         INSERT INTO users (nycu_id, name, email, user_type, status, role, created_at, updated_at)
         VALUES (:nycu_id, :name, :email, 'employee', '在職', 'super_admin', NOW(), NOW())
         ON CONFLICT (nycu_id) DO UPDATE
@@ -364,8 +355,7 @@ async def seed_admin_user(session: AsyncSession):
             status = '在職',
             updated_at = NOW()
         -- Note: role is NOT updated on conflict to preserve manual role changes
-    """
-        ),
+    """),
         {"nycu_id": admin_nycu_id, "name": "System Administrator", "email": admin_email},
     )
 
@@ -426,8 +416,7 @@ async def seed_scholarships(session: AsyncSession):
             scholarship_data["sub_type_list"] = json.dumps(scholarship_data["sub_type_list"])
 
         await session.execute(
-            text(
-                """
+            text("""
                 INSERT INTO scholarship_types (code, name, name_en, description, description_en,
                                               application_cycle, whitelist_enabled,
                                               sub_type_selection_mode, status, sub_type_list)
@@ -436,8 +425,7 @@ async def seed_scholarships(session: AsyncSession):
                         :sub_type_selection_mode, :status, :sub_type_list)
                 ON CONFLICT (code) DO NOTHING
                 -- Note: Changed from DO UPDATE to DO NOTHING to preserve manual changes in production
-            """
-            ),
+            """),
             {
                 **scholarship_data,
                 "sub_type_list": scholarship_data.get("sub_type_list"),
@@ -520,8 +508,7 @@ async def seed_application_fields(session: AsyncSession):
 
     for field_data in direct_phd_fields:
         await session.execute(
-            text(
-                """
+            text("""
                 INSERT INTO application_fields (scholarship_type, field_name, field_label, field_label_en,
                                                 field_type, is_required, placeholder, placeholder_en, max_length,
                                                 display_order, is_active, help_text, help_text_en, created_by, updated_by)
@@ -530,8 +517,7 @@ async def seed_application_fields(session: AsyncSession):
                         :display_order, :is_active, :help_text, :help_text_en, :created_by, :updated_by)
                 ON CONFLICT (scholarship_type, field_name) DO NOTHING
                 -- Note: Changed from DO UPDATE to DO NOTHING to preserve manual changes in production
-            """
-            ),
+            """),
             field_data,
         )
 
@@ -541,8 +527,7 @@ async def seed_application_fields(session: AsyncSession):
     # Insert phd_fields
     for field_data in phd_fields:
         await session.execute(
-            text(
-                """
+            text("""
                 INSERT INTO application_fields (scholarship_type, field_name, field_label, field_label_en,
                                                 field_type, is_required, placeholder, placeholder_en, max_length,
                                                 display_order, is_active, help_text, help_text_en, created_by, updated_by)
@@ -551,8 +536,7 @@ async def seed_application_fields(session: AsyncSession):
                         :display_order, :is_active, :help_text, :help_text_en, :created_by, :updated_by)
                 ON CONFLICT (scholarship_type, field_name) DO NOTHING
                 -- Note: Changed from DO UPDATE to DO NOTHING to preserve manual changes in production
-            """
-            ),
+            """),
             field_data,
         )
 

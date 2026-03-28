@@ -629,9 +629,7 @@ class CollegeReviewService:
             max_renewal_pos = max(renewal_positions)
             min_new_pos = min(new_positions)
             if max_renewal_pos > min_new_pos:
-                raise InvalidRankingDataError(
-                    "續領學生的排名必須在所有新申請學生之前"
-                )
+                raise InvalidRankingDataError("續領學生的排名必須在所有新申請學生之前")
 
         # Update rank positions
         updated_count = 0
