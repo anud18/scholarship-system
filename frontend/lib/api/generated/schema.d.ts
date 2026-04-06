@@ -4660,6 +4660,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/college-review/export-package": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Application Package
+         * @description Download a ZIP package of all application materials for a scholarship period.
+         */
+        get: operations["export_application_package_api_v1_college_review_export_package_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reviews/reviews": {
         parameters: {
             query?: never;
@@ -17629,6 +17649,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    export_application_package_api_v1_college_review_export_package_get: {
+        parameters: {
+            query: {
+                /** @description Scholarship type ID */
+                scholarship_type_id: number;
+                /** @description Academic year */
+                academic_year: number;
+                /** @description Semester (first/second/null for annual) */
+                semester?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
