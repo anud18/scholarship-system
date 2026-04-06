@@ -61,6 +61,7 @@ def _compute_suggestions(
     prior_years_map: dict[str, list[int]],
     quota_tracker: dict[tuple, int],
     academic_year: int,
+    rejected_map: Optional[dict[int, set[str]]] = None,
 ) -> list[dict]:
     """
     Pure allocation logic (no DB access).  Extracted so it can be unit-tested
@@ -87,6 +88,9 @@ def _compute_suggestions(
         This function decrements it as it allocates.
     academic_year:
         The current academic year being allocated.
+    rejected_map:
+        Mapping of {application_id: {rejected_sub_type_codes}} from professor
+        reviews.  Sub-types rejected by professors are excluded from allocation.
 
     Returns
     -------
@@ -94,6 +98,8 @@ def _compute_suggestions(
         [{"ranking_item_id": int, "sub_type_code": str|None, "allocation_year": int|None}, ...]
         One entry per unallocated input item, in allocation order.
     """
+    if rejected_map is None:
+        rejected_map = {}
     # Sort: renewal students first, then by rank_position ascending
     sorted_items = sorted(
         [item for item in unique_items if not item.is_allocated],
@@ -116,10 +122,15 @@ def _compute_suggestions(
             target_year = academic_year
 
         # Determine preference order, constrained to sub-types the student actually applied for
+        # and excluding sub-types rejected by professors
         applied = app.scholarship_subtype_list or []
+        rejected = rejected_map.get(app.id, set())
         raw_prefs: list[str] = app.sub_type_preferences or applied or default_prefs
         applied_set = set(applied)
-        preferences: list[str] = [p for p in raw_prefs if p in applied_set] if applied_set else raw_prefs
+        preferences: list[str] = [
+            p for p in raw_prefs
+            if (p in applied_set if applied_set else True) and p not in rejected
+        ]
 
         allocated_sub_type: Optional[str] = None
         allocated_year: Optional[int] = None
@@ -1001,6 +1012,22 @@ class ManualDistributionService:
                 if key in quota_tracker:
                     quota_tracker[key] = max(0, quota_tracker[key] - 1)
 
+        # Load rejected sub-types from professor reviews
+        app_ids = [item.application.id for item in unique_items]
+        rejected_map: dict[int, set[str]] = {}
+        if app_ids:
+            review_items_query = (
+                select(ApplicationReviewItem.sub_type_code, ApplicationReview.application_id)
+                .join(ApplicationReview, ApplicationReviewItem.review_id == ApplicationReview.id)
+                .where(
+                    ApplicationReview.application_id.in_(app_ids),
+                    ApplicationReviewItem.recommendation == "reject",
+                )
+            )
+            review_result = await self.db.execute(review_items_query)
+            for sub_type_code, app_id in review_result:
+                rejected_map.setdefault(app_id, set()).add(sub_type_code)
+
         return _compute_suggestions(
             unique_items=unique_items,
             default_prefs=default_prefs,
@@ -1008,4 +1035,5 @@ class ManualDistributionService:
             prior_years_map=prior_years_map,
             quota_tracker=quota_tracker,
             academic_year=academic_year,
+            rejected_map=rejected_map,
         )
