@@ -312,6 +312,7 @@ class ApplicationResponse(BaseModel):
     sub_type_preferences: Optional[List[str]] = Field(None, description="Ordered sub-type preference list")
     status: str
     status_name: Optional[str]
+    review_stage: Optional[str] = None  # 審核階段（用於前端進度顯示）
     is_renewal: bool = Field(False, description="是否為續領申請")
     academic_year: int
     semester: Optional[str] = None
@@ -517,6 +518,7 @@ class ApplicationListResponse(BaseModel):
     scholarship_subtype_list: Optional[List[str]] = []  # 獎學金子類型列表
     status: str
     status_name: Optional[str]
+    review_stage: Optional[str] = None  # 審核階段（用於前端進度顯示）
     is_renewal: bool = Field(False, description="是否為續領申請")
     academic_year: int
     semester: Optional[str] = None
