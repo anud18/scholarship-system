@@ -19,6 +19,7 @@ from sqlalchemy.orm import selectinload
 from app.models.application import Application
 from app.models.college_review import CollegeRanking, CollegeRankingItem, ManualDistributionHistory
 from app.models.enums import ApplicationStatus, ReviewStage
+from app.models.review import ApplicationReview, ApplicationReviewItem
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipSubTypeConfig
 
 logger = logging.getLogger(__name__)
@@ -208,6 +209,22 @@ class ManualDistributionService:
         result = await self.db.execute(items_query)
         items = result.scalars().all()
 
+        # Batch-load rejected sub-types from professor reviews for all applications
+        app_ids = [item.application.id for item in items if item.application]
+        rejected_map: dict[int, list[str]] = {}  # app_id -> [rejected sub_type_codes]
+        if app_ids:
+            review_items_query = (
+                select(ApplicationReviewItem.sub_type_code, ApplicationReview.application_id)
+                .join(ApplicationReview, ApplicationReviewItem.review_id == ApplicationReview.id)
+                .where(
+                    ApplicationReview.application_id.in_(app_ids),
+                    ApplicationReviewItem.recommendation == "reject",
+                )
+            )
+            review_result = await self.db.execute(review_items_query)
+            for sub_type_code, app_id in review_result:
+                rejected_map.setdefault(app_id, []).append(sub_type_code)
+
         students = []
         for item in items:
             app = item.application
@@ -235,6 +252,7 @@ class ManualDistributionService:
                 "application_id": app.id,
                 "rank_position": item.rank_position,
                 "applied_sub_types": app.scholarship_subtype_list or [],
+                "rejected_sub_types": rejected_map.get(app.id, []),
                 "allocated_sub_type": item.allocated_sub_type,
                 "allocation_year": item.allocation_year,
                 "status": item.status,
