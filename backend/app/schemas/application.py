@@ -368,6 +368,10 @@ class ApplicationResponse(BaseModel):
     dept_ranking: Optional[int] = None  # trm_depplacing
     dept_ranking_percent: Optional[float] = None  # trm_depplacingrate
 
+    # Workflow configuration flags
+    requires_professor_recommendation: bool = False
+    requires_college_review: bool = False
+
     @property
     def is_editable(self) -> bool:
         """Check if application can be edited"""
@@ -579,6 +583,10 @@ class ApplicationListResponse(BaseModel):
 
     # Scholarship configuration for professor review requirements
     scholarship_configuration: Optional[Dict[str, Any]] = None
+
+    # Workflow configuration flags
+    requires_professor_recommendation: bool = False
+    requires_college_review: bool = False
 
     @property
     def is_editable(self) -> bool:

@@ -652,13 +652,25 @@ class ApplicationService:
             created_at=application.created_at,
             updated_at=application.updated_at,
             meta_data=application.meta_data,
+            requires_professor_recommendation=bool(
+                application.scholarship_configuration
+                and application.scholarship_configuration.requires_professor_recommendation
+            ),
+            requires_college_review=bool(
+                application.scholarship_configuration
+                and application.scholarship_configuration.requires_college_review
+            ),
         )
 
     async def get_user_applications(self, user: User, status: Optional[str] = None) -> List[ApplicationListResponse]:
         """Get applications for a user"""
         stmt = (
             select(Application)
-            .options(selectinload(Application.files), selectinload(Application.scholarship))
+            .options(
+                selectinload(Application.files),
+                selectinload(Application.scholarship),
+                selectinload(Application.scholarship_configuration),
+            )
             .where(Application.user_id == user.id)
         )
 
@@ -975,6 +987,15 @@ class ApplicationService:
             "amount": amount,
             "currency": currency,
             **student_fields,  # Spread extracted student fields
+            # Workflow configuration flags
+            "requires_professor_recommendation": bool(
+                application.scholarship_configuration
+                and application.scholarship_configuration.requires_professor_recommendation
+            ),
+            "requires_college_review": bool(
+                application.scholarship_configuration
+                and application.scholarship_configuration.requires_college_review
+            ),
         }
 
         return ApplicationResponse(**response_data)
