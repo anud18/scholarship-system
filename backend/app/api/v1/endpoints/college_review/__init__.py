@@ -15,6 +15,7 @@ from fastapi import APIRouter
 
 from .application_review import router as application_router
 from .distribution import router as distribution_router
+from .export_package import router as export_package_router
 from .ranking_management import router as ranking_router
 from .utilities import router as utilities_router
 
@@ -26,5 +27,6 @@ router.include_router(application_router, tags=["College Review - Applications"]
 router.include_router(ranking_router, tags=["College Review - Rankings"])
 router.include_router(distribution_router, tags=["College Review - Distribution"])
 router.include_router(utilities_router, tags=["College Review - Utilities"])
+router.include_router(export_package_router, tags=["College Review - Export"])
 
 __all__ = ["router"]
