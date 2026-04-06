@@ -538,15 +538,10 @@ export function ScholarshipApplicationStep({
       // Check required fields
       requiredFields.forEach(field => {
         const fieldValue = dynamicFormData[field.field_name];
-        const isFixed = field.is_fixed === true;
-        const hasPrefillValue =
-          field.prefill_value !== undefined &&
-          field.prefill_value !== null &&
-          field.prefill_value !== "";
-
         if (
-          (isFixed && hasPrefillValue) ||
-          (fieldValue !== undefined && fieldValue !== null && fieldValue !== "")
+          fieldValue !== undefined &&
+          fieldValue !== null &&
+          fieldValue !== ""
         ) {
           completedItems++;
         }
@@ -555,12 +550,7 @@ export function ScholarshipApplicationStep({
       // Check required documents
       requiredDocuments.forEach(doc => {
         const docFiles = dynamicFileData[doc.document_name];
-        const isFixedDocument = doc.is_fixed === true;
-
-        if (
-          (isFixedDocument && doc.existing_file_url) ||
-          (docFiles && docFiles.length > 0)
-        ) {
+        if (docFiles && docFiles.length > 0) {
           completedItems++;
         }
       });
@@ -573,7 +563,7 @@ export function ScholarshipApplicationStep({
       const progress = Math.round((completedItems / totalRequired) * 100);
       setFormProgress(progress);
     } catch (error) {
-      console.error("Error calculating progress:", error);
+      // silently ignore progress calculation errors
       setFormProgress(0);
     }
   };
@@ -726,7 +716,7 @@ export function ScholarshipApplicationStep({
           }
         }
 
-        alert(text.draftSaved);
+        toast.success(text.draftSaved);
       } else {
         // Create new draft
         const application = await createApplication(applicationData, true);
@@ -739,11 +729,11 @@ export function ScholarshipApplicationStep({
             }
           }
 
-          alert(text.draftSaved);
+          toast.success(text.draftSaved);
         }
       }
     } catch (error: any) {
-      alert(text.submitError + ": " + error.message);
+      toast.error(text.submitError + ": " + error.message);
     } finally {
       setSubmitting(false);
     }
@@ -826,10 +816,10 @@ export function ScholarshipApplicationStep({
       // Submit application
       await submitApplicationApi(applicationId);
 
-      alert(text.submitSuccess);
+      toast.success(text.submitSuccess);
       onComplete();
     } catch (error: any) {
-      alert(text.submitError + ": " + error.message);
+      toast.error(text.submitError + ": " + error.message);
     } finally {
       setSubmitting(false);
     }
