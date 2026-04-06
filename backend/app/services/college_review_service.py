@@ -399,19 +399,22 @@ class CollegeReviewService:
             f"Building query for sub_type_code={sub_type_code}, semester_filter type={type(semester_filter)}, semester_filter={semester_filter}, creator_college={creator_college}"
         )
 
+        # Valid statuses for ranking: include all reviewed/approved states
+        valid_ranking_statuses = [
+            ApplicationStatus.submitted.value,
+            ApplicationStatus.under_review.value,
+            ApplicationStatus.approved.value,
+            ApplicationStatus.partial_approved.value,
+            ApplicationStatus.rejected.value,
+        ]
+
         if sub_type_code == "default":
             # Include all applications for this scholarship type, regardless of sub-type
             conditions = [
                 Application.scholarship_type_id == scholarship_type_id,
                 Application.academic_year == academic_year,
                 Application.deleted_at.is_(None),  # Exclude soft-deleted applications
-                Application.status.in_(  # Whitelist valid statuses
-                    [
-                        ApplicationStatus.under_review.value,
-                        ApplicationStatus.approved.value,
-                        ApplicationStatus.rejected.value,
-                    ]
-                ),
+                Application.status.in_(valid_ranking_statuses),
             ]
             logger.debug(f"Initial conditions count: {len(conditions)}")
 
@@ -443,13 +446,7 @@ class CollegeReviewService:
                 Application.sub_scholarship_type == sub_type_code,
                 Application.academic_year == academic_year,
                 Application.deleted_at.is_(None),  # Exclude soft-deleted applications
-                Application.status.in_(  # Whitelist valid statuses
-                    [
-                        ApplicationStatus.under_review.value,
-                        ApplicationStatus.approved.value,
-                        ApplicationStatus.rejected.value,
-                    ]
-                ),
+                Application.status.in_(valid_ranking_statuses),
             ]
             logger.debug(f"Initial conditions count: {len(conditions)}")
 

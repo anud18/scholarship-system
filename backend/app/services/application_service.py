@@ -2,10 +2,18 @@
 Application service for scholarship application management
 """
 
+import enum
 import logging
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
+
+
+def _serialize_enum(value) -> Optional[str]:
+    """Serialize an enum instance to its string value, or pass through strings/None."""
+    if value is None:
+        return None
+    return value.value if isinstance(value, enum.Enum) else value
 
 from sqlalchemy import and_, desc
 from sqlalchemy import func as sa_func
@@ -636,6 +644,7 @@ class ApplicationService:
             scholarship_subtype_list=application.scholarship_subtype_list or [],
             status=application.status,
             status_name=application.status_name,
+            review_stage=_serialize_enum(application.review_stage),
             is_renewal=application.is_renewal,
             academic_year=application.academic_year,
             semester=self._convert_semester_to_string(application.semester),
@@ -651,13 +660,25 @@ class ApplicationService:
             created_at=application.created_at,
             updated_at=application.updated_at,
             meta_data=application.meta_data,
+            requires_professor_recommendation=bool(
+                application.scholarship_configuration
+                and application.scholarship_configuration.requires_professor_recommendation
+            ),
+            requires_college_review=bool(
+                application.scholarship_configuration
+                and application.scholarship_configuration.requires_college_review
+            ),
         )
 
     async def get_user_applications(self, user: User, status: Optional[str] = None) -> List[ApplicationListResponse]:
         """Get applications for a user"""
         stmt = (
             select(Application)
-            .options(selectinload(Application.files), selectinload(Application.scholarship))
+            .options(
+                selectinload(Application.files),
+                selectinload(Application.scholarship),
+                selectinload(Application.scholarship_configuration),
+            )
             .where(Application.user_id == user.id)
         )
 
@@ -937,6 +958,7 @@ class ApplicationService:
             "sub_type_labels": sub_type_labels,
             "status": application.status,
             "status_name": application.status_name,
+            "review_stage": _serialize_enum(application.review_stage),
             "is_renewal": application.is_renewal,
             "academic_year": application.academic_year,
             "semester": self._convert_semester_to_string(application.semester),
@@ -973,6 +995,15 @@ class ApplicationService:
             "amount": amount,
             "currency": currency,
             **student_fields,  # Spread extracted student fields
+            # Workflow configuration flags
+            "requires_professor_recommendation": bool(
+                application.scholarship_configuration
+                and application.scholarship_configuration.requires_professor_recommendation
+            ),
+            "requires_college_review": bool(
+                application.scholarship_configuration
+                and application.scholarship_configuration.requires_college_review
+            ),
         }
 
         return ApplicationResponse(**response_data)
@@ -1150,8 +1181,40 @@ class ApplicationService:
         application.submitted_at = datetime.now(timezone.utc)
         application.updated_at = datetime.now(timezone.utc)
 
+        # 自動分配指導教授：根據 UserProfile 的 advisor_nycu_id 查找教授帳號
+        if not application.professor_id:
+            user_profile_stmt = select(UserProfile).where(UserProfile.user_id == application.user_id)
+            user_profile_result = await self.db.execute(user_profile_stmt)
+            advisor_profile = user_profile_result.scalar_one_or_none()
+
+            if advisor_profile and advisor_profile.advisor_nycu_id:
+                professor_stmt = select(User).where(
+                    User.nycu_id == advisor_profile.advisor_nycu_id,
+                    User.role == UserRole.professor,
+                )
+                professor_result = await self.db.execute(professor_stmt)
+                professor = professor_result.scalar_one_or_none()
+                if professor:
+                    application.professor_id = professor.id
+                    logger.info(
+                        f"Auto-assigned professor {professor.id} ({professor.name}) "
+                        f"to application {application.app_id}"
+                    )
+
         await self.db.commit()
-        await self.db.refresh(application, ["files", "reviews", "scholarship", "student"])
+
+        # Re-query with eager loading to avoid MissingGreenlet on expired attributes
+        stmt = (
+            select(Application)
+            .options(
+                selectinload(Application.files),
+                selectinload(Application.reviews),
+                selectinload(Application.scholarship),
+            )
+            .where(Application.id == application.id)
+        )
+        result = await self.db.execute(stmt)
+        application = result.scalar_one()
 
         # 發送自動化通知
         try:
@@ -2343,10 +2406,12 @@ class ApplicationService:
                 return False
 
             # Check application status - should be submitted or under review
-            if application.status not in [
-                ApplicationStatus.submitted.value,
-                ApplicationStatus.under_review.value,
-            ]:
+            # Compare with both enum and string value for robustness
+            valid_statuses = [
+                ApplicationStatus.submitted, ApplicationStatus.submitted.value,
+                ApplicationStatus.under_review, ApplicationStatus.under_review.value,
+            ]
+            if application.status not in valid_statuses:
                 return False
 
             now = datetime.now(timezone.utc)

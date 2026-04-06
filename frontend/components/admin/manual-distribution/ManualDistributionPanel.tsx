@@ -1057,6 +1057,10 @@ export function ManualDistributionPanel({
                                     student.applied_sub_types.includes(
                                       col.sub_type
                                     );
+                                  const isRejected =
+                                    (student.rejected_sub_types || []).includes(
+                                      col.sub_type
+                                    );
                                   const isChecked =
                                     curAlloc?.sub_type === col.sub_type &&
                                     curAlloc?.year === col.year;
@@ -1066,12 +1070,12 @@ export function ManualDistributionPanel({
                                     col.total > 0 &&
                                     localUsed >= col.total &&
                                     !isChecked;
-                                  const disabled = !isApplied || atCapacity;
+                                  const disabled = !isApplied || isRejected || atCapacity;
                                   return (
                                     <td
                                       key={col.key}
                                       className={`px-0.5 py-1.5 border-r border-slate-100 text-center ${
-                                        !isApplied ? "opacity-40" : ""
+                                        !isApplied ? "opacity-40" : isRejected ? "opacity-40 bg-red-50" : ""
                                       }`}
                                     >
                                       <input
@@ -1082,11 +1086,13 @@ export function ManualDistributionPanel({
                                         title={
                                           !isApplied
                                             ? `未申請 ${col.display_name}`
-                                            : atCapacity
-                                              ? `${col.display_name} 名額已滿`
-                                              : isChecked
-                                                ? "點擊取消分配"
-                                                : `分配至 ${col.display_name}`
+                                            : isRejected
+                                              ? `教授不推薦 ${col.display_name}`
+                                              : atCapacity
+                                                ? `${col.display_name} 名額已滿`
+                                                : isChecked
+                                                  ? "點擊取消分配"
+                                                  : `分配至 ${col.display_name}`
                                         }
                                         onChange={() =>
                                           handleCheckbox(
