@@ -132,23 +132,20 @@ class ExportPackageService:
 
         scholarship_name = scholarship.name
 
-        # Get college name from first matching application's student_data
+        # Get college name from applications matching this college
         college_name = None
         if college_code:
-            app_stmt = (
-                select(Application)
-                .where(
-                    Application.scholarship_type_id == scholarship_type_id,
-                    Application.academic_year == academic_year,
-                )
-                .limit(1)
+            app_stmt = select(Application).where(
+                Application.scholarship_type_id == scholarship_type_id,
+                Application.academic_year == academic_year,
             )
             if semester:
                 app_stmt = app_stmt.where(Application.semester == semester)
             app_result = await self.db.execute(app_stmt)
-            sample_app = app_result.scalar_one_or_none()
-            if sample_app and sample_app.student_data:
-                college_name = sample_app.student_data.get("trm_academyname")
+            for row in app_result.scalars():
+                if row.student_data and row.student_data.get("std_academyno") == college_code:
+                    college_name = row.student_data.get("trm_academyname")
+                    break
 
         return scholarship_name, college_name
 
@@ -159,13 +156,16 @@ class ExportPackageService:
         semester: Optional[str],
         college_code: Optional[str],
     ) -> List[Application]:
-        """Query applications with their files, filtered by college if needed."""
+        """Query submitted applications with their files, filtered by college if needed."""
+        # Only export applications that have been submitted (exclude drafts/withdrawn)
+        valid_statuses = ("submitted", "under_review", "approved", "partial_approved", "rejected")
         stmt = (
             select(Application)
             .options(selectinload(Application.files))
             .where(
                 Application.scholarship_type_id == scholarship_type_id,
                 Application.academic_year == academic_year,
+                Application.status.in_(valid_statuses),
             )
         )
 
@@ -235,9 +235,11 @@ class ExportPackageService:
 
             try:
                 response = self.minio.get_file_stream(af.object_name)
-                file_bytes = response.read()
-                response.close()
-                response.release_conn()
+                try:
+                    file_bytes = response.read()
+                finally:
+                    response.close()
+                    response.release_conn()
                 zf.writestr(f"{base_path}/{_sanitize_filename(filename)}", file_bytes)
             except Exception as e:
                 logger.error(f"Failed to fetch file {af.object_name} for app {app.id}: {e}")
@@ -271,7 +273,7 @@ class ExportPackageService:
         for field_id in sorted(fields_data.keys()):
             field = fields_data[field_id]
             form_fields.append({
-                "label": field.get("field_id", field_id),
+                "label": field.get("label", field.get("field_id", field_id)),
                 "value": field.get("value", ""),
             })
 
