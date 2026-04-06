@@ -51,19 +51,27 @@ export function validateAdvisorEmail(
 export function validateAdvisorInfo(data: AdvisorInfo): ValidationResult {
   const errors: string[] = [];
 
-  // Validate advisor name (optional, max 100 chars)
-  if (data.advisor_name && data.advisor_name.length > 100) {
+  // Validate advisor name (required, max 100 chars)
+  if (!data.advisor_name || !data.advisor_name.trim()) {
+    errors.push("請填寫指導教授姓名");
+  } else if (data.advisor_name.trim().length > 100) {
     errors.push("指導教授姓名不能超過100個字符");
   }
 
-  // Validate advisor email
-  const emailValidation = validateAdvisorEmail(data.advisor_email);
-  if (!emailValidation.isValid) {
-    errors.push(...emailValidation.errors);
+  // Validate advisor email (required)
+  if (!data.advisor_email || !data.advisor_email.trim()) {
+    errors.push("請填寫指導教授 Email");
+  } else {
+    const emailValidation = validateAdvisorEmail(data.advisor_email);
+    if (!emailValidation.isValid) {
+      errors.push(...emailValidation.errors);
+    }
   }
 
-  // Validate advisor NYCU ID (optional, max 20 chars)
-  if (data.advisor_nycu_id && data.advisor_nycu_id.length > 20) {
+  // Validate advisor NYCU ID (required, max 20 chars)
+  if (!data.advisor_nycu_id || !data.advisor_nycu_id.trim()) {
+    errors.push("請填寫指導教授本校人事編號");
+  } else if (data.advisor_nycu_id.trim().length > 20) {
     errors.push("指導教授本校人事編號不能超過20個字符");
   }
 
@@ -77,9 +85,17 @@ export function validateAdvisorInfo(data: AdvisorInfo): ValidationResult {
 export function validateBankInfo(data: BankInfo): ValidationResult {
   const errors: string[] = [];
 
-  // Validate account number (optional, max 50 chars)
-  if (data.account_number && data.account_number.length > 50) {
-    errors.push("郵局帳號不能超過50個字符");
+  if (!data.account_number || !data.account_number.trim()) {
+    errors.push("請填寫郵局帳號");
+  } else {
+    const digitsOnly = data.account_number.replace(/[\s-]/g, "");
+    if (!/^\d+$/.test(digitsOnly)) {
+      errors.push("郵局帳號僅能包含數字");
+    } else if (digitsOnly.length !== 14) {
+      errors.push(
+        "郵局帳號必須為 14 碼（目前輸入 " + digitsOnly.length + " 碼）"
+      );
+    }
   }
 
   return { isValid: errors.length === 0, errors };
@@ -115,6 +131,7 @@ export function sanitizeAdvisorInfo(data: AdvisorInfo): AdvisorInfo {
  */
 export function sanitizeBankInfo(data: BankInfo): BankInfo {
   return {
-    account_number: data.account_number?.trim() || undefined,
+    account_number:
+      data.account_number?.replace(/[\s-]/g, "").trim() || undefined,
   };
 }

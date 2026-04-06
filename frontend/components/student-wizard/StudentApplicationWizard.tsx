@@ -4,16 +4,9 @@ import React, { useState, useEffect } from "react";
 import { ApplicationSidebar } from "./ApplicationSidebar";
 import { NoticeAgreementStep } from "./steps/NoticeAgreementStep";
 import { StudentDataReviewStep } from "./steps/StudentDataReviewStep";
-import { PersonalInfoStep } from "./steps/PersonalInfoStep";
 import { ScholarshipApplicationStep } from "./steps/ScholarshipApplicationStep";
 import { WizardStep } from "./types";
-import {
-  FileText,
-  User,
-  CreditCard,
-  Award,
-  CheckCircle,
-} from "lucide-react";
+import { FileText, User, Award } from "lucide-react";
 import { User as UserType } from "@/types/user";
 import { Application } from "@/lib/api";
 
@@ -32,24 +25,20 @@ export function StudentApplicationWizard({
   editingApplication,
   initialStep,
 }: StudentApplicationWizardProps) {
-  // 如果是編輯模式且指定了 initialStep，使用 initialStep；否則從 0 開始
   const [currentStepIndex, setCurrentStepIndex] = useState(
     editingApplication && initialStep !== undefined ? initialStep : 0
   );
 
-  // 如果是編輯模式且 initialStep >= 1，自動同意條款
   const [agreedToTerms, setAgreedToTerms] = useState(
-    editingApplication && initialStep !== undefined && initialStep >= 1 ? true : false
+    editingApplication && initialStep !== undefined && initialStep >= 1
+      ? true
+      : false
   );
 
-  // 如果是編輯模式且 initialStep >= 2，自動確認學籍資料
   const [studentDataConfirmed, setStudentDataConfirmed] = useState(
-    editingApplication && initialStep !== undefined && initialStep >= 2 ? true : false
-  );
-
-  // 如果是編輯模式且 initialStep >= 3，自動完成個人資料（可選）
-  const [personalInfoCompleted, setPersonalInfoCompleted] = useState(
-    editingApplication && initialStep !== undefined && initialStep >= 3 ? true : false
+    editingApplication && initialStep !== undefined && initialStep >= 2
+      ? true
+      : false
   );
 
   const initialSteps: WizardStep[] = [
@@ -74,22 +63,12 @@ export function StudentApplicationWizard({
       isAccessible: false,
     },
     {
-      id: "personal-info",
-      label: "填寫個人資料",
-      label_en: "Fill Personal Info",
-      icon: CreditCard,
-      description: "指導教授與銀行資訊",
-      description_en: "Advisor and bank information",
-      isCompleted: false,
-      isAccessible: false,
-    },
-    {
       id: "scholarship",
-      label: "申請獎學金",
-      label_en: "Apply for Scholarship",
+      label: "填寫資料與申請獎學金",
+      label_en: "Fill Info & Apply",
       icon: Award,
-      description: "選擇並申請獎學金",
-      description_en: "Select and apply for scholarship",
+      description: "填寫個人資料並申請獎學金",
+      description_en: "Fill personal info and apply for scholarship",
       isCompleted: false,
       isAccessible: false,
     },
@@ -97,38 +76,28 @@ export function StudentApplicationWizard({
 
   const [steps, setSteps] = useState<WizardStep[]>(initialSteps);
 
-  // Update step accessibility based on completion status
   useEffect(() => {
-    setSteps(prevSteps => {
+    setSteps((prevSteps) => {
       const newSteps = [...prevSteps];
-
-      // Step 1 (Notice) is always accessible
       newSteps[0].isAccessible = true;
       newSteps[0].isCompleted = agreedToTerms;
-
-      // Step 2 (Student Data) is accessible after agreeing to terms
       newSteps[1].isAccessible = agreedToTerms;
       newSteps[1].isCompleted = studentDataConfirmed;
-
-      // Step 3 (Personal Info) is accessible after confirming student data
       newSteps[2].isAccessible = studentDataConfirmed;
-      newSteps[2].isCompleted = personalInfoCompleted;
-
-      // Step 4 (Scholarship) is accessible after personal info (can skip)
-      newSteps[3].isAccessible = studentDataConfirmed;
-      // This step is completed when application is submitted (handled in step component)
-
       return newSteps;
     });
-  }, [agreedToTerms, studentDataConfirmed, personalInfoCompleted]);
+  }, [agreedToTerms, studentDataConfirmed]);
 
-  // Auto-scroll to top when step changes
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }, [currentStepIndex]);
 
   const goToStep = (stepIndex: number) => {
-    if (stepIndex >= 0 && stepIndex < steps.length && steps[stepIndex].isAccessible) {
+    if (
+      stepIndex >= 0 &&
+      stepIndex < steps.length &&
+      steps[stepIndex].isAccessible
+    ) {
       setCurrentStepIndex(stepIndex);
     }
   };
@@ -153,19 +122,12 @@ export function StudentApplicationWizard({
     setStudentDataConfirmed(confirmed);
   };
 
-  const handlePersonalInfoComplete = (completed: boolean) => {
-    setPersonalInfoCompleted(completed);
-  };
-
   const handleApplicationComplete = () => {
-    // Mark scholarship step as completed
-    setSteps(prevSteps => {
+    setSteps((prevSteps) => {
       const newSteps = [...prevSteps];
-      newSteps[3].isCompleted = true;
+      newSteps[2].isCompleted = true;
       return newSteps;
     });
-
-    // Call parent callback if provided
     if (onApplicationComplete) {
       onApplicationComplete();
     }
@@ -173,7 +135,6 @@ export function StudentApplicationWizard({
 
   const renderCurrentStep = () => {
     const currentStep = steps[currentStepIndex];
-
     switch (currentStep.id) {
       case "notice":
         return (
@@ -190,15 +151,6 @@ export function StudentApplicationWizard({
             onNext={nextStep}
             onBack={prevStep}
             onConfirm={handleStudentDataConfirm}
-            locale={locale}
-          />
-        );
-      case "personal-info":
-        return (
-          <PersonalInfoStep
-            onNext={nextStep}
-            onBack={prevStep}
-            onComplete={handlePersonalInfoComplete}
             locale={locale}
           />
         );
@@ -219,7 +171,6 @@ export function StudentApplicationWizard({
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-slate-50 to-nycu-blue-50">
-      {/* Sidebar */}
       <div className="hidden lg:block">
         <ApplicationSidebar
           steps={steps}
@@ -229,15 +180,17 @@ export function StudentApplicationWizard({
         />
       </div>
 
-      {/* Mobile sidebar indicator */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-10 bg-white border-b border-gray-200 p-4">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm text-gray-600">
-              {locale === "zh" ? "步驟" : "Step"} {currentStepIndex + 1} / {steps.length}
+              {locale === "zh" ? "步驟" : "Step"} {currentStepIndex + 1} /{" "}
+              {steps.length}
             </p>
             <p className="font-semibold text-nycu-navy-800">
-              {locale === "zh" ? steps[currentStepIndex].label : steps[currentStepIndex].label_en}
+              {locale === "zh"
+                ? steps[currentStepIndex].label
+                : steps[currentStepIndex].label_en}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -257,11 +210,8 @@ export function StudentApplicationWizard({
         </div>
       </div>
 
-      {/* Main content */}
       <div className="flex-1 p-6 lg:p-12 mt-20 lg:mt-0">
-        <div className="max-w-4xl mx-auto">
-          {renderCurrentStep()}
-        </div>
+        <div className="max-w-4xl mx-auto">{renderCurrentStep()}</div>
       </div>
     </div>
   );

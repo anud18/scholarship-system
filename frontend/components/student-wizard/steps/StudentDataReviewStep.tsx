@@ -62,7 +62,7 @@ export function StudentDataReviewStep({
       role: "系統角色",
       degree: "學位",
       enrollmentStatus: "在學狀態",
-      enrollmentYear: "入學年度",
+      enrollmentYear: "入學年度學期",
       semesterCount: "學期數",
       dataNotice: "資料說明",
       dataNoticeContent:
@@ -91,7 +91,7 @@ export function StudentDataReviewStep({
       role: "System Role",
       degree: "Degree",
       enrollmentStatus: "Enrollment Status",
-      enrollmentYear: "Enrollment Year",
+      enrollmentYear: "Enrollment Year & Semester",
       semesterCount: "Semester Count",
       dataNotice: "Data Notice",
       dataNoticeContent:
@@ -329,7 +329,11 @@ export function StudentDataReviewStep({
                         <div className="flex items-center gap-2">
                           <Calendar className="h-4 w-4 text-gray-500" />
                           <div className="text-base text-gray-700">
-                            {studentInfo.std_enrollyear || "-"}
+                            {studentInfo.std_enrollyear
+                              ? locale === "zh"
+                                ? `${studentInfo.std_enrollyear} 學年度第 ${studentInfo.std_enrollterm || "?"} 學期`
+                                : `Year ${studentInfo.std_enrollyear}, Semester ${studentInfo.std_enrollterm || "?"}`
+                              : "-"}
                           </div>
                         </div>
                       </div>

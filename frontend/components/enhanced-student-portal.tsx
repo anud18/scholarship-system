@@ -252,8 +252,11 @@ export function EnhancedStudentPortal({
   }>({});
 
   // State for document requests
-  const [documentRequests, setDocumentRequests] = useState<StudentDocumentRequest[]>([]);
-  const [isLoadingDocumentRequests, setIsLoadingDocumentRequests] = useState(false);
+  const [documentRequests, setDocumentRequests] = useState<
+    StudentDocumentRequest[]
+  >([]);
+  const [isLoadingDocumentRequests, setIsLoadingDocumentRequests] =
+    useState(false);
 
   // Fetch eligible scholarships on component mount
   useEffect(() => {
@@ -319,7 +322,8 @@ export function EnhancedStudentPortal({
     const fetchDocumentRequests = async () => {
       try {
         setIsLoadingDocumentRequests(true);
-        const response = await api.documentRequests.getMyDocumentRequests("pending");
+        const response =
+          await api.documentRequests.getMyDocumentRequests("pending");
 
         if (response.success && response.data) {
           setDocumentRequests(response.data);
@@ -341,7 +345,8 @@ export function EnhancedStudentPortal({
   // Handler for fulfilling document requests
   const handleFulfillDocumentRequest = async (requestId: number) => {
     try {
-      const response = await api.documentRequests.fulfillDocumentRequest(requestId);
+      const response =
+        await api.documentRequests.fulfillDocumentRequest(requestId);
 
       if (response.success) {
         // Remove fulfilled request from the list
@@ -361,7 +366,9 @@ export function EnhancedStudentPortal({
       console.error("Failed to fulfill document request:", error);
       alert(
         error?.response?.data?.message ||
-          (locale === "zh" ? "標記完成時發生錯誤" : "Error marking as fulfilled")
+          (locale === "zh"
+            ? "標記完成時發生錯誤"
+            : "Error marking as fulfilled")
       );
     }
   };
@@ -1000,7 +1007,6 @@ export function EnhancedStudentPortal({
     setTermsPreviewFile(null);
   };
 
-
   // Handle application completion - switch to applications tab and refresh
   const handleApplicationComplete = () => {
     fetchApplications();
@@ -1150,7 +1156,10 @@ export function EnhancedStudentPortal({
                 {applicationsError}
               </div>
             ) : applications.length === 0 ? (
-              <div className="text-center py-8" data-testid="applications-empty-state">
+              <div
+                className="text-center py-8"
+                data-testid="applications-empty-state"
+              >
                 <div className="flex flex-col items-center gap-2">
                   <FileText className="h-12 w-12 text-muted-foreground" />
                   <p className="text-lg font-medium text-muted-foreground">
@@ -1252,7 +1261,7 @@ export function EnhancedStudentPortal({
           locale={locale}
           onApplicationComplete={handleApplicationComplete}
           editingApplication={editingApplication}
-          initialStep={editingApplication ? 3 : undefined}
+          initialStep={editingApplication ? 2 : undefined}
         />
       )}
 
@@ -1260,13 +1269,15 @@ export function EnhancedStudentPortal({
         <>
           {/* Scholarship Info Cards */}
           {eligibleScholarships.map(scholarship => {
-            const applicationInfo = scholarshipApplicationInfo[scholarship.code];
+            const applicationInfo =
+              scholarshipApplicationInfo[scholarship.code];
             // Check if scholarship has eligible sub-types AND no common errors
-            const hasCommonErrors = scholarship.errors?.some(rule => !rule.sub_type) || false;
+            const hasCommonErrors =
+              scholarship.errors?.some(rule => !rule.sub_type) || false;
             const isEligible =
               Array.isArray(scholarship.eligible_sub_types) &&
               scholarship.eligible_sub_types.length > 0 &&
-              !hasCommonErrors;  // If there are common errors, student is not eligible
+              !hasCommonErrors; // If there are common errors, student is not eligible
 
             return (
               <Card
@@ -1323,15 +1334,19 @@ export function EnhancedStudentPortal({
                           </p>
                         </div>
                         <div className="px-3 py-2 flex flex-wrap gap-1.5">
-                          {scholarship.eligible_sub_types.map((subType, index) => (
-                            <Badge
-                              key={subType.value || index}
-                              variant="outline"
-                              className="bg-white text-indigo-600 border-indigo-100 shadow-sm"
-                            >
-                              {locale === "zh" ? subType.label : subType.label_en}
-                            </Badge>
-                          ))}
+                          {scholarship.eligible_sub_types.map(
+                            (subType, index) => (
+                              <Badge
+                                key={subType.value || index}
+                                variant="outline"
+                                className="bg-white text-indigo-600 border-indigo-100 shadow-sm"
+                              >
+                                {locale === "zh"
+                                  ? subType.label
+                                  : subType.label_en}
+                              </Badge>
+                            )
+                          )}
                         </div>
                       </div>
                     )}
@@ -1357,14 +1372,27 @@ export function EnhancedStudentPortal({
                         <div className="p-3 space-y-4">
                           {/* Get common rules */}
                           {(() => {
-                            const commonPassedRules = scholarship.passed?.filter(rule => !rule.sub_type) || [];
-                            const commonErrorRules = scholarship.errors?.filter(rule => !rule.sub_type) || [];
+                            const commonPassedRules =
+                              scholarship.passed?.filter(
+                                rule => !rule.sub_type
+                              ) || [];
+                            const commonErrorRules =
+                              scholarship.errors?.filter(
+                                rule => !rule.sub_type
+                              ) || [];
 
-                            const hasSubTypes = scholarship.eligible_sub_types &&
-                              scholarship.eligible_sub_types.some(st => st.value && st.value !== "general");
+                            const hasSubTypes =
+                              scholarship.eligible_sub_types &&
+                              scholarship.eligible_sub_types.some(
+                                st => st.value && st.value !== "general"
+                              );
 
                             // If no subtypes (general scholarship), show common rules directly
-                            if (!hasSubTypes && (commonPassedRules.length > 0 || commonErrorRules.length > 0)) {
+                            if (
+                              !hasSubTypes &&
+                              (commonPassedRules.length > 0 ||
+                                commonErrorRules.length > 0)
+                            ) {
                               return (
                                 <div>
                                   <div className="flex flex-wrap gap-1">
@@ -1384,12 +1412,22 @@ export function EnhancedStudentPortal({
                                     {/* Error rules */}
                                     {commonErrorRules.map(rule => {
                                       // Determine color and icon based on status
-                                      const isDataUnavailable = rule.status === 'data_unavailable';
-                                      const bgColor = isDataUnavailable ? 'bg-amber-50' : 'bg-rose-50';
-                                      const textColor = isDataUnavailable ? 'text-amber-600' : 'text-rose-600';
-                                      const borderColor = isDataUnavailable ? 'border-amber-100' : 'border-rose-100';
-                                      const Icon = isDataUnavailable ? AlertCircle : AlertTriangle;
-                                      const displayMessage = rule.system_message || rule.message;
+                                      const isDataUnavailable =
+                                        rule.status === "data_unavailable";
+                                      const bgColor = isDataUnavailable
+                                        ? "bg-amber-50"
+                                        : "bg-rose-50";
+                                      const textColor = isDataUnavailable
+                                        ? "text-amber-600"
+                                        : "text-rose-600";
+                                      const borderColor = isDataUnavailable
+                                        ? "border-amber-100"
+                                        : "border-rose-100";
+                                      const Icon = isDataUnavailable
+                                        ? AlertCircle
+                                        : AlertTriangle;
+                                      const displayMessage =
+                                        rule.system_message || rule.message;
 
                                       return (
                                         <Badge
@@ -1412,73 +1450,100 @@ export function EnhancedStudentPortal({
                             }
 
                             // Sub-type specific sections with common rules appended
-                            return scholarship.eligible_sub_types?.map((subTypeInfo) => {
-                              const subType = subTypeInfo.value;
-                              if (!subType || subType === "general") return null;
+                            return scholarship.eligible_sub_types?.map(
+                              subTypeInfo => {
+                                const subType = subTypeInfo.value;
+                                if (!subType || subType === "general")
+                                  return null;
 
-                              const passedRulesForType = scholarship.passed?.filter(
-                                rule => rule.sub_type === subType
-                              ) || [];
-                              const errorRulesForType = scholarship.errors?.filter(
-                                rule => rule.sub_type === subType
-                              ) || [];
+                                const passedRulesForType =
+                                  scholarship.passed?.filter(
+                                    rule => rule.sub_type === subType
+                                  ) || [];
+                                const errorRulesForType =
+                                  scholarship.errors?.filter(
+                                    rule => rule.sub_type === subType
+                                  ) || [];
 
-                              // Combine common rules with subtype-specific rules
-                              const allPassedRules = [...commonPassedRules, ...passedRulesForType];
-                              const allErrorRules = [...commonErrorRules, ...errorRulesForType];
+                                // Combine common rules with subtype-specific rules
+                                const allPassedRules = [
+                                  ...commonPassedRules,
+                                  ...passedRulesForType,
+                                ];
+                                const allErrorRules = [
+                                  ...commonErrorRules,
+                                  ...errorRulesForType,
+                                ];
 
-                              // Only show subtype section if there are any rules for it
-                              if (allPassedRules.length === 0 && allErrorRules.length === 0)
-                                return null;
+                                // Only show subtype section if there are any rules for it
+                                if (
+                                  allPassedRules.length === 0 &&
+                                  allErrorRules.length === 0
+                                )
+                                  return null;
 
-                              return (
-                                <div key={subType}>
-                                  <p className="text-sm font-medium text-gray-800 mb-2">
-                                    {locale === "zh" ? subTypeInfo.label : subTypeInfo.label_en || subTypeInfo.label}
-                                  </p>
-                                  <div className="flex flex-wrap gap-1">
-                                    {/* Passed rules (common + subtype-specific) */}
-                                    {allPassedRules.map(rule => (
-                                      <Badge
-                                        key={rule.rule_id}
-                                        variant="outline"
-                                        className="bg-emerald-50 text-emerald-600 border-emerald-100"
-                                      >
-                                        {getTranslation(
-                                          locale,
-                                          `eligibility_tags.${rule.tag}`
-                                        )}
-                                      </Badge>
-                                    ))}
-                                    {/* Error rules (common + subtype-specific) */}
-                                    {allErrorRules.map(rule => {
-                                      // Determine color and icon based on status
-                                      const isDataUnavailable = rule.status === 'data_unavailable';
-                                      const bgColor = isDataUnavailable ? 'bg-amber-50' : 'bg-rose-50';
-                                      const textColor = isDataUnavailable ? 'text-amber-600' : 'text-rose-600';
-                                      const borderColor = isDataUnavailable ? 'border-amber-100' : 'border-rose-100';
-                                      const Icon = isDataUnavailable ? AlertCircle : AlertTriangle;
-                                      const displayMessage = rule.system_message || rule.message;
-
-                                      return (
+                                return (
+                                  <div key={subType}>
+                                    <p className="text-sm font-medium text-gray-800 mb-2">
+                                      {locale === "zh"
+                                        ? subTypeInfo.label
+                                        : subTypeInfo.label_en ||
+                                          subTypeInfo.label}
+                                    </p>
+                                    <div className="flex flex-wrap gap-1">
+                                      {/* Passed rules (common + subtype-specific) */}
+                                      {allPassedRules.map(rule => (
                                         <Badge
                                           key={rule.rule_id}
                                           variant="outline"
-                                          className={`${bgColor} ${textColor} ${borderColor}`}
-                                          title={displayMessage} // tooltip
+                                          className="bg-emerald-50 text-emerald-600 border-emerald-100"
                                         >
-                                          <Icon className="h-3 w-3 mr-1" />
                                           {getTranslation(
                                             locale,
                                             `eligibility_tags.${rule.tag}`
                                           )}
                                         </Badge>
-                                      );
-                                    })}
+                                      ))}
+                                      {/* Error rules (common + subtype-specific) */}
+                                      {allErrorRules.map(rule => {
+                                        // Determine color and icon based on status
+                                        const isDataUnavailable =
+                                          rule.status === "data_unavailable";
+                                        const bgColor = isDataUnavailable
+                                          ? "bg-amber-50"
+                                          : "bg-rose-50";
+                                        const textColor = isDataUnavailable
+                                          ? "text-amber-600"
+                                          : "text-rose-600";
+                                        const borderColor = isDataUnavailable
+                                          ? "border-amber-100"
+                                          : "border-rose-100";
+                                        const Icon = isDataUnavailable
+                                          ? AlertCircle
+                                          : AlertTriangle;
+                                        const displayMessage =
+                                          rule.system_message || rule.message;
+
+                                        return (
+                                          <Badge
+                                            key={rule.rule_id}
+                                            variant="outline"
+                                            className={`${bgColor} ${textColor} ${borderColor}`}
+                                            title={displayMessage} // tooltip
+                                          >
+                                            <Icon className="h-3 w-3 mr-1" />
+                                            {getTranslation(
+                                              locale,
+                                              `eligibility_tags.${rule.tag}`
+                                            )}
+                                          </Badge>
+                                        );
+                                      })}
+                                    </div>
                                   </div>
-                                </div>
-                              );
-                            });
+                                );
+                              }
+                            );
                           })()}
 
                           {/* Warnings - keep at the end */}
@@ -1546,7 +1611,9 @@ export function EnhancedStudentPortal({
                           <div className="flex items-center gap-2">
                             <Loader2 className="h-4 w-4 animate-spin text-sky-500" />
                             <p className="text-sm font-medium">
-                              {locale === "zh" ? "申請資訊" : "Application Info"}
+                              {locale === "zh"
+                                ? "申請資訊"
+                                : "Application Info"}
                             </p>
                           </div>
                           <p className="text-sm text-gray-600 mt-2">
@@ -1608,7 +1675,8 @@ export function EnhancedStudentPortal({
                                     >
                                       {locale === "zh"
                                         ? field.field_label
-                                        : field.field_label_en || field.field_label}
+                                        : field.field_label_en ||
+                                          field.field_label}
                                     </Badge>
                                   ))}
                               </div>
@@ -1635,7 +1703,9 @@ export function EnhancedStudentPortal({
                             <div className="p-3">
                               <div className="flex flex-wrap gap-1.5">
                                 {applicationInfo.documents
-                                  .filter(doc => doc.is_required && doc.is_active)
+                                  .filter(
+                                    doc => doc.is_required && doc.is_active
+                                  )
                                   .map((doc, index) => (
                                     <Badge
                                       key={`${scholarship.id}-req-doc-${doc.id}-${index}`}
@@ -1644,7 +1714,8 @@ export function EnhancedStudentPortal({
                                     >
                                       {locale === "zh"
                                         ? doc.document_name
-                                        : doc.document_name_en || doc.document_name}
+                                        : doc.document_name_en ||
+                                          doc.document_name}
                                     </Badge>
                                   ))}
                               </div>
@@ -1674,7 +1745,9 @@ export function EnhancedStudentPortal({
                             <div className="p-3">
                               <div className="flex flex-wrap gap-1.5">
                                 {applicationInfo.documents
-                                  .filter(doc => !doc.is_required && doc.is_active)
+                                  .filter(
+                                    doc => !doc.is_required && doc.is_active
+                                  )
                                   .map((doc, index) => (
                                     <Badge
                                       key={`${scholarship.id}-opt-doc-${doc.id}-${index}`}
@@ -1683,7 +1756,8 @@ export function EnhancedStudentPortal({
                                     >
                                       {locale === "zh"
                                         ? doc.document_name
-                                        : doc.document_name_en || doc.document_name}
+                                        : doc.document_name_en ||
+                                          doc.document_name}
                                     </Badge>
                                   ))}
                               </div>
