@@ -265,7 +265,12 @@ export function ScholarshipApplicationStep({
       setAdvisorNycuId(profile.advisor_nycu_id || "");
       setAccountNumber(profile.account_number || "");
       setExistingBankDocument(profile.bank_document_photo_url || null);
-      if (profile.advisor_name && profile.account_number) {
+      if (
+        profile.advisor_name &&
+        profile.advisor_email &&
+        profile.advisor_nycu_id &&
+        profile.account_number
+      ) {
         setPersonalInfoSaved(true);
       }
     }
@@ -339,12 +344,19 @@ export function ScholarshipApplicationStep({
     const filename =
       existingBankDocument.split("/").pop()?.split("?")[0] || "bank_document";
     const token = localStorage.getItem("auth_token") || "";
-    const previewUrl = `/api/v1/preview?fileId=${filename}&filename=${encodeURIComponent(filename)}&type=${encodeURIComponent("bank_document")}&token=${token}`;
+    const previewParams = new URLSearchParams({
+      fileId: filename,
+      filename,
+      type: "bank_document",
+      token,
+      userId: String(userId),
+    });
+    const previewUrl = `/api/v1/preview?${previewParams.toString()}`;
     let fileTypeDisplay = "other";
     if (filename.toLowerCase().endsWith(".pdf"))
       fileTypeDisplay = "application/pdf";
     else if (
-      [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"].some(ext =>
+      [".jpg", ".jpeg", ".png"].some(ext =>
         filename.toLowerCase().endsWith(ext)
       )
     )
@@ -1022,7 +1034,7 @@ export function ScholarshipApplicationStep({
                     setBankDocumentFiles(files);
                     setPersonalInfoSaved(false);
                   }}
-                  acceptedTypes={[".jpg", ".jpeg", ".png", ".webp", ".pdf"]}
+                  acceptedTypes={[".jpg", ".jpeg", ".png", ".pdf"]}
                   maxSize={10 * 1024 * 1024}
                   maxFiles={1}
                   initialFiles={bankDocumentFiles}
@@ -1457,13 +1469,20 @@ export function ScholarshipApplicationStep({
                         </span>
                         <p className="font-medium">
                           {(() => {
-                            const degreeMap: Record<string, string> = {
+                            const degreeMapZh: Record<string, string> = {
                               "1": "博士",
                               "2": "碩士",
                               "3": "學士",
                             };
+                            const degreeMapEn: Record<string, string> = {
+                              "1": "PhD",
+                              "2": "Master",
+                              "3": "Bachelor",
+                            };
                             const val = String(studentInfo.std_degree || "");
-                            return degreeMap[val] || val || "-";
+                            const map =
+                              locale === "zh" ? degreeMapZh : degreeMapEn;
+                            return map[val] || val || "-";
                           })()}
                         </p>
                       </div>
@@ -1473,7 +1492,9 @@ export function ScholarshipApplicationStep({
                         </span>
                         <p className="font-medium">
                           {studentInfo.std_enrollyear
-                            ? `${studentInfo.std_enrollyear} 學年度第 ${studentInfo.std_enrollterm || "?"} 學期`
+                            ? locale === "zh"
+                              ? `${studentInfo.std_enrollyear} 學年度第 ${studentInfo.std_enrollterm || "?"} 學期`
+                              : `Year ${studentInfo.std_enrollyear}, Semester ${studentInfo.std_enrollterm || "?"}`
                             : "-"}
                         </p>
                       </div>

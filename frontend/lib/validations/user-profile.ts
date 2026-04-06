@@ -54,7 +54,7 @@ export function validateAdvisorInfo(data: AdvisorInfo): ValidationResult {
   // Validate advisor name (required, max 100 chars)
   if (!data.advisor_name || !data.advisor_name.trim()) {
     errors.push("請填寫指導教授姓名");
-  } else if (data.advisor_name.length > 100) {
+  } else if (data.advisor_name.trim().length > 100) {
     errors.push("指導教授姓名不能超過100個字符");
   }
 
@@ -71,7 +71,7 @@ export function validateAdvisorInfo(data: AdvisorInfo): ValidationResult {
   // Validate advisor NYCU ID (required, max 20 chars)
   if (!data.advisor_nycu_id || !data.advisor_nycu_id.trim()) {
     errors.push("請填寫指導教授本校人事編號");
-  } else if (data.advisor_nycu_id.length > 20) {
+  } else if (data.advisor_nycu_id.trim().length > 20) {
     errors.push("指導教授本校人事編號不能超過20個字符");
   }
 
@@ -85,7 +85,9 @@ export function validateAdvisorInfo(data: AdvisorInfo): ValidationResult {
 export function validateBankInfo(data: BankInfo): ValidationResult {
   const errors: string[] = [];
 
-  if (data.account_number) {
+  if (!data.account_number || !data.account_number.trim()) {
+    errors.push("請填寫郵局帳號");
+  } else {
     const digitsOnly = data.account_number.replace(/[\s-]/g, "");
     if (!/^\d+$/.test(digitsOnly)) {
       errors.push("郵局帳號僅能包含數字");
@@ -130,6 +132,6 @@ export function sanitizeAdvisorInfo(data: AdvisorInfo): AdvisorInfo {
 export function sanitizeBankInfo(data: BankInfo): BankInfo {
   return {
     account_number:
-      data.account_number?.replace(/[\s-]/g, "")?.trim() || undefined,
+      data.account_number?.replace(/[\s-]/g, "").trim() || undefined,
   };
 }
