@@ -23,6 +23,15 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DynamicApplicationForm } from "@/components/dynamic-application-form";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { FileUpload } from "@/components/file-upload";
 import {
@@ -91,7 +100,12 @@ export function ScholarshipApplicationStep({
   const [error, setError] = useState<string | null>(null);
 
   // Personal info states
-  const { profile, refresh: refreshProfile } = useStudentProfile();
+  const {
+    profile,
+    userInfo,
+    studentInfo,
+    refresh: refreshProfile,
+  } = useStudentProfile();
   const [advisorName, setAdvisorName] = useState("");
   const [advisorEmail, setAdvisorEmail] = useState("");
   const [advisorNycuId, setAdvisorNycuId] = useState("");
@@ -111,6 +125,9 @@ export function ScholarshipApplicationStep({
     filename: string;
     type: string;
   } | null>(null);
+
+  // Submit preview dialog
+  const [showSubmitPreview, setShowSubmitPreview] = useState(false);
 
   // Terms document states
   const [showTermsPreview, setShowTermsPreview] = useState(false);
@@ -491,9 +508,11 @@ export function ScholarshipApplicationStep({
       }
 
       const { fields, documents } = response.data;
-      const requiredFields = fields.filter(f => f.is_active && f.is_required);
+      const requiredFields = fields.filter(
+        f => f.is_active && f.is_required && !f.is_fixed
+      );
       const requiredDocuments = documents.filter(
-        d => d.is_active && d.is_required
+        d => d.is_active && d.is_required && !d.is_fixed
       );
 
       let totalRequired = requiredFields.length + requiredDocuments.length;
@@ -1354,7 +1373,7 @@ export function ScholarshipApplicationStep({
                 )}
               </Button>
               <Button
-                onClick={handleSubmit}
+                onClick={() => setShowSubmitPreview(true)}
                 disabled={
                   submitting ||
                   !personalInfoSaved ||
@@ -1398,6 +1417,235 @@ export function ScholarshipApplicationStep({
         file={bankDocPreviewFile}
         locale={locale}
       />
+
+      {/* Submit Preview Dialog */}
+      <Dialog open={showSubmitPreview} onOpenChange={setShowSubmitPreview}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-xl flex items-center gap-2">
+              <Eye className="h-5 w-5" />
+              {locale === "zh" ? "申請資料預覽" : "Application Preview"}
+            </DialogTitle>
+            <DialogDescription>
+              {locale === "zh"
+                ? "請確認以下資料無誤後再送出申請"
+                : "Please verify the following information before submitting"}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Student Info */}
+            {userInfo && (
+              <div>
+                <h3 className="text-sm font-semibold text-gray-500 mb-2">
+                  {locale === "zh" ? "學籍資料" : "Student Information"}
+                </h3>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm bg-gray-50 rounded-lg p-4">
+                  <div>
+                    <span className="text-gray-500">
+                      {locale === "zh" ? "姓名" : "Name"}
+                    </span>
+                    <p className="font-medium">{userInfo.name || "-"}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">
+                      {locale === "zh" ? "學號" : "Student ID"}
+                    </span>
+                    <p className="font-medium">{userInfo.nycu_id || "-"}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">
+                      {locale === "zh" ? "系所" : "Department"}
+                    </span>
+                    <p className="font-medium">{userInfo.dept_name || "-"}</p>
+                  </div>
+                  {studentInfo && (
+                    <>
+                      <div>
+                        <span className="text-gray-500">
+                          {locale === "zh" ? "學位" : "Degree"}
+                        </span>
+                        <p className="font-medium">
+                          {(() => {
+                            const degreeMap: Record<string, string> = {
+                              "1": "博士",
+                              "2": "碩士",
+                              "3": "學士",
+                            };
+                            const val = String(studentInfo.std_degree || "");
+                            return degreeMap[val] || val || "-";
+                          })()}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">
+                          {locale === "zh" ? "入學年度學期" : "Enrollment"}
+                        </span>
+                        <p className="font-medium">
+                          {studentInfo.std_enrollyear
+                            ? `${studentInfo.std_enrollyear} 學年度第 ${studentInfo.std_enrollterm || "?"} 學期`
+                            : "-"}
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <Separator />
+
+            {/* Personal Info */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-500 mb-2">
+                {locale === "zh" ? "個人資料" : "Personal Information"}
+              </h3>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm bg-gray-50 rounded-lg p-4">
+                <div>
+                  <span className="text-gray-500">
+                    {locale === "zh" ? "指導教授" : "Advisor"}
+                  </span>
+                  <p className="font-medium">{advisorName || "-"}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">
+                    {locale === "zh" ? "教授 Email" : "Advisor Email"}
+                  </span>
+                  <p className="font-medium">{advisorEmail || "-"}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">
+                    {locale === "zh"
+                      ? "指導教授本校人事編號"
+                      : "Advisor NYCU ID"}
+                  </span>
+                  <p className="font-medium">{advisorNycuId || "-"}</p>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-gray-500">
+                    {locale === "zh"
+                      ? "郵局局號加帳號共 14 碼"
+                      : "Post Office Account"}
+                  </span>
+                  <p className="font-medium">{accountNumber || "-"}</p>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Scholarship Info */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-500 mb-2">
+                {locale === "zh" ? "申請獎學金" : "Scholarship Application"}
+              </h3>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm bg-gray-50 rounded-lg p-4">
+                <div className="col-span-2">
+                  <span className="text-gray-500">
+                    {locale === "zh" ? "獎學金" : "Scholarship"}
+                  </span>
+                  <p className="font-medium">
+                    {selectedScholarship
+                      ? locale === "zh"
+                        ? selectedScholarship.name
+                        : selectedScholarship.name_en ||
+                          selectedScholarship.name
+                      : "-"}
+                  </p>
+                </div>
+                {hasSpecialSubTypes && selectedSubTypes.length > 0 && (
+                  <>
+                    <div className="col-span-2">
+                      <span className="text-gray-500">
+                        {locale === "zh" ? "申請項目" : "Programs"}
+                      </span>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {selectedSubTypes.map(st => {
+                          const config = eligibleSubTypes.find(
+                            c => c.value === st
+                          );
+                          return (
+                            <Badge key={st} variant="secondary">
+                              {locale === "zh"
+                                ? config?.label || st
+                                : config?.label_en || config?.label || st}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    {subTypePreferences.length >= 2 && (
+                      <div className="col-span-2">
+                        <span className="text-gray-500">
+                          {locale === "zh" ? "志願序" : "Preference Order"}
+                        </span>
+                        <div className="mt-1 space-y-1">
+                          {subTypePreferences.map((st, i) => {
+                            const config = eligibleSubTypes.find(
+                              c => c.value === st
+                            );
+                            return (
+                              <div key={st} className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-nycu-blue-700 w-6">
+                                  {i + 1}.
+                                </span>
+                                <span className="text-sm font-medium">
+                                  {locale === "zh"
+                                    ? config?.label || st
+                                    : config?.label_en || config?.label || st}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Warning */}
+          <Alert className="border-amber-200 bg-amber-50">
+            <AlertCircle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-800 font-medium">
+              {locale === "zh"
+                ? "送出後將無法修改申請內容，請確認資料無誤。"
+                : "You cannot modify the application after submission. Please verify all information is correct."}
+            </AlertDescription>
+          </Alert>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowSubmitPreview(false)}
+            >
+              {locale === "zh" ? "返回修改" : "Go Back"}
+            </Button>
+            <Button
+              onClick={() => {
+                setShowSubmitPreview(false);
+                handleSubmit();
+              }}
+              disabled={submitting}
+              className="nycu-gradient text-white"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  {text.submitting}
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4 mr-2" />
+                  {locale === "zh" ? "確認送出" : "Confirm Submit"}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
