@@ -182,6 +182,24 @@ class ManualDistributionService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    async def _batch_load_rejected_map(self, app_ids: list[int]) -> dict[int, set[str]]:
+        """Load professor-rejected sub-types for a batch of applications."""
+        rejected_map: dict[int, set[str]] = {}
+        if not app_ids:
+            return rejected_map
+        query = (
+            select(ApplicationReviewItem.sub_type_code, ApplicationReview.application_id)
+            .join(ApplicationReview, ApplicationReviewItem.review_id == ApplicationReview.id)
+            .where(
+                ApplicationReview.application_id.in_(app_ids),
+                ApplicationReviewItem.recommendation == "reject",
+            )
+        )
+        result = await self.db.execute(query)
+        for sub_type_code, app_id in result:
+            rejected_map.setdefault(app_id, set()).add(sub_type_code)
+        return rejected_map
+
     async def get_students_for_distribution(
         self,
         scholarship_type_id: int,
@@ -220,21 +238,9 @@ class ManualDistributionService:
         result = await self.db.execute(items_query)
         items = result.scalars().all()
 
-        # Batch-load rejected sub-types from professor reviews for all applications
+        # Batch-load rejected sub-types from professor reviews
         app_ids = [item.application.id for item in items if item.application]
-        rejected_map: dict[int, list[str]] = {}  # app_id -> [rejected sub_type_codes]
-        if app_ids:
-            review_items_query = (
-                select(ApplicationReviewItem.sub_type_code, ApplicationReview.application_id)
-                .join(ApplicationReview, ApplicationReviewItem.review_id == ApplicationReview.id)
-                .where(
-                    ApplicationReview.application_id.in_(app_ids),
-                    ApplicationReviewItem.recommendation == "reject",
-                )
-            )
-            review_result = await self.db.execute(review_items_query)
-            for sub_type_code, app_id in review_result:
-                rejected_map.setdefault(app_id, []).append(sub_type_code)
+        rejected_map = await self._batch_load_rejected_map(app_ids)
 
         students = []
         for item in items:
@@ -263,7 +269,7 @@ class ManualDistributionService:
                 "application_id": app.id,
                 "rank_position": item.rank_position,
                 "applied_sub_types": app.scholarship_subtype_list or [],
-                "rejected_sub_types": rejected_map.get(app.id, []),
+                "rejected_sub_types": list(rejected_map.get(app.id, set())),
                 "allocated_sub_type": item.allocated_sub_type,
                 "allocation_year": item.allocation_year,
                 "status": item.status,
@@ -1014,19 +1020,7 @@ class ManualDistributionService:
 
         # Load rejected sub-types from professor reviews
         app_ids = [item.application.id for item in unique_items]
-        rejected_map: dict[int, set[str]] = {}
-        if app_ids:
-            review_items_query = (
-                select(ApplicationReviewItem.sub_type_code, ApplicationReview.application_id)
-                .join(ApplicationReview, ApplicationReviewItem.review_id == ApplicationReview.id)
-                .where(
-                    ApplicationReview.application_id.in_(app_ids),
-                    ApplicationReviewItem.recommendation == "reject",
-                )
-            )
-            review_result = await self.db.execute(review_items_query)
-            for sub_type_code, app_id in review_result:
-                rejected_map.setdefault(app_id, set()).add(sub_type_code)
+        rejected_map = await self._batch_load_rejected_map(app_ids)
 
         return _compute_suggestions(
             unique_items=unique_items,

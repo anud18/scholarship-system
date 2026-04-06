@@ -110,7 +110,7 @@ export const getApplicationTimeline = (
   };
 
   // Workflow configuration flags
-  const requiresProfessor = application.requires_professor_recommendation ?? Boolean(application.professor_id);
+  const requiresProfessor = application.requires_professor_recommendation ?? false;
   const requiresCollege = application.requires_college_review ?? false;
 
   // Determine the stage after professor review (skip college if not required)

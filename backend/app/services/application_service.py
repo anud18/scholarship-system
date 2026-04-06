@@ -2,10 +2,18 @@
 Application service for scholarship application management
 """
 
+import enum
 import logging
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
+
+
+def _serialize_enum(value) -> Optional[str]:
+    """Serialize an enum instance to its string value, or pass through strings/None."""
+    if value is None:
+        return None
+    return value.value if isinstance(value, enum.Enum) else value
 
 from sqlalchemy import and_, desc
 from sqlalchemy import func as sa_func
@@ -636,7 +644,7 @@ class ApplicationService:
             scholarship_subtype_list=application.scholarship_subtype_list or [],
             status=application.status,
             status_name=application.status_name,
-            review_stage=application.review_stage.value if hasattr(application.review_stage, 'value') else application.review_stage,
+            review_stage=_serialize_enum(application.review_stage),
             is_renewal=application.is_renewal,
             academic_year=application.academic_year,
             semester=self._convert_semester_to_string(application.semester),
@@ -950,7 +958,7 @@ class ApplicationService:
             "sub_type_labels": sub_type_labels,
             "status": application.status,
             "status_name": application.status_name,
-            "review_stage": application.review_stage.value if hasattr(application.review_stage, 'value') else application.review_stage,
+            "review_stage": _serialize_enum(application.review_stage),
             "is_renewal": application.is_renewal,
             "academic_year": application.academic_year,
             "semester": self._convert_semester_to_string(application.semester),
