@@ -77,9 +77,15 @@ export function validateAdvisorInfo(data: AdvisorInfo): ValidationResult {
 export function validateBankInfo(data: BankInfo): ValidationResult {
   const errors: string[] = [];
 
-  // Validate account number (optional, max 50 chars)
-  if (data.account_number && data.account_number.length > 50) {
-    errors.push("郵局帳號不能超過50個字符");
+  if (data.account_number) {
+    const digitsOnly = data.account_number.replace(/[\s-]/g, "");
+    if (!/^\d+$/.test(digitsOnly)) {
+      errors.push("郵局帳號僅能包含數字");
+    } else if (digitsOnly.length !== 14) {
+      errors.push(
+        "郵局帳號必須為 14 碼（目前輸入 " + digitsOnly.length + " 碼）"
+      );
+    }
   }
 
   return { isValid: errors.length === 0, errors };

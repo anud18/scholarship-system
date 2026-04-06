@@ -24,7 +24,10 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FileUpload } from "@/components/file-upload";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
-import { buildSecurePreviewUrl, getAuthToken } from "@/lib/utils/url-validation";
+import {
+  buildSecurePreviewUrl,
+  getAuthToken,
+} from "@/lib/utils/url-validation";
 import {
   Loader2,
   AlertCircle,
@@ -117,10 +120,12 @@ export function DynamicApplicationForm({
 
         // Auto-populate prefilled values for fixed fields
         const prefillData: Record<string, any> = {};
-        response.data.fields.forEach((field) => {
-          if (field.prefill_value !== undefined &&
-              field.prefill_value !== null &&
-              field.prefill_value !== "") {
+        response.data.fields.forEach(field => {
+          if (
+            field.prefill_value !== undefined &&
+            field.prefill_value !== null &&
+            field.prefill_value !== ""
+          ) {
             prefillData[field.field_name] = field.prefill_value;
           }
         });
@@ -299,11 +304,6 @@ export function DynamicApplicationForm({
               {field.is_required && (
                 <span className="text-red-500 ml-1">*</span>
               )}
-              {isFixedField && (
-                <Badge variant="outline" className="ml-2 text-xs">
-                  {locale === "zh" ? "固定欄位" : "Fixed Field"}
-                </Badge>
-              )}
             </Label>
             <Input
               id={field.field_name}
@@ -317,13 +317,6 @@ export function DynamicApplicationForm({
               required={field.is_required}
               className={`w-full ${isFixedField ? "bg-blue-50 border-blue-200" : ""}`}
             />
-            {isFixedField && fieldValue && (
-              <p className="text-sm text-blue-600">
-                {locale === "zh"
-                  ? "此欄位已從您的個人檔案自動填入，您可以修改內容"
-                  : "This field has been auto-filled from your profile and can be modified"}
-              </p>
-            )}
             {helpText && (
               <p className="text-sm text-muted-foreground">{helpText}</p>
             )}
@@ -337,11 +330,6 @@ export function DynamicApplicationForm({
               {label}
               {field.is_required && (
                 <span className="text-red-500 ml-1">*</span>
-              )}
-              {isFixedField && (
-                <Badge variant="outline" className="ml-2 text-xs">
-                  {locale === "zh" ? "固定欄位" : "Fixed Field"}
-                </Badge>
               )}
             </Label>
             <Input
@@ -361,13 +349,6 @@ export function DynamicApplicationForm({
               required={field.is_required}
               className={`w-full ${isFixedField ? "bg-blue-50 border-blue-200" : ""}`}
             />
-            {isFixedField && fieldValue && (
-              <p className="text-sm text-blue-600">
-                {locale === "zh"
-                  ? "此欄位已從您的個人檔案自動填入，您可以修改內容"
-                  : "This field has been auto-filled from your profile and can be modified"}
-              </p>
-            )}
             {helpText && (
               <p className="text-sm text-muted-foreground">{helpText}</p>
             )}
@@ -382,11 +363,6 @@ export function DynamicApplicationForm({
               {field.is_required && (
                 <span className="text-red-500 ml-1">*</span>
               )}
-              {isFixedField && (
-                <Badge variant="outline" className="ml-2 text-xs">
-                  {locale === "zh" ? "固定欄位" : "Fixed Field"}
-                </Badge>
-              )}
             </Label>
             <Input
               id={field.field_name}
@@ -398,13 +374,6 @@ export function DynamicApplicationForm({
               required={field.is_required}
               className={`w-full ${isFixedField ? "bg-blue-50 border-blue-200" : ""}`}
             />
-            {isFixedField && fieldValue && (
-              <p className="text-sm text-blue-600">
-                {locale === "zh"
-                  ? "此欄位已從您的個人檔案自動填入，您可以修改內容"
-                  : "This field has been auto-filled from your profile and can be modified"}
-              </p>
-            )}
             {helpText && (
               <p className="text-sm text-muted-foreground">{helpText}</p>
             )}
@@ -419,11 +388,6 @@ export function DynamicApplicationForm({
               {field.is_required && (
                 <span className="text-red-500 ml-1">*</span>
               )}
-              {isFixedField && (
-                <Badge variant="outline" className="ml-2 text-xs">
-                  {locale === "zh" ? "固定欄位" : "Fixed Field"}
-                </Badge>
-              )}
             </Label>
             <Textarea
               id={field.field_name}
@@ -437,13 +401,6 @@ export function DynamicApplicationForm({
               className={`w-full min-h-[120px] ${isFixedField ? "bg-blue-50 border-blue-200" : ""}`}
               rows={6}
             />
-            {isFixedField && fieldValue && (
-              <p className="text-sm text-blue-600">
-                {locale === "zh"
-                  ? "此欄位已從您的個人檔案自動填入，您可以修改內容"
-                  : "This field has been auto-filled from your profile and can be modified"}
-              </p>
-            )}
             {field.max_length && (
               <p className="text-sm text-muted-foreground text-right">
                 {fieldValue?.length || 0} / {field.max_length}
@@ -581,11 +538,6 @@ export function DynamicApplicationForm({
             {document.is_required && (
               <span className="text-red-500 ml-1">*</span>
             )}
-            {isFixedDocument && (
-              <Badge variant="outline" className="ml-2 text-xs">
-                {locale === "zh" ? "固定文件" : "Fixed Document"}
-              </Badge>
-            )}
           </Label>
           {files.length > 0 && (
             <Badge variant="secondary" className="text-xs">
@@ -680,31 +632,50 @@ export function DynamicApplicationForm({
           {document.example_file_url && (
             <button
               type="button"
-              onClick={(e) => {
+              onClick={e => {
                 e.preventDefault();
                 try {
                   // SECURITY: Use validated URL builder to prevent open redirect
-                  const safeUrl = buildSecurePreviewUrl('/api/v1/preview-document-example', {
-                    documentId: document.id,
-                    token: getAuthToken()
-                  });
+                  const safeUrl = buildSecurePreviewUrl(
+                    "/api/v1/preview-document-example",
+                    {
+                      documentId: document.id,
+                      token: getAuthToken(),
+                    }
+                  );
 
                   // Create and trigger download/preview
-                  const link = window.document.createElement('a');
+                  const link = window.document.createElement("a");
                   link.href = safeUrl;
-                  link.target = '_blank';
-                  link.rel = 'noopener noreferrer';
+                  link.target = "_blank";
+                  link.rel = "noopener noreferrer";
                   link.click();
                 } catch (error) {
-                  console.error('Failed to build preview URL:', error);
-                  alert('無法開啟預覽，請稍後再試');
+                  console.error("Failed to build preview URL:", error);
+                  alert("無法開啟預覽，請稍後再試");
                 }
               }}
               className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm font-medium mt-2"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                />
               </svg>
               {locale === "zh" ? "查看範例文件" : "View Example"}
             </button>
@@ -752,11 +723,11 @@ export function DynamicApplicationForm({
   }
 
   const activeFields = formConfig.fields
-    .filter(field => field.is_active)
+    .filter(field => field.is_active && !field.is_fixed)
     .sort((a, b) => a.display_order - b.display_order);
 
   const activeDocuments = formConfig.documents
-    .filter(doc => doc.is_active)
+    .filter(doc => doc.is_active && !doc.is_fixed)
     .sort((a, b) => a.display_order - b.display_order);
 
   return (
