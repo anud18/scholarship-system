@@ -1150,8 +1150,40 @@ class ApplicationService:
         application.submitted_at = datetime.now(timezone.utc)
         application.updated_at = datetime.now(timezone.utc)
 
+        # 自動分配指導教授：根據 UserProfile 的 advisor_nycu_id 查找教授帳號
+        if not application.professor_id:
+            user_profile_stmt = select(UserProfile).where(UserProfile.user_id == application.user_id)
+            user_profile_result = await self.db.execute(user_profile_stmt)
+            advisor_profile = user_profile_result.scalar_one_or_none()
+
+            if advisor_profile and advisor_profile.advisor_nycu_id:
+                professor_stmt = select(User).where(
+                    User.nycu_id == advisor_profile.advisor_nycu_id,
+                    User.role == UserRole.professor,
+                )
+                professor_result = await self.db.execute(professor_stmt)
+                professor = professor_result.scalar_one_or_none()
+                if professor:
+                    application.professor_id = professor.id
+                    logger.info(
+                        f"Auto-assigned professor {professor.id} ({professor.name}) "
+                        f"to application {application.app_id}"
+                    )
+
         await self.db.commit()
-        await self.db.refresh(application, ["files", "reviews", "scholarship", "student"])
+
+        # Re-query with eager loading to avoid MissingGreenlet on expired attributes
+        stmt = (
+            select(Application)
+            .options(
+                selectinload(Application.files),
+                selectinload(Application.reviews),
+                selectinload(Application.scholarship),
+            )
+            .where(Application.id == application.id)
+        )
+        result = await self.db.execute(stmt)
+        application = result.scalar_one()
 
         # 發送自動化通知
         try:
@@ -2343,10 +2375,12 @@ class ApplicationService:
                 return False
 
             # Check application status - should be submitted or under review
-            if application.status not in [
-                ApplicationStatus.submitted.value,
-                ApplicationStatus.under_review.value,
-            ]:
+            # Compare with both enum and string value for robustness
+            valid_statuses = [
+                ApplicationStatus.submitted, ApplicationStatus.submitted.value,
+                ApplicationStatus.under_review, ApplicationStatus.under_review.value,
+            ]
+            if application.status not in valid_statuses:
                 return False
 
             now = datetime.now(timezone.utc)

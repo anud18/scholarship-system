@@ -110,7 +110,8 @@ async def get_professor_review(
                     sub_type_code=item.sub_type_code,
                     recommendation=item.recommendation,
                     comments=item.comments,
-                    created_at=item.created_at,
+
+
                 )
                 for item in review.items
             ],
@@ -187,7 +188,8 @@ async def submit_professor_review(
                     sub_type_code=item.sub_type_code,
                     recommendation=item.recommendation,
                     comments=item.comments,
-                    created_at=item.created_at,
+
+
                 )
                 for item in review.items
             ],
@@ -266,7 +268,8 @@ async def update_professor_review(
                     sub_type_code=item.sub_type_code,
                     recommendation=item.recommendation,
                     comments=item.comments,
-                    created_at=item.created_at,
+
+
                 )
                 for item in review.items
             ],
