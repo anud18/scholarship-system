@@ -2,18 +2,10 @@
 Application service for scholarship application management
 """
 
-import enum
 import logging
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
-
-
-def _serialize_enum(value) -> Optional[str]:
-    """Serialize an enum instance to its string value, or pass through strings/None."""
-    if value is None:
-        return None
-    return value.value if isinstance(value, enum.Enum) else value
 
 from sqlalchemy import and_, desc
 from sqlalchemy import func as sa_func
@@ -22,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFoundError, ValidationError
+from app.core.schema_validation import serialize_value
 from app.models.application import Application, ApplicationStatus, ReviewStatus
 from app.models.enums import Semester
 from app.models.review import ApplicationReview
@@ -644,7 +637,7 @@ class ApplicationService:
             scholarship_subtype_list=application.scholarship_subtype_list or [],
             status=application.status,
             status_name=application.status_name,
-            review_stage=_serialize_enum(application.review_stage),
+            review_stage=serialize_value(application.review_stage),
             is_renewal=application.is_renewal,
             academic_year=application.academic_year,
             semester=self._convert_semester_to_string(application.semester),
@@ -958,7 +951,7 @@ class ApplicationService:
             "sub_type_labels": sub_type_labels,
             "status": application.status,
             "status_name": application.status_name,
-            "review_stage": _serialize_enum(application.review_stage),
+            "review_stage": serialize_value(application.review_stage),
             "is_renewal": application.is_renewal,
             "academic_year": application.academic_year,
             "semester": self._convert_semester_to_string(application.semester),
@@ -1181,11 +1174,13 @@ class ApplicationService:
         application.submitted_at = datetime.now(timezone.utc)
         application.updated_at = datetime.now(timezone.utc)
 
+        # Load user profile once (reused for auto-assign professor and email notification)
+        user_profile_stmt = select(UserProfile).where(UserProfile.user_id == application.user_id)
+        user_profile_result = await self.db.execute(user_profile_stmt)
+        advisor_profile = user_profile_result.scalar_one_or_none()
+
         # 自動分配指導教授：根據 UserProfile 的 advisor_nycu_id 查找教授帳號
-        if not application.professor_id:
-            user_profile_stmt = select(UserProfile).where(UserProfile.user_id == application.user_id)
-            user_profile_result = await self.db.execute(user_profile_stmt)
-            advisor_profile = user_profile_result.scalar_one_or_none()
+        if not application.professor_id and advisor_profile:
 
             if advisor_profile and advisor_profile.advisor_nycu_id:
                 professor_stmt = select(User).where(
@@ -1226,15 +1221,9 @@ class ApplicationService:
             # Extract professor information from user profile
             professor_name = ""
             professor_email = ""
-            if application.student:
-                # Access user profile for advisor information
-                user_profile_stmt = select(UserProfile).where(UserProfile.user_id == application.user_id)
-                user_profile_result = await self.db.execute(user_profile_stmt)
-                user_profile = user_profile_result.scalar_one_or_none()
-
-                if user_profile:
-                    professor_name = user_profile.advisor_name or ""
-                    professor_email = user_profile.advisor_email or ""
+            if application.student and advisor_profile:
+                professor_name = advisor_profile.advisor_name or ""
+                professor_email = advisor_profile.advisor_email or ""
 
             # Prepare application data for email automation
             application_data = {
@@ -2406,10 +2395,9 @@ class ApplicationService:
                 return False
 
             # Check application status - should be submitted or under review
-            # Compare with both enum and string value for robustness
             valid_statuses = [
-                ApplicationStatus.submitted, ApplicationStatus.submitted.value,
-                ApplicationStatus.under_review, ApplicationStatus.under_review.value,
+                ApplicationStatus.submitted.value,
+                ApplicationStatus.under_review.value,
             ]
             if application.status not in valid_statuses:
                 return False
