@@ -5,6 +5,7 @@ Generates ZIP files containing student application materials
 organized by department, with auto-generated summary PDFs.
 """
 
+import asyncio
 import io
 import logging
 import re
@@ -231,9 +232,9 @@ class ExportPackageService:
                 filename = f"{label}{ext}"
 
             try:
-                response = self.minio.get_file_stream(af.object_name)
+                response = await asyncio.to_thread(self.minio.get_file_stream, af.object_name)
                 try:
-                    file_bytes = response.read()
+                    file_bytes = await asyncio.to_thread(response.read)
                 finally:
                     response.close()
                     response.release_conn()

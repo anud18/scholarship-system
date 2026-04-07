@@ -20,7 +20,7 @@ from app.models.user import User, UserRole
 from app.services.export_package_service import ExportPackageService
 from app.services.minio_service import MinIOService
 
-from ._helpers import _check_academic_year_permission, _check_scholarship_permission
+from ._helpers import _check_academic_year_permission, _check_scholarship_permission, normalize_semester_value
 
 logger = logging.getLogger(__name__)
 
@@ -37,11 +37,8 @@ async def export_application_package(
 ):
     """Download a ZIP package of all application materials for a scholarship period."""
 
-    # Sanitize semester
-    if semester:
-        semester = semester.replace("\x00", "").strip()
-        if semester not in ("first", "second", "annual"):
-            semester = None
+    # Normalize semester using shared helper (handles "yearly" → None, enum values, etc.)
+    semester = normalize_semester_value(semester)
 
     # Permission checks
     if not await _check_scholarship_permission(current_user, scholarship_type_id, db):
