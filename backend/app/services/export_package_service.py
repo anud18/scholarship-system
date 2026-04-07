@@ -14,8 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import weasyprint
-from jinja2 import Environment, FileSystemLoader
+from fpdf import FPDF
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -50,15 +49,13 @@ def _sanitize_filename(name: str) -> str:
     return re.sub(r'[/\\:*?"<>|]', "_", name).strip()
 
 
+CJK_FONT_PATH = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
+
+
 class ExportPackageService:
     def __init__(self, db: AsyncSession, minio_service: MinIOService):
         self.db = db
         self.minio = minio_service
-        template_dir = Path(__file__).resolve().parent.parent / "templates"
-        self._jinja_env = Environment(
-            loader=FileSystemLoader(str(template_dir)),
-            autoescape=True,
-        )
 
     async def generate_export_zip(
         self,
@@ -255,49 +252,115 @@ class ExportPackageService:
         academic_year: int,
         semester: Optional[str],
     ) -> bytes:
-        """Generate a student summary PDF from the HTML template."""
+        """Generate a student summary PDF using fpdf2."""
         student = app.student_data or {}
         submitted = app.submitted_form_data or {}
 
-        # Degree label
         degree_raw = str(student.get("trm_degree", ""))
         degree_label = DEGREE_LABELS.get(degree_raw, degree_raw or "—")
-
-        # Semester label
         semester_map = {"first": "第一學期", "second": "第二學期"}
         semester_label = semester_map.get(semester, "全學年") if semester else "全學年"
+        export_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-        # Form fields
-        form_fields = []
+        pdf = FPDF()
+        pdf.set_auto_page_break(auto=True, margin=20)
+        pdf.add_font("NotoTC", "", CJK_FONT_PATH)
+        pdf.add_page()
+
+        # --- Header ---
+        pdf.set_font("NotoTC", size=9)
+        pdf.set_text_color(102, 102, 102)
+        pdf.cell(0, 5, f"{scholarship_name} {academic_year}學年度 {semester_label}", align="C", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(3)
+
+        # --- Title ---
+        pdf.set_font("NotoTC", size=16)
+        pdf.set_text_color(0, 0, 0)
+        pdf.cell(0, 12, "學生資料彙整", align="C", new_x="LMARGIN", new_y="NEXT")
+        pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+        pdf.ln(6)
+
+        # --- Section 1: Basic Info ---
+        self._pdf_section_header(pdf, "一、基本資料")
+        basic_rows = [
+            ("學號", student.get("std_stdcode", "—")),
+            ("姓名", student.get("std_cname", "—")),
+            ("英文姓名", student.get("std_ename", "—")),
+            ("學院", student.get("trm_academyname", "—")),
+            ("系所", student.get("trm_depname", "—")),
+            ("學位", degree_label),
+            ("入學年度", str(student.get("std_enrollyear", "—"))),
+            ("Email", student.get("com_email", "—")),
+            ("手機", student.get("com_cellphone", "—")),
+        ]
+        self._pdf_table(pdf, basic_rows)
+
+        # --- Section 2: Academic Performance ---
+        self._pdf_section_header(pdf, "二、學業表現")
+        placings = str(student.get("trm_placings", "—"))
+        if student.get("trm_placingsrate"):
+            placings += f" ({student['trm_placingsrate']}%)"
+        dep_placing = str(student.get("trm_depplacing", "—"))
+        if student.get("trm_depplacingrate"):
+            dep_placing += f" ({student['trm_depplacingrate']}%)"
+        academic_rows = [
+            ("學年 / 學期", f"{student.get('trm_year', '—')} / {student.get('trm_term', '—')}"),
+            ("GPA", str(student.get("trm_ascore_gpa", "—"))),
+            ("班排名", placings),
+            ("系排名", dep_placing),
+            ("修業學期數", str(student.get("trm_termcount", "—"))),
+        ]
+        self._pdf_table(pdf, academic_rows)
+
+        # --- Section 3: Form Fields ---
         fields_data = submitted.get("fields", {})
-        for field_id in sorted(fields_data.keys()):
-            field = fields_data[field_id]
-            form_fields.append({
-                "label": field.get("label", field.get("field_id", field_id)),
-                "value": field.get("value", ""),
-            })
+        if fields_data:
+            self._pdf_section_header(pdf, "三、表單填寫資料")
+            form_rows = []
+            for field_id in sorted(fields_data.keys()):
+                field = fields_data[field_id]
+                label = field.get("label", field.get("field_id", field_id))
+                value = str(field.get("value", "—") or "—")
+                form_rows.append((label, value))
+            self._pdf_table(pdf, form_rows)
 
-        # Document list
-        documents = []
-        for doc in submitted.get("documents", []):
-            documents.append({
-                "name": doc.get("document_type") or doc.get("document_id", "未知文件"),
-                "upload_time": doc.get("upload_time", ""),
-            })
+        # --- Section 4: Document List ---
+        doc_list = submitted.get("documents", [])
+        if doc_list:
+            self._pdf_section_header(pdf, "四、上傳文件清單")
+            pdf.set_font("NotoTC", size=10)
+            for doc in doc_list:
+                name = doc.get("document_type") or doc.get("document_id", "未知文件")
+                upload_time = doc.get("upload_time", "—")
+                pdf.cell(0, 7, f"• {name}（上傳時間：{upload_time}）", new_x="LMARGIN", new_y="NEXT")
 
-        # Render HTML
-        template = self._jinja_env.get_template("student_summary.html")
-        html_content = template.render(
-            student=student,
-            degree_label=degree_label,
-            scholarship_name=scholarship_name,
-            academic_year=academic_year,
-            semester_label=semester_label,
-            export_time=datetime.now().strftime("%Y-%m-%d %H:%M"),
-            form_fields=form_fields,
-            documents=documents,
-        )
+        # --- Footer ---
+        pdf.ln(10)
+        pdf.set_font("NotoTC", size=8)
+        pdf.set_text_color(153, 153, 153)
+        pdf.cell(0, 5, f"匯出時間：{export_time}", align="C", new_x="LMARGIN", new_y="NEXT")
 
-        # Generate PDF
-        pdf = weasyprint.HTML(string=html_content).write_pdf()
-        return pdf
+        return bytes(pdf.output())
+
+    @staticmethod
+    def _pdf_section_header(pdf: FPDF, title: str) -> None:
+        """Draw a section header with background."""
+        pdf.set_font("NotoTC", size=12)
+        pdf.set_fill_color(240, 240, 240)
+        pdf.set_text_color(0, 0, 0)
+        pdf.cell(0, 9, f"  {title}", fill=True, new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(2)
+
+    @staticmethod
+    def _pdf_table(pdf: FPDF, rows: List[Tuple[str, str]]) -> None:
+        """Draw a two-column label-value table."""
+        pdf.set_font("NotoTC", size=10)
+        col_w_label = 50
+        col_w_value = pdf.w - pdf.l_margin - pdf.r_margin - col_w_label
+        for label, value in rows:
+            pdf.set_fill_color(245, 245, 245)
+            pdf.set_text_color(0, 0, 0)
+            pdf.cell(col_w_label, 8, f" {label}", border=1, fill=True)
+            pdf.set_fill_color(255, 255, 255)
+            pdf.cell(col_w_value, 8, f" {str(value)}", border=1, new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(3)

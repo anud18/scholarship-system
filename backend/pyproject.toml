@@ -166,7 +166,7 @@ dependencies = [
     "openpyxl==3.1.2",
 
     # PDF generation
-    "weasyprint==63.1",
+    "fpdf2==2.8.7",
 
     # Logging and monitoring
     "structlog==24.4.0",
