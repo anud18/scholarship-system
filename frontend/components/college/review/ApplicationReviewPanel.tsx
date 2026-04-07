@@ -472,10 +472,17 @@ export function ApplicationReviewPanel({
         return;
       }
 
+      // Normalize semester: "yearly" or other non-standard values → undefined
+      const normalizedSemester =
+        selectedSemester &&
+        ["first", "second", "annual"].includes(selectedSemester)
+          ? selectedSemester
+          : undefined;
+
       const blob = await apiClient.college.exportPackage({
         scholarship_type_id: activeConfig.id,
         academic_year: selectedAcademicYear,
-        semester: selectedSemester,
+        semester: normalizedSemester,
         token,
       });
 
