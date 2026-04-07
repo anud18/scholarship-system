@@ -9,11 +9,11 @@ import asyncio
 import io
 import logging
 import re
+from xml.sax.saxutils import escape as xml_escape
 import zipfile
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -26,8 +26,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.application import Application, ApplicationFile
-from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
+from app.models.application import Application
+from app.models.scholarship import ScholarshipType
 from app.services.minio_service import MinIOService
 
 logger = logging.getLogger(__name__)
@@ -212,11 +212,13 @@ class ExportPackageService:
             )
 
         # Add uploaded files from ApplicationFile records
+        type_totals = Counter(af.file_type or "other" for af in app.files)
         file_type_counter: Dict[str, int] = defaultdict(int)
         for af in app.files:
-            file_type_counter[af.file_type or "other"] += 1
-            count = file_type_counter[af.file_type or "other"]
-            label = FILE_TYPE_LABELS.get(af.file_type or "other", "其他文件")
+            ft = af.file_type or "other"
+            file_type_counter[ft] += 1
+            count = file_type_counter[ft]
+            label = FILE_TYPE_LABELS.get(ft, "其他文件")
 
             # Determine file extension from original filename or mime_type
             ext = ""
@@ -227,8 +229,7 @@ class ExportPackageService:
                 ext = ext_map.get(af.mime_type, "")
 
             # Add sequence number only if multiple files of same type
-            total_of_type = sum(1 for f in app.files if (f.file_type or "other") == (af.file_type or "other"))
-            if total_of_type > 1:
+            if type_totals[ft] > 1:
                 filename = f"{label}_{count}{ext}"
             else:
                 filename = f"{label}{ext}"
@@ -369,7 +370,7 @@ class ExportPackageService:
     @staticmethod
     def _build_table(rows: List[Tuple[str, str]], style: ParagraphStyle, table_style: TableStyle) -> Table:
         """Build a two-column label-value table."""
-        data = [[Paragraph(label, style), Paragraph(str(value), style)] for label, value in rows]
+        data = [[Paragraph(xml_escape(label), style), Paragraph(xml_escape(str(value)), style)] for label, value in rows]
         t = Table(data, colWidths=[50 * mm, 120 * mm])
         t.setStyle(table_style)
         return t

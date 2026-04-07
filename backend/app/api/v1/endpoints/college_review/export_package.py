@@ -5,8 +5,6 @@ Generates and streams a ZIP file containing application materials
 organized by department for college review.
 """
 
-import logging
-from io import BytesIO
 from typing import Optional
 from urllib.parse import quote
 
@@ -21,8 +19,6 @@ from app.services.export_package_service import ExportPackageService
 from app.services.minio_service import MinIOService
 
 from ._helpers import _check_academic_year_permission, _check_scholarship_permission, normalize_semester_value
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
