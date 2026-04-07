@@ -11,14 +11,16 @@
  * Now using openapi-fetch for full type safety from backend OpenAPI schema
  */
 
-import { typedClient } from '../typed-client';
-import { toApiResponse } from '../compat';
-import type { ApiResponse } from '../types';
-import type { components as SchemaComponents } from '../generated/schema';
+import { typedClient } from "../typed-client";
+import { toApiResponse } from "../compat";
+import type { ApiResponse } from "../types";
+import type { components as SchemaComponents } from "../generated/schema";
 
 type CreateRankingRequest =
-  SchemaComponents['schemas']['Body_create_ranking_api_v1_college_review_rankings_post'];
-type CreateRankingInput = Omit<CreateRankingRequest, 'force_new'> & { force_new?: boolean };
+  SchemaComponents["schemas"]["Body_create_ranking_api_v1_college_review_rankings_post"];
+type CreateRankingInput = Omit<CreateRankingRequest, "force_new"> & {
+  force_new?: boolean;
+};
 
 export function createCollegeApi() {
   return {
@@ -39,29 +41,32 @@ export function createCollegeApi() {
       if (queryString) {
         const params = new URLSearchParams(queryString);
 
-        if (params.has('academic_year')) {
-          const yearStr = params.get('academic_year');
+        if (params.has("academic_year")) {
+          const yearStr = params.get("academic_year");
           if (yearStr) {
             queryParams.academic_year = parseInt(yearStr);
           }
         }
-        if (params.has('semester')) {
-          const semesterVal = params.get('semester');
+        if (params.has("semester")) {
+          const semesterVal = params.get("semester");
           if (semesterVal) {
             queryParams.semester = semesterVal;
           }
         }
-        if (params.has('scholarship_type')) {
-          const typeVal = params.get('scholarship_type');
+        if (params.has("scholarship_type")) {
+          const typeVal = params.get("scholarship_type");
           if (typeVal) {
             queryParams.scholarship_type = typeVal;
           }
         }
       }
 
-      const response = await typedClient.raw.GET('/api/v1/college-review/applications', {
-        params: { query: queryParams }
-      });
+      const response = await typedClient.raw.GET(
+        "/api/v1/college-review/applications",
+        {
+          params: { query: queryParams },
+        }
+      );
       return toApiResponse<any[]>(response);
     },
 
@@ -73,14 +78,17 @@ export function createCollegeApi() {
       academicYear?: number,
       semester?: string
     ): Promise<ApiResponse<any[]>> => {
-      const response = await typedClient.raw.GET('/api/v1/college-review/rankings', {
-        params: {
-          query: {
-            academic_year: academicYear,
-            semester,
+      const response = await typedClient.raw.GET(
+        "/api/v1/college-review/rankings",
+        {
+          params: {
+            query: {
+              academic_year: academicYear,
+              semester,
+            },
           },
-        },
-      });
+        }
+      );
       return toApiResponse<any[]>(response);
     },
 
@@ -89,9 +97,12 @@ export function createCollegeApi() {
      * Type-safe: Path parameter validated against OpenAPI
      */
     getRanking: async (rankingId: number): Promise<ApiResponse<any>> => {
-      const response = await typedClient.raw.GET('/api/v1/college-review/rankings/{ranking_id}', {
-        params: { path: { ranking_id: rankingId } },
-      });
+      const response = await typedClient.raw.GET(
+        "/api/v1/college-review/rankings/{ranking_id}",
+        {
+          params: { path: { ranking_id: rankingId } },
+        }
+      );
       return toApiResponse<any>(response);
     },
 
@@ -99,14 +110,19 @@ export function createCollegeApi() {
      * Create new ranking
      * Type-safe: Request body validated against OpenAPI
      */
-    createRanking: async (data: CreateRankingInput): Promise<ApiResponse<any>> => {
+    createRanking: async (
+      data: CreateRankingInput
+    ): Promise<ApiResponse<any>> => {
       const payload: CreateRankingRequest = {
         ...data,
         force_new: data.force_new ?? false,
       };
-      const response = await typedClient.raw.POST('/api/v1/college-review/rankings', {
-        body: payload,
-      });
+      const response = await typedClient.raw.POST(
+        "/api/v1/college-review/rankings",
+        {
+          body: payload,
+        }
+      );
       return toApiResponse<any>(response);
     },
 
@@ -118,10 +134,13 @@ export function createCollegeApi() {
       rankingId: number,
       data: { ranking_name: string }
     ): Promise<ApiResponse<any>> => {
-      const response = await typedClient.raw.PUT('/api/v1/college-review/rankings/{ranking_id}' as any, {
-        params: { path: { ranking_id: rankingId } },
-        body: data,
-      });
+      const response = await typedClient.raw.PUT(
+        "/api/v1/college-review/rankings/{ranking_id}" as any,
+        {
+          params: { path: { ranking_id: rankingId } },
+          body: data,
+        }
+      );
       return toApiResponse<any>(response);
     },
 
@@ -133,10 +152,13 @@ export function createCollegeApi() {
       rankingId: number,
       newOrder: Array<{ item_id: number; position: number }>
     ): Promise<ApiResponse<any>> => {
-      const response = await typedClient.raw.PUT('/api/v1/college-review/rankings/{ranking_id}/order', {
-        params: { path: { ranking_id: rankingId } },
-        body: newOrder,
-      });
+      const response = await typedClient.raw.PUT(
+        "/api/v1/college-review/rankings/{ranking_id}/order",
+        {
+          params: { path: { ranking_id: rankingId } },
+          body: newOrder,
+        }
+      );
       return toApiResponse<any>(response);
     },
 
@@ -145,9 +167,12 @@ export function createCollegeApi() {
      * Type-safe: Path parameter validated against OpenAPI
      */
     finalizeRanking: async (rankingId: number): Promise<ApiResponse<any>> => {
-      const response = await typedClient.raw.POST('/api/v1/college-review/rankings/{ranking_id}/finalize', {
-        params: { path: { ranking_id: rankingId } },
-      });
+      const response = await typedClient.raw.POST(
+        "/api/v1/college-review/rankings/{ranking_id}/finalize",
+        {
+          params: { path: { ranking_id: rankingId } },
+        }
+      );
       return toApiResponse<any>(response);
     },
 
@@ -156,9 +181,12 @@ export function createCollegeApi() {
      * Type-safe: Path parameter validated against OpenAPI
      */
     unfinalizeRanking: async (rankingId: number): Promise<ApiResponse<any>> => {
-      const response = await typedClient.raw.POST('/api/v1/college-review/rankings/{ranking_id}/unfinalize' as any, {
-        params: { path: { ranking_id: rankingId } },
-      });
+      const response = await typedClient.raw.POST(
+        "/api/v1/college-review/rankings/{ranking_id}/unfinalize" as any,
+        {
+          params: { path: { ranking_id: rankingId } },
+        }
+      );
       return toApiResponse<any>(response);
     },
 
@@ -174,10 +202,13 @@ export function createCollegeApi() {
         rank_position: number;
       }>
     ): Promise<ApiResponse<any>> => {
-      const response = await typedClient.raw.POST('/api/v1/college-review/rankings/{ranking_id}/import-excel' as any, {
-        params: { path: { ranking_id: rankingId } },
-        body: importData,
-      });
+      const response = await typedClient.raw.POST(
+        "/api/v1/college-review/rankings/{ranking_id}/import-excel" as any,
+        {
+          params: { path: { ranking_id: rankingId } },
+          body: importData,
+        }
+      );
       return toApiResponse<any>(response);
     },
 
@@ -185,10 +216,15 @@ export function createCollegeApi() {
      * Get distribution details for a ranking
      * Type-safe: Path parameter validated against OpenAPI
      */
-    getDistributionDetails: async (rankingId: number): Promise<ApiResponse<any>> => {
-      const response = await typedClient.raw.GET('/api/v1/college-review/rankings/{ranking_id}/distribution-details' as any, {
-        params: { path: { ranking_id: rankingId } },
-      });
+    getDistributionDetails: async (
+      rankingId: number
+    ): Promise<ApiResponse<any>> => {
+      const response = await typedClient.raw.GET(
+        "/api/v1/college-review/rankings/{ranking_id}/distribution-details" as any,
+        {
+          params: { path: { ranking_id: rankingId } },
+        }
+      );
       return toApiResponse<any>(response);
     },
 
@@ -197,10 +233,15 @@ export function createCollegeApi() {
      * 查詢排名的造冊狀態和進展
      * Type-safe: Path parameter validated against OpenAPI
      */
-    getRankingRosterStatus: async (rankingId: number): Promise<ApiResponse<any>> => {
-      const response = await typedClient.raw.GET('/api/v1/college-review/rankings/{ranking_id}/roster-status' as any, {
-        params: { path: { ranking_id: rankingId } },
-      });
+    getRankingRosterStatus: async (
+      rankingId: number
+    ): Promise<ApiResponse<any>> => {
+      const response = await typedClient.raw.GET(
+        "/api/v1/college-review/rankings/{ranking_id}/roster-status" as any,
+        {
+          params: { path: { ranking_id: rankingId } },
+        }
+      );
       return toApiResponse<any>(response);
     },
 
@@ -213,15 +254,18 @@ export function createCollegeApi() {
       academicYear: number,
       semester?: string
     ): Promise<ApiResponse<any>> => {
-      const response = await typedClient.raw.GET('/api/v1/college-review/quota-status', {
-        params: {
-          query: {
-            scholarship_type_id: scholarshipTypeId,
-            academic_year: academicYear,
-            semester,
+      const response = await typedClient.raw.GET(
+        "/api/v1/college-review/quota-status",
+        {
+          params: {
+            query: {
+              scholarship_type_id: scholarshipTypeId,
+              academic_year: academicYear,
+              semester,
+            },
           },
-        },
-      });
+        }
+      );
       return toApiResponse<any>(response);
     },
 
@@ -247,7 +291,10 @@ export function createCollegeApi() {
         semesters: string[];
       }>
     > => {
-      const response = await typedClient.raw.GET('/api/v1/college-review/available-combinations', {});
+      const response = await typedClient.raw.GET(
+        "/api/v1/college-review/available-combinations",
+        {}
+      );
       return toApiResponse<{
         scholarship_types: Array<{
           id: number;
@@ -265,9 +312,12 @@ export function createCollegeApi() {
      * Type-safe: Path parameter validated against OpenAPI
      */
     deleteRanking: async (rankingId: number): Promise<ApiResponse<any>> => {
-      const response = await typedClient.raw.DELETE('/api/v1/college-review/rankings/{ranking_id}' as any, {
-        params: { path: { ranking_id: rankingId } },
-      });
+      const response = await typedClient.raw.DELETE(
+        "/api/v1/college-review/rankings/{ranking_id}" as any,
+        {
+          params: { path: { ranking_id: rankingId } },
+        }
+      );
       return toApiResponse<any>(response);
     },
 
@@ -278,7 +328,7 @@ export function createCollegeApi() {
     reviewApplication: async (
       applicationId: number,
       reviewData: {
-        recommendation: 'approve' | 'reject' | 'conditional';
+        recommendation: "approve" | "reject" | "conditional";
         review_comments?: string;
         academic_score?: number;
         professor_review_score?: number;
@@ -289,10 +339,13 @@ export function createCollegeApi() {
         needs_special_attention?: boolean;
       }
     ): Promise<ApiResponse<any>> => {
-      const response = await typedClient.raw.POST('/api/v1/college-review/applications/{application_id}/review' as any, {
-        params: { path: { application_id: applicationId } },
-        body: reviewData,
-      });
+      const response = await typedClient.raw.POST(
+        "/api/v1/college-review/applications/{application_id}/review" as any,
+        {
+          params: { path: { application_id: applicationId } },
+          body: reviewData,
+        }
+      );
       return toApiResponse<any>(response);
     },
 
@@ -306,7 +359,10 @@ export function createCollegeApi() {
         en: { [key: string]: string };
       }>
     > => {
-      const response = await typedClient.raw.GET('/api/v1/college-review/sub-type-translations' as any, {});
+      const response = await typedClient.raw.GET(
+        "/api/v1/college-review/sub-type-translations" as any,
+        {}
+      );
       return toApiResponse<{
         zh: { [key: string]: string };
         en: { [key: string]: string };
@@ -325,7 +381,10 @@ export function createCollegeApi() {
         scholarship_count: number;
       } | null>
     > => {
-      const response = await typedClient.raw.GET('/api/v1/college-review/managed-college' as any, {});
+      const response = await typedClient.raw.GET(
+        "/api/v1/college-review/managed-college" as any,
+        {}
+      );
       return toApiResponse<{
         code: string;
         name: string;
@@ -342,12 +401,15 @@ export function createCollegeApi() {
       studentId: string,
       academicYear?: number
     ): Promise<ApiResponse<any>> => {
-      const response = await typedClient.raw.GET('/api/v1/college-review/students/{student_id}/preview', {
-        params: {
-          path: { student_id: studentId },
-          query: { academic_year: academicYear },
-        },
-      });
+      const response = await typedClient.raw.GET(
+        "/api/v1/college-review/students/{student_id}/preview",
+        {
+          params: {
+            path: { student_id: studentId },
+            query: { academic_year: academicYear },
+          },
+        }
+      );
       return toApiResponse<any>(response);
     },
 
@@ -357,9 +419,12 @@ export function createCollegeApi() {
      * Type-safe: Path parameter validated against OpenAPI
      */
     getSubTypes: async (applicationId: number): Promise<ApiResponse<any[]>> => {
-      const response = await typedClient.raw.GET('/api/v1/reviews/applications/{application_id}/sub-types' as any, {
-        params: { path: { application_id: applicationId } },
-      });
+      const response = await typedClient.raw.GET(
+        "/api/v1/reviews/applications/{application_id}/sub-types" as any,
+        {
+          params: { path: { application_id: applicationId } },
+        }
+      );
       return toApiResponse<any[]>(response);
     },
 
@@ -369,9 +434,12 @@ export function createCollegeApi() {
      * Type-safe: Path parameter validated against OpenAPI
      */
     getReview: async (applicationId: number): Promise<ApiResponse<any>> => {
-      const response = await typedClient.raw.GET('/api/v1/reviews/applications/{application_id}/review' as any, {
-        params: { path: { application_id: applicationId } },
-      });
+      const response = await typedClient.raw.GET(
+        "/api/v1/reviews/applications/{application_id}/review" as any,
+        {
+          params: { path: { application_id: applicationId } },
+        }
+      );
       return toApiResponse<any>(response);
     },
 
@@ -385,16 +453,59 @@ export function createCollegeApi() {
       reviewData: {
         items: Array<{
           sub_type_code: string;
-          recommendation: 'approve' | 'reject';
+          recommendation: "approve" | "reject";
           comments?: string;
         }>;
       }
     ): Promise<ApiResponse<any>> => {
-      const response = await typedClient.raw.POST('/api/v1/reviews/applications/{application_id}/review' as any, {
-        params: { path: { application_id: applicationId } },
-        body: reviewData,
-      });
+      const response = await typedClient.raw.POST(
+        "/api/v1/reviews/applications/{application_id}/review" as any,
+        {
+          params: { path: { application_id: applicationId } },
+          body: reviewData,
+        }
+      );
       return toApiResponse<any>(response);
+    },
+
+    /**
+     * Download application materials export package as ZIP
+     */
+    exportPackage: async (params: {
+      scholarship_type_id: number;
+      academic_year: number;
+      semester?: string;
+      token: string;
+    }): Promise<{ blob: Blob; filename: string }> => {
+      const searchParams = new URLSearchParams();
+      searchParams.set(
+        "scholarship_type_id",
+        String(params.scholarship_type_id)
+      );
+      searchParams.set("academic_year", String(params.academic_year));
+      if (params.semester) {
+        searchParams.set("semester", params.semester);
+      }
+      searchParams.set("token", params.token);
+
+      const response = await fetch(
+        `/api/v1/export-package?${searchParams.toString()}`
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || errorData?.detail || "匯出失敗");
+      }
+
+      // Extract filename from Content-Disposition header
+      const disposition = response.headers.get("content-disposition") || "";
+      const filenameMatch = disposition.match(/filename\*=UTF-8''(.+)/);
+      const filename = filenameMatch
+        ? decodeURIComponent(filenameMatch[1])
+        : "export.zip";
+
+      const blob = await response.blob();
+      return { blob, filename };
     },
   };
 }

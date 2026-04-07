@@ -164,7 +164,10 @@ dependencies = [
     # Excel processing
     "pandas==2.3.3",
     "openpyxl==3.1.2",
-    
+
+    # PDF generation
+    "reportlab==4.4.10",
+
     # Logging and monitoring
     "structlog==24.4.0",
     "prometheus-client==0.21.0",
