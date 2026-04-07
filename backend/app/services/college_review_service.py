@@ -192,6 +192,12 @@ class CollegeReviewService:
     # Use ReviewService.create_review() instead for all review operations
     # Ranking functionality now handled by create_ranking() method
 
+    @staticmethod
+    def _role_matches(role, *expected: str) -> bool:
+        """Compare role (enum or string) against expected string values."""
+        role_str = role.value if hasattr(role, "value") else role
+        return role_str in expected
+
     async def get_applications_for_review(
         self,
         scholarship_type_id: Optional[int] = None,
@@ -317,7 +323,8 @@ class CollegeReviewService:
                 "is_renewal": app.is_renewal,
                 # Professor review details
                 "professor_review_completed": any(
-                    review.reviewer.role == "professor" for review in app.reviews if review.reviewer
+                    self._role_matches(review.reviewer.role, "professor")
+                    for review in app.reviews if review.reviewer
                 ),
                 "professor_review_items": [
                     {
@@ -326,12 +333,12 @@ class CollegeReviewService:
                         "comments": item.comments,
                     }
                     for review in app.reviews
-                    if review.reviewer and review.reviewer.role == "professor"
+                    if review.reviewer and self._role_matches(review.reviewer.role, "professor")
                     for item in review.items
                 ],
                 # college_review_completed replaced by checking ApplicationReview with college role
                 "college_review_completed": any(
-                    review.reviewer.role in ["college", "admin", "super_admin"]
+                    self._role_matches(review.reviewer.role, "college", "admin", "super_admin")
                     for review in app.reviews
                     if hasattr(review, "reviewer")
                 ),
