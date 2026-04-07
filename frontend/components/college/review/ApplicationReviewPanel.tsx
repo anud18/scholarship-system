@@ -387,8 +387,11 @@ export function ApplicationReviewPanel({
           申請類別: applicationType,
           教授推薦: (app.professor_review_items || [])
             .map((item: any) => {
-              const label = ({nstc: "國科會", moe_1w: "教育部(1萬)", moe_2w: "教育部(2萬)"} as Record<string, string>)[item.sub_type_code] || item.sub_type_code;
-              return `${label}: ${item.recommendation === "approve" ? "推薦" : "不推薦"}`;
+              const label = getSubTypeName(item.sub_type_code, locale);
+              const rec = item.recommendation === "approve"
+                ? (locale === "zh" ? "推薦" : "Approve")
+                : (locale === "zh" ? "不推薦" : "Reject");
+              return `${label}: ${rec}`;
             })
             .join("; ") || "-",
           狀態: statusText,
@@ -409,6 +412,7 @@ export function ApplicationReviewPanel({
         { wch: 12 }, // 在學狀態
         { wch: 25 }, // 獎學金類型
         { wch: 12 }, // 申請類別
+        { wch: 30 }, // 教授推薦
         { wch: 15 }, // 狀態
         { wch: 12 }, // 申請時間
       ];
@@ -877,15 +881,17 @@ export function ApplicationReviewPanel({
                       <TableCell>
                         {app.professor_review_items?.length > 0 ? (
                           <div className="flex flex-col gap-0.5">
-                            {app.professor_review_items.map((item: any, idx: number) => (
-                              <TooltipProvider key={idx}>
+                            {app.professor_review_items.map((item: any) => (
+                              <TooltipProvider key={item.sub_type_code}>
                                 <Tooltip>
-                                  <TooltipTrigger>
+                                  <TooltipTrigger asChild>
                                     <Badge
                                       variant={item.recommendation === "approve" ? "default" : "destructive"}
-                                      className="text-xs"
+                                      className="text-xs cursor-default"
                                     >
-                                      {({nstc: "國科會", moe_1w: "教育部(1萬)", moe_2w: "教育部(2萬)"} as Record<string, string>)[item.sub_type_code] || item.sub_type_code}: {item.recommendation === "approve" ? "推薦" : "不推薦"}
+                                      {getSubTypeName(item.sub_type_code, locale)}: {item.recommendation === "approve"
+                                        ? (locale === "zh" ? "推薦" : "Approve")
+                                        : (locale === "zh" ? "不推薦" : "Reject")}
                                     </Badge>
                                   </TooltipTrigger>
                                   {item.comments && (
