@@ -15,7 +15,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from fpdf import FPDF
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import mm
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -50,13 +56,23 @@ def _sanitize_filename(name: str) -> str:
     return re.sub(r'[/\\:*?"<>|]', "_", name).strip()
 
 
-CJK_FONT_PATH = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
+CJK_FONT_PATH = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
+_font_registered = False
+
+
+def _ensure_font():
+    """Register CJK font once for reportlab."""
+    global _font_registered
+    if not _font_registered:
+        pdfmetrics.registerFont(TTFont("WQY", CJK_FONT_PATH, subfontIndex=0))
+        _font_registered = True
 
 
 class ExportPackageService:
     def __init__(self, db: AsyncSession, minio_service: MinIOService):
         self.db = db
         self.minio = minio_service
+        _ensure_font()
 
     async def generate_export_zip(
         self,
@@ -239,7 +255,7 @@ class ExportPackageService:
         academic_year: int,
         semester: Optional[str],
     ) -> bytes:
-        """Generate a student summary PDF using fpdf2."""
+        """Generate a student summary PDF using reportlab."""
         student = app.student_data or {}
         submitted = app.submitted_form_data or {}
 
@@ -249,26 +265,40 @@ class ExportPackageService:
         semester_label = semester_map.get(semester, "全學年") if semester else "全學年"
         export_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-        pdf = FPDF()
-        pdf.set_auto_page_break(auto=True, margin=20)
-        pdf.add_font("NotoTC", "", CJK_FONT_PATH)
-        pdf.add_page()
+        # Styles
+        s_normal = ParagraphStyle("CJK", fontName="WQY", fontSize=10, leading=14)
+        s_title = ParagraphStyle("CJKTitle", fontName="WQY", fontSize=16, leading=20, alignment=1)
+        s_section = ParagraphStyle(
+            "CJKSection", fontName="WQY", fontSize=12, leading=16,
+            backColor=colors.Color(0.94, 0.94, 0.94),
+        )
+        s_header = ParagraphStyle(
+            "CJKHeader", fontName="WQY", fontSize=9, leading=12,
+            alignment=1, textColor=colors.Color(0.4, 0.4, 0.4),
+        )
+        s_footer = ParagraphStyle(
+            "CJKFooter", fontName="WQY", fontSize=8, leading=10,
+            alignment=1, textColor=colors.Color(0.6, 0.6, 0.6),
+        )
 
-        # --- Header ---
-        pdf.set_font("NotoTC", size=9)
-        pdf.set_text_color(102, 102, 102)
-        pdf.cell(0, 5, f"{scholarship_name} {academic_year}學年度 {semester_label}", align="C", new_x="LMARGIN", new_y="NEXT")
-        pdf.ln(3)
+        table_style = TableStyle([
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("BACKGROUND", (0, 0), (0, -1), colors.Color(0.96, 0.96, 0.96)),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ])
 
-        # --- Title ---
-        pdf.set_font("NotoTC", size=16)
-        pdf.set_text_color(0, 0, 0)
-        pdf.cell(0, 12, "學生資料彙整", align="C", new_x="LMARGIN", new_y="NEXT")
-        pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
-        pdf.ln(6)
+        elements = []
 
-        # --- Section 1: Basic Info ---
-        self._pdf_section_header(pdf, "一、基本資料")
+        # Header + Title
+        elements.append(Paragraph(f"{scholarship_name} {academic_year}學年度 {semester_label}", s_header))
+        elements.append(Spacer(1, 3 * mm))
+        elements.append(Paragraph("學生資料彙整", s_title))
+        elements.append(Spacer(1, 6 * mm))
+
+        # Section 1: Basic Info
+        elements.append(Paragraph("一、基本資料", s_section))
+        elements.append(Spacer(1, 2 * mm))
         basic_rows = [
             ("學號", student.get("std_stdcode", "—")),
             ("姓名", student.get("std_cname", "—")),
@@ -280,10 +310,12 @@ class ExportPackageService:
             ("Email", student.get("com_email", "—")),
             ("手機", student.get("com_cellphone", "—")),
         ]
-        self._pdf_table(pdf, basic_rows)
+        elements.append(self._build_table(basic_rows, s_normal, table_style))
+        elements.append(Spacer(1, 4 * mm))
 
-        # --- Section 2: Academic Performance ---
-        self._pdf_section_header(pdf, "二、學業表現")
+        # Section 2: Academic Performance
+        elements.append(Paragraph("二、學業表現", s_section))
+        elements.append(Spacer(1, 2 * mm))
         placings = str(student.get("trm_placings", "—"))
         if student.get("trm_placingsrate"):
             placings += f" ({student['trm_placingsrate']}%)"
@@ -297,57 +329,47 @@ class ExportPackageService:
             ("系排名", dep_placing),
             ("修業學期數", str(student.get("trm_termcount", "—"))),
         ]
-        self._pdf_table(pdf, academic_rows)
+        elements.append(self._build_table(academic_rows, s_normal, table_style))
+        elements.append(Spacer(1, 4 * mm))
 
-        # --- Section 3: Form Fields ---
+        # Section 3: Form Fields
         fields_data = submitted.get("fields", {})
         if fields_data:
-            self._pdf_section_header(pdf, "三、表單填寫資料")
+            elements.append(Paragraph("三、表單填寫資料", s_section))
+            elements.append(Spacer(1, 2 * mm))
             form_rows = []
             for field_id in sorted(fields_data.keys()):
                 field = fields_data[field_id]
                 label = field.get("label", field.get("field_id", field_id))
                 value = str(field.get("value", "—") or "—")
                 form_rows.append((label, value))
-            self._pdf_table(pdf, form_rows)
+            elements.append(self._build_table(form_rows, s_normal, table_style))
+            elements.append(Spacer(1, 4 * mm))
 
-        # --- Section 4: Document List ---
+        # Section 4: Document List
         doc_list = submitted.get("documents", [])
         if doc_list:
-            self._pdf_section_header(pdf, "四、上傳文件清單")
-            pdf.set_font("NotoTC", size=10)
+            elements.append(Paragraph("四、上傳文件清單", s_section))
+            elements.append(Spacer(1, 2 * mm))
             for doc in doc_list:
                 name = doc.get("document_type") or doc.get("document_id", "未知文件")
                 upload_time = doc.get("upload_time", "—")
-                pdf.cell(0, 7, f"• {name}（上傳時間：{upload_time}）", new_x="LMARGIN", new_y="NEXT")
+                elements.append(Paragraph(f"• {name}（上傳時間：{upload_time}）", s_normal))
 
-        # --- Footer ---
-        pdf.ln(10)
-        pdf.set_font("NotoTC", size=8)
-        pdf.set_text_color(153, 153, 153)
-        pdf.cell(0, 5, f"匯出時間：{export_time}", align="C", new_x="LMARGIN", new_y="NEXT")
+        # Footer
+        elements.append(Spacer(1, 10 * mm))
+        elements.append(Paragraph(f"匯出時間：{export_time}", s_footer))
 
-        return bytes(pdf.output())
-
-    @staticmethod
-    def _pdf_section_header(pdf: FPDF, title: str) -> None:
-        """Draw a section header with background."""
-        pdf.set_font("NotoTC", size=12)
-        pdf.set_fill_color(240, 240, 240)
-        pdf.set_text_color(0, 0, 0)
-        pdf.cell(0, 9, f"  {title}", fill=True, new_x="LMARGIN", new_y="NEXT")
-        pdf.ln(2)
+        # Build PDF
+        buf = io.BytesIO()
+        doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=20 * mm, bottomMargin=20 * mm)
+        doc.build(elements)
+        return buf.getvalue()
 
     @staticmethod
-    def _pdf_table(pdf: FPDF, rows: List[Tuple[str, str]]) -> None:
-        """Draw a two-column label-value table."""
-        pdf.set_font("NotoTC", size=10)
-        col_w_label = 50
-        col_w_value = pdf.w - pdf.l_margin - pdf.r_margin - col_w_label
-        for label, value in rows:
-            pdf.set_fill_color(245, 245, 245)
-            pdf.set_text_color(0, 0, 0)
-            pdf.cell(col_w_label, 8, f" {label}", border=1, fill=True)
-            pdf.set_fill_color(255, 255, 255)
-            pdf.cell(col_w_value, 8, f" {str(value)}", border=1, new_x="LMARGIN", new_y="NEXT")
-        pdf.ln(3)
+    def _build_table(rows: List[Tuple[str, str]], style: ParagraphStyle, table_style: TableStyle) -> Table:
+        """Build a two-column label-value table."""
+        data = [[Paragraph(label, style), Paragraph(str(value), style)] for label, value in rows]
+        t = Table(data, colWidths=[50 * mm, 120 * mm])
+        t.setStyle(table_style)
+        return t

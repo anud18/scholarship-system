@@ -23,8 +23,8 @@ RUN echo "deb http://deb.debian.org/debian bookworm main" > /etc/apt/sources.lis
     tesseract-ocr-eng \
     libpq-dev \
     libmagic-dev \
-    # CJK fonts for Chinese PDF generation (fpdf2)
-    fonts-noto-cjk \
+    # CJK fonts for Chinese PDF generation (reportlab)
+    fonts-wqy-zenhei \
     && rm -rf /var/lib/apt/lists/* \
     && dpkg --get-selections > /installed-packages.list
 

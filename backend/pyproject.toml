@@ -166,7 +166,7 @@ dependencies = [
     "openpyxl==3.1.2",
 
     # PDF generation
-    "fpdf2==2.8.7",
+    "reportlab==4.4.10",
 
     # Logging and monitoring
     "structlog==24.4.0",
