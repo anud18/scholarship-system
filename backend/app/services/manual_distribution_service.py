@@ -258,8 +258,8 @@ class ManualDistributionService:
             # Compute application_identity
             identity = self._compute_application_identity(app)
 
-            # Compute grade display
-            grade = self._compute_grade_display(student_data)
+            # Compute term count
+            term_count = self._compute_term_count(student_data)
 
             # Format enrollment date (ROC calendar)
             enrollment_date = self._format_enrollment_date(student_data)
@@ -276,7 +276,7 @@ class ManualDistributionService:
                 "college_code": student_college,
                 "college_name": student_data.get("trm_academyname", ""),
                 "department_name": student_data.get("trm_depname", ""),
-                "grade": grade,
+                "term_count": term_count,
                 "student_name": student_data.get("std_cname", ""),
                 "nationality": student_data.get("std_nation", ""),
                 "enrollment_date": enrollment_date,
@@ -284,6 +284,9 @@ class ManualDistributionService:
                 "application_identity": identity,
                 "is_renewal": app.is_renewal,
                 "renewal_year": app.renewal_year,
+                "renewal_sub_type": self._get_renewal_sub_type(app),
+                "received_months": item.received_months,
+                "received_months_source": item.received_months_source,
             })
 
         # Sort by college_code, then rank_position
@@ -814,17 +817,37 @@ class ManualDistributionService:
         else:
             return f"{app.academic_year}新申請"
 
-    def _compute_grade_display(self, student_data: dict) -> str:
-        """Compute grade display string like 博一, 博二, 碩一, etc."""
-        degree = student_data.get("trm_degree", student_data.get("std_degree", 0))
-        term_count = student_data.get("trm_termcount", student_data.get("std_termcount", 1))
-        year = (term_count + 1) // 2  # Convert semester count to year
+    def _compute_term_count(self, student_data: dict) -> int | None:
+        """Get student's semester count (第幾學期) from SIS API data."""
+        term_count = student_data.get("trm_termcount")
+        if term_count is not None:
+            try:
+                return int(term_count)
+            except (ValueError, TypeError):
+                return None
+        return None
 
-        degree_prefix = {6: "博", 4: "碩", 2: "學"}.get(degree, "")
-        year_suffix = {1: "一", 2: "二", 3: "三", 4: "四", 5: "五", 6: "六", 7: "七"}.get(
-            year, str(year)
-        )
-        return f"{degree_prefix}{year_suffix}" if degree_prefix else f"第{year}年"
+    def _get_renewal_sub_type(self, app: Application) -> str | None:
+        """
+        Get the sub-type of the student's renewal application.
+        Maps sub_type codes to Chinese display names.
+        """
+        if not app.is_renewal:
+            return None
+        sub_type = app.sub_scholarship_type
+        if not sub_type or sub_type == "general":
+            return None
+        return self._sub_type_to_chinese(sub_type)
+
+    @staticmethod
+    def _sub_type_to_chinese(sub_type: str) -> str:
+        """Map sub-type code to Chinese display name."""
+        mapping = {
+            "nstc": "國科會",
+            "moe_1w": "教育部",
+            "moe_2w": "教育部",
+        }
+        return mapping.get(sub_type, sub_type)
 
     def _format_enrollment_date(self, student_data: dict) -> str:
         """Format enrollment date as ROC calendar (民國年.月.日)."""
