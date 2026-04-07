@@ -2395,9 +2395,10 @@ class ApplicationService:
                 return False
 
             # Check application status - should be submitted or under review
+            # Compare with both enum and string value for robustness
             valid_statuses = [
-                ApplicationStatus.submitted.value,
-                ApplicationStatus.under_review.value,
+                ApplicationStatus.submitted, ApplicationStatus.submitted.value,
+                ApplicationStatus.under_review, ApplicationStatus.under_review.value,
             ]
             if application.status not in valid_statuses:
                 return False
