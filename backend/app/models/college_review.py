@@ -152,6 +152,10 @@ class CollegeRankingItem(Base):
         JSONB, nullable=True
     )  # Array of backup allocations: [{sub_type, backup_position, college, allocation_reason}, ...]
 
+    # Received months tracking
+    received_months = Column(Integer, nullable=True)  # Number of months already received
+    received_months_source = Column(String(20), nullable=True)  # "system" or "imported"
+
     # Time tracking
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
