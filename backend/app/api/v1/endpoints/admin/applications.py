@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,6 +61,9 @@ async def get_all_applications(
         .join(User, Application.user_id == User.id)
         .outerjoin(ScholarshipType, Application.scholarship_type_id == ScholarshipType.id)
     )
+
+    # Exclude soft-deleted applications
+    stmt = stmt.where(Application.deleted_at.is_(None))
 
     # Apply filters
     if status:
@@ -411,4 +415,41 @@ async def admin_update_application_status(
         "success": True,
         "message": "Application status updated successfully",
         "data": result,
+    }
+
+
+class SoftDeleteRequest(BaseModel):
+    reason: str
+
+
+@router.patch("/applications/{id}/soft-delete")
+async def soft_delete_application(
+    id: int,
+    request: SoftDeleteRequest,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Soft-delete an application (admin only). Marks as deleted without removing data."""
+    stmt = select(Application).where(Application.id == id)
+    result = await db.execute(stmt)
+    app = result.scalar_one_or_none()
+
+    if not app:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+
+    if app.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Application is already deleted")
+
+    app.deleted_at = datetime.now(timezone.utc)
+    app.deleted_by_id = current_user.id
+    app.deletion_reason = request.reason
+    app.status = ApplicationStatus.rejected.value
+    app.status_name = "已退件"
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": f"Application {app.app_id} has been soft-deleted",
+        "data": {"id": app.id, "app_id": app.app_id, "deleted_at": app.deleted_at.isoformat()},
     }
