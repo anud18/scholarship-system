@@ -881,13 +881,13 @@ export function ApplicationReviewPanel({
                       <TableCell>
                         {app.professor_review_items?.length > 0 ? (
                           <div className="flex flex-col gap-0.5">
-                            {app.professor_review_items.map((item: any) => (
-                              <TooltipProvider key={item.sub_type_code}>
+                            {app.professor_review_items.map((item: any, idx: number) => (
+                              <TooltipProvider key={`${item.sub_type_code}-${idx}`}>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <Badge
-                                      variant={item.recommendation === "approve" ? "default" : "destructive"}
-                                      className="text-xs cursor-default"
+                                      variant={item.recommendation === "approve" ? "outline" : "destructive"}
+                                      className={`text-xs cursor-default ${item.recommendation === "approve" ? "border-emerald-500 text-emerald-700 bg-emerald-50" : ""}`}
                                     >
                                       {getSubTypeName(item.sub_type_code, locale)}: {item.recommendation === "approve"
                                         ? (locale === "zh" ? "推薦" : "Approve")
