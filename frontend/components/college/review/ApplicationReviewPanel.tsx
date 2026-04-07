@@ -353,7 +353,10 @@ export function ApplicationReviewPanel({
           '獎學金類型': app.scholarship_type_zh || app.scholarship_type || "-",
           '申請類別': applicationType,
           '教授推薦': (app.professor_review_items || [])
-            .map((item: any) => `${item.sub_type_code}: ${item.recommendation === "approve" ? "推薦" : "不推薦"}`)
+            .map((item: any) => {
+              const label = ({nstc: "國科會", moe_1w: "教育部(1萬)", moe_2w: "教育部(2萬)"} as Record<string, string>)[item.sub_type_code] || item.sub_type_code;
+              return `${label}: ${item.recommendation === "approve" ? "推薦" : "不推薦"}`;
+            })
             .join("; ") || "-",
           '狀態': statusText,
           '申請時間': applicationDate,
@@ -763,7 +766,7 @@ export function ApplicationReviewPanel({
                                       variant={item.recommendation === "approve" ? "default" : "destructive"}
                                       className="text-xs"
                                     >
-                                      {item.sub_type_code}: {item.recommendation === "approve" ? "推薦" : "不推薦"}
+                                      {({nstc: "國科會", moe_1w: "教育部(1萬)", moe_2w: "教育部(2萬)"} as Record<string, string>)[item.sub_type_code] || item.sub_type_code}: {item.recommendation === "approve" ? "推薦" : "不推薦"}
                                     </Badge>
                                   </TooltipTrigger>
                                   {item.comments && (
