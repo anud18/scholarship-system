@@ -464,11 +464,8 @@ export function ApplicationReviewPanel({
 
     setIsExportingPackage(true);
     try {
-      // Get token from cookie
-      const token = document.cookie
-        .split("; ")
-        .find(row => row.startsWith("token="))
-        ?.split("=")[1];
+      // Get token from localStorage
+      const token = localStorage.getItem("auth_token");
 
       if (!token) {
         toast.error(locale === "zh" ? "請重新登入" : "Please re-login");
