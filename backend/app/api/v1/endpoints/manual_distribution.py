@@ -7,7 +7,7 @@ Provides endpoints for admin to manually allocate scholarships to students.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -507,3 +507,84 @@ async def generate_rosters_from_distribution(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"造冊產生失敗: {str(e)}",
         )
+
+
+@router.post("/import-received-months")
+async def import_received_months(
+    ranking_id: int = Query(..., description="CollegeRanking ID to scope the import"),
+    file: UploadFile = File(..., description="Excel file with columns: 學號, 已領月份數"),
+    current_user=Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Import received months from Excel for students in a specific ranking."""
+    import openpyxl
+    from io import BytesIO
+
+    from app.models.college_review import CollegeRankingItem
+    from app.models.application import Application
+
+    # Validate file type
+    if not file.filename or not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="請上傳 Excel 檔案 (.xlsx 或 .xls)",
+        )
+
+    # Read Excel
+    content = await file.read()
+    wb = openpyxl.load_workbook(BytesIO(content), read_only=True)
+    ws = wb.active
+
+    # Parse rows: expect header row then data rows
+    rows = list(ws.iter_rows(min_row=2, values_only=True))
+    if not rows:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Excel 檔案沒有資料列")
+
+    # Build student_id -> months mapping
+    import_data: dict[str, int] = {}
+    for row in rows:
+        if len(row) < 2 or row[0] is None or row[1] is None:
+            continue
+        student_id = str(row[0]).strip()
+        try:
+            months = int(row[1])
+        except (ValueError, TypeError):
+            continue
+        import_data[student_id] = months
+
+    if not import_data:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="無法解析任何有效資料")
+
+    # Get ranking items with their applications for student ID matching
+    stmt = (
+        select(CollegeRankingItem, Application)
+        .join(Application, CollegeRankingItem.application_id == Application.id)
+        .where(CollegeRankingItem.ranking_id == ranking_id)
+    )
+    result = await db.execute(stmt)
+    item_pairs = result.all()
+
+    matched = 0
+    not_found = list(import_data.keys())  # Start with all, remove as matched
+
+    for item, app in item_pairs:
+        student_data = app.student_data or {}
+        sid = student_data.get("std_stdcode", "")
+        if sid in import_data:
+            item.received_months = import_data[sid]
+            item.received_months_source = "imported"
+            matched += 1
+            if sid in not_found:
+                not_found.remove(sid)
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": f"成功匯入 {matched} 筆已領月份數",
+        "data": {
+            "matched": matched,
+            "not_found": not_found,
+            "updated": matched,
+        },
+    }
