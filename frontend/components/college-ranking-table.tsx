@@ -83,6 +83,7 @@ interface Application {
   academy_name?: string;
   academy_code?: string;
   department_name?: string;
+  department_code?: string;
   scholarship_type: string;
   sub_type: string;
   eligible_subtypes?: Array<{
@@ -493,26 +494,108 @@ export function CollegeRankingTable({
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
       // Parse Excel data - expected columns: 學號, 姓名, 排名
-      const importData = jsonData
-        .map((row: any) => ({
-          student_id: row["學號"] || row["student_id"] || "",
-          student_name: row["姓名"] || row["student_name"] || row["name"] || "",
-          rank_position: parseInt(
-            row["排名"] || row["rank_position"] || row["rank"] || "0"
-          ),
-        }))
-        .filter(item => item.student_id && item.rank_position > 0);
+      const errors: string[] = [];
+      const importData: Array<{
+        student_id: string;
+        student_name: string;
+        rank_position: number | string;
+      }> = [];
+
+      jsonData.forEach((row: any, index: number) => {
+        const rowNum = index + 2; // Excel row (header = row 1)
+        const studentId = String(row["學號"] || row["student_id"] || "").trim();
+        const studentName = String(
+          row["姓名"] || row["student_name"] || row["name"] || ""
+        ).trim();
+        const rawRank = row["排名"] ?? row["rank_position"] ?? row["rank"];
+
+        if (!studentId) return; // Skip empty rows
+
+        // Validate rank value
+        if (
+          rawRank === undefined ||
+          rawRank === null ||
+          String(rawRank).trim() === ""
+        ) {
+          errors.push(`第 ${rowNum} 行排名欄位為空（學號：${studentId}）`);
+          return;
+        }
+
+        const rankStr = String(rawRank).trim();
+
+        if (rankStr.toUpperCase() === "N") {
+          importData.push({
+            student_id: studentId,
+            student_name: studentName,
+            rank_position: "N",
+          });
+        } else {
+          const rankNum = Number(rankStr);
+          if (!Number.isInteger(rankNum) || rankNum < 1) {
+            errors.push(
+              `第 ${rowNum} 行排名格式無效：'${rankStr}'（學號：${studentId}）`
+            );
+          } else {
+            importData.push({
+              student_id: studentId,
+              student_name: studentName,
+              rank_position: rankNum,
+            });
+          }
+        }
+      });
+
+      // Validate: no duplicate integer ranks
+      const integerRanks = importData
+        .filter(item => typeof item.rank_position === "number")
+        .map(item => item.rank_position as number);
+
+      const rankCounts = new Map<number, number>();
+      integerRanks.forEach(r =>
+        rankCounts.set(r, (rankCounts.get(r) || 0) + 1)
+      );
+      rankCounts.forEach((count, rank) => {
+        if (count > 1) {
+          errors.push(`排名 ${rank} 重複出現（${count} 次）`);
+        }
+      });
+
+      // Validate: consecutive from 1
+      if (integerRanks.length > 0 && errors.length === 0) {
+        const sorted = [...integerRanks].sort((a, b) => a - b);
+        const missing: number[] = [];
+        for (let i = 1; i <= sorted.length; i++) {
+          if (!sorted.includes(i)) missing.push(i);
+        }
+        if (missing.length > 0) {
+          errors.push(`排名不連續：缺少第 ${missing.join(", ")} 名`);
+        }
+      }
+
+      if (errors.length > 0) {
+        toast.error(errors.join("\n"), { duration: 10000 });
+        setIsImporting(false);
+        event.target.value = "";
+        return;
+      }
 
       if (importData.length === 0) {
         toast.error("Excel 檔案中沒有找到有效的排名資料");
         setIsImporting(false);
+        event.target.value = "";
         return;
       }
 
       // Call import handler if provided
       if (onImportExcel) {
         await onImportExcel(importData);
-        toast.success(`成功匯入 ${importData.length} 筆排名資料`);
+        const rejectedCount = importData.filter(
+          item => item.rank_position === "N"
+        ).length;
+        const rankedCount = importData.length - rejectedCount;
+        toast.success(
+          `成功匯入 ${importData.length} 筆排名資料（排名 ${rankedCount} 筆，拒絕 ${rejectedCount} 筆）`
+        );
         setIsImportDialogOpen(false);
       }
     } catch (error) {
@@ -529,11 +612,19 @@ export function CollegeRankingTable({
 
   const handleTemplateDownload = () => {
     try {
-      // Extract current students from localApplications with blank rankings
-      const templateData = localApplications.map(app => ({
+      // Sort by department code, then student ID
+      const sorted = [...localApplications].sort((a, b) => {
+        const deptA = a.department_code || a.department_name || "";
+        const deptB = b.department_code || b.department_name || "";
+        if (deptA !== deptB) return deptA.localeCompare(deptB);
+        return (a.student_id || "").localeCompare(b.student_id || "");
+      });
+
+      const templateData = sorted.map(app => ({
         學號: app.student_id || "",
         姓名: app.student_name || "",
-        排名: "", // Blank for user to fill
+        系所: app.department_name || "",
+        排名: "", // Blank for user to fill in (integer or N)
       }));
 
       // Create worksheet
@@ -543,6 +634,7 @@ export function CollegeRankingTable({
       worksheet["!cols"] = [
         { wch: 15 }, // 學號
         { wch: 20 }, // 姓名
+        { wch: 25 }, // 系所
         { wch: 10 }, // 排名
       ];
 
@@ -754,14 +846,32 @@ export function CollegeRankingTable({
                             <li>
                               •{" "}
                               {locale === "zh"
-                                ? "必需欄位：學號、姓名、排名"
-                                : "Required columns: Student ID, Name, Rank"}
+                                ? "必需欄位：學號、姓名、排名（系所欄位選填，不影響匯入）"
+                                : "Required columns: Student ID (學號), Name (姓名), Rank (排名); Dept (系所) is optional"}
                             </li>
                             <li>
                               •{" "}
                               {locale === "zh"
-                                ? "排名必須為正整數 (1, 2, 3...)"
-                                : "Rank must be positive integers (1, 2, 3...)"}
+                                ? "排名欄位填入正整數（從 1 開始連續排名）或 N（代表拒絕）"
+                                : "Rank must be consecutive positive integers starting from 1, or N to reject"}
+                            </li>
+                            <li>
+                              •{" "}
+                              {locale === "zh"
+                                ? "排名數字不可重複、不可跳號"
+                                : "Rank numbers must not repeat and must be consecutive (no gaps)"}
+                            </li>
+                            <li>
+                              •{" "}
+                              {locale === "zh"
+                                ? "N 代表拒絕該申請，可重複填寫"
+                                : "N means the application is rejected; multiple N values are allowed"}
+                            </li>
+                            <li>
+                              •{" "}
+                              {locale === "zh"
+                                ? "所有學生都必須有排名（整數或 N）"
+                                : "All students must have a rank value (integer or N)"}
                             </li>
                           </ul>
                         </div>
