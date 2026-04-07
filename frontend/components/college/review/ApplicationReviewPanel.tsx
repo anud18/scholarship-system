@@ -352,6 +352,9 @@ export function ApplicationReviewPanel({
           '在學狀態': studyingStatus,
           '獎學金類型': app.scholarship_type_zh || app.scholarship_type || "-",
           '申請類別': applicationType,
+          '教授推薦': (app.professor_review_items || [])
+            .map((item: any) => `${item.sub_type_code}: ${item.recommendation === "approve" ? "推薦" : "不推薦"}`)
+            .join("; ") || "-",
           '狀態': statusText,
           '申請時間': applicationDate,
         };
@@ -684,6 +687,9 @@ export function ApplicationReviewPanel({
                       {locale === "zh" ? "申請類別" : "Type"}
                     </TableHead>
                     <TableHead>
+                      {locale === "zh" ? "教授推薦" : "Prof. Review"}
+                    </TableHead>
+                    <TableHead>
                       {locale === "zh" ? "狀態" : "Status"}
                     </TableHead>
                     <TableHead>
@@ -743,6 +749,35 @@ export function ApplicationReviewPanel({
                         <Badge variant={app.is_renewal ? "secondary" : "default"}>
                           {app.is_renewal ? "續領" : "初領"}
                         </Badge>
+                      </TableCell>
+
+                      {/* 6.5 教授推薦 */}
+                      <TableCell>
+                        {app.professor_review_items?.length > 0 ? (
+                          <div className="flex flex-col gap-0.5">
+                            {app.professor_review_items.map((item: any, idx: number) => (
+                              <TooltipProvider key={idx}>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Badge
+                                      variant={item.recommendation === "approve" ? "default" : "destructive"}
+                                      className="text-xs"
+                                    >
+                                      {item.sub_type_code}: {item.recommendation === "approve" ? "推薦" : "不推薦"}
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  {item.comments && (
+                                    <TooltipContent>
+                                      <p>{item.comments}</p>
+                                    </TooltipContent>
+                                  )}
+                                </Tooltip>
+                              </TooltipProvider>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">—</span>
+                        )}
                       </TableCell>
 
                       {/* 7. 狀態 */}
