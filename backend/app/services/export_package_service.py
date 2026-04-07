@@ -131,7 +131,7 @@ class ExportPackageService:
         buf.seek(0)
 
         # 5. Build filename
-        semester_label = {"first": "1", "second": "2"}.get(semester, "0") if semester else "0"
+        semester_label = {"first": "1", "second": "2", "annual": "0"}.get(semester, "0") if semester else "0"
         zip_filename = (
             f"{_sanitize_filename(scholarship_name)}"
             f"_申請資料_{academic_year}_{semester_label}"

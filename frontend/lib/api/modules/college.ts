@@ -476,7 +476,7 @@ export function createCollegeApi() {
       academic_year: number;
       semester?: string;
       token: string;
-    }): Promise<Blob> => {
+    }): Promise<{ blob: Blob; filename: string }> => {
       const searchParams = new URLSearchParams();
       searchParams.set(
         "scholarship_type_id",
@@ -497,7 +497,15 @@ export function createCollegeApi() {
         throw new Error(errorData?.error || errorData?.detail || "匯出失敗");
       }
 
-      return response.blob();
+      // Extract filename from Content-Disposition header
+      const disposition = response.headers.get("content-disposition") || "";
+      const filenameMatch = disposition.match(/filename\*=UTF-8''(.+)/);
+      const filename = filenameMatch
+        ? decodeURIComponent(filenameMatch[1])
+        : "export.zip";
+
+      const blob = await response.blob();
+      return { blob, filename };
     },
   };
 }

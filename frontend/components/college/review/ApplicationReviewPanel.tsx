@@ -479,18 +479,18 @@ export function ApplicationReviewPanel({
           ? selectedSemester
           : undefined;
 
-      const blob = await apiClient.college.exportPackage({
+      const { blob, filename } = await apiClient.college.exportPackage({
         scholarship_type_id: activeConfig.id,
         academic_year: selectedAcademicYear,
         semester: normalizedSemester,
         token,
       });
 
-      // Trigger browser download
+      // Trigger browser download using backend-provided filename
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${activeConfig.name}_申請資料_${selectedAcademicYear}_${selectedSemester || "全"}.zip`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
