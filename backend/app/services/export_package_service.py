@@ -71,10 +71,8 @@ class ExportPackageService:
         Returns:
             Tuple of (BytesIO buffer, suggested filename)
         """
-        # 1. Get scholarship info for naming
-        scholarship_name, college_name = await self._get_scholarship_and_college_info(
-            scholarship_type_id, academic_year, semester, college_code
-        )
+        # 1. Get scholarship name
+        scholarship_name = await self._get_scholarship_name(scholarship_type_id)
 
         # 2. Query applications with files
         applications = await self._query_applications(
@@ -83,6 +81,18 @@ class ExportPackageService:
 
         if not applications:
             raise ValueError("無申請資料可匯出")
+
+        if len(applications) > 200:
+            raise ValueError(f"申請筆數超過上限 (200)，請縮小篩選範圍（目前 {len(applications)} 筆）")
+
+        # Derive college name from first application's student_data
+        college_name = None
+        if college_code:
+            for app in applications:
+                if app.student_data:
+                    college_name = app.student_data.get("trm_academyname")
+                    if college_name:
+                        break
 
         # 3. Group by department
         dept_groups: Dict[str, List[Application]] = defaultdict(list)
@@ -114,38 +124,14 @@ class ExportPackageService:
 
         return buf, zip_filename
 
-    async def _get_scholarship_and_college_info(
-        self,
-        scholarship_type_id: int,
-        academic_year: int,
-        semester: Optional[str],
-        college_code: Optional[str],
-    ) -> Tuple[str, Optional[str]]:
-        """Get scholarship name and college name for ZIP filename."""
+    async def _get_scholarship_name(self, scholarship_type_id: int) -> str:
+        """Get scholarship name for ZIP filename."""
         stmt = select(ScholarshipType).where(ScholarshipType.id == scholarship_type_id)
         result = await self.db.execute(stmt)
         scholarship = result.scalar_one_or_none()
         if not scholarship:
             raise ValueError(f"找不到獎學金類型 ID={scholarship_type_id}")
-
-        scholarship_name = scholarship.name
-
-        # Get college name from applications matching this college
-        college_name = None
-        if college_code:
-            app_stmt = select(Application).where(
-                Application.scholarship_type_id == scholarship_type_id,
-                Application.academic_year == academic_year,
-            )
-            if semester:
-                app_stmt = app_stmt.where(Application.semester == semester)
-            app_result = await self.db.execute(app_stmt)
-            for row in app_result.scalars():
-                if row.student_data and row.student_data.get("std_academyno") == college_code:
-                    college_name = row.student_data.get("trm_academyname")
-                    break
-
-        return scholarship_name, college_name
+        return scholarship.name
 
     async def _query_applications(
         self,
