@@ -562,10 +562,10 @@ export function CollegeRankingTable({
 
       // Validate: consecutive from 1
       if (integerRanks.length > 0 && errors.length === 0) {
-        const sorted = [...integerRanks].sort((a, b) => a - b);
+        const rankSet = new Set(integerRanks);
         const missing: number[] = [];
-        for (let i = 1; i <= sorted.length; i++) {
-          if (!sorted.includes(i)) missing.push(i);
+        for (let i = 1; i <= integerRanks.length; i++) {
+          if (!rankSet.has(i)) missing.push(i);
         }
         if (missing.length > 0) {
           errors.push(`排名不連續：缺少第 ${missing.join(", ")} 名`);
