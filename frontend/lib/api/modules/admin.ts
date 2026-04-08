@@ -1285,8 +1285,7 @@ export function createAdminApi() {
     },
 
     /**
-     * Soft-delete an application with a reason (退件)
-     * Sets deleted_at, deleted_by_id, and deletion_reason; application is hidden from normal listing
+     * Soft-delete an application (admin only).
      */
     softDeleteApplication: async (
       id: number,

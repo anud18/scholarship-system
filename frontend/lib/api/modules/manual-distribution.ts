@@ -359,7 +359,9 @@ export function createManualDistributionApi() {
      * Import received months from Excel file.
      */
     importReceivedMonths: async (
-      rankingId: number,
+      scholarshipTypeId: number,
+      academicYear: number,
+      semester: string,
       file: File
     ): Promise<
       ApiResponse<{ matched: number; not_found: string[]; updated: number }>
@@ -367,11 +369,18 @@ export function createManualDistributionApi() {
       const formData = new FormData();
       formData.append("file", file);
 
+      const params = new URLSearchParams({
+        scholarship_type_id: String(scholarshipTypeId),
+        academic_year: String(academicYear),
+        semester,
+      });
+
       const response = await fetch(
-        `/api/v1/manual-distribution/import-received-months?ranking_id=${rankingId}`,
+        `/api/v1/manual-distribution/import-received-months?${params}`,
         {
           method: "POST",
           body: formData,
+          credentials: "include",
         }
       );
       const data = await response.json();

@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -419,7 +419,7 @@ async def admin_update_application_status(
 
 
 class SoftDeleteRequest(BaseModel):
-    reason: str
+    reason: str = Field(..., min_length=1)
 
 
 @router.patch("/applications/{id}/soft-delete")

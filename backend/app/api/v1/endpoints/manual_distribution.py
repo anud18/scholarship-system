@@ -9,12 +9,12 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_admin_user, get_db
 from app.db.deps import get_sync_db
-from app.models.college_review import ManualDistributionHistory
+from app.models.college_review import CollegeRanking, ManualDistributionHistory
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.services.manual_distribution_service import ManualDistributionService
 
@@ -511,27 +511,32 @@ async def generate_rosters_from_distribution(
 
 @router.post("/import-received-months")
 async def import_received_months(
-    ranking_id: int = Query(..., description="CollegeRanking ID to scope the import"),
+    scholarship_type_id: int = Query(..., description="Scholarship type ID"),
+    academic_year: int = Query(..., description="Academic year"),
+    semester: str = Query(..., description="Semester"),
     file: UploadFile = File(..., description="Excel file with columns: 學號, 已領月份數"),
     current_user=Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Import received months from Excel for students in a specific ranking."""
+    """Import received months from Excel for students in a distribution."""
     import openpyxl
     from io import BytesIO
 
-    from app.models.college_review import CollegeRankingItem
+    from app.models.college_review import CollegeRanking, CollegeRankingItem
     from app.models.application import Application
 
     # Validate file type
-    if not file.filename or not file.filename.endswith((".xlsx", ".xls")):
+    if not file.filename or not file.filename.endswith(".xlsx"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="請上傳 Excel 檔案 (.xlsx 或 .xls)",
+            detail="請上傳 Excel 檔案 (.xlsx)",
         )
 
-    # Read Excel
+    # Read Excel with size limit
     content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="檔案過大 (上限 5MB)")
+
     wb = openpyxl.load_workbook(BytesIO(content), read_only=True)
     ws = wb.active
 
@@ -550,22 +555,46 @@ async def import_received_months(
             months = int(row[1])
         except (ValueError, TypeError):
             continue
+        if months < 0:
+            continue
         import_data[student_id] = months
 
     if not import_data:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="無法解析任何有效資料")
 
+    # Find rankings matching the scholarship/year/semester combination
+    if semester == "yearly":
+        sem_condition = or_(
+            CollegeRanking.semester.is_(None),
+            CollegeRanking.semester == "annual",
+            CollegeRanking.semester == "yearly",
+        )
+    else:
+        sem_condition = CollegeRanking.semester == semester
+    ranking_stmt = select(CollegeRanking.id).where(
+        and_(
+            CollegeRanking.scholarship_type_id == scholarship_type_id,
+            CollegeRanking.academic_year == academic_year,
+            sem_condition,
+        )
+    )
+    ranking_result = await db.execute(ranking_stmt)
+    ranking_ids = [r[0] for r in ranking_result.all()]
+
+    if not ranking_ids:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到對應的排名資料")
+
     # Get ranking items with their applications for student ID matching
     stmt = (
         select(CollegeRankingItem, Application)
         .join(Application, CollegeRankingItem.application_id == Application.id)
-        .where(CollegeRankingItem.ranking_id == ranking_id)
+        .where(CollegeRankingItem.ranking_id.in_(ranking_ids))
     )
     result = await db.execute(stmt)
     item_pairs = result.all()
 
+    matched_sids: set[str] = set()
     matched = 0
-    not_found = list(import_data.keys())  # Start with all, remove as matched
 
     for item, app in item_pairs:
         student_data = app.student_data or {}
@@ -574,8 +603,9 @@ async def import_received_months(
             item.received_months = import_data[sid]
             item.received_months_source = "imported"
             matched += 1
-            if sid in not_found:
-                not_found.remove(sid)
+            matched_sids.add(sid)
+
+    not_found = [sid for sid in import_data if sid not in matched_sids]
 
     await db.commit()
 

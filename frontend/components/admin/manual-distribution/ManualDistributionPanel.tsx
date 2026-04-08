@@ -657,6 +657,24 @@ export function ManualDistributionPanel({
                   onChange={async e => {
                     const file = e.target.files?.[0];
                     if (!file) return;
+                    try {
+                      const result =
+                        await apiClient.manualDistribution.importReceivedMonths(
+                          scholarshipTypeId,
+                          selectedAcademicYear,
+                          selectedSemester,
+                          file
+                        );
+                      if (result.success && result.data) {
+                        const { matched, not_found } = result.data;
+                        setSaveMessage(
+                          `成功匯入 ${matched} 筆${not_found.length > 0 ? `，${not_found.length} 筆學號未找到` : ""}`
+                        );
+                        await fetchData();
+                      }
+                    } catch (err) {
+                      setSaveMessage("匯入失敗，請確認檔案格式");
+                    }
                     e.target.value = "";
                   }}
                 />
