@@ -14,18 +14,24 @@ export interface DistributionStudent {
   application_id: number;
   rank_position: number;
   applied_sub_types: string[];
+  rejected_sub_types: string[];
   allocated_sub_type: string | null;
   allocation_year: number | null;
   status: string;
   college_code: string;
   college_name: string;
   department_name: string;
-  grade: string;
+  term_count: number | null;
   student_name: string;
   nationality: string;
   enrollment_date: string;
   student_id: string;
   application_identity: string;
+  is_renewal: boolean;
+  renewal_year: number | null;
+  renewal_sub_type: string | null;
+  received_months: number | null;
+  received_months_source: string | null;
 }
 
 export interface CollegeQuota {
@@ -347,6 +353,33 @@ export function createManualDistributionApi() {
         { body: request as any }
       );
       return toApiResponse(response) as ApiResponse<GenerateRostersResult>;
+    },
+
+    /**
+     * Import received months from Excel file.
+     */
+    importReceivedMonths: async (
+      rankingId: number,
+      file: File
+    ): Promise<
+      ApiResponse<{ matched: number; not_found: string[]; updated: number }>
+    > => {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch(
+        `/api/v1/manual-distribution/import-received-months?ranking_id=${rankingId}`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+      const data = await response.json();
+      return data as ApiResponse<{
+        matched: number;
+        not_found: string[];
+        updated: number;
+      }>;
     },
   };
 }
