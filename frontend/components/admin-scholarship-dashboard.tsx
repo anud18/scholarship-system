@@ -201,9 +201,14 @@ const transformApplicationData = (app: any): DashboardApplication => {
     submitted_form_data: submittedFormData, // Use the enhanced version
     student_data: app.student_data,
     // Map student information using helper functions with fallbacks
-    student_name: app.student_name || getStudentName(app.student_data) || "未知",
+    student_name:
+      app.student_name || getStudentName(app.student_data) || "未知",
     student_no: app.student_no || getStudentId(app.student_data) || "N/A",
-    student_email: app.student_email || getStudentEmail(app.student_data) || app.user?.email || "N/A",
+    student_email:
+      app.student_email ||
+      getStudentEmail(app.student_data) ||
+      app.user?.email ||
+      "N/A",
     user: app.user || {
       email: getStudentEmail(app.student_data) || "N/A",
     },
@@ -280,7 +285,8 @@ export function AdminScholarshipDashboard({
   const [showApplicationDetail, setShowApplicationDetail] = useState(false);
   const [selectedApplicationForDetail, setSelectedApplicationForDetail] =
     useState<Application | null>(null);
-  const [loadingApplicationDetail, setLoadingApplicationDetail] = useState(false);
+  const [loadingApplicationDetail, setLoadingApplicationDetail] =
+    useState(false);
   const [bankVerificationLoading, setBankVerificationLoading] = useState<
     Record<number, boolean>
   >({});
@@ -289,7 +295,9 @@ export function AdminScholarshipDashboard({
   const [selectedApplicationsForBatch, setSelectedApplicationsForBatch] =
     useState<number[]>([]);
   const [bankReviewDialogOpen, setBankReviewDialogOpen] = useState(false);
-  const [currentBankVerification, setCurrentBankVerification] = useState<any | null>(null);
+  const [currentBankVerification, setCurrentBankVerification] = useState<
+    any | null
+  >(null);
   // 學期選擇相關狀態
   const [selectedAcademicYear, setSelectedAcademicYear] = useState<number>();
   const [selectedSemester, setSelectedSemester] = useState<string>();
@@ -408,7 +416,10 @@ export function AdminScholarshipDashboard({
   // 獲取子類型顯示名稱（從後端獲取）
   const getSubTypeDisplayName = (subType: string, lang: string = locale) => {
     // Type-safe access to translations
-    const currentLangDict = lang === "zh" || lang === "en" ? subTypeTranslations[lang] : subTypeTranslations.zh;
+    const currentLangDict =
+      lang === "zh" || lang === "en"
+        ? subTypeTranslations[lang]
+        : subTypeTranslations.zh;
 
     // 使用後端翻譯
     if (currentLangDict && currentLangDict[subType]) {
@@ -416,7 +427,11 @@ export function AdminScholarshipDashboard({
     }
 
     // 如果當前語言沒有翻譯，嘗試使用中文
-    if (lang !== "zh" && subTypeTranslations.zh && subTypeTranslations.zh[subType]) {
+    if (
+      lang !== "zh" &&
+      subTypeTranslations.zh &&
+      subTypeTranslations.zh[subType]
+    ) {
       return subTypeTranslations.zh[subType];
     }
 
@@ -435,7 +450,9 @@ export function AdminScholarshipDashboard({
       console.log("Status update result:", result);
 
       // 檢查是否成功（即使拋出錯誤，實際上也可能成功了）
-      toast.success(`申請狀態已更新為${newStatus === "approved" ? "已核准" : newStatus === "rejected" ? "已駁回" : newStatus}`);
+      toast.success(
+        `申請狀態已更新為${newStatus === "approved" ? "已核准" : newStatus === "rejected" ? "已駁回" : newStatus}`
+      );
 
       // 重新載入數據
       refetch();
@@ -453,7 +470,9 @@ export function AdminScholarshipDashboard({
   const handleViewApplication = async (dashboardApp: DashboardApplication) => {
     setLoadingApplicationDetail(true);
     try {
-      const response = await apiClient.applications.getApplicationById(dashboardApp.id);
+      const response = await apiClient.applications.getApplicationById(
+        dashboardApp.id
+      );
       if (response.success && response.data) {
         setSelectedApplicationForDetail(response.data);
         setShowApplicationDetail(true);
@@ -522,7 +541,8 @@ export function AdminScholarshipDashboard({
     setBankVerificationLoading(prev => ({ ...prev, [applicationId]: true }));
     try {
       // 執行 OCR 驗證（與自動驗證使用相同 API）
-      const response = await apiClient.bankVerification.verifyBankAccount(applicationId);
+      const response =
+        await apiClient.bankVerification.verifyBankAccount(applicationId);
 
       if (response.success && response.data) {
         // 不管驗證結果如何，都開啟人工檢閱 dialog
@@ -555,7 +575,9 @@ export function AdminScholarshipDashboard({
         selectedApplicationsForBatch
       );
       if (response.success) {
-        toast.success(`已完成 ${selectedApplicationsForBatch.length} 個申請案件的郵局帳戶驗證`);
+        toast.success(
+          `已完成 ${selectedApplicationsForBatch.length} 個申請案件的郵局帳戶驗證`
+        );
         setSelectedApplicationsForBatch([]);
         refetch(); // 重新載入數據
       } else {
@@ -610,8 +632,11 @@ export function AdminScholarshipDashboard({
 
     // 如果有分開狀態，判斷整體驗證狀態
     if (accountNumberStatus || accountHolderStatus) {
-      const allVerified = accountNumberStatus === "verified" && accountHolderStatus === "verified";
-      const anyFailed = accountNumberStatus === "failed" || accountHolderStatus === "failed";
+      const allVerified =
+        accountNumberStatus === "verified" &&
+        accountHolderStatus === "verified";
+      const anyFailed =
+        accountNumberStatus === "failed" || accountHolderStatus === "failed";
 
       if (allVerified) {
         return <ShieldCheck className="h-5 w-5 text-green-600" />;
@@ -666,7 +691,8 @@ export function AdminScholarshipDashboard({
     setAuditLoading(true);
     try {
       // 使用新的獎學金稽核軌跡端點，一次性獲取所有日誌（包含已刪除申請）
-      const response = await apiClient.admin.getScholarshipAuditTrail(activeTab);
+      const response =
+        await apiClient.admin.getScholarshipAuditTrail(activeTab);
 
       if (response.success && response.data) {
         setAuditLogs(response.data);
@@ -948,7 +974,7 @@ export function AdminScholarshipDashboard({
                               <div className="flex items-center justify-between gap-2 p-2 bg-green-50 border border-green-200 rounded-md">
                                 <div className="flex items-center gap-1">
                                   <CheckCircle className="h-4 w-4 text-green-600" />
-                                    <span className="text-sm font-medium text-green-800 whitespace-nowrap">
+                                  <span className="text-sm font-medium text-green-800 whitespace-nowrap">
                                     {(() => {
                                       console.log(
                                         "🎯 Display logic - App:",
@@ -1091,7 +1117,9 @@ export function AdminScholarshipDashboard({
                         // 不需要教授推薦的獎學金
                         <div className="flex items-center gap-2 p-2 bg-gray-50 border border-gray-200 rounded-md">
                           <Minus className="h-4 w-4 text-gray-500" />
-                          <span className="text-sm text-gray-600 whitespace-nowrap">不需要</span>
+                          <span className="text-sm text-gray-600 whitespace-nowrap">
+                            不需要
+                          </span>
                         </div>
                       )}
                     </TableCell>
@@ -1101,8 +1129,11 @@ export function AdminScholarshipDashboard({
                           const statusInfo = getDisplayStatusInfo(app, "zh");
                           return (
                             <>
-                              {app.status === 'partial_approved' ? (
-                                <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300">
+                              {app.status === "partial_approved" ? (
+                                <Badge
+                                  variant="outline"
+                                  className="bg-blue-100 text-blue-700 border-blue-300"
+                                >
                                   <Circle className="w-3 h-3 mr-1 fill-blue-700" />
                                   {statusInfo.statusLabel}
                                 </Badge>
@@ -1111,11 +1142,12 @@ export function AdminScholarshipDashboard({
                                   {statusInfo.statusLabel}
                                 </Badge>
                               )}
-                              {statusInfo.showStage && statusInfo.stageLabel && (
-                                <Badge variant={statusInfo.stageVariant}>
-                                  {statusInfo.stageLabel}
-                                </Badge>
-                              )}
+                              {statusInfo.showStage &&
+                                statusInfo.stageLabel && (
+                                  <Badge variant={statusInfo.stageVariant}>
+                                    {statusInfo.stageLabel}
+                                  </Badge>
+                                )}
                             </>
                           );
                         })()}
@@ -1148,7 +1180,8 @@ export function AdminScholarshipDashboard({
                         </Button>
 
                         {/* 刪除按鈕 */}
-                        {(app.status === "draft" || app.status === "submitted") && (
+                        {(app.status === "draft" ||
+                          app.status === "submitted") && (
                           <Button
                             variant="outline"
                             size="sm"
@@ -1161,6 +1194,28 @@ export function AdminScholarshipDashboard({
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         )}
+
+                        {/* 退件按鈕 */}
+                        <button
+                          onClick={async () => {
+                            const reason = window.prompt("請輸入退件理由：");
+                            if (!reason) return;
+                            try {
+                              await apiClient.admin.softDeleteApplication(
+                                app.id,
+                                reason
+                              );
+                              toast.success("退件成功");
+                              refetch();
+                            } catch (error) {
+                              console.error("Failed to soft-delete:", error);
+                              toast.error("退件失敗，請稍後再試");
+                            }
+                          }}
+                          className="text-xs text-red-600 hover:text-red-800 hover:underline"
+                        >
+                          退件
+                        </button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -1379,9 +1434,7 @@ export function AdminScholarshipDashboard({
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold">獎學金申請管理</h2>
-            <p className="text-muted-foreground">
-              載入獎學金資料中...
-            </p>
+            <p className="text-muted-foreground">載入獎學金資料中...</p>
           </div>
           <div className="flex gap-2">
             <Skeleton className="h-10 w-28" /> {/* 操作紀錄按鈕 */}
@@ -1603,7 +1656,7 @@ export function AdminScholarshipDashboard({
         application={selectedApplicationForDetail}
         role="admin"
         open={showApplicationDetail}
-        onOpenChange={(open) => {
+        onOpenChange={open => {
           setShowApplicationDetail(open);
           if (!open) {
             setSelectedApplicationForDetail(null);
@@ -1642,7 +1695,9 @@ export function AdminScholarshipDashboard({
                   {auditLogs.map((log, index) => (
                     <TableRow key={index}>
                       <TableCell className="text-sm">
-                        {new Date(log.created_at || log.timestamp).toLocaleString("zh-TW")}
+                        {new Date(
+                          log.created_at || log.timestamp
+                        ).toLocaleString("zh-TW")}
                       </TableCell>
                       <TableCell className="text-sm">
                         {log.user_name || log.user?.name || "系統"}
@@ -1680,14 +1735,14 @@ export function AdminScholarshipDashboard({
       {applicationToDelete && (
         <DeleteApplicationDialog
           open={showDeleteDialog}
-          onOpenChange={(open) => {
+          onOpenChange={open => {
             setShowDeleteDialog(open);
             if (!open) {
               setApplicationToDelete(null);
             }
           }}
           applicationId={applicationToDelete.id}
-          applicationName={`${applicationToDelete.app_id || 'N/A'} - ${applicationToDelete.student_name || '未知'}`}
+          applicationName={`${applicationToDelete.app_id || "N/A"} - ${applicationToDelete.student_name || "未知"}`}
           onSuccess={handleDeleteSuccess}
           locale="zh"
           requireReason={true}
