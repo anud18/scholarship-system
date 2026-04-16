@@ -545,6 +545,19 @@ export function CollegeRankingTable({
         }
       });
 
+      // Validate: no duplicate student IDs
+      const seenStudentIds = new Set<string>();
+      const duplicateStudentIds = new Set<string>();
+      importData.forEach(item => {
+        if (seenStudentIds.has(item.student_id)) {
+          duplicateStudentIds.add(item.student_id);
+        }
+        seenStudentIds.add(item.student_id);
+      });
+      if (duplicateStudentIds.size > 0) {
+        errors.push(`學號重複：${Array.from(duplicateStudentIds).join(", ")}`);
+      }
+
       // Validate: no duplicate integer ranks
       const integerRanks = importData
         .filter(item => typeof item.rank_position === "number")

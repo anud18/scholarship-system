@@ -930,7 +930,17 @@ async def import_ranking_from_excel(
         # --- Validation ---
         errors = []
 
-        # 1. Collect ranking system student IDs
+        # 1. Check for duplicate student IDs in import data
+        seen_student_ids: set = set()
+        duplicate_student_ids: list = []
+        for item in import_data:
+            if item.student_id in seen_student_ids:
+                duplicate_student_ids.append(item.student_id)
+            seen_student_ids.add(item.student_id)
+        if duplicate_student_ids:
+            errors.append(f"匯入資料中學號重複：{', '.join(sorted(set(duplicate_student_ids)))}")
+
+        # 2. Collect ranking system student IDs
         system_student_ids = set()
         student_id_to_item = {}
         for rank_item in ranking.items:
@@ -942,10 +952,8 @@ async def import_ranking_from_excel(
                 system_student_ids.add(sid)
                 student_id_to_item[sid] = rank_item
 
-        # 2. Collect import student IDs
-        import_student_ids = {item.student_id for item in import_data}
-
         # 3. Strict student matching
+        import_student_ids = seen_student_ids
         extra_ids = import_student_ids - system_student_ids
         missing_ids = system_student_ids - import_student_ids
         if extra_ids:
@@ -984,15 +992,20 @@ async def import_ranking_from_excel(
         # --- Apply updates ---
         updated_count = 0
         rejected_count = 0
+        num_ranked = len(integer_ranks)
 
         import_map = {item.student_id: item for item in import_data}
 
+        # Track rejected index for assigning positions after ranked students
+        rejected_index = 0
         for sid, rank_item in student_id_to_item.items():
             if sid not in import_map:
                 continue
             import_item = import_map[sid]
             if import_item.rank_position == "N":
-                rank_item.rank_position = None
+                # rank_position is NOT NULL — assign after last ranked position
+                rejected_index += 1
+                rank_item.rank_position = num_ranked + rejected_index
                 rank_item.status = "rejected"
                 rejected_count += 1
             else:
@@ -1001,7 +1014,7 @@ async def import_ranking_from_excel(
             updated_count += 1
 
         ranking.total_applications = len(ranking.items)
-        await db.flush()
+        await db.commit()
 
         return ApiResponse(
             success=True,
