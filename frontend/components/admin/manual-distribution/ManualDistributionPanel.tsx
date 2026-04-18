@@ -667,13 +667,17 @@ export function ManualDistributionPanel({
                         );
                       if (result.success && result.data) {
                         const { matched, not_found } = result.data;
-                        setSaveMessage(
-                          `成功匯入 ${matched} 筆${not_found.length > 0 ? `，${not_found.length} 筆學號未找到` : ""}`
-                        );
+                        setSaveMessage({
+                          type: "success",
+                          text: `成功匯入 ${matched} 筆${not_found.length > 0 ? `，${not_found.length} 筆學號未找到` : ""}`,
+                        });
                         await fetchData();
                       }
                     } catch (err) {
-                      setSaveMessage("匯入失敗，請確認檔案格式");
+                      setSaveMessage({
+                        type: "error",
+                        text: "匯入失敗，請確認檔案格式",
+                      });
                     }
                     e.target.value = "";
                   }}

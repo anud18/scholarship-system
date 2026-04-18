@@ -1297,6 +1297,26 @@ export interface paths {
         patch: operations["admin_update_application_status_api_v1_admin_applications__id__status_patch"];
         trace?: never;
     };
+    "/api/v1/admin/applications/{id}/soft-delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Soft Delete Application
+         * @description Soft-delete an application (admin only). Marks as deleted without removing data.
+         */
+        patch: operations["soft_delete_application_api_v1_admin_applications__id__soft_delete_patch"];
+        trace?: never;
+    };
     "/api/v1/admin/announcements": {
         parameters: {
             query?: never;
@@ -6666,6 +6686,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/manual-distribution/import-received-months": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Received Months
+         * @description Import received months from Excel for students in a distribution.
+         */
+        post: operations["import_received_months_api_v1_manual_distribution_import_received_months_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -7505,6 +7545,15 @@ export interface components {
             /**
              * File
              * Format: binary
+             */
+            file: string;
+        };
+        /** Body_import_received_months_api_v1_manual_distribution_import_received_months_post */
+        Body_import_received_months_api_v1_manual_distribution_import_received_months_post: {
+            /**
+             * File
+             * Format: binary
+             * @description Excel file with columns: 學號, 已領月份數
              */
             file: string;
         };
@@ -9082,6 +9131,11 @@ export interface components {
              * @description Email body (plain text or HTML)
              */
             body: string;
+        };
+        /** SoftDeleteRequest */
+        SoftDeleteRequest: {
+            /** Reason */
+            reason: string;
         };
         /**
          * StudentDataSchema
@@ -11648,6 +11702,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ApplicationStatusUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    soft_delete_application_api_v1_admin_applications__id__soft_delete_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SoftDeleteRequest"];
             };
         };
         responses: {
@@ -20619,6 +20708,46 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["GenerateRostersRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_received_months_api_v1_manual_distribution_import_received_months_post: {
+        parameters: {
+            query: {
+                /** @description Scholarship type ID */
+                scholarship_type_id: number;
+                /** @description Academic year */
+                academic_year: number;
+                /** @description Semester */
+                semester: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_import_received_months_api_v1_manual_distribution_import_received_months_post"];
             };
         };
         responses: {
