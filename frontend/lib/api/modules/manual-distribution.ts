@@ -375,12 +375,15 @@ export function createManualDistributionApi() {
         semester,
       });
 
+      const token = typedClient.getToken();
       const response = await fetch(
         `/api/v1/manual-distribution/import-received-months?${params}`,
         {
           method: "POST",
           body: formData,
-          credentials: "include",
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
         }
       );
       const data = await response.json();

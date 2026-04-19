@@ -585,10 +585,16 @@ async def import_received_months(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到對應的排名資料")
 
     # Get ranking items with their applications for student ID matching
+    # Exclude soft-deleted applications
     stmt = (
         select(CollegeRankingItem, Application)
         .join(Application, CollegeRankingItem.application_id == Application.id)
-        .where(CollegeRankingItem.ranking_id.in_(ranking_ids))
+        .where(
+            and_(
+                CollegeRankingItem.ranking_id.in_(ranking_ids),
+                Application.deleted_at.is_(None),
+            )
+        )
     )
     result = await db.execute(stmt)
     item_pairs = result.all()

@@ -248,6 +248,10 @@ class ManualDistributionService:
             if not app:
                 continue
 
+            # Skip soft-deleted applications
+            if app.deleted_at is not None:
+                continue
+
             student_data = app.student_data or {}
 
             # Filter by college if specified
@@ -413,6 +417,9 @@ class ManualDistributionService:
         # Build allocation counts: {sub_type: {year: {college: count}}}
         allocation_counts: dict[str, dict[int, dict[str, int]]] = {}
         for item in allocated_items:
+            # Skip soft-deleted applications from quota accounting
+            if item.application and item.application.deleted_at is not None:
+                continue
             sub_type = item.allocated_sub_type
             if not sub_type:
                 continue
@@ -650,6 +657,10 @@ class ManualDistributionService:
         for item in items:
             app = item.application
             if not app:
+                continue
+
+            # Skip soft-deleted applications
+            if app.deleted_at is not None:
                 continue
 
             if item.is_allocated and item.allocated_sub_type:
@@ -951,11 +962,15 @@ class ManualDistributionService:
         result = await self.db.execute(items_query)
         all_items = result.scalars().all()
 
-        # Deduplicate by application_id (keep first seen)
+        # Deduplicate by application_id (keep first seen), skip soft-deleted
         seen_app_ids: set[int] = set()
         unique_items = []
         for item in all_items:
-            if item.application and item.application.id not in seen_app_ids:
+            if (
+                item.application
+                and item.application.deleted_at is None
+                and item.application.id not in seen_app_ids
+            ):
                 seen_app_ids.add(item.application.id)
                 unique_items.append(item)
 

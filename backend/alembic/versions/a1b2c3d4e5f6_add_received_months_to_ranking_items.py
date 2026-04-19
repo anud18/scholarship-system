@@ -1,7 +1,7 @@
 """add received_months to college_ranking_items
 
 Revision ID: a1b2c3d4e5f6
-Revises: adcbec818138
+Revises: add_renewal_year_001
 Create Date: 2026-04-07 10:00:00.000000
 
 """
@@ -13,7 +13,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "a1b2c3d4e5f6"
-down_revision: Union[str, None] = "adcbec818138"
+down_revision: Union[str, None] = "add_renewal_year_001"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
