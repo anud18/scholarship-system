@@ -1198,15 +1198,24 @@ export function AdminScholarshipDashboard({
                         {/* 退件按鈕 */}
                         <button
                           onClick={async () => {
-                            const reason = window.prompt("請輸入退件理由：");
+                            const reason = window
+                              .prompt("請輸入退件理由：")
+                              ?.trim();
                             if (!reason) return;
                             try {
-                              await apiClient.admin.softDeleteApplication(
-                                app.id,
-                                reason
-                              );
-                              toast.success("退件成功");
-                              refetch();
+                              const result =
+                                await apiClient.admin.softDeleteApplication(
+                                  app.id,
+                                  reason
+                                );
+                              if (result.success) {
+                                toast.success("退件成功");
+                                refetch();
+                              } else {
+                                toast.error(
+                                  result.message || "退件失敗，請稍後再試"
+                                );
+                              }
                             } catch (error) {
                               console.error("Failed to soft-delete:", error);
                               toast.error("退件失敗，請稍後再試");

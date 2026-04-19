@@ -537,11 +537,17 @@ async def import_received_months(
     if len(content) > 5 * 1024 * 1024:
         raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="檔案過大 (上限 5MB)")
 
-    wb = openpyxl.load_workbook(BytesIO(content), read_only=True)
-    ws = wb.active
+    try:
+        wb = openpyxl.load_workbook(BytesIO(content), read_only=True)
+        ws = wb.active
+        # Parse rows: expect header row then data rows
+        rows = list(ws.iter_rows(min_row=2, values_only=True))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"無法解析 Excel 檔案，請確認格式正確: {type(e).__name__}",
+        )
 
-    # Parse rows: expect header row then data rows
-    rows = list(ws.iter_rows(min_row=2, values_only=True))
     if not rows:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Excel 檔案沒有資料列")
 

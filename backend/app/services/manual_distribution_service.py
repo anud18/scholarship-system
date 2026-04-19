@@ -415,6 +415,7 @@ class ManualDistributionService:
             allocated_items = []
 
         # Build allocation counts: {sub_type: {year: {college: count}}}
+        ranking_by_id = {r.id: r for r in all_rankings}
         allocation_counts: dict[str, dict[int, dict[str, int]]] = {}
         for item in allocated_items:
             # Skip soft-deleted applications from quota accounting
@@ -423,7 +424,7 @@ class ManualDistributionService:
             sub_type = item.allocated_sub_type
             if not sub_type:
                 continue
-            ranking = next((r for r in all_rankings if r.id == item.ranking_id), None)
+            ranking = ranking_by_id.get(item.ranking_id)
             alloc_year = item.allocation_year or (ranking.academic_year if ranking else None)
             if not alloc_year:
                 continue

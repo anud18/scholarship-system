@@ -386,8 +386,29 @@ export function createManualDistributionApi() {
           },
         }
       );
-      const data = await response.json();
-      return data as ApiResponse<{
+
+      let body: any = null;
+      try {
+        body = await response.json();
+      } catch {
+        // Non-JSON response — keep body null and fall through to error shape
+      }
+
+      if (!response.ok) {
+        return {
+          success: false,
+          message:
+            (body && (body.message || body.detail)) ||
+            `Upload failed (HTTP ${response.status})`,
+          data: undefined,
+        } as ApiResponse<{
+          matched: number;
+          not_found: string[];
+          updated: number;
+        }>;
+      }
+
+      return body as ApiResponse<{
         matched: number;
         not_found: string[];
         updated: number;

@@ -652,7 +652,7 @@ export function ManualDistributionPanel({
                 匯入已領月份數
                 <input
                   type="file"
-                  accept=".xlsx,.xls"
+                  accept=".xlsx"
                   className="hidden"
                   onChange={async e => {
                     const file = e.target.files?.[0];

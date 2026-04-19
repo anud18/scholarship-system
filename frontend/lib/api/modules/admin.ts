@@ -1294,8 +1294,11 @@ export function createAdminApi() {
       ApiResponse<{ id: number; app_id: string; deleted_at: string }>
     > => {
       const response = await typedClient.raw.PATCH(
-        `/api/v1/admin/applications/${id}/soft-delete` as any,
-        { body: { reason } as any }
+        "/api/v1/admin/applications/{id}/soft-delete",
+        {
+          params: { path: { id } },
+          body: { reason },
+        }
       );
       return toApiResponse(response) as ApiResponse<{
         id: number;

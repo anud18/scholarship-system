@@ -7,12 +7,6 @@ Covers the admin UI enhancement features:
 - _sub_type_to_chinese: Sub-type code -> display name mapping
 """
 
-import os
-
-# Set test mode before importing anything that reads settings
-os.environ["TESTING"] = "true"
-
-import pytest
 from unittest.mock import Mock
 
 from app.models.application import Application
