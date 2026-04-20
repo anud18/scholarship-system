@@ -312,6 +312,17 @@ function ProfessorReviewComponentInner({
           comments: item.comments
         }));
 
+      // Validate that all rejected items have comments
+      const rejectedWithoutComments = filteredItems.filter(
+        item => item.recommendation === 'reject' && (!item.comments || item.comments.trim() === '')
+      );
+
+      if (rejectedWithoutComments.length > 0) {
+        setError('當選擇「不同意」時必須填寫評估意見');
+        setLoading(false);
+        return;
+      }
+
       const submissionData = {
         items: filteredItems
       };
@@ -647,10 +658,10 @@ function ProfessorReviewComponentInner({
                   <CardHeader>
                     <CardTitle className="text-lg flex items-center gap-2">
                       <CheckCircle className="h-5 w-5 text-blue-600" />
-                      子類型推薦評估
+                      是否同意學生申請
                     </CardTitle>
                     <p className="text-sm text-muted-foreground">
-                      請針對每個獎學金子類型進行評估，並提供您的推薦意見
+                      請針對每個獎學金申請進行評估，並提供您的推薦意見
                     </p>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -665,96 +676,86 @@ function ProfessorReviewComponentInner({
                           key={subType.value}
                           className="border rounded-lg p-4 space-y-4"
                         >
-                          {/* Simple checkbox approach */}
-                          <div className="flex items-start gap-4">
-                            <div className="flex items-center space-x-2 pt-1">
-                              <Checkbox
-                                id={`recommend-${subType.value}`}
-                                checked={isRecommended}
-                                onCheckedChange={checked => {
-                                  console.log(
-                                    "Checkbox changed:",
-                                    subType.value,
-                                    "to:",
-                                    checked
-                                  );
-                                  updateReviewItem(
-                                    subType.value,
-                                    "recommendation",
-                                    checked ? 'approve' : 'reject'
-                                  );
-                                }}
-                              />
-                              <label
-                                htmlFor={`recommend-${subType.value}`}
-                                className="text-sm font-medium cursor-pointer"
-                              >
-                                推薦
-                              </label>
-                            </div>
-                            <div className="flex-1">
-                              <h3 className="font-semibold text-lg mb-1">
-                                {subType.label}
-                              </h3>
-                              {subType.label_en && (
-                                <p className="text-sm text-muted-foreground mb-2">
-                                  {subType.label_en}
-                                </p>
-                              )}
-                              <Badge
-                                variant={
-                                  isRecommended ? "default" : "secondary"
-                                }
-                              >
-                                {isRecommended ? "✓ 推薦" : "未推薦"}
-                              </Badge>
-                            </div>
+                          {/* Sub-type Title */}
+                          <div>
+                            <h3 className="font-semibold text-lg mb-1">
+                              {subType.label}
+                            </h3>
+                            {subType.label_en && (
+                              <p className="text-sm text-muted-foreground mb-2">
+                                {subType.label_en}
+                              </p>
+                            )}
                           </div>
 
-                          {/* Alternative buttons */}
-                          <div className="flex gap-2">
-                            <Button
-                              type="button"
-                              variant={isRecommended ? "default" : "outline"}
-                              size="sm"
-                              onClick={() => {
-                                console.log(
-                                  "Direct recommend button clicked:",
-                                  subType.value
-                                );
-                                updateReviewItem(
-                                  subType.value,
-                                  "recommendation",
-                                  'approve'
-                                );
-                              }}
-                            >
-                              推薦此項目
-                            </Button>
-                            <Button
-                              type="button"
-                              variant={!isRecommended ? "secondary" : "outline"}
-                              size="sm"
-                              onClick={() => {
-                                console.log(
-                                  "Direct not recommend button clicked:",
-                                  subType.value
-                                );
-                                updateReviewItem(
-                                  subType.value,
-                                  "recommendation",
-                                  'reject'
-                                );
-                              }}
-                            >
-                              不推薦
-                            </Button>
+                          {/* Checkbox options */}
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-4">
+                              <div className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`agree-${subType.value}`}
+                                  checked={reviewItem?.recommendation === 'approve'}
+                                  onCheckedChange={checked => {
+                                    console.log(
+                                      "Agree checkbox changed:",
+                                      subType.value,
+                                      "to:",
+                                      checked
+                                    );
+                                    updateReviewItem(
+                                      subType.value,
+                                      "recommendation",
+                                      checked ? 'approve' : 'pending'
+                                    );
+                                  }}
+                                />
+                                <label
+                                  htmlFor={`agree-${subType.value}`}
+                                  className="text-sm font-medium cursor-pointer"
+                                >
+                                  同意
+                                </label>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`disagree-${subType.value}`}
+                                  checked={reviewItem?.recommendation === 'reject'}
+                                  onCheckedChange={checked => {
+                                    console.log(
+                                      "Disagree checkbox changed:",
+                                      subType.value,
+                                      "to:",
+                                      checked
+                                    );
+                                    updateReviewItem(
+                                      subType.value,
+                                      "recommendation",
+                                      checked ? 'reject' : 'pending'
+                                    );
+                                  }}
+                                />
+                                <label
+                                  htmlFor={`disagree-${subType.value}`}
+                                  className="text-sm font-medium cursor-pointer"
+                                >
+                                  不同意
+                                </label>
+                              </div>
+                            </div>
+                            {reviewItem?.recommendation && reviewItem.recommendation !== 'pending' && (
+                              <Badge
+                                variant={reviewItem.recommendation === 'approve' ? 'default' : 'destructive'}
+                                className="w-fit"
+                              >
+                                {reviewItem.recommendation === 'approve' ? '✓ 同意' : '✗ 不同意'}
+                              </Badge>
+                            )}
                           </div>
 
                           {/* Comments Section */}
                           <div>
                             <label className="text-sm font-medium mb-2 block">
-                              評估意見 (可選)
+                              評估意見 {reviewItem?.recommendation === 'reject' && <span className="text-red-500">*</span>} (當選擇「不同意」時為必填)
                             </label>
                             <Textarea
                               placeholder={`請說明您對「${subType.label}」的評估意見...`}
@@ -771,7 +772,13 @@ function ProfessorReviewComponentInner({
                                 );
                               }}
                               rows={3}
+                              className={reviewItem?.recommendation === 'reject' && (!reviewItem?.comments || reviewItem.comments.trim() === '') ? 'border-red-500' : ''}
                             />
+                            {reviewItem?.recommendation === 'reject' && (!reviewItem?.comments || reviewItem.comments.trim() === '') && (
+                              <p className="text-sm text-red-600 mt-1">
+                                當選擇「不同意」時必須填寫評估意見
+                              </p>
+                            )}
                           </div>
                         </div>
                       );
@@ -829,7 +836,12 @@ function ProfessorReviewComponentInner({
                 >
                   取消
                 </Button>
-                <Button onClick={submitReview} disabled={loading}>
+                <Button
+                  onClick={submitReview}
+                  disabled={loading || reviewData.items.some(
+                    item => item.recommendation === 'reject' && (!item.comments || item.comments.trim() === '')
+                  )}
+                >
                   {loading
                     ? "提交中..."
                     : existingReview
