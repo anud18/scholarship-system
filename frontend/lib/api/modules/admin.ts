@@ -975,17 +975,18 @@ export function createAdminApi() {
     },
 
     /**
-     * Soft-delete an application (admin only).
+     * Hard-delete an application (admin only).
+     * Cascades removal of related review/roster rows; audit log is preserved.
      */
-    softDeleteApplication: async (
+    deleteApplication: async (
       id: number,
       reason: string
-    ): Promise<ApiResponse<{ id: number; app_id: string; deleted_at: string }>> => {
-      const response = await typedClient.raw.PATCH('/api/v1/admin/applications/{id}/soft-delete', {
+    ): Promise<ApiResponse<{ id: number; app_id: string; reason: string }>> => {
+      const response = await typedClient.raw.DELETE('/api/v1/admin/applications/{id}', {
         params: { path: { id } },
         body: { reason },
       });
-      return toApiResponse(response) as ApiResponse<{ id: number; app_id: string; deleted_at: string }>;
+      return toApiResponse(response) as ApiResponse<{ id: number; app_id: string; reason: string }>;
     },
   };
 }

@@ -1147,7 +1147,7 @@ export function AdminScholarshipDashboard({
                           )}
                         </Button>
 
-                        {/* 刪除按鈕 */}
+                        {/* 刪除按鈕：僅限學生申請階段（草稿 / 已送出） */}
                         {(app.status === "draft" || app.status === "submitted") && (
                           <Button
                             variant="outline"
@@ -1157,33 +1157,11 @@ export function AdminScholarshipDashboard({
                               setShowDeleteDialog(true);
                             }}
                             className="hover:bg-red-50 hover:border-red-300 hover:text-red-600"
+                            title="刪除申請（僅限學生申請階段）"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         )}
-
-                        {/* 退件按鈕 */}
-                        <button
-                          onClick={async () => {
-                            const reason = window.prompt("請輸入退件理由：")?.trim();
-                            if (!reason) return;
-                            try {
-                              const result = await apiClient.admin.softDeleteApplication(app.id, reason);
-                              if (result.success) {
-                                toast.success("退件成功");
-                                refetch();
-                              } else {
-                                toast.error(result.message || "退件失敗，請稍後再試");
-                              }
-                            } catch (error) {
-                              console.error("Failed to soft-delete:", error);
-                              toast.error("退件失敗，請稍後再試");
-                            }
-                          }}
-                          className="text-xs text-red-600 hover:text-red-800 hover:underline"
-                        >
-                          退件
-                        </button>
                       </div>
                     </TableCell>
                   </TableRow>

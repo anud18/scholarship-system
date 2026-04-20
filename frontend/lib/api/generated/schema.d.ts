@@ -1297,7 +1297,7 @@ export interface paths {
         patch: operations["admin_update_application_status_api_v1_admin_applications__id__status_patch"];
         trace?: never;
     };
-    "/api/v1/admin/applications/{id}/soft-delete": {
+    "/api/v1/admin/applications/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1307,14 +1307,25 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Application
+         * @description Hard-delete an application (admin only).
+         *
+         *     Only allowed while the application is still in the student-facing stage
+         *     (draft / submitted). Once review has started the row must be preserved.
+         *
+         *     Performs a cascade delete:
+         *     - Removes related CollegeRankingItem and PaymentRosterItem rows explicitly.
+         *     - SQLAlchemy cascades remove ApplicationReview, ApplicationFile, DocumentRequest rows.
+         *     - The application row itself is permanently removed.
+         *
+         *     Records an AuditLog entry describing the deletion so the operation
+         *     history persists even after the application row is gone.
+         */
+        delete: operations["delete_application_api_v1_admin_applications__id__delete"];
         options?: never;
         head?: never;
-        /**
-         * Soft Delete Application
-         * @description Soft-delete an application (admin only). Marks as deleted without removing data.
-         */
-        patch: operations["soft_delete_application_api_v1_admin_applications__id__soft_delete_patch"];
+        patch?: never;
         trace?: never;
     };
     "/api/v1/admin/announcements": {
@@ -7873,6 +7884,11 @@ export interface components {
              */
             validation_regex?: string | null;
         };
+        /** DeleteApplicationRequest */
+        DeleteApplicationRequest: {
+            /** Reason */
+            reason: string;
+        };
         /**
          * DeveloperProfileRequest
          * @description Developer profile creation request schema
@@ -9131,11 +9147,6 @@ export interface components {
              * @description Email body (plain text or HTML)
              */
             body: string;
-        };
-        /** SoftDeleteRequest */
-        SoftDeleteRequest: {
-            /** Reason */
-            reason: string;
         };
         /**
          * StudentDataSchema
@@ -11725,7 +11736,7 @@ export interface operations {
             };
         };
     };
-    soft_delete_application_api_v1_admin_applications__id__soft_delete_patch: {
+    delete_application_api_v1_admin_applications__id__delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -11736,7 +11747,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SoftDeleteRequest"];
+                "application/json": components["schemas"]["DeleteApplicationRequest"];
             };
         };
         responses: {

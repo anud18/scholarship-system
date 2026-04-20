@@ -13,8 +13,9 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
+from sqlalchemy import delete as sqla_delete
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +25,9 @@ from app.core.exceptions import AuthorizationError, NotFoundError
 from app.core.security import require_admin
 from app.db.deps import get_db
 from app.models.application import Application, ApplicationStatus
+from app.models.college_review import CollegeRankingItem
 from app.models.enums import Semester
+from app.models.payment_roster import PaymentRosterItem
 from app.models.scholarship import ScholarshipType
 from app.models.user import User
 from app.schemas.application import (
@@ -35,6 +38,7 @@ from app.schemas.application import (
     ProfessorAssignmentRequest,
 )
 from app.schemas.common import PaginatedResponse
+from app.services.application_audit_service import ApplicationAuditService
 from app.services.application_service import ApplicationService
 from app.services.bulk_approval_service import BulkApprovalService
 
@@ -418,18 +422,43 @@ async def admin_update_application_status(
     }
 
 
-class SoftDeleteRequest(BaseModel):
-    reason: str = Field(..., min_length=1)
+class DeleteApplicationRequest(BaseModel):
+    reason: str = Field(..., min_length=1, max_length=500)
 
 
-@router.patch("/applications/{id}/soft-delete")
-async def soft_delete_application(
+# Only applications still in the student-facing stage can be deleted.
+# Once review has started or a final decision is recorded, the application
+# must be preserved for audit/history purposes.
+DELETABLE_APPLICATION_STATUSES: frozenset[str] = frozenset(
+    {
+        ApplicationStatus.draft.value,
+        ApplicationStatus.submitted.value,
+    }
+)
+
+
+@router.delete("/applications/{id}")
+async def delete_application(
     id: int,
-    request: SoftDeleteRequest,
+    payload: DeleteApplicationRequest,
+    request: Request = None,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Soft-delete an application (admin only). Marks as deleted without removing data."""
+    """
+    Hard-delete an application (admin only).
+
+    Only allowed while the application is still in the student-facing stage
+    (draft / submitted). Once review has started the row must be preserved.
+
+    Performs a cascade delete:
+    - Removes related CollegeRankingItem and PaymentRosterItem rows explicitly.
+    - SQLAlchemy cascades remove ApplicationReview, ApplicationFile, DocumentRequest rows.
+    - The application row itself is permanently removed.
+
+    Records an AuditLog entry describing the deletion so the operation
+    history persists even after the application row is gone.
+    """
     stmt = select(Application).where(Application.id == id)
     result = await db.execute(stmt)
     app = result.scalar_one_or_none()
@@ -437,19 +466,51 @@ async def soft_delete_application(
     if not app:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
 
-    if app.deleted_at is not None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Application is already deleted")
+    app_status_value = app.status.value if hasattr(app.status, "value") else str(app.status)
+    if app_status_value not in DELETABLE_APPLICATION_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="只有在學生申請階段（草稿或已送出）的申請才可刪除",
+        )
 
-    app.deleted_at = datetime.now(timezone.utc)
-    app.deleted_by_id = current_user.id
-    app.deletion_reason = request.reason
-    app.status = ApplicationStatus.rejected.value
-    app.status_name = "已退件"
+    app_id_str = app.app_id
+    reason = payload.reason.strip()
 
-    await db.commit()
+    # Capture scholarship/student snapshot so the audit log remains
+    # attributable after the application row is hard-deleted.
+    student_name = None
+    if isinstance(app.student_data, dict):
+        student_name = app.student_data.get("std_cname") or app.student_data.get("student_name")
+
+    audit_service = ApplicationAuditService(db)
+    await audit_service.log_delete_application(
+        application_id=app.id,
+        app_id=app_id_str,
+        user=current_user,
+        reason=reason,
+        request=request,
+        scholarship_type_id=app.scholarship_type_id,
+        student_name=student_name,
+    )
+
+    try:
+        # Explicit cascade for FKs without ON DELETE CASCADE.
+        await db.execute(sqla_delete(PaymentRosterItem).where(PaymentRosterItem.application_id == id))
+        await db.execute(sqla_delete(CollegeRankingItem).where(CollegeRankingItem.application_id == id))
+
+        # ORM delete so relationship-level cascades (reviews/files/document_requests) fire.
+        await db.delete(app)
+        await db.commit()
+    except SQLAlchemyError as e:
+        await db.rollback()
+        logger.error(f"Database error deleting application {id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete application due to a database error.",
+        )
 
     return {
         "success": True,
-        "message": f"Application {app.app_id} has been soft-deleted",
-        "data": {"id": app.id, "app_id": app.app_id, "deleted_at": app.deleted_at.isoformat()},
+        "message": f"Application {app_id_str} has been deleted",
+        "data": {"id": id, "app_id": app_id_str, "reason": reason},
     }
