@@ -960,7 +960,10 @@ export function ManualDistributionPanel({
                     >
                       學期數
                     </th>
-                    <th className="px-1.5 py-1.5 border border-slate-200 text-center font-semibold text-[11px] w-16">
+                    <th
+                      rowSpan={2}
+                      className="px-1.5 py-1.5 border border-slate-200 text-center font-semibold text-[11px] w-16"
+                    >
                       已領月份數
                     </th>
                     <th
@@ -1170,22 +1173,8 @@ export function ManualDistributionPanel({
                                   {student.term_count ?? "-"}
                                 </td>
                                 <td className="px-3 py-2.5 border-r border-slate-100 text-center whitespace-nowrap">
-                                  <span
-                                    className={
-                                      student.received_months_source ===
-                                      "imported"
-                                        ? "text-blue-600 font-medium"
-                                        : ""
-                                    }
-                                  >
-                                    {student.received_months ?? "-"}
-                                  </span>
-                                  {student.received_months_source ===
-                                    "imported" && (
-                                    <span className="ml-0.5 text-[9px] text-blue-400">
-                                      匯
-                                    </span>
-                                  )}
+                                  <span className={student.received_months_source === "imported" ? "text-blue-600 font-medium" : ""}>{student.received_months ?? "-"}</span>
+                                  {student.received_months_source === "imported" && <span className="ml-0.5 text-[9px] text-blue-400">匯</span>}
                                 </td>
                                 <td className="px-3 py-2.5 border-r border-slate-100 font-medium whitespace-nowrap">
                                   {student.student_name}
