@@ -807,26 +807,6 @@ function ProfessorReviewComponentInner({
                 </Card>
               )}
 
-              {/* Overall Recommendation */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">整體推薦意見</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Textarea
-                    placeholder="請提供對此申請的整體推薦意見..."
-                    value={reviewData.recommendation || ""}
-                    onChange={e =>
-                      setReviewData(prev => ({
-                        ...prev,
-                        recommendation: e.target.value,
-                      }))
-                    }
-                    rows={4}
-                  />
-                </CardContent>
-              </Card>
-
               {/* Actions */}
               <div className="flex justify-end gap-2">
                 <Button
