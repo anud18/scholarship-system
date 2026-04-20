@@ -135,12 +135,7 @@ function ProfessorReviewComponentInner({
 
   // Ensure reviewData.items is always initialized when subTypes change
   useEffect(() => {
-    console.log("SubTypes changed, checking reviewData initialization");
-    console.log("SubTypes:", subTypes);
-    console.log("Current reviewData.items:", reviewData.items);
-
     if (subTypes.length > 0 && reviewData.items.length === 0) {
-      console.log("Initializing reviewData.items from subTypes effect");
       const initialItems = subTypes.map(subType => ({
         sub_type_code: subType.value,
         recommendation: 'pending' as const,
@@ -151,8 +146,6 @@ function ProfessorReviewComponentInner({
         ...prev,
         items: initialItems,
       }));
-
-      console.log("ReviewData.items initialized:", initialItems);
     }
   }, [subTypes, reviewData.items.length]);
 
@@ -187,25 +180,19 @@ function ProfessorReviewComponentInner({
     setError(null);
 
     try {
-      console.log("=== OPENING REVIEW MODAL ===");
-      console.log("Application ID:", application.id);
-
       // Get available sub-types
       const subTypesResponse = await apiClient.professor.getSubTypes(
         application.id
       );
-      console.log("Sub-types response:", subTypesResponse);
 
       let availableSubTypes: SubTypeOption[] = [];
       if (subTypesResponse.success && subTypesResponse.data) {
         availableSubTypes = subTypesResponse.data;
         setSubTypes(availableSubTypes);
-        console.log("Set sub-types:", availableSubTypes);
       }
 
       // Always initialize items based on available sub-types
       const initializeItems = (subTypes: SubTypeOption[]) => {
-        console.log("Initializing items for sub-types:", subTypes);
         return subTypes.map(subType => ({
           sub_type_code: subType.value,
           recommendation: 'pending' as const,
@@ -215,13 +202,11 @@ function ProfessorReviewComponentInner({
 
       // Get existing review if any
       const initialItems = initializeItems(availableSubTypes);
-      console.log("Initial items created:", initialItems);
 
       try {
         const reviewResponse = await apiClient.professor.getReview(
           application.id
         );
-        console.log("Existing review response:", reviewResponse);
 
         // Check if this is an actual existing review (id > 0) or a new review (id = 0)
         if (
@@ -230,8 +215,6 @@ function ProfessorReviewComponentInner({
           reviewResponse.data.id &&
           reviewResponse.data.id > 0
         ) {
-          console.log("Found existing review with ID:", reviewResponse.data.id);
-          console.log("Existing review items:", reviewResponse.data.items);
           setExistingReview(reviewResponse.data);
 
           // Merge existing review items with all available sub-types
@@ -249,14 +232,12 @@ function ProfessorReviewComponentInner({
             );
           });
 
-          console.log("Merged items with existing review:", mergedItems);
           setReviewData({
             recommendation: reviewResponse.data.recommendation || "",
             items: mergedItems,
           });
         } else {
           // No existing review (id = 0 or no data), use initial items
-          console.log("No existing review found, using initial items");
           setExistingReview(null);
           setReviewData({
             recommendation: "",
@@ -265,21 +246,12 @@ function ProfessorReviewComponentInner({
         }
       } catch (e) {
         // No existing review, use initial items
-        console.log("Error getting existing review, using initial items:", e);
         setExistingReview(null);
         setReviewData({
           recommendation: "",
           items: initialItems,
         });
       }
-
-      // Final verification
-      setTimeout(() => {
-        console.log("=== FINAL STATE VERIFICATION ===");
-        console.log("SubTypes length:", availableSubTypes.length);
-        console.log("ReviewData items length:", initialItems.length);
-        console.log("ReviewData items:", initialItems);
-      }, 100);
 
       setReviewModalOpen(true);
     } catch (e: any) {
@@ -311,6 +283,13 @@ function ProfessorReviewComponentInner({
           recommendation: item.recommendation as 'approve' | 'reject',
           comments: item.comments
         }));
+
+      // Validate that at least one item has been evaluated
+      if (filteredItems.length === 0) {
+        setError('請至少對一個獎學金申請項目進行評估（選擇同意或不同意）');
+        setLoading(false);
+        return;
+      }
 
       // Validate that all rejected items have comments
       const rejectedWithoutComments = filteredItems.filter(
@@ -362,35 +341,17 @@ function ProfessorReviewComponentInner({
 
   // Update review item
   const updateReviewItem = (subTypeCode: string, field: string, value: any) => {
-    console.log("=== updateReviewItem START ===");
-    console.log("Parameters:", { subTypeCode, field, value });
-    console.log(
-      "Current reviewData before update:",
-      JSON.stringify(reviewData, null, 2)
-    );
-
     setReviewData(prev => {
-      console.log("Previous state in setter:", JSON.stringify(prev, null, 2));
-
-      const itemFound = prev.items.find(
-        item => item.sub_type_code === subTypeCode
-      );
-      console.log("Item found for subTypeCode:", subTypeCode, "=", itemFound);
-
       const newData = {
         ...prev,
         items: prev.items.map(item => {
           if (item.sub_type_code === subTypeCode) {
-            const updatedItem = { ...item, [field]: value };
-            console.log("Updating item from:", item, "to:", updatedItem);
-            return updatedItem;
+            return { ...item, [field]: value };
           }
           return item;
         }),
       };
 
-      console.log("New reviewData:", JSON.stringify(newData, null, 2));
-      console.log("=== updateReviewItem END ===");
       return newData;
     });
   };
@@ -696,12 +657,6 @@ function ProfessorReviewComponentInner({
                                   id={`agree-${subType.value}`}
                                   checked={reviewItem?.recommendation === 'approve'}
                                   onCheckedChange={checked => {
-                                    console.log(
-                                      "Agree checkbox changed:",
-                                      subType.value,
-                                      "to:",
-                                      checked
-                                    );
                                     updateReviewItem(
                                       subType.value,
                                       "recommendation",
@@ -721,12 +676,6 @@ function ProfessorReviewComponentInner({
                                   id={`disagree-${subType.value}`}
                                   checked={reviewItem?.recommendation === 'reject'}
                                   onCheckedChange={checked => {
-                                    console.log(
-                                      "Disagree checkbox changed:",
-                                      subType.value,
-                                      "to:",
-                                      checked
-                                    );
                                     updateReviewItem(
                                       subType.value,
                                       "recommendation",
@@ -761,10 +710,6 @@ function ProfessorReviewComponentInner({
                               placeholder={`請說明您對「${subType.label}」的評估意見...`}
                               value={reviewItem?.comments || ""}
                               onChange={e => {
-                                console.log(
-                                  "Comments updated for:",
-                                  subType.value
-                                );
                                 updateReviewItem(
                                   subType.value,
                                   "comments",
@@ -784,25 +729,6 @@ function ProfessorReviewComponentInner({
                       );
                     })}
 
-                    {/* Debug Info */}
-                    <div className="bg-yellow-50 border border-yellow-200 rounded p-3 text-sm">
-                      <p className="font-medium">Debug Info:</p>
-                      <p>Sub-types count: {subTypes.length}</p>
-                      <p>Review items count: {reviewData.items.length}</p>
-                      <p>
-                        Recommended count:{" "}
-                        {
-                          reviewData.items.filter(item => item.recommendation === 'approve')
-                            .length
-                        }
-                      </p>
-                      <div className="mt-2">
-                        <p>Current review data:</p>
-                        <pre className="text-xs bg-white p-2 rounded mt-1">
-                          {JSON.stringify(reviewData.items, null, 2)}
-                        </pre>
-                      </div>
-                    </div>
                   </CardContent>
                 </Card>
               )}
