@@ -605,8 +605,11 @@ async def import_received_months(
     result = await db.execute(stmt)
     item_pairs = result.all()
 
+    # matched = unique students from the Excel that had a ranking item.
+    # updated = number of ranking rows actually touched (same student can have
+    # multiple items, e.g. different sub_types, and all of them are updated).
     matched_sids: set[str] = set()
-    matched = 0
+    updated = 0
 
     for item, app in item_pairs:
         student_data = app.student_data or {}
@@ -614,19 +617,20 @@ async def import_received_months(
         if sid in import_data:
             item.received_months = import_data[sid]
             item.received_months_source = "imported"
-            matched += 1
+            updated += 1
             matched_sids.add(sid)
 
     not_found = [sid for sid in import_data if sid not in matched_sids]
+    matched = len(matched_sids)
 
     await db.commit()
 
     return {
         "success": True,
-        "message": f"成功匯入 {matched} 筆已領月份數",
+        "message": f"成功匯入 {matched} 位學生（{updated} 筆紀錄）",
         "data": {
             "matched": matched,
             "not_found": not_found,
-            "updated": matched,
+            "updated": updated,
         },
     }

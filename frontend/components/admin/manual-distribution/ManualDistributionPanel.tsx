@@ -672,6 +672,11 @@ export function ManualDistributionPanel({
                           text: `成功匯入 ${matched} 筆${not_found.length > 0 ? `，${not_found.length} 筆學號未找到` : ""}`,
                         });
                         await fetchData();
+                      } else {
+                        setSaveMessage({
+                          type: "error",
+                          text: result.message || "匯入失敗",
+                        });
                       }
                     } catch (err) {
                       setSaveMessage({

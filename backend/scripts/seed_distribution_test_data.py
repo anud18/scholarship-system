@@ -12,7 +12,6 @@ Usage:
 
 import asyncio
 import sys
-from datetime import datetime, timezone
 
 from sqlalchemy import select
 
