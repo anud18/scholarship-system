@@ -158,7 +158,7 @@ export function ScholarshipApplicationStep({
       advisorId: "指導教授本校人事編號",
       advisorIdPlaceholder: "請輸入指導教授本校人事編號",
       bankInfo: "郵局帳號資訊",
-      accountNumber: "郵局局號加帳號共 14 碼",
+      accountNumber: "郵局局號加帳號共 14 碼(限本人)",
       accountNumberPlaceholder: "請輸入 14 碼郵局帳號",
       bankDocument: "存摺封面照片",
       documentUploaded: "已上傳文件",
@@ -878,12 +878,14 @@ export function ScholarshipApplicationStep({
               <User className="h-6 w-6 text-violet-600" />
             </div>
             <div>
-              <CardTitle className="text-2xl">
-                {text.personalInfoTitle}
-              </CardTitle>
-              <CardDescription>
+              <CardTitle className="text-xl font-bold">
                 {locale === "zh"
-                  ? "請填寫指導教授資訊與郵局帳號資料"
+                  ? "指導教授資訊與本人郵局帳號資料"
+                  : "Advisor & Bank Account Information"}
+              </CardTitle>
+              <CardDescription className="mt-1">
+                {locale === "zh"
+                  ? "請填寫指導教授資訊與學生本人郵局帳號資料"
                   : "Please provide advisor information and bank account details"}
               </CardDescription>
             </div>
