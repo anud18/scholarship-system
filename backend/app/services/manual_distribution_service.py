@@ -21,6 +21,7 @@ from app.models.college_review import CollegeRanking, CollegeRankingItem, Manual
 from app.models.enums import ApplicationStatus, ReviewStage
 from app.models.review import ApplicationReview, ApplicationReviewItem
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipSubTypeConfig
+from app.services.received_months_service import calculate_received_months_bulk_async
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +201,47 @@ class ManualDistributionService:
             rejected_map.setdefault(app_id, set()).add(sub_type_code)
         return rejected_map
 
+    async def _bulk_system_received_months(
+        self,
+        items: list[CollegeRankingItem],
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: str,
+    ) -> dict[str, int]:
+        """
+        Bulk-compute system received_months keyed by student std_stdcode.
+
+        Returns empty dict when no matching ScholarshipConfiguration exists;
+        callers fall back to showing no system value for affected students.
+        """
+        config_stmt = select(ScholarshipConfiguration.id).where(
+            and_(
+                ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+                ScholarshipConfiguration.academic_year == academic_year,
+                _config_semester_condition(semester),
+            )
+        )
+        config_row = (await self.db.execute(config_stmt)).first()
+        if not config_row:
+            return {}
+        config_id = config_row[0]
+
+        student_ids: list[str] = []
+        for item in items:
+            app = item.application
+            if not app or app.deleted_at is not None:
+                continue
+            sid = (app.student_data or {}).get("std_stdcode", "")
+            if sid:
+                student_ids.append(sid)
+
+        if not student_ids:
+            return {}
+
+        return await calculate_received_months_bulk_async(
+            self.db, student_ids, config_id
+        )
+
     async def get_students_for_distribution(
         self,
         scholarship_type_id: int,
@@ -242,6 +284,13 @@ class ManualDistributionService:
         app_ids = [item.application.id for item in items if item.application]
         rejected_map = await self._batch_load_rejected_map(app_ids)
 
+        # Bulk-compute system received_months for all students in one query.
+        # Admin-imported overrides (source="imported") take precedence over
+        # system values — see docs/received-months-calculation.md.
+        system_months = await self._bulk_system_received_months(
+            items, scholarship_type_id, academic_year, semester
+        )
+
         students = []
         for item in items:
             app = item.application
@@ -268,6 +317,15 @@ class ManualDistributionService:
             # Format enrollment date (ROC calendar)
             enrollment_date = self._format_enrollment_date(student_data)
 
+            # Resolve received_months: imported overrides win, else system value
+            if item.received_months_source == "imported" and item.received_months is not None:
+                rm_value = item.received_months
+                rm_source = "imported"
+            else:
+                student_id_value = student_data.get("std_stdcode", "")
+                rm_value = system_months.get(student_id_value) if student_id_value else None
+                rm_source = "system" if rm_value is not None else None
+
             students.append({
                 "ranking_item_id": item.id,
                 "application_id": app.id,
@@ -289,8 +347,8 @@ class ManualDistributionService:
                 "is_renewal": app.is_renewal,
                 "renewal_year": app.renewal_year,
                 "renewal_sub_type": self._get_renewal_sub_type(app),
-                "received_months": item.received_months,
-                "received_months_source": item.received_months_source,
+                "received_months": rm_value,
+                "received_months_source": rm_source,
             })
 
         # Sort by college_code, then rank_position
