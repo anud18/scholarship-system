@@ -818,9 +818,15 @@ function ProfessorReviewComponentInner({
                 </Button>
                 <Button
                   onClick={submitReview}
-                  disabled={loading || reviewData.items.some(
-                    item => item.recommendation === 'reject' && (!item.comments || item.comments.trim() === '')
-                  )}
+                  disabled={
+                    loading ||
+                    !reviewData.items.some(
+                      item => item.recommendation === "approve" || item.recommendation === "reject"
+                    ) ||
+                    reviewData.items.some(
+                      item => item.recommendation === "reject" && (!item.comments || item.comments.trim() === "")
+                    )
+                  }
                 >
                   {loading
                     ? "提交中..."
