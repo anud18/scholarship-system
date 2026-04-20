@@ -588,6 +588,7 @@ class RosterService:
                 ),
                 Application.status == "approved",  # 已核准
                 Application.academic_year == academic_year,
+                Application.deleted_at.is_(None),  # 排除已退件
             )
         )
 

@@ -13,12 +13,10 @@ Key Rules:
 import logging
 from typing import Any, Dict, Optional, Tuple
 
-from sqlalchemy import and_, select
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from app.models.payment_roster import PaymentRoster, PaymentRosterItem
 from app.models.scholarship import ScholarshipConfiguration
+from app.services.received_months_service import calculate_received_months
 from app.utils.application_helpers import get_college_code_from_data
 
 logger = logging.getLogger(__name__)
@@ -164,57 +162,22 @@ def check_phd_alternate_eligibility(
 
 def _calculate_received_months(db: Session, student_nycu_id: str, scholarship_config: ScholarshipConfiguration) -> int:
     """
-    Calculate total months a student has received this scholarship
+    Calculate total months a student has received this scholarship.
 
-    Queries historical PaymentRosterItem records and counts months
-    where the student was included (is_included=True).
+    Delegates to the shared received_months_service so both PhD eligibility
+    and manual distribution report the same numbers. See
+    docs/received-months-calculation.md.
 
-    Args:
-        db: Database session
-        student_nycu_id: Student NYCU ID
-        scholarship_config: Scholarship configuration
-
-    Returns:
-        Total months received
+    On any error returns 0 (fail open) so eligibility checks don't block
+    promotion due to transient DB problems.
     """
     try:
-        # Query all PaymentRosterItem for this student with this scholarship type
-        roster_items = (
-            db.query(PaymentRosterItem)
-            .join(PaymentRoster, PaymentRosterItem.roster_id == PaymentRoster.id)
-            .filter(
-                and_(
-                    PaymentRosterItem.student_id_number == student_nycu_id,
-                    PaymentRosterItem.is_included.is_(True),
-                    PaymentRoster.scholarship_configuration_id == scholarship_config.id,
-                )
-            )
-            .all()
-        )
-
-        # Count unique academic_year + semester combinations
-        # This handles both monthly and semester-based rosters
-        unique_periods = set()
-        for item in roster_items:
-            roster = item.roster
-            if roster:
-                # Use academic_year + period_label as unique identifier
-                period_key = f"{roster.academic_year}_{roster.period_label}"
-                unique_periods.add(period_key)
-
-        # For PhD scholarships, typically count by semester or year
-        # Each unique period counts as 1 month (or adjust based on roster_cycle)
-        # For more accurate counting, we'd need to parse period_label
-        months_count = len(unique_periods)
-
+        months = calculate_received_months(db, student_nycu_id, scholarship_config.id)
         logger.info(
-            f"Student {student_nycu_id} has received {months_count} periods "
+            f"Student {student_nycu_id} has received {months} months "
             f"for scholarship_config {scholarship_config.id}"
         )
-
-        return months_count
-
+        return months
     except Exception as e:
         logger.error(f"Error calculating received months for student {student_nycu_id}: {e}")
-        # In case of error, assume 0 months to allow promotion (fail open)
         return 0

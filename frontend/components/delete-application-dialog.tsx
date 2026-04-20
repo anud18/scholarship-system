@@ -39,18 +39,23 @@ export function DeleteApplicationDialog({
   const [reason, setReason] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const resetState = () => {
+    setReason("");
+    setIsDeleting(false);
+  };
+
   const handleDelete = async () => {
-    // Validate reason if required
-    if (requireReason && !reason.trim()) {
+    const trimmedReason = reason.trim();
+    if (requireReason && !trimmedReason) {
       toast.error(locale === "zh" ? "請輸入刪除原因" : "Deletion reason is required");
       return;
     }
 
     setIsDeleting(true);
     try {
-      const response = await apiClient.applications.deleteApplication(
+      const response = await apiClient.admin.deleteApplication(
         applicationId,
-        requireReason ? reason : undefined
+        trimmedReason
       );
 
       if (response.success) {
@@ -58,7 +63,7 @@ export function DeleteApplicationDialog({
           locale === "zh" ? "申請已成功刪除" : "Application deleted successfully"
         );
         onOpenChange(false);
-        setReason(""); // Reset reason
+        resetState();
         onSuccess?.();
       } else {
         toast.error(
@@ -78,53 +83,73 @@ export function DeleteApplicationDialog({
   };
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) resetState();
+        onOpenChange(next);
+      }}
+    >
       <AlertDialogContent className="max-w-md">
         <AlertDialogHeader>
-          <div className="flex items-center gap-2 text-red-600 mb-2">
-            <AlertTriangle className="h-5 w-5" />
-            <AlertDialogTitle>
-              {locale === "zh" ? "確認刪除申請" : "Confirm Delete Application"}
-            </AlertDialogTitle>
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 flex-shrink-0 mt-1">
+              <AlertTriangle className="h-5 w-5 text-red-600" />
+            </div>
+            <div className="flex-1">
+              <AlertDialogTitle className="text-red-700">
+                {locale === "zh" ? "確認刪除申請" : "Confirm Delete Application"}
+              </AlertDialogTitle>
+              <AlertDialogDescription className="mt-1">
+                {locale === "zh"
+                  ? "此操作將永久移除申請資料，且無法撤銷。"
+                  : "This action permanently removes the application and cannot be undone."}
+              </AlertDialogDescription>
+            </div>
           </div>
-          <AlertDialogDescription className="space-y-3">
-            <p>
-              {locale === "zh"
-                ? `確定要刪除申請「${applicationName}」嗎？`
-                : `Are you sure you want to delete application "${applicationName}"?`}
-            </p>
-            <p className="text-sm font-medium text-gray-700">
-              {locale === "zh"
-                ? "此操作將標記申請為「已刪除」狀態，可在操作紀錄中查看。"
-                : "This action will mark the application as 'deleted' and can be viewed in the audit trail."}
-            </p>
-
-            {requireReason && (
-              <div className="space-y-2 pt-2">
-                <Label htmlFor="deletion-reason" className="text-gray-900">
-                  {locale === "zh" ? "刪除原因 *" : "Deletion Reason *"}
-                </Label>
-                <Textarea
-                  id="deletion-reason"
-                  placeholder={
-                    locale === "zh"
-                      ? "請輸入刪除原因..."
-                      : "Enter deletion reason..."
-                  }
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  className="min-h-[80px]"
-                  disabled={isDeleting}
-                />
-                <p className="text-xs text-gray-500">
-                  {locale === "zh"
-                    ? "刪除原因將記錄在操作紀錄中"
-                    : "The reason will be recorded in the audit trail"}
-                </p>
-              </div>
-            )}
-          </AlertDialogDescription>
         </AlertDialogHeader>
+
+        <div className="space-y-3 bg-gray-50 border border-gray-200 p-3 rounded-lg">
+          <p className="text-sm text-gray-900">
+            <span className="text-gray-600">
+              {locale === "zh" ? "申請：" : "Application: "}
+            </span>
+            <span className="font-semibold">{applicationName}</span>
+          </p>
+          <p className="text-xs text-gray-500">
+            {locale === "zh"
+              ? "刪除後相關審查、造冊明細等關聯資料也會一併移除，但操作紀錄會永久保留。"
+              : "Related review and roster records will be removed as well; audit logs are preserved."}
+          </p>
+        </div>
+
+        {requireReason && (
+          <div className="space-y-2">
+            <Label htmlFor="deletion-reason" className="text-gray-900">
+              {locale === "zh" ? "刪除原因" : "Deletion Reason"}
+              <span className="text-red-600 ml-1">*</span>
+            </Label>
+            <Textarea
+              id="deletion-reason"
+              placeholder={
+                locale === "zh"
+                  ? "請輸入刪除原因..."
+                  : "Enter deletion reason..."
+              }
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className="min-h-[80px]"
+              maxLength={500}
+              disabled={isDeleting}
+            />
+            <p className="text-xs text-gray-500">
+              {locale === "zh"
+                ? "刪除原因將記錄在操作紀錄中"
+                : "The reason will be recorded in the audit trail"}
+            </p>
+          </div>
+        )}
+
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isDeleting}>
             {locale === "zh" ? "取消" : "Cancel"}
@@ -142,8 +167,10 @@ export function DeleteApplicationDialog({
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 {locale === "zh" ? "刪除中..." : "Deleting..."}
               </>
+            ) : locale === "zh" ? (
+              "確認刪除"
             ) : (
-              <>{locale === "zh" ? "確認刪除" : "Confirm Delete"}</>
+              "Confirm Delete"
             )}
           </AlertDialogAction>
         </AlertDialogFooter>

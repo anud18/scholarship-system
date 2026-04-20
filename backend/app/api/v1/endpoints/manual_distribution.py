@@ -7,14 +7,14 @@ Provides endpoints for admin to manually allocate scholarships to students.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_admin_user, get_db
 from app.db.deps import get_sync_db
-from app.models.college_review import ManualDistributionHistory
+from app.models.college_review import CollegeRanking, ManualDistributionHistory
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.services.manual_distribution_service import ManualDistributionService
 
@@ -507,3 +507,130 @@ async def generate_rosters_from_distribution(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"造冊產生失敗: {str(e)}",
         )
+
+
+@router.post("/import-received-months")
+async def import_received_months(
+    scholarship_type_id: int = Query(..., description="Scholarship type ID"),
+    academic_year: int = Query(..., description="Academic year"),
+    semester: str = Query(..., description="Semester"),
+    file: UploadFile = File(..., description="Excel file with columns: 學號, 已領月份數"),
+    current_user=Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Import received months from Excel for students in a distribution."""
+    import openpyxl
+    from io import BytesIO
+
+    from app.models.college_review import CollegeRanking, CollegeRankingItem
+    from app.models.application import Application
+
+    # Validate file type
+    if not file.filename or not file.filename.endswith(".xlsx"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="請上傳 Excel 檔案 (.xlsx)",
+        )
+
+    # Read Excel with size limit
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="檔案過大 (上限 5MB)")
+
+    try:
+        wb = openpyxl.load_workbook(BytesIO(content), read_only=True)
+        ws = wb.active
+        # Parse rows: expect header row then data rows
+        rows = list(ws.iter_rows(min_row=2, values_only=True))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"無法解析 Excel 檔案，請確認格式正確: {type(e).__name__}",
+        )
+
+    if not rows:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Excel 檔案沒有資料列")
+
+    # Build student_id -> months mapping
+    import_data: dict[str, int] = {}
+    for row in rows:
+        if len(row) < 2 or row[0] is None or row[1] is None:
+            continue
+        student_id = str(row[0]).strip()
+        try:
+            months = int(row[1])
+        except (ValueError, TypeError):
+            continue
+        if months < 0:
+            continue
+        import_data[student_id] = months
+
+    if not import_data:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="無法解析任何有效資料")
+
+    # Find rankings matching the scholarship/year/semester combination
+    if semester == "yearly":
+        sem_condition = or_(
+            CollegeRanking.semester.is_(None),
+            CollegeRanking.semester == "annual",
+            CollegeRanking.semester == "yearly",
+        )
+    else:
+        sem_condition = CollegeRanking.semester == semester
+    ranking_stmt = select(CollegeRanking.id).where(
+        and_(
+            CollegeRanking.scholarship_type_id == scholarship_type_id,
+            CollegeRanking.academic_year == academic_year,
+            sem_condition,
+        )
+    )
+    ranking_result = await db.execute(ranking_stmt)
+    ranking_ids = [r[0] for r in ranking_result.all()]
+
+    if not ranking_ids:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到對應的排名資料")
+
+    # Get ranking items with their applications for student ID matching
+    # Exclude soft-deleted applications
+    stmt = (
+        select(CollegeRankingItem, Application)
+        .join(Application, CollegeRankingItem.application_id == Application.id)
+        .where(
+            and_(
+                CollegeRankingItem.ranking_id.in_(ranking_ids),
+                Application.deleted_at.is_(None),
+            )
+        )
+    )
+    result = await db.execute(stmt)
+    item_pairs = result.all()
+
+    # matched = unique students from the Excel that had a ranking item.
+    # updated = number of ranking rows actually touched (same student can have
+    # multiple items, e.g. different sub_types, and all of them are updated).
+    matched_sids: set[str] = set()
+    updated = 0
+
+    for item, app in item_pairs:
+        student_data = app.student_data or {}
+        sid = student_data.get("std_stdcode", "")
+        if sid in import_data:
+            item.received_months = import_data[sid]
+            item.received_months_source = "imported"
+            updated += 1
+            matched_sids.add(sid)
+
+    not_found = [sid for sid in import_data if sid not in matched_sids]
+    matched = len(matched_sids)
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": f"成功匯入 {matched} 位學生（{updated} 筆紀錄）",
+        "data": {
+            "matched": matched,
+            "not_found": not_found,
+            "updated": updated,
+        },
+    }
