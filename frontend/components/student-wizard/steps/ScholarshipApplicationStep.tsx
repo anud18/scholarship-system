@@ -878,9 +878,6 @@ export function ScholarshipApplicationStep({
               <User className="h-6 w-6 text-violet-600" />
             </div>
             <div>
-              <CardTitle className="text-2xl">
-                {text.personalInfoTitle}
-              </CardTitle>
               <CardDescription>
                 {locale === "zh"
                   ? "請填寫指導教授資訊與學生本人郵局帳號資料"
