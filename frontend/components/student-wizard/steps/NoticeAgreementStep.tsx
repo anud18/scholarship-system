@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -20,6 +20,8 @@ import {
   AlertTriangle,
   ChevronRight,
 } from "lucide-react";
+import { api } from "@/lib/api";
+import { FilePreviewDialog } from "@/components/file-preview-dialog";
 
 interface NoticeAgreementStepProps {
   agreedToTerms: boolean;
@@ -35,6 +37,32 @@ export function NoticeAgreementStep({
   locale,
 }: NoticeAgreementStepProps) {
   const [hasReadNotice, setHasReadNotice] = useState(false);
+  const [publicDocs, setPublicDocs] = useState<{
+    regulations_url?: string;
+    sample_document_url?: string;
+  }>({});
+  const [previewFile, setPreviewFile] = useState<{
+    url: string;
+    filename: string;
+    type: string;
+  } | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+
+  useEffect(() => {
+    api.systemSettings.getPublicDocs().then((res) => {
+      if (res.success && res.data) setPublicDocs(res.data);
+    });
+  }, []);
+
+  const handleOpenDoc = (
+    key: "regulations_url" | "sample_document_url",
+    label: string
+  ) => {
+    const token = localStorage.getItem("auth_token") || "";
+    const url = `/api/v1/system-settings/file/${key}?token=${encodeURIComponent(token)}`;
+    setPreviewFile({ url, filename: label, type: "application/pdf" });
+    setShowPreview(true);
+  };
 
   const notices = {
     zh: {
@@ -89,6 +117,10 @@ export function NoticeAgreementStep({
       readNoticeText: "我已詳閱所有注意事項",
       nextButton: "同意並繼續",
       readFirst: "請先詳細閱讀注意事項",
+      referenceDocs: "參考文件",
+      regulations: "獎學金要點",
+      sampleDocument: "申請文件範例檔",
+      notProvided: "尚未提供",
     },
     en: {
       title: "Scholarship Application Notice",
@@ -143,6 +175,10 @@ export function NoticeAgreementStep({
       readNoticeText: "I have read all notices",
       nextButton: "Agree and Continue",
       readFirst: "Please read the notice first",
+      referenceDocs: "Reference Documents",
+      regulations: "Scholarship Regulations",
+      sampleDocument: "Sample Application Documents",
+      notProvided: "Not available",
     },
   };
 
@@ -175,6 +211,39 @@ export function NoticeAgreementStep({
               </div>
             </AlertDescription>
           </Alert>
+
+          {/* Reference Documents */}
+          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <p className="text-sm font-semibold text-blue-900 mb-3">{t.referenceDocs}</p>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleOpenDoc("regulations_url", t.regulations)}
+                disabled={!publicDocs.regulations_url}
+                className="flex items-center gap-2"
+              >
+                <FileText className="h-4 w-4" />
+                {t.regulations}
+                {!publicDocs.regulations_url && (
+                  <span className="text-xs text-gray-400 ml-1">({t.notProvided})</span>
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleOpenDoc("sample_document_url", t.sampleDocument)}
+                disabled={!publicDocs.sample_document_url}
+                className="flex items-center gap-2"
+              >
+                <FileText className="h-4 w-4" />
+                {t.sampleDocument}
+                {!publicDocs.sample_document_url && (
+                  <span className="text-xs text-gray-400 ml-1">({t.notProvided})</span>
+                )}
+              </Button>
+            </div>
+          </div>
 
           {/* Notice Content */}
           <Card className="border-2">
@@ -273,6 +342,13 @@ export function NoticeAgreementStep({
           </div>
         </CardContent>
       </Card>
+
+      <FilePreviewDialog
+        open={showPreview}
+        onClose={() => setShowPreview(false)}
+        file={previewFile}
+        locale={locale}
+      />
     </div>
   );
 }
