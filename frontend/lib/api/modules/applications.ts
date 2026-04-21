@@ -373,5 +373,55 @@ export function createApplicationsApi() {
       );
       return toApiResponse<any[]>(response);
     },
+
+    /**
+     * Upload 申請文件 for a specific application.
+     */
+    uploadApplicationDocument: async (
+      applicationId: number,
+      file: File
+    ): Promise<ApiResponse<{ application_document_url: string }>> => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const baseUrl =
+        process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const token =
+        typeof localStorage !== "undefined"
+          ? localStorage.getItem("auth_token") || ""
+          : "";
+      const res = await fetch(
+        `${baseUrl}/api/v1/applications/${applicationId}/application-document`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        }
+      );
+      const json = await res.json();
+      return json;
+    },
+
+    /**
+     * Delete 申請文件 for a specific application.
+     */
+    deleteApplicationDocument: async (
+      applicationId: number
+    ): Promise<ApiResponse<null>> => {
+      const baseUrl =
+        process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const token =
+        typeof localStorage !== "undefined"
+          ? localStorage.getItem("auth_token") || ""
+          : "";
+      const res = await fetch(
+        `${baseUrl}/api/v1/applications/${applicationId}/application-document`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      const json = await res.json();
+      return json;
+    },
   };
 }

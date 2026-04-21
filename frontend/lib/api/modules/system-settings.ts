@@ -183,5 +183,70 @@ export function createSystemSettingsApi() {
       });
       return toApiResponse<any[]>(response);
     },
+
+    /**
+     * Get public doc object_names (regulations_url, sample_document_url).
+     * Accessible by any authenticated user.
+     */
+    getPublicDocs: async (): Promise<
+      ApiResponse<{ regulations_url?: string; sample_document_url?: string }>
+    > => {
+      const response = await (typedClient.raw.GET as any)(
+        "/api/v1/system-settings/public-docs"
+      );
+      return toApiResponse(response);
+    },
+
+    /**
+     * Upload 獎學金要點 (admin only).
+     */
+    uploadRegulations: async (
+      file: File
+    ): Promise<ApiResponse<{ key: string; object_name: string }>> => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const baseUrl =
+        process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const token =
+        typeof localStorage !== "undefined"
+          ? localStorage.getItem("auth_token") || ""
+          : "";
+      const res = await fetch(
+        `${baseUrl}/api/v1/system-settings/upload/regulations_url`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        }
+      );
+      const json = await res.json();
+      return json;
+    },
+
+    /**
+     * Upload 申請文件範例檔 (admin only).
+     */
+    uploadSampleDocument: async (
+      file: File
+    ): Promise<ApiResponse<{ key: string; object_name: string }>> => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const baseUrl =
+        process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const token =
+        typeof localStorage !== "undefined"
+          ? localStorage.getItem("auth_token") || ""
+          : "";
+      const res = await fetch(
+        `${baseUrl}/api/v1/system-settings/upload/sample_document_url`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        }
+      );
+      const json = await res.json();
+      return json;
+    },
   };
 }
