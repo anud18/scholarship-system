@@ -226,7 +226,15 @@ class Settings(BaseSettings):
     @classmethod
     def create_upload_directory(cls, v: str) -> str:
         """Ensure upload directory exists"""
-        os.makedirs(v, exist_ok=True)
+        import sys
+        # Skip directory creation during Alembic migrations or when directory is not writable
+        try:
+            if "alembic" not in sys.argv:
+                os.makedirs(v, exist_ok=True)
+        except (OSError, PermissionError):
+            # If we can't create the directory, just skip it
+            # This happens during Alembic migrations when running as non-root user
+            pass
         return v
 
     @property
@@ -259,14 +267,20 @@ class Settings(BaseSettings):
     @classmethod
     def create_roster_template_directory(cls, v: str) -> str:
         """Ensure roster template directory exists"""
-        os.makedirs(v, exist_ok=True)
+        try:
+            os.makedirs(v, exist_ok=True)
+        except (OSError, PermissionError):
+            pass
         return v
 
     @field_validator("roster_export_dir", mode="before")
     @classmethod
     def create_roster_export_directory(cls, v: str) -> str:
         """Ensure roster export directory exists"""
-        os.makedirs(v, exist_ok=True)
+        try:
+            os.makedirs(v, exist_ok=True)
+        except (OSError, PermissionError):
+            pass
         return v
 
     @property

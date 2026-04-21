@@ -37,9 +37,6 @@ RUN uv pip install --system -r pyproject.toml
 # Copy application code
 COPY . .
 
-# Copy frontend email templates
-COPY emails /frontend/emails
-
 # Create uploads directory
 RUN mkdir -p uploads
 
