@@ -462,7 +462,7 @@ export function ApplicationReviewPanel({
 
   const handleViewRegulations = () => {
     const token = localStorage.getItem("auth_token") || "";
-    const url = `/api/v1/system-settings/file/regulations_url?token=${encodeURIComponent(token)}`;
+    const url = `/api/v1/system-settings/file-proxy?key=regulations_url&token=${encodeURIComponent(token)}`;
     setRegulationsFile({ url, filename: "獎學金要點", type: "application/pdf" });
     setShowRegulations(true);
   };

@@ -59,7 +59,7 @@ export function NoticeAgreementStep({
     label: string
   ) => {
     const token = localStorage.getItem("auth_token") || "";
-    const url = `/api/v1/system-settings/file/${key}?token=${encodeURIComponent(token)}`;
+    const url = `/api/v1/system-settings/file-proxy?key=${key}&token=${encodeURIComponent(token)}`;
     setPreviewFile({ url, filename: label, type: "application/pdf" });
     setShowPreview(true);
   };

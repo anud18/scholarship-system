@@ -1,21 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest) {
   try {
-    const { id } = params;
-    if (!/^\d+$/.test(id)) {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+
+    if (!id || !/^\d+$/.test(id)) {
       return NextResponse.json({ error: "Invalid id" }, { status: 400 });
     }
 
-    const queryToken = request.nextUrl.searchParams.get("token");
+    const queryToken = searchParams.get("token");
     const authHeader = request.headers.get("authorization");
     const cookieToken =
       request.cookies.get("access_token")?.value ||
       request.cookies.get("auth_token")?.value;
-    const token = queryToken || authHeader?.replace("Bearer ", "") || cookieToken;
+    const token =
+      queryToken || authHeader?.replace("Bearer ", "") || cookieToken;
 
     if (!token) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

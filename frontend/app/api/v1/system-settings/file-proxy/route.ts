@@ -2,23 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 
 const ALLOWED_KEYS = new Set(["regulations_url", "sample_document_url"]);
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { key: string } }
-) {
+export async function GET(request: NextRequest) {
   try {
-    const { key } = params;
+    const { searchParams } = new URL(request.url);
+    const key = searchParams.get("key");
 
-    if (!ALLOWED_KEYS.has(key)) {
+    if (!key || !ALLOWED_KEYS.has(key)) {
       return NextResponse.json({ error: "Invalid key" }, { status: 400 });
     }
 
-    const queryToken = request.nextUrl.searchParams.get("token");
+    const queryToken = searchParams.get("token");
     const authHeader = request.headers.get("authorization");
     const cookieToken =
       request.cookies.get("access_token")?.value ||
       request.cookies.get("auth_token")?.value;
-    const token = queryToken || authHeader?.replace("Bearer ", "") || cookieToken;
+    const token =
+      queryToken || authHeader?.replace("Bearer ", "") || cookieToken;
 
     if (!token) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

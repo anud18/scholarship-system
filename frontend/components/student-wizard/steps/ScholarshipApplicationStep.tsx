@@ -403,7 +403,7 @@ export function ScholarshipApplicationStep({
       existingApplicationDocument.split("/").pop()?.split("?")[0] ||
       "application_document";
     const token = localStorage.getItem("auth_token") || "";
-    const previewUrl = `/api/v1/applications/${editingApplication.id}/application-document?token=${encodeURIComponent(token)}`;
+    const previewUrl = `/api/v1/application-document-proxy?id=${editingApplication.id}&token=${encodeURIComponent(token)}`;
     let fileTypeDisplay = "other";
     if (filename.toLowerCase().endsWith(".pdf"))
       fileTypeDisplay = "application/pdf";
