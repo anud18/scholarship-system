@@ -341,6 +341,11 @@ export function ApplicationReviewPanel({
         return;
       }
 
+      // Guard against CSV/Excel formula injection (OWASP): prefix a single quote
+      // when a cell value starts with =, +, -, @, tab or CR.
+      const sanitizeCell = (value: string): string =>
+        /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+
       // Prepare export data
       const exportData = applications.map(app => {
         // Format status
@@ -376,16 +381,31 @@ export function ApplicationReviewPanel({
               )
             : "-";
 
+        const professorRecommendation = (app.professor_review_items || [])
+          .map((item: any) => {
+            const label = getSubTypeName(item.sub_type_code, locale);
+            const rec = item.recommendation === "approve"
+              ? (locale === "zh" ? "推薦" : "Approve")
+              : (locale === "zh" ? "不推薦" : "Reject");
+            const reasonLabel = locale === "zh" ? "不同意理由" : "Reason";
+            const reason = item.recommendation === "reject" && item.comments
+              ? ` (${reasonLabel}: ${sanitizeCell(item.comments)})`
+              : "";
+            return `${label}: ${rec}${reason}`;
+          })
+          .join("; ") || "-";
+
         return {
-          學生姓名: app.student_name || "-",
-          學號: app.student_id || "-",
-          學院: getAcademyName(app.academy_code, academies),
-          系所: getDepartmentName(app.department_code, departments),
-          在學學期數: app.student_termcount || "-",
-          在學狀態: studyingStatus,
-          獎學金類型: app.scholarship_type_zh || app.scholarship_type || "-",
+          學生姓名: sanitizeCell(app.student_name || "-"),
+          學號: sanitizeCell(app.student_id || "-"),
+          學院: sanitizeCell(getAcademyName(app.academy_code, academies)),
+          系所: sanitizeCell(getDepartmentName(app.department_code, departments)),
+          在學學期數: sanitizeCell(String(app.student_termcount || "-")),
+          在學狀態: sanitizeCell(studyingStatus),
+          獎學金類型: sanitizeCell(app.scholarship_type_zh || app.scholarship_type || "-"),
           申請類別: applicationType,
-          狀態: statusText,
+          教授推薦: professorRecommendation,
+          狀態: sanitizeCell(statusText),
           申請時間: applicationDate,
         };
       });
@@ -403,6 +423,7 @@ export function ApplicationReviewPanel({
         { wch: 12 }, // 在學狀態
         { wch: 25 }, // 獎學金類型
         { wch: 12 }, // 申請類別
+        { wch: 30 }, // 教授推薦
         { wch: 15 }, // 狀態
         { wch: 12 }, // 申請時間
       ];
@@ -797,6 +818,9 @@ export function ApplicationReviewPanel({
                     <TableHead>
                       {locale === "zh" ? "申請類別" : "Type"}
                     </TableHead>
+                    <TableHead>
+                      {locale === "zh" ? "教授推薦" : "Prof. Review"}
+                    </TableHead>
                     <TableHead>{locale === "zh" ? "狀態" : "Status"}</TableHead>
                     <TableHead>
                       {locale === "zh" ? "申請時間" : "Applied"}
@@ -862,6 +886,42 @@ export function ApplicationReviewPanel({
                         >
                           {app.is_renewal ? "續領" : "初領"}
                         </Badge>
+                      </TableCell>
+
+                      {/* 6.5 教授推薦 */}
+                      <TableCell>
+                        {app.professor_review_items?.length > 0 ? (
+                          <div className="flex flex-col gap-0.5">
+                            {app.professor_review_items.map((item: any, idx: number) => (
+                              <TooltipProvider key={`${item.sub_type_code}-${idx}`}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Badge
+                                      variant={item.recommendation === "approve" ? "outline" : "destructive"}
+                                      className={`text-xs cursor-default ${item.recommendation === "approve" ? "border-emerald-500 text-emerald-700 bg-emerald-50" : ""}`}
+                                    >
+                                      {getSubTypeName(item.sub_type_code, locale)}: {item.recommendation === "approve"
+                                        ? (locale === "zh" ? "推薦" : "Approve")
+                                        : (locale === "zh" ? "不推薦" : "Reject")}
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  {item.comments && (
+                                    <TooltipContent>
+                                      {item.recommendation === "reject" && (
+                                        <p className="font-medium text-xs mb-1">
+                                          {locale === "zh" ? "不同意理由" : "Reason for Reject"}
+                                        </p>
+                                      )}
+                                      <p className="max-w-xs whitespace-pre-wrap">{item.comments}</p>
+                                    </TooltipContent>
+                                  )}
+                                </Tooltip>
+                              </TooltipProvider>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">—</span>
+                        )}
                       </TableCell>
 
                       {/* 7. 狀態 */}

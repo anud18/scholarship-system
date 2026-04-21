@@ -1053,6 +1053,8 @@ export function ManualDistributionPanel({
                             </td>
                           </tr>
                           {collegeStudents.map(student => {
+                            const rejectedSubTypes =
+                              student.rejected_sub_types || [];
                             const curAlloc = localAllocations.get(
                               student.ranking_item_id
                             );
@@ -1116,9 +1118,9 @@ export function ManualDistributionPanel({
                                     student.applied_sub_types.includes(
                                       col.sub_type
                                     );
-                                  const isRejected = (
-                                    student.rejected_sub_types || []
-                                  ).includes(col.sub_type);
+                                  const isRejected = rejectedSubTypes.includes(
+                                    col.sub_type
+                                  );
                                   const isChecked =
                                     curAlloc?.sub_type === col.sub_type &&
                                     curAlloc?.year === col.year;
@@ -1134,10 +1136,10 @@ export function ManualDistributionPanel({
                                     <td
                                       key={col.key}
                                       className={`px-0.5 py-1.5 border-r border-slate-100 text-center ${
-                                        !isApplied
-                                          ? "opacity-40"
-                                          : isRejected
-                                            ? "opacity-40 bg-red-50"
+                                        isRejected
+                                          ? "opacity-40 bg-red-50"
+                                          : !isApplied
+                                            ? "opacity-40"
                                             : ""
                                       }`}
                                     >
