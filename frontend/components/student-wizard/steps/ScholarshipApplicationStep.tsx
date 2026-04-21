@@ -1198,7 +1198,7 @@ export function ScholarshipApplicationStep({
             ) : (
               <FileUpload
                 onFilesChange={setApplicationDocumentFiles}
-                acceptedTypes={[".pdf", ".jpg", ".jpeg", ".png"]}
+                acceptedTypes={[".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx"]}
                 maxSize={10 * 1024 * 1024}
                 maxFiles={1}
                 initialFiles={applicationDocumentFiles}

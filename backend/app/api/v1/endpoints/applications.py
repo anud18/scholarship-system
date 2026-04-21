@@ -957,7 +957,7 @@ async def upload_application_document(
     if not application:
         raise HTTPException(status_code=404, detail="申請單不存在或無權限")
 
-    allowed_extensions = [".pdf", ".jpg", ".jpeg", ".png"]
+    allowed_extensions = [".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx"]
     file_content = await file.read()
     validate_upload_file(
         filename=file.filename,
@@ -1054,6 +1054,10 @@ async def get_application_document_file(
         content_type = "image/png"
     elif lower.endswith(".jpg") or lower.endswith(".jpeg"):
         content_type = "image/jpeg"
+    elif lower.endswith(".doc"):
+        content_type = "application/msword"
+    elif lower.endswith(".docx"):
+        content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
     filename = object_name.split("/")[-1]
     return StreamingResponse(
