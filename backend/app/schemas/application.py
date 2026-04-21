@@ -332,6 +332,7 @@ class ApplicationResponse(BaseModel):
     meta_data: Optional[Dict[str, Any]] = None
 
     reviews: List[ApplicationReviewResponse] = []
+    professor_review_items: List[Dict[str, Any]] = []  # Per sub-type professor recommendations with comments
 
     # Additional display fields
     student_name: Optional[str] = None

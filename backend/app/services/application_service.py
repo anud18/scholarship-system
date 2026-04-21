@@ -814,6 +814,7 @@ class ApplicationService:
             .options(
                 selectinload(Application.files),
                 selectinload(Application.reviews).selectinload(ApplicationReview.reviewer),
+                selectinload(Application.reviews).selectinload(ApplicationReview.items),
                 selectinload(Application.scholarship_configuration).selectinload(
                     ScholarshipConfiguration.scholarship_type
                 ),
@@ -967,20 +968,40 @@ class ApplicationService:
             "created_at": application.created_at,
             "updated_at": application.updated_at,
             "meta_data": application.meta_data,
-            "reviews": [
-                {
-                    "id": review.id,
-                    "application_id": review.application_id,
-                    "reviewer_id": review.reviewer_id,
-                    "recommendation": review.recommendation,
-                    "comments": review.comments,
-                    "reviewed_at": review.reviewed_at,
-                    "created_at": review.created_at,
-                    "reviewer_name": review.reviewer.name if review.reviewer else None,
-                    "reviewer_role": review.reviewer.role if review.reviewer else None,
-                }
-                for review in (application.reviews or [])
-            ],
+            "reviews": (
+                []
+                if current_user.role == UserRole.student
+                else [
+                    {
+                        "id": review.id,
+                        "application_id": review.application_id,
+                        "reviewer_id": review.reviewer_id,
+                        "recommendation": review.recommendation,
+                        "comments": review.comments,
+                        "reviewed_at": review.reviewed_at,
+                        "created_at": review.created_at,
+                        "reviewer_name": review.reviewer.name if review.reviewer else None,
+                        "reviewer_role": review.reviewer.role if review.reviewer else None,
+                    }
+                    for review in (application.reviews or [])
+                ]
+            ),
+            "professor_review_items": (
+                []
+                if current_user.role == UserRole.student
+                else [
+                    {
+                        "sub_type_code": item.sub_type_code,
+                        "recommendation": item.recommendation,
+                        "comments": item.comments,
+                    }
+                    for review in (application.reviews or [])
+                    if review.reviewer
+                    and (review.reviewer.role.value if hasattr(review.reviewer.role, "value") else review.reviewer.role)
+                    == "professor"
+                    for item in (review.items or [])
+                ]
+            ),
             # Additional display fields
             "scholarship_type": scholarship_type_name,
             "scholarship_type_zh": scholarship_type_zh,

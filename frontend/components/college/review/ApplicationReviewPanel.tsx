@@ -391,7 +391,11 @@ export function ApplicationReviewPanel({
               const rec = item.recommendation === "approve"
                 ? (locale === "zh" ? "推薦" : "Approve")
                 : (locale === "zh" ? "不推薦" : "Reject");
-              return `${label}: ${rec}`;
+              const reasonLabel = locale === "zh" ? "不同意理由" : "Reason";
+              const reason = item.recommendation === "reject" && item.comments
+                ? ` (${reasonLabel}: ${item.comments})`
+                : "";
+              return `${label}: ${rec}${reason}`;
             })
             .join("; ") || "-",
           狀態: statusText,
@@ -896,7 +900,12 @@ export function ApplicationReviewPanel({
                                   </TooltipTrigger>
                                   {item.comments && (
                                     <TooltipContent>
-                                      <p>{item.comments}</p>
+                                      {item.recommendation === "reject" && (
+                                        <p className="font-medium text-xs mb-1">
+                                          {locale === "zh" ? "不同意理由" : "Reason for Reject"}
+                                        </p>
+                                      )}
+                                      <p className="max-w-xs whitespace-pre-wrap">{item.comments}</p>
                                     </TooltipContent>
                                   )}
                                 </Tooltip>
