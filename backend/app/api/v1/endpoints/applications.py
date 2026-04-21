@@ -927,3 +927,96 @@ async def get_application_audit_trail(
         "message": f"Retrieved {len(formatted_logs)} audit log entries",
         "data": formatted_logs,
     }
+
+
+@router.post("/{application_id}/application-document")
+async def upload_application_document(
+    application_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_student),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload 申請文件 for a specific application (student only, must own the application)."""
+    import io
+    from datetime import datetime, timezone
+
+    from sqlalchemy import select
+
+    from app.core.path_security import validate_upload_file
+    from app.models.application import Application
+    from app.services.minio_service import minio_service
+
+    # Fetch and authorize
+    stmt = select(Application).where(
+        Application.id == application_id,
+        Application.user_id == current_user.id,
+        Application.deleted_at.is_(None),
+    )
+    result = await db.execute(stmt)
+    application = result.scalar_one_or_none()
+    if not application:
+        raise HTTPException(status_code=404, detail="申請單不存在或無權限")
+
+    allowed_extensions = [".pdf", ".jpg", ".jpeg", ".png"]
+    file_content = await file.read()
+    validate_upload_file(
+        filename=file.filename,
+        allowed_extensions=allowed_extensions,
+        max_size_mb=10,
+        file_size=len(file_content),
+        allow_unicode=True,
+    )
+
+    ext = ""
+    if file.filename:
+        for e in allowed_extensions:
+            if file.filename.lower().endswith(e):
+                ext = e
+                break
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    object_name = f"application-documents/{application_id}_{timestamp}{ext}"
+
+    minio_service.client.put_object(
+        bucket_name=minio_service.default_bucket,
+        object_name=object_name,
+        data=io.BytesIO(file_content),
+        length=len(file_content),
+        content_type=file.content_type or "application/octet-stream",
+    )
+
+    application.application_document_url = object_name
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": "申請文件上傳成功",
+        "data": {"application_document_url": object_name},
+    }
+
+
+@router.delete("/{application_id}/application-document")
+async def delete_application_document(
+    application_id: int,
+    current_user: User = Depends(require_student),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete 申請文件 for a specific application."""
+    from sqlalchemy import select
+
+    from app.models.application import Application
+
+    stmt = select(Application).where(
+        Application.id == application_id,
+        Application.user_id == current_user.id,
+        Application.deleted_at.is_(None),
+    )
+    result = await db.execute(stmt)
+    application = result.scalar_one_or_none()
+    if not application:
+        raise HTTPException(status_code=404, detail="申請單不存在或無權限")
+
+    application.application_document_url = None
+    await db.commit()
+
+    return {"success": True, "message": "申請文件已刪除", "data": None}
