@@ -1694,6 +1694,82 @@ export function ScholarshipApplicationStep({
 
             <Separator />
 
+            {/* Uploaded Documents */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-500 mb-2">
+                {locale === "zh" ? "上傳文件" : "Uploaded Documents"}
+              </h3>
+              <div className="space-y-2 text-sm bg-gray-50 rounded-lg p-4">
+                {/* Passbook */}
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">
+                    {locale === "zh" ? "存摺封面" : "Passbook Cover"}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {existingBankDocument ? (
+                      <>
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span className="text-green-700 font-medium">
+                          {locale === "zh" ? "已上傳" : "Uploaded"}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handlePreviewBankDocument}
+                          className="h-6 px-2 text-nycu-blue-600"
+                        >
+                          <Eye className="h-3 w-3 mr-1" />
+                          {locale === "zh" ? "預覽" : "Preview"}
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-4 w-4 text-amber-500" />
+                        <span className="text-amber-700">
+                          {locale === "zh" ? "未上傳" : "Not uploaded"}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Application Document */}
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">
+                    {locale === "zh" ? "申請文件" : "Application Document"}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {existingApplicationDocument ? (
+                      <>
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span className="text-green-700 font-medium">
+                          {locale === "zh" ? "已上傳" : "Uploaded"}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handlePreviewAppDocument}
+                          className="h-6 px-2 text-nycu-blue-600"
+                        >
+                          <Eye className="h-3 w-3 mr-1" />
+                          {locale === "zh" ? "預覽" : "Preview"}
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-4 w-4 text-amber-500" />
+                        <span className="text-amber-700">
+                          {locale === "zh" ? "未上傳" : "Not uploaded"}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
             {/* Scholarship Info */}
             <div>
               <h3 className="text-sm font-semibold text-gray-500 mb-2">
