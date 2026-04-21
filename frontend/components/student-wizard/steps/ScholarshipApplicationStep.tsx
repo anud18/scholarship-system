@@ -125,6 +125,17 @@ export function ScholarshipApplicationStep({
     filename: string;
     type: string;
   } | null>(null);
+  const [applicationDocumentFiles, setApplicationDocumentFiles] = useState<
+    File[]
+  >([]);
+  const [existingApplicationDocument, setExistingApplicationDocument] =
+    useState<string | null>(null);
+  const [showAppDocPreview, setShowAppDocPreview] = useState(false);
+  const [appDocPreviewFile, setAppDocPreviewFile] = useState<{
+    url: string;
+    filename: string;
+    type: string;
+  } | null>(null);
 
   // Submit preview dialog
   const [showSubmitPreview, setShowSubmitPreview] = useState(false);
@@ -164,6 +175,9 @@ export function ScholarshipApplicationStep({
       documentUploaded: "已上傳文件",
       preview: "預覽",
       deleteBankDoc: "刪除",
+      applicationDocument: "申請文件",
+      applicationDocumentUploaded: "申請文件已上傳",
+      deleteAppDoc: "刪除",
       fileFormats: "支援格式：JPG, JPEG, PNG, PDF",
       fileSizeLimit: "檔案大小限制：10MB",
       savePersonalInfo: "儲存個人資料",
@@ -217,6 +231,9 @@ export function ScholarshipApplicationStep({
       documentUploaded: "Document Uploaded",
       preview: "Preview",
       deleteBankDoc: "Delete",
+      applicationDocument: "Application Document",
+      applicationDocumentUploaded: "Application document uploaded",
+      deleteAppDoc: "Delete",
       fileFormats: "Supported formats: JPG, JPEG, PNG, PDF",
       fileSizeLimit: "File size limit: 10MB",
       savePersonalInfo: "Save Personal Info",
@@ -329,6 +346,21 @@ export function ScholarshipApplicationStep({
           throw new Error(uploadResp.message || "Failed to upload document");
       }
 
+      if (applicationDocumentFiles.length > 0 && editingApplication?.id) {
+        const appDocResp = await api.applications.uploadApplicationDocument(
+          editingApplication.id,
+          applicationDocumentFiles[0]
+        );
+        if (!appDocResp.success)
+          throw new Error(
+            appDocResp.message || "Failed to upload application document"
+          );
+        setExistingApplicationDocument(
+          appDocResp.data?.application_document_url || null
+        );
+        setApplicationDocumentFiles([]);
+      }
+
       await refreshProfile();
       setPersonalInfoSaved(true);
       toast.success(text.personalInfoSaved);
@@ -365,6 +397,33 @@ export function ScholarshipApplicationStep({
     setShowBankDocPreview(true);
   };
 
+  const handlePreviewAppDocument = () => {
+    if (!existingApplicationDocument) return;
+    const filename =
+      existingApplicationDocument.split("/").pop()?.split("?")[0] ||
+      "application_document";
+    const token = localStorage.getItem("auth_token") || "";
+    const previewParams = new URLSearchParams({
+      fileId: filename,
+      filename,
+      type: "application_document",
+      token,
+      userId: String(userId),
+    });
+    const previewUrl = `/api/v1/preview?${previewParams.toString()}`;
+    let fileTypeDisplay = "other";
+    if (filename.toLowerCase().endsWith(".pdf"))
+      fileTypeDisplay = "application/pdf";
+    else if (
+      [".jpg", ".jpeg", ".png"].some(ext =>
+        filename.toLowerCase().endsWith(ext)
+      )
+    )
+      fileTypeDisplay = "image";
+    setAppDocPreviewFile({ url: previewUrl, filename, type: fileTypeDisplay });
+    setShowAppDocPreview(true);
+  };
+
   const handleDeleteBankDocument = async () => {
     try {
       const response = await api.userProfiles.deleteBankDocument();
@@ -372,6 +431,23 @@ export function ScholarshipApplicationStep({
         toast.success(locale === "zh" ? "文件已刪除" : "Document deleted");
         setExistingBankDocument(null);
         await refreshProfile();
+      } else {
+        throw new Error(response.message || "Delete failed");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "刪除失敗");
+    }
+  };
+
+  const handleDeleteAppDocument = async () => {
+    if (!editingApplication?.id) return;
+    try {
+      const response = await api.applications.deleteApplicationDocument(
+        editingApplication.id
+      );
+      if (response.success) {
+        toast.success(locale === "zh" ? "申請文件已刪除" : "Document deleted");
+        setExistingApplicationDocument(null);
       } else {
         throw new Error(response.message || "Delete failed");
       }
@@ -466,6 +542,13 @@ export function ScholarshipApplicationStep({
           }
         });
         setDynamicFileData(existingFileData);
+      }
+
+      // Load application document
+      if ((editingApplication as any).application_document_url) {
+        setExistingApplicationDocument(
+          (editingApplication as any).application_document_url
+        );
       }
 
       // Set agreed to terms
@@ -823,6 +906,15 @@ export function ScholarshipApplicationStep({
             await uploadDocument(applicationId, file, docType);
           }
         }
+
+        // Upload application document if provided
+        if (applicationDocumentFiles.length > 0) {
+          await api.applications.uploadApplicationDocument(
+            applicationId,
+            applicationDocumentFiles[0]
+          );
+          setApplicationDocumentFiles([]);
+        }
       }
 
       // Submit application
@@ -1049,6 +1141,53 @@ export function ScholarshipApplicationStep({
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Application Document Upload */}
+          <div className="mt-6 pt-6 border-t">
+            <h4 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              <FileText className="h-5 w-5 text-nycu-blue-600" />
+              {text.applicationDocument}
+            </h4>
+
+            {existingApplicationDocument ? (
+              <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+                <span className="text-sm text-green-800 flex-1">
+                  {text.applicationDocumentUploaded}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handlePreviewAppDocument}
+                  className="text-nycu-blue-600"
+                >
+                  <Eye className="h-4 w-4 mr-1" />
+                  {text.preview}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleDeleteAppDocument}
+                  className="text-red-600"
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  {text.deleteAppDoc}
+                </Button>
+              </div>
+            ) : (
+              <FileUpload
+                onFilesChange={setApplicationDocumentFiles}
+                acceptedTypes={[".pdf", ".jpg", ".jpeg", ".png"]}
+                maxSize={10 * 1024 * 1024}
+                maxFiles={1}
+                initialFiles={applicationDocumentFiles}
+                fileType="application_document"
+                locale={locale}
+              />
+            )}
+            <p className="text-xs text-gray-500 mt-2">{text.fileFormats}</p>
+            <p className="text-xs text-gray-500">{text.fileSizeLimit}</p>
           </div>
 
           {/* Save Personal Info Button */}
@@ -1419,6 +1558,14 @@ export function ScholarshipApplicationStep({
         isOpen={showBankDocPreview}
         onClose={() => setShowBankDocPreview(false)}
         file={bankDocPreviewFile}
+        locale={locale}
+      />
+
+      {/* Application Document Preview Dialog */}
+      <FilePreviewDialog
+        isOpen={showAppDocPreview}
+        onClose={() => setShowAppDocPreview(false)}
+        file={appDocPreviewFile}
         locale={locale}
       />
 
