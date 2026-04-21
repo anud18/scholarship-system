@@ -40,6 +40,8 @@ export function NoticeAgreementStep({
   const [publicDocs, setPublicDocs] = useState<{
     regulations_url?: string;
     sample_document_url?: string;
+    regulations_url_filename?: string;
+    sample_document_url_filename?: string;
   }>({});
   const [previewFile, setPreviewFile] = useState<{
     url: string;
@@ -60,7 +62,25 @@ export function NoticeAgreementStep({
   ) => {
     const token = localStorage.getItem("auth_token") || "";
     const url = `/api/v1/system-settings/file-proxy?key=${key}&token=${encodeURIComponent(token)}`;
-    setPreviewFile({ url, filename: label, type: "application/pdf" });
+    const originalName =
+      key === "regulations_url"
+        ? publicDocs.regulations_url_filename
+        : publicDocs.sample_document_url_filename;
+    const objectName =
+      key === "regulations_url"
+        ? publicDocs.regulations_url
+        : publicDocs.sample_document_url;
+    const filename = originalName || label;
+    const lower = (originalName || objectName || "").toLowerCase();
+    let type = "application/pdf";
+    if (lower.endsWith(".doc")) type = "application/msword";
+    else if (lower.endsWith(".docx"))
+      type =
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    else if (lower.endsWith(".jpg") || lower.endsWith(".jpeg"))
+      type = "image/jpeg";
+    else if (lower.endsWith(".png")) type = "image/png";
+    setPreviewFile({ url, filename, type });
     setShowPreview(true);
   };
 

@@ -189,7 +189,12 @@ export function createSystemSettingsApi() {
      * Accessible by any authenticated user.
      */
     getPublicDocs: async (): Promise<
-      ApiResponse<{ regulations_url?: string; sample_document_url?: string }>
+      ApiResponse<{
+        regulations_url?: string;
+        sample_document_url?: string;
+        regulations_url_filename?: string;
+        sample_document_url_filename?: string;
+      }>
     > => {
       const response = await (typedClient.raw.GET as any)(
         "/api/v1/system-settings/public-docs"
@@ -202,7 +207,9 @@ export function createSystemSettingsApi() {
      */
     uploadRegulations: async (
       file: File
-    ): Promise<ApiResponse<{ key: string; object_name: string }>> => {
+    ): Promise<
+      ApiResponse<{ key: string; object_name: string; original_filename: string }>
+    > => {
       const formData = new FormData();
       formData.append("file", file);
       const token =
@@ -226,7 +233,9 @@ export function createSystemSettingsApi() {
      */
     uploadSampleDocument: async (
       file: File
-    ): Promise<ApiResponse<{ key: string; object_name: string }>> => {
+    ): Promise<
+      ApiResponse<{ key: string; object_name: string; original_filename: string }>
+    > => {
       const formData = new FormData();
       formData.append("file", file);
       const token =

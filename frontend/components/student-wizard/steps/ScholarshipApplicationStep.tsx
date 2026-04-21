@@ -346,21 +346,6 @@ export function ScholarshipApplicationStep({
           throw new Error(uploadResp.message || "Failed to upload document");
       }
 
-      if (applicationDocumentFiles.length > 0 && editingApplication?.id) {
-        const appDocResp = await api.applications.uploadApplicationDocument(
-          editingApplication.id,
-          applicationDocumentFiles[0]
-        );
-        if (!appDocResp.success)
-          throw new Error(
-            appDocResp.message || "Failed to upload application document"
-          );
-        setExistingApplicationDocument(
-          appDocResp.data?.application_document_url || null
-        );
-        setApplicationDocumentFiles([]);
-      }
-
       await refreshProfile();
       setPersonalInfoSaved(true);
       toast.success(text.personalInfoSaved);
@@ -806,11 +791,16 @@ export function ScholarshipApplicationStep({
 
         // Upload application document if provided
         if (applicationDocumentFiles.length > 0) {
-          await api.applications.uploadApplicationDocument(
+          const appDocResp = await api.applications.uploadApplicationDocument(
             editingApplication.id,
             applicationDocumentFiles[0]
           );
-          setApplicationDocumentFiles([]);
+          if (appDocResp.success) {
+            setExistingApplicationDocument(
+              appDocResp.data?.application_document_url || null
+            );
+            setApplicationDocumentFiles([]);
+          }
         }
 
         toast.success(text.draftSaved);
@@ -828,11 +818,16 @@ export function ScholarshipApplicationStep({
 
           // Upload application document if provided
           if (applicationDocumentFiles.length > 0) {
-            await api.applications.uploadApplicationDocument(
+            const appDocResp = await api.applications.uploadApplicationDocument(
               application.id,
               applicationDocumentFiles[0]
             );
-            setApplicationDocumentFiles([]);
+            if (appDocResp.success) {
+              setExistingApplicationDocument(
+                appDocResp.data?.application_document_url || null
+              );
+              setApplicationDocumentFiles([]);
+            }
           }
 
           toast.success(text.draftSaved);
@@ -1163,53 +1158,6 @@ export function ScholarshipApplicationStep({
             </div>
           </div>
 
-          {/* Application Document Upload */}
-          <div className="mt-6 pt-6 border-t">
-            <h4 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-              <FileText className="h-5 w-5 text-nycu-blue-600" />
-              {text.applicationDocument}
-            </h4>
-
-            {existingApplicationDocument ? (
-              <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
-                <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-                <span className="text-sm text-green-800 flex-1">
-                  {text.applicationDocumentUploaded}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handlePreviewAppDocument}
-                  className="text-nycu-blue-600"
-                >
-                  <Eye className="h-4 w-4 mr-1" />
-                  {text.preview}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleDeleteAppDocument}
-                  className="text-red-600"
-                >
-                  <X className="h-4 w-4 mr-1" />
-                  {text.deleteAppDoc}
-                </Button>
-              </div>
-            ) : (
-              <FileUpload
-                onFilesChange={setApplicationDocumentFiles}
-                acceptedTypes={[".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx"]}
-                maxSize={10 * 1024 * 1024}
-                maxFiles={1}
-                initialFiles={applicationDocumentFiles}
-                fileType="application_document"
-                locale={locale}
-              />
-            )}
-            <p className="text-xs text-gray-500 mt-2">{text.fileFormats}</p>
-            <p className="text-xs text-gray-500">{text.fileSizeLimit}</p>
-          </div>
-
           {/* Save Personal Info Button */}
           <div className="flex justify-end">
             <Button
@@ -1510,6 +1458,55 @@ export function ScholarshipApplicationStep({
             </div>
           )}
 
+          {/* Application Document Upload */}
+          {selectedScholarship && (
+            <div className="pt-4 border-t">
+              <h4 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                <FileText className="h-5 w-5 text-nycu-blue-600" />
+                {text.applicationDocument}
+              </h4>
+
+              {existingApplicationDocument ? (
+                <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                  <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+                  <span className="text-sm text-green-800 flex-1">
+                    {text.applicationDocumentUploaded}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handlePreviewAppDocument}
+                    className="text-nycu-blue-600"
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    {text.preview}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleDeleteAppDocument}
+                    className="text-red-600"
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    {text.deleteAppDoc}
+                  </Button>
+                </div>
+              ) : (
+                <FileUpload
+                  onFilesChange={setApplicationDocumentFiles}
+                  acceptedTypes={[".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx"]}
+                  maxSize={10 * 1024 * 1024}
+                  maxFiles={1}
+                  initialFiles={applicationDocumentFiles}
+                  fileType="application_document"
+                  locale={locale}
+                />
+              )}
+              <p className="text-xs text-gray-500 mt-2">{text.fileFormats}</p>
+              <p className="text-xs text-gray-500">{text.fileSizeLimit}</p>
+            </div>
+          )}
+
           {/* Action buttons */}
           <div className="flex justify-between pt-4">
             <Button variant="outline" onClick={onBack} size="lg">
@@ -1742,6 +1739,15 @@ export function ScholarshipApplicationStep({
                           {locale === "zh" ? "預覽" : "Preview"}
                         </Button>
                       </>
+                    ) : bankDocumentFiles.length > 0 ? (
+                      <>
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span className="text-green-700 font-medium">
+                          {locale === "zh"
+                            ? `待上傳：${bankDocumentFiles[0].name}`
+                            : `Pending: ${bankDocumentFiles[0].name}`}
+                        </span>
+                      </>
                     ) : (
                       <>
                         <AlertCircle className="h-4 w-4 text-amber-500" />
@@ -1774,6 +1780,15 @@ export function ScholarshipApplicationStep({
                           <Eye className="h-3 w-3 mr-1" />
                           {locale === "zh" ? "預覽" : "Preview"}
                         </Button>
+                      </>
+                    ) : applicationDocumentFiles.length > 0 ? (
+                      <>
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span className="text-green-700 font-medium">
+                          {locale === "zh"
+                            ? `待上傳：${applicationDocumentFiles[0].name}`
+                            : `Pending: ${applicationDocumentFiles[0].name}`}
+                        </span>
                       </>
                     ) : (
                       <>

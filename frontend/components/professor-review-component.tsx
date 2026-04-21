@@ -93,18 +93,33 @@ function ProfessorReviewComponentInner({
     filename: string;
     type: string;
   } | null>(null);
+  const [regulationsFilename, setRegulationsFilename] = useState<string>("");
 
   useEffect(() => {
     apiClient.systemSettings.getPublicDocs().then((res) => {
-      if (res.success && res.data?.regulations_url)
+      if (res.success && res.data?.regulations_url) {
         setRegulationsUrl(res.data.regulations_url);
+        setRegulationsFilename(
+          res.data.regulations_url_filename || res.data.regulations_url
+        );
+      }
     });
   }, []);
 
   const handleViewRegulations = () => {
     const token = localStorage.getItem("auth_token") || "";
     const url = `/api/v1/system-settings/file-proxy?key=regulations_url&token=${encodeURIComponent(token)}`;
-    setRegulationsFile({ url, filename: "獎學金要點", type: "application/pdf" });
+    const lower = regulationsFilename.toLowerCase();
+    let type = "application/pdf";
+    if (lower.endsWith(".doc")) type = "application/msword";
+    else if (lower.endsWith(".docx"))
+      type =
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    setRegulationsFile({
+      url,
+      filename: regulationsFilename || "獎學金要點",
+      type,
+    });
     setShowRegulations(true);
   };
 

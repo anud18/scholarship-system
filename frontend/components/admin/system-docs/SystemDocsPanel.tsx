@@ -26,14 +26,20 @@ export function SystemDocsPanel() {
   useEffect(() => {
     apiClient.systemSettings.getPublicDocs().then((res) => {
       if (res.success && res.data) {
-        if (res.data.regulations_url)
+        if (res.data.regulations_url) {
           setCurrentRegulationsName(
-            res.data.regulations_url.split("/").pop() || ""
+            res.data.regulations_url_filename ||
+              res.data.regulations_url.split("/").pop() ||
+              ""
           );
-        if (res.data.sample_document_url)
+        }
+        if (res.data.sample_document_url) {
           setCurrentSampleDocName(
-            res.data.sample_document_url.split("/").pop() || ""
+            res.data.sample_document_url_filename ||
+              res.data.sample_document_url.split("/").pop() ||
+              ""
           );
+        }
       }
     });
   }, []);
@@ -45,7 +51,9 @@ export function SystemDocsPanel() {
       const res = await apiClient.systemSettings.uploadRegulations(regulationsFile);
       if (res.success) {
         toast.success("獎學金要點上傳成功");
-        setCurrentRegulationsName(res.data?.object_name?.split("/").pop() || "");
+        setCurrentRegulationsName(
+          res.data?.original_filename || regulationsFile.name
+        );
         setRegulationsFile(null);
       } else {
         toast.error(res.message || "上傳失敗");
@@ -64,7 +72,9 @@ export function SystemDocsPanel() {
       const res = await apiClient.systemSettings.uploadSampleDocument(sampleDocFile);
       if (res.success) {
         toast.success("申請文件範例檔上傳成功");
-        setCurrentSampleDocName(res.data?.object_name?.split("/").pop() || "");
+        setCurrentSampleDocName(
+          res.data?.original_filename || sampleDocFile.name
+        );
         setSampleDocFile(null);
       } else {
         toast.error(res.message || "上傳失敗");

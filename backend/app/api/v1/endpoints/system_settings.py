@@ -97,7 +97,8 @@ async def get_public_docs(
 
     from app.models.system_setting import SystemSetting
 
-    stmt = select(SystemSetting).where(SystemSetting.key.in_(list(_ALLOWED_DOC_KEYS)))
+    keys = list(_ALLOWED_DOC_KEYS) + [f"{k}_filename" for k in _ALLOWED_DOC_KEYS]
+    stmt = select(SystemSetting).where(SystemSetting.key.in_(keys))
     result = await db.execute(stmt)
     rows = result.scalars().all()
     data = {row.key: row.value for row in rows}
@@ -155,30 +156,48 @@ async def upload_system_doc(
         content_type=file.content_type or "application/octet-stream",
     )
 
-    # Upsert into system_settings
-    stmt = select(SystemSetting).where(SystemSetting.key == doc_key)
-    result = await db.execute(stmt)
-    setting = result.scalar_one_or_none()
+    original_filename = file.filename or ""
+    filename_key = f"{doc_key}_filename"
 
-    if setting:
-        setting.value = object_name
-        setting.last_modified_by = current_user.id
-    else:
-        setting = SystemSetting(
-            key=doc_key,
-            value=object_name,
-            category=ConfigCategory.file_storage,
-            data_type=ConfigDataType.string,
-            description="獎學金要點" if doc_key == "regulations_url" else "申請文件範例檔",
-            is_sensitive=False,
-            is_readonly=False,
-            allow_empty=True,
-            last_modified_by=current_user.id,
-        )
-        db.add(setting)
+    # Upsert object_name and original filename
+    stmt = select(SystemSetting).where(SystemSetting.key.in_([doc_key, filename_key]))
+    result = await db.execute(stmt)
+    existing = {row.key: row for row in result.scalars().all()}
+
+    def _upsert(key: str, value: str, description: str) -> None:
+        row = existing.get(key)
+        if row:
+            row.value = value
+            row.last_modified_by = current_user.id
+        else:
+            db.add(
+                SystemSetting(
+                    key=key,
+                    value=value,
+                    category=ConfigCategory.file_storage,
+                    data_type=ConfigDataType.string,
+                    description=description,
+                    is_sensitive=False,
+                    is_readonly=False,
+                    allow_empty=True,
+                    last_modified_by=current_user.id,
+                )
+            )
+
+    main_desc = "獎學金要點" if doc_key == "regulations_url" else "申請文件範例檔"
+    _upsert(doc_key, object_name, main_desc)
+    _upsert(filename_key, original_filename, f"{main_desc} 原始檔名")
 
     await db.commit()
-    return {"success": True, "message": "上傳成功", "data": {"key": doc_key, "object_name": object_name}}
+    return {
+        "success": True,
+        "message": "上傳成功",
+        "data": {
+            "key": doc_key,
+            "object_name": object_name,
+            "original_filename": original_filename,
+        },
+    }
 
 
 @router.get("/file/{doc_key}")
@@ -198,32 +217,39 @@ async def get_system_doc_file(
     if doc_key not in _ALLOWED_DOC_KEYS:
         raise HTTPException(status_code=400, detail="Invalid doc_key")
 
-    stmt = select(SystemSetting).where(SystemSetting.key == doc_key)
+    filename_key = f"{doc_key}_filename"
+    stmt = select(SystemSetting).where(SystemSetting.key.in_([doc_key, filename_key]))
     result = await db.execute(stmt)
-    setting = result.scalar_one_or_none()
+    settings_map = {row.key: row.value for row in result.scalars().all()}
 
-    if not setting or not setting.value:
+    object_name = settings_map.get(doc_key)
+    if not object_name:
         raise HTTPException(status_code=404, detail="文件尚未上傳")
 
     try:
         response = minio_service.client.get_object(
             bucket_name=minio_service.default_bucket,
-            object_name=setting.value,
+            object_name=object_name,
         )
         file_content = response.read()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"無法取得文件: {str(e)}")
 
     content_type = "application/pdf"
-    if setting.value.endswith(".doc"):
+    if object_name.endswith(".doc"):
         content_type = "application/msword"
-    elif setting.value.endswith(".docx"):
+    elif object_name.endswith(".docx"):
         content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+    from urllib.parse import quote
+
+    download_name = settings_map.get(filename_key) or object_name.split("/")[-1]
+    encoded_name = quote(download_name, safe="")
 
     return StreamingResponse(
         io.BytesIO(file_content),
         media_type=content_type,
-        headers={"Content-Disposition": f"inline; filename*=UTF-8''{doc_key}.pdf"},
+        headers={"Content-Disposition": f"inline; filename*=UTF-8''{encoded_name}"},
     )
 
 
