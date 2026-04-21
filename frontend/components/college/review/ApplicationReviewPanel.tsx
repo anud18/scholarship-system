@@ -49,6 +49,7 @@ import {
   Award,
   Building,
   Info,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -60,6 +61,7 @@ import {
 import { useScholarshipData } from "@/hooks/use-scholarship-data";
 import * as XLSX from "xlsx";
 import { apiClient } from "@/lib/api";
+import { FilePreviewDialog } from "@/components/file-preview-dialog";
 
 interface ApplicationReviewPanelProps {
   user: User;
@@ -442,6 +444,29 @@ export function ApplicationReviewPanel({
 
   const [isExportingPackage, setIsExportingPackage] = useState(false);
 
+  // Regulations state
+  const [regulationsUrl, setRegulationsUrl] = useState<string | null>(null);
+  const [showRegulations, setShowRegulations] = useState(false);
+  const [regulationsFile, setRegulationsFile] = useState<{
+    url: string;
+    filename: string;
+    type: string;
+  } | null>(null);
+
+  useEffect(() => {
+    apiClient.systemSettings.getPublicDocs().then(res => {
+      if (res.success && res.data?.regulations_url)
+        setRegulationsUrl(res.data.regulations_url);
+    });
+  }, []);
+
+  const handleViewRegulations = () => {
+    const token = localStorage.getItem("auth_token") || "";
+    const url = `/api/v1/system-settings/file/regulations_url?token=${encodeURIComponent(token)}`;
+    setRegulationsFile({ url, filename: "獎學金要點", type: "application/pdf" });
+    setShowRegulations(true);
+  };
+
   const handleExportPackage = async () => {
     if (!activeScholarshipTab || !selectedAcademicYear) {
       toast.error(
@@ -545,6 +570,16 @@ export function ApplicationReviewPanel({
             locale={locale}
           />
 
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleViewRegulations}
+            disabled={!regulationsUrl}
+            className="flex items-center gap-2"
+          >
+            <FileText className="h-4 w-4" />
+            查看獎學金要點
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -970,6 +1005,13 @@ export function ApplicationReviewPanel({
         }}
         applicationId={applicationToRequestDocs?.id}
         applicationName={applicationToRequestDocs?.student_name}
+      />
+
+      <FilePreviewDialog
+        isOpen={showRegulations}
+        onClose={() => setShowRegulations(false)}
+        file={regulationsFile}
+        locale="zh"
       />
     </>
   );
