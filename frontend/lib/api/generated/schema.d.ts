@@ -1297,6 +1297,37 @@ export interface paths {
         patch: operations["admin_update_application_status_api_v1_admin_applications__id__status_patch"];
         trace?: never;
     };
+    "/api/v1/admin/applications/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Application
+         * @description Hard-delete an application (admin only).
+         *
+         *     Only allowed while the application is still in the student-facing stage
+         *     (draft / submitted). Once review has started the row must be preserved.
+         *
+         *     Performs a cascade delete:
+         *     - Removes related CollegeRankingItem and PaymentRosterItem rows explicitly.
+         *     - SQLAlchemy cascades remove ApplicationReview, ApplicationFile, DocumentRequest rows.
+         *     - The application row itself is permanently removed.
+         *
+         *     Records an AuditLog entry describing the deletion so the operation
+         *     history persists even after the application row is gone.
+         */
+        delete: operations["delete_application_api_v1_admin_applications__id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/announcements": {
         parameters: {
             query?: never;
@@ -6686,6 +6717,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/manual-distribution/import-received-months": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Received Months
+         * @description Import received months from Excel for students in a distribution.
+         */
+        post: operations["import_received_months_api_v1_manual_distribution_import_received_months_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -7528,6 +7579,15 @@ export interface components {
              */
             file: string;
         };
+        /** Body_import_received_months_api_v1_manual_distribution_import_received_months_post */
+        Body_import_received_months_api_v1_manual_distribution_import_received_months_post: {
+            /**
+             * File
+             * Format: binary
+             * @description Excel file with columns: 學號, 已領月份數
+             */
+            file: string;
+        };
         /** Body_import_whitelist_excel_api_v1_scholarship_configurations__id__whitelist_import_post */
         Body_import_whitelist_excel_api_v1_scholarship_configurations__id__whitelist_import_post: {
             /**
@@ -7843,6 +7903,11 @@ export interface components {
              * @description Validation regex
              */
             validation_regex?: string | null;
+        };
+        /** DeleteApplicationRequest */
+        DeleteApplicationRequest: {
+            /** Reason */
+            reason: string;
         };
         /**
          * DeveloperProfileRequest
@@ -11668,6 +11733,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ApplicationStatusUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_application_api_v1_admin_applications__id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteApplicationRequest"];
             };
         };
         responses: {
@@ -20675,6 +20775,46 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["GenerateRostersRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_received_months_api_v1_manual_distribution_import_received_months_post: {
+        parameters: {
+            query: {
+                /** @description Scholarship type ID */
+                scholarship_type_id: number;
+                /** @description Academic year */
+                academic_year: number;
+                /** @description Semester */
+                semester: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_import_received_months_api_v1_manual_distribution_import_received_months_post"];
             };
         };
         responses: {

@@ -154,15 +154,28 @@ class ApplicationAuditService:
         user: User,
         reason: str,
         request: Optional[Request] = None,
+        scholarship_type_id: Optional[int] = None,
+        student_name: Optional[str] = None,
     ) -> Optional[AuditLog]:
-        """記錄刪除申請"""
+        """記錄刪除申請。
+
+        Application 會被硬刪除，因此必須在 meta_data 記錄
+        scholarship_type_id / student_name 等欄位，`get_scholarship_audit_trail`
+        才能在 applications row 消失後仍然把這筆 log 歸屬回正確的獎學金。
+        """
+        meta_data: Dict[str, Any] = {"app_id": app_id, "deletion_reason": reason}
+        if scholarship_type_id is not None:
+            meta_data["scholarship_type_id"] = scholarship_type_id
+        if student_name:
+            meta_data["student_name"] = student_name
+
         return await self.log_application_operation(
             application_id=application_id,
             action=AuditAction.delete,
             user=user,
             request=request,
             description=f"刪除申請 {app_id}，原因: {reason}",
-            meta_data={"app_id": app_id, "deletion_reason": reason},
+            meta_data=meta_data,
         )
 
     async def log_document_upload(
@@ -526,21 +539,30 @@ class ApplicationAuditService:
             List[Dict]: 稽核日誌列表（包含申請和學生資訊）
         """
         try:
+            from sqlalchemy import func, or_
             from sqlalchemy.orm import selectinload
 
             from app.models.application import Application
 
-            # Join audit logs with applications to filter by scholarship type
-            # Note: We DON'T filter by application status - this ensures deleted app logs are included
+            # LEFT OUTER JOIN so delete logs survive after the Application row is gone.
+            # For orphan rows, fall back to scholarship_type_id stored in meta_data.
+            # meta_data is plain JSON (not JSONB), so use json_extract_path_text for ->> access.
+            scholarship_id_str = str(scholarship_type_id)
+            meta_scholarship_id = func.json_extract_path_text(AuditLog.meta_data, "scholarship_type_id")
             query = (
                 select(AuditLog, Application)
-                .join(
+                .outerjoin(
                     Application,
                     AuditLog.resource_id == Application.id.cast(sqlalchemy.String),
                 )
-                .options(selectinload(AuditLog.user))  # Eager load user to avoid lazy loading issues
+                .options(selectinload(AuditLog.user))
                 .where(AuditLog.resource_type == "application")
-                .where(Application.scholarship_type_id == scholarship_type_id)
+                .where(
+                    or_(
+                        Application.scholarship_type_id == scholarship_type_id,
+                        meta_scholarship_id == scholarship_id_str,
+                    )
+                )
             )
 
             if action_filter:
@@ -551,31 +573,47 @@ class ApplicationAuditService:
             result = await self.db.execute(query)
             rows = result.all()
 
-            # Enrich audit logs with application information
             enriched_logs = []
             for audit_log, application in rows:
-                log_dict = {
-                    "id": audit_log.id,
-                    "action": audit_log.action,
-                    "user_id": audit_log.user_id,
-                    "user_name": audit_log.user.name if audit_log.user else "Unknown",
-                    "description": audit_log.description,
-                    "old_values": audit_log.old_values,
-                    "new_values": audit_log.new_values,
-                    "ip_address": audit_log.ip_address,
-                    "request_method": audit_log.request_method,
-                    "request_url": audit_log.request_url,
-                    "status": audit_log.status,
-                    "error_message": audit_log.error_message,
-                    "meta_data": audit_log.meta_data,
-                    "created_at": audit_log.created_at,
-                    # Add application context
-                    "application_id": application.id,
-                    "app_id": application.app_id,
-                    "scholarship_type_id": application.scholarship_type_id,
-                    "student_name": application.student_data.get("std_cname") if application.student_data else None,
-                }
-                enriched_logs.append(log_dict)
+                meta = audit_log.meta_data or {}
+                if application:
+                    app_id = application.app_id
+                    app_scholarship_id = application.scholarship_type_id
+                    student_name = (application.student_data or {}).get("std_cname") if application.student_data else None
+                    application_id = application.id
+                else:
+                    # Application has been hard-deleted; rely on snapshot stored in meta_data.
+                    app_id = meta.get("app_id")
+                    app_scholarship_id = meta.get("scholarship_type_id")
+                    student_name = meta.get("student_name")
+                    try:
+                        application_id = int(audit_log.resource_id) if audit_log.resource_id else None
+                    except (TypeError, ValueError):
+                        application_id = None
+
+                enriched_logs.append(
+                    {
+                        "id": audit_log.id,
+                        "action": audit_log.action,
+                        "user_id": audit_log.user_id,
+                        "user_name": audit_log.user.name if audit_log.user else "Unknown",
+                        "description": audit_log.description,
+                        "old_values": audit_log.old_values,
+                        "new_values": audit_log.new_values,
+                        "ip_address": audit_log.ip_address,
+                        "request_method": audit_log.request_method,
+                        "request_url": audit_log.request_url,
+                        "status": audit_log.status,
+                        "error_message": audit_log.error_message,
+                        "meta_data": audit_log.meta_data,
+                        "created_at": audit_log.created_at,
+                        "application_id": application_id,
+                        "app_id": app_id,
+                        "scholarship_type_id": app_scholarship_id,
+                        "student_name": student_name,
+                        "application_deleted": application is None,
+                    }
+                )
 
             return enriched_logs
 

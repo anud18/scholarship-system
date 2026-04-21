@@ -21,6 +21,7 @@ from app.models.college_review import CollegeRanking, CollegeRankingItem, Manual
 from app.models.enums import ApplicationStatus, ReviewStage
 from app.models.review import ApplicationReview, ApplicationReviewItem
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipSubTypeConfig
+from app.services.received_months_service import calculate_received_months_bulk_async
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +201,47 @@ class ManualDistributionService:
             rejected_map.setdefault(app_id, set()).add(sub_type_code)
         return rejected_map
 
+    async def _bulk_system_received_months(
+        self,
+        items: list[CollegeRankingItem],
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: str,
+    ) -> dict[str, int]:
+        """
+        Bulk-compute system received_months keyed by student std_stdcode.
+
+        Returns empty dict when no matching ScholarshipConfiguration exists;
+        callers fall back to showing no system value for affected students.
+        """
+        config_stmt = select(ScholarshipConfiguration.id).where(
+            and_(
+                ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+                ScholarshipConfiguration.academic_year == academic_year,
+                _config_semester_condition(semester),
+            )
+        )
+        config_row = (await self.db.execute(config_stmt)).first()
+        if not config_row:
+            return {}
+        config_id = config_row[0]
+
+        student_ids: list[str] = []
+        for item in items:
+            app = item.application
+            if not app or app.deleted_at is not None:
+                continue
+            sid = (app.student_data or {}).get("std_stdcode", "")
+            if sid:
+                student_ids.append(sid)
+
+        if not student_ids:
+            return {}
+
+        return await calculate_received_months_bulk_async(
+            self.db, student_ids, config_id
+        )
+
     async def get_students_for_distribution(
         self,
         scholarship_type_id: int,
@@ -242,10 +284,21 @@ class ManualDistributionService:
         app_ids = [item.application.id for item in items if item.application]
         rejected_map = await self._batch_load_rejected_map(app_ids)
 
+        # Bulk-compute system received_months for all students in one query.
+        # Admin-imported overrides (source="imported") take precedence over
+        # system values — see docs/received-months-calculation.md.
+        system_months = await self._bulk_system_received_months(
+            items, scholarship_type_id, academic_year, semester
+        )
+
         students = []
         for item in items:
             app = item.application
             if not app:
+                continue
+
+            # Skip soft-deleted applications
+            if app.deleted_at is not None:
                 continue
 
             student_data = app.student_data or {}
@@ -258,11 +311,20 @@ class ManualDistributionService:
             # Compute application_identity
             identity = self._compute_application_identity(app)
 
-            # Compute grade display
-            grade = self._compute_grade_display(student_data)
+            # Compute term count
+            term_count = self._compute_term_count(student_data)
 
             # Format enrollment date (ROC calendar)
             enrollment_date = self._format_enrollment_date(student_data)
+
+            # Resolve received_months: imported overrides win, else system value
+            if item.received_months_source == "imported" and item.received_months is not None:
+                rm_value = item.received_months
+                rm_source = "imported"
+            else:
+                student_id_value = student_data.get("std_stdcode", "")
+                rm_value = system_months.get(student_id_value) if student_id_value else None
+                rm_source = "system" if rm_value is not None else None
 
             students.append({
                 "ranking_item_id": item.id,
@@ -276,7 +338,7 @@ class ManualDistributionService:
                 "college_code": student_college,
                 "college_name": student_data.get("trm_academyname", ""),
                 "department_name": student_data.get("trm_depname", ""),
-                "grade": grade,
+                "term_count": term_count,
                 "student_name": student_data.get("std_cname", ""),
                 "nationality": student_data.get("std_nation", ""),
                 "enrollment_date": enrollment_date,
@@ -284,6 +346,9 @@ class ManualDistributionService:
                 "application_identity": identity,
                 "is_renewal": app.is_renewal,
                 "renewal_year": app.renewal_year,
+                "renewal_sub_type": self._get_renewal_sub_type(app),
+                "received_months": rm_value,
+                "received_months_source": rm_source,
             })
 
         # Sort by college_code, then rank_position
@@ -408,12 +473,16 @@ class ManualDistributionService:
             allocated_items = []
 
         # Build allocation counts: {sub_type: {year: {college: count}}}
+        ranking_by_id = {r.id: r for r in all_rankings}
         allocation_counts: dict[str, dict[int, dict[str, int]]] = {}
         for item in allocated_items:
+            # Skip soft-deleted applications from quota accounting
+            if item.application and item.application.deleted_at is not None:
+                continue
             sub_type = item.allocated_sub_type
             if not sub_type:
                 continue
-            ranking = next((r for r in all_rankings if r.id == item.ranking_id), None)
+            ranking = ranking_by_id.get(item.ranking_id)
             alloc_year = item.allocation_year or (ranking.academic_year if ranking else None)
             if not alloc_year:
                 continue
@@ -649,6 +718,10 @@ class ManualDistributionService:
             if not app:
                 continue
 
+            # Skip soft-deleted applications
+            if app.deleted_at is not None:
+                continue
+
             if item.is_allocated and item.allocated_sub_type:
                 app.status = ApplicationStatus.approved
                 app.quota_allocation_status = "allocated"
@@ -814,17 +887,37 @@ class ManualDistributionService:
         else:
             return f"{app.academic_year}新申請"
 
-    def _compute_grade_display(self, student_data: dict) -> str:
-        """Compute grade display string like 博一, 博二, 碩一, etc."""
-        degree = student_data.get("trm_degree", student_data.get("std_degree", 0))
-        term_count = student_data.get("trm_termcount", student_data.get("std_termcount", 1))
-        year = (term_count + 1) // 2  # Convert semester count to year
+    def _compute_term_count(self, student_data: dict) -> int | None:
+        """Get student's semester count (第幾學期) from SIS API data."""
+        term_count = student_data.get("trm_termcount")
+        if term_count is not None:
+            try:
+                return int(term_count)
+            except (ValueError, TypeError):
+                return None
+        return None
 
-        degree_prefix = {6: "博", 4: "碩", 2: "學"}.get(degree, "")
-        year_suffix = {1: "一", 2: "二", 3: "三", 4: "四", 5: "五", 6: "六", 7: "七"}.get(
-            year, str(year)
-        )
-        return f"{degree_prefix}{year_suffix}" if degree_prefix else f"第{year}年"
+    def _get_renewal_sub_type(self, app: Application) -> str | None:
+        """
+        Get the sub-type of the student's renewal application.
+        Maps sub_type codes to Chinese display names.
+        """
+        if not app.is_renewal:
+            return None
+        sub_type = app.sub_scholarship_type
+        if not sub_type or sub_type == "general":
+            return None
+        return self._sub_type_to_chinese(sub_type)
+
+    @staticmethod
+    def _sub_type_to_chinese(sub_type: str) -> str:
+        """Map sub-type code to Chinese display name."""
+        mapping = {
+            "nstc": "國科會",
+            "moe_1w": "教育部",
+            "moe_2w": "教育部",
+        }
+        return mapping.get(sub_type, sub_type)
 
     def _format_enrollment_date(self, student_data: dict) -> str:
         """Format enrollment date as ROC calendar (民國年.月.日)."""
@@ -928,11 +1021,15 @@ class ManualDistributionService:
         result = await self.db.execute(items_query)
         all_items = result.scalars().all()
 
-        # Deduplicate by application_id (keep first seen)
+        # Deduplicate by application_id (keep first seen), skip soft-deleted
         seen_app_ids: set[int] = set()
         unique_items = []
         for item in all_items:
-            if item.application and item.application.id not in seen_app_ids:
+            if (
+                item.application
+                and item.application.deleted_at is None
+                and item.application.id not in seen_app_ids
+            ):
                 seen_app_ids.add(item.application.id)
                 unique_items.append(item)
 

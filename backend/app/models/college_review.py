@@ -152,6 +152,12 @@ class CollegeRankingItem(Base):
         JSONB, nullable=True
     )  # Array of backup allocations: [{sub_type, backup_position, college, allocation_reason}, ...]
 
+    # Received months tracking
+    received_months = Column(Integer, nullable=True)  # Number of months already received
+    # "imported" when admin uploads an Excel; NULL otherwise (system-computed
+    # values are derived on read via received_months_service, not persisted).
+    received_months_source = Column(String(20), nullable=True)
+
     # Time tracking
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

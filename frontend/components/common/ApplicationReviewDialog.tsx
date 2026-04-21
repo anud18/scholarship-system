@@ -576,6 +576,7 @@ export function ApplicationReviewDialog({
   }>>([]);
   const [existingReview, setExistingReview] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingSubTypes, setIsLoadingSubTypes] = useState(false);
 
   const {
     studyingStatuses,
@@ -812,6 +813,7 @@ export function ApplicationReviewDialog({
 
   // Load sub-types and existing review for college and admin users
   const loadSubTypesAndReview = async (applicationId: number) => {
+    setIsLoadingSubTypes(true);
     try {
       // Get available sub-types (route based on role)
       const subTypesResponse = (role === "admin" || role === "super_admin")
@@ -882,6 +884,8 @@ export function ApplicationReviewDialog({
       }
     } catch (err) {
       console.error("Error loading sub-types and review:", err);
+    } finally {
+      setIsLoadingSubTypes(false);
     }
   };
 
@@ -905,6 +909,7 @@ export function ApplicationReviewDialog({
       setReviewItems([]);
       setSubTypes([]);
       setExistingReview(null);
+      setIsLoadingSubTypes(false);
     }
   }, [open, application, role]);
 
@@ -2031,12 +2036,22 @@ export function ApplicationReviewDialog({
                           </div>
                         </CardContent>
                       </Card>
-                    ) : (
+                    ) : isLoadingSubTypes ? (
                       <Card>
                         <CardContent className="py-12 text-center">
                           <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-muted-foreground" />
                           <p className="text-muted-foreground">
                             {locale === "zh" ? "載入審核表單中..." : "Loading review form..."}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      <Card>
+                        <CardContent className="py-12 text-center">
+                          <p className="text-muted-foreground">
+                            {locale === "zh"
+                              ? "此申請無可審核的子類型"
+                              : "No reviewable sub-types for this application"}
                           </p>
                         </CardContent>
                       </Card>

@@ -574,6 +574,207 @@ class TestAdminEndpoints:
         # Assert
         assert response.status_code == 422
 
+    # ------------------------------------------------------------------
+    # DELETE /api/v1/admin/applications/{id}
+    # ------------------------------------------------------------------
+
+    @pytest_asyncio.fixture
+    async def deletable_applications(self, client):
+        """Create applications in every relevant status for delete-endpoint tests."""
+        from sqlalchemy import select
+
+        from app.db.deps import get_db
+        from app.main import app
+        from app.models.scholarship import ScholarshipType
+        from app.models.user import User, UserType
+
+        get_db_override = app.dependency_overrides[get_db]
+        db_gen = get_db_override()
+        db = await db_gen.__anext__()
+
+        # Ensure scholarship exists (unique by code)
+        existing = (
+            await db.execute(select(ScholarshipType).where(ScholarshipType.code == "delete_test_scholarship"))
+        ).scalar_one_or_none()
+        if existing is None:
+            scholarship = ScholarshipType(
+                code="delete_test_scholarship",
+                name="Delete Test Scholarship",
+                description="For testing admin delete endpoint",
+                category="undergraduate_freshman",
+            )
+            db.add(scholarship)
+            await db.commit()
+            await db.refresh(scholarship)
+        else:
+            scholarship = existing
+
+        status_specs = [
+            ("draft", ApplicationStatus.draft.value, "DEL-DRAFT"),
+            ("submitted", ApplicationStatus.submitted.value, "DEL-SUBMITTED"),
+            ("under_review", ApplicationStatus.under_review.value, "DEL-UNDERREVIEW"),
+            ("approved", ApplicationStatus.approved.value, "DEL-APPROVED"),
+            ("rejected", ApplicationStatus.rejected.value, "DEL-REJECTED"),
+        ]
+        created: dict[str, Application] = {}
+        for i, (key, status_value, id_prefix) in enumerate(status_specs):
+            user = User(
+                nycu_id=f"del_student_{i}",
+                name=f"Delete Student {i}",
+                email=f"del_{i}@university.edu",
+                user_type=UserType.student,
+                role=UserRole.student,
+            )
+            db.add(user)
+            await db.commit()
+            await db.refresh(user)
+
+            application = Application(
+                app_id=f"{id_prefix}-{i}",
+                user_id=user.id,
+                scholarship_type_id=scholarship.id,
+                status=status_value,
+                academic_year=113,
+                semester="first",
+                sub_type_selection_mode="SINGLE",
+                student_data={"std_cname": f"學生{i}", "std_stdcode": f"3104600{i:02d}"},
+                created_at=datetime.now(timezone.utc),
+            )
+            db.add(application)
+            await db.commit()
+            await db.refresh(application)
+            created[key] = application
+
+        return created
+
+    @pytest.mark.asyncio
+    async def test_delete_application_success_draft(self, admin_client, deletable_applications):
+        """Admin can hard-delete a draft application and its row disappears."""
+        from sqlalchemy import select
+
+        from app.db.deps import get_db
+        from app.main import app as fastapi_app
+
+        target = deletable_applications["draft"]
+
+        response = await admin_client.request(
+            "DELETE",
+            f"/api/v1/admin/applications/{target.id}",
+            json={"reason": "測試刪除 draft"},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is True
+        assert body["data"]["id"] == target.id
+        assert body["data"]["app_id"] == target.app_id
+        assert body["data"]["reason"] == "測試刪除 draft"
+
+        # Row must be gone.
+        get_db_override = fastapi_app.dependency_overrides[get_db]
+        db = await get_db_override().__anext__()
+        still_there = (
+            await db.execute(select(Application).where(Application.id == target.id))
+        ).scalar_one_or_none()
+        assert still_there is None
+
+    @pytest.mark.asyncio
+    async def test_delete_application_success_submitted_records_audit_log(
+        self, admin_client, deletable_applications
+    ):
+        """Deleting a submitted app writes an AuditLog with the reason and scholarship snapshot."""
+        from sqlalchemy import select
+
+        from app.db.deps import get_db
+        from app.main import app as fastapi_app
+        from app.models.audit_log import AuditLog
+
+        target = deletable_applications["submitted"]
+        scholarship_type_id = target.scholarship_type_id
+
+        response = await admin_client.request(
+            "DELETE",
+            f"/api/v1/admin/applications/{target.id}",
+            json={"reason": "policy violation"},
+        )
+        assert response.status_code == 200
+
+        get_db_override = fastapi_app.dependency_overrides[get_db]
+        db = await get_db_override().__anext__()
+        audit = (
+            await db.execute(
+                select(AuditLog)
+                .where(AuditLog.resource_type == "application")
+                .where(AuditLog.resource_id == str(target.id))
+                .where(AuditLog.action == "delete")
+            )
+        ).scalar_one_or_none()
+        assert audit is not None
+        assert "policy violation" in (audit.description or "")
+        meta = audit.meta_data or {}
+        assert meta.get("deletion_reason") == "policy violation"
+        assert meta.get("scholarship_type_id") == scholarship_type_id
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("status_key", ["under_review", "approved", "rejected"])
+    async def test_delete_application_rejects_post_review_status(
+        self, admin_client, deletable_applications, status_key
+    ):
+        """Applications that have left the student-facing stage cannot be deleted."""
+        target = deletable_applications[status_key]
+
+        response = await admin_client.request(
+            "DELETE",
+            f"/api/v1/admin/applications/{target.id}",
+            json={"reason": "nope"},
+        )
+        assert response.status_code == 400
+        body = response.json()
+        # FastAPI wraps detail under message/error depending on handler; check either.
+        detail = body.get("detail") or body.get("message") or ""
+        assert "學生申請階段" in detail
+
+    @pytest.mark.asyncio
+    async def test_delete_application_requires_nonempty_reason(self, admin_client, deletable_applications):
+        """Missing or empty reason is a 422 validation error."""
+        target = deletable_applications["submitted"]
+
+        r_missing = await admin_client.request(
+            "DELETE",
+            f"/api/v1/admin/applications/{target.id}",
+            json={},
+        )
+        assert r_missing.status_code == 422
+
+        r_empty = await admin_client.request(
+            "DELETE",
+            f"/api/v1/admin/applications/{target.id}",
+            json={"reason": ""},
+        )
+        assert r_empty.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_delete_application_not_found(self, admin_client):
+        """Unknown id returns 404."""
+        response = await admin_client.request(
+            "DELETE",
+            "/api/v1/admin/applications/999999",
+            json={"reason": "x"},
+        )
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_delete_application_permission_denied(self, non_admin_client, deletable_applications):
+        """Non-admins cannot call the delete endpoint."""
+        target = deletable_applications["submitted"]
+
+        response = await non_admin_client.request(
+            "DELETE",
+            f"/api/v1/admin/applications/{target.id}",
+            json={"reason": "x"},
+        )
+        assert response.status_code == 403
+
     # TODO: Add tests for rate limiting on admin endpoints
     # TODO: Add tests for admin action logging and audit trail
     # TODO: Add tests for admin permission inheritance and delegation

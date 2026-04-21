@@ -14,18 +14,24 @@ export interface DistributionStudent {
   application_id: number;
   rank_position: number;
   applied_sub_types: string[];
+  rejected_sub_types: string[];
   allocated_sub_type: string | null;
   allocation_year: number | null;
   status: string;
   college_code: string;
   college_name: string;
   department_name: string;
-  grade: string;
+  term_count: number | null;
   student_name: string;
   nationality: string;
   enrollment_date: string;
   student_id: string;
   application_identity: string;
+  is_renewal: boolean;
+  renewal_year: number | null;
+  renewal_sub_type: string | null;
+  received_months: number | null;
+  received_months_source: string | null;
 }
 
 export interface CollegeQuota {
@@ -347,6 +353,66 @@ export function createManualDistributionApi() {
         { body: request as any }
       );
       return toApiResponse(response) as ApiResponse<GenerateRostersResult>;
+    },
+
+    /**
+     * Import received months from Excel file.
+     */
+    importReceivedMonths: async (
+      scholarshipTypeId: number,
+      academicYear: number,
+      semester: string,
+      file: File
+    ): Promise<
+      ApiResponse<{ matched: number; not_found: string[]; updated: number }>
+    > => {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const params = new URLSearchParams({
+        scholarship_type_id: String(scholarshipTypeId),
+        academic_year: String(academicYear),
+        semester,
+      });
+
+      const token = typedClient.getToken();
+      const response = await fetch(
+        `/api/v1/manual-distribution/import-received-months?${params}`,
+        {
+          method: "POST",
+          body: formData,
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
+      );
+
+      let body: any = null;
+      try {
+        body = await response.json();
+      } catch {
+        // Non-JSON response — keep body null and fall through to error shape
+      }
+
+      if (!response.ok) {
+        return {
+          success: false,
+          message:
+            (body && (body.message || body.detail)) ||
+            `Upload failed (HTTP ${response.status})`,
+          data: undefined,
+        } as ApiResponse<{
+          matched: number;
+          not_found: string[];
+          updated: number;
+        }>;
+      }
+
+      return body as ApiResponse<{
+        matched: number;
+        not_found: string[];
+        updated: number;
+      }>;
     },
   };
 }
