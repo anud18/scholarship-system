@@ -383,14 +383,12 @@ export function createApplicationsApi() {
     ): Promise<ApiResponse<{ application_document_url: string }>> => {
       const formData = new FormData();
       formData.append("file", file);
-      const baseUrl =
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       const token =
         typeof localStorage !== "undefined"
           ? localStorage.getItem("auth_token") || ""
           : "";
       const res = await fetch(
-        `${baseUrl}/api/v1/applications/${applicationId}/application-document`,
+        `/api/v1/applications/${applicationId}/application-document`,
         {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
@@ -407,14 +405,12 @@ export function createApplicationsApi() {
     deleteApplicationDocument: async (
       applicationId: number
     ): Promise<ApiResponse<null>> => {
-      const baseUrl =
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       const token =
         typeof localStorage !== "undefined"
           ? localStorage.getItem("auth_token") || ""
           : "";
       const res = await fetch(
-        `${baseUrl}/api/v1/applications/${applicationId}/application-document`,
+        `/api/v1/applications/${applicationId}/application-document`,
         {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },

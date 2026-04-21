@@ -205,14 +205,12 @@ export function createSystemSettingsApi() {
     ): Promise<ApiResponse<{ key: string; object_name: string }>> => {
       const formData = new FormData();
       formData.append("file", file);
-      const baseUrl =
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       const token =
         typeof localStorage !== "undefined"
           ? localStorage.getItem("auth_token") || ""
           : "";
       const res = await fetch(
-        `${baseUrl}/api/v1/system-settings/upload/regulations_url`,
+        `/api/v1/system-settings/upload/regulations_url`,
         {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
@@ -231,14 +229,12 @@ export function createSystemSettingsApi() {
     ): Promise<ApiResponse<{ key: string; object_name: string }>> => {
       const formData = new FormData();
       formData.append("file", file);
-      const baseUrl =
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       const token =
         typeof localStorage !== "undefined"
           ? localStorage.getItem("auth_token") || ""
           : "";
       const res = await fetch(
-        `${baseUrl}/api/v1/system-settings/upload/sample_document_url`,
+        `/api/v1/system-settings/upload/sample_document_url`,
         {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
