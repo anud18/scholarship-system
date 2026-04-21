@@ -995,6 +995,74 @@ async def upload_application_document(
     }
 
 
+@router.get("/{application_id}/application-document")
+async def get_application_document_file(
+    application_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Stream the 申請文件 from MinIO. Owner or staff can access."""
+    import io
+
+    from fastapi.responses import StreamingResponse
+    from sqlalchemy import select
+
+    from app.models.application import Application
+    from app.services.minio_service import minio_service
+
+    stmt = select(Application).where(
+        Application.id == application_id,
+        Application.deleted_at.is_(None),
+    )
+    result = await db.execute(stmt)
+    application = result.scalar_one_or_none()
+    if not application:
+        raise HTTPException(status_code=404, detail="申請單不存在")
+
+    # Authorization: owner OR staff/admin/professor/college
+    from app.models.user import UserRole
+
+    is_owner = application.user_id == current_user.id
+    is_staff = current_user.role in (
+        UserRole.admin,
+        UserRole.super_admin,
+        UserRole.professor,
+        UserRole.college,
+    )
+    if not is_owner and not is_staff:
+        raise HTTPException(status_code=403, detail="無權限")
+
+    if not application.application_document_url:
+        raise HTTPException(status_code=404, detail="申請文件不存在")
+
+    object_name = application.application_document_url
+
+    try:
+        response = minio_service.client.get_object(
+            bucket_name=minio_service.default_bucket,
+            object_name=object_name,
+        )
+        file_content = response.read()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"無法取得文件: {str(e)}")
+
+    content_type = "application/octet-stream"
+    lower = object_name.lower()
+    if lower.endswith(".pdf"):
+        content_type = "application/pdf"
+    elif lower.endswith(".png"):
+        content_type = "image/png"
+    elif lower.endswith(".jpg") or lower.endswith(".jpeg"):
+        content_type = "image/jpeg"
+
+    filename = object_name.split("/")[-1]
+    return StreamingResponse(
+        io.BytesIO(file_content),
+        media_type=content_type,
+        headers={"Content-Disposition": f"inline; filename*=UTF-8''{filename}"},
+    )
+
+
 @router.delete("/{application_id}/application-document")
 async def delete_application_document(
     application_id: int,

@@ -344,7 +344,7 @@ export function NoticeAgreementStep({
       </Card>
 
       <FilePreviewDialog
-        open={showPreview}
+        isOpen={showPreview}
         onClose={() => setShowPreview(false)}
         file={previewFile}
         locale={locale}

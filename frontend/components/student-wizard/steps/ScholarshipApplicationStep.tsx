@@ -398,19 +398,12 @@ export function ScholarshipApplicationStep({
   };
 
   const handlePreviewAppDocument = () => {
-    if (!existingApplicationDocument) return;
+    if (!existingApplicationDocument || !editingApplication?.id) return;
     const filename =
       existingApplicationDocument.split("/").pop()?.split("?")[0] ||
       "application_document";
     const token = localStorage.getItem("auth_token") || "";
-    const previewParams = new URLSearchParams({
-      fileId: filename,
-      filename,
-      type: "application_document",
-      token,
-      userId: String(userId),
-    });
-    const previewUrl = `/api/v1/preview?${previewParams.toString()}`;
+    const previewUrl = `/api/v1/applications/${editingApplication.id}/application-document?token=${encodeURIComponent(token)}`;
     let fileTypeDisplay = "other";
     if (filename.toLowerCase().endsWith(".pdf"))
       fileTypeDisplay = "application/pdf";
@@ -811,6 +804,15 @@ export function ScholarshipApplicationStep({
           }
         }
 
+        // Upload application document if provided
+        if (applicationDocumentFiles.length > 0) {
+          await api.applications.uploadApplicationDocument(
+            editingApplication.id,
+            applicationDocumentFiles[0]
+          );
+          setApplicationDocumentFiles([]);
+        }
+
         toast.success(text.draftSaved);
       } else {
         // Create new draft
@@ -822,6 +824,15 @@ export function ScholarshipApplicationStep({
             for (const file of files) {
               await uploadDocument(application.id, file, docType);
             }
+          }
+
+          // Upload application document if provided
+          if (applicationDocumentFiles.length > 0) {
+            await api.applications.uploadApplicationDocument(
+              application.id,
+              applicationDocumentFiles[0]
+            );
+            setApplicationDocumentFiles([]);
           }
 
           toast.success(text.draftSaved);
@@ -890,6 +901,15 @@ export function ScholarshipApplicationStep({
               await uploadDocument(applicationId, file, docType);
             }
           }
+        }
+
+        // Upload application document if provided
+        if (applicationDocumentFiles.length > 0) {
+          await api.applications.uploadApplicationDocument(
+            editingApplication.id,
+            applicationDocumentFiles[0]
+          );
+          setApplicationDocumentFiles([]);
         }
       } else {
         // Create new application
