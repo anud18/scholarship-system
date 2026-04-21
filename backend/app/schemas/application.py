@@ -333,6 +333,7 @@ class ApplicationResponse(BaseModel):
     application_document_url: Optional[str] = None
 
     reviews: List[ApplicationReviewResponse] = []
+    professor_review_items: List[Dict[str, Any]] = []  # Per sub-type professor recommendations with comments
 
     # Additional display fields
     student_name: Optional[str] = None

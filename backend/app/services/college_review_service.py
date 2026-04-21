@@ -192,6 +192,12 @@ class CollegeReviewService:
     # Use ReviewService.create_review() instead for all review operations
     # Ranking functionality now handled by create_ranking() method
 
+    @staticmethod
+    def _role_matches(role, *expected: str) -> bool:
+        """Compare role (enum or string) against expected string values."""
+        role_str = role.value if hasattr(role, "value") else role
+        return role_str in expected
+
     async def get_applications_for_review(
         self,
         scholarship_type_id: Optional[int] = None,
@@ -214,7 +220,10 @@ class CollegeReviewService:
                 selectinload(Application.scholarship_type_ref),
                 selectinload(Application.reviews).selectinload(
                     ApplicationReview.reviewer
-                ),  # Unified review system with reviewer info
+                ),
+                selectinload(Application.reviews).selectinload(
+                    ApplicationReview.items
+                ),
                 selectinload(Application.files),
                 selectinload(Application.student),  # Load student information
             )
@@ -312,15 +321,26 @@ class CollegeReviewService:
                 "created_at": app.created_at,
                 "student_data": student_payload,
                 "is_renewal": app.is_renewal,
-                # Check if professor has reviewed (unified review system - check if any reviewer with professor role exists)
+                # Professor review details
                 "professor_review_completed": any(
-                    review.reviewer.role == "professor" for review in app.reviews if hasattr(review, "reviewer")
+                    self._role_matches(review.reviewer.role, "professor")
+                    for review in app.reviews if review.reviewer
                 ),
+                "professor_review_items": [
+                    {
+                        "sub_type_code": item.sub_type_code,
+                        "recommendation": item.recommendation,
+                        "comments": item.comments,
+                    }
+                    for review in app.reviews
+                    if review.reviewer and self._role_matches(review.reviewer.role, "professor")
+                    for item in review.items
+                ],
                 # college_review_completed replaced by checking ApplicationReview with college role
                 "college_review_completed": any(
-                    review.reviewer.role in ["college", "admin", "super_admin"]
+                    self._role_matches(review.reviewer.role, "college", "admin", "super_admin")
                     for review in app.reviews
-                    if hasattr(review, "reviewer")
+                    if review.reviewer
                 ),
                 # Use Application.final_ranking_position instead of college_review.final_rank
                 "final_ranking_position": app.final_ranking_position,
