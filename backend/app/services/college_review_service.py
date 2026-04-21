@@ -340,7 +340,7 @@ class CollegeReviewService:
                 "college_review_completed": any(
                     self._role_matches(review.reviewer.role, "college", "admin", "super_admin")
                     for review in app.reviews
-                    if hasattr(review, "reviewer")
+                    if review.reviewer
                 ),
                 # Use Application.final_ranking_position instead of college_review.final_rank
                 "final_ranking_position": app.final_ranking_position,

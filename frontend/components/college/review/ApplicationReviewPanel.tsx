@@ -341,6 +341,11 @@ export function ApplicationReviewPanel({
         return;
       }
 
+      // Guard against CSV/Excel formula injection (OWASP): prefix a single quote
+      // when a cell value starts with =, +, -, @, tab or CR.
+      const sanitizeCell = (value: string): string =>
+        /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+
       // Prepare export data
       const exportData = applications.map(app => {
         // Format status
@@ -376,29 +381,31 @@ export function ApplicationReviewPanel({
               )
             : "-";
 
+        const professorRecommendation = (app.professor_review_items || [])
+          .map((item: any) => {
+            const label = getSubTypeName(item.sub_type_code, locale);
+            const rec = item.recommendation === "approve"
+              ? (locale === "zh" ? "推薦" : "Approve")
+              : (locale === "zh" ? "不推薦" : "Reject");
+            const reasonLabel = locale === "zh" ? "不同意理由" : "Reason";
+            const reason = item.recommendation === "reject" && item.comments
+              ? ` (${reasonLabel}: ${sanitizeCell(item.comments)})`
+              : "";
+            return `${label}: ${rec}${reason}`;
+          })
+          .join("; ") || "-";
+
         return {
-          學生姓名: app.student_name || "-",
-          學號: app.student_id || "-",
-          學院: getAcademyName(app.academy_code, academies),
-          系所: getDepartmentName(app.department_code, departments),
-          在學學期數: app.student_termcount || "-",
-          在學狀態: studyingStatus,
-          獎學金類型: app.scholarship_type_zh || app.scholarship_type || "-",
+          學生姓名: sanitizeCell(app.student_name || "-"),
+          學號: sanitizeCell(app.student_id || "-"),
+          學院: sanitizeCell(getAcademyName(app.academy_code, academies)),
+          系所: sanitizeCell(getDepartmentName(app.department_code, departments)),
+          在學學期數: sanitizeCell(String(app.student_termcount || "-")),
+          在學狀態: sanitizeCell(studyingStatus),
+          獎學金類型: sanitizeCell(app.scholarship_type_zh || app.scholarship_type || "-"),
           申請類別: applicationType,
-          教授推薦: (app.professor_review_items || [])
-            .map((item: any) => {
-              const label = getSubTypeName(item.sub_type_code, locale);
-              const rec = item.recommendation === "approve"
-                ? (locale === "zh" ? "推薦" : "Approve")
-                : (locale === "zh" ? "不推薦" : "Reject");
-              const reasonLabel = locale === "zh" ? "不同意理由" : "Reason";
-              const reason = item.recommendation === "reject" && item.comments
-                ? ` (${reasonLabel}: ${item.comments})`
-                : "";
-              return `${label}: ${rec}${reason}`;
-            })
-            .join("; ") || "-",
-          狀態: statusText,
+          教授推薦: professorRecommendation,
+          狀態: sanitizeCell(statusText),
           申請時間: applicationDate,
         };
       });
