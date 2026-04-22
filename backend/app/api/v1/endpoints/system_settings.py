@@ -163,6 +163,7 @@ async def upload_system_doc(
     stmt = select(SystemSetting).where(SystemSetting.key.in_([doc_key, filename_key]))
     result = await db.execute(stmt)
     existing = {row.key: row for row in result.scalars().all()}
+    previous_object = existing[doc_key].value if doc_key in existing else None
 
     def _upsert(key: str, value: str, description: str) -> None:
         row = existing.get(key)
@@ -189,6 +190,13 @@ async def upload_system_doc(
     _upsert(filename_key, original_filename, f"{main_desc} 原始檔名")
 
     await db.commit()
+
+    if previous_object and previous_object != object_name:
+        try:
+            minio_service.client.remove_object(minio_service.default_bucket, previous_object)
+        except Exception:
+            pass
+
     return {
         "success": True,
         "message": "上傳成功",
@@ -249,7 +257,12 @@ async def get_system_doc_file(
     return StreamingResponse(
         io.BytesIO(file_content),
         media_type=content_type,
-        headers={"Content-Disposition": f"inline; filename*=UTF-8''{encoded_name}"},
+        headers={
+            "Content-Disposition": f"inline; filename*=UTF-8''{encoded_name}",
+            "Content-Length": str(len(file_content)),
+            "Accept-Ranges": "bytes",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 

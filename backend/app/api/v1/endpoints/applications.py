@@ -985,9 +985,16 @@ async def upload_application_document(
         content_type=file.content_type or "application/octet-stream",
     )
 
+    previous_object = application.application_document_url
     application.application_document_url = object_name
     application.application_document_original_filename = file.filename or ""
     await db.commit()
+
+    if previous_object and previous_object != object_name:
+        try:
+            minio_service.client.remove_object(minio_service.default_bucket, previous_object)
+        except Exception:
+            pass
 
     return {
         "success": True,
@@ -1070,7 +1077,12 @@ async def get_application_document_file(
     return StreamingResponse(
         io.BytesIO(file_content),
         media_type=content_type,
-        headers={"Content-Disposition": f"inline; filename*=UTF-8''{encoded_name}"},
+        headers={
+            "Content-Disposition": f"inline; filename*=UTF-8''{encoded_name}",
+            "Content-Length": str(len(file_content)),
+            "Accept-Ranges": "bytes",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 
@@ -1084,6 +1096,7 @@ async def delete_application_document(
     from sqlalchemy import select
 
     from app.models.application import Application
+    from app.services.minio_service import minio_service
 
     stmt = select(Application).where(
         Application.id == application_id,
@@ -1095,8 +1108,15 @@ async def delete_application_document(
     if not application:
         raise HTTPException(status_code=404, detail="申請單不存在或無權限")
 
+    previous_object = application.application_document_url
     application.application_document_url = None
     application.application_document_original_filename = None
     await db.commit()
+
+    if previous_object:
+        try:
+            minio_service.client.remove_object(minio_service.default_bucket, previous_object)
+        except Exception:
+            pass
 
     return {"success": True, "message": "申請文件已刪除", "data": None}

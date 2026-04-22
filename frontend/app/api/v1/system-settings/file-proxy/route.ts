@@ -80,6 +80,8 @@ export async function GET(request: NextRequest) {
         "Content-Length": fileBuffer.byteLength.toString(),
         "Accept-Ranges": "bytes",
         "Cache-Control": "private, max-age=3600",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "no-referrer",
       },
     });
   } catch {

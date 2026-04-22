@@ -662,8 +662,7 @@ class ApplicationService:
                 and application.scholarship_configuration.requires_professor_recommendation
             ),
             requires_college_review=bool(
-                application.scholarship_configuration
-                and application.scholarship_configuration.requires_college_review
+                application.scholarship_configuration and application.scholarship_configuration.requires_college_review
             ),
         )
 
@@ -798,7 +797,7 @@ class ApplicationService:
                 updated_at=application.updated_at,
                 meta_data=application.meta_data,
                 application_document_url=application.application_document_url,
-            application_document_original_filename=application.application_document_original_filename,
+                application_document_original_filename=application.application_document_original_filename,
             )
 
             recent_applications_response.append(app_data)
@@ -1023,8 +1022,7 @@ class ApplicationService:
                 and application.scholarship_configuration.requires_professor_recommendation
             ),
             "requires_college_review": bool(
-                application.scholarship_configuration
-                and application.scholarship_configuration.requires_college_review
+                application.scholarship_configuration and application.scholarship_configuration.requires_college_review
             ),
         }
 
@@ -1508,7 +1506,7 @@ class ApplicationService:
                 updated_at=application.updated_at,
                 meta_data=application.meta_data,
                 application_document_url=application.application_document_url,
-            application_document_original_filename=application.application_document_original_filename,
+                application_document_original_filename=application.application_document_original_filename,
             )
 
             response_applications.append(app_data)
@@ -1875,7 +1873,7 @@ class ApplicationService:
                 updated_at=application.updated_at,
                 meta_data=application.meta_data,
                 application_document_url=application.application_document_url,
-            application_document_original_filename=application.application_document_original_filename,
+                application_document_original_filename=application.application_document_original_filename,
             )
 
             response_applications.append(app_data)
@@ -2434,8 +2432,10 @@ class ApplicationService:
             # Check application status - should be submitted or under review
             # Compare with both enum and string value for robustness
             valid_statuses = [
-                ApplicationStatus.submitted, ApplicationStatus.submitted.value,
-                ApplicationStatus.under_review, ApplicationStatus.under_review.value,
+                ApplicationStatus.submitted,
+                ApplicationStatus.submitted.value,
+                ApplicationStatus.under_review,
+                ApplicationStatus.under_review.value,
             ]
             if application.status not in valid_statuses:
                 return False
