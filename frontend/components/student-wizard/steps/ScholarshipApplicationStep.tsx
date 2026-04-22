@@ -130,6 +130,9 @@ export function ScholarshipApplicationStep({
   >([]);
   const [existingApplicationDocument, setExistingApplicationDocument] =
     useState<string | null>(null);
+  const [savedApplicationId, setSavedApplicationId] = useState<number | null>(
+    null
+  );
   const [showAppDocPreview, setShowAppDocPreview] = useState(false);
   const [appDocPreviewFile, setAppDocPreviewFile] = useState<{
     url: string;
@@ -383,12 +386,14 @@ export function ScholarshipApplicationStep({
   };
 
   const handlePreviewAppDocument = () => {
-    if (!existingApplicationDocument || !editingApplication?.id) return;
+    const appId = editingApplication?.id ?? savedApplicationId;
+    if (!existingApplicationDocument || !appId) return;
     const filename =
       existingApplicationDocument.split("/").pop()?.split("?")[0] ||
       "application_document";
     const token = localStorage.getItem("auth_token") || "";
-    const previewUrl = `/api/v1/application-document-proxy?id=${editingApplication.id}&token=${encodeURIComponent(token)}`;
+    const cacheBuster = encodeURIComponent(existingApplicationDocument);
+    const previewUrl = `/api/v1/application-document-proxy?id=${appId}&token=${encodeURIComponent(token)}&v=${cacheBuster}`;
     let fileTypeDisplay = "other";
     if (filename.toLowerCase().endsWith(".pdf"))
       fileTypeDisplay = "application/pdf";
@@ -418,11 +423,10 @@ export function ScholarshipApplicationStep({
   };
 
   const handleDeleteAppDocument = async () => {
-    if (!editingApplication?.id) return;
+    const appId = editingApplication?.id ?? savedApplicationId;
+    if (!appId) return;
     try {
-      const response = await api.applications.deleteApplicationDocument(
-        editingApplication.id
-      );
+      const response = await api.applications.deleteApplicationDocument(appId);
       if (response.success) {
         toast.success(locale === "zh" ? "申請文件已刪除" : "Document deleted");
         setExistingApplicationDocument(null);
@@ -809,6 +813,8 @@ export function ScholarshipApplicationStep({
         const application = await createApplication(applicationData, true);
 
         if (application && application.id) {
+          setSavedApplicationId(application.id);
+
           // Upload files
           for (const [docType, files] of Object.entries(dynamicFileData)) {
             for (const file of files) {
@@ -914,6 +920,7 @@ export function ScholarshipApplicationStep({
           throw new Error("Failed to create application");
         }
         applicationId = application.id;
+        setSavedApplicationId(application.id);
 
         // Upload files
         for (const [docType, files] of Object.entries(dynamicFileData)) {
