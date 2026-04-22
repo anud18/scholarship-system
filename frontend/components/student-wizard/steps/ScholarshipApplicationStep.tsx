@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Card,
   CardContent,
@@ -130,9 +130,7 @@ export function ScholarshipApplicationStep({
   >([]);
   const [existingApplicationDocument, setExistingApplicationDocument] =
     useState<string | null>(null);
-  const [savedApplicationId, setSavedApplicationId] = useState<number | null>(
-    null
-  );
+  const savedApplicationIdRef = useRef<number | null>(null);
   const [showAppDocPreview, setShowAppDocPreview] = useState(false);
   const [appDocPreviewFile, setAppDocPreviewFile] = useState<{
     url: string;
@@ -386,13 +384,13 @@ export function ScholarshipApplicationStep({
   };
 
   const handlePreviewAppDocument = () => {
-    const appId = editingApplication?.id ?? savedApplicationId;
+    const appId = editingApplication?.id ?? savedApplicationIdRef.current;
     if (!existingApplicationDocument || !appId) return;
     const filename =
       existingApplicationDocument.split("/").pop()?.split("?")[0] ||
       "application_document";
     const token = localStorage.getItem("auth_token") || "";
-    const cacheBuster = encodeURIComponent(existingApplicationDocument);
+    const cacheBuster = encodeURIComponent(filename);
     const previewUrl = `/api/v1/application-document-proxy?id=${appId}&token=${encodeURIComponent(token)}&v=${cacheBuster}`;
     let fileTypeDisplay = "other";
     if (filename.toLowerCase().endsWith(".pdf"))
@@ -423,7 +421,7 @@ export function ScholarshipApplicationStep({
   };
 
   const handleDeleteAppDocument = async () => {
-    const appId = editingApplication?.id ?? savedApplicationId;
+    const appId = editingApplication?.id ?? savedApplicationIdRef.current;
     if (!appId) return;
     try {
       const response = await api.applications.deleteApplicationDocument(appId);
@@ -813,7 +811,7 @@ export function ScholarshipApplicationStep({
         const application = await createApplication(applicationData, true);
 
         if (application && application.id) {
-          setSavedApplicationId(application.id);
+          savedApplicationIdRef.current = application.id;
 
           // Upload files
           for (const [docType, files] of Object.entries(dynamicFileData)) {
@@ -920,7 +918,7 @@ export function ScholarshipApplicationStep({
           throw new Error("Failed to create application");
         }
         applicationId = application.id;
-        setSavedApplicationId(application.id);
+        savedApplicationIdRef.current = application.id;
 
         // Upload files
         for (const [docType, files] of Object.entries(dynamicFileData)) {

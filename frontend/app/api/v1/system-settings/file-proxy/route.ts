@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
         "Content-Disposition": contentDisposition,
         "Content-Length": fileBuffer.byteLength.toString(),
         "Accept-Ranges": "bytes",
-        "Cache-Control": "no-store, must-revalidate",
+        "Cache-Control": "private, max-age=3600",
       },
     });
   } catch {

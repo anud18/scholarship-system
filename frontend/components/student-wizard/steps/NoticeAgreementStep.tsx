@@ -69,7 +69,9 @@ export function NoticeAgreementStep({
       key === "regulations_url"
         ? publicDocs.regulations_url
         : publicDocs.sample_document_url;
-    const cacheBuster = encodeURIComponent(objectName || "");
+    const cacheBuster = encodeURIComponent(
+      objectName?.split("/").pop() || ""
+    );
     const url = `/api/v1/system-settings/file-proxy?key=${key}&token=${encodeURIComponent(token)}&v=${cacheBuster}`;
     const filename = originalName || label;
     const lower = (originalName || objectName || "").toLowerCase();
