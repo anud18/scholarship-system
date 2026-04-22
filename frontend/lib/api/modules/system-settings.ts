@@ -217,7 +217,7 @@ export function createSystemSettingsApi() {
           ? localStorage.getItem("auth_token") || ""
           : "";
       const res = await fetch(
-        `/api/v1/system-settings/upload/regulations_url`,
+        `/api/v1/system-settings/upload-proxy?key=regulations_url`,
         {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
@@ -243,7 +243,7 @@ export function createSystemSettingsApi() {
           ? localStorage.getItem("auth_token") || ""
           : "";
       const res = await fetch(
-        `/api/v1/system-settings/upload/sample_document_url`,
+        `/api/v1/system-settings/upload-proxy?key=sample_document_url`,
         {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },

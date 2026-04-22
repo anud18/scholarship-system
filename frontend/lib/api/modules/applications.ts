@@ -388,7 +388,7 @@ export function createApplicationsApi() {
           ? localStorage.getItem("auth_token") || ""
           : "";
       const res = await fetch(
-        `/api/v1/applications/${applicationId}/application-document`,
+        `/api/v1/application-document-upload-proxy?id=${applicationId}`,
         {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
@@ -410,7 +410,7 @@ export function createApplicationsApi() {
           ? localStorage.getItem("auth_token") || ""
           : "";
       const res = await fetch(
-        `/api/v1/applications/${applicationId}/application-document`,
+        `/api/v1/application-document-upload-proxy?id=${applicationId}`,
         {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
