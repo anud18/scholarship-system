@@ -130,6 +130,8 @@ export function ScholarshipApplicationStep({
   >([]);
   const [existingApplicationDocument, setExistingApplicationDocument] =
     useState<string | null>(null);
+  const [existingApplicationDocumentName, setExistingApplicationDocumentName] =
+    useState<string>("");
   const savedApplicationIdRef = useRef<number | null>(null);
   const [showAppDocPreview, setShowAppDocPreview] = useState(false);
   const [appDocPreviewFile, setAppDocPreviewFile] = useState<{
@@ -387,6 +389,7 @@ export function ScholarshipApplicationStep({
     const appId = editingApplication?.id ?? savedApplicationIdRef.current;
     if (!existingApplicationDocument || !appId) return;
     const filename =
+      existingApplicationDocumentName ||
       existingApplicationDocument.split("/").pop()?.split("?")[0] ||
       "application_document";
     const token = localStorage.getItem("auth_token") || "";
@@ -428,6 +431,7 @@ export function ScholarshipApplicationStep({
       if (response.success) {
         toast.success(locale === "zh" ? "申請文件已刪除" : "Document deleted");
         setExistingApplicationDocument(null);
+        setExistingApplicationDocumentName("");
       } else {
         throw new Error(response.message || "Delete failed");
       }
@@ -528,6 +532,9 @@ export function ScholarshipApplicationStep({
       if ((editingApplication as any).application_document_url) {
         setExistingApplicationDocument(
           (editingApplication as any).application_document_url
+        );
+        setExistingApplicationDocumentName(
+          (editingApplication as any).application_document_original_filename || ""
         );
       }
 
@@ -793,13 +800,18 @@ export function ScholarshipApplicationStep({
 
         // Upload application document if provided
         if (applicationDocumentFiles.length > 0) {
+          const uploadedFile = applicationDocumentFiles[0];
           const appDocResp = await api.applications.uploadApplicationDocument(
             editingApplication.id,
-            applicationDocumentFiles[0]
+            uploadedFile
           );
           if (appDocResp.success) {
             setExistingApplicationDocument(
               appDocResp.data?.application_document_url || null
+            );
+            setExistingApplicationDocumentName(
+              (appDocResp.data as any)?.application_document_original_filename ||
+                uploadedFile.name
             );
             setApplicationDocumentFiles([]);
           }
@@ -822,13 +834,18 @@ export function ScholarshipApplicationStep({
 
           // Upload application document if provided
           if (applicationDocumentFiles.length > 0) {
+            const uploadedFile = applicationDocumentFiles[0];
             const appDocResp = await api.applications.uploadApplicationDocument(
               application.id,
-              applicationDocumentFiles[0]
+              uploadedFile
             );
             if (appDocResp.success) {
               setExistingApplicationDocument(
                 appDocResp.data?.application_document_url || null
+              );
+              setExistingApplicationDocumentName(
+                (appDocResp.data as any)?.application_document_original_filename ||
+                  uploadedFile.name
               );
               setApplicationDocumentFiles([]);
             }

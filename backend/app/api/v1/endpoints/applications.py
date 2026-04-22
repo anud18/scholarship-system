@@ -986,12 +986,16 @@ async def upload_application_document(
     )
 
     application.application_document_url = object_name
+    application.application_document_original_filename = file.filename or ""
     await db.commit()
 
     return {
         "success": True,
         "message": "申請文件上傳成功",
-        "data": {"application_document_url": object_name},
+        "data": {
+            "application_document_url": object_name,
+            "application_document_original_filename": application.application_document_original_filename,
+        },
     }
 
 
@@ -1059,11 +1063,14 @@ async def get_application_document_file(
     elif lower.endswith(".docx"):
         content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
-    filename = object_name.split("/")[-1]
+    from urllib.parse import quote
+
+    download_name = application.application_document_original_filename or object_name.split("/")[-1]
+    encoded_name = quote(download_name, safe="")
     return StreamingResponse(
         io.BytesIO(file_content),
         media_type=content_type,
-        headers={"Content-Disposition": f"inline; filename*=UTF-8''{filename}"},
+        headers={"Content-Disposition": f"inline; filename*=UTF-8''{encoded_name}"},
     )
 
 
@@ -1089,6 +1096,7 @@ async def delete_application_document(
         raise HTTPException(status_code=404, detail="申請單不存在或無權限")
 
     application.application_document_url = None
+    application.application_document_original_filename = None
     await db.commit()
 
     return {"success": True, "message": "申請文件已刪除", "data": None}
