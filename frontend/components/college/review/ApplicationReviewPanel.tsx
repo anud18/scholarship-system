@@ -49,6 +49,7 @@ import {
   Award,
   Building,
   Info,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -60,6 +61,7 @@ import {
 import { useScholarshipData } from "@/hooks/use-scholarship-data";
 import * as XLSX from "xlsx";
 import { apiClient } from "@/lib/api";
+import { FilePreviewDialog } from "@/components/file-preview-dialog";
 
 interface ApplicationReviewPanelProps {
   user: User;
@@ -463,6 +465,44 @@ export function ApplicationReviewPanel({
 
   const [isExportingPackage, setIsExportingPackage] = useState(false);
 
+  // Regulations state
+  const [regulationsUrl, setRegulationsUrl] = useState<string | null>(null);
+  const [showRegulations, setShowRegulations] = useState(false);
+  const [regulationsFile, setRegulationsFile] = useState<{
+    url: string;
+    filename: string;
+    type: string;
+  } | null>(null);
+  const [regulationsFilename, setRegulationsFilename] = useState<string>("");
+
+  useEffect(() => {
+    apiClient.systemSettings.getPublicDocs().then(res => {
+      if (res.success && res.data?.regulations_url) {
+        setRegulationsUrl(res.data.regulations_url);
+        setRegulationsFilename(
+          res.data.regulations_url_filename || res.data.regulations_url
+        );
+      }
+    });
+  }, []);
+
+  const handleViewRegulations = () => {
+    const token = localStorage.getItem("auth_token") || "";
+    const url = `/api/v1/system-settings/file-proxy?key=regulations_url&token=${encodeURIComponent(token)}`;
+    const lower = regulationsFilename.toLowerCase();
+    let type = "application/pdf";
+    if (lower.endsWith(".doc")) type = "application/msword";
+    else if (lower.endsWith(".docx"))
+      type =
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    setRegulationsFile({
+      url,
+      filename: regulationsFilename || "獎學金要點",
+      type,
+    });
+    setShowRegulations(true);
+  };
+
   const handleExportPackage = async () => {
     if (!activeScholarshipTab || !selectedAcademicYear) {
       toast.error(
@@ -566,6 +606,16 @@ export function ApplicationReviewPanel({
             locale={locale}
           />
 
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleViewRegulations}
+            disabled={!regulationsUrl}
+            className="flex items-center gap-2"
+          >
+            <FileText className="h-4 w-4" />
+            查看獎學金要點
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -1030,6 +1080,13 @@ export function ApplicationReviewPanel({
         }}
         applicationId={applicationToRequestDocs?.id}
         applicationName={applicationToRequestDocs?.student_name}
+      />
+
+      <FilePreviewDialog
+        isOpen={showRegulations}
+        onClose={() => setShowRegulations(false)}
+        file={regulationsFile}
+        locale="zh"
       />
     </>
   );

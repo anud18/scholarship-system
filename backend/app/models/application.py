@@ -161,6 +161,8 @@ class Application(Base):
     batch_import_id = Column(Integer, ForeignKey("batch_imports.id"), nullable=True)  # 批次匯入紀錄
     import_source = Column(String(20), nullable=True, default="online")  # 'online' | 'batch_import'
     document_status = Column(String(30), nullable=True, default="complete")  # 'complete' | 'pending_documents'
+    application_document_url = Column(String(500), nullable=True)  # 申請文件
+    application_document_original_filename = Column(String(255), nullable=True)
 
     # 其他資訊
     meta_data = Column(JSON)  # 額外的元資料

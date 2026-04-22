@@ -243,6 +243,8 @@ class ApplicationService:
             created_at=application.created_at,
             updated_at=application.updated_at,
             meta_data=application.meta_data,
+            application_document_url=application.application_document_url,
+            application_document_original_filename=application.application_document_original_filename,
             **student_fields,  # Spread extracted student fields
         )
 
@@ -653,13 +655,14 @@ class ApplicationService:
             created_at=application.created_at,
             updated_at=application.updated_at,
             meta_data=application.meta_data,
+            application_document_url=application.application_document_url,
+            application_document_original_filename=application.application_document_original_filename,
             requires_professor_recommendation=bool(
                 application.scholarship_configuration
                 and application.scholarship_configuration.requires_professor_recommendation
             ),
             requires_college_review=bool(
-                application.scholarship_configuration
-                and application.scholarship_configuration.requires_college_review
+                application.scholarship_configuration and application.scholarship_configuration.requires_college_review
             ),
         )
 
@@ -793,6 +796,8 @@ class ApplicationService:
                 created_at=application.created_at,
                 updated_at=application.updated_at,
                 meta_data=application.meta_data,
+                application_document_url=application.application_document_url,
+                application_document_original_filename=application.application_document_original_filename,
             )
 
             recent_applications_response.append(app_data)
@@ -968,6 +973,8 @@ class ApplicationService:
             "created_at": application.created_at,
             "updated_at": application.updated_at,
             "meta_data": application.meta_data,
+            "application_document_url": application.application_document_url,
+            "application_document_original_filename": application.application_document_original_filename,
             "reviews": (
                 []
                 if current_user.role == UserRole.student
@@ -1015,8 +1022,7 @@ class ApplicationService:
                 and application.scholarship_configuration.requires_professor_recommendation
             ),
             "requires_college_review": bool(
-                application.scholarship_configuration
-                and application.scholarship_configuration.requires_college_review
+                application.scholarship_configuration and application.scholarship_configuration.requires_college_review
             ),
         }
 
@@ -1360,6 +1366,8 @@ class ApplicationService:
             "created_at": application.created_at,
             "updated_at": application.updated_at,
             "meta_data": application.meta_data,
+            "application_document_url": application.application_document_url,
+            "application_document_original_filename": application.application_document_original_filename,
             # 移除獨立的 files 欄位
             "reviews": [
                 {
@@ -1497,6 +1505,8 @@ class ApplicationService:
                 created_at=application.created_at,
                 updated_at=application.updated_at,
                 meta_data=application.meta_data,
+                application_document_url=application.application_document_url,
+                application_document_original_filename=application.application_document_original_filename,
             )
 
             response_applications.append(app_data)
@@ -1862,6 +1872,8 @@ class ApplicationService:
                 created_at=application.created_at,
                 updated_at=application.updated_at,
                 meta_data=application.meta_data,
+                application_document_url=application.application_document_url,
+                application_document_original_filename=application.application_document_original_filename,
             )
 
             response_applications.append(app_data)
@@ -2323,6 +2335,8 @@ class ApplicationService:
                         created_at=app.created_at,
                         updated_at=app.updated_at,
                         meta_data=app.meta_data,
+                        application_document_url=app.application_document_url,
+                        application_document_original_filename=app.application_document_original_filename,
                         # Display fields
                         student_name=app.student_data.get("std_cname", "") if app.student_data else "",
                         student_no=app.student_data.get("std_stdcode", "") if app.student_data else "",
@@ -2418,8 +2432,10 @@ class ApplicationService:
             # Check application status - should be submitted or under review
             # Compare with both enum and string value for robustness
             valid_statuses = [
-                ApplicationStatus.submitted, ApplicationStatus.submitted.value,
-                ApplicationStatus.under_review, ApplicationStatus.under_review.value,
+                ApplicationStatus.submitted,
+                ApplicationStatus.submitted.value,
+                ApplicationStatus.under_review,
+                ApplicationStatus.under_review.value,
             ]
             if application.status not in valid_statuses:
                 return False

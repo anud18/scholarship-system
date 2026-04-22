@@ -31,8 +31,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Eye, CheckCircle, AlertCircle, Clock, X } from "lucide-react";
+import { Search, Eye, CheckCircle, AlertCircle, Clock, X, FileText } from "lucide-react";
 import apiClient, { Application, ApiResponse } from "@/lib/api";
+import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { User } from "@/types/user";
 import { getDisplayStatusInfo } from "@/lib/utils/application-helpers";
 import { Locale } from "@/lib/validators";
@@ -83,6 +84,44 @@ function ProfessorReviewComponentInner({
   });
   const [existingReview, setExistingReview] = useState<any>(null);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
+
+  // Regulations state
+  const [regulationsUrl, setRegulationsUrl] = useState<string | null>(null);
+  const [showRegulations, setShowRegulations] = useState(false);
+  const [regulationsFile, setRegulationsFile] = useState<{
+    url: string;
+    filename: string;
+    type: string;
+  } | null>(null);
+  const [regulationsFilename, setRegulationsFilename] = useState<string>("");
+
+  useEffect(() => {
+    apiClient.systemSettings.getPublicDocs().then((res) => {
+      if (res.success && res.data?.regulations_url) {
+        setRegulationsUrl(res.data.regulations_url);
+        setRegulationsFilename(
+          res.data.regulations_url_filename || res.data.regulations_url
+        );
+      }
+    });
+  }, []);
+
+  const handleViewRegulations = () => {
+    const token = localStorage.getItem("auth_token") || "";
+    const url = `/api/v1/system-settings/file-proxy?key=regulations_url&token=${encodeURIComponent(token)}`;
+    const lower = regulationsFilename.toLowerCase();
+    let type = "application/pdf";
+    if (lower.endsWith(".doc")) type = "application/msword";
+    else if (lower.endsWith(".docx"))
+      type =
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    setRegulationsFile({
+      url,
+      filename: regulationsFilename || "獎學金要點",
+      type,
+    });
+    setShowRegulations(true);
+  };
 
   // Load applications
   const fetchApplications = async () => {
@@ -371,6 +410,16 @@ function ProfessorReviewComponentInner({
             審查學生獎學金申請並提供推薦意見
           </p>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleViewRegulations}
+          disabled={!regulationsUrl}
+          className="flex items-center gap-2"
+        >
+          <FileText className="h-4 w-4" />
+          查看獎學金要點
+        </Button>
       </div>
 
       {/* Error/Success Messages */}
@@ -571,6 +620,14 @@ function ProfessorReviewComponentInner({
           )}
         </CardContent>
       </Card>
+
+      {/* Regulations Preview */}
+      <FilePreviewDialog
+        isOpen={showRegulations}
+        onClose={() => setShowRegulations(false)}
+        file={regulationsFile}
+        locale="zh"
+      />
 
       {/* Review Modal */}
       <Dialog open={reviewModalOpen} onOpenChange={setReviewModalOpen}>

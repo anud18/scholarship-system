@@ -927,3 +927,218 @@ async def get_application_audit_trail(
         "message": f"Retrieved {len(formatted_logs)} audit log entries",
         "data": formatted_logs,
     }
+
+
+@router.post("/{application_id}/application-document")
+async def upload_application_document(
+    application_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_student),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload 申請文件 for a specific application (student only, must own the application)."""
+    import io
+    from datetime import datetime, timezone
+
+    from sqlalchemy import select
+
+    from app.core.path_security import validate_upload_file
+    from app.models.application import Application
+    from app.services.minio_service import minio_service
+
+    # Fetch and authorize
+    stmt = select(Application).where(
+        Application.id == application_id,
+        Application.user_id == current_user.id,
+        Application.deleted_at.is_(None),
+    )
+    result = await db.execute(stmt)
+    application = result.scalar_one_or_none()
+    if not application:
+        raise HTTPException(status_code=404, detail="申請單不存在或無權限")
+
+    if not application.is_editable:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="申請已送出，無法修改申請文件",
+        )
+
+    allowed_extensions = [".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx"]
+    file_content = await file.read()
+    validate_upload_file(
+        filename=file.filename,
+        allowed_extensions=allowed_extensions,
+        max_size_mb=10,
+        file_size=len(file_content),
+        allow_unicode=True,
+    )
+
+    ext = ""
+    if file.filename:
+        for e in allowed_extensions:
+            if file.filename.lower().endswith(e):
+                ext = e
+                break
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    object_name = f"application-documents/{application_id}_{timestamp}{ext}"
+
+    minio_service.client.put_object(
+        bucket_name=minio_service.default_bucket,
+        object_name=object_name,
+        data=io.BytesIO(file_content),
+        length=len(file_content),
+        content_type=file.content_type or "application/octet-stream",
+    )
+
+    previous_object = application.application_document_url
+    application.application_document_url = object_name
+    application.application_document_original_filename = file.filename or ""
+    await db.commit()
+
+    if previous_object and previous_object != object_name:
+        try:
+            minio_service.client.remove_object(minio_service.default_bucket, previous_object)
+        except Exception as exc:
+            logger.warning(
+                "Failed to remove orphaned MinIO object %s for application %s: %s",
+                previous_object,
+                application_id,
+                exc,
+            )
+
+    return {
+        "success": True,
+        "message": "申請文件上傳成功",
+        "data": {
+            "application_document_url": object_name,
+            "application_document_original_filename": application.application_document_original_filename,
+        },
+    }
+
+
+@router.get("/{application_id}/application-document")
+async def get_application_document_file(
+    application_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Stream the 申請文件 from MinIO. Owner or staff can access."""
+    import io
+
+    from fastapi.responses import StreamingResponse
+    from sqlalchemy import select
+
+    from app.models.application import Application
+    from app.services.minio_service import minio_service
+
+    stmt = select(Application).where(
+        Application.id == application_id,
+        Application.deleted_at.is_(None),
+    )
+    result = await db.execute(stmt)
+    application = result.scalar_one_or_none()
+    if not application:
+        raise HTTPException(status_code=404, detail="申請單不存在")
+
+    # Authorization: owner OR staff/admin/professor/college
+    from app.models.user import UserRole
+
+    is_owner = application.user_id == current_user.id
+    is_staff = current_user.role in (
+        UserRole.admin,
+        UserRole.super_admin,
+        UserRole.professor,
+        UserRole.college,
+    )
+    if not is_owner and not is_staff:
+        raise HTTPException(status_code=403, detail="無權限")
+
+    if not application.application_document_url:
+        raise HTTPException(status_code=404, detail="申請文件不存在")
+
+    object_name = application.application_document_url
+
+    try:
+        response = minio_service.client.get_object(
+            bucket_name=minio_service.default_bucket,
+            object_name=object_name,
+        )
+        file_content = response.read()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"無法取得文件: {str(e)}")
+
+    content_type = "application/octet-stream"
+    lower = object_name.lower()
+    if lower.endswith(".pdf"):
+        content_type = "application/pdf"
+    elif lower.endswith(".png"):
+        content_type = "image/png"
+    elif lower.endswith(".jpg") or lower.endswith(".jpeg"):
+        content_type = "image/jpeg"
+    elif lower.endswith(".doc"):
+        content_type = "application/msword"
+    elif lower.endswith(".docx"):
+        content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+    from urllib.parse import quote
+
+    download_name = application.application_document_original_filename or object_name.split("/")[-1]
+    encoded_name = quote(download_name, safe="")
+    return StreamingResponse(
+        io.BytesIO(file_content),
+        media_type=content_type,
+        headers={
+            "Content-Disposition": f"inline; filename*=UTF-8''{encoded_name}",
+            "Content-Length": str(len(file_content)),
+            "Accept-Ranges": "bytes",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.delete("/{application_id}/application-document")
+async def delete_application_document(
+    application_id: int,
+    current_user: User = Depends(require_student),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete 申請文件 for a specific application."""
+    from sqlalchemy import select
+
+    from app.models.application import Application
+    from app.services.minio_service import minio_service
+
+    stmt = select(Application).where(
+        Application.id == application_id,
+        Application.user_id == current_user.id,
+        Application.deleted_at.is_(None),
+    )
+    result = await db.execute(stmt)
+    application = result.scalar_one_or_none()
+    if not application:
+        raise HTTPException(status_code=404, detail="申請單不存在或無權限")
+
+    if not application.is_editable:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="申請已送出，無法刪除申請文件",
+        )
+
+    previous_object = application.application_document_url
+    application.application_document_url = None
+    application.application_document_original_filename = None
+    await db.commit()
+
+    if previous_object:
+        try:
+            minio_service.client.remove_object(minio_service.default_bucket, previous_object)
+        except Exception as exc:
+            logger.warning(
+                "Failed to remove MinIO object %s after delete for application %s: %s",
+                previous_object,
+                application_id,
+                exc,
+            )
+
+    return {"success": True, "message": "申請文件已刪除", "data": None}

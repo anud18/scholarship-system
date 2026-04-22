@@ -31,6 +31,7 @@ import { ConfigurationsPanel } from "./configurations/ConfigurationsPanel";
 import { RulesPanel } from "./rules/RulesPanel";
 import { WorkflowsPanel } from "./workflows/WorkflowsPanel";
 import { SettingsPanel } from "./settings/SettingsPanel";
+import { SystemDocsPanel } from "./system-docs/SystemDocsPanel";
 
 interface User {
   id: string;
@@ -99,7 +100,7 @@ function AdminManagementContent({ user }: AdminManagementShellProps) {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList
-          className={`grid w-full ${hasQuotaPermission ? "grid-cols-11" : "grid-cols-10"}`}
+          className={`grid w-full ${hasQuotaPermission ? "grid-cols-12" : "grid-cols-11"}`}
         >
           <TabsTrigger value="dashboard">系統概覽</TabsTrigger>
           <TabsTrigger value="users">使用者權限</TabsTrigger>
@@ -114,6 +115,7 @@ function AdminManagementContent({ user }: AdminManagementShellProps) {
           <TabsTrigger value="history">歷史申請</TabsTrigger>
           <TabsTrigger value="announcements">系統公告</TabsTrigger>
           <TabsTrigger value="settings">系統設定</TabsTrigger>
+          <TabsTrigger value="system-docs">系統文件</TabsTrigger>
         </TabsList>
 
         <TabsContent value="dashboard" className="space-y-4">
@@ -160,6 +162,10 @@ function AdminManagementContent({ user }: AdminManagementShellProps) {
 
         <TabsContent value="settings" className="space-y-4">
           <SettingsPanel />
+        </TabsContent>
+
+        <TabsContent value="system-docs" className="space-y-4">
+          <SystemDocsPanel />
         </TabsContent>
       </Tabs>
     </div>

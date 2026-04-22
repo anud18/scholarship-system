@@ -330,6 +330,8 @@ class ApplicationResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     meta_data: Optional[Dict[str, Any]] = None
+    application_document_url: Optional[str] = None
+    application_document_original_filename: Optional[str] = None
 
     reviews: List[ApplicationReviewResponse] = []
     professor_review_items: List[Dict[str, Any]] = []  # Per sub-type professor recommendations with comments
@@ -452,6 +454,8 @@ class ApplicationStatusUpdateResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     meta_data: Optional[Dict[str, Any]] = None
+    application_document_url: Optional[str] = None
+    application_document_original_filename: Optional[str] = None
     reviews: List[ApplicationReviewResponse] = []
 
     # Additional display fields
@@ -541,6 +545,8 @@ class ApplicationListResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     meta_data: Optional[Dict[str, Any]] = None
+    application_document_url: Optional[str] = None
+    application_document_original_filename: Optional[str] = None
 
     # Additional display fields
     student_name: Optional[str] = None

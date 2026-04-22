@@ -1,9 +1,11 @@
+import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import require_admin
+from app.core.security import get_current_user, require_admin
 from app.db.deps import get_db
 from app.models.system_setting import ConfigCategory, ConfigDataType
 from app.models.user import User
@@ -16,6 +18,7 @@ from app.schemas.system_setting import (
 from app.services.config_management_service import ConfigurationService
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("")
@@ -78,6 +81,195 @@ async def get_all_configurations(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve configurations: {str(e)}"
         )
+
+
+_ALLOWED_DOC_KEYS = {"regulations_url", "sample_document_url"}
+
+
+@router.get("/public-docs")
+async def get_public_docs(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Return object_names for 獎學金要點 and 申請文件範例檔.
+    Accessible by any authenticated user.
+    """
+    from sqlalchemy import select
+
+    from app.models.system_setting import SystemSetting
+
+    keys = list(_ALLOWED_DOC_KEYS) + [f"{k}_filename" for k in _ALLOWED_DOC_KEYS]
+    stmt = select(SystemSetting).where(SystemSetting.key.in_(keys))
+    result = await db.execute(stmt)
+    rows = result.scalars().all()
+    data = {row.key: row.value for row in rows}
+    return {"success": True, "message": "OK", "data": data}
+
+
+@router.post("/upload/{doc_key}")
+async def upload_system_doc(
+    doc_key: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Upload a global system document (獎學金要點 or 申請文件範例檔). Admin only.
+    Stores object_name in system_settings under the given key.
+    """
+    import io
+    from datetime import datetime, timezone
+
+    from sqlalchemy import select
+
+    from app.core.path_security import validate_upload_file
+    from app.models.system_setting import ConfigCategory, ConfigDataType, SystemSetting
+    from app.services.minio_service import minio_service
+
+    if doc_key not in _ALLOWED_DOC_KEYS:
+        raise HTTPException(status_code=400, detail=f"Invalid doc_key. Allowed: {_ALLOWED_DOC_KEYS}")
+
+    allowed_extensions = [".pdf", ".doc", ".docx"]
+    file_content = await file.read()
+    validate_upload_file(
+        filename=file.filename,
+        allowed_extensions=allowed_extensions,
+        max_size_mb=10,
+        file_size=len(file_content),
+        allow_unicode=True,
+    )
+
+    ext = ""
+    if file.filename:
+        for e in allowed_extensions:
+            if file.filename.lower().endswith(e):
+                ext = e
+                break
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    object_name = f"system-docs/{doc_key}_{timestamp}{ext}"
+
+    minio_service.client.put_object(
+        bucket_name=minio_service.default_bucket,
+        object_name=object_name,
+        data=io.BytesIO(file_content),
+        length=len(file_content),
+        content_type=file.content_type or "application/octet-stream",
+    )
+
+    original_filename = file.filename or ""
+    filename_key = f"{doc_key}_filename"
+
+    # Upsert object_name and original filename
+    stmt = select(SystemSetting).where(SystemSetting.key.in_([doc_key, filename_key]))
+    result = await db.execute(stmt)
+    existing = {row.key: row for row in result.scalars().all()}
+    previous_object = existing[doc_key].value if doc_key in existing else None
+
+    def _upsert(key: str, value: str, description: str) -> None:
+        row = existing.get(key)
+        if row:
+            row.value = value
+            row.last_modified_by = current_user.id
+        else:
+            db.add(
+                SystemSetting(
+                    key=key,
+                    value=value,
+                    category=ConfigCategory.file_storage,
+                    data_type=ConfigDataType.string,
+                    description=description,
+                    is_sensitive=False,
+                    is_readonly=False,
+                    allow_empty=True,
+                    last_modified_by=current_user.id,
+                )
+            )
+
+    main_desc = "獎學金要點" if doc_key == "regulations_url" else "申請文件範例檔"
+    _upsert(doc_key, object_name, main_desc)
+    _upsert(filename_key, original_filename, f"{main_desc} 原始檔名")
+
+    await db.commit()
+
+    if previous_object and previous_object != object_name:
+        try:
+            minio_service.client.remove_object(minio_service.default_bucket, previous_object)
+        except Exception as exc:
+            logger.warning(
+                "Failed to remove orphaned MinIO system doc %s: %s",
+                previous_object,
+                exc,
+            )
+
+    return {
+        "success": True,
+        "message": "上傳成功",
+        "data": {
+            "key": doc_key,
+            "object_name": object_name,
+            "original_filename": original_filename,
+        },
+    }
+
+
+@router.get("/file/{doc_key}")
+async def get_system_doc_file(
+    doc_key: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Proxy a global system document from MinIO. Any authenticated user."""
+    import io
+
+    from sqlalchemy import select
+
+    from app.models.system_setting import SystemSetting
+    from app.services.minio_service import minio_service
+
+    if doc_key not in _ALLOWED_DOC_KEYS:
+        raise HTTPException(status_code=400, detail="Invalid doc_key")
+
+    filename_key = f"{doc_key}_filename"
+    stmt = select(SystemSetting).where(SystemSetting.key.in_([doc_key, filename_key]))
+    result = await db.execute(stmt)
+    settings_map = {row.key: row.value for row in result.scalars().all()}
+
+    object_name = settings_map.get(doc_key)
+    if not object_name:
+        raise HTTPException(status_code=404, detail="文件尚未上傳")
+
+    try:
+        response = minio_service.client.get_object(
+            bucket_name=minio_service.default_bucket,
+            object_name=object_name,
+        )
+        file_content = response.read()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"無法取得文件: {str(e)}")
+
+    content_type = "application/pdf"
+    if object_name.endswith(".doc"):
+        content_type = "application/msword"
+    elif object_name.endswith(".docx"):
+        content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+    from urllib.parse import quote
+
+    download_name = settings_map.get(filename_key) or object_name.split("/")[-1]
+    encoded_name = quote(download_name, safe="")
+
+    return StreamingResponse(
+        io.BytesIO(file_content),
+        media_type=content_type,
+        headers={
+            "Content-Disposition": f"inline; filename*=UTF-8''{encoded_name}",
+            "Content-Length": str(len(file_content)),
+            "Accept-Ranges": "bytes",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.get("/{id}")
