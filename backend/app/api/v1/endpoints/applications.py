@@ -957,6 +957,12 @@ async def upload_application_document(
     if not application:
         raise HTTPException(status_code=404, detail="申請單不存在或無權限")
 
+    if not application.is_editable:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="申請已送出，無法修改申請文件",
+        )
+
     allowed_extensions = [".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx"]
     file_content = await file.read()
     validate_upload_file(
@@ -993,8 +999,13 @@ async def upload_application_document(
     if previous_object and previous_object != object_name:
         try:
             minio_service.client.remove_object(minio_service.default_bucket, previous_object)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "Failed to remove orphaned MinIO object %s for application %s: %s",
+                previous_object,
+                application_id,
+                exc,
+            )
 
     return {
         "success": True,
@@ -1108,6 +1119,12 @@ async def delete_application_document(
     if not application:
         raise HTTPException(status_code=404, detail="申請單不存在或無權限")
 
+    if not application.is_editable:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="申請已送出，無法刪除申請文件",
+        )
+
     previous_object = application.application_document_url
     application.application_document_url = None
     application.application_document_original_filename = None
@@ -1116,7 +1133,12 @@ async def delete_application_document(
     if previous_object:
         try:
             minio_service.client.remove_object(minio_service.default_bucket, previous_object)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "Failed to remove MinIO object %s after delete for application %s: %s",
+                previous_object,
+                application_id,
+                exc,
+            )
 
     return {"success": True, "message": "申請文件已刪除", "data": None}

@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -17,6 +18,7 @@ from app.schemas.system_setting import (
 from app.services.config_management_service import ConfigurationService
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("")
@@ -194,8 +196,12 @@ async def upload_system_doc(
     if previous_object and previous_object != object_name:
         try:
             minio_service.client.remove_object(minio_service.default_bucket, previous_object)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "Failed to remove orphaned MinIO system doc %s: %s",
+                previous_object,
+                exc,
+            )
 
     return {
         "success": True,
