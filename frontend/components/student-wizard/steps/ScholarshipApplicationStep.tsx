@@ -54,6 +54,7 @@ import api, {
   ApplicationCreate,
   Application,
 } from "@/lib/api";
+import { isSelectableScholarship } from "@/lib/scholarship-eligibility";
 import { clsx } from "@/lib/utils";
 import { useApplications } from "@/hooks/use-applications";
 import { useStudentProfile } from "@/hooks/use-student-profile";
@@ -551,19 +552,7 @@ export function ScholarshipApplicationStep({
     try {
       const response = await api.scholarships.getEligible();
       if (response.success && response.data) {
-        // Filter to only show eligible scholarships (no common errors)
-        const eligible = response.data.filter(
-          (scholarship: ScholarshipType) => {
-            const hasCommonErrors =
-              scholarship.errors?.some(rule => !rule.sub_type) || false;
-            return (
-              Array.isArray(scholarship.eligible_sub_types) &&
-              scholarship.eligible_sub_types.length > 0 &&
-              !hasCommonErrors
-            );
-          }
-        );
-        setEligibleScholarships(eligible);
+        setEligibleScholarships(response.data.filter(isSelectableScholarship));
       } else {
         setError(response.message || text.loadError);
       }
@@ -984,19 +973,6 @@ export function ScholarshipApplicationStep({
           <AlertCircle className="h-12 w-12 mx-auto mb-4 text-red-500" />
           <p className="text-lg text-red-600 mb-4">{text.loadError}</p>
           <p className="text-sm text-gray-600">{error}</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (eligibleScholarships.length === 0) {
-    return (
-      <Card>
-        <CardContent className="p-12 text-center">
-          <AlertCircle className="h-12 w-12 text-orange-500 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold">
-            {text.noEligibleScholarships}
-          </h3>
         </CardContent>
       </Card>
     );

@@ -30,6 +30,7 @@ import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { StudentApplicationWizard } from "@/components/student-wizard/StudentApplicationWizard";
 import { DocumentRequestAlert } from "@/components/document-request-alert";
 import type { StudentDocumentRequest } from "@/lib/api/modules/document-requests";
+import { isSelectableScholarship } from "@/lib/scholarship-eligibility";
 import {
   Edit,
   Eye,
@@ -1255,15 +1256,28 @@ export function EnhancedStudentPortal({
         </Card>
       )}
 
-      {activeTab === "new-application" && (
-        <StudentApplicationWizard
-          user={user}
-          locale={locale}
-          onApplicationComplete={handleApplicationComplete}
-          editingApplication={editingApplication}
-          initialStep={editingApplication ? 2 : undefined}
-        />
-      )}
+      {activeTab === "new-application" &&
+        (eligibleScholarships.some(isSelectableScholarship) ? (
+          <StudentApplicationWizard
+            user={user}
+            locale={locale}
+            onApplicationComplete={handleApplicationComplete}
+            editingApplication={editingApplication}
+            initialStep={editingApplication ? 2 : undefined}
+          />
+        ) : (
+          <Card>
+            <CardContent className="p-6 text-center">
+              <AlertTriangle className="h-8 w-8 text-orange-500 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold mb-2">
+                {t("messages.no_eligible_scholarships")}
+              </h3>
+              <p className="text-muted-foreground">
+                {t("messages.no_eligible_scholarships_desc")}
+              </p>
+            </CardContent>
+          </Card>
+        ))}
 
       {activeTab === "scholarship-list" && (
         <>
