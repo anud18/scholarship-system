@@ -246,7 +246,7 @@ SAMPLE_STUDENTS = {
         "std_schoolid": 1,
         "std_overseaplace": "中國大陸",
         "std_termcount": 3,
-        "std_studingstatus": 2,
+        "std_studingstatus": 1,  # 在學
         "mgd_title": "在學",
         "ToDoctor": 0,
         "com_commadd": "新竹市東區大學路1001號國際學舍",
@@ -272,7 +272,7 @@ SAMPLE_STUDENTS = {
         "std_schoolid": 1,
         "std_overseaplace": "",
         "std_termcount": 4,
-        "std_studingstatus": 2,
+        "std_studingstatus": 4,  # 休學
         "mgd_title": "休學",
         "ToDoctor": 0,
         "com_commadd": "新竹市東區大學路1001號",

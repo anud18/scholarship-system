@@ -1257,7 +1257,8 @@ export function EnhancedStudentPortal({
       )}
 
       {activeTab === "new-application" &&
-        (eligibleScholarships.some(isSelectableScholarship) ? (
+        (editingApplication ||
+        eligibleScholarships.some(isSelectableScholarship) ? (
           <StudentApplicationWizard
             user={user}
             locale={locale}
