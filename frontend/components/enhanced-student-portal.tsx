@@ -30,6 +30,7 @@ import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { StudentApplicationWizard } from "@/components/student-wizard/StudentApplicationWizard";
 import { DocumentRequestAlert } from "@/components/document-request-alert";
 import type { StudentDocumentRequest } from "@/lib/api/modules/document-requests";
+import { isSelectableScholarship } from "@/lib/scholarship-eligibility";
 import {
   Edit,
   Eye,
@@ -1255,15 +1256,26 @@ export function EnhancedStudentPortal({
         </Card>
       )}
 
-      {activeTab === "new-application" && (
-        <StudentApplicationWizard
-          user={user}
-          locale={locale}
-          onApplicationComplete={handleApplicationComplete}
-          editingApplication={editingApplication}
-          initialStep={editingApplication ? 2 : undefined}
-        />
-      )}
+      {activeTab === "new-application" &&
+        (editingApplication ||
+        eligibleScholarships.some(isSelectableScholarship) ? (
+          <StudentApplicationWizard
+            user={user}
+            locale={locale}
+            onApplicationComplete={handleApplicationComplete}
+            editingApplication={editingApplication}
+            initialStep={editingApplication ? 2 : undefined}
+          />
+        ) : (
+          <Card>
+            <CardContent className="p-6 text-center">
+              <AlertTriangle className="h-8 w-8 text-orange-500 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold">
+                {t("messages.no_eligible_scholarships")}
+              </h3>
+            </CardContent>
+          </Card>
+        ))}
 
       {activeTab === "scholarship-list" && (
         <>
@@ -1271,13 +1283,7 @@ export function EnhancedStudentPortal({
           {eligibleScholarships.map(scholarship => {
             const applicationInfo =
               scholarshipApplicationInfo[scholarship.code];
-            // Check if scholarship has eligible sub-types AND no common errors
-            const hasCommonErrors =
-              scholarship.errors?.some(rule => !rule.sub_type) || false;
-            const isEligible =
-              Array.isArray(scholarship.eligible_sub_types) &&
-              scholarship.eligible_sub_types.length > 0 &&
-              !hasCommonErrors; // If there are common errors, student is not eligible
+            const isEligible = isSelectableScholarship(scholarship);
 
             return (
               <Card

@@ -54,6 +54,7 @@ import api, {
   ApplicationCreate,
   Application,
 } from "@/lib/api";
+import { isSelectableScholarship } from "@/lib/scholarship-eligibility";
 import { clsx } from "@/lib/utils";
 import { useApplications } from "@/hooks/use-applications";
 import { useStudentProfile } from "@/hooks/use-student-profile";
@@ -188,7 +189,6 @@ export function ScholarshipApplicationStep({
       personalInfoSaveFailed: "儲存個人資料失敗",
       selectScholarship: "選擇獎學金",
       selectScholarshipPlaceholder: "請選擇要申請的獎學金",
-      noEligibleScholarships: "目前沒有符合資格的獎學金",
       selectPrograms: "選擇申請項目",
       programsRequired: "請至少選擇一個申請項目",
       formProgress: "表單完成度",
@@ -244,7 +244,6 @@ export function ScholarshipApplicationStep({
       personalInfoSaveFailed: "Failed to save personal info",
       selectScholarship: "Select Scholarship",
       selectScholarshipPlaceholder: "Please select a scholarship to apply",
-      noEligibleScholarships: "No eligible scholarships available",
       selectPrograms: "Select Programs",
       programsRequired: "Please select at least one program",
       formProgress: "Form Completion",
@@ -551,19 +550,7 @@ export function ScholarshipApplicationStep({
     try {
       const response = await api.scholarships.getEligible();
       if (response.success && response.data) {
-        // Filter to only show eligible scholarships (no common errors)
-        const eligible = response.data.filter(
-          (scholarship: ScholarshipType) => {
-            const hasCommonErrors =
-              scholarship.errors?.some(rule => !rule.sub_type) || false;
-            return (
-              Array.isArray(scholarship.eligible_sub_types) &&
-              scholarship.eligible_sub_types.length > 0 &&
-              !hasCommonErrors
-            );
-          }
-        );
-        setEligibleScholarships(eligible);
+        setEligibleScholarships(response.data.filter(isSelectableScholarship));
       } else {
         setError(response.message || text.loadError);
       }
@@ -1242,19 +1229,13 @@ export function ScholarshipApplicationStep({
                 <SelectValue placeholder={text.selectScholarshipPlaceholder} />
               </SelectTrigger>
               <SelectContent>
-                {eligibleScholarships.length === 0 ? (
-                  <SelectItem value="no-eligible" disabled>
-                    {text.noEligibleScholarships}
+                {eligibleScholarships.map(scholarship => (
+                  <SelectItem key={scholarship.id} value={scholarship.code}>
+                    {locale === "zh"
+                      ? scholarship.name
+                      : scholarship.name_en || scholarship.name}
                   </SelectItem>
-                ) : (
-                  eligibleScholarships.map(scholarship => (
-                    <SelectItem key={scholarship.id} value={scholarship.code}>
-                      {locale === "zh"
-                        ? scholarship.name
-                        : scholarship.name_en || scholarship.name}
-                    </SelectItem>
-                  ))
-                )}
+                ))}
               </SelectContent>
             </Select>
           </div>
