@@ -989,6 +989,19 @@ export function ScholarshipApplicationStep({
     );
   }
 
+  if (eligibleScholarships.length === 0) {
+    return (
+      <Card>
+        <CardContent className="p-12 text-center">
+          <AlertCircle className="h-12 w-12 text-orange-500 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold">
+            {text.noEligibleScholarships}
+          </h3>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const eligibleSubTypes = selectedScholarship?.eligible_sub_types ?? [];
   const selectionMode =
     selectedScholarship?.sub_type_selection_mode ?? "multiple";
@@ -1242,19 +1255,13 @@ export function ScholarshipApplicationStep({
                 <SelectValue placeholder={text.selectScholarshipPlaceholder} />
               </SelectTrigger>
               <SelectContent>
-                {eligibleScholarships.length === 0 ? (
-                  <SelectItem value="no-eligible" disabled>
-                    {text.noEligibleScholarships}
+                {eligibleScholarships.map(scholarship => (
+                  <SelectItem key={scholarship.id} value={scholarship.code}>
+                    {locale === "zh"
+                      ? scholarship.name
+                      : scholarship.name_en || scholarship.name}
                   </SelectItem>
-                ) : (
-                  eligibleScholarships.map(scholarship => (
-                    <SelectItem key={scholarship.id} value={scholarship.code}>
-                      {locale === "zh"
-                        ? scholarship.name
-                        : scholarship.name_en || scholarship.name}
-                    </SelectItem>
-                  ))
-                )}
+                ))}
               </SelectContent>
             </Select>
           </div>
