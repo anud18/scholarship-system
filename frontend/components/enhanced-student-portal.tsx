@@ -1269,12 +1269,9 @@ export function EnhancedStudentPortal({
           <Card>
             <CardContent className="p-6 text-center">
               <AlertTriangle className="h-8 w-8 text-orange-500 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">
+              <h3 className="text-lg font-semibold">
                 {t("messages.no_eligible_scholarships")}
               </h3>
-              <p className="text-muted-foreground">
-                {t("messages.no_eligible_scholarships_desc")}
-              </p>
             </CardContent>
           </Card>
         ))}
