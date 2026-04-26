@@ -206,7 +206,7 @@ function SortableItem({
           className="bg-blue-100 text-blue-700 border-blue-300"
         >
           <Circle className="w-3 h-3 mr-1 fill-blue-700" />
-          {locale === "zh" ? "部分核准" : "Partial Approval"}
+          {locale === "zh" ? "部分同意" : "Partial Approval"}
         </Badge>
       );
     }
