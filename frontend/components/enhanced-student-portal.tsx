@@ -1498,12 +1498,23 @@ export function EnhancedStudentPortal({
                               );
                             }
 
-                            // Sub-type specific sections with common rules appended
-                            return scholarship.eligible_sub_types?.map(
-                              subTypeInfo => {
-                                const subType = subTypeInfo.value;
+                            // Sub-type specific sections with common rules appended.
+                            // Iterate all_sub_type_list so ineligible subtypes are also
+                            // shown; their failed-rule tags will appear in red.
+                            return (scholarship.all_sub_type_list ?? []).map(
+                              subType => {
                                 if (!subType || subType === "general")
                                   return null;
+
+                                const isSubEligible =
+                                  scholarship.subtype_eligibility?.[subType]
+                                    ?.eligible !== false;
+
+                                const subTypeLabel =
+                                  getTranslation(
+                                    locale,
+                                    `rule_types.${subType}`
+                                  ) || subType;
 
                                 const passedRulesForType =
                                   scholarship.passed?.filter(
@@ -1533,11 +1544,21 @@ export function EnhancedStudentPortal({
 
                                 return (
                                   <div key={subType}>
-                                    <p className="text-sm font-medium text-gray-800 mb-2">
-                                      {locale === "zh"
-                                        ? subTypeInfo.label
-                                        : subTypeInfo.label_en ||
-                                          subTypeInfo.label}
+                                    <p
+                                      className={`text-sm font-medium mb-2 ${
+                                        isSubEligible
+                                          ? "text-gray-800"
+                                          : "text-gray-400"
+                                      }`}
+                                    >
+                                      {subTypeLabel}
+                                      {!isSubEligible && (
+                                        <span className="ml-2 text-xs text-gray-400">
+                                          {locale === "zh"
+                                            ? "（不符資格）"
+                                            : "(Not eligible)"}
+                                        </span>
+                                      )}
                                     </p>
                                     <div className="flex flex-wrap gap-1">
                                       {/* Passed rules (common + subtype-specific) */}
