@@ -99,7 +99,7 @@ interface Application {
   }>; // Eligible sub-scholarship types with review status
   rank_position: number;
   is_allocated: boolean;
-  college_rejected?: boolean;
+  college_rejected: boolean;
   is_renewal?: boolean;
   renewal_year?: number | null;
   status: string;

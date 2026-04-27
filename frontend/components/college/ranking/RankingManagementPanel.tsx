@@ -111,7 +111,7 @@ export function RankingManagementPanel({
               is_renewal: item.application?.is_renewal || false,
               renewal_year: item.application?.renewal_year || null,
               status: item.application?.status || "pending",
-              college_rejected: item.college_rejected || false,
+              college_rejected: Boolean(item.college_rejected),
               review_status: item.application?.review_status,
             })
           );
