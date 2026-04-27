@@ -1327,9 +1327,9 @@ export function EnhancedStudentPortal({
                   {/* Eligible Programs Section - only show if student is eligible */}
                   {isEligible &&
                     scholarship.all_sub_type_list &&
-                    scholarship.all_sub_type_list.length > 0 &&
-                    scholarship.all_sub_type_list[0] !== "general" &&
-                    scholarship.all_sub_type_list[0] !== null && (
+                    scholarship.all_sub_type_list.some(
+                      st => st && st !== "general"
+                    ) && (
                       <div className="mt-3 bg-indigo-50/30 rounded-lg border border-indigo-100/50 divide-y divide-indigo-100/50">
                         <div className="px-3 py-2">
                           <p className="text-sm font-medium text-indigo-900">
@@ -1346,11 +1346,15 @@ export function EnhancedStudentPortal({
                                 scholarship.subtype_eligibility?.[subTypeKey];
                               const isSubEligible =
                                 eligibility?.eligible !== false;
+                              const labelKey = `rule_types.${subTypeKey}`;
+                              const labelLookup = getTranslation(
+                                locale,
+                                labelKey
+                              );
                               const label =
-                                getTranslation(
-                                  locale,
-                                  `rule_types.${subTypeKey}`
-                                ) || subTypeKey;
+                                labelLookup === labelKey
+                                  ? subTypeKey
+                                  : labelLookup;
 
                               if (isSubEligible) {
                                 return (
@@ -1367,14 +1371,17 @@ export function EnhancedStudentPortal({
                               const failedTagLabels = (
                                 eligibility?.failed_rules ?? []
                               )
-                                .map(r =>
-                                  r.tag
-                                    ? getTranslation(
-                                        locale,
-                                        `eligibility_tags.${r.tag}`
-                                      )
-                                    : null
-                                )
+                                .map(r => {
+                                  if (!r.tag) return null;
+                                  const tagKey = `eligibility_tags.${r.tag}`;
+                                  const tagLookup = getTranslation(
+                                    locale,
+                                    tagKey
+                                  );
+                                  return tagLookup === tagKey
+                                    ? null
+                                    : tagLookup;
+                                })
                                 .filter((s): s is string => Boolean(s));
                               const reasonText =
                                 failedTagLabels.length > 0
@@ -1510,11 +1517,15 @@ export function EnhancedStudentPortal({
                                   scholarship.subtype_eligibility?.[subType]
                                     ?.eligible !== false;
 
+                                const subTypeLabelKey = `rule_types.${subType}`;
+                                const subTypeLabelLookup = getTranslation(
+                                  locale,
+                                  subTypeLabelKey
+                                );
                                 const subTypeLabel =
-                                  getTranslation(
-                                    locale,
-                                    `rule_types.${subType}`
-                                  ) || subType;
+                                  subTypeLabelLookup === subTypeLabelKey
+                                    ? subType
+                                    : subTypeLabelLookup;
 
                                 const passedRulesForType =
                                   scholarship.passed?.filter(

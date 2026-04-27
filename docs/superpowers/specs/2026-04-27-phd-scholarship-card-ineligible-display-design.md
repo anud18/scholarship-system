@@ -33,7 +33,8 @@
 - ❌ 不修改 i18n `eligibility_tags` 中「中華民國國籍」display
 - ❌ 不修改 eligibility/篩選**業務邏輯**（service 層完全不動）
 - ❌ 不修改申請流程的子類型選擇器（仍只能勾選 eligible 子類型）
-- ❌ 不修改卡片的「申請資格」(Block 2) 區塊
+
+> **Scope expanded during implementation:** the original spec scoped only Block 1, but the user reviewed the partial result and asked for Block 2「申請資格」 to also iterate all subtypes (greyed title + 「（不符資格）」 hint for ineligible, with the same passed/error tag groupings). The implementation reflects this expanded scope.
 
 ---
 
