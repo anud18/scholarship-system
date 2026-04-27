@@ -844,7 +844,7 @@ export function AdminScholarshipDashboard({
                 <option value="submitted">已提交</option>
                 <option value="under_review">審核中</option>
                 <option value="approved">已核准</option>
-                <option value="partial_approved">部分核准</option>
+                <option value="partial_approved">部分同意</option>
                 <option value="rejected">已拒絕</option>
               </select>
             </div>

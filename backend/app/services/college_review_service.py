@@ -231,7 +231,7 @@ class CollegeReviewService:
                 or_(
                     Application.status == ApplicationStatus.under_review.value,
                     Application.status == ApplicationStatus.approved.value,  # 包含已核准的申請
-                    Application.status == ApplicationStatus.partial_approved.value,  # 包含部分核准的申請
+                    Application.status == ApplicationStatus.partial_approved.value,  # 包含部分同意的申請
                     Application.status == ApplicationStatus.rejected.value,  # 包含已駁回的申請
                 )
             )

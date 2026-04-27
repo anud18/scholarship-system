@@ -164,7 +164,7 @@ export const getApplicationStatusLabel = (
       [ApplicationStatus.UNDER_REVIEW]: "審批中",
       [ApplicationStatus.PENDING_DOCUMENTS]: "補件中",
       [ApplicationStatus.APPROVED]: "已核准",
-      [ApplicationStatus.PARTIAL_APPROVED]: "部分核准",
+      [ApplicationStatus.PARTIAL_APPROVED]: "部分同意",
       [ApplicationStatus.REJECTED]: "已駁回",
       [ApplicationStatus.RETURNED]: "已退回",
       [ApplicationStatus.WITHDRAWN]: "已撤回",
@@ -203,7 +203,7 @@ export const getApplicationStatusBadgeVariant = (
     case ApplicationStatus.APPROVED:
       return "default";
 
-    // 審核中/部分核准 - outline (淺色邊框)
+    // 審核中/部分同意 - outline (淺色邊框)
     case ApplicationStatus.UNDER_REVIEW:
     case ApplicationStatus.PENDING_DOCUMENTS:
     case ApplicationStatus.PARTIAL_APPROVED:
