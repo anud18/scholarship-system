@@ -1326,10 +1326,10 @@ export function EnhancedStudentPortal({
 
                   {/* Eligible Programs Section - only show if student is eligible */}
                   {isEligible &&
-                    scholarship.eligible_sub_types &&
-                    scholarship.eligible_sub_types.length > 0 &&
-                    scholarship.eligible_sub_types[0]?.value !== "general" &&
-                    scholarship.eligible_sub_types[0]?.value !== null && (
+                    scholarship.all_sub_type_list &&
+                    scholarship.all_sub_type_list.some(
+                      st => st && st !== "general"
+                    ) && (
                       <div className="mt-3 bg-indigo-50/30 rounded-lg border border-indigo-100/50 divide-y divide-indigo-100/50">
                         <div className="px-3 py-2">
                           <p className="text-sm font-medium text-indigo-900">
@@ -1340,18 +1340,68 @@ export function EnhancedStudentPortal({
                           </p>
                         </div>
                         <div className="px-3 py-2 flex flex-wrap gap-1.5">
-                          {scholarship.eligible_sub_types.map(
-                            (subType, index) => (
-                              <Badge
-                                key={subType.value || index}
-                                variant="outline"
-                                className="bg-white text-indigo-600 border-indigo-100 shadow-sm"
-                              >
-                                {locale === "zh"
-                                  ? subType.label
-                                  : subType.label_en}
-                              </Badge>
-                            )
+                          {(scholarship.all_sub_type_list ?? []).map(
+                            subTypeKey => {
+                              const eligibility =
+                                scholarship.subtype_eligibility?.[subTypeKey];
+                              const isSubEligible =
+                                eligibility?.eligible !== false;
+                              const labelKey = `rule_types.${subTypeKey}`;
+                              const labelLookup = getTranslation(
+                                locale,
+                                labelKey
+                              );
+                              const label =
+                                labelLookup === labelKey
+                                  ? subTypeKey
+                                  : labelLookup;
+
+                              if (isSubEligible) {
+                                return (
+                                  <Badge
+                                    key={subTypeKey}
+                                    variant="outline"
+                                    className="bg-white text-indigo-600 border-indigo-100 shadow-sm whitespace-normal text-left"
+                                  >
+                                    ✓ {label}
+                                  </Badge>
+                                );
+                              }
+
+                              const failedTagLabels = (
+                                eligibility?.failed_rules ?? []
+                              )
+                                .map(r => {
+                                  if (!r.tag) return null;
+                                  const tagKey = `eligibility_tags.${r.tag}`;
+                                  const tagLookup = getTranslation(
+                                    locale,
+                                    tagKey
+                                  );
+                                  return tagLookup === tagKey
+                                    ? null
+                                    : tagLookup;
+                                })
+                                .filter((s): s is string => Boolean(s));
+                              const reasonText =
+                                failedTagLabels.length > 0
+                                  ? `${locale === "zh" ? "不符" : "Missing"}：${failedTagLabels.join(
+                                      "、"
+                                    )}`
+                                  : locale === "zh"
+                                    ? "不符資格"
+                                    : "Not eligible";
+
+                              return (
+                                <Badge
+                                  key={subTypeKey}
+                                  variant="outline"
+                                  className="bg-gray-100 text-gray-400 border-gray-200 shadow-sm whitespace-normal text-left"
+                                >
+                                  ✗ {label} — {reasonText}
+                                </Badge>
+                              );
+                            }
                           )}
                         </div>
                       </div>
@@ -1455,12 +1505,27 @@ export function EnhancedStudentPortal({
                               );
                             }
 
-                            // Sub-type specific sections with common rules appended
-                            return scholarship.eligible_sub_types?.map(
-                              subTypeInfo => {
-                                const subType = subTypeInfo.value;
+                            // Sub-type specific sections with common rules appended.
+                            // Iterate all_sub_type_list so ineligible subtypes are also
+                            // shown; their failed-rule tags will appear in red.
+                            return (scholarship.all_sub_type_list ?? []).map(
+                              subType => {
                                 if (!subType || subType === "general")
                                   return null;
+
+                                const isSubEligible =
+                                  scholarship.subtype_eligibility?.[subType]
+                                    ?.eligible !== false;
+
+                                const subTypeLabelKey = `rule_types.${subType}`;
+                                const subTypeLabelLookup = getTranslation(
+                                  locale,
+                                  subTypeLabelKey
+                                );
+                                const subTypeLabel =
+                                  subTypeLabelLookup === subTypeLabelKey
+                                    ? subType
+                                    : subTypeLabelLookup;
 
                                 const passedRulesForType =
                                   scholarship.passed?.filter(
@@ -1490,11 +1555,21 @@ export function EnhancedStudentPortal({
 
                                 return (
                                   <div key={subType}>
-                                    <p className="text-sm font-medium text-gray-800 mb-2">
-                                      {locale === "zh"
-                                        ? subTypeInfo.label
-                                        : subTypeInfo.label_en ||
-                                          subTypeInfo.label}
+                                    <p
+                                      className={`text-sm font-medium mb-2 ${
+                                        isSubEligible
+                                          ? "text-gray-800"
+                                          : "text-gray-400"
+                                      }`}
+                                    >
+                                      {subTypeLabel}
+                                      {!isSubEligible && (
+                                        <span className="ml-2 text-xs text-gray-400">
+                                          {locale === "zh"
+                                            ? "（不符資格）"
+                                            : "(Not eligible)"}
+                                        </span>
+                                      )}
                                     </p>
                                     <div className="flex flex-wrap gap-1">
                                       {/* Passed rules (common + subtype-specific) */}
