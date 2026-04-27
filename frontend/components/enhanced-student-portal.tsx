@@ -1326,10 +1326,10 @@ export function EnhancedStudentPortal({
 
                   {/* Eligible Programs Section - only show if student is eligible */}
                   {isEligible &&
-                    scholarship.eligible_sub_types &&
-                    scholarship.eligible_sub_types.length > 0 &&
-                    scholarship.eligible_sub_types[0]?.value !== "general" &&
-                    scholarship.eligible_sub_types[0]?.value !== null && (
+                    scholarship.all_sub_type_list &&
+                    scholarship.all_sub_type_list.length > 0 &&
+                    scholarship.all_sub_type_list[0] !== "general" &&
+                    scholarship.all_sub_type_list[0] !== null && (
                       <div className="mt-3 bg-indigo-50/30 rounded-lg border border-indigo-100/50 divide-y divide-indigo-100/50">
                         <div className="px-3 py-2">
                           <p className="text-sm font-medium text-indigo-900">
@@ -1340,18 +1340,61 @@ export function EnhancedStudentPortal({
                           </p>
                         </div>
                         <div className="px-3 py-2 flex flex-wrap gap-1.5">
-                          {scholarship.eligible_sub_types.map(
-                            (subType, index) => (
-                              <Badge
-                                key={subType.value || index}
-                                variant="outline"
-                                className="bg-white text-indigo-600 border-indigo-100 shadow-sm"
-                              >
-                                {locale === "zh"
-                                  ? subType.label
-                                  : subType.label_en}
-                              </Badge>
-                            )
+                          {(scholarship.all_sub_type_list ?? []).map(
+                            subTypeKey => {
+                              const eligibility =
+                                scholarship.subtype_eligibility?.[subTypeKey];
+                              const isSubEligible =
+                                eligibility?.eligible !== false;
+                              const label =
+                                getTranslation(
+                                  locale,
+                                  `rule_types.${subTypeKey}`
+                                ) || subTypeKey;
+
+                              if (isSubEligible) {
+                                return (
+                                  <Badge
+                                    key={subTypeKey}
+                                    variant="outline"
+                                    className="bg-white text-indigo-600 border-indigo-100 shadow-sm whitespace-normal text-left"
+                                  >
+                                    ✓ {label}
+                                  </Badge>
+                                );
+                              }
+
+                              const failedTagLabels = (
+                                eligibility?.failed_rules ?? []
+                              )
+                                .map(r =>
+                                  r.tag
+                                    ? getTranslation(
+                                        locale,
+                                        `eligibility_tags.${r.tag}`
+                                      )
+                                    : null
+                                )
+                                .filter((s): s is string => Boolean(s));
+                              const reasonText =
+                                failedTagLabels.length > 0
+                                  ? `${locale === "zh" ? "不符" : "Missing"}：${failedTagLabels.join(
+                                      "、"
+                                    )}`
+                                  : locale === "zh"
+                                    ? "不符資格"
+                                    : "Not eligible";
+
+                              return (
+                                <Badge
+                                  key={subTypeKey}
+                                  variant="outline"
+                                  className="bg-gray-100 text-gray-400 border-gray-200 shadow-sm whitespace-normal text-left"
+                                >
+                                  ✗ {label} — {reasonText}
+                                </Badge>
+                              );
+                            }
                           )}
                         </div>
                       </div>
