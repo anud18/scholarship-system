@@ -203,6 +203,22 @@ export interface ScholarshipType {
     label_en: string;
     is_default: boolean;
   }>;
+  all_sub_type_list?: string[];
+  subtype_eligibility?: {
+    [subTypeKey: string]: {
+      eligible: boolean;
+      failed_rules: Array<{
+        rule_name: string;
+        message?: string | null;
+        tag?: string | null;
+      }>;
+      warning_rules: Array<{
+        rule_name: string;
+        message?: string | null;
+        tag?: string | null;
+      }>;
+    };
+  };
   passed?: Array<{
     rule_id: number;
     rule_name: string;

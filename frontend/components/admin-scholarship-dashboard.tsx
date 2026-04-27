@@ -844,7 +844,7 @@ export function AdminScholarshipDashboard({
                 <option value="submitted">已提交</option>
                 <option value="under_review">審核中</option>
                 <option value="approved">已核准</option>
-                <option value="partial_approved">部分核准</option>
+                <option value="partial_approved">部分同意</option>
                 <option value="rejected">已拒絕</option>
               </select>
             </div>
@@ -1147,7 +1147,7 @@ export function AdminScholarshipDashboard({
                           )}
                         </Button>
 
-                        {/* 刪除按鈕 */}
+                        {/* 刪除按鈕：僅限學生申請階段（草稿 / 已送出） */}
                         {(app.status === "draft" || app.status === "submitted") && (
                           <Button
                             variant="outline"
@@ -1157,6 +1157,7 @@ export function AdminScholarshipDashboard({
                               setShowDeleteDialog(true);
                             }}
                             className="hover:bg-red-50 hover:border-red-300 hover:text-red-600"
+                            title="刪除申請（僅限學生申請階段）"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>

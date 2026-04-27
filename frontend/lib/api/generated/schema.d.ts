@@ -932,6 +932,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/applications/{application_id}/application-document": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Application Document File
+         * @description Stream the 申請文件 from MinIO. Owner or staff can access.
+         */
+        get: operations["get_application_document_file_api_v1_applications__application_id__application_document_get"];
+        put?: never;
+        /**
+         * Upload Application Document
+         * @description Upload 申請文件 for a specific application (student only, must own the application).
+         */
+        post: operations["upload_application_document_api_v1_applications__application_id__application_document_post"];
+        /**
+         * Delete Application Document
+         * @description Delete 申請文件 for a specific application.
+         */
+        delete: operations["delete_application_document_api_v1_applications__application_id__application_document_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/applications/{application_id}/document-requests": {
         parameters: {
             query?: never;
@@ -1295,6 +1323,37 @@ export interface paths {
          *     This is a wrapper around the applications endpoint for admin-specific access.
          */
         patch: operations["admin_update_application_status_api_v1_admin_applications__id__status_patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/applications/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Application
+         * @description Hard-delete an application (admin only).
+         *
+         *     Only allowed while the application is still in the student-facing stage
+         *     (draft / submitted). Once review has started the row must be preserved.
+         *
+         *     Performs a cascade delete:
+         *     - Removes related CollegeRankingItem and PaymentRosterItem rows explicitly.
+         *     - SQLAlchemy cascades remove ApplicationReview, ApplicationFile, DocumentRequest rows.
+         *     - The application row itself is permanently removed.
+         *
+         *     Records an AuditLog entry describing the deletion so the operation
+         *     history persists even after the application row is gone.
+         */
+        delete: operations["delete_application_api_v1_admin_applications__id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/admin/announcements": {
@@ -4660,6 +4719,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/college-review/export-package": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Application Package
+         * @description Download a ZIP package of all application materials for a scholarship period.
+         */
+        get: operations["export_application_package_api_v1_college_review_export_package_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reviews/reviews": {
         parameters: {
             query?: never;
@@ -6301,6 +6380,68 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/system-settings/public-docs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Public Docs
+         * @description Return object_names for 獎學金要點 and 申請文件範例檔.
+         *     Accessible by any authenticated user.
+         */
+        get: operations["get_public_docs_api_v1_system_settings_public_docs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system-settings/upload/{doc_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload System Doc
+         * @description Upload a global system document (獎學金要點 or 申請文件範例檔). Admin only.
+         *     Stores object_name in system_settings under the given key.
+         */
+        post: operations["upload_system_doc_api_v1_system_settings_upload__doc_key__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system-settings/file/{doc_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get System Doc File
+         * @description Proxy a global system document from MinIO. Any authenticated user.
+         */
+        get: operations["get_system_doc_file_api_v1_system_settings_file__doc_key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/system-settings/{id}": {
         parameters: {
             query?: never;
@@ -6666,6 +6807,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/manual-distribution/import-received-months": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Received Months
+         * @description Import received months from Excel for students in a distribution.
+         */
+        post: operations["import_received_months_api_v1_manual_distribution_import_received_months_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -6748,6 +6909,19 @@ export interface components {
             /** Trace Id */
             trace_id?: string | null;
         };
+        /** ApiResponse[list[EligibleScholarshipResponse]] */
+        ApiResponse_list_EligibleScholarshipResponse__: {
+            /** Success */
+            success: boolean;
+            /** Message */
+            message: string;
+            /** Data */
+            data?: components["schemas"]["EligibleScholarshipResponse"][] | null;
+            /** Errors */
+            errors?: string[] | null;
+            /** Trace Id */
+            trace_id?: string | null;
+        };
         /**
          * ApplicationCreate
          * @description 建立申請
@@ -6821,6 +6995,11 @@ export interface components {
              */
             sub_type_preferences?: string[] | null;
         };
+        /**
+         * ApplicationCycleEnum
+         * @enum {string}
+         */
+        ApplicationCycleEnum: "semester" | "yearly";
         /**
          * ApplicationDocumentCreate
          * @description Schema for creating application document
@@ -7256,6 +7435,10 @@ export interface components {
             updated_at: string;
             /** Meta Data */
             meta_data?: Record<string, never> | null;
+            /** Application Document Url */
+            application_document_url?: string | null;
+            /** Application Document Original Filename */
+            application_document_original_filename?: string | null;
             /**
              * Reviews
              * @default []
@@ -7508,6 +7691,15 @@ export interface components {
              */
             file: string;
         };
+        /** Body_import_received_months_api_v1_manual_distribution_import_received_months_post */
+        Body_import_received_months_api_v1_manual_distribution_import_received_months_post: {
+            /**
+             * File
+             * Format: binary
+             * @description Excel file with columns: 學號, 已領月份數
+             */
+            file: string;
+        };
         /** Body_import_whitelist_excel_api_v1_scholarship_configurations__id__whitelist_import_post */
         Body_import_whitelist_excel_api_v1_scholarship_configurations__id__whitelist_import_post: {
             /**
@@ -7561,6 +7753,14 @@ export interface components {
             /** Academic Year */
             academic_year?: number | null;
         };
+        /** Body_upload_application_document_api_v1_applications__application_id__application_document_post */
+        Body_upload_application_document_api_v1_applications__application_id__application_document_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+        };
         /** Body_upload_bank_document_file_api_v1_user_profiles_me_bank_document_file_post */
         Body_upload_bank_document_file_api_v1_user_profiles_me_bank_document_file_post: {
             /**
@@ -7605,6 +7805,14 @@ export interface components {
         };
         /** Body_upload_file_api_v1_applications__id__files_upload_post */
         Body_upload_file_api_v1_applications__id__files_upload_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+        };
+        /** Body_upload_system_doc_api_v1_system_settings_upload__doc_key__post */
+        Body_upload_system_doc_api_v1_system_settings_upload__doc_key__post: {
             /**
              * File
              * Format: binary
@@ -7824,6 +8032,11 @@ export interface components {
              */
             validation_regex?: string | null;
         };
+        /** DeleteApplicationRequest */
+        DeleteApplicationRequest: {
+            /** Reason */
+            reason: string;
+        };
         /**
          * DeveloperProfileRequest
          * @description Developer profile creation request schema
@@ -7967,6 +8180,68 @@ export interface components {
              * @description 驗證規則
              */
             validation_rules?: Record<string, never> | null;
+        };
+        /** EligibleScholarshipResponse */
+        EligibleScholarshipResponse: {
+            /** Id */
+            id: number;
+            /** Configuration Id */
+            configuration_id: number;
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Name En */
+            name_en: string;
+            /** Eligible Sub Types */
+            eligible_sub_types: components["schemas"]["SubTypeOption"][];
+            application_cycle: components["schemas"]["ApplicationCycleEnum"];
+            /** Description */
+            description?: string | null;
+            /** Description En */
+            description_en?: string | null;
+            /** Amount */
+            amount: string;
+            /** Currency */
+            currency: string;
+            /** Application Start Date */
+            application_start_date?: string | null;
+            /** Application End Date */
+            application_end_date?: string | null;
+            /** Professor Review Start */
+            professor_review_start?: string | null;
+            /** Professor Review End */
+            professor_review_end?: string | null;
+            /** College Review Start */
+            college_review_start?: string | null;
+            /** College Review End */
+            college_review_end?: string | null;
+            sub_type_selection_mode: components["schemas"]["SubTypeSelectionModeEnum"];
+            /** Terms Document Url */
+            terms_document_url?: string | null;
+            /** Passed */
+            passed: components["schemas"]["RuleMessage"][];
+            /** Warnings */
+            warnings: components["schemas"]["RuleMessage"][];
+            /** Errors */
+            errors: components["schemas"]["RuleMessage"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * All Sub Type List
+             * @default []
+             */
+            all_sub_type_list: string[];
+            /**
+             * Subtype Eligibility
+             * @default {}
+             */
+            subtype_eligibility: {
+                [key: string]: components["schemas"]["SubtypeEligibilityInfo"];
+            };
         };
         /** EmailAutomationRuleCreate */
         EmailAutomationRuleCreate: {
@@ -8695,6 +8970,42 @@ export interface components {
              */
             overwrite_existing: boolean;
         };
+        /** RuleMessage */
+        RuleMessage: {
+            /** Rule Id */
+            rule_id: number | string;
+            /** Rule Name */
+            rule_name: string;
+            /** Rule Type */
+            rule_type: string;
+            /** Tag */
+            tag?: string | null;
+            /** Message */
+            message: string;
+            /** Message En */
+            message_en?: string | null;
+            /** Sub Type */
+            sub_type?: string | null;
+            /**
+             * Priority
+             * @default 0
+             */
+            priority: number;
+            /**
+             * Is Warning
+             * @default false
+             */
+            is_warning: boolean;
+            /**
+             * Is Hard Rule
+             * @default false
+             */
+            is_hard_rule: boolean;
+            /** Status */
+            status?: string | null;
+            /** System Message */
+            system_message?: string | null;
+        };
         /**
          * RuleTemplateRequest
          * @description Schema for creating rule templates
@@ -9180,6 +9491,52 @@ export interface components {
          * @enum {string}
          */
         StudentVerificationStatus: "verified" | "graduated" | "suspended" | "withdrawn" | "api_error" | "not_found";
+        /**
+         * SubTypeOption
+         * @description Schema for scholarship sub-type options
+         */
+        SubTypeOption: {
+            /** Value */
+            value: string | null;
+            /** Label */
+            label: string;
+            /** Label En */
+            label_en: string;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+        };
+        /**
+         * SubTypeSelectionModeEnum
+         * @enum {string}
+         */
+        SubTypeSelectionModeEnum: "single" | "multiple" | "hierarchical";
+        /** SubtypeEligibilityInfo */
+        SubtypeEligibilityInfo: {
+            /** Eligible */
+            eligible: boolean;
+            /**
+             * Failed Rules
+             * @default []
+             */
+            failed_rules: components["schemas"]["SubtypeRuleDetail"][];
+            /**
+             * Warning Rules
+             * @default []
+             */
+            warning_rules: components["schemas"]["SubtypeRuleDetail"][];
+        };
+        /** SubtypeRuleDetail */
+        SubtypeRuleDetail: {
+            /** Rule Name */
+            rule_name: string;
+            /** Message */
+            message?: string | null;
+            /** Tag */
+            tag?: string | null;
+        };
         /**
          * SupervisorInfo
          * @description Supervisor information schema
@@ -11088,6 +11445,103 @@ export interface operations {
             };
         };
     };
+    get_application_document_file_api_v1_applications__application_id__application_document_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_application_document_api_v1_applications__application_id__application_document_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_application_document_api_v1_applications__application_id__application_document_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_application_document_api_v1_applications__application_id__application_document_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_application_document_requests_api_v1_applications__application_id__document_requests_get: {
         parameters: {
             query?: {
@@ -11648,6 +12102,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ApplicationStatusUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_application_api_v1_admin_applications__id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteApplicationRequest"];
             };
         };
         responses: {
@@ -13668,7 +14157,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ApiResponse_list_EligibleScholarshipResponse__"];
                 };
             };
         };
@@ -17633,6 +18122,42 @@ export interface operations {
             };
         };
     };
+    export_application_package_api_v1_college_review_export_package_get: {
+        parameters: {
+            query: {
+                /** @description Scholarship type ID */
+                scholarship_type_id: number;
+                /** @description Academic year */
+                academic_year: number;
+                /** @description Semester (first/second/null for annual) */
+                semester?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_review_api_v1_reviews_reviews_post: {
         parameters: {
             query?: never;
@@ -20058,6 +20583,92 @@ export interface operations {
             };
         };
     };
+    get_public_docs_api_v1_system_settings_public_docs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    upload_system_doc_api_v1_system_settings_upload__doc_key__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_system_doc_api_v1_system_settings_upload__doc_key__post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_system_doc_file_api_v1_system_settings_file__doc_key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_configuration_api_v1_system_settings__id__get: {
         parameters: {
             query?: {
@@ -20619,6 +21230,46 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["GenerateRostersRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_received_months_api_v1_manual_distribution_import_received_months_post: {
+        parameters: {
+            query: {
+                /** @description Scholarship type ID */
+                scholarship_type_id: number;
+                /** @description Academic year */
+                academic_year: number;
+                /** @description Semester */
+                semester: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_import_received_months_api_v1_manual_distribution_import_received_months_post"];
             };
         };
         responses: {

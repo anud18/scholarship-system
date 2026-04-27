@@ -29,7 +29,7 @@ class ApplicationStatus(enum.Enum):
 
     # 完成狀態（最終結果）
     approved = "approved"  # 核准
-    partial_approved = "partial_approved"  # 部分核准
+    partial_approved = "partial_approved"  # 部分同意
     rejected = "rejected"  # 駁回
 
     # 特殊狀態

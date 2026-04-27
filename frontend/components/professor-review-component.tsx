@@ -31,8 +31,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Eye, CheckCircle, AlertCircle, Clock, X } from "lucide-react";
+import { Search, Eye, CheckCircle, AlertCircle, Clock, X, FileText } from "lucide-react";
 import apiClient, { Application, ApiResponse } from "@/lib/api";
+import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { User } from "@/types/user";
 import { getDisplayStatusInfo } from "@/lib/utils/application-helpers";
 import { Locale } from "@/lib/validators";
@@ -83,6 +84,44 @@ function ProfessorReviewComponentInner({
   });
   const [existingReview, setExistingReview] = useState<any>(null);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
+
+  // Regulations state
+  const [regulationsUrl, setRegulationsUrl] = useState<string | null>(null);
+  const [showRegulations, setShowRegulations] = useState(false);
+  const [regulationsFile, setRegulationsFile] = useState<{
+    url: string;
+    filename: string;
+    type: string;
+  } | null>(null);
+  const [regulationsFilename, setRegulationsFilename] = useState<string>("");
+
+  useEffect(() => {
+    apiClient.systemSettings.getPublicDocs().then((res) => {
+      if (res.success && res.data?.regulations_url) {
+        setRegulationsUrl(res.data.regulations_url);
+        setRegulationsFilename(
+          res.data.regulations_url_filename || res.data.regulations_url
+        );
+      }
+    });
+  }, []);
+
+  const handleViewRegulations = () => {
+    const token = localStorage.getItem("auth_token") || "";
+    const url = `/api/v1/system-settings/file-proxy?key=regulations_url&token=${encodeURIComponent(token)}`;
+    const lower = regulationsFilename.toLowerCase();
+    let type = "application/pdf";
+    if (lower.endsWith(".doc")) type = "application/msword";
+    else if (lower.endsWith(".docx"))
+      type =
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    setRegulationsFile({
+      url,
+      filename: regulationsFilename || "獎學金要點",
+      type,
+    });
+    setShowRegulations(true);
+  };
 
   // Load applications
   const fetchApplications = async () => {
@@ -135,12 +174,7 @@ function ProfessorReviewComponentInner({
 
   // Ensure reviewData.items is always initialized when subTypes change
   useEffect(() => {
-    console.log("SubTypes changed, checking reviewData initialization");
-    console.log("SubTypes:", subTypes);
-    console.log("Current reviewData.items:", reviewData.items);
-
     if (subTypes.length > 0 && reviewData.items.length === 0) {
-      console.log("Initializing reviewData.items from subTypes effect");
       const initialItems = subTypes.map(subType => ({
         sub_type_code: subType.value,
         recommendation: 'pending' as const,
@@ -151,8 +185,6 @@ function ProfessorReviewComponentInner({
         ...prev,
         items: initialItems,
       }));
-
-      console.log("ReviewData.items initialized:", initialItems);
     }
   }, [subTypes, reviewData.items.length]);
 
@@ -187,25 +219,19 @@ function ProfessorReviewComponentInner({
     setError(null);
 
     try {
-      console.log("=== OPENING REVIEW MODAL ===");
-      console.log("Application ID:", application.id);
-
       // Get available sub-types
       const subTypesResponse = await apiClient.professor.getSubTypes(
         application.id
       );
-      console.log("Sub-types response:", subTypesResponse);
 
       let availableSubTypes: SubTypeOption[] = [];
       if (subTypesResponse.success && subTypesResponse.data) {
         availableSubTypes = subTypesResponse.data;
         setSubTypes(availableSubTypes);
-        console.log("Set sub-types:", availableSubTypes);
       }
 
       // Always initialize items based on available sub-types
       const initializeItems = (subTypes: SubTypeOption[]) => {
-        console.log("Initializing items for sub-types:", subTypes);
         return subTypes.map(subType => ({
           sub_type_code: subType.value,
           recommendation: 'pending' as const,
@@ -215,13 +241,11 @@ function ProfessorReviewComponentInner({
 
       // Get existing review if any
       const initialItems = initializeItems(availableSubTypes);
-      console.log("Initial items created:", initialItems);
 
       try {
         const reviewResponse = await apiClient.professor.getReview(
           application.id
         );
-        console.log("Existing review response:", reviewResponse);
 
         // Check if this is an actual existing review (id > 0) or a new review (id = 0)
         if (
@@ -230,8 +254,6 @@ function ProfessorReviewComponentInner({
           reviewResponse.data.id &&
           reviewResponse.data.id > 0
         ) {
-          console.log("Found existing review with ID:", reviewResponse.data.id);
-          console.log("Existing review items:", reviewResponse.data.items);
           setExistingReview(reviewResponse.data);
 
           // Merge existing review items with all available sub-types
@@ -249,14 +271,12 @@ function ProfessorReviewComponentInner({
             );
           });
 
-          console.log("Merged items with existing review:", mergedItems);
           setReviewData({
             recommendation: reviewResponse.data.recommendation || "",
             items: mergedItems,
           });
         } else {
           // No existing review (id = 0 or no data), use initial items
-          console.log("No existing review found, using initial items");
           setExistingReview(null);
           setReviewData({
             recommendation: "",
@@ -265,21 +285,12 @@ function ProfessorReviewComponentInner({
         }
       } catch (e) {
         // No existing review, use initial items
-        console.log("Error getting existing review, using initial items:", e);
         setExistingReview(null);
         setReviewData({
           recommendation: "",
           items: initialItems,
         });
       }
-
-      // Final verification
-      setTimeout(() => {
-        console.log("=== FINAL STATE VERIFICATION ===");
-        console.log("SubTypes length:", availableSubTypes.length);
-        console.log("ReviewData items length:", initialItems.length);
-        console.log("ReviewData items:", initialItems);
-      }, 100);
 
       setReviewModalOpen(true);
     } catch (e: any) {
@@ -311,6 +322,24 @@ function ProfessorReviewComponentInner({
           recommendation: item.recommendation as 'approve' | 'reject',
           comments: item.comments
         }));
+
+      // Validate that at least one item has been evaluated
+      if (filteredItems.length === 0) {
+        setError('請至少對一個獎學金申請項目進行評估（選擇同意或不同意）');
+        setLoading(false);
+        return;
+      }
+
+      // Validate that all rejected items have comments
+      const rejectedWithoutComments = filteredItems.filter(
+        item => item.recommendation === 'reject' && (!item.comments || item.comments.trim() === '')
+      );
+
+      if (rejectedWithoutComments.length > 0) {
+        setError('當選擇「不同意」時必須填寫評估意見');
+        setLoading(false);
+        return;
+      }
 
       const submissionData = {
         items: filteredItems
@@ -351,35 +380,17 @@ function ProfessorReviewComponentInner({
 
   // Update review item
   const updateReviewItem = (subTypeCode: string, field: string, value: any) => {
-    console.log("=== updateReviewItem START ===");
-    console.log("Parameters:", { subTypeCode, field, value });
-    console.log(
-      "Current reviewData before update:",
-      JSON.stringify(reviewData, null, 2)
-    );
-
     setReviewData(prev => {
-      console.log("Previous state in setter:", JSON.stringify(prev, null, 2));
-
-      const itemFound = prev.items.find(
-        item => item.sub_type_code === subTypeCode
-      );
-      console.log("Item found for subTypeCode:", subTypeCode, "=", itemFound);
-
       const newData = {
         ...prev,
         items: prev.items.map(item => {
           if (item.sub_type_code === subTypeCode) {
-            const updatedItem = { ...item, [field]: value };
-            console.log("Updating item from:", item, "to:", updatedItem);
-            return updatedItem;
+            return { ...item, [field]: value };
           }
           return item;
         }),
       };
 
-      console.log("New reviewData:", JSON.stringify(newData, null, 2));
-      console.log("=== updateReviewItem END ===");
       return newData;
     });
   };
@@ -399,6 +410,16 @@ function ProfessorReviewComponentInner({
             審查學生獎學金申請並提供推薦意見
           </p>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleViewRegulations}
+          disabled={!regulationsUrl}
+          className="flex items-center gap-2"
+        >
+          <FileText className="h-4 w-4" />
+          查看獎學金要點
+        </Button>
       </div>
 
       {/* Error/Success Messages */}
@@ -600,6 +621,14 @@ function ProfessorReviewComponentInner({
         </CardContent>
       </Card>
 
+      {/* Regulations Preview */}
+      <FilePreviewDialog
+        isOpen={showRegulations}
+        onClose={() => setShowRegulations(false)}
+        file={regulationsFile}
+        locale="zh"
+      />
+
       {/* Review Modal */}
       <Dialog open={reviewModalOpen} onOpenChange={setReviewModalOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -647,10 +676,10 @@ function ProfessorReviewComponentInner({
                   <CardHeader>
                     <CardTitle className="text-lg flex items-center gap-2">
                       <CheckCircle className="h-5 w-5 text-blue-600" />
-                      子類型推薦評估
+                      是否同意學生申請
                     </CardTitle>
                     <p className="text-sm text-muted-foreground">
-                      請針對每個獎學金子類型進行評估，並提供您的推薦意見
+                      請針對每個獎學金申請進行評估，並提供您的推薦意見
                     </p>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -665,105 +694,79 @@ function ProfessorReviewComponentInner({
                           key={subType.value}
                           className="border rounded-lg p-4 space-y-4"
                         >
-                          {/* Simple checkbox approach */}
-                          <div className="flex items-start gap-4">
-                            <div className="flex items-center space-x-2 pt-1">
-                              <Checkbox
-                                id={`recommend-${subType.value}`}
-                                checked={isRecommended}
-                                onCheckedChange={checked => {
-                                  console.log(
-                                    "Checkbox changed:",
-                                    subType.value,
-                                    "to:",
-                                    checked
-                                  );
-                                  updateReviewItem(
-                                    subType.value,
-                                    "recommendation",
-                                    checked ? 'approve' : 'reject'
-                                  );
-                                }}
-                              />
-                              <label
-                                htmlFor={`recommend-${subType.value}`}
-                                className="text-sm font-medium cursor-pointer"
-                              >
-                                推薦
-                              </label>
-                            </div>
-                            <div className="flex-1">
-                              <h3 className="font-semibold text-lg mb-1">
-                                {subType.label}
-                              </h3>
-                              {subType.label_en && (
-                                <p className="text-sm text-muted-foreground mb-2">
-                                  {subType.label_en}
-                                </p>
-                              )}
-                              <Badge
-                                variant={
-                                  isRecommended ? "default" : "secondary"
-                                }
-                              >
-                                {isRecommended ? "✓ 推薦" : "未推薦"}
-                              </Badge>
-                            </div>
+                          {/* Sub-type Title */}
+                          <div>
+                            <h3 className="font-semibold text-lg mb-1">
+                              {subType.label}
+                            </h3>
+                            {subType.label_en && (
+                              <p className="text-sm text-muted-foreground mb-2">
+                                {subType.label_en}
+                              </p>
+                            )}
                           </div>
 
-                          {/* Alternative buttons */}
-                          <div className="flex gap-2">
-                            <Button
-                              type="button"
-                              variant={isRecommended ? "default" : "outline"}
-                              size="sm"
-                              onClick={() => {
-                                console.log(
-                                  "Direct recommend button clicked:",
-                                  subType.value
-                                );
-                                updateReviewItem(
-                                  subType.value,
-                                  "recommendation",
-                                  'approve'
-                                );
-                              }}
-                            >
-                              推薦此項目
-                            </Button>
-                            <Button
-                              type="button"
-                              variant={!isRecommended ? "secondary" : "outline"}
-                              size="sm"
-                              onClick={() => {
-                                console.log(
-                                  "Direct not recommend button clicked:",
-                                  subType.value
-                                );
-                                updateReviewItem(
-                                  subType.value,
-                                  "recommendation",
-                                  'reject'
-                                );
-                              }}
-                            >
-                              不推薦
-                            </Button>
+                          {/* Checkbox options */}
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-4">
+                              <div className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`agree-${subType.value}`}
+                                  checked={reviewItem?.recommendation === 'approve'}
+                                  onCheckedChange={checked => {
+                                    updateReviewItem(
+                                      subType.value,
+                                      "recommendation",
+                                      checked ? 'approve' : 'pending'
+                                    );
+                                  }}
+                                />
+                                <label
+                                  htmlFor={`agree-${subType.value}`}
+                                  className="text-sm font-medium cursor-pointer"
+                                >
+                                  同意
+                                </label>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`disagree-${subType.value}`}
+                                  checked={reviewItem?.recommendation === 'reject'}
+                                  onCheckedChange={checked => {
+                                    updateReviewItem(
+                                      subType.value,
+                                      "recommendation",
+                                      checked ? 'reject' : 'pending'
+                                    );
+                                  }}
+                                />
+                                <label
+                                  htmlFor={`disagree-${subType.value}`}
+                                  className="text-sm font-medium cursor-pointer"
+                                >
+                                  不同意
+                                </label>
+                              </div>
+                            </div>
+                            {reviewItem?.recommendation && reviewItem.recommendation !== 'pending' && (
+                              <Badge
+                                variant={reviewItem.recommendation === 'approve' ? 'default' : 'destructive'}
+                                className="w-fit"
+                              >
+                                {reviewItem.recommendation === 'approve' ? '✓ 同意' : '✗ 不同意'}
+                              </Badge>
+                            )}
                           </div>
 
                           {/* Comments Section */}
                           <div>
                             <label className="text-sm font-medium mb-2 block">
-                              評估意見 (可選)
+                              評估意見 {reviewItem?.recommendation === 'reject' && <span className="text-red-500">*</span>} (當選擇「不同意」時為必填)
                             </label>
                             <Textarea
                               placeholder={`請說明您對「${subType.label}」的評估意見...`}
                               value={reviewItem?.comments || ""}
                               onChange={e => {
-                                console.log(
-                                  "Comments updated for:",
-                                  subType.value
-                                );
                                 updateReviewItem(
                                   subType.value,
                                   "comments",
@@ -771,54 +774,21 @@ function ProfessorReviewComponentInner({
                                 );
                               }}
                               rows={3}
+                              className={reviewItem?.recommendation === 'reject' && (!reviewItem?.comments || reviewItem.comments.trim() === '') ? 'border-red-500' : ''}
                             />
+                            {reviewItem?.recommendation === 'reject' && (!reviewItem?.comments || reviewItem.comments.trim() === '') && (
+                              <p className="text-sm text-red-600 mt-1">
+                                當選擇「不同意」時必須填寫評估意見
+                              </p>
+                            )}
                           </div>
                         </div>
                       );
                     })}
 
-                    {/* Debug Info */}
-                    <div className="bg-yellow-50 border border-yellow-200 rounded p-3 text-sm">
-                      <p className="font-medium">Debug Info:</p>
-                      <p>Sub-types count: {subTypes.length}</p>
-                      <p>Review items count: {reviewData.items.length}</p>
-                      <p>
-                        Recommended count:{" "}
-                        {
-                          reviewData.items.filter(item => item.recommendation === 'approve')
-                            .length
-                        }
-                      </p>
-                      <div className="mt-2">
-                        <p>Current review data:</p>
-                        <pre className="text-xs bg-white p-2 rounded mt-1">
-                          {JSON.stringify(reviewData.items, null, 2)}
-                        </pre>
-                      </div>
-                    </div>
                   </CardContent>
                 </Card>
               )}
-
-              {/* Overall Recommendation */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">整體推薦意見</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Textarea
-                    placeholder="請提供對此申請的整體推薦意見..."
-                    value={reviewData.recommendation || ""}
-                    onChange={e =>
-                      setReviewData(prev => ({
-                        ...prev,
-                        recommendation: e.target.value,
-                      }))
-                    }
-                    rows={4}
-                  />
-                </CardContent>
-              </Card>
 
               {/* Actions */}
               <div className="flex justify-end gap-2">
@@ -829,7 +799,18 @@ function ProfessorReviewComponentInner({
                 >
                   取消
                 </Button>
-                <Button onClick={submitReview} disabled={loading}>
+                <Button
+                  onClick={submitReview}
+                  disabled={
+                    loading ||
+                    !reviewData.items.some(
+                      item => item.recommendation === "approve" || item.recommendation === "reject"
+                    ) ||
+                    reviewData.items.some(
+                      item => item.recommendation === "reject" && (!item.comments || item.comments.trim() === "")
+                    )
+                  }
+                >
                   {loading
                     ? "提交中..."
                     : existingReview

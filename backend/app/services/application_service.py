@@ -2,18 +2,10 @@
 Application service for scholarship application management
 """
 
-import enum
 import logging
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
-
-
-def _serialize_enum(value) -> Optional[str]:
-    """Serialize an enum instance to its string value, or pass through strings/None."""
-    if value is None:
-        return None
-    return value.value if isinstance(value, enum.Enum) else value
 
 from sqlalchemy import and_, desc
 from sqlalchemy import func as sa_func
@@ -22,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFoundError, ValidationError
+from app.core.schema_validation import serialize_value
 from app.models.application import Application, ApplicationStatus, ReviewStatus
 from app.models.enums import Semester
 from app.models.review import ApplicationReview
@@ -250,6 +243,8 @@ class ApplicationService:
             created_at=application.created_at,
             updated_at=application.updated_at,
             meta_data=application.meta_data,
+            application_document_url=application.application_document_url,
+            application_document_original_filename=application.application_document_original_filename,
             **student_fields,  # Spread extracted student fields
         )
 
@@ -644,7 +639,7 @@ class ApplicationService:
             scholarship_subtype_list=application.scholarship_subtype_list or [],
             status=application.status,
             status_name=application.status_name,
-            review_stage=_serialize_enum(application.review_stage),
+            review_stage=serialize_value(application.review_stage),
             is_renewal=application.is_renewal,
             academic_year=application.academic_year,
             semester=self._convert_semester_to_string(application.semester),
@@ -660,13 +655,14 @@ class ApplicationService:
             created_at=application.created_at,
             updated_at=application.updated_at,
             meta_data=application.meta_data,
+            application_document_url=application.application_document_url,
+            application_document_original_filename=application.application_document_original_filename,
             requires_professor_recommendation=bool(
                 application.scholarship_configuration
                 and application.scholarship_configuration.requires_professor_recommendation
             ),
             requires_college_review=bool(
-                application.scholarship_configuration
-                and application.scholarship_configuration.requires_college_review
+                application.scholarship_configuration and application.scholarship_configuration.requires_college_review
             ),
         )
 
@@ -800,6 +796,8 @@ class ApplicationService:
                 created_at=application.created_at,
                 updated_at=application.updated_at,
                 meta_data=application.meta_data,
+                application_document_url=application.application_document_url,
+                application_document_original_filename=application.application_document_original_filename,
             )
 
             recent_applications_response.append(app_data)
@@ -821,6 +819,7 @@ class ApplicationService:
             .options(
                 selectinload(Application.files),
                 selectinload(Application.reviews).selectinload(ApplicationReview.reviewer),
+                selectinload(Application.reviews).selectinload(ApplicationReview.items),
                 selectinload(Application.scholarship_configuration).selectinload(
                     ScholarshipConfiguration.scholarship_type
                 ),
@@ -958,7 +957,7 @@ class ApplicationService:
             "sub_type_labels": sub_type_labels,
             "status": application.status,
             "status_name": application.status_name,
-            "review_stage": _serialize_enum(application.review_stage),
+            "review_stage": serialize_value(application.review_stage),
             "is_renewal": application.is_renewal,
             "academic_year": application.academic_year,
             "semester": self._convert_semester_to_string(application.semester),
@@ -974,20 +973,42 @@ class ApplicationService:
             "created_at": application.created_at,
             "updated_at": application.updated_at,
             "meta_data": application.meta_data,
-            "reviews": [
-                {
-                    "id": review.id,
-                    "application_id": review.application_id,
-                    "reviewer_id": review.reviewer_id,
-                    "recommendation": review.recommendation,
-                    "comments": review.comments,
-                    "reviewed_at": review.reviewed_at,
-                    "created_at": review.created_at,
-                    "reviewer_name": review.reviewer.name if review.reviewer else None,
-                    "reviewer_role": review.reviewer.role if review.reviewer else None,
-                }
-                for review in (application.reviews or [])
-            ],
+            "application_document_url": application.application_document_url,
+            "application_document_original_filename": application.application_document_original_filename,
+            "reviews": (
+                []
+                if current_user.role == UserRole.student
+                else [
+                    {
+                        "id": review.id,
+                        "application_id": review.application_id,
+                        "reviewer_id": review.reviewer_id,
+                        "recommendation": review.recommendation,
+                        "comments": review.comments,
+                        "reviewed_at": review.reviewed_at,
+                        "created_at": review.created_at,
+                        "reviewer_name": review.reviewer.name if review.reviewer else None,
+                        "reviewer_role": review.reviewer.role if review.reviewer else None,
+                    }
+                    for review in (application.reviews or [])
+                ]
+            ),
+            "professor_review_items": (
+                []
+                if current_user.role == UserRole.student
+                else [
+                    {
+                        "sub_type_code": item.sub_type_code,
+                        "recommendation": item.recommendation,
+                        "comments": item.comments,
+                    }
+                    for review in (application.reviews or [])
+                    if review.reviewer
+                    and (review.reviewer.role.value if hasattr(review.reviewer.role, "value") else review.reviewer.role)
+                    == "professor"
+                    for item in (review.items or [])
+                ]
+            ),
             # Additional display fields
             "scholarship_type": scholarship_type_name,
             "scholarship_type_zh": scholarship_type_zh,
@@ -1001,8 +1022,7 @@ class ApplicationService:
                 and application.scholarship_configuration.requires_professor_recommendation
             ),
             "requires_college_review": bool(
-                application.scholarship_configuration
-                and application.scholarship_configuration.requires_college_review
+                application.scholarship_configuration and application.scholarship_configuration.requires_college_review
             ),
         }
 
@@ -1181,11 +1201,13 @@ class ApplicationService:
         application.submitted_at = datetime.now(timezone.utc)
         application.updated_at = datetime.now(timezone.utc)
 
+        # Load user profile once (reused for auto-assign professor and email notification)
+        user_profile_stmt = select(UserProfile).where(UserProfile.user_id == application.user_id)
+        user_profile_result = await self.db.execute(user_profile_stmt)
+        advisor_profile = user_profile_result.scalar_one_or_none()
+
         # 自動分配指導教授：根據 UserProfile 的 advisor_nycu_id 查找教授帳號
-        if not application.professor_id:
-            user_profile_stmt = select(UserProfile).where(UserProfile.user_id == application.user_id)
-            user_profile_result = await self.db.execute(user_profile_stmt)
-            advisor_profile = user_profile_result.scalar_one_or_none()
+        if not application.professor_id and advisor_profile:
 
             if advisor_profile and advisor_profile.advisor_nycu_id:
                 professor_stmt = select(User).where(
@@ -1226,15 +1248,9 @@ class ApplicationService:
             # Extract professor information from user profile
             professor_name = ""
             professor_email = ""
-            if application.student:
-                # Access user profile for advisor information
-                user_profile_stmt = select(UserProfile).where(UserProfile.user_id == application.user_id)
-                user_profile_result = await self.db.execute(user_profile_stmt)
-                user_profile = user_profile_result.scalar_one_or_none()
-
-                if user_profile:
-                    professor_name = user_profile.advisor_name or ""
-                    professor_email = user_profile.advisor_email or ""
+            if application.student and advisor_profile:
+                professor_name = advisor_profile.advisor_name or ""
+                professor_email = advisor_profile.advisor_email or ""
 
             # Prepare application data for email automation
             application_data = {
@@ -1350,6 +1366,8 @@ class ApplicationService:
             "created_at": application.created_at,
             "updated_at": application.updated_at,
             "meta_data": application.meta_data,
+            "application_document_url": application.application_document_url,
+            "application_document_original_filename": application.application_document_original_filename,
             # 移除獨立的 files 欄位
             "reviews": [
                 {
@@ -1487,6 +1505,8 @@ class ApplicationService:
                 created_at=application.created_at,
                 updated_at=application.updated_at,
                 meta_data=application.meta_data,
+                application_document_url=application.application_document_url,
+                application_document_original_filename=application.application_document_original_filename,
             )
 
             response_applications.append(app_data)
@@ -1852,6 +1872,8 @@ class ApplicationService:
                 created_at=application.created_at,
                 updated_at=application.updated_at,
                 meta_data=application.meta_data,
+                application_document_url=application.application_document_url,
+                application_document_original_filename=application.application_document_original_filename,
             )
 
             response_applications.append(app_data)
@@ -2234,6 +2256,7 @@ class ApplicationService:
                             ApplicationStatus.submitted.value,
                             ApplicationStatus.under_review.value,
                             ApplicationStatus.approved.value,
+                            ApplicationStatus.partial_approved.value,
                             ApplicationStatus.rejected.value,
                         ]
                     ),
@@ -2255,6 +2278,7 @@ class ApplicationService:
                     Application.status.in_(
                         [
                             ApplicationStatus.approved.value,
+                            ApplicationStatus.partial_approved.value,
                             ApplicationStatus.rejected.value,
                         ]
                     )
@@ -2313,6 +2337,8 @@ class ApplicationService:
                         created_at=app.created_at,
                         updated_at=app.updated_at,
                         meta_data=app.meta_data,
+                        application_document_url=app.application_document_url,
+                        application_document_original_filename=app.application_document_original_filename,
                         # Display fields
                         student_name=app.student_data.get("std_cname", "") if app.student_data else "",
                         student_no=app.student_data.get("std_stdcode", "") if app.student_data else "",
@@ -2374,6 +2400,7 @@ class ApplicationService:
                 ApplicationStatus.submitted.value,
                 ApplicationStatus.under_review.value,
                 ApplicationStatus.approved.value,
+                ApplicationStatus.partial_approved.value,
                 ApplicationStatus.rejected.value,
             ]:
                 return False
@@ -2408,8 +2435,10 @@ class ApplicationService:
             # Check application status - should be submitted or under review
             # Compare with both enum and string value for robustness
             valid_statuses = [
-                ApplicationStatus.submitted, ApplicationStatus.submitted.value,
-                ApplicationStatus.under_review, ApplicationStatus.under_review.value,
+                ApplicationStatus.submitted,
+                ApplicationStatus.submitted.value,
+                ApplicationStatus.under_review,
+                ApplicationStatus.under_review.value,
             ]
             if application.status not in valid_statuses:
                 return False

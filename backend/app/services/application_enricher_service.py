@@ -260,6 +260,9 @@ class ApplicationEnricherService:
                     "review_count": len(app.get("reviews", [])),
                     "files_count": len(app.get("files", [])),
                 },
+                # 教授審核資訊
+                "professor_review_completed": app.get("professor_review_completed", False),
+                "professor_review_items": app.get("professor_review_items", []),
             }
 
             # 添加獎學金期間數據（如果存在）

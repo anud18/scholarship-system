@@ -395,7 +395,7 @@ class ReviewService:
         elif all_rejected:
             application.status = ApplicationStatus.rejected.value
         else:
-            # 部分核准
+            # 部分同意
             application.status = ApplicationStatus.partial_approved.value
 
         # 更新審核階段（基於最新審查者角色）

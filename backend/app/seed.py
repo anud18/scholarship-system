@@ -174,6 +174,26 @@ async def seed_test_users(session: AsyncSession):
             "dept_name": "資訊工程學系",
             "role": UserRole.student,
         },
+        {
+            "nycu_id": "stuchina1",
+            "name": "陸生學士",
+            "email": "stuchina1@nycu.edu.tw",
+            "user_type": UserType.student,
+            "status": EmployeeStatus.student,
+            "dept_code": "CS",
+            "dept_name": "資訊工程學系",
+            "role": UserRole.student,
+        },
+        {
+            "nycu_id": "stuleave1",
+            "name": "休學博士",
+            "email": "stuleave1@nycu.edu.tw",
+            "user_type": UserType.student,
+            "status": EmployeeStatus.student,
+            "dept_code": "CS",
+            "dept_name": "資訊工程學系",
+            "role": UserRole.student,
+        },
         # Computer Science College Users
         {
             "nycu_id": "cs_professor",

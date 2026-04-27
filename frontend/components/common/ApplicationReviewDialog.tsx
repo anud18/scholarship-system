@@ -576,6 +576,7 @@ export function ApplicationReviewDialog({
   }>>([]);
   const [existingReview, setExistingReview] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingSubTypes, setIsLoadingSubTypes] = useState(false);
 
   const {
     studyingStatuses,
@@ -812,6 +813,7 @@ export function ApplicationReviewDialog({
 
   // Load sub-types and existing review for college and admin users
   const loadSubTypesAndReview = async (applicationId: number) => {
+    setIsLoadingSubTypes(true);
     try {
       // Get available sub-types (route based on role)
       const subTypesResponse = (role === "admin" || role === "super_admin")
@@ -882,6 +884,8 @@ export function ApplicationReviewDialog({
       }
     } catch (err) {
       console.error("Error loading sub-types and review:", err);
+    } finally {
+      setIsLoadingSubTypes(false);
     }
   };
 
@@ -905,6 +909,7 @@ export function ApplicationReviewDialog({
       setReviewItems([]);
       setSubTypes([]);
       setExistingReview(null);
+      setIsLoadingSubTypes(false);
     }
   }, [open, application, role]);
 
@@ -1334,6 +1339,7 @@ export function ApplicationReviewDialog({
     department_code: detailedApplication?.department_code ?? (application as Application).department_code,
     degree: (detailedApplication as any)?.degree,
     degree_name: (detailedApplication as any)?.degree ? getDegreeName((detailedApplication as any).degree, degrees) : undefined,
+    professor_review_items: (detailedApplication as any)?.professor_review_items ?? [],
   };
 
   return (
@@ -1583,6 +1589,75 @@ export function ApplicationReviewDialog({
                       </div>
                     </CardContent>
                   </Card>
+
+                  {/* Professor Review Results (college/admin only) */}
+                  {["college", "admin", "super_admin"].includes(role) &&
+                    displayData.professor_review_items?.length > 0 && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-lg">
+                            {locale === "zh" ? "教授審查結果" : "Professor Review"}
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-2">
+                            {displayData.professor_review_items.map(
+                              (item: any, idx: number) => (
+                                <div
+                                  key={`${item.sub_type_code}-${idx}`}
+                                  className={`p-3 rounded border ${
+                                    item.recommendation === "approve"
+                                      ? "border-emerald-200 bg-emerald-50"
+                                      : "border-red-200 bg-red-50"
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <Badge
+                                      variant={
+                                        item.recommendation === "approve"
+                                          ? "outline"
+                                          : "destructive"
+                                      }
+                                      className={
+                                        item.recommendation === "approve"
+                                          ? "border-emerald-500 text-emerald-700 bg-white"
+                                          : ""
+                                      }
+                                    >
+                                      {getSubTypeLabel(item.sub_type_code)}
+                                      :{" "}
+                                      {item.recommendation === "approve"
+                                        ? locale === "zh"
+                                          ? "推薦"
+                                          : "Approve"
+                                        : locale === "zh"
+                                        ? "不推薦"
+                                        : "Reject"}
+                                    </Badge>
+                                  </div>
+                                  {item.comments && (
+                                    <div className="mt-2">
+                                      <Label className="text-xs font-medium">
+                                        {item.recommendation === "reject"
+                                          ? locale === "zh"
+                                            ? "不同意理由"
+                                            : "Reason for Reject"
+                                          : locale === "zh"
+                                          ? "備註"
+                                          : "Comments"}
+                                      </Label>
+                                      <p className="text-sm mt-1 whitespace-pre-wrap">
+                                        {item.comments}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
 
                   {/* Progress Timeline */}
                   <Card>
@@ -1961,12 +2036,22 @@ export function ApplicationReviewDialog({
                           </div>
                         </CardContent>
                       </Card>
-                    ) : (
+                    ) : isLoadingSubTypes ? (
                       <Card>
                         <CardContent className="py-12 text-center">
                           <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-muted-foreground" />
                           <p className="text-muted-foreground">
                             {locale === "zh" ? "載入審核表單中..." : "Loading review form..."}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      <Card>
+                        <CardContent className="py-12 text-center">
+                          <p className="text-muted-foreground">
+                            {locale === "zh"
+                              ? "此申請無可審核的子類型"
+                              : "No reviewable sub-types for this application"}
                           </p>
                         </CardContent>
                       </Card>

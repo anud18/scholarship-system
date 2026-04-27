@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Card,
   CardContent,
@@ -54,6 +54,7 @@ import api, {
   ApplicationCreate,
   Application,
 } from "@/lib/api";
+import { isSelectableScholarship } from "@/lib/scholarship-eligibility";
 import { clsx } from "@/lib/utils";
 import { useApplications } from "@/hooks/use-applications";
 import { useStudentProfile } from "@/hooks/use-student-profile";
@@ -125,6 +126,20 @@ export function ScholarshipApplicationStep({
     filename: string;
     type: string;
   } | null>(null);
+  const [applicationDocumentFiles, setApplicationDocumentFiles] = useState<
+    File[]
+  >([]);
+  const [existingApplicationDocument, setExistingApplicationDocument] =
+    useState<string | null>(null);
+  const [existingApplicationDocumentName, setExistingApplicationDocumentName] =
+    useState<string>("");
+  const savedApplicationIdRef = useRef<number | null>(null);
+  const [showAppDocPreview, setShowAppDocPreview] = useState(false);
+  const [appDocPreviewFile, setAppDocPreviewFile] = useState<{
+    url: string;
+    filename: string;
+    type: string;
+  } | null>(null);
 
   // Submit preview dialog
   const [showSubmitPreview, setShowSubmitPreview] = useState(false);
@@ -158,12 +173,15 @@ export function ScholarshipApplicationStep({
       advisorId: "指導教授本校人事編號",
       advisorIdPlaceholder: "請輸入指導教授本校人事編號",
       bankInfo: "郵局帳號資訊",
-      accountNumber: "郵局局號加帳號共 14 碼",
+      accountNumber: "郵局局號加帳號共 14 碼(限本人)",
       accountNumberPlaceholder: "請輸入 14 碼郵局帳號",
       bankDocument: "存摺封面照片",
       documentUploaded: "已上傳文件",
       preview: "預覽",
       deleteBankDoc: "刪除",
+      applicationDocument: "申請文件",
+      applicationDocumentUploaded: "申請文件已上傳",
+      deleteAppDoc: "刪除",
       fileFormats: "支援格式：JPG, JPEG, PNG, PDF",
       fileSizeLimit: "檔案大小限制：10MB",
       savePersonalInfo: "儲存個人資料",
@@ -171,7 +189,6 @@ export function ScholarshipApplicationStep({
       personalInfoSaveFailed: "儲存個人資料失敗",
       selectScholarship: "選擇獎學金",
       selectScholarshipPlaceholder: "請選擇要申請的獎學金",
-      noEligibleScholarships: "目前沒有符合資格的獎學金",
       selectPrograms: "選擇申請項目",
       programsRequired: "請至少選擇一個申請項目",
       formProgress: "表單完成度",
@@ -217,6 +234,9 @@ export function ScholarshipApplicationStep({
       documentUploaded: "Document Uploaded",
       preview: "Preview",
       deleteBankDoc: "Delete",
+      applicationDocument: "Application Document",
+      applicationDocumentUploaded: "Application document uploaded",
+      deleteAppDoc: "Delete",
       fileFormats: "Supported formats: JPG, JPEG, PNG, PDF",
       fileSizeLimit: "File size limit: 10MB",
       savePersonalInfo: "Save Personal Info",
@@ -224,7 +244,6 @@ export function ScholarshipApplicationStep({
       personalInfoSaveFailed: "Failed to save personal info",
       selectScholarship: "Select Scholarship",
       selectScholarshipPlaceholder: "Please select a scholarship to apply",
-      noEligibleScholarships: "No eligible scholarships available",
       selectPrograms: "Select Programs",
       programsRequired: "Please select at least one program",
       formProgress: "Form Completion",
@@ -365,6 +384,29 @@ export function ScholarshipApplicationStep({
     setShowBankDocPreview(true);
   };
 
+  const handlePreviewAppDocument = () => {
+    const appId = editingApplication?.id ?? savedApplicationIdRef.current;
+    if (!existingApplicationDocument || !appId) return;
+    const filename =
+      existingApplicationDocumentName ||
+      existingApplicationDocument.split("/").pop()?.split("?")[0] ||
+      "application_document";
+    const token = localStorage.getItem("auth_token") || "";
+    const cacheBuster = encodeURIComponent(filename);
+    const previewUrl = `/api/v1/application-document-proxy?id=${appId}&token=${encodeURIComponent(token)}&v=${cacheBuster}`;
+    let fileTypeDisplay = "other";
+    if (filename.toLowerCase().endsWith(".pdf"))
+      fileTypeDisplay = "application/pdf";
+    else if (
+      [".jpg", ".jpeg", ".png"].some(ext =>
+        filename.toLowerCase().endsWith(ext)
+      )
+    )
+      fileTypeDisplay = "image";
+    setAppDocPreviewFile({ url: previewUrl, filename, type: fileTypeDisplay });
+    setShowAppDocPreview(true);
+  };
+
   const handleDeleteBankDocument = async () => {
     try {
       const response = await api.userProfiles.deleteBankDocument();
@@ -372,6 +414,23 @@ export function ScholarshipApplicationStep({
         toast.success(locale === "zh" ? "文件已刪除" : "Document deleted");
         setExistingBankDocument(null);
         await refreshProfile();
+      } else {
+        throw new Error(response.message || "Delete failed");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "刪除失敗");
+    }
+  };
+
+  const handleDeleteAppDocument = async () => {
+    const appId = editingApplication?.id ?? savedApplicationIdRef.current;
+    if (!appId) return;
+    try {
+      const response = await api.applications.deleteApplicationDocument(appId);
+      if (response.success) {
+        toast.success(locale === "zh" ? "申請文件已刪除" : "Document deleted");
+        setExistingApplicationDocument(null);
+        setExistingApplicationDocumentName("");
       } else {
         throw new Error(response.message || "Delete failed");
       }
@@ -468,6 +527,16 @@ export function ScholarshipApplicationStep({
         setDynamicFileData(existingFileData);
       }
 
+      // Load application document
+      if ((editingApplication as any).application_document_url) {
+        setExistingApplicationDocument(
+          (editingApplication as any).application_document_url
+        );
+        setExistingApplicationDocumentName(
+          (editingApplication as any).application_document_original_filename || ""
+        );
+      }
+
       // Set agreed to terms
       if (editingApplication.agree_terms) {
         setAgreedToTerms(true);
@@ -481,19 +550,7 @@ export function ScholarshipApplicationStep({
     try {
       const response = await api.scholarships.getEligible();
       if (response.success && response.data) {
-        // Filter to only show eligible scholarships (no common errors)
-        const eligible = response.data.filter(
-          (scholarship: ScholarshipType) => {
-            const hasCommonErrors =
-              scholarship.errors?.some(rule => !rule.sub_type) || false;
-            return (
-              Array.isArray(scholarship.eligible_sub_types) &&
-              scholarship.eligible_sub_types.length > 0 &&
-              !hasCommonErrors
-            );
-          }
-        );
-        setEligibleScholarships(eligible);
+        setEligibleScholarships(response.data.filter(isSelectableScholarship));
       } else {
         setError(response.message || text.loadError);
       }
@@ -728,16 +785,56 @@ export function ScholarshipApplicationStep({
           }
         }
 
+        // Upload application document if provided
+        if (applicationDocumentFiles.length > 0) {
+          const uploadedFile = applicationDocumentFiles[0];
+          const appDocResp = await api.applications.uploadApplicationDocument(
+            editingApplication.id,
+            uploadedFile
+          );
+          if (appDocResp.success) {
+            setExistingApplicationDocument(
+              appDocResp.data?.application_document_url || null
+            );
+            setExistingApplicationDocumentName(
+              (appDocResp.data as any)?.application_document_original_filename ||
+                uploadedFile.name
+            );
+            setApplicationDocumentFiles([]);
+          }
+        }
+
         toast.success(text.draftSaved);
       } else {
         // Create new draft
         const application = await createApplication(applicationData, true);
 
         if (application && application.id) {
+          savedApplicationIdRef.current = application.id;
+
           // Upload files
           for (const [docType, files] of Object.entries(dynamicFileData)) {
             for (const file of files) {
               await uploadDocument(application.id, file, docType);
+            }
+          }
+
+          // Upload application document if provided
+          if (applicationDocumentFiles.length > 0) {
+            const uploadedFile = applicationDocumentFiles[0];
+            const appDocResp = await api.applications.uploadApplicationDocument(
+              application.id,
+              uploadedFile
+            );
+            if (appDocResp.success) {
+              setExistingApplicationDocument(
+                appDocResp.data?.application_document_url || null
+              );
+              setExistingApplicationDocumentName(
+                (appDocResp.data as any)?.application_document_original_filename ||
+                  uploadedFile.name
+              );
+              setApplicationDocumentFiles([]);
             }
           }
 
@@ -808,6 +905,15 @@ export function ScholarshipApplicationStep({
             }
           }
         }
+
+        // Upload application document if provided
+        if (applicationDocumentFiles.length > 0) {
+          await api.applications.uploadApplicationDocument(
+            editingApplication.id,
+            applicationDocumentFiles[0]
+          );
+          setApplicationDocumentFiles([]);
+        }
       } else {
         // Create new application
         const application = await createApplication(applicationData, true);
@@ -816,12 +922,22 @@ export function ScholarshipApplicationStep({
           throw new Error("Failed to create application");
         }
         applicationId = application.id;
+        savedApplicationIdRef.current = application.id;
 
         // Upload files
         for (const [docType, files] of Object.entries(dynamicFileData)) {
           for (const file of files) {
             await uploadDocument(applicationId, file, docType);
           }
+        }
+
+        // Upload application document if provided
+        if (applicationDocumentFiles.length > 0) {
+          await api.applications.uploadApplicationDocument(
+            applicationId,
+            applicationDocumentFiles[0]
+          );
+          setApplicationDocumentFiles([]);
         }
       }
 
@@ -878,12 +994,14 @@ export function ScholarshipApplicationStep({
               <User className="h-6 w-6 text-violet-600" />
             </div>
             <div>
-              <CardTitle className="text-2xl">
-                {text.personalInfoTitle}
-              </CardTitle>
-              <CardDescription>
+              <CardTitle className="text-xl font-bold">
                 {locale === "zh"
-                  ? "請填寫指導教授資訊與郵局帳號資料"
+                  ? "指導教授資訊與本人郵局帳號資料"
+                  : "Advisor & Bank Account Information"}
+              </CardTitle>
+              <CardDescription className="mt-1">
+                {locale === "zh"
+                  ? "請填寫指導教授資訊與學生本人郵局帳號資料"
                   : "Please provide advisor information and bank account details"}
               </CardDescription>
             </div>
@@ -1111,19 +1229,13 @@ export function ScholarshipApplicationStep({
                 <SelectValue placeholder={text.selectScholarshipPlaceholder} />
               </SelectTrigger>
               <SelectContent>
-                {eligibleScholarships.length === 0 ? (
-                  <SelectItem value="no-eligible" disabled>
-                    {text.noEligibleScholarships}
+                {eligibleScholarships.map(scholarship => (
+                  <SelectItem key={scholarship.id} value={scholarship.code}>
+                    {locale === "zh"
+                      ? scholarship.name
+                      : scholarship.name_en || scholarship.name}
                   </SelectItem>
-                ) : (
-                  eligibleScholarships.map(scholarship => (
-                    <SelectItem key={scholarship.id} value={scholarship.code}>
-                      {locale === "zh"
-                        ? scholarship.name
-                        : scholarship.name_en || scholarship.name}
-                    </SelectItem>
-                  ))
-                )}
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -1349,6 +1461,55 @@ export function ScholarshipApplicationStep({
             </div>
           )}
 
+          {/* Application Document Upload */}
+          {selectedScholarship && (
+            <div className="pt-4 border-t">
+              <h4 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                <FileText className="h-5 w-5 text-nycu-blue-600" />
+                {text.applicationDocument}
+              </h4>
+
+              {existingApplicationDocument ? (
+                <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                  <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+                  <span className="text-sm text-green-800 flex-1">
+                    {text.applicationDocumentUploaded}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handlePreviewAppDocument}
+                    className="text-nycu-blue-600"
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    {text.preview}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleDeleteAppDocument}
+                    className="text-red-600"
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    {text.deleteAppDoc}
+                  </Button>
+                </div>
+              ) : (
+                <FileUpload
+                  onFilesChange={setApplicationDocumentFiles}
+                  acceptedTypes={[".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx"]}
+                  maxSize={10 * 1024 * 1024}
+                  maxFiles={1}
+                  initialFiles={applicationDocumentFiles}
+                  fileType="application_document"
+                  locale={locale}
+                />
+              )}
+              <p className="text-xs text-gray-500 mt-2">{text.fileFormats}</p>
+              <p className="text-xs text-gray-500">{text.fileSizeLimit}</p>
+            </div>
+          )}
+
           {/* Action buttons */}
           <div className="flex justify-between pt-4">
             <Button variant="outline" onClick={onBack} size="lg">
@@ -1417,6 +1578,14 @@ export function ScholarshipApplicationStep({
         isOpen={showBankDocPreview}
         onClose={() => setShowBankDocPreview(false)}
         file={bankDocPreviewFile}
+        locale={locale}
+      />
+
+      {/* Application Document Preview Dialog */}
+      <FilePreviewDialog
+        isOpen={showAppDocPreview}
+        onClose={() => setShowAppDocPreview(false)}
+        file={appDocPreviewFile}
         locale={locale}
       />
 
@@ -1539,6 +1708,100 @@ export function ScholarshipApplicationStep({
                       : "Post Office Account"}
                   </span>
                   <p className="font-medium">{accountNumber || "-"}</p>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Uploaded Documents */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-500 mb-2">
+                {locale === "zh" ? "上傳文件" : "Uploaded Documents"}
+              </h3>
+              <div className="space-y-2 text-sm bg-gray-50 rounded-lg p-4">
+                {/* Passbook */}
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">
+                    {locale === "zh" ? "存摺封面" : "Passbook Cover"}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {existingBankDocument ? (
+                      <>
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span className="text-green-700 font-medium">
+                          {locale === "zh" ? "已上傳" : "Uploaded"}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handlePreviewBankDocument}
+                          className="h-6 px-2 text-nycu-blue-600"
+                        >
+                          <Eye className="h-3 w-3 mr-1" />
+                          {locale === "zh" ? "預覽" : "Preview"}
+                        </Button>
+                      </>
+                    ) : bankDocumentFiles.length > 0 ? (
+                      <>
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span className="text-green-700 font-medium">
+                          {locale === "zh"
+                            ? `待上傳：${bankDocumentFiles[0].name}`
+                            : `Pending: ${bankDocumentFiles[0].name}`}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-4 w-4 text-amber-500" />
+                        <span className="text-amber-700">
+                          {locale === "zh" ? "未上傳" : "Not uploaded"}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Application Document */}
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">
+                    {locale === "zh" ? "申請文件" : "Application Document"}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {existingApplicationDocument ? (
+                      <>
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span className="text-green-700 font-medium">
+                          {locale === "zh" ? "已上傳" : "Uploaded"}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handlePreviewAppDocument}
+                          className="h-6 px-2 text-nycu-blue-600"
+                        >
+                          <Eye className="h-3 w-3 mr-1" />
+                          {locale === "zh" ? "預覽" : "Preview"}
+                        </Button>
+                      </>
+                    ) : applicationDocumentFiles.length > 0 ? (
+                      <>
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span className="text-green-700 font-medium">
+                          {locale === "zh"
+                            ? `待上傳：${applicationDocumentFiles[0].name}`
+                            : `Pending: ${applicationDocumentFiles[0].name}`}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-4 w-4 text-amber-500" />
+                        <span className="text-amber-700">
+                          {locale === "zh" ? "未上傳" : "Not uploaded"}
+                        </span>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

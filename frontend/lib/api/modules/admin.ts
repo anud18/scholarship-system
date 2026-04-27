@@ -973,5 +973,20 @@ export function createAdminApi() {
       });
       return toApiResponse<any>(response);
     },
+
+    /**
+     * Hard-delete an application (admin only).
+     * Cascades removal of related review/roster rows; audit log is preserved.
+     */
+    deleteApplication: async (
+      id: number,
+      reason: string
+    ): Promise<ApiResponse<{ id: number; app_id: string; reason: string }>> => {
+      const response = await typedClient.raw.DELETE('/api/v1/admin/applications/{id}', {
+        params: { path: { id } },
+        body: { reason },
+      });
+      return toApiResponse(response) as ApiResponse<{ id: number; app_id: string; reason: string }>;
+    },
   };
 }

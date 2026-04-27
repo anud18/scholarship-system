@@ -249,9 +249,9 @@ export const translations = {
       第一學年: "第一學年",
     },
     rule_types: {
-      nstc: "國科會",
-      moe_1w: "教育部(1萬)",
-      moe_2w: "教育部(2萬)",
+      nstc: "國科會博士生獎學金",
+      moe_1w: "教育部博士生獎學金 (指導教授配合款一萬)",
+      moe_2w: "教育部博士生獎學金 (指導教授配合款兩萬)",
     },
     scholarship_sections: {
       eligible_programs: "可申請項目",
@@ -589,9 +589,9 @@ export const translations = {
       第一學年: "First Academic Year",
     },
     rule_types: {
-      nstc: "NSTC",
-      moe_1w: "MOE (10K)",
-      moe_2w: "MOE (20K)",
+      nstc: "NSTC PhD Scholarship",
+      moe_1w: "MOE PhD Scholarship (Advisor Matching Fund - 10K)",
+      moe_2w: "MOE PhD Scholarship (Advisor Matching Fund - 20K)",
     },
     scholarship_sections: {
       eligible_programs: "Eligible Programs",

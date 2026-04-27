@@ -64,6 +64,8 @@ export function StudentDataReviewStep({
       enrollmentStatus: "在學狀態",
       enrollmentYear: "入學年度學期",
       semesterCount: "學期數",
+      nationality: "國籍",
+      identity: "身分",
       dataNotice: "資料說明",
       dataNoticeContent:
         "以上資料來自學校資料庫，若發現資料有誤，請聯繫教務處註冊組更新。",
@@ -93,6 +95,8 @@ export function StudentDataReviewStep({
       enrollmentStatus: "Enrollment Status",
       enrollmentYear: "Enrollment Year & Semester",
       semesterCount: "Semester Count",
+      nationality: "Nationality",
+      identity: "Identity",
       dataNotice: "Data Notice",
       dataNoticeContent:
         "The above information is from the university database. If you find any errors, please contact the Office of the Registrar.",
@@ -126,6 +130,25 @@ export function StudentDataReviewStep({
     "9": "保留學籍",
     "10": "放棄入學",
     "11": "畢業",
+  };
+
+  const identityMap: Record<string, string> = {
+    "1": "一般生",
+    "2": "原住民",
+    "3": "僑生(目前有中華民國國籍生)",
+    "4": "外籍生(目前有中華民國國籍生)",
+    "5": "外交子女",
+    "6": "身心障礙生",
+    "7": "運動成績優良甄試學生",
+    "8": "離島",
+    "9": "退伍軍人",
+    "10": "一般公費生",
+    "11": "原住民公費生",
+    "12": "離島公費生",
+    "13": "退伍軍人公費生",
+    "14": "願景計畫生",
+    "17": "陸生",
+    "30": "其他",
   };
 
   const handleConfirm = () => {
@@ -345,6 +368,30 @@ export function StudentDataReviewStep({
                         </label>
                         <div className="text-base text-gray-700">
                           {studentInfo.std_termcount || "-"}
+                        </div>
+                      </div>
+
+                      {/* Nationality */}
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-600">
+                          {text.nationality}
+                        </label>
+                        <div className="text-base text-gray-700">
+                          {studentInfo.std_nation || "-"}
+                        </div>
+                      </div>
+
+                      {/* Identity */}
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-600">
+                          {text.identity}
+                        </label>
+                        <div className="text-base text-gray-700">
+                          {studentInfo.std_identity
+                            ? identityMap[
+                                String(studentInfo.std_identity)
+                              ] || studentInfo.std_identity
+                            : "-"}
                         </div>
                       </div>
                     </div>
