@@ -185,10 +185,10 @@ async def get_all_scholarships(
 
 
 # 學生查看自己可以申請的獎學金
-@router.get("/eligible", response_model=ApiResponse[list[EligibleScholarshipResponse]])
+@router.get("/eligible")
 async def get_scholarship_eligibility(
     db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
-):
+) -> ApiResponse[list[EligibleScholarshipResponse]]:
     """Get scholarships that the current student is eligible for"""
     from app.services.application_service import get_student_data_from_user
     from app.services.scholarship_service import ScholarshipService
