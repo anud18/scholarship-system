@@ -74,6 +74,7 @@ import { apiClient } from "@/lib/api";
 import * as XLSX from "xlsx";
 import { ApplicationReviewDialog } from "@/components/common/ApplicationReviewDialog";
 import { Application as ApplicationType, User } from "@/lib/api";
+import { ApplicationStatus, getApplicationStatusLabel } from "@/lib/enums";
 
 interface Application {
   id: number;
@@ -206,7 +207,7 @@ function SortableItem({
           className="bg-blue-100 text-blue-700 border-blue-300"
         >
           <Circle className="w-3 h-3 mr-1 fill-blue-700" />
-          {locale === "zh" ? "部分同意" : "Partial Approval"}
+          {getApplicationStatusLabel(ApplicationStatus.PARTIAL_APPROVED, locale)}
         </Badge>
       );
     }

@@ -830,7 +830,10 @@ export function ApplicationReviewPanel({
                   {locale === "zh" ? "已核准" : "Approved"}
                 </SelectItem>
                 <SelectItem value="partial_approved">
-                  {locale === "zh" ? "部分同意" : "Partial Approval"}
+                  {getApplicationStatusLabel(
+                    ApplicationStatus.PARTIAL_APPROVED,
+                    locale
+                  )}
                 </SelectItem>
                 <SelectItem value="rejected">
                   {locale === "zh" ? "已駁回" : "Rejected"}

@@ -2400,6 +2400,7 @@ class ApplicationService:
                 ApplicationStatus.submitted.value,
                 ApplicationStatus.under_review.value,
                 ApplicationStatus.approved.value,
+                ApplicationStatus.partial_approved.value,
                 ApplicationStatus.rejected.value,
             ]:
                 return False

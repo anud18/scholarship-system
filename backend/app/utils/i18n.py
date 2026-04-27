@@ -119,7 +119,7 @@ class ScholarshipI18n:
                 "recommended": "Recommended",
                 "professor_review": "Professor Review",
                 "approved": "Approved",
-                "partial_approved": "Partial Approval",
+                "partial_approved": "Partially Approved",
                 "rejected": "Rejected",
                 "withdrawn": "Withdrawn",
                 "returned": "Returned",
