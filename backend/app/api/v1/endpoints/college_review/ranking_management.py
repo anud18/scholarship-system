@@ -925,6 +925,16 @@ async def import_ranking_from_excel(
         if not ranking:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
 
+        # Check permissions - only creator or admin can import
+        if ranking.created_by != current_user.id and current_user.role not in [
+            UserRole.admin,
+            UserRole.super_admin,
+        ]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the ranking creator or admin can import to this ranking",
+            )
+
         if ranking.is_finalized:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot modify finalized ranking")
 

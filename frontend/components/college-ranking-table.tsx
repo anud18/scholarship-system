@@ -495,6 +495,13 @@ export function CollegeRankingTable({
       return;
     }
 
+    // Validate file size (10 MB cap to prevent excessive memory usage)
+    const MAX_FILE_SIZE = 10 * 1024 * 1024;
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error("檔案大小不能超過 10 MB");
+      return;
+    }
+
     setIsImporting(true);
 
     try {
