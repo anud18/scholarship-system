@@ -442,6 +442,7 @@ async def get_ranking(
                     "display_rank": len(items) + 1,  # Dynamic display rank (skips deleted applications)
                     "is_allocated": item.is_allocated,
                     "status": item.status,
+                    "college_rejected": item.college_rejected,
                     "student_name": student_name,
                     "student_id": student_id,
                     # Lightweight DTO with minimal student exposure
@@ -996,21 +997,24 @@ async def import_ranking_from_excel(
 
         import_map = {item.student_id: item for item in import_data}
 
-        # Track rejected index for assigning positions after ranked students
+        # Track rejected index for assigning positions after ranked students.
+        # college_rejected=True is the college-level "N" marker. status stays
+        # 'ranked' so admin retains ability to allocate.
         rejected_index = 0
         for sid, rank_item in student_id_to_item.items():
             if sid not in import_map:
                 continue
             import_item = import_map[sid]
             if import_item.rank_position == "N":
-                # rank_position is NOT NULL — assign after last ranked position
                 rejected_index += 1
                 rank_item.rank_position = num_ranked + rejected_index
-                rank_item.status = "rejected"
+                rank_item.status = "ranked"
+                rank_item.college_rejected = True
                 rejected_count += 1
             else:
                 rank_item.rank_position = import_item.rank_position
                 rank_item.status = "ranked"
+                rank_item.college_rejected = False
             updated_count += 1
 
         ranking.total_applications = len(ranking.items)

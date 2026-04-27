@@ -1064,7 +1064,11 @@ export function ManualDistributionPanel({
                                 className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
                               >
                                 <td className="px-1.5 py-1.5 border-r border-slate-100 text-center font-bold text-slate-700 text-[11px]">
-                                  {student.rank_position}
+                                  {student.college_rejected ? (
+                                    <span className="text-red-600">N</span>
+                                  ) : (
+                                    student.rank_position
+                                  )}
                                 </td>
                                 <td className="px-1.5 py-1.5 border-r border-slate-100 leading-snug text-[10px]">
                                   {student.applied_sub_types.length > 0 ? (
@@ -1388,7 +1392,11 @@ export function ManualDistributionPanel({
                                 className="border-b border-slate-50 hover:bg-slate-50"
                               >
                                 <td className="px-4 py-1.5 text-slate-400">
-                                  {student.rank_position}
+                                  {student.college_rejected ? (
+                                    <span className="text-red-600">N</span>
+                                  ) : (
+                                    student.rank_position
+                                  )}
                                 </td>
                                 <td className="px-4 py-1.5 font-mono text-xs">
                                   {student.student_id}

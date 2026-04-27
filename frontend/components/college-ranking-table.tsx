@@ -99,6 +99,7 @@ interface Application {
   }>; // Eligible sub-scholarship types with review status
   rank_position: number;
   is_allocated: boolean;
+  college_rejected?: boolean;
   is_renewal?: boolean;
   renewal_year?: number | null;
   status: string;
@@ -170,7 +171,17 @@ function SortableItem({
     transition,
   };
 
-  const getRankBadge = (position: number) => {
+  const getRankBadge = (position: number, collegeRejected?: boolean) => {
+    if (collegeRejected) {
+      return (
+        <Badge
+          variant="outline"
+          className="bg-red-100 text-red-800 border-red-300"
+        >
+          <XCircle className="w-3 h-3 mr-1" />N
+        </Badge>
+      );
+    }
     if (position <= 3) {
       const colors = {
         1: "bg-yellow-100 text-yellow-800 border-yellow-300",
@@ -282,7 +293,7 @@ function SortableItem({
               <GripVertical className="h-4 w-4 text-gray-400" />
             </div>
           )}
-          {getRankBadge(application.rank_position)}
+          {getRankBadge(application.rank_position, application.college_rejected)}
         </div>
       </TableCell>
 
