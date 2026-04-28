@@ -961,7 +961,7 @@ export function ManualDistributionPanel({
                     </th>
                     <th
                       rowSpan={2}
-                      className="px-1.5 py-1.5 border border-slate-200 text-center font-semibold text-[11px] w-12"
+                      className="px-1.5 py-1.5 border border-slate-200 text-center font-semibold text-[11px] w-16 whitespace-nowrap"
                     >
                       在學學期數
                     </th>
