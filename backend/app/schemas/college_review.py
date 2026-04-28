@@ -9,9 +9,9 @@ This module contains all request/response schemas for college review operations 
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class CollegeReviewCreate(BaseModel):
@@ -139,4 +139,27 @@ class RankingImportItem(BaseModel):
 
     student_id: str = Field(..., description="Student ID (學號)")
     student_name: str = Field(..., description="Student name (姓名)")
-    rank_position: int = Field(..., ge=1, description="Ranking position (排名)")
+    rank_position: Union[int, Literal["N"]] = Field(..., description="Ranking position (排名): positive integer or 'N' for rejected")
+
+    @field_validator("rank_position", mode="before")
+    @classmethod
+    def validate_rank(cls, v):
+        # Reject booleans (bool is subclass of int in Python)
+        if isinstance(v, bool):
+            raise ValueError(f"排名格式無效：'{v}'，只接受正整數或 'N'")
+        if isinstance(v, str):
+            if v.strip().upper() == "N":
+                return "N"
+            try:
+                v = int(v)
+            except ValueError:
+                raise ValueError(f"排名格式無效：'{v}'，只接受正整數或 'N'")
+        if isinstance(v, float):
+            if not v.is_integer():
+                raise ValueError(f"排名必須為整數，收到：{v}")
+            v = int(v)
+        if isinstance(v, int):
+            if v < 1:
+                raise ValueError(f"排名必須為正整數，收到：{v}")
+            return v
+        raise ValueError(f"排名格式無效：'{v}'")

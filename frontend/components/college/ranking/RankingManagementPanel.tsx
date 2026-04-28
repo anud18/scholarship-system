@@ -102,6 +102,7 @@ export function RankingManagementPanel({
               academy_name: item.application?.academy_name,
               academy_code: item.application?.academy_code,
               department_name: item.application?.department_name,
+              department_code: item.application?.department_code,
               scholarship_type: item.application?.scholarship_type,
               sub_type: item.sub_type,
               eligible_subtypes: item.application?.eligible_subtypes || [],
@@ -110,6 +111,7 @@ export function RankingManagementPanel({
               is_renewal: item.application?.is_renewal || false,
               renewal_year: item.application?.renewal_year || null,
               status: item.application?.status || "pending",
+              college_rejected: Boolean(item.college_rejected),
               review_status: item.application?.review_status,
             })
           );

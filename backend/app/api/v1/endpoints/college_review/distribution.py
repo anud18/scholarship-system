@@ -274,9 +274,12 @@ async def get_distribution_details(
                 "renewal_year": app.renewal_year,
             }
 
-            # 優先處理被駁回的學生
-            if item.status == "rejected":
-                rejection_reason = item.allocation_reason or "申請已被駁回"
+            # 優先處理被駁回的學生（管理員駁回 status='rejected'，或學院 N college_rejected=True）
+            if item.status == "rejected" or getattr(item, "college_rejected", False):
+                if item.status == "rejected":
+                    rejection_reason = item.allocation_reason or "申請已被駁回"
+                else:
+                    rejection_reason = "學院標記不予分配 (N)"
                 rejected_students.append(
                     {
                         "rank_position": item.rank_position,

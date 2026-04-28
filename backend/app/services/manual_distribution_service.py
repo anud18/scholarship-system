@@ -110,6 +110,16 @@ def _compute_suggestions(
     results: list[dict] = []
 
     for item in sorted_items:
+        # College-rejected students default to no allocation. Admin can still
+        # override manually if needed.
+        if getattr(item, "college_rejected", False):
+            results.append({
+                "ranking_item_id": item.id,
+                "sub_type_code": None,
+                "allocation_year": None,
+            })
+            continue
+
         app = item.application
         college = (app.student_data or {}).get("std_academyno", "")
 
@@ -335,6 +345,7 @@ class ManualDistributionService:
                 "allocated_sub_type": item.allocated_sub_type,
                 "allocation_year": item.allocation_year,
                 "status": item.status,
+                "college_rejected": item.college_rejected,
                 "college_code": student_college,
                 "college_name": student_data.get("trm_academyname", ""),
                 "department_name": student_data.get("trm_depname", ""),

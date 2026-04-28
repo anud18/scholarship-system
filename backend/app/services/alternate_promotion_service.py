@@ -177,7 +177,8 @@ class AlternatePromotionService:
                         CollegeRankingItem.ranking_id == ranking_id,
                         CollegeRankingItem.backup_allocations.isnot(None),
                         CollegeRankingItem.is_allocated.is_(False),  # Not already allocated
-                        CollegeRankingItem.status != "rejected",  # Not rejected
+                        CollegeRankingItem.status != "rejected",  # Not admin-rejected
+                        CollegeRankingItem.college_rejected.is_(False),  # Not college-N-rejected
                     )
                 )
                 .all()

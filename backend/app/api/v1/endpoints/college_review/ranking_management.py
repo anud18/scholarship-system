@@ -442,6 +442,7 @@ async def get_ranking(
                     "display_rank": len(items) + 1,  # Dynamic display rank (skips deleted applications)
                     "is_allocated": item.is_allocated,
                     "status": item.status,
+                    "college_rejected": item.college_rejected,
                     "student_name": student_name,
                     "student_id": student_id,
                     # Lightweight DTO with minimal student exposure
@@ -903,16 +904,16 @@ async def import_ranking_from_excel(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Import ranking data from Excel
+    Import ranking data from Excel.
 
-    Expected Excel columns: 學號, 姓名, 排名
-    This endpoint updates the rank_position of existing ranking items based on student IDs
+    Expected columns: 學號, 姓名, 排名
+    rank_position accepts positive integers (1-based, consecutive, no duplicates) or "N" (rejected).
+    Student IDs must exactly match the ranking's application set.
     """
-
     try:
         logger.info(f"User {current_user.id} importing {len(import_data)} rankings for ranking_id={ranking_id}")
 
-        # Get ranking
+        # Load ranking with items
         stmt = (
             select(CollegeRanking)
             .options(selectinload(CollegeRanking.items).selectinload(CollegeRankingItem.application))
@@ -924,46 +925,119 @@ async def import_ranking_from_excel(
         if not ranking:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
 
-        # Check if ranking can be modified
+        # Check permissions - only creator or admin can import
+        if ranking.created_by != current_user.id and current_user.role not in [
+            UserRole.admin,
+            UserRole.super_admin,
+        ]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the ranking creator or admin can import to this ranking",
+            )
+
         if ranking.is_finalized:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot modify finalized ranking")
 
-        # Build a map of student_id -> import_item
-        import_map = {item.student_id: item for item in import_data}
+        # --- Validation ---
+        errors = []
 
-        # Update ranking items
-        updated_count = 0
-        not_found = []
+        # 1. Check for duplicate student IDs in import data
+        seen_student_ids: set = set()
+        duplicate_student_ids: list = []
+        for item in import_data:
+            if item.student_id in seen_student_ids:
+                duplicate_student_ids.append(item.student_id)
+            seen_student_ids.add(item.student_id)
+        if duplicate_student_ids:
+            errors.append(f"匯入資料中學號重複：{', '.join(sorted(set(duplicate_student_ids)))}")
 
+        # 2. Collect ranking system student IDs
+        system_student_ids = set()
+        student_id_to_item = {}
         for rank_item in ranking.items:
             app = rank_item.application
             if not app or not app.student_data:
                 continue
+            sid = app.student_data.get("std_stdcode") or app.student_data.get("student_id")
+            if sid:
+                system_student_ids.add(sid)
+                student_id_to_item[sid] = rank_item
 
-            student_id = app.student_data.get("std_stdcode") or app.student_data.get("student_id")
-            if not student_id:
+        # 3. Strict student matching
+        import_student_ids = seen_student_ids
+        extra_ids = import_student_ids - system_student_ids
+        missing_ids = system_student_ids - import_student_ids
+        if extra_ids:
+            errors.append(f"以下學號不在申請清單中：{', '.join(sorted(extra_ids))}")
+        if missing_ids:
+            errors.append(f"以下學號未包含在匯入檔案中：{', '.join(sorted(missing_ids))}")
+
+        # 4. Validate rank sequence
+        integer_ranks = []
+        for item in import_data:
+            if isinstance(item.rank_position, int):
+                integer_ranks.append(item.rank_position)
+
+        # Check duplicates
+        rank_counts: Dict[int, int] = {}
+        for r in integer_ranks:
+            rank_counts[r] = rank_counts.get(r, 0) + 1
+        duplicates = [str(r) for r, count in sorted(rank_counts.items()) if count > 1]
+        if duplicates:
+            errors.append(f"排名重複：{', '.join(duplicates)}")
+
+        # Check consecutive from 1
+        if integer_ranks and not duplicates:
+            expected = set(range(1, len(integer_ranks) + 1))
+            actual = set(integer_ranks)
+            missing_ranks = expected - actual
+            if missing_ranks:
+                errors.append(f"排名不連續：缺少第 {', '.join(str(r) for r in sorted(missing_ranks))} 名")
+
+        if errors:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="\n".join(errors),
+            )
+
+        # --- Apply updates ---
+        updated_count = 0
+        rejected_count = 0
+        num_ranked = len(integer_ranks)
+
+        import_map = {item.student_id: item for item in import_data}
+
+        # Track rejected index for assigning positions after ranked students.
+        # college_rejected=True is the college-level "N" marker. status stays
+        # 'ranked' so admin retains ability to allocate.
+        rejected_index = 0
+        for sid, rank_item in student_id_to_item.items():
+            if sid not in import_map:
                 continue
-
-            if student_id in import_map:
-                import_item = import_map[student_id]
-                rank_item.rank_position = import_item.rank_position
-                updated_count += 1
+            import_item = import_map[sid]
+            if import_item.rank_position == "N":
+                rejected_index += 1
+                rank_item.rank_position = num_ranked + rejected_index
+                rank_item.status = "ranked"
+                rank_item.college_rejected = True
+                rejected_count += 1
             else:
-                not_found.append(student_id)
+                rank_item.rank_position = import_item.rank_position
+                rank_item.status = "ranked"
+                rank_item.college_rejected = False
+            updated_count += 1
 
-        # Update ranking metadata
         ranking.total_applications = len(ranking.items)
-
-        await db.flush()
+        await db.commit()
 
         return ApiResponse(
             success=True,
-            message=f"Ranking import successful. Updated {updated_count} students.",
+            message=f"排名匯入成功。更新 {updated_count} 筆（其中 {rejected_count} 筆拒絕）。",
             data={
                 "ranking_id": ranking_id,
                 "updated_count": updated_count,
+                "rejected_count": rejected_count,
                 "total_imported": len(import_data),
-                "not_found_in_ranking": not_found if len(not_found) < 20 else f"{len(not_found)} students not found",
             },
         )
 
@@ -972,5 +1046,6 @@ async def import_ranking_from_excel(
     except Exception as e:
         logger.error(f"Error importing ranking data: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to import ranking data: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to import ranking data: {str(e)}",
         )

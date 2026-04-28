@@ -18,6 +18,7 @@ export interface DistributionStudent {
   allocated_sub_type: string | null;
   allocation_year: number | null;
   status: string;
+  college_rejected: boolean;
   college_code: string;
   college_name: string;
   department_name: string;

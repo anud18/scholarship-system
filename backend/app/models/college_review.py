@@ -144,6 +144,12 @@ class CollegeRankingItem(Base):
     # Status tracking
     status = Column(String(20), default="ranked")  # 'ranked', 'allocated', 'rejected', 'waitlisted'
 
+    # College-level rejection flag (independent of `status`).
+    # Set when college imports rank "N" for a student. Student remains in normal
+    # allocation flow (status stays 'ranked'); admin can still allocate if desired.
+    # Distinct from status='rejected' which excludes from alternate-promotion.
+    college_rejected = Column(Boolean, default=False, nullable=False, server_default="false")
+
     # Matrix distribution fields
     allocated_sub_type = Column(String(50), nullable=True)  # Sub-type code allocated to (e.g., 'nstc', 'moe_1w')
     allocation_year = Column(Integer, nullable=True)  # Which academic year's quota was used (e.g., 113 for prior-year supplement)
