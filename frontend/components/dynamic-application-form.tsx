@@ -318,7 +318,7 @@ export function DynamicApplicationForm({
               className={`w-full ${isFixedField ? "bg-blue-50 border-blue-200" : ""}`}
             />
             {helpText && (
-              <p className="text-sm text-muted-foreground">{helpText}</p>
+              <p className="text-sm text-muted-foreground whitespace-pre-line">{helpText}</p>
             )}
           </div>
         );
@@ -350,7 +350,7 @@ export function DynamicApplicationForm({
               className={`w-full ${isFixedField ? "bg-blue-50 border-blue-200" : ""}`}
             />
             {helpText && (
-              <p className="text-sm text-muted-foreground">{helpText}</p>
+              <p className="text-sm text-muted-foreground whitespace-pre-line">{helpText}</p>
             )}
           </div>
         );
@@ -375,7 +375,7 @@ export function DynamicApplicationForm({
               className={`w-full ${isFixedField ? "bg-blue-50 border-blue-200" : ""}`}
             />
             {helpText && (
-              <p className="text-sm text-muted-foreground">{helpText}</p>
+              <p className="text-sm text-muted-foreground whitespace-pre-line">{helpText}</p>
             )}
           </div>
         );
@@ -407,7 +407,7 @@ export function DynamicApplicationForm({
               </p>
             )}
             {helpText && (
-              <p className="text-sm text-muted-foreground">{helpText}</p>
+              <p className="text-sm text-muted-foreground whitespace-pre-line">{helpText}</p>
             )}
           </div>
         );
@@ -442,7 +442,7 @@ export function DynamicApplicationForm({
               </SelectContent>
             </Select>
             {helpText && (
-              <p className="text-sm text-muted-foreground">{helpText}</p>
+              <p className="text-sm text-muted-foreground whitespace-pre-line">{helpText}</p>
             )}
           </div>
         );
@@ -467,7 +467,7 @@ export function DynamicApplicationForm({
               </Label>
             </div>
             {helpText && (
-              <p className="text-sm text-muted-foreground">{helpText}</p>
+              <p className="text-sm text-muted-foreground whitespace-pre-line">{helpText}</p>
             )}
           </div>
         );
@@ -508,7 +508,7 @@ export function DynamicApplicationForm({
               ))}
             </div>
             {helpText && (
-              <p className="text-sm text-muted-foreground">{helpText}</p>
+              <p className="text-sm text-muted-foreground whitespace-pre-line">{helpText}</p>
             )}
           </div>
         );
