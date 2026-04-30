@@ -44,8 +44,7 @@ def _serialize_result(result):
     try:
         mapper = sa_inspect(type(result))
         return {
-            c.key: (v.value if isinstance(v := getattr(result, c.key), enum.Enum) else v)
-            for c in mapper.column_attrs
+            c.key: (v.value if isinstance(v := getattr(result, c.key), enum.Enum) else v) for c in mapper.column_attrs
         }
     except Exception as exc:
         raise TypeError(f"Cannot serialize {type(result).__name__}: {exc}") from exc
@@ -199,7 +198,11 @@ async def create_application(
                         "status": existing_status_str,
                         "scholarship_type_id": existing_application.scholarship_type_id,
                         "academic_year": existing_application.academic_year,
-                        "semester": existing_application.semester.value if hasattr(existing_application.semester, "value") else existing_application.semester,
+                        "semester": (
+                            existing_application.semester.value
+                            if hasattr(existing_application.semester, "value")
+                            else existing_application.semester
+                        ),
                     },
                 }
 

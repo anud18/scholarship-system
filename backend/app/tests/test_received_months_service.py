@@ -277,9 +277,7 @@ class TestCalculateReceivedMonthsBulk:
         _make_item(db, roster_id=roster.id, student_nycu_id="S001", application_id=1)
         _make_item(db, roster_id=roster.id, student_nycu_id="S002", application_id=2)
 
-        result = calculate_received_months_bulk(
-            db, ["S001", "S002", "S999"], scholarship_config_id=1
-        )
+        result = calculate_received_months_bulk(db, ["S001", "S002", "S999"], scholarship_config_id=1)
         assert result == {"S001": 1, "S002": 1, "S999": 0}
 
     def test_empty_list_returns_empty_dict(self, db):

@@ -9,6 +9,7 @@ sqlalchemy==2.0.44  # Updated for Python 3.13 compatibility
 alembic==1.17.2  # Updated for Python 3.13 compatibility
 asyncpg==0.30.0  # Updated for Python 3.13 compatibility
 psycopg2-binary==2.9.11  # Updated for Python 3.13 compatibility
+greenlet>=3.0,<4  # Required by SQLAlchemy sync engine (used by health check + APScheduler)
 
 # Authentication and Security
 PyJWT[crypto]==2.9.0  # Replaced python-jose (unmaintained, has CVE-2024-33663)
@@ -54,6 +55,9 @@ minio==7.2.18  # Updated for Python 3.13 compatibility
 # Excel processing
 pandas==2.3.3  # Updated for Python 3.13 compatibility
 openpyxl==3.1.2
+
+# PDF generation
+reportlab==4.4.10  # Used by export_package_service
 
 # Logging and monitoring
 structlog==24.4.0  # Updated for Python 3.13 compatibility

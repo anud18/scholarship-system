@@ -89,6 +89,6 @@ class TestPhdSubTypeSelectionMode:
         """Confirm hierarchical mode would reject MOE-only (the old behavior we're removing)."""
         sub_type_list = ["nstc", "moe_1w"]
         selected = ["moe_1w"]
-        expected = sub_type_list[:len(selected)]
+        expected = sub_type_list[: len(selected)]
         # hierarchical: selected must match prefix of sub_type_list
         assert selected != expected, "Hierarchical should reject ['moe_1w'] alone"

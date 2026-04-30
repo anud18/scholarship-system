@@ -37,6 +37,7 @@ class RosterSchedulerService:
         # 設定Redis作為Job Store
         # Parse REDIS_URL: redis://:password@host:port/db
         from urllib.parse import urlparse
+
         parsed = urlparse(settings.redis_url)
         redis_password = parsed.password if parsed.password else None
         redis_host = parsed.hostname if parsed.hostname else "redis"

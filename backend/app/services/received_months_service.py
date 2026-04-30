@@ -72,9 +72,7 @@ def _bulk_stmt(student_nycu_ids: list[str], scholarship_config_id: int) -> Selec
     )
 
 
-def calculate_received_months(
-    db: Session, student_nycu_id: str, scholarship_config_id: int
-) -> int:
+def calculate_received_months(db: Session, student_nycu_id: str, scholarship_config_id: int) -> int:
     """
     Total months a single student has received under the given scholarship config.
 

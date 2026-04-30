@@ -1443,8 +1443,7 @@ class RosterService:
 
         if not scholarship_config:
             raise ValueError(
-                f"找不到對應的獎學金配置：scholarship_type_id={scholarship_type_id}, "
-                f"academic_year={academic_year}"
+                f"找不到對應的獎學金配置：scholarship_type_id={scholarship_type_id}, " f"academic_year={academic_year}"
             )
 
         # 3. 取得所有已分配的 ranking items，並按 (allocation_year, allocated_sub_type) 分組
@@ -1460,9 +1459,7 @@ class RosterService:
         )
 
         if not allocated_items:
-            raise ValueError(
-                f"排名 {ranking_ids} 沒有已分配的學生。請確認已完成手動分發並確認分發。"
-            )
+            raise ValueError(f"排名 {ranking_ids} 沒有已分配的學生。請確認已完成手動分發並確認分發。")
 
         # 分組：{(allocation_year, sub_type): [ranking_item, ...]}
         groups: Dict[tuple, List] = {}
@@ -1533,9 +1530,7 @@ class RosterService:
             project_number = sub_type_projects.get(str(allocation_year))
 
         # 產生造冊代碼（包含 sub_type 和 allocation_year 以確保唯一性）
-        roster_code = (
-            f"ROSTER-{academic_year}-{sub_type}-{allocation_year}-{scholarship_config.config_code}"
-        )
+        roster_code = f"ROSTER-{academic_year}-{sub_type}-{allocation_year}-{scholarship_config.config_code}"
 
         # 檢查是否已存在
         existing_roster = (
@@ -1676,6 +1671,7 @@ class RosterService:
 
         # 產生 Excel 並上傳至 MinIO（在 sync 環境中執行，避免 greenlet 問題）
         from app.services.excel_export_service import ExcelExportService
+
         try:
             export_service = ExcelExportService()
             export_service.export_roster_to_excel(

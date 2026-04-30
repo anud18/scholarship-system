@@ -9,7 +9,12 @@ import asyncio
 import io
 import logging
 import re
-from xml.sax.saxutils import escape as xml_escape
+
+# `escape` is a pure string-escaping helper (replaces `<` → `&lt;` etc.) used
+# for sanitising values before they are placed inside reportlab Paragraph
+# markup. It does not parse untrusted XML, so the B406 warning is a false
+# positive here — defusedxml does not provide an equivalent escape function.
+from xml.sax.saxutils import escape as xml_escape  # nosec B406
 import zipfile
 from collections import Counter, defaultdict
 from datetime import datetime
@@ -91,9 +96,7 @@ class ExportPackageService:
         scholarship_name = await self._get_scholarship_name(scholarship_type_id)
 
         # 2. Query applications with files
-        applications = await self._query_applications(
-            scholarship_type_id, academic_year, semester, college_code
-        )
+        applications = await self._query_applications(scholarship_type_id, academic_year, semester, college_code)
 
         if not applications:
             raise ValueError("無申請資料可匯出")
@@ -124,9 +127,7 @@ class ExportPackageService:
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             for dept_folder, apps in sorted(dept_groups.items()):
                 for app in apps:
-                    await self._add_application_to_zip(
-                        zf, dept_folder, app, scholarship_name, academic_year, semester
-                    )
+                    await self._add_application_to_zip(zf, dept_folder, app, scholarship_name, academic_year, semester)
 
         buf.seek(0)
 
@@ -178,7 +179,8 @@ class ExportPackageService:
         # Filter by college_code using student_data
         if college_code:
             applications = [
-                app for app in applications
+                app
+                for app in applications
                 if app.student_data and app.student_data.get("std_academyno") == college_code
             ]
 
@@ -270,24 +272,37 @@ class ExportPackageService:
         s_normal = ParagraphStyle("CJK", fontName="WQY", fontSize=10, leading=14)
         s_title = ParagraphStyle("CJKTitle", fontName="WQY", fontSize=16, leading=20, alignment=1)
         s_section = ParagraphStyle(
-            "CJKSection", fontName="WQY", fontSize=12, leading=16,
+            "CJKSection",
+            fontName="WQY",
+            fontSize=12,
+            leading=16,
             backColor=colors.Color(0.94, 0.94, 0.94),
         )
         s_header = ParagraphStyle(
-            "CJKHeader", fontName="WQY", fontSize=9, leading=12,
-            alignment=1, textColor=colors.Color(0.4, 0.4, 0.4),
+            "CJKHeader",
+            fontName="WQY",
+            fontSize=9,
+            leading=12,
+            alignment=1,
+            textColor=colors.Color(0.4, 0.4, 0.4),
         )
         s_footer = ParagraphStyle(
-            "CJKFooter", fontName="WQY", fontSize=8, leading=10,
-            alignment=1, textColor=colors.Color(0.6, 0.6, 0.6),
+            "CJKFooter",
+            fontName="WQY",
+            fontSize=8,
+            leading=10,
+            alignment=1,
+            textColor=colors.Color(0.6, 0.6, 0.6),
         )
 
-        table_style = TableStyle([
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-            ("BACKGROUND", (0, 0), (0, -1), colors.Color(0.96, 0.96, 0.96)),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 6),
-        ])
+        table_style = TableStyle(
+            [
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("BACKGROUND", (0, 0), (0, -1), colors.Color(0.96, 0.96, 0.96)),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ]
+        )
 
         elements = []
 
@@ -370,7 +385,9 @@ class ExportPackageService:
     @staticmethod
     def _build_table(rows: List[Tuple[str, str]], style: ParagraphStyle, table_style: TableStyle) -> Table:
         """Build a two-column label-value table."""
-        data = [[Paragraph(xml_escape(label), style), Paragraph(xml_escape(str(value)), style)] for label, value in rows]
+        data = [
+            [Paragraph(xml_escape(label), style), Paragraph(xml_escape(str(value)), style)] for label, value in rows
+        ]
         t = Table(data, colWidths=[50 * mm, 120 * mm])
         t.setStyle(table_style)
         return t

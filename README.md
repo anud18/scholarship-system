@@ -180,6 +180,9 @@ scholarship-system/
 - **Python 3.12+** and **uv** (if running backend locally) - [Install uv](https://github.com/astral-sh/uv)
 - **Bun** (if running frontend locally) - [Install Bun](https://bun.sh)
 - **Make** (optional, for Makefile commands)
+- **libmagic** & **tesseract** system libraries (only when running the backend on host, not in Docker):
+  - macOS: `brew install libmagic tesseract`
+  - Debian/Ubuntu: `sudo apt-get install libmagic-dev tesseract-ocr`
 
 > **New in this version:** We've upgraded to **Bun** for frontend development (replacing npm) and **uv** for backend (replacing pip) for significantly faster dependency installation and better developer experience. See [DEV_SETUP.md](DEV_SETUP.md) for detailed setup instructions.
 
