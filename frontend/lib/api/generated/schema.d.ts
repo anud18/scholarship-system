@@ -4574,10 +4574,11 @@ export interface paths {
         put?: never;
         /**
          * Import Ranking From Excel
-         * @description Import ranking data from Excel
+         * @description Import ranking data from Excel.
          *
-         *     Expected Excel columns: 學號, 姓名, 排名
-         *     This endpoint updates the rank_position of existing ranking items based on student IDs
+         *     Expected columns: 學號, 姓名, 排名
+         *     rank_position accepts positive integers (1-based, consecutive, no duplicates) or "N" (rejected).
+         *     Student IDs must exactly match the ranking's application set.
          */
         post: operations["import_ranking_from_excel_api_v1_college_review_rankings__ranking_id__import_excel_post"];
         delete?: never;
@@ -8561,9 +8562,9 @@ export interface components {
             student_name: string;
             /**
              * Rank Position
-             * @description Ranking position (排名)
+             * @description Ranking position (排名): positive integer or 'N' for rejected
              */
-            rank_position: number;
+            rank_position: number | "N";
         };
         /**
          * RankingOrderUpdate
