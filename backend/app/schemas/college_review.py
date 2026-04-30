@@ -139,7 +139,9 @@ class RankingImportItem(BaseModel):
 
     student_id: str = Field(..., description="Student ID (學號)")
     student_name: str = Field(..., description="Student name (姓名)")
-    rank_position: Union[int, Literal["N"]] = Field(..., description="Ranking position (排名): positive integer or 'N' for rejected")
+    rank_position: Union[int, Literal["N"]] = Field(
+        ..., description="Ranking position (排名): positive integer or 'N' for rejected"
+    )
 
     @field_validator("rank_position", mode="before")
     @classmethod

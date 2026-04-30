@@ -530,6 +530,7 @@ async def preview_roster_students(
 
         # 查詢分發資訊：從同學年度排名中取得各 application 的分配結果
         from app.models.college_review import CollegeRankingItem
+
         app_ids = [a.id for a in applications]
         allocation_map: dict = {}
         if app_ids:
@@ -843,19 +844,23 @@ async def get_roster_cycle_status(
                             "period_end_date": period_dates["end_date"].isoformat(),
                         }
                         if roster.status in [RosterStatus.COMPLETED, RosterStatus.LOCKED]:
-                            entry.update({
-                                "status": "completed",
-                                "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
-                                "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                                "qualified_count": roster.qualified_count,
-                            })
+                            entry.update(
+                                {
+                                    "status": "completed",
+                                    "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
+                                    "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                                    "qualified_count": roster.qualified_count,
+                                }
+                            )
                         elif roster.status == RosterStatus.FAILED:
-                            entry.update({
-                                "status": "failed",
-                                "error_message": roster.notes,
-                                "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                                "qualified_count": roster.qualified_count,
-                            })
+                            entry.update(
+                                {
+                                    "status": "failed",
+                                    "error_message": roster.notes,
+                                    "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                                    "qualified_count": roster.qualified_count,
+                                }
+                            )
                         elif roster.status == RosterStatus.PROCESSING:
                             entry["status"] = "processing"
                         else:
@@ -903,19 +908,23 @@ async def get_roster_cycle_status(
                             "period_end_date": period_dates["end_date"].isoformat(),
                         }
                         if roster.status in [RosterStatus.COMPLETED, RosterStatus.LOCKED]:
-                            entry.update({
-                                "status": "completed",
-                                "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
-                                "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                                "qualified_count": roster.qualified_count,
-                            })
+                            entry.update(
+                                {
+                                    "status": "completed",
+                                    "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
+                                    "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                                    "qualified_count": roster.qualified_count,
+                                }
+                            )
                         elif roster.status == RosterStatus.FAILED:
-                            entry.update({
-                                "status": "failed",
-                                "error_message": roster.notes,
-                                "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                                "qualified_count": roster.qualified_count,
-                            })
+                            entry.update(
+                                {
+                                    "status": "failed",
+                                    "error_message": roster.notes,
+                                    "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                                    "qualified_count": roster.qualified_count,
+                                }
+                            )
                         elif roster.status == RosterStatus.PROCESSING:
                             entry["status"] = "processing"
                         else:
@@ -960,19 +969,23 @@ async def get_roster_cycle_status(
                         "period_end_date": period_dates["end_date"].isoformat(),
                     }
                     if roster.status in [RosterStatus.COMPLETED, RosterStatus.LOCKED]:
-                        entry.update({
-                            "status": "completed",
-                            "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
-                            "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                            "qualified_count": roster.qualified_count,
-                        })
+                        entry.update(
+                            {
+                                "status": "completed",
+                                "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
+                                "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                                "qualified_count": roster.qualified_count,
+                            }
+                        )
                     elif roster.status == RosterStatus.FAILED:
-                        entry.update({
-                            "status": "failed",
-                            "error_message": roster.notes,
-                            "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                            "qualified_count": roster.qualified_count,
-                        })
+                        entry.update(
+                            {
+                                "status": "failed",
+                                "error_message": roster.notes,
+                                "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                                "qualified_count": roster.qualified_count,
+                            }
+                        )
                     elif roster.status == RosterStatus.PROCESSING:
                         entry["status"] = "processing"
                     else:
@@ -1006,19 +1019,23 @@ async def get_roster_cycle_status(
                         "project_number": roster.project_number,
                     }
                     if roster.status in [RosterStatus.COMPLETED, RosterStatus.LOCKED]:
-                        entry.update({
-                            "status": "completed",
-                            "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
-                            "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                            "qualified_count": roster.qualified_count,
-                        })
+                        entry.update(
+                            {
+                                "status": "completed",
+                                "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
+                                "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                                "qualified_count": roster.qualified_count,
+                            }
+                        )
                     elif roster.status == RosterStatus.FAILED:
-                        entry.update({
-                            "status": "failed",
-                            "error_message": roster.notes,
-                            "total_amount": float(roster.total_amount) if roster.total_amount else 0,
-                            "qualified_count": roster.qualified_count,
-                        })
+                        entry.update(
+                            {
+                                "status": "failed",
+                                "error_message": roster.notes,
+                                "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                                "qualified_count": roster.qualified_count,
+                            }
+                        )
                     elif roster.status == RosterStatus.PROCESSING:
                         entry["status"] = "processing"
                     else:

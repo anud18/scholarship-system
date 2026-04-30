@@ -1010,6 +1010,7 @@ async def update_scholarship_configuration(
             # Frontend textarea may send as string; parse to dict
             if isinstance(pqy, str):
                 import json as _json
+
                 try:
                     pqy = _json.loads(pqy)
                 except (ValueError, TypeError):

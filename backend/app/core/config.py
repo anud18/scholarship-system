@@ -227,6 +227,7 @@ class Settings(BaseSettings):
     def create_upload_directory(cls, v: str) -> str:
         """Ensure upload directory exists"""
         import sys
+
         # Skip directory creation during Alembic migrations or when directory is not writable
         try:
             if "alembic" not in sys.argv:

@@ -218,12 +218,8 @@ class CollegeReviewService:
             select(Application)
             .options(
                 selectinload(Application.scholarship_type_ref),
-                selectinload(Application.reviews).selectinload(
-                    ApplicationReview.reviewer
-                ),
-                selectinload(Application.reviews).selectinload(
-                    ApplicationReview.items
-                ),
+                selectinload(Application.reviews).selectinload(ApplicationReview.reviewer),
+                selectinload(Application.reviews).selectinload(ApplicationReview.items),
                 selectinload(Application.files),
                 selectinload(Application.student),  # Load student information
             )
@@ -323,8 +319,7 @@ class CollegeReviewService:
                 "is_renewal": app.is_renewal,
                 # Professor review details
                 "professor_review_completed": any(
-                    self._role_matches(review.reviewer.role, "professor")
-                    for review in app.reviews if review.reviewer
+                    self._role_matches(review.reviewer.role, "professor") for review in app.reviews if review.reviewer
                 ),
                 "professor_review_items": [
                     {
@@ -646,9 +641,7 @@ class CollegeReviewService:
             max_renewal_pos = max(renewal_positions)
             min_new_pos = min(new_positions)
             if max_renewal_pos > min_new_pos:
-                raise InvalidRankingDataError(
-                    "續領學生的排名必須在所有新申請學生之前"
-                )
+                raise InvalidRankingDataError("續領學生的排名必須在所有新申請學生之前")
 
         # Update rank positions
         updated_count = 0

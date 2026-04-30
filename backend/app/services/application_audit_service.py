@@ -579,7 +579,9 @@ class ApplicationAuditService:
                 if application:
                     app_id = application.app_id
                     app_scholarship_id = application.scholarship_type_id
-                    student_name = (application.student_data or {}).get("std_cname") if application.student_data else None
+                    student_name = (
+                        (application.student_data or {}).get("std_cname") if application.student_data else None
+                    )
                     application_id = application.id
                 else:
                     # Application has been hard-deleted; rely on snapshot stored in meta_data.

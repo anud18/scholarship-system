@@ -113,11 +113,13 @@ def _compute_suggestions(
         # College-rejected students default to no allocation. Admin can still
         # override manually if needed.
         if getattr(item, "college_rejected", False):
-            results.append({
-                "ranking_item_id": item.id,
-                "sub_type_code": None,
-                "allocation_year": None,
-            })
+            results.append(
+                {
+                    "ranking_item_id": item.id,
+                    "sub_type_code": None,
+                    "allocation_year": None,
+                }
+            )
             continue
 
         app = item.application
@@ -139,8 +141,7 @@ def _compute_suggestions(
         raw_prefs: list[str] = app.sub_type_preferences or applied or default_prefs
         applied_set = set(applied)
         preferences: list[str] = [
-            p for p in raw_prefs
-            if (p in applied_set if applied_set else True) and p not in rejected
+            p for p in raw_prefs if (p in applied_set if applied_set else True) and p not in rejected
         ]
 
         allocated_sub_type: Optional[str] = None
@@ -180,11 +181,13 @@ def _compute_suggestions(
                     allocated_year = academic_year
                     break
 
-        results.append({
-            "ranking_item_id": item.id,
-            "sub_type_code": allocated_sub_type,
-            "allocation_year": allocated_year,
-        })
+        results.append(
+            {
+                "ranking_item_id": item.id,
+                "sub_type_code": allocated_sub_type,
+                "allocation_year": allocated_year,
+            }
+        )
 
     return results
 
@@ -248,9 +251,7 @@ class ManualDistributionService:
         if not student_ids:
             return {}
 
-        return await calculate_received_months_bulk_async(
-            self.db, student_ids, config_id
-        )
+        return await calculate_received_months_bulk_async(self.db, student_ids, config_id)
 
     async def get_students_for_distribution(
         self,
@@ -297,9 +298,7 @@ class ManualDistributionService:
         # Bulk-compute system received_months for all students in one query.
         # Admin-imported overrides (source="imported") take precedence over
         # system values — see docs/received-months-calculation.md.
-        system_months = await self._bulk_system_received_months(
-            items, scholarship_type_id, academic_year, semester
-        )
+        system_months = await self._bulk_system_received_months(items, scholarship_type_id, academic_year, semester)
 
         students = []
         for item in items:
@@ -336,31 +335,33 @@ class ManualDistributionService:
                 rm_value = system_months.get(student_id_value) if student_id_value else None
                 rm_source = "system" if rm_value is not None else None
 
-            students.append({
-                "ranking_item_id": item.id,
-                "application_id": app.id,
-                "rank_position": item.rank_position,
-                "applied_sub_types": app.scholarship_subtype_list or [],
-                "rejected_sub_types": list(rejected_map.get(app.id, set())),
-                "allocated_sub_type": item.allocated_sub_type,
-                "allocation_year": item.allocation_year,
-                "status": item.status,
-                "college_rejected": item.college_rejected,
-                "college_code": student_college,
-                "college_name": student_data.get("trm_academyname", ""),
-                "department_name": student_data.get("trm_depname", ""),
-                "term_count": term_count,
-                "student_name": student_data.get("std_cname", ""),
-                "nationality": student_data.get("std_nation", ""),
-                "enrollment_date": enrollment_date,
-                "student_id": student_data.get("std_stdcode", ""),
-                "application_identity": identity,
-                "is_renewal": app.is_renewal,
-                "renewal_year": app.renewal_year,
-                "renewal_sub_type": self._get_renewal_sub_type(app),
-                "received_months": rm_value,
-                "received_months_source": rm_source,
-            })
+            students.append(
+                {
+                    "ranking_item_id": item.id,
+                    "application_id": app.id,
+                    "rank_position": item.rank_position,
+                    "applied_sub_types": app.scholarship_subtype_list or [],
+                    "rejected_sub_types": list(rejected_map.get(app.id, set())),
+                    "allocated_sub_type": item.allocated_sub_type,
+                    "allocation_year": item.allocation_year,
+                    "status": item.status,
+                    "college_rejected": item.college_rejected,
+                    "college_code": student_college,
+                    "college_name": student_data.get("trm_academyname", ""),
+                    "department_name": student_data.get("trm_depname", ""),
+                    "term_count": term_count,
+                    "student_name": student_data.get("std_cname", ""),
+                    "nationality": student_data.get("std_nation", ""),
+                    "enrollment_date": enrollment_date,
+                    "student_id": student_data.get("std_stdcode", ""),
+                    "application_identity": identity,
+                    "is_renewal": app.is_renewal,
+                    "renewal_year": app.renewal_year,
+                    "renewal_sub_type": self._get_renewal_sub_type(app),
+                    "received_months": rm_value,
+                    "received_months_source": rm_source,
+                }
+            )
 
         # Sort by college_code, then rank_position
         students.sort(key=lambda s: (s["college_code"], s["rank_position"]))
@@ -395,9 +396,7 @@ class ManualDistributionService:
         }
         """
         # 1. Load current year's config to get prior_quota_years
-        current_config = await self._load_config(
-            scholarship_type_id, academic_year, semester
-        )
+        current_config = await self._load_config(scholarship_type_id, academic_year, semester)
 
         prior_years_map: dict[str, list[int]] = {}
         if current_config and current_config.prior_quota_years:
@@ -598,9 +597,7 @@ class ManualDistributionService:
         sub_type_code=None means unallocate.
         """
         # Validate quota limits first
-        await self._validate_allocations(
-            scholarship_type_id, academic_year, semester, allocations
-        )
+        await self._validate_allocations(scholarship_type_id, academic_year, semester, allocations)
 
         updated_count = 0
         for alloc in allocations:
@@ -608,9 +605,7 @@ class ManualDistributionService:
             sub_type = alloc.get("sub_type_code")
             alloc_year = alloc.get("allocation_year") or (academic_year if sub_type else None)
 
-            item_query = select(CollegeRankingItem).where(
-                CollegeRankingItem.id == item_id
-            )
+            item_query = select(CollegeRankingItem).where(CollegeRankingItem.id == item_id)
             result = await self.db.execute(item_query)
             item = result.scalar_one_or_none()
             if not item:
@@ -649,9 +644,7 @@ class ManualDistributionService:
 
             if ranking_ids:
                 # Get current allocations
-                items_query = select(CollegeRankingItem).where(
-                    CollegeRankingItem.ranking_id.in_(ranking_ids)
-                )
+                items_query = select(CollegeRankingItem).where(CollegeRankingItem.ranking_id.in_(ranking_ids))
                 result = await self.db.execute(items_query)
                 items = result.scalars().all()
 
@@ -814,9 +807,7 @@ class ManualDistributionService:
 
         if ranking_ids:
             # Clear all allocations
-            items_query = select(CollegeRankingItem).where(
-                CollegeRankingItem.ranking_id.in_(ranking_ids)
-            )
+            items_query = select(CollegeRankingItem).where(CollegeRankingItem.ranking_id.in_(ranking_ids))
             result = await self.db.execute(items_query)
             items = result.scalars().all()
 
@@ -832,9 +823,7 @@ class ManualDistributionService:
         for item_id_str, alloc_data in allocations_snapshot.items():
             try:
                 item_id = int(item_id_str)
-                item_query = select(CollegeRankingItem).where(
-                    CollegeRankingItem.id == item_id
-                )
+                item_query = select(CollegeRankingItem).where(CollegeRankingItem.id == item_id)
                 result = await self.db.execute(item_query)
                 item = result.scalar_one_or_none()
 
@@ -956,9 +945,7 @@ class ManualDistributionService:
         result = await self.db.execute(stmt)
         return [row.sub_type_code for row in result.scalars().all()]
 
-    async def _batch_load_previous_allocation_years(
-        self, previous_app_ids: list[int]
-    ) -> dict[int, int]:
+    async def _batch_load_previous_allocation_years(self, previous_app_ids: list[int]) -> dict[int, int]:
         """
         For renewal students, find the allocation_year from their previous application's
         CollegeRankingItem.
@@ -1036,11 +1023,7 @@ class ManualDistributionService:
         seen_app_ids: set[int] = set()
         unique_items = []
         for item in all_items:
-            if (
-                item.application
-                and item.application.deleted_at is None
-                and item.application.id not in seen_app_ids
-            ):
+            if item.application and item.application.deleted_at is None and item.application.id not in seen_app_ids:
                 seen_app_ids.add(item.application.id)
                 unique_items.append(item)
 

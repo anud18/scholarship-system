@@ -673,15 +673,11 @@ class TestAdminEndpoints:
         # Row must be gone.
         get_db_override = fastapi_app.dependency_overrides[get_db]
         db = await get_db_override().__anext__()
-        still_there = (
-            await db.execute(select(Application).where(Application.id == target.id))
-        ).scalar_one_or_none()
+        still_there = (await db.execute(select(Application).where(Application.id == target.id))).scalar_one_or_none()
         assert still_there is None
 
     @pytest.mark.asyncio
-    async def test_delete_application_success_submitted_records_audit_log(
-        self, admin_client, deletable_applications
-    ):
+    async def test_delete_application_success_submitted_records_audit_log(self, admin_client, deletable_applications):
         """Deleting a submitted app writes an AuditLog with the reason and scholarship snapshot."""
         from sqlalchemy import select
 
