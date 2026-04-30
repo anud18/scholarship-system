@@ -1273,6 +1273,7 @@ export interface ScholarshipConfigurationFormData {
   quota_management_mode?: string;
   total_quota?: number;
   quotas?: Record<string, any> | string;
+  prior_quota_years?: Record<string, any> | string;
   whitelist_student_ids?: Record<string, number[]> | string;
   renewal_application_start_date?: string;
   renewal_application_end_date?: string;

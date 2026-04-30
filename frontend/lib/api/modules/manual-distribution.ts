@@ -153,6 +153,7 @@ export interface DistributionSummaryStudent {
   college_name: string;
   department_name: string;
   rank_position: number;
+  college_rejected?: boolean;
 }
 
 export interface DistributionSummaryGroup {
