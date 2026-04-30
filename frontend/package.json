@@ -119,6 +119,7 @@
     },
     "@isaacs/brace-expansion": ">=5.0.1",
     "glob": ">=13.0.2",
+    "test-exclude": "^8.0.0",
     "lodash": ">=4.17.23",
     "webpack": ">=5.105.0",
     "js-yaml": ">=4.1.1",

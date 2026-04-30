@@ -117,6 +117,10 @@ describe("Application Helpers", () => {
       submitted_at: "2025-01-02T10:00:00Z",
       reviewed_at: "2025-01-03T10:00:00Z",
       approved_at: "2025-01-04T10:00:00Z",
+      // getApplicationTimeline now conditionalizes professor/college review steps
+      // on these flags. Tests below expect the full 8-step timeline.
+      requires_professor_recommendation: true,
+      requires_college_review: true,
     };
 
     it("should return correct timeline for draft status in Chinese", () => {
