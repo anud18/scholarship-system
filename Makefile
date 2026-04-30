@@ -34,39 +34,69 @@ help: ## Show this help message
 # Setup Commands
 install: ## Setup - Install all dependencies (backend + frontend)
 	@echo "$(GREEN)Installing dependencies...$(NC)"
-	@echo "$(CYAN)Installing backend dependencies with uv...$(NC)"
-	cd backend && uv pip install -r pyproject.toml --extra dev
+	@if ! command -v uv >/dev/null 2>&1; then \
+		echo "$(RED)❌ uv not found. Install: https://github.com/astral-sh/uv$(NC)"; \
+		exit 1; \
+	fi
+	@if ! command -v bun >/dev/null 2>&1; then \
+		echo "$(RED)❌ bun not found. Install: https://bun.sh$(NC)"; \
+		exit 1; \
+	fi
+	@if [ "$$(uname)" = "Darwin" ] && ! brew list libmagic >/dev/null 2>&1; then \
+		echo "$(YELLOW)⚠️  libmagic not installed (required by python-magic).$(NC)"; \
+		echo "$(YELLOW)   Run: brew install libmagic$(NC)"; \
+	fi
+	@echo "$(CYAN)Creating backend venv at backend/.venv...$(NC)"
+	cd backend && uv venv --python 3.12 .venv
+	@echo "$(CYAN)Installing backend deps (runtime + dev)...$(NC)"
+	cd backend && uv pip install --python .venv/bin/python -r requirements.txt -r requirements-dev.txt
 	@echo "$(CYAN)Installing frontend dependencies with bun...$(NC)"
 	cd frontend && bun install
 	@echo "$(GREEN)✅ Dependencies installed successfully!$(NC)"
+	@echo "$(YELLOW)Activate the backend venv before 'make dev':$(NC)"
+	@echo "  source backend/.venv/bin/activate"
 
 setup: install ## Setup - Complete project setup (install deps + setup env)
 	@echo "$(GREEN)Setting up development environment...$(NC)"
 	@if [ ! -f backend/.env ]; then \
-		echo "$(YELLOW)Creating backend .env file...$(NC)"; \
-		cp backend/.env.example backend/.env 2>/dev/null || echo "DATABASE_URL=sqlite+aiosqlite:///./scholarship.db\nSECRET_KEY=dev-secret-key" > backend/.env; \
+		echo "$(YELLOW)Writing backend/.env (local-dev defaults that match docker-compose.dev.yml)...$(NC)"; \
+		./scripts/write_dev_env.sh backend; \
+	else \
+		echo "$(CYAN)backend/.env already exists, skipping$(NC)"; \
 	fi
 	@if [ ! -f frontend/.env.local ]; then \
-		echo "$(YELLOW)Creating frontend .env.local file...$(NC)"; \
-		cp frontend/.env.example frontend/.env.local 2>/dev/null || echo "NEXT_PUBLIC_API_URL=http://localhost:8000" > frontend/.env.local; \
+		echo "$(YELLOW)Writing frontend/.env.local (local-dev defaults)...$(NC)"; \
+		./scripts/write_dev_env.sh frontend; \
+	else \
+		echo "$(CYAN)frontend/.env.local already exists, skipping$(NC)"; \
 	fi
 	@echo "$(GREEN)✅ Development environment setup complete!$(NC)"
 	@echo "$(CYAN)Next steps:$(NC)"
-	@echo "  1. Run 'make dev' to start development servers"
-	@echo "  2. Run 'make test' to run tests"
-	@echo "  3. Run 'make docker-up' to start with Docker"
+	@echo "  1. Start infra services:  docker compose -f docker-compose.dev.yml up -d postgres redis minio mock-student-api"
+	@echo "  2. Activate venv:         source backend/.venv/bin/activate"
+	@echo "  3. Run migrations:        make db-migrate"
+	@echo "  4. Seed test data:        make db-seed"
+	@echo "  5. Start dev servers:     make dev"
+	@echo "  ─ or, for full Docker dev: make init-all"
+
+# Resolve uvicorn from the venv if it exists; otherwise rely on PATH.
+UVICORN := $(shell test -x backend/.venv/bin/uvicorn && echo backend/.venv/bin/uvicorn || echo uvicorn)
 
 # Development Commands
 dev: ## Development - Start both backend and frontend in development mode
 	@echo "$(GREEN)Starting development servers...$(NC)"
+	@if [ ! -f backend/.env ]; then \
+		echo "$(RED)❌ backend/.env missing. Run 'make setup' first.$(NC)"; \
+		exit 1; \
+	fi
 	@trap 'kill 0' SIGINT; \
-	(cd backend && echo "$(CYAN)Starting backend on http://localhost:8000$(NC)" && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000) & \
+	(cd backend && echo "$(CYAN)Starting backend on http://localhost:8000$(NC)" && $(abspath $(UVICORN)) app.main:app --reload --host 0.0.0.0 --port 8000) & \
 	(cd frontend && echo "$(CYAN)Starting frontend on http://localhost:3000$(NC)" && bun run dev) & \
 	wait
 
 dev-backend: ## Development - Start only backend server
 	@echo "$(GREEN)Starting backend server...$(NC)"
-	cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+	cd backend && $(abspath $(UVICORN)) app.main:app --reload --host 0.0.0.0 --port 8000
 
 dev-frontend: ## Development - Start only frontend server
 	@echo "$(GREEN)Starting frontend server...$(NC)"
@@ -311,6 +341,19 @@ init-all: ## Initialize complete development environment (Docker + DB + Test Dat
 	@echo "$(GREEN)✅ Directories created$(NC)"
 	@echo ""
 	@$(MAKE) docker-up
+	@echo "$(CYAN)⏳ Waiting for backend container to become healthy...$(NC)"
+	@for i in $$(seq 1 60); do \
+		if docker inspect --format '{{.State.Health.Status}}' scholarship_backend_dev 2>/dev/null | grep -q healthy; then \
+			echo "$(GREEN)✅ Backend healthy$(NC)"; break; \
+		fi; \
+		if [ $$i -eq 60 ]; then \
+			echo "$(RED)❌ Backend never became healthy. Check 'docker compose -f docker-compose.dev.yml logs backend'$(NC)"; \
+			exit 1; \
+		fi; \
+		printf "."; sleep 2; \
+	done
+	@echo "$(CYAN)🗄️  Running database migrations (alembic upgrade head)...$(NC)"
+	@docker exec scholarship_backend_dev alembic upgrade head
 	@echo "$(CYAN)🚀 Running database seed...$(NC)"
 	@docker exec scholarship_backend_dev python -m app.seed
 	@echo ""
