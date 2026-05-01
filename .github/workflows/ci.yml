@@ -11,7 +11,7 @@ env:
   NODE_VERSION: '22'
   PYTHON_VERSION: '3.13'
   REGISTRY: ghcr.io
-  USER: ${{ github.actor }}
+  USER: ${{ github.repository_owner }}
   IMAGE_NAME: ${{ github.repository }}
   CI: true
 
