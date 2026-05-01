@@ -834,21 +834,18 @@ async def get_roster_cycle_status(
                 estimate_cache[semester_filter] = 0
                 return 0
 
-            count_stmt = (
-                select(func.count(Application.id))
-                .where(
-                    and_(
-                        or_(
-                            Application.scholarship_configuration_id == config_id,
-                            and_(
-                                Application.scholarship_configuration_id.is_(None),
-                                Application.scholarship_type_id == config.scholarship_type_id,
-                            ),
+            count_stmt = select(func.count(Application.id)).where(
+                and_(
+                    or_(
+                        Application.scholarship_configuration_id == config_id,
+                        and_(
+                            Application.scholarship_configuration_id.is_(None),
+                            Application.scholarship_type_id == config.scholarship_type_id,
                         ),
-                        Application.status == "approved",
-                        Application.academic_year == academic_year,
-                        Application.deleted_at.is_(None),
-                    )
+                    ),
+                    Application.status == "approved",
+                    Application.academic_year == academic_year,
+                    Application.deleted_at.is_(None),
                 )
             )
 
