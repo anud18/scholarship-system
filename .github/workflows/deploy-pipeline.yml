@@ -104,7 +104,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ github.actor }}/scholarship-system-${{ matrix.component }}
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/scholarship-system-${{ matrix.component }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -159,8 +159,8 @@ jobs:
       - name: Pull latest images
         run: |
           echo "Pulling Docker images..."
-          docker pull ${{ env.REGISTRY }}/${{ github.actor }}/scholarship-system-backend:${{ needs.pre-deployment.outputs.version }}
-          docker pull ${{ env.REGISTRY }}/${{ github.actor }}/scholarship-system-frontend:${{ needs.pre-deployment.outputs.version }}
+          docker pull ${{ env.REGISTRY }}/${{ github.repository_owner }}/scholarship-system-backend:${{ needs.pre-deployment.outputs.version }}
+          docker pull ${{ env.REGISTRY }}/${{ github.repository_owner }}/scholarship-system-frontend:${{ needs.pre-deployment.outputs.version }}
 
       - name: Create deployment directory
         run: |
@@ -278,7 +278,7 @@ jobs:
           echo "Cleaning up old Docker images (keeping latest 3 versions)..."
 
           # Cleanup old backend images (sorted by creation time, newest first)
-          docker images ghcr.io/${{ github.actor }}/scholarship-system-backend \
+          docker images ghcr.io/${{ github.repository_owner }}/scholarship-system-backend \
             --format "{{.CreatedAt}}\t{{.Repository}}:{{.Tag}}" | \
             sort -r | \
             grep -v latest | \
@@ -287,7 +287,7 @@ jobs:
             xargs -r docker rmi -f || true
 
           # Cleanup old frontend images (sorted by creation time, newest first)
-          docker images ghcr.io/${{ github.actor }}/scholarship-system-frontend \
+          docker images ghcr.io/${{ github.repository_owner }}/scholarship-system-frontend \
             --format "{{.CreatedAt}}\t{{.Repository}}:{{.Tag}}" | \
             sort -r | \
             grep -v latest | \
