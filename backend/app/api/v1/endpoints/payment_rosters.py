@@ -10,7 +10,7 @@ from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.sql.functions import count
@@ -798,6 +798,85 @@ async def get_roster_cycle_status(
         periods = []
         academic_year = config.academic_year
 
+        # Resolve ranking for matrix-based scholarships (used for eligible-count estimation)
+        from app.models.application import Application
+        from app.models.college_review import CollegeRanking, CollegeRankingItem
+        from app.models.enums import QuotaManagementMode
+
+        ranking_id_for_estimate: Optional[int] = None
+        is_matrix_based = config.quota_management_mode == QuotaManagementMode.matrix_based
+        if is_matrix_based:
+            ranking_stmt = (
+                select(CollegeRanking.id)
+                .where(
+                    and_(
+                        CollegeRanking.scholarship_type_id == config.scholarship_type_id,
+                        CollegeRanking.academic_year == academic_year,
+                        CollegeRanking.is_finalized.is_(True),
+                        CollegeRanking.distribution_executed.is_(True),
+                    )
+                )
+                .order_by(CollegeRanking.finalized_at.desc())
+                .limit(1)
+            )
+            ranking_id_for_estimate = (await db.execute(ranking_stmt)).scalar_one_or_none()
+
+        # Cache counts by semester filter to avoid duplicate queries across periods
+        estimate_cache: dict = {}
+
+        async def _estimate_eligible_count(semester_filter: Optional[str]) -> int:
+            """Count approved applications eligible for the given period semester."""
+            if semester_filter in estimate_cache:
+                return estimate_cache[semester_filter]
+
+            # Matrix-based scholarships require an executed ranking; without one, no students are eligible
+            if is_matrix_based and ranking_id_for_estimate is None:
+                estimate_cache[semester_filter] = 0
+                return 0
+
+            count_stmt = (
+                select(func.count(Application.id))
+                .where(
+                    and_(
+                        or_(
+                            Application.scholarship_configuration_id == config_id,
+                            and_(
+                                Application.scholarship_configuration_id.is_(None),
+                                Application.scholarship_type_id == config.scholarship_type_id,
+                            ),
+                        ),
+                        Application.status == "approved",
+                        Application.academic_year == academic_year,
+                        Application.deleted_at.is_(None),
+                    )
+                )
+            )
+
+            if is_matrix_based:
+                count_stmt = count_stmt.join(
+                    CollegeRankingItem, CollegeRankingItem.application_id == Application.id
+                ).where(
+                    and_(
+                        CollegeRankingItem.ranking_id == ranking_id_for_estimate,
+                        CollegeRankingItem.is_allocated.is_(True),
+                    )
+                )
+
+            if semester_filter:
+                count_stmt = count_stmt.where(Application.semester == semester_filter)
+
+            value = (await db.execute(count_stmt)).scalar() or 0
+            estimate_cache[semester_filter] = value
+            return value
+
+        def _semester_for_month(month_int: int) -> Optional[str]:
+            """Map a month to a semester for semester-based scholarships."""
+            if month_int in (2, 3, 4, 5, 6, 7):
+                return "second"
+            if month_int in (8, 9, 10, 11, 12, 1):
+                return "first"
+            return None
+
         if schedule.roster_cycle.value == "monthly":
             # Determine if this is a yearly (academic year) scholarship
             is_yearly = config.semester is None or config.semester.value == "annual"
@@ -867,6 +946,8 @@ async def get_roster_cycle_status(
                             entry["status"] = "draft"
                         periods.append(entry)
                 else:
+                    semester_filter = None if is_yearly else _semester_for_month(month)
+                    estimated_count = await _estimate_eligible_count(semester_filter)
                     periods.append(
                         {
                             "label": period_label,
@@ -874,7 +955,7 @@ async def get_roster_cycle_status(
                             "display_label": display_label,
                             "status": "waiting",
                             "next_schedule": schedule.next_run_at.isoformat() if schedule.next_run_at else None,
-                            "estimated_count": 0,  # TODO: Calculate estimated count
+                            "estimated_count": estimated_count,
                             "period_start_date": period_dates["start_date"].isoformat(),
                             "period_end_date": period_dates["end_date"].isoformat(),
                         }
@@ -931,12 +1012,17 @@ async def get_roster_cycle_status(
                             entry["status"] = "draft"
                         periods.append(entry)
                 else:
+                    if config.semester is None:
+                        semester_filter = None
+                    else:
+                        semester_filter = "first" if half == "H1" else "second"
+                    estimated_count = await _estimate_eligible_count(semester_filter)
                     periods.append(
                         {
                             "label": period_label,
                             "status": "waiting",
                             "next_schedule": schedule.next_run_at.isoformat() if schedule.next_run_at else None,
-                            "estimated_count": 0,
+                            "estimated_count": estimated_count,
                             "period_start_date": period_dates["start_date"].isoformat(),
                             "period_end_date": period_dates["end_date"].isoformat(),
                         }
@@ -992,12 +1078,13 @@ async def get_roster_cycle_status(
                         entry["status"] = "draft"
                     periods.append(entry)
             else:
+                estimated_count = await _estimate_eligible_count(None)
                 periods.append(
                     {
                         "label": period_label,
                         "status": "waiting",
                         "next_schedule": schedule.next_run_at.isoformat() if schedule.next_run_at else None,
-                        "estimated_count": 0,
+                        "estimated_count": estimated_count,
                         "period_start_date": period_dates["start_date"].isoformat(),
                         "period_end_date": period_dates["end_date"].isoformat(),
                     }
