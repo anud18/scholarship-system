@@ -554,12 +554,45 @@ class ApplicationService:
             .options(
                 selectinload(Application.files),
                 selectinload(Application.reviews),
+                selectinload(Application.scholarship),
             )
         )
         result = await self.db.execute(stmt)
         application = result.scalar_one()
 
         logger.debug(f"Application created successfully: {application.app_id} with status: {application.status}")
+
+        # Trigger email automation for directly-submitted applications (non-draft)
+        if not is_draft:
+            try:
+                logger.info(f"=== STARTING EMAIL AUTOMATION for application {application.app_id} ===")
+                user_profile_stmt = select(UserProfile).where(UserProfile.user_id == application.user_id)
+                user_profile_result = await self.db.execute(user_profile_stmt)
+                advisor_profile = user_profile_result.scalar_one_or_none()
+
+                student_data = application.student_data or {}
+                professor_name = advisor_profile.advisor_name or "" if advisor_profile else ""
+                professor_email = advisor_profile.advisor_email or "" if advisor_profile else ""
+
+                application_data_for_email = {
+                    "id": application.id,
+                    "app_id": application.app_id,
+                    "student_data": student_data,
+                    "student_name": student_data.get("std_cname", ""),
+                    "student_email": student_data.get("com_email", ""),
+                    "professor_name": professor_name,
+                    "professor_email": professor_email,
+                    "scholarship_type": getattr(application.scholarship, "name", "") if application.scholarship else "",
+                    "scholarship_type_id": application.scholarship_type_id,
+                    "submit_date": application.submitted_at.strftime("%Y-%m-%d") if application.submitted_at else "",
+                }
+                await email_automation_service.trigger_application_submitted(
+                    self.db, application.id, application_data_for_email
+                )
+                logger.info(f"=== EMAIL AUTOMATION COMPLETED for application {application.app_id} ===")
+            except Exception as e:
+                logger.error(f"❌ Failed to trigger automated submission emails: {e}", exc_info=True)
+
         return await self._build_application_response(application, user)
 
     def _integrate_application_file_data(self, application: Application, user: User) -> Dict[str, Any]:
