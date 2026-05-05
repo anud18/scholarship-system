@@ -538,7 +538,8 @@ class EmailAutomationService:
         """Process and send scheduled emails that are due"""
         try:
             # Get scheduled emails that are ready to send
-            query = text("""
+            query = text(
+                """
                 SELECT id, recipient_email, subject, body, html_body, cc_emails, bcc_emails, template_key,
                        email_category, application_id, scholarship_type_id, priority
                 FROM scheduled_emails
@@ -547,7 +548,8 @@ class EmailAutomationService:
                 AND (requires_approval = false OR approved_by_user_id IS NOT NULL)
                 ORDER BY priority ASC, scheduled_for ASC
                 LIMIT 50
-            """)
+            """
+            )
 
             result = await db.execute(query)
             scheduled_emails = result.fetchall()
@@ -693,22 +695,26 @@ class EmailAutomationService:
                         )
 
                     # Mark as sent
-                    update_query = text("""
+                    update_query = text(
+                        """
                         UPDATE scheduled_emails
                         SET status = 'sent', updated_at = NOW()
                         WHERE id = :email_id
-                    """)
+                    """
+                    )
                     await db.execute(update_query, {"email_id": email_row.id})
 
                 except Exception as e:
                     logger.error(f"Failed to send scheduled email {email_row.id}: {e}")
 
                     # Mark as failed
-                    fail_query = text("""
+                    fail_query = text(
+                        """
                         UPDATE scheduled_emails
                         SET status = 'failed', last_error = :error, retry_count = retry_count + 1, updated_at = NOW()
                         WHERE id = :email_id
-                    """)
+                    """
+                    )
                     await db.execute(fail_query, {"email_id": email_row.id, "error": str(e)})
 
             await db.commit()
