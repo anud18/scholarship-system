@@ -10,7 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Eye, Mail, Code, FileText, AlertCircle, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
-import { renderEmailTemplate } from "@/lib/email-renderer";
 
 interface TemplateVariable {
   name: string;
@@ -62,8 +61,17 @@ function PreviewDialog({ template, open, onClose }: PreviewDialogProps) {
     setError(null);
 
     try {
-      const html = await renderEmailTemplate(template.name as any, testData);
-      setPreviewHtml(html);
+      const res = await fetch("/api/email/render", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ template_name: template.name, context: testData }),
+      });
+      const result = await res.json();
+      if (result.success && result.html) {
+        setPreviewHtml(result.html);
+      } else {
+        setError(result.error || "渲染模板失敗");
+      }
     } catch (err) {
       console.error("Failed to render template:", err);
       setError(err instanceof Error ? err.message : "渲染模板失敗");
@@ -83,14 +91,22 @@ function PreviewDialog({ template, open, onClose }: PreviewDialogProps) {
     setSuccess(null);
 
     try {
-      // First render the email
-      const html = await renderEmailTemplate(template.name as any, testData);
+      // Render via server-side API route (same path as real email system)
+      const res = await fetch("/api/email/render", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ template_name: template.name, context: testData }),
+      });
+      const result = await res.json();
+      if (!result.success || !result.html) {
+        throw new Error(result.error || "渲染模板失敗");
+      }
 
       // Then send it via the email API
       await api.emailManagement.sendSimpleTestEmail({
         recipient_email: testEmail,
         subject: `[測試] ${template.display_name}`,
-        body: html,
+        body: result.html,
       });
 
       setSuccess(`測試郵件已發送至 ${testEmail}`);
