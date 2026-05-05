@@ -19,7 +19,7 @@ from app.db.session import AsyncSessionLocal
 from app.models.application import Application, ApplicationStatus
 from app.models.college_review import CollegeRanking, CollegeRankingItem
 from app.models.enums import ReviewStage, Semester
-from app.models.scholarship import ScholarshipType, SubTypeSelectionMode
+from app.models.scholarship import ScholarshipConfiguration, ScholarshipType, SubTypeSelectionMode
 from app.models.user import User, UserRole, UserType
 
 
@@ -31,6 +31,16 @@ async def main():
         if not phd:
             print("ERROR: PhD scholarship type not found. Run seed first.")
             sys.exit(1)
+
+        # Get PhD 114 scholarship configuration
+        cfg_result = await db.execute(
+            select(ScholarshipConfiguration).where(ScholarshipConfiguration.config_code == "phd_114")
+        )
+        phd_config = cfg_result.scalar_one_or_none()
+        if not phd_config:
+            print("ERROR: phd_114 config not found. Run seed_scholarship_configs first.")
+            sys.exit(1)
+        print(f"  PhD config ID: {phd_config.id} (config_code=phd_114)")
 
         # Find or create test students
         students_info = [
@@ -64,6 +74,8 @@ async def main():
                     app_id=app_id,
                     user_id=user.id,
                     scholarship_type_id=phd.id,
+                    scholarship_configuration_id=phd_config.id,
+                    amount=phd_config.amount,
                     scholarship_subtype_list=[sub_type],
                     sub_type_selection_mode=SubTypeSelectionMode.multiple,
                     sub_scholarship_type=sub_type,
@@ -76,6 +88,10 @@ async def main():
                     student_data={
                         "std_stdcode": stdcode,
                         "std_cname": name,
+                        "std_degree": 1,
+                        "std_studystatus": 1,
+                        "std_identity": 1,
+                        "trm_studystatus": 1,
                         "trm_termcount": 3 + idx,
                         "trm_academyname": "電機學院",
                         "trm_depname": "電機工程學系",
@@ -83,6 +99,17 @@ async def main():
                         "std_nation": "中華民國",
                         "std_enrollyear": 113,
                         "std_enrollterm": 1,
+                    },
+                    submitted_form_data={
+                        "fields": {
+                            "postal_account": {
+                                "field_id": "postal_account",
+                                "field_type": "text",
+                                "value": f"0000000{idx:02d}",
+                                "required": True,
+                            }
+                        },
+                        "documents": [],
                     },
                     agree_terms=True,
                 )
@@ -138,6 +165,8 @@ async def main():
         await db.commit()
         print(f"Seeded: {len(apps)} applications, 1 ranking with {len(apps)} items")
         print(f"  Scholarship type ID: {phd.id} (for API calls)")
+        print(f"  Scholarship config ID: {phd_config.id} (phd_114, for roster generation)")
+        print(f"  Ranking ID: {ranking.id}")
         print(f"  Academic year: 114, semester: first")
 
 
