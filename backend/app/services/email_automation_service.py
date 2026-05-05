@@ -71,14 +71,11 @@ class EmailAutomationService:
         # Get recipients based on condition query
         recipients = await self._get_recipients(db, rule, context)
         if not recipients:
-            logger.warning(f"No recipients found for rule {rule.template_key}")
-
-            # Use fallback email for testing and record keeping
-            import os
-
-            fallback_email = os.getenv("FALLBACK_EMAIL", "jotp.cs12@nycu.edu.tw")
-            logger.warning(f"Using fallback email: {fallback_email}")
-            recipients = [{"email": fallback_email}]
+            logger.warning(
+                f"No recipients found for rule {rule.template_key} — skipping send. "
+                f"Check advisor_email is set in user_profiles for this application."
+            )
+            return
 
         # Get email template
         template = await EmailTemplateService.get_template(db, rule.template_key)

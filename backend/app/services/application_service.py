@@ -17,7 +17,7 @@ from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFound
 from app.core.schema_validation import serialize_value
 from app.models.application import Application, ApplicationStatus, ReviewStatus
 from app.models.enums import Semester
-from app.models.review import ApplicationReview
+from app.models.review import ApplicationReview, ApplicationReviewItem
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType, SubTypeSelectionMode
 from app.models.user import User, UserRole
 from app.models.user_profile import UserProfile
@@ -1628,7 +1628,7 @@ class ApplicationService:
 
     async def create_professor_review(self, application_id: int, user: User, review_data) -> ApplicationResponse:
         """Create a professor review record and notify college reviewers"""
-        #         from app.models.application import ProfessorReview, ProfessorReviewItem
+        from app.models.enums import ReviewStage
 
         stmt = select(Application).where(Application.id == application_id)
         result = await self.db.execute(stmt)
@@ -1639,34 +1639,72 @@ class ApplicationService:
         if application.professor_id != user.id:
             raise AuthorizationError("You are not the assigned professor for this application")
 
-        # Create review record
-        review = ProfessorReview(
-            application_id=application_id,
-            professor_id=user.id,
-            recommendation=review_data.recommendation,
-            review_status=review_data.review_status or "completed",
-            reviewed_at=datetime.utcnow(),
-        )
-        self.db.add(review)
-        await self.db.flush()  # Get the review ID
+        # Calculate overall recommendation from items
+        # all approve → 'approve', all reject → 'reject', mixed → 'partial_approve'
+        item_recommendations = [item.recommendation for item in review_data.items]
+        if all(r == "approve" for r in item_recommendations):
+            overall_recommendation = "approve"
+        elif all(r == "reject" for r in item_recommendations):
+            overall_recommendation = "reject"
+        else:
+            overall_recommendation = "partial_approve"
 
-        # Create review items for each sub-type
+        # Build combined comments from items
+        combined_comments = "\n".join(
+            f"[{item.sub_type_code}] {item.comments}"
+            for item in review_data.items
+            if item.comments
+        ) or None
+
+        reviewed_at = datetime.now(timezone.utc)
+
+        # Upsert: update existing review if professor already submitted one
+        stmt_existing = select(ApplicationReview).where(
+            ApplicationReview.application_id == application_id,
+            ApplicationReview.reviewer_id == user.id,
+        )
+        result_existing = await self.db.execute(stmt_existing)
+        review = result_existing.scalar_one_or_none()
+
+        if review:
+            review.recommendation = overall_recommendation
+            review.comments = combined_comments
+            review.reviewed_at = reviewed_at
+            # Delete existing items and re-create
+            from sqlalchemy import delete as sa_delete
+            await self.db.execute(
+                sa_delete(ApplicationReviewItem).where(ApplicationReviewItem.review_id == review.id)
+            )
+            await self.db.flush()
+        else:
+            review = ApplicationReview(
+                application_id=application_id,
+                reviewer_id=user.id,
+                recommendation=overall_recommendation,
+                comments=combined_comments,
+                reviewed_at=reviewed_at,
+            )
+            self.db.add(review)
+            await self.db.flush()  # Get the review ID
+
+        # Create per-sub-type review items
         for item_data in review_data.items:
-            review_item = ProfessorReviewItem(
+            review_item = ApplicationReviewItem(
                 review_id=review.id,
                 sub_type_code=item_data.sub_type_code,
-                is_recommended=item_data.is_recommended,
+                recommendation=item_data.recommendation,
                 comments=item_data.comments,
             )
             self.db.add(review_item)
+
+        # Advance review_stage to professor_reviewed
+        application.review_stage = ReviewStage.professor_reviewed.value
+        application.updated_at = datetime.now(timezone.utc)
 
         await self.db.commit()
 
         # 觸發教授審查提交事件（會觸發自動化郵件規則）
         try:
-            from app.services.email_automation_service import email_automation_service
-
-            # Fetch student and scholarship info for email context
             stmt_student = select(User).where(User.id == application.user_id)
             result_student = await self.db.execute(stmt_student)
             student = result_student.scalar_one_or_none()
@@ -1685,22 +1723,18 @@ class ApplicationService:
                     "professor_email": user.email,
                     "scholarship_type": scholarship.name if scholarship else "Unknown",
                     "scholarship_type_id": application.scholarship_type_id,
-                    "review_result": review.review_status,
-                    "review_date": (
-                        review.reviewed_at.strftime("%Y-%m-%d")
-                        if review.reviewed_at
-                        else datetime.utcnow().strftime("%Y-%m-%d")
-                    ),
-                    "professor_recommendation": review.recommendation,
-                    "college_name": application.college_name if hasattr(application, "college_name") else "",
-                    "review_deadline": "",  # Add if available from scholarship config
+                    "review_result": overall_recommendation,
+                    "review_date": reviewed_at.strftime("%Y-%m-%d"),
+                    "professor_recommendation": overall_recommendation,
+                    "college_name": "",
+                    "review_deadline": "",
                 },
             )
         except Exception as e:
             logger.error(f"Failed to trigger professor review automation: {e}")
 
         # Return fresh copy with all relationships loaded
-        return await self.get_application_by_id(application_id)
+        return await self.get_application_by_id(application_id, user)
 
     async def upload_application_file_minio(
         self, application_id: int, user: User, file, file_type: str
@@ -2058,6 +2092,31 @@ class ApplicationService:
         application.deleted_at = None
         application.deleted_by_id = None
         application.deletion_reason = None
+
+        await self.db.commit()
+        await self.db.refresh(application)
+
+        return application
+
+    async def withdraw_application(self, application_id: int, current_user: User) -> Application:
+        """Withdraw a submitted application back to draft status"""
+        stmt = select(Application).where(Application.id == application_id)
+        result = await self.db.execute(stmt)
+        application = result.scalar_one_or_none()
+
+        if not application:
+            raise NotFoundError("Application", application_id)
+
+        if current_user.role == UserRole.student and application.user_id != current_user.id:
+            raise AuthorizationError("You can only withdraw your own applications")
+
+        if application.status not in [ApplicationStatus.submitted, ApplicationStatus.under_review]:
+            raise ValidationError("Only submitted or under-review applications can be withdrawn")
+
+        application.status = ApplicationStatus.draft
+        application.review_stage = None
+        application.professor_id = None
+        application.updated_at = datetime.now(timezone.utc)
 
         await self.db.commit()
         await self.db.refresh(application)
@@ -2948,21 +3007,50 @@ class ApplicationService:
             await self.db.commit()
             await self.db.refresh(application)
 
-            # Send email notification to professor
+            # Send email via React Email HTML system (scheduled_emails queue)
             if professor.email:
                 try:
+                    from app.core.config import settings
+                    from app.services.frontend_email_renderer import render_email_via_frontend
+
+                    student_name = application.student_data.get("std_cname") if application.student_data else "Unknown"
+                    email_context = {
+                        "app_id": application.app_id,
+                        "student_name": student_name,
+                        "scholarship_type": application.scholarship_name or "獎學金",
+                        "professor_name": professor.name,
+                        "professor_email": professor.email,
+                        "submit_date": application.updated_at.strftime("%Y-%m-%d") if application.updated_at else "",
+                        "system_url": getattr(settings, "FRONTEND_URL", "https://scholarship.nycu.edu.tw"),
+                    }
+                    html = await render_email_via_frontend(
+                        frontend_url=getattr(settings, "INTERNAL_FRONTEND_URL", "http://frontend:3000"),
+                        template_name="professor-review-request",
+                        context=email_context,
+                    )
                     email_service = EmailService()
-                    await email_service.send_to_professor(application, self.db)
-                    logger.info(f"Email notification sent to professor {professor.nycu_id}")
+                    await email_service.schedule_email(
+                        db=self.db,
+                        to=professor.email,
+                        subject=f"審查通知 - {student_name} 的 {application.scholarship_name or '獎學金'} 申請",
+                        body=f"申請編號 {application.app_id} 已指派給您進行教授推薦審查。",
+                        scheduled_for=datetime.now(timezone.utc),
+                        html_content=html,
+                        template_key="professor_review_notification",
+                        application_id=application.id,
+                        scholarship_type_id=application.scholarship_type_id,
+                        created_by_user_id=assigned_by.id,
+                    )
+                    logger.info(f"Scheduled HTML email to professor {professor.nycu_id}")
                 except Exception as e:
                     logger.error(f"Failed to send email to professor {professor.nycu_id}: {e}")
 
-            # Create in-app notification
+            # Create in-app notification (use info type which exists in DB enum)
             try:
                 notification_service = NotificationService(self.db)
                 await notification_service.create_notification(
                     user_id=professor.id,
-                    notification_type=NotificationType.professor_assignment,
+                    notification_type=NotificationType.info,
                     data={
                         "title": "新的獎學金申請需要您的審查",
                         "message": f"申請編號 {application.app_id} 已指派給您進行教授推薦審查",

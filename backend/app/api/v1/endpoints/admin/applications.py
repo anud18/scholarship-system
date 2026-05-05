@@ -53,6 +53,7 @@ async def get_all_applications(
     size: int = Query(20, ge=1, le=100, description="Page size"),
     status: Optional[str] = Query(None, description="Filter by status"),
     search: Optional[str] = Query(None, description="Search by student name or ID"),
+    missing_professor: Optional[bool] = Query(None, description="Filter apps awaiting professor assignment"),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -75,6 +76,12 @@ async def get_all_applications(
     else:
         # Default: exclude draft applications for admin view
         stmt = stmt.where(Application.status != ApplicationStatus.draft.value)
+
+    if missing_professor is True:
+        stmt = stmt.where(
+            Application.professor_id.is_(None),
+            Application.status == ApplicationStatus.submitted.value,
+        )
 
     if search:
         stmt = stmt.where(
