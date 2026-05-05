@@ -16,7 +16,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Fixture-based module isolation: mock only when not already imported,
 # and restore on teardown to avoid poisoning other test modules.
