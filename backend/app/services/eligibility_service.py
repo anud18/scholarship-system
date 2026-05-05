@@ -265,14 +265,17 @@ class EligibilityService:
                     if rule_passed is False or (rule_passed is None and rule.is_hard_rule):
                         subtype_eligibility[rule.sub_type] = False
 
-            if rule_passed is False:
+            if rule_passed is True:
+                if rule.is_warning:
+                    logger.info(f"Warning rule triggered for student: {rule.rule_name}")
+            elif rule_passed is False:
                 if rule.is_hard_rule:
                     # Hard rules are mandatory - prevent showing scholarship
                     message = rule.message or f"不符合規則: {rule.rule_name}"
                     failure_reasons.append(message)
                 elif rule.is_warning:
-                    # Warning rules don't prevent eligibility but could be logged
-                    logger.warning(f"Warning rule failed for student: {rule.rule_name}")
+                    # Warning condition not triggered — no action needed
+                    pass
                 else:
                     # Soft rules don't prevent eligibility - allow display but prevent application
                     pass  # Don't add to failure_reasons, allow scholarship to be shown
@@ -374,8 +377,12 @@ class EligibilityService:
                         subtype_critical_rules[rule.sub_type].append(rule.rule_name)
 
             if rule_passed is True:
-                # Rule passed - add to passed list
-                details["passed"].append(rule_detail)
+                if rule.is_warning:
+                    # Warning condition triggered — alert staff to review this student
+                    details["warnings"].append(rule_detail)
+                    logger.info(f"Warning rule triggered for student: {rule.rule_name}")
+                else:
+                    details["passed"].append(rule_detail)
             elif rule_passed is None:
                 # Cannot verify due to data unavailability
                 error_message = student_data.get("_term_error_message", "學期資料暫時無法取得")
@@ -396,9 +403,8 @@ class EligibilityService:
                     failure_reasons.append(message)
                     details["errors"].append({**rule_detail, "status": "validation_failed"})
                 elif rule.is_warning:
-                    # Warning rules don't prevent eligibility but are shown as warnings
-                    details["warnings"].append(rule_detail)
-                    logger.warning(f"Warning rule failed for student: {rule.rule_name}")
+                    # Warning condition not triggered — student is normal for this check
+                    pass
                 else:
                     # Soft rules - show scholarship card with error tags so students can see why they failed
                     # Don't add to failure_reasons - allow scholarship to be shown with errors
