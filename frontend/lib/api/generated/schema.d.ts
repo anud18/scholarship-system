@@ -11952,6 +11952,8 @@ export interface operations {
                 status?: string | null;
                 /** @description Search by student name or ID */
                 search?: string | null;
+                /** @description Filter apps awaiting professor assignment */
+                missing_professor?: boolean | null;
             };
             header?: never;
             path?: never;

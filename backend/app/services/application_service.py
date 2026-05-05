@@ -1650,11 +1650,9 @@ class ApplicationService:
             overall_recommendation = "partial_approve"
 
         # Build combined comments from items
-        combined_comments = "\n".join(
-            f"[{item.sub_type_code}] {item.comments}"
-            for item in review_data.items
-            if item.comments
-        ) or None
+        combined_comments = (
+            "\n".join(f"[{item.sub_type_code}] {item.comments}" for item in review_data.items if item.comments) or None
+        )
 
         reviewed_at = datetime.now(timezone.utc)
 
@@ -1672,9 +1670,8 @@ class ApplicationService:
             review.reviewed_at = reviewed_at
             # Delete existing items and re-create
             from sqlalchemy import delete as sa_delete
-            await self.db.execute(
-                sa_delete(ApplicationReviewItem).where(ApplicationReviewItem.review_id == review.id)
-            )
+
+            await self.db.execute(sa_delete(ApplicationReviewItem).where(ApplicationReviewItem.review_id == review.id))
             await self.db.flush()
         else:
             review = ApplicationReview(
