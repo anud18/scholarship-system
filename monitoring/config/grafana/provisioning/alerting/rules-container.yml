@@ -1,0 +1,102 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: container_health
+    folder: Alerts
+    interval: 30s
+    rules:
+      - uid: alert-container-down
+        title: ContainerDown
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-uid
+            model:
+              expr: time() - container_last_seen{name!=""} > 60
+              refId: A
+              instant: true
+        noDataState: NoData
+        execErrState: Error
+        for: 2m
+        labels:
+          severity: critical
+          category: container
+        annotations:
+          summary: "Container {{ $labels.name }} is down"
+          description: "Container {{ $labels.name }} on {{ $labels.instance }} ({{ $labels.environment }}) has been down for more than 2 minutes"
+        isPaused: false
+
+      - uid: alert-container-high-cpu
+        title: ContainerHighCPU
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus-uid
+            model:
+              expr: sum(rate(container_cpu_usage_seconds_total{name!=""}[5m])) by (name, instance, environment) * 100 > 80
+              refId: A
+              instant: true
+        noDataState: NoData
+        execErrState: Error
+        for: 5m
+        labels:
+          severity: warning
+          category: container
+        annotations:
+          summary: "High CPU usage in container {{ $labels.name }}"
+          description: "Container {{ $labels.name }} on {{ $labels.instance }} ({{ $labels.environment }}) is using more than 80% CPU. Current value: {{ $value | humanize }}%"
+        isPaused: false
+
+      - uid: alert-container-high-memory
+        title: ContainerHighMemory
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus-uid
+            model:
+              expr: (container_memory_usage_bytes{name!=""} / container_spec_memory_limit_bytes{name!=""}) * 100 > 85
+              refId: A
+              instant: true
+        noDataState: NoData
+        execErrState: Error
+        for: 5m
+        labels:
+          severity: warning
+          category: container
+        annotations:
+          summary: "High memory usage in container {{ $labels.name }}"
+          description: "Container {{ $labels.name }} on {{ $labels.instance }} ({{ $labels.environment }}) is using more than 85% of its memory limit. Current value: {{ $value | humanize }}%"
+        isPaused: false
+
+      - uid: alert-container-restarting-frequently
+        title: ContainerRestartingFrequently
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus-uid
+            model:
+              expr: rate(container_last_seen{name!=""}[15m]) > 0.1
+              refId: A
+              instant: true
+        noDataState: NoData
+        execErrState: Error
+        for: 5m
+        labels:
+          severity: warning
+          category: container
+        annotations:
+          summary: "Container {{ $labels.name }} is restarting frequently"
+          description: "Container {{ $labels.name }} on {{ $labels.instance }} ({{ $labels.environment }}) has restarted multiple times in the last 15 minutes"
+        isPaused: false
