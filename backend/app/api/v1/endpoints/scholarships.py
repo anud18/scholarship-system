@@ -424,7 +424,7 @@ async def add_student_to_whitelist(
 
 @router.post("/{scholarship_type}/upload-terms")
 async def upload_terms_document(
-    scholarship_type: str = Path(..., regex=r"^[a-z_]{1,50}$"),
+    scholarship_type: str = Path(..., pattern=r"^[a-z_]{1,50}$"),
     file: UploadFile = File(...),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -544,7 +544,7 @@ async def upload_terms_document(
 
 @router.get("/{scholarship_type}/terms")
 async def get_terms_document(
-    scholarship_type: str = Path(..., regex=r"^[a-z_]{1,50}$"),
+    scholarship_type: str = Path(..., pattern=r"^[a-z_]{1,50}$"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):

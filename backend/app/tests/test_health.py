@@ -4,7 +4,7 @@ Health check endpoint tests
 
 import pytest
 from fastapi.testclient import TestClient
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 
 from app.main import app
 
@@ -35,7 +35,10 @@ def test_root_endpoint():
 @pytest.mark.asyncio
 async def test_health_endpoint_async():
     """Test health check endpoint async"""
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    # httpx >=0.28 deprecated `AsyncClient(app=...)` in favor of explicit
+    # ASGITransport. Update for forward compatibility.
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/health")
 
         assert response.status_code == 200
