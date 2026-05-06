@@ -189,9 +189,8 @@ function PreviewDialog({ template, open, onClose }: PreviewDialogProps) {
               <div className="border rounded-lg overflow-hidden">
                 <iframe
                   srcDoc={previewHtml}
-                  className="w-full h-[400px]"
+                  className="w-full h-[600px]"
                   title="Email Preview"
-                  sandbox="allow-same-origin"
                 />
               </div>
             </div>

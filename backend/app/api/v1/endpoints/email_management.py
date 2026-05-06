@@ -630,8 +630,16 @@ async def send_simple_test_email(
         # Add [TEST] prefix to subject
         test_subject = f"[TEST] {request.subject}"
 
+        body_stripped = request.body.strip()
+        is_html = body_stripped.lower().startswith("<!doctype") or body_stripped.lower().startswith("<html")
+
         await email_service.send_email(
-            to=request.recipient_email, subject=test_subject, body=request.body, db=db, **metadata
+            to=request.recipient_email,
+            subject=test_subject,
+            body=None if is_html else request.body,
+            html_content=request.body if is_html else None,
+            db=db,
+            **metadata,
         )
 
         # Get the last email history entry to return ID
