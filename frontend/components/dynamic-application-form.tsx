@@ -296,7 +296,13 @@ export function DynamicApplicationForm({
 
     switch (field.field_type) {
       case "text":
-      case "email":
+      case "email": {
+        // validation_rules JSON may carry { pattern, patternMessage } from the
+        // application_fields config (#60). Surface them via HTML5 pattern + title.
+        const rules = (field as { validation_rules?: { pattern?: string; patternMessage?: string } })
+          .validation_rules ?? undefined;
+        const pattern = rules?.pattern;
+        const patternMessage = rules?.patternMessage;
         return (
           <div key={field.field_name} className="space-y-2">
             <Label htmlFor={field.field_name}>
@@ -315,13 +321,19 @@ export function DynamicApplicationForm({
               placeholder={placeholder}
               maxLength={field.max_length}
               required={field.is_required}
+              pattern={pattern}
+              title={patternMessage}
               className={`w-full ${isFixedField ? "bg-blue-50 border-blue-200" : ""}`}
             />
+            {patternMessage && (
+              <p className="text-xs text-muted-foreground">{patternMessage}</p>
+            )}
             {helpText && (
               <p className="text-sm text-muted-foreground whitespace-pre-line">{helpText}</p>
             )}
           </div>
         );
+      }
 
       case "number":
         return (
