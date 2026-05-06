@@ -36,7 +36,7 @@ interface PreviewDialogProps {
 
 function PreviewDialog({ template, open, onClose }: PreviewDialogProps) {
   const [testData, setTestData] = useState<Record<string, string>>({});
-  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [isSendingTest, setIsSendingTest] = useState(false);
   const [testEmail, setTestEmail] = useState("");
@@ -68,13 +68,7 @@ function PreviewDialog({ template, open, onClose }: PreviewDialogProps) {
       });
       const result = await res.json();
       if (result.success && result.html) {
-        const previewRes = await fetch("/api/email/preview", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ html: result.html }),
-        });
-        const { id } = await previewRes.json();
-        setPreviewId(id);
+        setPreviewHtml(result.html);
       } else {
         setError(result.error || "渲染模板失敗");
       }
@@ -189,12 +183,12 @@ function PreviewDialog({ template, open, onClose }: PreviewDialogProps) {
           </div>
 
           {/* Preview */}
-          {previewId && (
+          {previewHtml && (
             <div className="space-y-4">
               <h4 className="font-semibold">預覽</h4>
               <div className="border rounded-lg overflow-hidden">
                 <iframe
-                  src={`/api/email/preview/${previewId}`}
+                  srcDoc={previewHtml}
                   className="w-full h-[600px]"
                   title="Email Preview"
                 />
