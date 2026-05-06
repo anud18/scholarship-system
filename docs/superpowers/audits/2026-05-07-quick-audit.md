@@ -1,0 +1,150 @@
+# Quick Audit — 2026-05-07 (plan-12-bubbly-toucan)
+
+**Worktree**: main repo (audit/monitoring-stack-phase1)
+**Author**: Claude (Opus 4.7) under `/loop` dynamic mode
+**Goal**: 在 weekly reset 前榨乾剩餘 ~87% 額度,產出可驗證 commit + issue 整理。
+
+## Phase 0 — Quota injection hook ✅
+
+- `~/.claude/statusline.sh` + `~/.claude/hooks/inject-quota.sh` 部署完成
+- `~/.claude/cache/quota.json` 由 statusline 寫入,hook 讀取注入 `additionalContext`
+- 確認欄位語意:`used_percentage` 是「已用 %」,**不是剩餘**(我之前 plan 寫錯)
+- ⚠️ 觀察到 cache 偶爾出現 `reset expired` — 可能是 statusline refresh interval(30s)沒覆蓋到 reset 邊界。**Phase 1.x 後再修**(把 hook 改成偵測 `now > resets_at` 時拒絕注入或標 stale)。
+
+## Phase 0.5 — Skill recovery ✅
+
+從 `git stash@{1}^3`(unraced untracked component)抽出完整的 `.claude/skills/playwright-test-and-debug/`:
+- `SKILL.md`(518 行)
+- `scripts/`:`build-storage-state.sh`、`check-install.sh`、`check-stack.sh`、`db-query.sh`、`dump-app-state.sh`、`list-users.sh`、`login-mock-sso.sh`、`reset-db.sh`、`screenshot.js`、`tail-logs.sh`、`wait-for-stack.sh`、`with-session.js`
+- `.gitignore`
+- 已 `chmod +x` 全部 `.sh`,Claude Code 已自動辨識 skill(在 available skills 出現)
+- ⚠️ 已 staged 但**未 commit**;Phase 1.1 開跑前先確認此目錄要不要進 git(專案歷史無此 skill,可能被 .gitignore 主動排除過)
+
+## Phase 1.2 — DB / 程式設計快檢 findings
+
+### F1 [P0] 身分證明文 — 對應 #73
+- **位置**:
+  - `backend/app/models/payment_roster.py:183` — `student_id_number = Column(String(20), nullable=False)` 純文字、無 hash/encrypt
+  - `backend/app/schemas/student_snapshot.py:30` — `std_pid: str` 進入 `applications.student_data` JSON 也是純文字
+- **風險**: PaymentRosterItem 是「分發完成的造冊明細」,Excel 匯出 + admin 可見;`student_data` 全 JSON 暴露在多個 API 回應裡
+- **建議修法**:
+  1. 加 `app/core/crypto.py`:對稱加密(Fernet / AES-GCM),金鑰從 env
+  2. SQLAlchemy `TypeDecorator` 包 `EncryptedString` 自動 encrypt/decrypt(類似 [sqlalchemy-utils](https://github.com/kvesteri/sqlalchemy-utils) `EncryptedType`)
+  3. Alembic migration 把現有資料 in-place 加密(寫一次性 script,不在 schema migration 內跑業務邏輯)
+  4. Excel 匯出層:選擇加密 / 遮罩(只顯示後 4 碼),由 admin 操作時臨時解密
+- **預估**: L (大,需要設計 + migration + 跨 model 修改 + 測試)
+- **分階段建議**: 拆成至少 3 個 PR — (a) crypto 模組 + tests、(b) `student_id_number` 改 `EncryptedString` + 一次性遷移、(c) `student_data.std_pid` 同樣處理
+
+### F2 [P1] Semester enum 文件與程式碼脫節 — `NEW-CANDIDATE`
+- **CLAUDE.md(專案根目錄)** 寫 `Semester` enum 是 `first / second / annual`
+- **實際程式碼** `backend/app/models/enums.py:8-13` 是 `first / second / yearly`(連 `ApplicationCycle.yearly` 也是 yearly)
+- **風險**: 後續開發若依 CLAUDE.md 加 `annual` 字串會觸發 `LookupError: 'annual' is not among the defined enum values`
+- **建議修法**: 改 CLAUDE.md 的 enum 文檔(非常小),或反過來統一 enum 名稱(較大、有 migration 風險)
+- **預估**: S (改文檔)
+- **動作**: Phase 2 結束前批次開 issue,標題類似「docs(CLAUDE.md): Semester enum value is `yearly`, not `annual`」
+
+### F3 [P2] ApplicationSequence 在批次匯入下的鎖定行為 — `NEW-CANDIDATE`
+- **位置**: `backend/app/models/application_sequence.py`(模型) + 對應 service 的 `FOR UPDATE` 鎖
+- **風險**: #67(續領彙整匯入)會在短時間內生成大量 application;若每筆都搶同一個 `(academic_year, semester)` row 的鎖,可能熱點 lock contention
+- **驗證需求**: 還沒看 service 端的 sequence 生成程式碼,Phase 1 先 noted
+- **預估**: 待 service 端讀完評估
+
+### F4 [P1] Bank document delete orphan — 對應 #55
+- **位置**: 待 Phase 1.1 walkthrough 確認(plan 列在 `backend/app/api/v1/endpoints/student/me.py` 的 `DELETE /me/bank-document`)
+- **預估**: S (純後端 bug fix,可單元測試)
+- **建議修法**: delete handler 內 (a) 同步刪 MinIO object、(b) 清空 DB column、(c) audit log 一筆
+- **action**: Phase 1.1 結束後即進 Phase 3 chunk-1
+
+## Phase 1.1 — UI walkthrough (DEFERRED)
+
+5h 額度 92% 用掉,本輪不跑 Playwright(避免撞牆中斷)。等 5h reset 後在下個 wakeup 跑。
+
+預計流程(從 plan):
+1. 學生登入 → 申請(#59 / #60 / #61)
+2. 學生上傳郵局存摺 → 刪除(#55)
+3. 教授推薦(#64)
+4. 學院排名 + 匯出(#62 / #63)
+5. Admin 分發 + 造冊 + 刪除名單(#66 / #70)
+6. 全域 nav + 角色切換
+
+**用 `playwright-test-and-debug` skill** 跑 — 它有 mock-SSO + screenshot + DB query 一條龍。
+
+## Open Issues 觀察(取自 `gh issue list --state open`,共 22 筆)
+
+| 編號 | 類別 | 在我的 plan 內排程 |
+|------|------|-------------------|
+| #45 | app.status will be rejected after admin distribute | Phase 3 候選 |
+| #55 | DELETE /me/bank-document 孤兒 | **chunk-1 候選**(S, 純 bug) |
+| #59 | 獎學金說明頁 + 滑到底才能勾 | chunk 候選(S, 前端) |
+| #60 | 申請表單聯絡電話 | chunk 候選(S, 前端) |
+| #61 | 申請表單暫存 | M, 之後 |
+| #62 | 學院匯出整體改善 | M, 之後 |
+| #63 | 排名 deadline 提示 | S~M |
+| #64 | 學院開始審核後鎖教授 | **chunk-2 候選**(S~M) |
+| #65 | 已領月份數匯入 | 待會後拿到範本 — 暫不啟動 |
+| #66 | 造冊刪除功能 | M |
+| #67 | 續領彙整匯入 | M~L |
+| #68 | 國籍/身分顯示 | S~M |
+| #69 | 113 續領拆分 | L,Phase 3 末段 |
+| #70 | 分發後依計畫編號自動造冊 | M |
+| #71 | 續領完整功能 + 排名前置 | L |
+| #72 | 遞補功能 | M |
+| #73 | 身分證加密 | **L,本 audit F1**,可拆 3 PR |
+| #74 | 部署正式機 | infra,不在 plan |
+| #75 | 監控建置 | 已是 audit/monitoring-stack-phase1 主題 |
+| #76 | Playwright e2e 套件 | 與本 audit Phase 1.1 重疊 |
+| #79 | OCR 現況檢視 | 報告型,不寫 code |
+| #80 | SSO audit | 已有報告(同分支) |
+
+## Fix Queue (live status)
+
+```
+[x] chunk-1: #55 bank-document orphan delete + #81 test infra unblock (S+S)
+       commit: e8b4e41 fix(db): pool args dialect-conditional (closes #81)
+       commit: 4029df1 fix(user-profile): clear both columns + remove MinIO (closes #55)
+       verified: live dev stack upload→delete cycle, both DB cols NULL + MinIO empty ✅
+       new finding: #82 JSONB-on-SQLite blocks pytest for models with JSONB column
+[x] chunk-2: #64 學院 review 鎖教授 (S~M)
+       commit: 2fdb660 fix(review): lock professor review (backend guard + tests)
+       commit: b71f3b5 feat(professor-review-ui): readonly + warning banner
+       verified: 3 sync pytest tests pass (lock-set, helper logic);
+                 4 async tests written but blocked by #82
+       deferred: live integration verify needs prof↔app seed state (1 app, 0 reviews)
+[x] chunk-3: #60 申請表單聯絡電話 (S)
+       commit: ad9c023 feat(application-form): add contact_phone with TW validation
+       — config-driven via Alembic (add_contact_phone_field_001)
+       — FE dynamic form now consumes validation_rules.{pattern,patternMessage}
+       verified: GET /api/v1/application-fields/fields/phd returns the row ✅
+[ ] chunk-4: F2 docs(CLAUDE.md) Semester enum 修正 (S, doc-only) ← deferred next round
+[ ] chunk-5: #82 JSONB-on-SQLite test infra (M, follow-up to #81)
+[ ] chunk-6+: 視 quota 餘量插入更多 — #45 / #59 / #63 / #68 / etc.
+[ ] CHECKPOINT: weekly < 5% → push + 寫總結 → 停
+```
+
+## Round-end snapshot (this turn)
+
+- weekly: 22% used (10h to reset) — plenty of headroom for next round
+- 5h: 92% used / cache shows expired reset — sleep til real reset before grinding more
+- chunks completed in this round: 0, 0.5 (skill), 1, 2, 3 — six commits total on branch
+- branch state: all local commits, NOT pushed (per plan rules until weekly < 5%)
+
+## New issues filed during execution
+
+| Issue | Title | Severity |
+|-------|-------|----------|
+| #81 | test infra broken: session.py passes PG pool args to SQLite create_async_engine | P0 (closed by chunk-1 commit e8b4e41) |
+| #82 | test infra: SQLite test DB can't render JSONB columns from PostgreSQL models | P1 (open, blocks pytest for JSONB-touching models) |
+
+## Quota status when this doc was written
+
+- weekly: 22% used (~10h 30m to reset) — plenty
+- 5h: 92% used (cache shows expired reset) — near wall, current chunk should not exceed ~5% more
+- 策略:此輪寫完此 doc + ScheduleWakeup;下一輪 5h 已 reset,直接進 Playwright walk + chunk-1
+
+## Stop conditions reminder
+
+1. weekly < 5% → push + 寫總結 + 停
+2. destructive op need → 停問人
+3. 連兩 chunk fail → 停寫 status note
+4. user 中斷
+5. 全 chunk 完成 → 寫總結 + 停
