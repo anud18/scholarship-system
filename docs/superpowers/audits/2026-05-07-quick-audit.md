@@ -165,6 +165,45 @@
 - Started: 5h 1% used / weekly 13% used (fresh fresh fresh)
 - After chunk-7: 5h 14% / weekly 15% — plenty of headroom remains
 
+---
+
+## Round 2 (continued) — chunk-8: #63 backend deadline guard
+
+Closes the backend half of #63 (#63 FE — countdown + disabled buttons —
+deferred to keep this PR focused on the security-critical part):
+
+- New `assert_ranking_within_deadline(scholarship_type_id, academic_year, semester, current_user)`
+  on `CollegeReviewService`: looks up matching `ScholarshipConfiguration`
+  (deadline lives there, not on `ScholarshipType`), raises `AuthorizationError`
+  when `college_review_end < now`. Admin / super_admin bypass.
+- `assert_ranking_within_deadline_by_ranking(ranking_id, current_user)` —
+  convenience that resolves type+year+semester from the ranking row.
+- Wired into 4 endpoints: POST /rankings, PUT /rankings/{id}/order,
+  POST /rankings/{id}/finalize, POST /rankings/{id}/unfinalize. Each now
+  translates AuthorizationError → 403 and helper-raised NotFoundError → 404.
+- Tests: 6/6 passing (deadline future / no-deadline / no-config / past-college /
+  admin-bypass / super-admin-bypass).
+
+Commit: `ec4e5f2`
+
+## End-of-round state
+
+- Branch: `audit/monitoring-stack-phase1` — **14 new commits** ahead of upstream
+- No pushes (per plan: hold until `weekly < 5%`)
+- Quota: weekly 15% used / 5h 17% used / 3h7m to 5h reset
+- Issues closed: #45, #55, #60, #64, #81, #82 — six fully closed
+- Issues partially closed: #59 (B done; A needs source text), #63 (backend done; FE deferred)
+
+## Suggested next chunks (for next wakeup)
+
+| chunk | issue | scope | est |
+|-------|-------|-------|-----|
+| chunk-9  | #63 FE | countdown + disabled UI + "已過排名截止時間" banner on RankingManagementPanel | M |
+| chunk-10 | #68 | nationality / identity columns on admin + college list views; backend Excel export adds two columns | M |
+| chunk-11 | #66 | admin removes a roster item with reason capture + audit + re-export | M~L |
+| chunk-12 | #59 A | 勞保 SOP section in NoticeAgreementStep (needs source text — ASK USER) | S (after source) |
+| chunk-13 | #72 | 遞補 (waitlist) — eligibility + flow | M |
+
 ## New issues filed during execution
 
 | Issue | Title | Severity |
