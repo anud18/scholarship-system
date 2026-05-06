@@ -157,7 +157,7 @@ class CollegeRankingItem(Base):
     )  # Which academic year's quota was used (e.g., 113 for prior-year supplement)
     backup_position = Column(Integer, nullable=True)  # Backup position (NULL for admitted, 1, 2, 3... for backup)
     backup_allocations = Column(
-        JSONB, nullable=True
+        get_json_type(), nullable=True
     )  # Array of backup allocations: [{sub_type, backup_position, college, allocation_reason}, ...]
 
     # Received months tracking

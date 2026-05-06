@@ -4,12 +4,6 @@ Regression tests for ReviewService.assert_professor_review_unlocked — issue #6
 Once an application's review_stage advances to college_review (or any stage
 beyond), professors must not be able to submit or update their reviews.
 Admins / super_admins keep an escape hatch.
-
-NOTE: These tests can't currently execute under the SQLite test conftest
-because Application transitively pulls in JSONB columns that SQLite can't
-render. See issue #82. The test logic itself is correct and will run once
-that infra blocker is closed. (Issue #81 — engine pool args — is already
-fixed in the parent commit chain.)
 """
 
 from unittest.mock import MagicMock
@@ -97,6 +91,7 @@ async def test_assert_unlocks_for_admin_even_when_stage_locked(db: AsyncSession)
         user_id=admin.id,
         academic_year=114,
         scholarship_type_id=1,
+        sub_type_selection_mode="single",
         review_stage=ReviewStage.college_review.value,
     )
     db.add(app)
@@ -120,6 +115,7 @@ async def test_assert_raises_for_professor_when_stage_locked(db: AsyncSession):
         user_id=professor.id,
         academic_year=114,
         scholarship_type_id=1,
+        sub_type_selection_mode="single",
         review_stage=ReviewStage.college_reviewed.value,
     )
     db.add(app)
@@ -143,6 +139,7 @@ async def test_assert_passes_when_stage_unlocked(db: AsyncSession):
         user_id=professor.id,
         academic_year=114,
         scholarship_type_id=1,
+        sub_type_selection_mode="single",
         review_stage=ReviewStage.professor_reviewed.value,
     )
     db.add(app)
