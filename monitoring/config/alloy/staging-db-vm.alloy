@@ -78,15 +78,43 @@ loki.write "default" {
 }
 
 // =============================================================================
-// METRICS PIPELINE - PULL MODE
+// METRICS PIPELINE — PUSH MODE (matches AP-VM Alloy structure)
 // =============================================================================
-// Metrics are exposed via exporters and scraped directly by Prometheus on AP-VM:
-// - Node Exporter: exposed on port 9100
-// - PostgreSQL Exporter: exposed on port 9187
-// - Alloy Self-Monitoring: exposed on port 12345
-//
-// Prometheus on AP-VM will add environment/vm labels during scrape using
-// relabel_configs in its prometheus.yml configuration.
+// Scrapes local DB-VM exporters and pushes to AP-VM Prometheus via remote_write.
+// Adds environment + vm labels via prometheus.relabel before push so dashboards
+// and alerts can filter on {environment="staging", vm="db-vm"}.
+
+prometheus.scrape "node_exporter" {
+  targets    = [{ __address__ = "node-exporter:9100" }]
+  forward_to = [prometheus.relabel.add_labels.receiver]
+  job_name   = "node"
+  scrape_interval = "15s"
+}
+
+prometheus.scrape "postgres_exporter" {
+  targets    = [{ __address__ = "postgres-exporter:9187" }]
+  forward_to = [prometheus.relabel.add_labels.receiver]
+  job_name   = "postgres"
+  scrape_interval = "15s"
+}
+
+prometheus.relabel "add_labels" {
+  forward_to = [prometheus.remote_write.default.receiver]
+  rule {
+    target_label = "environment"
+    replacement  = "staging"
+  }
+  rule {
+    target_label = "vm"
+    replacement  = "db-vm"
+  }
+}
+
+prometheus.remote_write "default" {
+  endpoint {
+    url = env("MONITORING_SERVER_URL") + ":9090/api/v1/write"
+  }
+}
 
 // =============================================================================
 // SELF-MONITORING
