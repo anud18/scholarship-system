@@ -103,18 +103,3 @@ datasources:
     secureJsonData:
       httpHeaderValue1: 'dev'
     version: 1
-
-  # =========================================================================
-  # ALERTMANAGER
-  # =========================================================================
-  - name: AlertManager
-    type: alertmanager
-    uid: alertmanager-uid
-    orgId: 1
-    access: proxy
-    url: http://alertmanager:9093
-    editable: false
-    jsonData:
-      implementation: prometheus
-      handleGrafanaManagedAlerts: true
-    version: 1
