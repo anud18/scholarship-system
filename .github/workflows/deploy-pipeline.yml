@@ -12,6 +12,10 @@ on:
         type: boolean
         default: false
 
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   NODE_VERSION: '22'
   PYTHON_VERSION: '3.13'
@@ -125,8 +129,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
           build-args: |
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
             VCS_REF=${{ github.sha }}
@@ -211,10 +215,6 @@ jobs:
         run: |
           cd ~/scholarship-staging
           docker compose up -d
-
-          # Wait for backend to be ready
-          echo "Waiting for backend to start..."
-          sleep 15
 
       - name: Run database migrations
         run: |

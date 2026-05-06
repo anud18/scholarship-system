@@ -1,0 +1,5 @@
+black==24.8.0
+flake8
+mypy
+pylint
+types-requests
