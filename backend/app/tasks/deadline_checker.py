@@ -281,17 +281,13 @@ class DeadlineChecker:
         result = await self.db.execute(app_stmt)
         applications = result.scalars().all()
 
-        logger.info(
-            f"Config {config.id}: scheduling {len(applications)} professor review deadline reminders"
-        )
+        logger.info(f"Config {config.id}: scheduling {len(applications)} professor review deadline reminders")
 
         for application in applications:
             try:
                 await self._schedule_professor_deadline_reminder(application, config, now)
             except Exception as e:
-                logger.error(
-                    f"Failed to schedule deadline reminder for application {application.id}: {e}"
-                )
+                logger.error(f"Failed to schedule deadline reminder for application {application.id}: {e}")
 
     async def _schedule_professor_deadline_reminder(
         self, application: Application, config: ScholarshipConfiguration, now: datetime
@@ -302,18 +298,12 @@ class DeadlineChecker:
             logger.warning(f"Application {application.id} has no professor email, skipping")
             return
 
-        days_remaining = math.ceil(
-            (config.professor_review_end - now).total_seconds() / 86400
-        )
+        days_remaining = math.ceil((config.professor_review_end - now).total_seconds() / 86400)
 
         student_data = application.student_data or {}
-        student_name = student_data.get("std_cname") or (
-            application.student.name if application.student else ""
-        )
+        student_name = student_data.get("std_cname") or (application.student.name if application.student else "")
         scholarship_name = config.scholarship_type.name if config.scholarship_type else ""
-        submit_date = (
-            application.submitted_at.strftime("%Y-%m-%d") if application.submitted_at else ""
-        )
+        submit_date = application.submitted_at.strftime("%Y-%m-%d") if application.submitted_at else ""
         app_id_str = application.app_id or str(application.id)
 
         context = {
