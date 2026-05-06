@@ -80,7 +80,8 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - public folder files
+     * - api/email/preview/ (serves email HTML with its own CSP; middleware nonce would block inline styles)
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|eot)).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/email/preview/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|eot)).*)",
   ],
 };
