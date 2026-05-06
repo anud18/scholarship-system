@@ -560,3 +560,42 @@ This workflow is designed for **staging only**. When ready for production:
 **Last Updated**: 2025-01-11
 **Architecture**: Self-hosted runner on Staging AP-VM (localhost deployment)
 **Maintained By**: Scholarship System Development Team
+
+---
+
+## Repo Migration Checklist (post-2026-05-06)
+
+The deploy workflow on `anud18/scholarship-system` has zero successful runs after the migration from `jotpalch/scholarship-system`. Before any monitoring config change deploys, complete this checklist on `anud18/scholarship-system`.
+
+### Required GitHub Repository Secrets
+
+Set these via Settings → Secrets and variables → Actions:
+
+| Name | Source | Notes |
+|---|---|---|
+| `GRAFANA_ADMIN_USER` | `admin` | Grafana admin login |
+| `GRAFANA_ADMIN_PASSWORD` | password manager | rotate to a strong value before prod launch |
+| `GRAFANA_ROOT_URL` | `https://ss.test.nycu.edu.tw/monitoring` | nginx public URL |
+| `STAGING_DB_HOST` | DB-VM IP (e.g., `10.113.74.25`) | private subnet IP |
+| `STAGING_DB_USER` | DB-VM SSH username | dedicated deploy user |
+| `STAGING_DB_SSH_KEY` | private key file content | full file including BEGIN/END markers |
+| `STAGING_MONITORING_SERVER_URL` | AP-VM internal URL (e.g., `http://10.113.74.X`) | NO port; alloy appends `:3100` / `:9090` |
+
+`GRAFANA_SECRET_KEY` is intentionally NOT set; Grafana generates a session key at startup. Trade-off: session cookies don't survive Grafana restart. Set it before launch if persistent sessions are required.
+
+### Self-Hosted Runner
+
+The deploy workflow declares `runs-on: self-hosted`. The runner labelled `self-hosted, Linux, X64` must be registered to `anud18/scholarship-system` (Settings → Actions → Runners). The same physical machine that hosted the staging AP-VM runner on `jotpalch/scholarship-system` can be re-registered to the new repo; deregister from the OLD repo first to avoid double-claim.
+
+### Verification
+
+After secrets and runner are in place:
+
+```bash
+gh workflow run deploy-monitoring-stack.yml --repo anud18/scholarship-system
+gh run watch --repo anud18/scholarship-system
+```
+
+Expected: both jobs (`Deploy Monitoring Server (Staging AP-VM)` and `Deploy Staging DB-VM Monitoring`) succeed.
+
+If the run stays in `queued` for more than 30 seconds, the runner is not picking up the job — re-check runner registration and labels.
