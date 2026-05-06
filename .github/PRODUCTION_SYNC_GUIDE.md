@@ -65,7 +65,7 @@ In **this repository** (development repo):
 
 | Secret Name | Value | Description |
 |-------------|-------|-------------|
-| `PRODUCTION_SYNC_PAT` | `ghp_xxxxxxxxxxxx` | Personal Access Token from Step 2 |
+| `GH_PAT` | `ghp_xxxxxxxxxxxx` | Personal Access Token from Step 2 |
 | `PRODUCTION_REPO` | `owner/repo-name` | Full repo path, e.g., `jotpalch/scholarship-production` |
 
 #### Optional Secrets
@@ -386,12 +386,12 @@ gh run view <run-id>
 
 ## 🔧 Troubleshooting
 
-### Issue: "PRODUCTION_SYNC_PAT not configured"
+### Issue: "GH_PAT not configured"
 
 **Cause**: Secret not set or named incorrectly
 
 **Solution**:
-1. Verify secret name is exactly `PRODUCTION_SYNC_PAT` (case-sensitive)
+1. Verify secret name is exactly `GH_PAT` (case-sensitive)
 2. Check secret is set in **source repo** (not production repo)
 3. Ensure token hasn't expired
 
