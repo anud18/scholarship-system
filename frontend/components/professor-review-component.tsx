@@ -42,6 +42,42 @@ interface ProfessorReviewComponentProps {
   user: User;
 }
 
+// Mirror of backend's LOCKED_STAGES_FOR_PROFESSOR_REVIEW (#64).
+// Once an application's review_stage reaches any of these, the professor's
+// review form is read-only — admins / super_admins keep an escape hatch
+// server-side, regular professors cannot edit or submit.
+const LOCKED_REVIEW_STAGES: ReadonlySet<string> = new Set([
+  "college_review",
+  "college_reviewed",
+  "college_ranking",
+  "college_ranked",
+  "admin_review",
+  "admin_reviewed",
+  "quota_distribution",
+  "quota_distributed",
+  "roster_preparation",
+  "roster_prepared",
+  "roster_submitted",
+  "completed",
+  "archived",
+]);
+
+const STAGE_LABEL_ZH: Record<string, string> = {
+  college_review: "學院審核中",
+  college_reviewed: "學院審核完成",
+  college_ranking: "學院排名中",
+  college_ranked: "學院排名完成",
+  admin_review: "管理員審核中",
+  admin_reviewed: "管理員審核完成",
+  quota_distribution: "配額分發中",
+  quota_distributed: "配額已分發",
+  roster_preparation: "造冊準備中",
+  roster_prepared: "造冊已完成",
+  roster_submitted: "造冊已送出",
+  completed: "流程完成",
+  archived: "已歸檔",
+};
+
 interface SubTypeOption {
   value: string;
   label: string;
@@ -641,8 +677,22 @@ function ProfessorReviewComponentInner({
             </DialogDescription>
           </DialogHeader>
 
-          {selectedApplication && (
+          {selectedApplication && (() => {
+            const reviewStageValue = ((selectedApplication as unknown) as { review_stage?: string })?.review_stage;
+            const isLocked = !!reviewStageValue && LOCKED_REVIEW_STAGES.has(reviewStageValue);
+            const lockedStageLabel = reviewStageValue
+              ? STAGE_LABEL_ZH[reviewStageValue] ?? reviewStageValue
+              : "";
+            return (
             <div className="space-y-6">
+              {/* Locked banner — issue #64 */}
+              {isLocked && (
+                <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                  <strong>本申請已進入「{lockedStageLabel}」階段。</strong>
+                  教授審核已鎖定，您無法再修改或提交審核意見。如需更動，請聯繫管理員。
+                </div>
+              )}
+
               {/* Application Info */}
               <Card>
                 <CardHeader>
@@ -713,6 +763,7 @@ function ProfessorReviewComponentInner({
                                 <Checkbox
                                   id={`agree-${subType.value}`}
                                   checked={reviewItem?.recommendation === 'approve'}
+                                  disabled={isLocked}
                                   onCheckedChange={checked => {
                                     updateReviewItem(
                                       subType.value,
@@ -732,6 +783,7 @@ function ProfessorReviewComponentInner({
                                 <Checkbox
                                   id={`disagree-${subType.value}`}
                                   checked={reviewItem?.recommendation === 'reject'}
+                                  disabled={isLocked}
                                   onCheckedChange={checked => {
                                     updateReviewItem(
                                       subType.value,
@@ -766,6 +818,7 @@ function ProfessorReviewComponentInner({
                             <Textarea
                               placeholder={`請說明您對「${subType.label}」的評估意見...`}
                               value={reviewItem?.comments || ""}
+                              disabled={isLocked}
                               onChange={e => {
                                 updateReviewItem(
                                   subType.value,
@@ -802,6 +855,7 @@ function ProfessorReviewComponentInner({
                 <Button
                   onClick={submitReview}
                   disabled={
+                    isLocked ||
                     loading ||
                     !reviewData.items.some(
                       item => item.recommendation === "approve" || item.recommendation === "reject"
@@ -811,15 +865,18 @@ function ProfessorReviewComponentInner({
                     )
                   }
                 >
-                  {loading
-                    ? "提交中..."
-                    : existingReview
-                      ? "更新推薦"
-                      : "提交推薦"}
+                  {isLocked
+                    ? "已鎖定"
+                    : loading
+                      ? "提交中..."
+                      : existingReview
+                        ? "更新推薦"
+                        : "提交推薦"}
                 </Button>
               </div>
             </div>
-          )}
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>
