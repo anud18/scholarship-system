@@ -15,7 +15,7 @@ Complete guide for deploying the monitoring infrastructure using GitHub Actions 
 ## Overview
 
 The monitoring stack is deployed using GitHub Actions workflows that:
-1. Deploy the central monitoring server (Grafana, Loki, Prometheus, AlertManager) **on Staging AP-VM**
+1. Deploy the central monitoring server (Grafana, Loki, Prometheus) **on Staging AP-VM**
 2. Deploy monitoring agents on Staging AP-VM (localhost)
 3. Deploy monitoring agents on Staging DB-VM (via SSH)
 4. Perform health checks to ensure all services are running
@@ -37,7 +37,7 @@ The monitoring stack is deployed using GitHub Actions workflows that:
 │  └───────────────────────────────────────────────────┘  │
 │  ┌───────────────────────────────────────────────────┐  │
 │  │  Monitoring Stack                                 │  │
-│  │  - Grafana, Prometheus, Loki, AlertManager        │  │
+│  │  - Grafana, Prometheus, Loki                       │  │
 │  │  - Grafana Alloy (staging-ap-vm.alloy)            │  │
 │  │  - Node Exporter, cAdvisor, Nginx Exporter        │  │
 │  └───────────────────────────────────────────────────┘  │
@@ -90,16 +90,11 @@ Configure these in GitHub repository settings → Secrets and variables → Acti
 
 **Note**: The workflow is configured to use SSH port **8822** for DB-VM connections (not the default port 22).
 
-### Alert Configuration Secrets (Optional)
+### Alert Configuration
 
-| Secret Name | Description | Required |
-|-------------|-------------|----------|
-| `ALERT_EMAIL_FROM` | Email sender address for alerts | No |
-| `ALERT_SMTP_HOST` | SMTP server hostname | No |
-| `ALERT_SMTP_PORT` | SMTP server port | No |
-| `ALERT_SMTP_USER` | SMTP username | No |
-| `ALERT_SMTP_PASSWORD` | SMTP password | No |
-| `ALERT_SLACK_WEBHOOK` | Slack webhook URL for alerts | No |
+Alerts are now handled by Grafana unified alerting + GitHub Issues. See `monitoring/PRODUCTION_RUNBOOK.md` for operational guidance and Phase 2 spec §6.2 for design rationale.
+
+The only alerting-related secret is `GH_PAT` (already used by `mirror-to-production.yml`); it is read by Grafana via `/etc/grafana/secrets/gh_pat` mounted from `/opt/scholarship/secrets/gh_pat` on the host (provisioned by `deploy-monitoring-stack.yml`).
 
 ### Secrets Summary
 
@@ -188,7 +183,7 @@ The workflow performs these steps in 2 jobs:
 3. **Deploy configuration**: Copy monitoring configs to `/opt/scholarship/monitoring/`
 4. **Set environment variables**: Create `.env.monitoring` from GitHub secrets
 5. **Pull images**: Update to latest Docker images
-6. **Deploy stack**: Start monitoring services (Grafana, Prometheus, Loki, AlertManager)
+6. **Deploy stack**: Start monitoring services (Grafana, Prometheus, Loki)
 7. **Health check**: Verify all 4 services are healthy
 8. **Deploy Alloy**: Copy `staging-ap-vm.alloy` config and restart Alloy
 
@@ -211,7 +206,6 @@ The workflow performs comprehensive health checks:
 - ✅ Grafana API health check (`/api/health`)
 - ✅ Prometheus health check (`/-/healthy`)
 - ✅ Loki readiness check (`/ready`)
-- ✅ AlertManager health check (`/-/healthy`)
 - ✅ Prometheus targets status (all staging targets UP)
 - ✅ Loki log ingestion (staging logs being received)
 
@@ -462,8 +456,6 @@ docker-compose -f /opt/scholarship/monitoring/docker-compose.monitoring.yml logs
 docker logs monitoring_grafana -f
 docker logs monitoring_prometheus -f
 docker logs monitoring_loki -f
-docker logs monitoring_alertmanager -f
-
 # View Alloy logs on AP-VM
 docker logs scholarship_alloy_staging_ap -f
 ```
