@@ -23,6 +23,33 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Pre-flight secret check
+        env:
+          REQUIRED_SECRETS: |
+            GRAFANA_ADMIN_USER GRAFANA_ADMIN_PASSWORD GRAFANA_ROOT_URL
+            STAGING_DB_HOST STAGING_DB_USER STAGING_DB_SSH_KEY
+            STAGING_MONITORING_SERVER_URL
+          GRAFANA_ADMIN_USER: ${{ secrets.GRAFANA_ADMIN_USER }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          GRAFANA_ROOT_URL: ${{ secrets.GRAFANA_ROOT_URL }}
+          STAGING_DB_HOST: ${{ secrets.STAGING_DB_HOST }}
+          STAGING_DB_USER: ${{ secrets.STAGING_DB_USER }}
+          STAGING_DB_SSH_KEY: ${{ secrets.STAGING_DB_SSH_KEY }}
+          STAGING_MONITORING_SERVER_URL: ${{ secrets.STAGING_MONITORING_SERVER_URL }}
+        run: |
+          missing=()
+          for var in $REQUIRED_SECRETS; do
+            if [ -z "${!var}" ]; then
+              missing+=("$var")
+            fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required secrets: ${missing[*]}"
+            echo "::error::See monitoring/GITHUB_DEPLOYMENT.md → Repo Migration Checklist"
+            exit 1
+          fi
+          echo "✅ All required secrets present"
+
       - name: Create monitoring directories
         run: |
           sudo mkdir -p /opt/scholarship/monitoring
@@ -130,6 +157,33 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Pre-flight secret check
+        env:
+          REQUIRED_SECRETS: |
+            GRAFANA_ADMIN_USER GRAFANA_ADMIN_PASSWORD GRAFANA_ROOT_URL
+            STAGING_DB_HOST STAGING_DB_USER STAGING_DB_SSH_KEY
+            STAGING_MONITORING_SERVER_URL
+          GRAFANA_ADMIN_USER: ${{ secrets.GRAFANA_ADMIN_USER }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          GRAFANA_ROOT_URL: ${{ secrets.GRAFANA_ROOT_URL }}
+          STAGING_DB_HOST: ${{ secrets.STAGING_DB_HOST }}
+          STAGING_DB_USER: ${{ secrets.STAGING_DB_USER }}
+          STAGING_DB_SSH_KEY: ${{ secrets.STAGING_DB_SSH_KEY }}
+          STAGING_MONITORING_SERVER_URL: ${{ secrets.STAGING_MONITORING_SERVER_URL }}
+        run: |
+          missing=()
+          for var in $REQUIRED_SECRETS; do
+            if [ -z "${!var}" ]; then
+              missing+=("$var")
+            fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required secrets: ${missing[*]}"
+            echo "::error::See monitoring/GITHUB_DEPLOYMENT.md → Repo Migration Checklist"
+            exit 1
+          fi
+          echo "✅ All required secrets present"
 
       - name: Set up SSH key for DB-VM
         run: |
