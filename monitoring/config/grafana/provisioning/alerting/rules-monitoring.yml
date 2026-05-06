@@ -1,0 +1,78 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: monitoring_health
+    folder: Alerts
+    interval: 60s
+    rules:
+      - uid: alert-prometheus-target-down
+        title: PrometheusTargetDown
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus-uid
+            model:
+              expr: up == 0
+              refId: A
+              instant: true
+        noDataState: NoData
+        execErrState: Error
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Prometheus target {{ $labels.job }} is down"
+          description: "Prometheus cannot scrape {{ $labels.job }} on {{ $labels.instance }} ({{ $labels.environment }})"
+        isPaused: false
+
+      - uid: alert-loki-ingestion-falling-behind
+        title: LokiIngestionFallingBehind
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-uid
+            model:
+              expr: rate(loki_distributor_bytes_received_total[5m]) > rate(loki_ingester_chunks_flushed_total[5m]) * 1000
+              refId: A
+              instant: true
+        noDataState: NoData
+        execErrState: Error
+        for: 10m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Loki ingestion is falling behind"
+          description: "Loki is receiving logs faster than it can flush them. This may cause memory issues."
+        isPaused: false
+
+      - uid: alert-prometheus-storage-low
+        title: PrometheusStorageLow
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-uid
+            model:
+              expr: (prometheus_tsdb_storage_blocks_bytes / prometheus_tsdb_retention_limit_bytes) > 0.8
+              refId: A
+              instant: true
+        noDataState: NoData
+        execErrState: Error
+        for: 10m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Prometheus storage usage is high"
+          description: "Prometheus is using more than 80% of its storage retention limit. Current value: {{ $value | humanizePercentage }}"
+        isPaused: false
