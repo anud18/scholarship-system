@@ -1,0 +1,106 @@
+name: Create Monitoring Alert Issue
+
+on:
+  repository_dispatch:
+    types: [monitoring-alert]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  handle-alert:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Render issue title and body
+        id: render
+        env:
+          ALERT: ${{ github.event.client_payload.alertname }}
+          ENV: ${{ github.event.client_payload.environment }}
+          STATUS: ${{ github.event.client_payload.status }}
+          SEVERITY: ${{ github.event.client_payload.severity }}
+          SUMMARY: ${{ github.event.client_payload.summary }}
+          DESCRIPTION: ${{ github.event.client_payload.description }}
+          INSTANCE: ${{ github.event.client_payload.instance }}
+          VALUE: ${{ github.event.client_payload.value }}
+          FIRED_AT: ${{ github.event.client_payload.fired_at }}
+          GRAFANA_URL: ${{ github.event.client_payload.grafana_url }}
+        run: |
+          echo "title=Monitoring Alert: $ALERT ($ENV/$SEVERITY)" >> "$GITHUB_OUTPUT"
+          cat > /tmp/body.md <<EOF
+          ## $STATUS — $ALERT
+
+          **Environment:** \`$ENV\`
+          **Severity:** \`$SEVERITY\`
+          **Instance:** \`$INSTANCE\`
+          **Value:** $VALUE
+          **Fired at:** $FIRED_AT
+          **Grafana:** $GRAFANA_URL
+
+          ### Summary
+          $SUMMARY
+
+          ### Description
+          $DESCRIPTION
+          EOF
+
+      - name: Find existing issue
+        id: find
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ALERT: ${{ github.event.client_payload.alertname }}
+          ENV: ${{ github.event.client_payload.environment }}
+        run: |
+          ISSUE=$(gh issue list \
+            --repo "${{ github.repository }}" \
+            --label "monitoring-alert" \
+            --label "alert:$ALERT" \
+            --label "env:$ENV" \
+            --state all \
+            --limit 1 \
+            --json number,state \
+            --jq '.[0]')
+          if [ -n "$ISSUE" ] && [ "$ISSUE" != "null" ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "number=$(echo "$ISSUE" | jq -r .number)" >> "$GITHUB_OUTPUT"
+            echo "state=$(echo "$ISSUE" | jq -r .state)" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create new issue (no existing match, status=firing)
+        if: steps.find.outputs.found != 'true' && github.event.client_payload.status == 'firing'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --repo "${{ github.repository }}" \
+            --title "${{ steps.render.outputs.title }}" \
+            --body-file /tmp/body.md \
+            --label "monitoring-alert" \
+            --label "alert:${{ github.event.client_payload.alertname }}" \
+            --label "env:${{ github.event.client_payload.environment }}" \
+            --label "severity:${{ github.event.client_payload.severity }}"
+
+      - name: Reopen + comment (existing closed, status=firing)
+        if: steps.find.outputs.found == 'true' && steps.find.outputs.state == 'CLOSED' && github.event.client_payload.status == 'firing'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue reopen ${{ steps.find.outputs.number }} --repo "${{ github.repository }}"
+          gh issue comment ${{ steps.find.outputs.number }} --repo "${{ github.repository }}" --body-file /tmp/body.md
+
+      - name: Append firing comment (existing open, status=firing)
+        if: steps.find.outputs.found == 'true' && steps.find.outputs.state == 'OPEN' && github.event.client_payload.status == 'firing'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment ${{ steps.find.outputs.number }} --repo "${{ github.repository }}" --body-file /tmp/body.md
+
+      - name: Append resolved comment (existing issue, status=resolved)
+        if: steps.find.outputs.found == 'true' && github.event.client_payload.status == 'resolved'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment ${{ steps.find.outputs.number }} --repo "${{ github.repository }}" \
+            --body "✅ Alert resolved at ${{ github.event.client_payload.fired_at }}. Closing left to operator after verifying root cause."
