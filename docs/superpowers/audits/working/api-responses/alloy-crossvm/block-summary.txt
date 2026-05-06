@@ -1,0 +1,43 @@
+=== prod-ap-vm ===
+   1 discovery.docker "containers" {
+   1 loki.process "add_labels" {
+   1 loki.relabel "container_labels" {
+   1 loki.source.docker "containers" {
+   1 loki.write "default" {
+   1 prometheus.exporter.self "alloy" { }
+   1 prometheus.relabel "add_labels" {
+   1 prometheus.remote_write "default" {
+   1 prometheus.scrape "alloy_self" {
+   1 prometheus.scrape "backend" {
+   1 prometheus.scrape "cadvisor" {
+   1 prometheus.scrape "nginx_exporter" {
+   1 prometheus.scrape "node_exporter" {
+=== prod-db-vm ===
+   1 discovery.docker "containers" {
+   1 loki.process "add_labels" {
+   1 loki.relabel "container_labels" {
+   1 loki.source.docker "containers" {
+   1 loki.write "default" {
+   1 prometheus.exporter.self "alloy" { }
+=== staging-ap-vm ===
+   1 discovery.docker "containers" {
+   1 loki.process "add_labels" {
+   1 loki.relabel "container_labels" {
+   1 loki.source.docker "containers" {
+   1 loki.write "default" {
+   1 prometheus.exporter.self "alloy" { }
+   1 prometheus.relabel "add_labels" {
+   1 prometheus.remote_write "default" {
+   1 prometheus.scrape "alloy_self" {
+   1 prometheus.scrape "backend" {
+   1 prometheus.scrape "cadvisor" {
+   1 prometheus.scrape "nginx_exporter" {
+   1 prometheus.scrape "node_exporter" {
+   1 prometheus.scrape "redis_exporter" {
+=== staging-db-vm ===
+   1 discovery.docker "containers" {
+   1 loki.process "add_labels" {
+   1 loki.relabel "container_labels" {
+   1 loki.source.docker "containers" {
+   1 loki.write "default" {
+   1 prometheus.exporter.self "alloy" { }
