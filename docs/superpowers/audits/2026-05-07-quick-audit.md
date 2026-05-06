@@ -128,6 +128,43 @@
 - chunks completed in this round: 0, 0.5 (skill), 1, 2, 3 — six commits total on branch
 - branch state: all local commits, NOT pushed (per plan rules until weekly < 5%)
 
+---
+
+## Round 2 progress (after wakeup, fresh 5h window)
+
+| chunk | status | issues | commits |
+|-------|--------|--------|---------|
+| chunk-4: F2 docs(CLAUDE.md) Semester `annual` -> `yearly` | ✅ | (no issue, F2 finding) | 406afc6 |
+| chunk-5: #82 JSONB on SQLite test infra unblock | ✅ closes #82 | swap raw `JSONB` → `get_json_type()` in college_review.py:160; 10/10 regression tests now pass (3 #55 + 7 #64) | eff16f9 |
+| chunk-6: #45 distribution status not stomped to rejected | ✅ closes #45 | manual_distribution_service.finalize: drop `app.status = ApplicationStatus.rejected` for non-allocated branch | 193fecf |
+| chunk-7: #59 part B (scroll-to-bottom enables agree) | ✅ partial #59 (B done; A "勞保 SOP" content needs source text) | NoticeAgreementStep: replace ScrollArea with onScroll div, latch hasReadNotice on bottom-reach, auto-detect short content | 6125ff8 |
+
+## Issues touched across the whole session
+
+| Issue | State | Path |
+|-------|-------|------|
+| #45 | ✅ closed | distribution status preserve |
+| #55 | ✅ closed | bank-doc orphan delete |
+| #59 | 🔄 partial | B done, A blocked on missing 勞保 SOP content |
+| #60 | ✅ closed | contact_phone field |
+| #64 | ✅ closed | professor review lock |
+| #81 | ✅ closed | engine pool args dialect-conditional |
+| #82 | ✅ closed | JSONB → get_json_type() |
+| (F2) | ✅ docs | CLAUDE.md Semester enum corrected |
+
+## Test coverage gained
+
+- `test_user_profile_service_bank_document.py` — 3 tests, all passing
+- `test_review_service_lock.py` — 7 tests, all passing
+- combined run: 10/10 passing
+- baseline `test_health.py` — 2/3 (1 pre-existing AsyncClient TypeError, NOT mine)
+- `test_manual_distribution_service.py` — 14/14 passing (no regression from chunk-6)
+
+## Round 2 quota
+
+- Started: 5h 1% used / weekly 13% used (fresh fresh fresh)
+- After chunk-7: 5h 14% / weekly 15% — plenty of headroom remains
+
 ## New issues filed during execution
 
 | Issue | Title | Severity |
