@@ -1,0 +1,78 @@
+{
+  "probe_time": "2026-05-06T18:10:00Z",
+  "note": "All queries via Grafana datasource proxy /monitoring/api/datasources/proxy/uid/prometheus-uid/api/v1/*",
+  "grafana_build_info": {
+    "http": 200,
+    "result_count": 1,
+    "sample": {"environment": "monitoring", "instance": "grafana:3000", "job": "grafana", "version": "12.2.1"}
+  },
+  "up": {
+    "http": 200,
+    "result_count": 3,
+    "note": "Only monitoring-environment targets: loki:3100, localhost:9090, grafana:3000. All environment=monitoring. No staging or prod targets from direct scrape."
+  },
+  "up_environment_staging": {
+    "http": 200,
+    "result_count": 6,
+    "instances": [
+      {"job": "nginx", "instance": "nginx-exporter:9113", "vm": "ap-vm"},
+      {"job": "redis", "instance": "redis-exporter:9121", "vm": "ap-vm"},
+      {"job": "backend", "instance": "backend:8000", "vm": "ap-vm"},
+      {"job": "node", "instance": "node-exporter:9100", "vm": "ap-vm"},
+      {"job": "cadvisor", "instance": "cadvisor:8080", "vm": "ap-vm"},
+      {"job": "integrations/self", "instance": "eb9c12434ccc", "vm": "ap-vm"}
+    ],
+    "note": "All staging targets are vm=ap-vm only. No db-vm targets present."
+  },
+  "up_environment_prod": {
+    "http": 200,
+    "result_count": 0,
+    "note": "Zero prod-environment targets. No prod Alloy is pushing to this Prometheus."
+  },
+  "job_label_values": ["backend", "cadvisor", "grafana", "integrations/self", "loki", "nginx", "node", "prometheus", "redis"],
+  "vm_label_values": ["ap-vm"],
+  "note_no_db_vm": "Only ap-vm exists. DB-VM metrics (postgres-exporter, node-exporter on db) not arriving.",
+  "rules_endpoint": {
+    "http": 200,
+    "body": "{\"status\":\"success\",\"data\":{\"groups\":[]}}",
+    "note": "Empty groups — rule_files are commented out in prometheus.yml. All alert and recording rules are disabled."
+  },
+  "runtimeinfo_endpoint": {
+    "http": 404,
+    "body": "404 page not found",
+    "note": "Grafana datasource proxy does not forward /api/v1/runtimeinfo — admin API not proxied."
+  },
+  "pg_stat_activity_count": {
+    "http": 200,
+    "result_count": 0,
+    "note": "Zero results. postgres-exporter not present in Prometheus (no db-vm scrape)."
+  },
+  "http_errors_total_backend": {
+    "http": 200,
+    "result_count": 0,
+    "note": "Metric http_errors_total does not exist in Prometheus TSDB."
+  },
+  "http_request_duration_seconds_bucket_backend": {
+    "http": 200,
+    "result_count": 98,
+    "note": "Exists and has data. Backend latency histogram works."
+  },
+  "db_query_duration_seconds_bucket_backend": {
+    "http": 200,
+    "result_count": 0,
+    "note": "Metric db_query_duration_seconds_bucket does not exist in Prometheus TSDB."
+  },
+  "scholarship_applications_total": {
+    "http": 200,
+    "result_count": 0,
+    "note": "Custom application metric not present."
+  },
+  "email_sent_total": {
+    "http": 200,
+    "result_count": 0,
+    "note": "Custom email metric not present."
+  },
+  "postgres_exporter_metrics": {
+    "note": "Only postgres_exporter_config_last_reload_success_timestamp_seconds and postgres_exporter_config_last_reload_successful present. No pg_stat_activity_count, no pg_stat_statements_*, no pg_up."
+  }
+}
