@@ -2,7 +2,7 @@
 
 import { User } from "@/types/user";
 import { useCollegeManagement } from "@/contexts/college-management-context";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Semester } from "@/lib/enums";
 import {
   Card,
@@ -15,9 +15,53 @@ import { Button } from "@/components/ui/button";
 import { CollegeRankingTable } from "@/components/college-ranking-table";
 import { ConfigSelector } from "../shared/ConfigSelector";
 import { RankingCardList } from "../shared/RankingCardList";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2, Clock, AlertTriangle, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
+
+// #63: surface the college-review deadline visibly on the ranking page
+// and warn / lock once the deadline approaches or passes.
+type DeadlineState = "none" | "ok" | "near" | "passed";
+
+interface DeadlineInfo {
+  state: DeadlineState;
+  deadline?: Date;
+  msToDeadline?: number;
+  daysToDeadline?: number;
+}
+
+const NEAR_THRESHOLD_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+
+function computeDeadlineInfo(deadlineISO?: string | null): DeadlineInfo {
+  if (!deadlineISO) return { state: "none" };
+  const deadline = new Date(deadlineISO);
+  if (Number.isNaN(deadline.getTime())) return { state: "none" };
+  const ms = deadline.getTime() - Date.now();
+  const days = Math.floor(ms / (24 * 60 * 60 * 1000));
+  if (ms <= 0) {
+    return { state: "passed", deadline, msToDeadline: ms, daysToDeadline: days };
+  }
+  if (ms <= NEAR_THRESHOLD_MS) {
+    return { state: "near", deadline, msToDeadline: ms, daysToDeadline: days };
+  }
+  return { state: "ok", deadline, msToDeadline: ms, daysToDeadline: days };
+}
+
+function formatCountdown(ms: number, locale: "zh" | "en"): string {
+  if (ms <= 0) return locale === "zh" ? "已過期" : "expired";
+  const totalMin = Math.floor(ms / 60000);
+  const days = Math.floor(totalMin / (60 * 24));
+  const hours = Math.floor((totalMin % (60 * 24)) / 60);
+  const mins = totalMin % 60;
+  if (locale === "zh") {
+    if (days > 0) return `${days} 天 ${hours} 小時`;
+    if (hours > 0) return `${hours} 小時 ${mins} 分鐘`;
+    return `${mins} 分鐘`;
+  }
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins}m`;
+}
 import {
   Dialog,
   DialogContent,
@@ -565,6 +609,24 @@ export function RankingManagementPanel({
     setEditingRankingName("");
   }, [setEditingRankingId, setEditingRankingName]);
 
+  // #63: deadline state for the currently-selected scholarship configuration.
+  // Re-evaluates every minute so the countdown stays close to live without
+  // burning render cycles on every state change.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const deadlineISO =
+    (scholarshipConfig as { college_review_end?: string | null } | undefined)
+      ?.college_review_end ?? null;
+  const deadlineInfo = useMemo(
+    () => computeDeadlineInfo(deadlineISO),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `now` triggers re-eval
+    [deadlineISO, now]
+  );
+  const isAdmin = user.role === "admin" || user.role === "super_admin";
+
   return (
     <>
       <div className="flex items-center justify-between">
@@ -589,12 +651,79 @@ export function RankingManagementPanel({
             locale={locale}
           />
 
-          <Button onClick={createNewRanking}>
+          <Button
+            onClick={createNewRanking}
+            disabled={deadlineInfo.state === "passed" && !isAdmin}
+          >
             <Plus className="h-4 w-4 mr-2" />
             建立新排名
           </Button>
         </div>
       </div>
+
+      {/* #63: deadline banner */}
+      {deadlineInfo.state !== "none" && deadlineInfo.deadline && (
+        <div
+          className={`rounded-md border p-3 text-sm flex items-start gap-2 ${
+            deadlineInfo.state === "passed"
+              ? "border-rose-300 bg-rose-50 text-rose-900"
+              : deadlineInfo.state === "near"
+              ? "border-amber-300 bg-amber-50 text-amber-900"
+              : "border-emerald-300 bg-emerald-50 text-emerald-900"
+          }`}
+        >
+          {deadlineInfo.state === "passed" ? (
+            <Lock className="h-4 w-4 mt-0.5 shrink-0" />
+          ) : deadlineInfo.state === "near" ? (
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+          ) : (
+            <Clock className="h-4 w-4 mt-0.5 shrink-0" />
+          )}
+          <div className="flex-1 leading-relaxed">
+            {deadlineInfo.state === "passed" ? (
+              <>
+                <strong>已過排名截止時間</strong>(
+                {deadlineInfo.deadline.toLocaleString(
+                  locale === "zh" ? "zh-TW" : "en-US"
+                )}
+                )。
+                {isAdmin
+                  ? locale === "zh"
+                    ? "你以管理員身份登入,仍可調整排名。"
+                    : "You're signed in as an administrator and can still edit."
+                  : locale === "zh"
+                  ? "排名匯入 / 修改功能已鎖定,如需修改請聯絡管理員延期。"
+                  : "Ranking import / edit is locked. Contact an administrator to extend the deadline."}
+              </>
+            ) : deadlineInfo.state === "near" ? (
+              <>
+                <strong>
+                  {locale === "zh"
+                    ? "排名截止時間將至"
+                    : "Ranking deadline approaching"}
+                </strong>
+                {locale === "zh" ? "  ·  剩餘 " : " · "}
+                {formatCountdown(deadlineInfo.msToDeadline ?? 0, locale)}
+                {locale === "zh" ? "  ·  截止於 " : " · due "}
+                {deadlineInfo.deadline.toLocaleString(
+                  locale === "zh" ? "zh-TW" : "en-US"
+                )}
+                。
+              </>
+            ) : (
+              <>
+                {locale === "zh" ? "排名截止時間" : "Ranking deadline"}:
+                {" "}
+                {deadlineInfo.deadline.toLocaleString(
+                  locale === "zh" ? "zh-TW" : "en-US"
+                )}
+                {locale === "zh" ? "  ·  剩餘 " : " · "}
+                {formatCountdown(deadlineInfo.msToDeadline ?? 0, locale)}
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Ranking Selection */}
       <Card>
