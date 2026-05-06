@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Card,
   CardContent,
@@ -12,13 +12,13 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   AlertCircle,
   CheckCircle,
   FileText,
   AlertTriangle,
   ChevronRight,
+  ArrowDown,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
@@ -37,6 +37,32 @@ export function NoticeAgreementStep({
   locale,
 }: NoticeAgreementStepProps) {
   const [hasReadNotice, setHasReadNotice] = useState(false);
+  const noticeScrollRef = useRef<HTMLDivElement | null>(null);
+
+  // #59: enable the agreement checkbox only after the user has scrolled
+  // to the bottom of the notice list. Once reached, latches to true so
+  // bouncing back up doesn't disable the agree checkbox again.
+  const handleNoticeScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      if (hasReadNotice) return; // already latched
+      const el = e.currentTarget;
+      const reachedBottom =
+        el.scrollHeight - el.scrollTop - el.clientHeight <= 8; // 8px slack
+      if (reachedBottom) setHasReadNotice(true);
+    },
+    [hasReadNotice]
+  );
+
+  // If the notice fits without needing to scroll, treat it as already read
+  // once the element mounts (otherwise the checkbox would never enable).
+  useEffect(() => {
+    const el = noticeScrollRef.current;
+    if (!el) return;
+    if (el.scrollHeight <= el.clientHeight + 8) {
+      setHasReadNotice(true);
+    }
+  }, []);
+
   const [publicDocs, setPublicDocs] = useState<{
     regulations_url?: string;
     sample_document_url?: string;
@@ -137,9 +163,11 @@ export function NoticeAgreementStep({
       importantContent:
         "請務必詳細閱讀各獎學金的申請條款與相關規定。每位學生每學期限申請一項獎學金，請謹慎選擇。",
       agreementText: "我已詳細閱讀並了解上述注意事項，同意遵守相關規定",
-      readNoticeText: "我已詳閱所有注意事項",
+      readNoticeText: "已詳閱所有注意事項",
+      readNoticeHint: "請滑到下方注意事項的最底端，閱讀完成後才能勾選同意",
+      readNoticeDone: "已閱讀完成",
       nextButton: "同意並繼續",
-      readFirst: "請先詳細閱讀注意事項",
+      readFirst: "請先滑到注意事項底部完成閱讀",
       referenceDocs: "參考文件",
       regulations: "獎學金要點",
       sampleDocument: "申請文件範例檔",
@@ -196,8 +224,10 @@ export function NoticeAgreementStep({
       agreementText:
         "I have read and understand the above notice and agree to comply with the regulations",
       readNoticeText: "I have read all notices",
+      readNoticeHint: "Scroll to the bottom of the notices to confirm you have read them",
+      readNoticeDone: "Reading complete",
       nextButton: "Agree and Continue",
-      readFirst: "Please read the notice first",
+      readFirst: "Please scroll to the bottom of the notices first",
       referenceDocs: "Reference Documents",
       regulations: "Scholarship Regulations",
       sampleDocument: "Sample Application Documents",
@@ -268,9 +298,13 @@ export function NoticeAgreementStep({
             </div>
           </div>
 
-          {/* Notice Content */}
-          <Card className="border-2">
-            <ScrollArea className="h-[400px] p-6">
+          {/* Notice Content — scroll-to-bottom triggers hasReadNotice (#59) */}
+          <Card className="border-2 relative">
+            <div
+              ref={noticeScrollRef}
+              onScroll={handleNoticeScroll}
+              className="h-[400px] overflow-y-auto p-6"
+            >
               <div className="space-y-4">
                 {t.items.map((item, index) => (
                   <div
@@ -292,24 +326,36 @@ export function NoticeAgreementStep({
                     </div>
                   </div>
                 ))}
+                {/* End-of-notice marker — visible only when scrolled to bottom */}
+                <div className="pt-2 text-center text-xs text-emerald-600 font-medium">
+                  ── {locale === "zh" ? "已到底部" : "End of notices"} ──
+                </div>
               </div>
-            </ScrollArea>
+            </div>
+            {!hasReadNotice && (
+              <div className="absolute bottom-2 right-3 flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs text-amber-800 shadow-sm pointer-events-none">
+                <ArrowDown className="h-3 w-3 animate-bounce" />
+                {t.readNoticeHint}
+              </div>
+            )}
           </Card>
 
-          {/* Read confirmation */}
-          <div className="flex items-center space-x-2 p-4 bg-gray-50 rounded-lg">
+          {/* Read confirmation — auto-checked when user scrolls to bottom */}
+          <div
+            className={`flex items-center space-x-2 p-4 rounded-lg transition-colors ${
+              hasReadNotice ? "bg-emerald-50 border border-emerald-200" : "bg-gray-50"
+            }`}
+          >
             <Checkbox
               id="read-notice"
               checked={hasReadNotice}
-              onCheckedChange={(checked) =>
-                setHasReadNotice(checked as boolean)
-              }
+              disabled
             />
             <Label
               htmlFor="read-notice"
-              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+              className="text-sm font-medium leading-none cursor-default"
             >
-              {t.readNoticeText}
+              {hasReadNotice ? t.readNoticeDone : t.readNoticeText}
             </Label>
           </div>
 
