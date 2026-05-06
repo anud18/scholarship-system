@@ -1,0 +1,33 @@
+apiVersion: 1
+contactPoints:
+  - orgId: 1
+    name: github-issue
+    receivers:
+      - uid: github-issue-uid
+        type: webhook
+        disableResolveMessage: false
+        settings:
+          url: https://api.github.com/repos/anud18/scholarship-system/dispatches
+          httpMethod: POST
+          authorization_scheme: token
+          # GH_PAT mounted as a file at runtime; Grafana reads via $__file{...}
+          authorization_credentials: $__file{/etc/grafana/secrets/gh_pat}
+          # Override default webhook body so GitHub's dispatches API accepts it
+          # (event_type + client_payload wrapper required by repository_dispatch).
+          message: |-
+            {
+              "event_type": "monitoring-alert",
+              "client_payload": {
+                "alertname": "{{ (index .Alerts 0).Labels.alertname }}",
+                "severity": "{{ (index .Alerts 0).Labels.severity }}",
+                "category": "{{ (index .Alerts 0).Labels.category }}",
+                "status": "{{ .Status }}",
+                "summary": "{{ (index .Alerts 0).Annotations.summary }}",
+                "description": "{{ (index .Alerts 0).Annotations.description }}",
+                "instance": "{{ (index .Alerts 0).Labels.instance }}",
+                "environment": "{{ (index .Alerts 0).Labels.environment }}",
+                "value": "{{ (index .Alerts 0).ValueString }}",
+                "fired_at": "{{ (index .Alerts 0).StartsAt }}",
+                "grafana_url": "{{ .ExternalURL }}"
+              }
+            }
