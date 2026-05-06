@@ -18,16 +18,22 @@ Manual Usage:
 
 import asyncio
 import logging
+import math
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.application import Application, ApplicationStatus
+from app.models.email_management import EmailCategory, ScheduledEmail
+from app.models.review import ApplicationReview
 from app.models.scholarship import ScholarshipConfiguration
 from app.services.email_automation_service import email_automation_service
+from app.services.email_service import EmailService
+from app.services.frontend_email_renderer import render_email_via_frontend
 
 logger = logging.getLogger(__name__)
 
@@ -201,12 +207,164 @@ class DeadlineChecker:
     async def check_review_deadlines(self):
         """Check for approaching review deadlines"""
         logger.info("Checking review deadlines...")
+        await self.send_professor_review_deadline_reminders()
 
-        # Note: Current models don't have review deadline fields
-        # This could be added to ScholarshipConfiguration in the future
-        # TODO: Add professor_review_deadline and college_review_deadline fields
+    async def send_professor_review_deadline_reminders(self):
+        """Send daily reminder emails to professors with pending reviews in the last 3 days before deadline"""
+        now = datetime.now(timezone.utc)
+        window_end = now + timedelta(days=3)
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-        logger.info("Review deadline checking not yet implemented (no deadline fields)")
+        # Find active configs with professor_review_end within next 3 days (not yet passed)
+        config_stmt = (
+            select(ScholarshipConfiguration)
+            .options(selectinload(ScholarshipConfiguration.scholarship_type))
+            .where(
+                and_(
+                    ScholarshipConfiguration.is_active.is_(True),
+                    ScholarshipConfiguration.professor_review_end.isnot(None),
+                    ScholarshipConfiguration.professor_review_end >= now,
+                    ScholarshipConfiguration.professor_review_end <= window_end,
+                )
+            )
+        )
+        result = await self.db.execute(config_stmt)
+        configs = result.scalars().all()
+
+        logger.info(f"Found {len(configs)} configs with professor review deadline in next 3 days")
+
+        for config in configs:
+            await self._send_professor_reminders_for_config(config, now, today_start)
+
+    async def _send_professor_reminders_for_config(
+        self, config: ScholarshipConfiguration, now: datetime, today_start: datetime
+    ):
+        """Find unreviewed applications for a config and schedule reminder emails"""
+        app_stmt = (
+            select(Application)
+            .options(
+                selectinload(Application.student),
+                selectinload(Application.professor),
+                selectinload(Application.scholarship_type_ref),
+            )
+            .where(
+                and_(
+                    Application.scholarship_configuration_id == config.id,
+                    Application.professor_id.isnot(None),
+                    or_(
+                        Application.status == ApplicationStatus.submitted.value,
+                        Application.status == ApplicationStatus.under_review.value,
+                    ),
+                    # Professor has not submitted a review yet
+                    ~exists(
+                        select(ApplicationReview.id).where(
+                            and_(
+                                ApplicationReview.application_id == Application.id,
+                                ApplicationReview.reviewer_id == Application.professor_id,
+                            )
+                        )
+                    ),
+                    # No reminder email sent today for this application
+                    ~exists(
+                        select(ScheduledEmail.id).where(
+                            and_(
+                                ScheduledEmail.application_id == Application.id,
+                                ScheduledEmail.template_key == "professor_review_notification",
+                                ScheduledEmail.created_at >= today_start,
+                            )
+                        )
+                    ),
+                )
+            )
+        )
+
+        result = await self.db.execute(app_stmt)
+        applications = result.scalars().all()
+
+        logger.info(
+            f"Config {config.id}: scheduling {len(applications)} professor review deadline reminders"
+        )
+
+        for application in applications:
+            try:
+                await self._schedule_professor_deadline_reminder(application, config, now)
+            except Exception as e:
+                logger.error(
+                    f"Failed to schedule deadline reminder for application {application.id}: {e}"
+                )
+
+    async def _schedule_professor_deadline_reminder(
+        self, application: Application, config: ScholarshipConfiguration, now: datetime
+    ):
+        """Render and schedule one deadline reminder email for a professor"""
+        professor = application.professor
+        if not professor or not professor.email:
+            logger.warning(f"Application {application.id} has no professor email, skipping")
+            return
+
+        days_remaining = math.ceil(
+            (config.professor_review_end - now).total_seconds() / 86400
+        )
+
+        student_data = application.student_data or {}
+        student_name = student_data.get("std_cname") or (
+            application.student.name if application.student else ""
+        )
+        scholarship_name = config.scholarship_type.name if config.scholarship_type else ""
+        submit_date = (
+            application.submitted_at.strftime("%Y-%m-%d") if application.submitted_at else ""
+        )
+        app_id_str = application.app_id or str(application.id)
+
+        context = {
+            "professor_name": professor.name or "",
+            "student_name": student_name,
+            "app_id": app_id_str,
+            "application_id": application.id,
+            "scholarship_type": scholarship_name,
+            "scholarship_name": scholarship_name,
+            "submit_date": submit_date,
+            "submission_date": submit_date,
+            "system_url": settings.frontend_url,
+            "review_url": f"{settings.frontend_url}/applications/{app_id_str}",
+            "days_remaining": str(days_remaining),
+            "review_deadline": config.professor_review_end.strftime("%Y-%m-%d"),
+            "professor_email": professor.email,
+            "student_email": "",
+            "professor_recommendation": "",
+            "review_result": "",
+            "semester": "",
+            "scholarship_amount": "",
+        }
+
+        html_content = None
+        try:
+            html_content = await render_email_via_frontend(
+                frontend_url=settings.frontend_internal_url,
+                template_name="professor-review-request",
+                context=context,
+            )
+        except Exception as e:
+            logger.error(f"Failed to render deadline reminder HTML for application {application.id}: {e}")
+
+        await EmailService().schedule_email(
+            db=self.db,
+            to=professor.email,
+            subject=f"[提醒] 尚有 {days_remaining} 天 — 請完成審核 {app_id_str}",
+            body=f"請完成審核：{app_id_str}（剩餘 {days_remaining} 天）",
+            scheduled_for=now,
+            html_content=html_content,
+            email_category=EmailCategory.recommendation_professor,
+            application_id=application.id,
+            scholarship_type_id=config.scholarship_type_id,
+            template_key="professor_review_notification",
+            created_by_user_id=1,
+        )
+
+        logger.info(
+            f"Scheduled deadline reminder → {professor.email} for application {app_id_str} "
+            f"({days_remaining} days remaining)"
+        )
 
 
 async def run_deadline_check():

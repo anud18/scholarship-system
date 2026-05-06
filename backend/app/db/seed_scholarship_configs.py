@@ -1031,7 +1031,7 @@ async def seed_email_automation_rules(session: AsyncSession) -> None:
             "trigger_event": TriggerEvent.application_submitted,
             "template_key": "application_submitted_student",
             "delay_hours": 0,
-            "is_active": False,
+            "is_active": True,
             "condition_query": """
                 SELECT email FROM (
                     SELECT applications.student_data->>'com_email' as email
@@ -1058,14 +1058,15 @@ async def seed_email_automation_rules(session: AsyncSession) -> None:
             "trigger_event": TriggerEvent.application_submitted,
             "template_key": "professor_review_notification",
             "delay_hours": 0,
-            "is_active": False,
+            "is_active": True,
             "condition_query": """
-                SELECT user_profiles.advisor_email as email
-                FROM applications
-                JOIN user_profiles ON applications.user_id = user_profiles.user_id
-                WHERE applications.id = {application_id}
-                AND user_profiles.advisor_email IS NOT NULL
-                AND user_profiles.advisor_email != ''
+                SELECT COALESCE(u.email, up.advisor_email) AS email
+                FROM applications a
+                LEFT JOIN users u ON u.id = a.professor_id
+                LEFT JOIN user_profiles up ON up.user_id = a.user_id
+                WHERE a.id = {application_id}
+                AND COALESCE(u.email, up.advisor_email) IS NOT NULL
+                AND COALESCE(u.email, up.advisor_email) != ''
             """,
         },
         {
