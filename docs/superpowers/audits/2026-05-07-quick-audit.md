@@ -204,6 +204,35 @@ Commit: `ec4e5f2`
 | chunk-12 | #59 A | 勞保 SOP section in NoticeAgreementStep (needs source text — ASK USER) | S (after source) |
 | chunk-13 | #72 | 遞補 (waitlist) — eligibility + flow | M |
 
+## Round 3 (after chunk-8 wakeup)
+
+| chunk | status | issue | commit |
+|-------|--------|-------|--------|
+| chunk-9 | ✅ closes #63 (FE half) | RankingManagementPanel deadline banner: green/amber/red states + 60s countdown re-render + admin-bypass note + disabled "建立新排名" button | 60cf214 |
+| chunk-10 | ✅ test-infra cleanup | unbreak test_health::test_health_endpoint_async (httpx 0.28+ ASGITransport), guard pool.size() against StaticPool, scrub 11 FastAPI regex= → pattern= deprecations across 7 endpoints | 5ff78a0 |
+| chunk-11 | 🔄 #68 partial (ranking only) | college-ranking-table.tsx: new "國籍 / 身分" column with identity-code → 本國生/僑生/外籍生/陸生/港澳生/外籍交換生 mapping. Admin app list + Excel export deferred. | 17cb2f0 |
+
+## Round 3 quota end
+
+- weekly 15% used / 8h to weekly reset
+- 5h 20% used / ~2h30m to 5h reset
+
+## Test sweep (33/33)
+
+```
+test_health.py                                3/3
+test_user_profile_service_bank_document.py    3/3
+test_review_service_lock.py                   7/7
+test_college_review_deadline.py               6/6
+test_manual_distribution_service.py          14/14
+                                            -----
+                                            33/33
+```
+
+## Cumulative session output
+
+**18 commits** on `audit/monitoring-stack-phase1`. Issues fully closed: #45, #55, #60, #63, #64, #81, #82 (seven). Issues partially closed: #59 (B done, A needs source), #68 (ranking page done, admin list + Excel deferred).
+
 ## New issues filed during execution
 
 | Issue | Title | Severity |
