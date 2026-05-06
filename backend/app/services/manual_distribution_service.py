@@ -687,7 +687,10 @@ class ManualDistributionService:
         """
         Finalize manual distribution:
         1. Mark rankings as distribution_executed
-        2. Update application statuses (allocated -> approved, others -> rejected)
+        2. Update application statuses (allocated -> approved; non-allocated keeps
+           its prior user-facing status — see #45. Only quota_allocation_status
+           is set to 'rejected' for non-allocated apps so the distribution engine
+           can distinguish allocated/non-allocated outcomes.)
         3. Update quota_allocation_status on applications
         """
         ranking_query = select(CollegeRanking).where(
@@ -734,8 +737,14 @@ class ManualDistributionService:
                 app.review_stage = ReviewStage.quota_distributed
                 approved_count += 1
             else:
+                # Non-allocated: keep the user-facing app.status as-is
+                # (e.g. an approved-but-not-funded app stays "approved"). Only
+                # the quota_allocation_status flips to "rejected" so the
+                # distribution engine can identify non-allocated outcomes.
+                # See #45 — earlier code stomped app.status to rejected, which
+                # incorrectly told students their application was denied when
+                # in fact they passed review but missed the quota cut.
                 item.status = "rejected"
-                app.status = ApplicationStatus.rejected
                 app.quota_allocation_status = "rejected"
                 app.review_stage = ReviewStage.quota_distributed
                 rejected_count += 1
