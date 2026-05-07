@@ -110,6 +110,28 @@ prometheus.scrape "minio" {
   metrics_path = "/minio/v2/metrics/cluster"
 }
 
+// Bucket-level metrics live behind a separate endpoint. Without this,
+// minio_bucket_usage_total_bytes / minio_bucket_usage_object_total stay
+// missing and the dashboard's Total Storage / Total Objects / Total
+// Buckets / Bucket Usage panels show "No data".
+prometheus.scrape "minio_bucket" {
+  targets    = [{ __address__ = "minio:9000" }]
+  forward_to = [prometheus.relabel.add_labels.receiver]
+  job_name   = "minio"
+  scrape_interval = "30s"
+  metrics_path = "/minio/v2/metrics/bucket"
+}
+
+// Per-node metrics — S3 request rates + traffic counters. Required by
+// the "S3 API Requests" / "S3 API Errors" / "Network Traffic" panels.
+prometheus.scrape "minio_node" {
+  targets    = [{ __address__ = "minio:9000" }]
+  forward_to = [prometheus.relabel.add_labels.receiver]
+  job_name   = "minio"
+  scrape_interval = "15s"
+  metrics_path = "/minio/v2/metrics/node"
+}
+
 prometheus.relabel "add_labels" {
   forward_to = [prometheus.remote_write.default.receiver]
   rule {
