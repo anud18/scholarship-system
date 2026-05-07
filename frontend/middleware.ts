@@ -32,7 +32,7 @@ export function middleware(request: NextRequest) {
       "default-src 'self'",
       "script-src 'self' 'unsafe-eval' 'unsafe-inline'", // HMR requires unsafe-eval
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob:",
+      "img-src 'self' data: blob: https:",
       "font-src 'self'",
       "connect-src 'self' ws: wss:", // WebSocket for HMR
       "frame-ancestors 'none'",
@@ -46,8 +46,8 @@ export function middleware(request: NextRequest) {
     const csp = [
       "default-src 'self'",
       `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`, // strict-dynamic for bundled scripts
-      `style-src 'self' 'nonce-${nonce}'`,
-      "img-src 'self' data: blob:",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob: https:",
       "font-src 'self'",
       "connect-src 'self' https://*.nycu.edu.tw",
       "base-uri 'self'",
