@@ -1,0 +1,11 @@
+{"method":"GET","status":200,"url":"/api/v1/notifications/unread-count"}
+{"method":"GET","status":200,"url":"/api/v1/college-review/managed-college"}
+{"method":"GET","status":200,"url":"/api/v1/college-review/available-combinations"}
+{"method":"GET","status":200,"url":"/api/v1/college-review/applications"}
+{"method":"GET","status":200,"url":"/api/v1/users/me"}
+{"method":"GET","status":200,"url":"/api/v1/college-review/managed-college"}
+{"method":"GET","status":200,"url":"/api/v1/college-review/available-combinations"}
+{"method":"GET","status":200,"url":"/api/v1/users/me"}
+{"method":"GET","status":200,"url":"/api/v1/college-review/available-combinations"}
+{"method":"GET","status":200,"url":"/api/v1/college-review/applications"}
+{"method":"GET","status":200,"url":"/api/v1/college-review/available-combinations"}

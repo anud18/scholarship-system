@@ -1,0 +1,6 @@
+  semester='first' -> HTTP 404
+  semester='second' -> HTTP 404
+  semester='yearly' -> HTTP 404
+  semester='invalid' -> HTTP 404
+  semester='  OR 1=1  ' -> HTTP 000
+  semester='' -> HTTP 404

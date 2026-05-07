@@ -1,0 +1,43 @@
+## Test 5: OCR upload Content-Length DoS hardening (deb076d)
+Endpoint: POST /api/v1/user-profiles/bank-passbook-ocr
+Limit: 10MB per current code
+
+=== Case 1: Content-Length: 99999999 with no body, no auth (5s timeout) ===
+HTTP: 000  uploaded=0  time_total=5.001696
+(curl exited non-zero -- timeout or framing issue)
+Body:
+
+
+=== Case 2: Content-Length: 99999999 with no body, WITH auth (5s timeout) ===
+HTTP: 000  uploaded=0  time_total=5.011142
+(curl exited non-zero -- timeout or framing issue)
+Body:
+
+
+=== Case 3: Real 12MB body uploaded with auth (exceeds 10MB cap) ===
+Body size on disk:  12582912 bytes
+HTTP: 400  uploaded=12583113  time_total=0.132991
+Wall clock: 0.16s
+Body:
+{"success":false,"message":"File size must be less than 10MB","trace_id":"07656637-2ce3-4c20-b4c7-8d950c5f33e0"}
+
+=== Diagnosis ===
+With deb076d deployed, the endpoint would inspect Content-Length BEFORE reading
+the body and return 413 Payload Too Large in milliseconds (no body buffered).
+
+ACTUAL on running stack:
+  Case 1+2 (lying Content-Length: 99M, no body): server WAITS for the body up to
+    5s — proves no early Content-Length pre-check exists. This is exactly the
+    DoS surface deb076d was meant to close (a cheap client can hold N connections
+    open for the duration of FastAPI's read timeout).
+  Case 3 (real 12MB upload): server buffered the whole body, then returned 400
+    "File size must be less than 10MB" — confirming the size check happens AFTER
+    full buffering, not on the Content-Length header.
+
+  docker exec scholarship_backend_dev grep -n "content_length\|413" \
+      /app/app/api/v1/endpoints/user_profiles.py
+  (no matches)
+
+VERDICT: FAIL_NOT_DEPLOYED -- deb076d not in deployed image. The DoS
+hardening is not active. Existing 10MB cap still works post-buffering, so
+this is a "wasted bandwidth + memory" hardening regression, not a crash bug.

@@ -1,0 +1,61 @@
+## Test 4: Professor-student cross-query auth bypass
+## Commit: ff15c0d
+
+=== Deployment status ===
+docker exec scholarship_backend_dev sed -n '40,55p' /app/app/api/v1/endpoints/professor_student.py
+   query = select(ProfessorStudentRelationship)
+   # Apply filters
+   if professor_id is not None:
+       query = query.where(ProfessorStudentRelationship.professor_id == professor_id)
+   elif current_user.role == "professor":
+       # Professors can only see their own relationships
+       query = query.where(ProfessorStudentRelationship.professor_id == current_user.id)
+
+The endpoint trusts the URL professor_id without authorization. The
+ff15c0d fix is NOT in the deployed image.
+
+=== Test methodology ===
+1. Login as cs_professor (id=12) via mock-SSO and obtain JWT (203 chars).
+2. Test self-query, cross-query, and default (no professor_id query param).
+
+=== Outcomes ===
+
+(a) GET /api/v1/professor-student?professor_id=12  (self-query)
+    HTTP 200
+    {"success":true,"message":"查詢成功","data":[]}
+    -- empty because cs_professor has no seeded relationships
+
+(b) GET /api/v1/professor-student?professor_id=3  (cross-query, BYPASS)
+    HTTP 200
+    {"success":true,"message":"查詢成功","data":[
+       {"id":1,"professor_id":3,"student_id":6,"relationship_type":"advisor","status":"active",...},
+       {"id":2,"professor_id":3,"student_id":5,"relationship_type":"supervisor","status":"active",...}
+    ]}
+    -- DATA LEAK: cs_professor (id=12) sees professor (id=3) student relationships
+
+(c) GET /api/v1/professor-student  (no professor_id param at all)
+    HTTP 200
+    Returns ALL records system-wide (same 2 records as case b)
+
+=== Secondary bug discovered ===
+In case (c), the elif branch at line 48-50:
+    elif current_user.role == "professor":
+        query = query.where(ProfessorStudentRelationship.professor_id == current_user.id)
+
+Verified inside the container:
+    >>> from app.models.user import UserRole
+    >>> UserRole.professor == "professor"
+    False
+    >>> UserRole.professor.value == "professor"
+    True
+
+So the elif silently fails to apply the scope filter, and ANY logged-in
+professor receives ALL professor-student records when no query param is
+supplied. This is an additional bug not covered by ff15c0d's commit message.
+
+=== Verdict ===
+FAIL_NOT_DEPLOYED — ff15c0d is missing from the deployed image.
+Active P1 auth bypass: cs_professor reads other professors' relationships.
+Plus a secondary bug (enum vs string comparison) that means even after
+ff15c0d is deployed, the no-query-param fallthrough still leaks all data.
+ff15c0d should be expanded to fix the .role comparison too.

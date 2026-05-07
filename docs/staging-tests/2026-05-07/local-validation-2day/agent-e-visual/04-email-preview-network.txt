@@ -1,0 +1,172 @@
+REQ GET http://localhost:3000/
+RES 200 http://localhost:3000/ ct=text/html; charset=utf-8
+REQ GET http://localhost:3000/_next/static/chunks/_e084681a._.css
+REQ GET http://localhost:3000/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_57d40746._.js
+REQ GET http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js
+REQ GET http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_next-devtools_index_a9cb0712.js
+REQ GET http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_5150ccfd._.js
+REQ GET http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_cf1d9188._.js
+REQ GET http://localhost:3000/_next/static/chunks/node_modules_next_dist_b0daae9a._.js
+REQ GET http://localhost:3000/_next/static/chunks/node_modules_%40swc_helpers_cjs_b3dc30d6._.js
+REQ GET http://localhost:3000/_next/static/chunks/_a0ff3932._.js
+REQ GET http://localhost:3000/_next/static/chunks/turbopack-_cdba956c._.js
+REQ GET http://localhost:3000/_next/static/chunks/_157c64e7._.js
+REQ GET http://localhost:3000/_next/static/chunks/_b3927f02._.js
+REQ GET http://localhost:3000/_next/static/chunks/node_modules_0749d7b1._.js
+REQ GET http://localhost:3000/_next/static/chunks/app_layout_tsx_0a548d63._.js
+REQ GET http://localhost:3000/_next/static/chunks/_e5c2b59c._.js
+REQ GET http://localhost:3000/_next/static/chunks/components_ui_dd1e48bc._.js
+REQ GET http://localhost:3000/_next/static/chunks/components_application-detail-dialog_tsx_f3f67a8f._.js
+REQ GET http://localhost:3000/_next/static/chunks/components_student-wizard_bbbe0c5b._.js
+REQ GET http://localhost:3000/_next/static/chunks/components_enhanced-student-portal_tsx_ac266d54._.js
+REQ GET http://localhost:3000/_next/static/chunks/components_admin-scholarship-management-interface_tsx_619c60c9._.js
+REQ GET http://localhost:3000/_next/static/chunks/components_common_ApplicationReviewDialog_tsx_18dbc797._.js
+REQ GET http://localhost:3000/_next/static/chunks/components_admin-scholarship-dashboard_tsx_a1a26831._.js
+REQ GET http://localhost:3000/_next/static/chunks/components_user-permission-management_tsx_eb418631._.js
+REQ GET http://localhost:3000/_next/static/chunks/components_admin_4ccb19e1._.js
+REQ GET http://localhost:3000/_next/static/chunks/components_admin-configuration-management_tsx_8da0a43a._.js
+REQ GET http://localhost:3000/_next/static/chunks/components_ScholarshipWorkflowMermaid_tsx_16cfab4a._.js
+REQ GET http://localhost:3000/_next/static/chunks/components_professor-review-component_tsx_7f037d4b._.js
+REQ GET http://localhost:3000/_next/static/chunks/components_roster_920c11e4._.js
+REQ GET http://localhost:3000/_next/static/chunks/components_batch-import-panel_tsx_19db43a9._.js
+REQ GET http://localhost:3000/_next/static/chunks/components_2f59f695._.js
+REQ GET http://localhost:3000/_next/static/chunks/_fa5662ee._.js
+REQ GET http://localhost:3000/_next/static/chunks/node_modules_lucide-react_dist_esm_icons_01dd8e0d._.js
+REQ GET http://localhost:3000/_next/static/chunks/node_modules_date-fns_esm_953165de._.js
+REQ GET http://localhost:3000/_next/static/chunks/node_modules_d87b516f._.js
+REQ GET http://localhost:3000/_next/static/chunks/app_page_tsx_e0898d24._.js
+REQ GET http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_components_builtin_global-error_e0898d24.js
+RES 200 http://localhost:3000/_next/static/chunks/_e084681a._.css ct=text/css; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_57d40746._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/node_modules_next_dist_b0daae9a._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_5150ccfd._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/_a0ff3932._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/node_modules_%40swc_helpers_cjs_b3dc30d6._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/_157c64e7._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/turbopack-_cdba956c._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_cf1d9188._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/app_layout_tsx_0a548d63._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/_e5c2b59c._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/_b3927f02._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/components_ui_dd1e48bc._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/components_application-detail-dialog_tsx_f3f67a8f._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/components_enhanced-student-portal_tsx_ac266d54._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/components_student-wizard_bbbe0c5b._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/components_admin-scholarship-management-interface_tsx_619c60c9._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/node_modules_0749d7b1._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/components_common_ApplicationReviewDialog_tsx_18dbc797._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_next-devtools_index_a9cb0712.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/components_user-permission-management_tsx_eb418631._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/components_admin-scholarship-dashboard_tsx_a1a26831._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/components_ScholarshipWorkflowMermaid_tsx_16cfab4a._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/components_professor-review-component_tsx_7f037d4b._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/components_admin_4ccb19e1._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/components_batch-import-panel_tsx_19db43a9._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/components_roster_920c11e4._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/components_admin-configuration-management_tsx_8da0a43a._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/node_modules_lucide-react_dist_esm_icons_01dd8e0d._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/app_page_tsx_e0898d24._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_components_builtin_global-error_e0898d24.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/_fa5662ee._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/node_modules_date-fns_esm_953165de._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/node_modules_d87b516f._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/components_2f59f695._.js ct=application/javascript; charset=UTF-8
+REQ GET http://localhost:3000/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_c8c997ce._.js
+REQ GET http://localhost:3000/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_285433b7._.js
+REQ GET http://localhost:3000/_next/static/chunks/components_debug-panel_tsx_83f56c0d._.js
+REQ GET http://localhost:3000/_next/static/chunks/node_modules_lucide-react_dist_esm_icons_0b09eb4d._.js
+REQ GET http://localhost:3000/_next/static/chunks/components_debug-panel_tsx_87076068._.js
+REQ GET http://localhost:3000/api/v1/scholarships
+REQ GET http://localhost:3000/api/v1/scholarships
+REQ GET http://localhost:3000/api/v1/scholarships
+REQ GET http://localhost:3000/api/v1/notifications/unread-count
+REQ GET http://localhost:3000/api/v1/admin/scholarships/my-scholarships
+REQ GET http://localhost:3000/api/v1/admin/scholarships/stats
+REQ GET http://localhost:3000/api/v1/admin/scholarships/my-scholarships
+REQ GET http://localhost:3000/api/v1/admin/dashboard/stats
+REQ GET http://localhost:3000/api/v1/admin/recent-applications?limit=5
+REQ GET http://localhost:3000/api/v1/admin/system-announcements?limit=5
+REQ GET http://localhost:3000/api/v1/admin/applications?page=1&size=20
+REQ GET http://localhost:3000/api/v1/admin/scholarships/my-scholarships
+REQ GET http://localhost:3000/api/v1/admin/scholarships/stats
+REQ GET http://localhost:3000/api/v1/admin/scholarships/my-scholarships
+REQ GET http://localhost:3000/api/v1/admin/scholarships/my-scholarships
+REQ GET http://localhost:3000/api/v1/admin/scholarships/my-scholarships
+REQ GET http://localhost:3000/api/v1/admin/scholarships/my-scholarships
+REQ GET http://localhost:3000/api/v1/admin/scholarships/my-scholarships
+RES 200 http://localhost:3000/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_285433b7._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_c8c997ce._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/components_debug-panel_tsx_87076068._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/node_modules_lucide-react_dist_esm_icons_0b09eb4d._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/components_debug-panel_tsx_83f56c0d._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/api/v1/notifications/unread-count ct=application/json
+RES 200 http://localhost:3000/api/v1/admin/scholarships/my-scholarships ct=application/json
+RES 200 http://localhost:3000/api/v1/admin/dashboard/stats ct=application/json
+RES 200 http://localhost:3000/api/v1/admin/scholarships/stats ct=application/json
+RES 200 http://localhost:3000/api/v1/admin/recent-applications?limit=5 ct=application/json
+RES 200 http://localhost:3000/api/v1/scholarships ct=application/json
+REQ GET http://localhost:3000/api/v1/admin/scholarships/undergraduate_freshman/applications
+REQ GET http://localhost:3000/api/v1/users/me
+REQ GET http://localhost:3000/api/v1/users/me
+RES 200 http://localhost:3000/api/v1/admin/system-announcements?limit=5 ct=application/json
+RES 200 http://localhost:3000/api/v1/scholarships ct=application/json
+RES 200 http://localhost:3000/api/v1/admin/scholarships/my-scholarships ct=application/json
+RES 200 http://localhost:3000/api/v1/admin/scholarships/undergraduate_freshman/applications ct=application/json
+REQ GET http://localhost:3000/api/v1/admin/scholarships/phd/applications
+RES 200 http://localhost:3000/api/v1/admin/applications?page=1&size=20 ct=application/json
+RES 200 http://localhost:3000/api/v1/admin/scholarships/stats ct=application/json
+REQ GET http://localhost:3000/api/v1/admin/scholarships/undergraduate_freshman/applications
+RES 200 http://localhost:3000/api/v1/users/me ct=application/json
+RES 200 http://localhost:3000/api/v1/scholarships ct=application/json
+REQ GET http://localhost:3000/api/v1/admin/scholarships/sub-type-translations
+RES 200 http://localhost:3000/api/v1/admin/scholarships/my-scholarships ct=application/json
+RES 200 http://localhost:3000/api/v1/admin/scholarships/undergraduate_freshman/applications ct=application/json
+REQ GET http://localhost:3000/api/v1/admin/scholarships/phd/applications
+RES 200 http://localhost:3000/api/v1/users/me ct=application/json
+RES 200 http://localhost:3000/api/v1/admin/scholarships/phd/applications ct=application/json
+REQ GET http://localhost:3000/api/v1/admin/scholarships/direct_phd/applications
+RES 200 http://localhost:3000/api/v1/admin/scholarships/sub-type-translations ct=application/json
+RES 200 http://localhost:3000/api/v1/admin/scholarships/my-scholarships ct=application/json
+RES 200 http://localhost:3000/api/v1/admin/scholarships/direct_phd/applications ct=application/json
+RES 200 http://localhost:3000/api/v1/admin/scholarships/my-scholarships ct=application/json
+RES 200 http://localhost:3000/api/v1/admin/scholarships/phd/applications ct=application/json
+REQ GET http://localhost:3000/api/v1/scholarships
+REQ GET http://localhost:3000/api/v1/scholarship-configurations/available-semesters?scholarship_code=undergraduate_freshman
+REQ GET http://localhost:3000/api/v1/scholarship-configurations/available-semesters?scholarship_code=undergraduate_freshman
+REQ GET http://localhost:3000/api/v1/admin/scholarships/direct_phd/applications
+RES 200 http://localhost:3000/api/v1/admin/scholarships/my-scholarships ct=application/json
+RES 200 http://localhost:3000/api/v1/scholarships ct=application/json
+REQ GET http://localhost:3000/api/v1/scholarship-configurations/available-semesters?scholarship_code=undergraduate_freshman
+REQ GET http://localhost:3000/api/v1/scholarship-configurations/available-semesters?scholarship_code=undergraduate_freshman
+RES 200 http://localhost:3000/api/v1/admin/scholarships/my-scholarships ct=application/json
+RES 200 http://localhost:3000/api/v1/admin/scholarships/direct_phd/applications ct=application/json
+RES 200 http://localhost:3000/api/v1/scholarship-configurations/available-semesters?scholarship_code=undergraduate_freshman ct=application/json
+RES 200 http://localhost:3000/api/v1/admin/scholarships/my-scholarships ct=application/json
+RES 200 http://localhost:3000/api/v1/scholarship-configurations/available-semesters?scholarship_code=undergraduate_freshman ct=application/json
+RES 200 http://localhost:3000/api/v1/scholarship-configurations/available-semesters?scholarship_code=undergraduate_freshman ct=application/json
+REQ GET http://localhost:3000/api/v1/scholarships?academic_year=114&semester=second
+RES 200 http://localhost:3000/api/v1/scholarship-configurations/available-semesters?scholarship_code=undergraduate_freshman ct=application/json
+RES 200 http://localhost:3000/api/v1/scholarships?academic_year=114&semester=second ct=application/json
+REQ GET http://localhost:3000/api/v1/scholarship-configurations/available-semesters?scholarship_code=undergraduate_freshman
+REQ GET http://localhost:3000/api/v1/scholarship-configurations/available-semesters?scholarship_code=undergraduate_freshman
+RES 200 http://localhost:3000/api/v1/scholarship-configurations/available-semesters?scholarship_code=undergraduate_freshman ct=application/json
+RES 200 http://localhost:3000/api/v1/scholarship-configurations/available-semesters?scholarship_code=undergraduate_freshman ct=application/json
+REQ GET http://localhost:3000/_next/static/chunks/_4cdc4ed5._.js
+REQ GET http://localhost:3000/_next/static/chunks/components_admin_dashboard_DashboardPanel_tsx_d60a2ac9._.js
+RES 200 http://localhost:3000/_next/static/chunks/components_admin_dashboard_DashboardPanel_tsx_d60a2ac9._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/_4cdc4ed5._.js ct=application/javascript; charset=UTF-8
+REQ GET http://localhost:3000/api/v1/admin/dashboard/stats
+RES 200 http://localhost:3000/api/v1/admin/dashboard/stats ct=application/json
+REQ GET http://localhost:3000/_next/static/chunks/components_e3865016._.js
+REQ GET http://localhost:3000/_next/static/chunks/node_modules_lucide-react_dist_esm_icons_3113a9f2._.js
+REQ GET http://localhost:3000/_next/static/chunks/components_admin_email_EmailPanel_tsx_d60a2ac9._.js
+RES 200 http://localhost:3000/_next/static/chunks/components_admin_email_EmailPanel_tsx_d60a2ac9._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/node_modules_lucide-react_dist_esm_icons_3113a9f2._.js ct=application/javascript; charset=UTF-8
+RES 200 http://localhost:3000/_next/static/chunks/components_e3865016._.js ct=application/javascript; charset=UTF-8
+REQ GET http://localhost:3000/api/v1/email-management/react-email-templates
+REQ GET http://localhost:3000/api/v1/email-management/react-email-templates
+RES 200 http://localhost:3000/api/v1/email-management/react-email-templates ct=application/json
+RES 200 http://localhost:3000/api/v1/email-management/react-email-templates ct=application/json
+REQ POST http://localhost:3000/api/email/render
+RES 200 http://localhost:3000/api/email/render ct=application/json

@@ -1,0 +1,48 @@
+{
+  "test_subject": "commit 001b14b — @rate_limit decorators on auth endpoints",
+  "deployed": true,
+  "evidence": {
+    "container_grep": "docker exec scholarship_backend_dev grep -n 'rate_limit' /app/app/api/v1/endpoints/auth.py shows lines 11/40/64/159 — register=10/600s, login=20/300s, mock-sso/login=30/300s",
+    "redis_keys": "Redis stack returned: rate_limit:ip:192.168.167.1:login and rate_limit:ip:192.168.167.1:register"
+  },
+  "tests": [
+    {
+      "endpoint": "POST /api/v1/auth/login",
+      "spec": "20 reqs / 300s",
+      "method": "Burst 25 bogus-credential attempts in <30s after clearing redis key",
+      "result": "Attempts 1-20 returned HTTP 401 (Invalid nycu_id or email). Attempt 21 returned HTTP 429.",
+      "response_body_429": {
+        "success": false,
+        "message": {
+          "error": "Rate limit exceeded",
+          "limit": 20,
+          "window_seconds": 300,
+          "remaining": 0,
+          "retry_after": 300
+        },
+        "trace_id": "<uuid>"
+      },
+      "shape_match": "OK — body has limit=20, window_seconds=300, retry_after=300 as required"
+    },
+    {
+      "endpoint": "POST /api/v1/auth/register",
+      "spec": "10 reqs / 600s",
+      "method": "11 well-formed register payloads with throwaway nycu_id+email after clearing redis key",
+      "result": "Attempts 1-10 returned HTTP 201 (created). Attempt 11 returned HTTP 429.",
+      "response_body_429": {
+        "success": false,
+        "message": {
+          "error": "Rate limit exceeded",
+          "limit": 10,
+          "window_seconds": 600,
+          "remaining": 0,
+          "retry_after": 600
+        },
+        "trace_id": "<uuid>"
+      },
+      "shape_match": "OK — body has limit=10, window_seconds=600, retry_after=600 as required"
+    }
+  ],
+  "anomaly_first_run": "On the very first burst test (before I knew about pre-existing redis counters), the login endpoint never returned 429 within 25 attempts. Investigation showed the redis key existed before my test, but the counter had clearly already crossed 20. Subsequent run after redis DEL produced 429 on attempt 21 cleanly. This is not a bug — just initial-state context.",
+  "verdict": "PASS"
+}

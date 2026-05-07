@@ -1,0 +1,83 @@
+=== Notifications quiet-hours TZ + roster filename TZ (commit 0597f76) ===
+
+--- 4a: notification.py is_quiet_time() (running container) ---
+        """Check if current time is within user's quiet hours"""
+        if not self.quiet_hours_start or not self.quiet_hours_end:
+            return False
+
+        if current_time is None:
+            current_time = datetime.now(timezone.utc)
+
+        # Convert to user's timezone and check
+        # This is a simplified version - in production you'd use proper timezone handling
+        current_hour_minute = current_time.strftime("%H:%M")
+
+        if self.quiet_hours_start <= self.quiet_hours_end:
+            # Same day quiet hours (e.g., 09:00 to 17:00)
+            return self.quiet_hours_start <= current_hour_minute <= self.quiet_hours_end
+        else:
+            # Overnight quiet hours (e.g., 22:00 to 07:00 next day)
+            return current_hour_minute >= self.quiet_hours_start or current_hour_minute <= self.quiet_hours_end
+
+
+class NotificationTemplate(Base):
+    """
+    Notification templates for consistent messaging
+    """
+
+    __tablename__ = "notification_templates"
+
+
+Container code uses current_time.strftime() with no timezone conversion.
+Quiet hours are stored as local-time strings; comparing to UTC %H:%M shifts the window 8h.
+
+--- 4b: payment_roster.py generate_excel_filename (running container) ---
+        if self.is_locked:
+            raise ValueError("Roster is already locked")
+
+        self.status = RosterStatus.LOCKED
+        self.locked_at = datetime.now(timezone.utc)
+        self.locked_by = locked_by_user_id
+
+    def generate_excel_filename(self) -> str:
+        """產生Excel檔案名稱"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return f"roster_{self.roster_code}_{timestamp}.xlsx"
+
+
+class PaymentRosterItem(Base):
+    """造冊明細檔"""
+
+
+Container uses datetime.now() naive (server-TZ-dependent), not datetime.now(timezone.utc).
+
+--- 4c: Trigger roster filename generation via API to capture timestamp ---
+Look for roster endpoints...
+POST /api/v1/payment-rosters/generate
+POST /api/v1/payment-rosters/{roster_id}/export
+GET /api/v1/payment-rosters/{roster_id}/download
+POST /api/v1/manual-distribution/generate-rosters-from-distribution
+
+HTTP 404
+First 500 chars: {"success":false,"message":"Not Found","trace_id":"5190f2f3-96d3-4058-9fe0-3d265a232f14"}
+
+--- 4d: List existing rosters ---
+ERROR:  column "generated_at" does not exist
+LINE 1: SELECT id, roster_code, status, generated_at FROM payment_ro...
+                                        ^
+
+ count 
+-------
+     0
+(1 row)
+
+
+--- 4e: Trigger generate-rosters-from-distribution to see filename behavior ---
+HTTP 200
+Body first 400: {"success":true,"message":"查詢成功","data":{"items":[],"total":0,"skip":0,"limit":50},"errors":null,"trace_id":null}
+
+--- 4f: Container TZ + datetime behavior verification ---
+TZ env: (unset)
+datetime.now() (naive, container local): 2026-05-07 07:24:27
+datetime.now(timezone.utc) (UTC): 2026-05-07 07:24:27
+Asia/Taipei: 2026-05-07 15:24:27

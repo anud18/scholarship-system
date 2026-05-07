@@ -1,0 +1,79 @@
+NYCU
+National Yang Ming Chiao Tung University
+Academic Affairs
+NYCU Admissions Scholarship System
+
+Admissions Scholarship Management
+
+Student
+🇺🇸
+English
+陳小明
+stuunder1
+Logout
+NYCU Admissions Scholarship System
+
+獎學金申請與簽核系統
+
+國立陽明交通大學教務處 | NYCU Office of Academic Affairs
+
+Scholarship List
+New Application
+My Applications
+
+目前沒有符合資格的獎學金
+
+National Yang Ming Chiao Tung University
+
+Office of Academic Affairs
+
+NYCU Admissions Scholarship System
+
+Version v1.0.0
+
+This system is developed and maintained by the Office of Academic Affairs, providing comprehensive management for student scholarship applications, professor recommendations, and administrative reviews, committed to improving efficiency and transparency in scholarship operations.
+
+Contact Information
+Chiao Tung Campus
+
+1001 University Road, Hsinchu City 30010
+
+Science Building 1, 1F (Academic Affairs Units) / Library & Information Center, 8F (Dean's Office)
+
+(03) 571-2121
+
+Ext: 31666(Registration), 31668(Curriculum), 31391(Admission), 31751, 31752(Main Office)
+
+Yang Ming Campus
+
+No. 155, Sec. 2, Linong St., Beitou District, Taipei City 11221
+
+Administration Building, 3F
+
+(02) 2826-7000
+
+Ext: 62203(Registration), 62038(Curriculum), 62299(Admission), 62310(Internship), 62022(Main Office)
+
+oaa@nycu.edu.tw
+
+Academic Affairs Email
+
+Related Links
+NYCU Homepage
+Academic Affairs
+NYCU Portal
+Scholarship Guide
+FAQ
+User Manual
+
+© 2026 NYCU Office of Academic Affairs. All rights reserved.
+
+This system complies with Personal Data Protection Act
+
+Privacy Policy
+Terms of Use
+Accessibility
+Sitemap
+System Operational
+Last Updated: 5/7/2026
+D
