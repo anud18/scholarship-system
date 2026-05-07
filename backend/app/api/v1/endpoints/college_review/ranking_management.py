@@ -11,8 +11,10 @@ Handles:
 
 import logging
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import quote as _url_quote
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -20,12 +22,18 @@ from sqlalchemy.orm import selectinload
 from app.core.exceptions import AuthorizationError, NotFoundError
 from app.core.security import require_college
 from app.db.deps import get_db
+from app.models.application_field import ApplicationField, FieldType
 from app.models.college_review import CollegeRanking, CollegeRankingItem
-from app.models.scholarship import ScholarshipConfiguration
+from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.student import Department
 from app.models.user import User, UserRole
 from app.schemas.college_review import RankingImportItem, RankingOrderUpdate, RankingUpdate
 from app.schemas.response import ApiResponse
+from app.services.college_ranking_export_service import (
+    CollegeRankingExportService,
+    DynamicFieldSpec,
+    ExportRow,
+)
 from app.services.college_review_service import (
     CollegeReviewError,
     CollegeReviewService,
@@ -1075,3 +1083,120 @@ async def import_ranking_from_excel(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to import ranking data: {str(e)}",
         )
+
+
+@router.get("/rankings/{ranking_id}/export-excel")
+async def export_ranking_excel(
+    ranking_id: int,
+    current_user: User = Depends(require_college),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate the 學生資料彙整表 Excel for a ranking.
+
+    Auth: admin/super_admin OR a college user whose `college_code` matches the
+    ranking creator's `college_code` (rankings are scoped per college via creator).
+    """
+
+    # 1. Load ranking + items with applications
+    stmt = (
+        select(CollegeRanking)
+        .where(CollegeRanking.id == ranking_id)
+        .options(
+            selectinload(CollegeRanking.items).selectinload(CollegeRankingItem.application),
+            selectinload(CollegeRanking.scholarship_type).selectinload(
+                ScholarshipType.sub_type_configs
+            ),
+            selectinload(CollegeRanking.creator),
+        )
+    )
+    ranking = (await db.execute(stmt)).scalar_one_or_none()
+    if ranking is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到該學院排序資料")
+
+    # 2. Authorization — admin OK; college users must share creator's college_code
+    if current_user.role not in (UserRole.admin, UserRole.super_admin):
+        creator_college = getattr(ranking.creator, "college_code", None)
+        if not creator_college or creator_college != current_user.college_code:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="無權限匯出此學院之資料"
+            )
+
+    # 3. Load dynamic text fields flagged for export
+    scholarship_type_code = (
+        ranking.scholarship_type.code if ranking.scholarship_type else None
+    )
+    dynamic_fields: list[DynamicFieldSpec] = []
+    if scholarship_type_code:
+        df_stmt = (
+            select(ApplicationField)
+            .where(
+                ApplicationField.scholarship_type == scholarship_type_code,
+                ApplicationField.include_in_college_export.is_(True),
+                ApplicationField.is_active.is_(True),
+                ApplicationField.field_type == FieldType.TEXT.value,
+            )
+            .order_by(ApplicationField.display_order, ApplicationField.id)
+        )
+        dynamic_rows = (await db.execute(df_stmt)).scalars().all()
+        dynamic_fields = [
+            DynamicFieldSpec(
+                field_name=f.field_name,
+                field_label=f.field_label,
+                export_column_label=f.export_column_label,
+                display_order=f.display_order or 0,
+            )
+            for f in dynamic_rows
+        ]
+
+    # 4. Build sub-type label map from configured sub_type_configs
+    sub_type_labels: dict[str, str] = {}
+    if ranking.scholarship_type:
+        for cfg in getattr(ranking.scholarship_type, "sub_type_configs", []) or []:
+            if cfg.sub_type_code and cfg.name:
+                sub_type_labels[cfg.sub_type_code] = cfg.name
+
+    # 5. Build export rows
+    items_sorted = sorted(ranking.items or [], key=lambda x: x.rank_position)
+    export_rows = [
+        ExportRow(rank_position=item.rank_position, application=item.application)
+        for item in items_sorted
+        if item.application is not None
+    ]
+
+    # 6. Title + sheet name + filename
+    scholarship_name = (
+        ranking.scholarship_type.name
+        if ranking.scholarship_type and ranking.scholarship_type.name
+        else "獎學金"
+    )
+    title = f"{ranking.academic_year}學年度{scholarship_name}學生資料彙整表"
+    sheet_name = f"{ranking.academic_year}學年"
+
+    # College name in filename — use the current college user's college_code for
+    # college users; admins fall back to "全校" if the creator has no code.
+    college_label = (
+        current_user.college_code
+        if current_user.role not in (UserRole.admin, UserRole.super_admin)
+        else (getattr(ranking.creator, "college_code", None) or "全校")
+    )
+    base_filename = f"{ranking.academic_year}學年度{scholarship_name}學生資料彙整表_{college_label}.xlsx"
+    encoded = _url_quote(base_filename)
+
+    # 7. Render workbook
+    service = CollegeRankingExportService()
+    payload = service.build_workbook(
+        rows=export_rows,
+        dynamic_fields=dynamic_fields,
+        sub_type_labels=sub_type_labels,
+        title=title,
+        sheet_name=sheet_name,
+    )
+
+    return StreamingResponse(
+        iter([payload]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded}",
+            "Content-Length": str(len(payload)),
+        },
+    )
