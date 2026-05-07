@@ -286,6 +286,21 @@ test_manual_distribution_service.py          14/14
   — each has a small follow-up tracked in commits' "out of scope" notes
 - 33 regression tests still passing
 
+---
+
+## Round 7 — chunk-14: #45 regression test
+
+| chunk | status | issue | commit |
+|-------|--------|-------|--------|
+| chunk-14 | ✅ test pin for #45 | New test_manual_distribution_finalize.py exercising the full ranking → finalize() flow with one allocated + one non-allocated app, asserting non-allocated app.status stays "approved" (the regression target). 1/1 passing; 34/34 sweep across all added test files. | 10bd1fb |
+
+End of round 7: **23 commits**. Test coverage now pins:
+  - bank-document delete path (#55)
+  - professor-review lock at college stage (#64)
+  - ranking deadline guard (#63 backend)
+  - distribution finalize non-allocated status preservation (#45)
+  - test infra unblockers (#81, #82)
+
 ## New issues filed during execution
 
 | Issue | Title | Severity |
