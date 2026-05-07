@@ -501,3 +501,26 @@ display sites + 1 stale "annual" string:
 - All commits on `audit/monitoring-stack-phase1` (worktree-isolated; main repo's branch flipper no longer affecting work)
 - No pushes (per plan rules; weekly stays well below 5%)
 - Next-session pickup: close on #59 part A (needs 勞保 SOP source text from user) or #67 (續領彙整匯入, needs source format) or expand test coverage for the 9 P1 fixes
+
+---
+
+## Round 14 — semester code + Optional return-type cleanup + regression tests
+
+| chunk | commit | scope |
+|-------|--------|-------|
+| chunk-42 | ff4b7c4 | **P1**: scholarship_configurations.py 2 endpoints — `Semester.first if "1" else Semester.second` silently mapped "0" (yearly) to second; explicit dict mapping with ValueError on unknown |
+| chunk-43 | 92247d2 | test(labels): 12 unit tests pinning Semester.yearly handling across Application / ScholarshipRule / ScholarshipConfiguration / format_academic_term |
+| chunk-44 | 9cf6b6a | test(notifications): source-grep invariant — no `datetime.now()` in notification_service (pins 4d05f0e) |
+| chunk-45 | 54c8112 | test(flag-modified): 5 source-grep invariants pinning the JSONB persistence fixes (782b460 + 0b48324) |
+| chunk-46 | 659fc01 | fix(dynamic-config): get_bool/int/float/str now `-> Optional[X]` with explicit None short-circuit; pre-fix crashed on TypeError(None) for missing keys |
+
+## Cumulative session totals (round 14 end)
+
+- **60 commits** on `audit/monitoring-stack-phase1`
+- 8 issues fully closed: #45 #55 #60 #63 #64 #68 #81 #82
+- 2 issues mostly closed: #59 (B), #66 (main flow)
+- **10 P1 bug categories** closed across rounds 10-14
+- **3 new regression test files** with source-grep invariants pinning the fixes:
+   - test_semester_yearly_labels.py (12 tests)
+   - test_notification_timezone.py (2 tests)
+   - test_flag_modified_invariants.py (5 tests)
