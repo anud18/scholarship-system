@@ -5,10 +5,21 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -18,7 +29,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 
 interface Period {
@@ -52,6 +64,7 @@ interface RosterDetailDialogProps {
 }
 
 interface RosterItem {
+  id: number;
   student_name: string;
   student_id: string;
   student_id_number: string;
@@ -64,6 +77,7 @@ interface RosterItem {
   allocation_year?: number;
   bank_account?: string;
   is_included: boolean;
+  exclusion_reason?: string | null;
   application_identity?: string;
   allocated_sub_type?: string;
 }
@@ -78,6 +92,54 @@ export function RosterDetailDialog({
   const [rosterItems, setRosterItems] = useState<RosterItem[]>([]);
   const [selectedCollege, setSelectedCollege] = useState<string>("");
   const [hasMatrix, setHasMatrix] = useState(false);
+
+  // #66: exclude-item dialog state
+  const [excludeTarget, setExcludeTarget] = useState<RosterItem | null>(null);
+  const [excludeCategory, setExcludeCategory] = useState<
+    "returned" | "declined" | "other"
+  >("returned");
+  const [excludeNote, setExcludeNote] = useState("");
+  const [excludeSubmitting, setExcludeSubmitting] = useState(false);
+
+  const openExcludeDialog = (item: RosterItem) => {
+    setExcludeTarget(item);
+    setExcludeCategory("returned");
+    setExcludeNote("");
+  };
+
+  const submitExclude = async () => {
+    if (!excludeTarget || !period.roster_id) return;
+    if (excludeCategory === "other" && !excludeNote.trim()) {
+      toast.error("選擇「其他」時必須填寫補充說明");
+      return;
+    }
+    setExcludeSubmitting(true);
+    try {
+      const response = await apiClient.request(
+        `/payment-rosters/${period.roster_id}/items/${excludeTarget.id}/exclude`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            reason_category: excludeCategory,
+            reason_note: excludeNote.trim() || undefined,
+          }),
+        }
+      );
+      if (response.success) {
+        toast.success(`已排除 ${excludeTarget.student_name} 的造冊明細`);
+        setExcludeTarget(null);
+        await loadRosterItems();
+      } else {
+        toast.error(response.message || "排除失敗");
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "排除失敗";
+      toast.error(message);
+    } finally {
+      setExcludeSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     if (open && period.roster_id) {
@@ -160,6 +222,7 @@ export function RosterDetailDialog({
             <TableHead>申請身分</TableHead>
             <TableHead>分發獎學金</TableHead>
             <TableHead className="text-right">金額</TableHead>
+            <TableHead className="text-right w-20">操作</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -203,6 +266,16 @@ export function RosterDetailDialog({
               </TableCell>
               <TableCell className="text-right font-medium">
                 {formatCurrency(item.scholarship_amount)}
+              </TableCell>
+              <TableCell className="text-right">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => openExcludeDialog(item)}
+                  title="排除此明細(學生繳回 / 放棄)"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
               </TableCell>
             </TableRow>
           ))}
@@ -300,6 +373,93 @@ export function RosterDetailDialog({
           </div>
         </div>
       </DialogContent>
+
+      {/* #66: exclude confirmation dialog */}
+      <Dialog
+        open={!!excludeTarget}
+        onOpenChange={open => !open && !excludeSubmitting && setExcludeTarget(null)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>排除造冊明細</DialogTitle>
+            <DialogDescription>
+              {excludeTarget && (
+                <>
+                  將從本期造冊中排除學生 <strong>{excludeTarget.student_name}</strong>
+                  (學號 {excludeTarget.student_id})。
+                  此動作會記錄稽核日誌且需指明原因。
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="exclude-category">排除原因</Label>
+              <Select
+                value={excludeCategory}
+                onValueChange={value =>
+                  setExcludeCategory(value as "returned" | "declined" | "other")
+                }
+                disabled={excludeSubmitting}
+              >
+                <SelectTrigger id="exclude-category">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="returned">學生繳回</SelectItem>
+                  <SelectItem value="declined">學生放棄</SelectItem>
+                  <SelectItem value="other">其他</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="exclude-note">
+                補充說明
+                {excludeCategory === "other" && (
+                  <span className="text-red-500 ml-1">*</span>
+                )}
+              </Label>
+              <Textarea
+                id="exclude-note"
+                value={excludeNote}
+                onChange={e => setExcludeNote(e.target.value)}
+                placeholder={
+                  excludeCategory === "other"
+                    ? "選擇「其他」時必填,請說明原因"
+                    : "選填"
+                }
+                rows={3}
+                disabled={excludeSubmitting}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setExcludeTarget(null)}
+              disabled={excludeSubmitting}
+            >
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={submitExclude}
+              disabled={
+                excludeSubmitting ||
+                (excludeCategory === "other" && !excludeNote.trim())
+              }
+            >
+              {excludeSubmitting ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : null}
+              確認排除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }
