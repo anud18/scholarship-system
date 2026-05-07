@@ -61,18 +61,21 @@ async def get_applications_for_review(
         if not semester or semester not in ["first", "second", "annual"]:
             semester = None
 
-    # Granular authorization checks
-    if not current_user.is_college() and not current_user.is_admin() and not current_user.is_super_admin():
-        raise ReviewPermissionError("College role required for application review access")
-
-    # Additional checks for specific operations
-    if scholarship_type_id and not await _check_scholarship_permission(current_user, scholarship_type_id, db):
-        raise ReviewPermissionError(f"User {current_user.id} not authorized for scholarship type {scholarship_type_id}")
-
-    if academic_year and not await _check_academic_year_permission(current_user, academic_year, db):
-        raise ReviewPermissionError(f"User {current_user.id} not authorized for academic year {academic_year}")
-
     try:
+        # Granular authorization checks (must be inside try so ReviewPermissionError
+        # is caught by the handler below and returned as 403, not propagated as 500).
+        if not current_user.is_college() and not current_user.is_admin() and not current_user.is_super_admin():
+            raise ReviewPermissionError("College role required for application review access")
+
+        # Additional checks for specific operations
+        if scholarship_type_id and not await _check_scholarship_permission(current_user, scholarship_type_id, db):
+            raise ReviewPermissionError(
+                f"User {current_user.id} not authorized for scholarship type {scholarship_type_id}"
+            )
+
+        if academic_year and not await _check_academic_year_permission(current_user, academic_year, db):
+            raise ReviewPermissionError(f"User {current_user.id} not authorized for academic year {academic_year}")
+
         # Get college code for filtering (None for super_admin to see all)
         college_code = current_user.college_code if current_user.role == UserRole.college else None
 
