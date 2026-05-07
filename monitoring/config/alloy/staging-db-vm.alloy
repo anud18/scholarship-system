@@ -98,6 +98,18 @@ prometheus.scrape "postgres_exporter" {
   scrape_interval = "15s"
 }
 
+// MinIO ships built-in Prometheus metrics on the same port as the API.
+// No exporter container needed; just scrape the cluster metrics endpoint.
+// MinIO requires no auth on this path when MINIO_PROMETHEUS_AUTH_TYPE=public
+// (default in newer images) — if it's set to "jwt" you'd need a bearer.
+prometheus.scrape "minio" {
+  targets    = [{ __address__ = "minio:9000" }]
+  forward_to = [prometheus.relabel.add_labels.receiver]
+  job_name   = "minio"
+  scrape_interval = "15s"
+  metrics_path = "/minio/v2/metrics/cluster"
+}
+
 prometheus.relabel "add_labels" {
   forward_to = [prometheus.remote_write.default.receiver]
   rule {

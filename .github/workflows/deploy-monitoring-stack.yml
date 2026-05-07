@@ -198,6 +198,30 @@ jobs:
           fi
           echo "✅ leftover datasource '$DS_NAME' removed via provisioning"
 
+      - name: Reload Grafana provisioning
+        env:
+          ADMIN_USER: ${{ secrets.GRAFANA_ADMIN_USER }}
+          ADMIN_PASS: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+        run: |
+          # Bind-mounted config files in /etc/grafana/provisioning are
+          # visible to the container immediately, but Grafana only reads
+          # them at boot or on explicit reload. Without this step, newly
+          # added alert rules / dashboards stay invisible until the next
+          # full container restart (which the rest of this workflow only
+          # does in the leftover-datasource cleanup branch).
+          NET="monitoring_monitoring_network"
+          for path in dashboards datasources alerting plugins; do
+            STATUS=$(docker run --rm --network "$NET" curlimages/curl:8.10.1 \
+              -sS -o /dev/null -w "%{http_code}" \
+              -X POST -u "$ADMIN_USER:$ADMIN_PASS" \
+              "http://monitoring_grafana:3000/api/admin/provisioning/${path}/reload" || echo "000")
+            case "$STATUS" in
+              200) echo "✅ reloaded $path" ;;
+              404) echo "(no $path reload endpoint — older Grafana?)" ;;
+              *)   echo "::warning::$path reload returned $STATUS" ;;
+            esac
+          done
+
       - name: Health check monitoring services
         run: |
           set -e
@@ -273,9 +297,9 @@ jobs:
             "http://localhost:3000/api/v1/provisioning/alert-rules" \
             | jq 'length')
           # Total alert rules across rules-*.yml: 5 (system) + 4 (container)
-          # + 3 (monitoring) + 2 (database) = 14.
-          if [ "${RULE_COUNT:-0}" -lt 14 ]; then
-            echo "::error::Expected ≥14 provisioned alert rules, got $RULE_COUNT"
+          # + 3 (monitoring) + 2 (database) + 3 (application-logs) = 17.
+          if [ "${RULE_COUNT:-0}" -lt 17 ]; then
+            echo "::error::Expected ≥17 provisioned alert rules, got $RULE_COUNT"
             docker logs monitoring_grafana 2>&1 | grep -E 'provisioning.alerting.*level=error' | tail -20
             exit 1
           fi
@@ -426,6 +450,30 @@ jobs:
             ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }}:/opt/scholarship/
           echo "✅ docker-compose.staging-db-monitoring.yml transferred"
 
+      - name: Sync staging-db.yml + recreate MinIO for prom auth=public
+        run: |
+          # MINIO_PROMETHEUS_AUTH_TYPE=public has to land via env var, which
+          # means the minio container needs --force-recreate. The main
+          # staging-db stack isn't deployed by this workflow, and the
+          # existing minio container was created under a different compose
+          # project name, so a plain `docker compose up` hits a name
+          # conflict. Force-remove first (volumes persist), then up.
+          scp -P 8822 -i ~/.ssh/staging_db \
+            ./docker-compose.staging-db.yml \
+            ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }}:/opt/scholarship/
+          ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} << 'EOF'
+            cd /opt/scholarship
+            if [ -f docker-compose.staging-db.yml ]; then
+              # Idempotent: if container doesn't exist, rm is a no-op.
+              docker rm -f scholarship_minio_staging 2>/dev/null || true
+              # Match the original compose project name so future deploys
+              # don't keep recreating it under a different name.
+              docker compose -p scholarship_staging_db \
+                -f docker-compose.staging-db.yml up -d minio || \
+                echo "::warning::MinIO recreate failed"
+            fi
+          EOF
+
       - name: Deploy monitoring stack to Staging DB-VM
         run: |
           echo "Deploying monitoring services on DB-VM..."
@@ -472,15 +520,17 @@ jobs:
               | jq -r '.data.result[0].value[1] // "0"'
           }
 
-          # Poll until we hit the full expected count, not just any count —
-          # DB-VM Alloy only just started, so its first scrape needs ~15s
-          # to land in remote_write.
+          # Poll until we hit the full expected count AND nothing is
+          # currently down. Just-recreated services (e.g. MinIO after a
+          # docker rm/up cycle) can briefly land in up{}==0 before they
+          # finish booting; waiting them out avoids spurious failures.
           for i in $(seq 1 24); do
             STAGING_TOTAL=$(query_count 'count(up{environment="staging"}==1)')
-            if [ "${STAGING_TOTAL:-0}" -ge "$MIN_EXPECTED" ]; then
+            STAGING_DOWN=$(query_count 'count(up{environment="staging"}==0)')
+            if [ "${STAGING_TOTAL:-0}" -ge "$MIN_EXPECTED" ] && [ "${STAGING_DOWN:-0}" -eq 0 ]; then
               break
             fi
-            echo "Have $STAGING_TOTAL/$MIN_EXPECTED staging up=1 metrics, waiting... ($i/24)"
+            echo "Have up=1:$STAGING_TOTAL/$MIN_EXPECTED  up=0:$STAGING_DOWN  ($i/24)"
             sleep 10
           done
 

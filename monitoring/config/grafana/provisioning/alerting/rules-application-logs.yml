@@ -1,0 +1,99 @@
+apiVersion: 1
+# Application log-based alerts (Loki).
+#
+# These rules query Loki tenants instead of Prometheus, so they catch
+# things metrics can't see: stack traces, application-level ERROR lines,
+# unhandled exceptions. They go through the same notification policy as
+# Prometheus alerts, so a firing rule eventually opens / updates a GitHub
+# issue via the repository_dispatch webhook.
+groups:
+  - orgId: 1
+    name: application_logs
+    folder: Alerts
+    interval: 1m
+    rules:
+      - uid: alert-backend-error-spike
+        title: BackendErrorSpike
+        # Fire when the backend container emits more than 5 ERROR-level
+        # lines in any 5-minute window. Threshold is intentionally lenient
+        # for staging — bump for production once baseline is known.
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki-staging-uid
+            model:
+              expr: |
+                sum(count_over_time({environment="staging", container=~"scholarship_backend.*"} |~ "(?i)\\bERROR\\b" [5m])) > 5
+              refId: A
+              instant: true
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        labels:
+          severity: warning
+          category: application
+          environment: staging
+        annotations:
+          summary: "Backend error log spike (>5/5min) on {{ $labels.environment }}"
+          description: "scholarship_backend has emitted more than 5 ERROR-level log lines in the last 5 minutes. Investigate via Loki: {environment=\"staging\", container=~\"scholarship_backend.*\"} |~ \"ERROR\""
+        isPaused: false
+
+      - uid: alert-backend-traceback
+        title: BackendUnhandledTraceback
+        # Any python traceback line is high-signal — a stack trace usually
+        # means an unhandled exception bubbled past the request middleware.
+        # 1 occurrence in 5 minutes is enough to fire.
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki-staging-uid
+            model:
+              expr: |
+                sum(count_over_time({environment="staging", container=~"scholarship_backend.*"} |= "Traceback (most recent call last)" [5m])) > 0
+              refId: A
+              instant: true
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        labels:
+          severity: high
+          category: application
+          environment: staging
+        annotations:
+          summary: "Backend Python traceback detected on {{ $labels.environment }}"
+          description: "An unhandled Python exception traceback appeared in the backend logs. Open Loki and search: {environment=\"staging\", container=~\"scholarship_backend.*\"} |= \"Traceback\""
+        isPaused: false
+
+      - uid: alert-postgres-error-log
+        title: PostgresErrorLog
+        # Postgres ERROR/FATAL lines that aren't routine "database does
+        # not exist" probe noise. Threshold of 3 in 5 minutes.
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki-staging-uid
+            model:
+              expr: |
+                sum(count_over_time({environment="staging", container="scholarship_postgres_staging"} |~ "(?i)\\b(ERROR|FATAL)\\b" [5m])) > 3
+              refId: A
+              instant: true
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        labels:
+          severity: warning
+          category: database
+          environment: staging
+        annotations:
+          summary: "Postgres ERROR/FATAL log spike on {{ $labels.environment }}"
+          description: "scholarship_postgres_staging emitted >3 ERROR/FATAL lines in 5 minutes. Inspect via Loki: {environment=\"staging\", container=\"scholarship_postgres_staging\"} |~ \"ERROR|FATAL\""
+        isPaused: false
