@@ -437,6 +437,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                         <TableRow>
                           <TableHead>申請編號</TableHead>
                           <TableHead>學生資訊</TableHead>
+                          <TableHead>國籍/身分</TableHead>
                           <TableHead>獎學金類型</TableHead>
                           <TableHead>學年度/學期</TableHead>
                           <TableHead>狀態</TableHead>
@@ -449,7 +450,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                         {historicalApplications.length === 0 ? (
                           <TableRow>
                             <TableCell
-                              colSpan={8}
+                              colSpan={9}
                               className="text-center py-8 text-gray-500"
                             >
                               沒有找到符合條件的申請記錄
@@ -474,42 +475,27 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                                       {application.student_department}
                                     </div>
                                   )}
-                                  {/* #68: nationality + identity */}
-                                  {(application.student_nationality ||
-                                    application.student_identity) && (
-                                    <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-1">
-                                      {application.student_nationality && (
-                                        <Badge
-                                          variant="outline"
-                                          className="text-[10px] px-1 py-0"
-                                        >
-                                          {application.student_nationality}
-                                        </Badge>
-                                      )}
-                                      {application.student_identity != null && (
-                                        <Badge
-                                          variant="outline"
-                                          className="text-[10px] px-1 py-0"
-                                        >
-                                          {(() => {
-                                            const idMap: Record<number, string> = {
-                                              1: "本國生",
-                                              2: "僑生",
-                                              3: "外籍生",
-                                              4: "陸生",
-                                              5: "港澳生",
-                                              6: "外籍交換生",
-                                            };
-                                            return (
-                                              idMap[application.student_identity!] ||
-                                              `身分別 ${application.student_identity}`
-                                            );
-                                          })()}
-                                        </Badge>
-                                      )}
-                                    </div>
-                                  )}
                                 </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="text-sm">
+                                  {application.student_nationality || "-"}
+                                </div>
+                                {application.student_identity != null && (
+                                  <div className="text-xs text-gray-500">
+                                    {(() => {
+                                      const idMap: Record<number, string> = {
+                                        1: "本國生",
+                                        2: "僑生",
+                                        3: "外籍生",
+                                        4: "陸生",
+                                        5: "港澳生",
+                                        6: "外籍交換生",
+                                      };
+                                      return idMap[application.student_identity!] || `身分別 ${application.student_identity}`;
+                                    })()}
+                                  </div>
+                                )}
                               </TableCell>
                               <TableCell>
                                 <div>
@@ -789,6 +775,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                       <TableRow>
                         <TableHead>申請編號</TableHead>
                         <TableHead>學生資訊</TableHead>
+                        <TableHead>國籍/身分</TableHead>
                         <TableHead>學年度/學期</TableHead>
                         <TableHead>狀態</TableHead>
                         <TableHead>申請時間</TableHead>
@@ -801,7 +788,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                       0 ? (
                         <TableRow>
                           <TableCell
-                            colSpan={7}
+                            colSpan={8}
                             className="text-center py-8 text-gray-500"
                           >
                             沒有找到 {scholarshipType} 的申請記錄
@@ -828,6 +815,26 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                                     </div>
                                   )}
                                 </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="text-sm">
+                                  {application.student_nationality || "-"}
+                                </div>
+                                {application.student_identity != null && (
+                                  <div className="text-xs text-gray-500">
+                                    {(() => {
+                                      const idMap: Record<number, string> = {
+                                        1: "本國生",
+                                        2: "僑生",
+                                        3: "外籍生",
+                                        4: "陸生",
+                                        5: "港澳生",
+                                        6: "外籍交換生",
+                                      };
+                                      return idMap[application.student_identity!] || `身分別 ${application.student_identity}`;
+                                    })()}
+                                  </div>
+                                )}
                               </TableCell>
                               <TableCell>
                                 <div className="text-sm">
