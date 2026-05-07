@@ -525,7 +525,9 @@ async def get_ranking(
                 "sub_type_metadata": list(sub_type_metadata_map.values()),
                 "items": items,
                 "created_at": ranking.created_at.isoformat(),
-                "college_review_end": config.college_review_end.isoformat() if config and config.college_review_end else None,
+                "college_review_end": (
+                    config.college_review_end.isoformat() if config and config.college_review_end else None
+                ),
             },
         )
 
