@@ -800,6 +800,14 @@ function ProfessorReviewComponentInner({
                 </div>
               )}
 
+              {/* Inline error from submit/update (e.g. 403 lock) — issue #92 */}
+              {error && !isLocked && (
+                <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900 flex items-start gap-2">
+                  <span className="flex-1">{error}</span>
+                  <button onClick={() => setError(null)} className="shrink-0 text-red-700 hover:text-red-900">✕</button>
+                </div>
+              )}
+
               {/* Application Info */}
               <Card>
                 <CardHeader>
