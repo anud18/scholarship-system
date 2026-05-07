@@ -6192,6 +6192,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/payment-rosters/{roster_id}/items/{item_id}/exclude": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exclude Roster Item
+         * @description 從造冊明細中排除指定項目(學生繳回 / 放棄獎學金等情境)。
+         *
+         *     Soft-deletes by setting `is_included=False` + `exclusion_reason` so the
+         *     item still appears in audit trails / re-exports with the exclusion
+         *     metadata, rather than being hard-deleted (#66).
+         *
+         *     Notes:
+         *       - Only admins may exclude items. Roster must NOT be LOCKED.
+         *       - This does NOT decrement the student's cumulative received_months;
+         *         if the funds are actually being returned, the admin should adjust
+         *         received_months separately (it lives on CollegeRankingItem and the
+         *         update path is intentionally manual).
+         *       - A RosterAuditLog row is created with action=ITEM_REMOVE.
+         */
+        post: operations["exclude_roster_item_api_v1_payment_rosters__roster_id__items__item_id__exclude_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/payment-rosters/{roster_id}/audit-logs": {
         parameters: {
             query?: never;
@@ -7675,6 +7707,19 @@ export interface components {
              * @default false
              */
             force_new: boolean;
+        };
+        /** Body_exclude_roster_item_api_v1_payment_rosters__roster_id__items__item_id__exclude_post */
+        Body_exclude_roster_item_api_v1_payment_rosters__roster_id__items__item_id__exclude_post: {
+            /**
+             * Reason Category
+             * @description 排除原因分類:'returned'(繳回) / 'declined'(放棄) / 'other'(其他)
+             */
+            reason_category: string;
+            /**
+             * Reason Note
+             * @description 補充說明,自由文字
+             */
+            reason_note?: string | null;
         };
         /** Body_extract_bank_info_from_passbook_api_v1_user_profiles_bank_passbook_ocr_post */
         Body_extract_bank_info_from_passbook_api_v1_user_profiles_bank_passbook_ocr_post: {
@@ -20176,6 +20221,42 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    exclude_roster_item_api_v1_payment_rosters__roster_id__items__item_id__exclude_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roster_id: number;
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Body_exclude_roster_item_api_v1_payment_rosters__roster_id__items__item_id__exclude_post"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
