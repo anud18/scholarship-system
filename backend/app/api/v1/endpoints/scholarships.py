@@ -40,6 +40,8 @@ async def get_all_scholarships(
         semester_enum = Semester.first
     elif display_semester == "second":
         semester_enum = Semester.second
+    elif display_semester == "yearly":
+        semester_enum = Semester.yearly
 
     # Batch load all configurations to avoid N+1 query
     # Get scholarship IDs for batch query

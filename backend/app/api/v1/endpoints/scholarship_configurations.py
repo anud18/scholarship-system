@@ -1204,6 +1204,8 @@ async def list_scholarship_configurations(
                 conditions.append(ScholarshipConfiguration.semester == Semester.first)
             elif semester == "second":
                 conditions.append(ScholarshipConfiguration.semester == Semester.second)
+            elif semester == "yearly":
+                conditions.append(ScholarshipConfiguration.semester == Semester.yearly)
 
         # Execute query
         stmt = (
