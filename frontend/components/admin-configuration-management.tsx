@@ -542,6 +542,7 @@ export function AdminConfigurationManagement({
     if (!semester) return "全學年";
     if (semester === "first" || semester === "1") return "第一學期";
     if (semester === "second" || semester === "2") return "第二學期";
+    if (semester === "yearly" || semester === "0") return "全年";
     return semester;
   };
 
