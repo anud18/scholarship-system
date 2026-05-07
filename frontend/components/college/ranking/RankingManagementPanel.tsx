@@ -121,6 +121,9 @@ export function RankingManagementPanel({
     fetchRankings,
   } = useCollegeManagement();
 
+  // #91 fix: store the college_review_end fetched for the active ranking's config.
+  const [activeConfigDeadline, setActiveConfigDeadline] = useState<string | null>(null);
+
   const fetchRankingDetails = useCallback(
     async (rankingId: number) => {
       setIsRankingLoading(true);
@@ -160,6 +163,9 @@ export function RankingManagementPanel({
             })
           );
 
+          // #91: college_review_end is now returned directly by the ranking detail endpoint
+          setActiveConfigDeadline((response.data as any).college_review_end ?? null);
+
           setRankingData({
             applications: transformedApplications,
             totalQuota: response.data.total_quota || 0,
@@ -186,7 +192,7 @@ export function RankingManagementPanel({
         setIsRankingLoading(false);
       }
     },
-    [setIsRankingLoading, setRankingData]
+    [setIsRankingLoading, setRankingData, setActiveConfigDeadline]
   );
 
   // Auto-refresh when switching to ranking tab or when data version changes
@@ -538,6 +544,7 @@ export function RankingManagementPanel({
         if (selectedRanking === rankingToDelete.id) {
           setSelectedRanking(null);
           setRankingData(null);
+          setActiveConfigDeadline(null);
         }
         await fetchRankings();
         incrementDataVersion();
@@ -617,9 +624,7 @@ export function RankingManagementPanel({
     const id = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(id);
   }, []);
-  const deadlineISO =
-    (scholarshipConfig as { college_review_end?: string | null } | undefined)
-      ?.college_review_end ?? null;
+  const deadlineISO = activeConfigDeadline;
   const deadlineInfo = useMemo(
     () => computeDeadlineInfo(deadlineISO),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `now` triggers re-eval
