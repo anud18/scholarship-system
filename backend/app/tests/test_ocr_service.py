@@ -248,7 +248,7 @@ class TestOCRService:
         assert result["success"] is False
         assert "Invalid response format" in result["error"]
         assert result["confidence"] == 0.0
-        assert result["raw_response"] == "invalid json response"
+        assert "raw_response" not in result
 
     @pytest.mark.asyncio
     @patch("app.services.ocr_service.settings")
