@@ -165,8 +165,8 @@ class PaymentRoster(Base):
         self.locked_by = locked_by_user_id
 
     def generate_excel_filename(self) -> str:
-        """產生Excel檔案名稱"""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        """產生Excel檔案名稱 (timestamp in UTC for cross-server consistency)"""
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         return f"roster_{self.roster_code}_{timestamp}.xlsx"
 
 

@@ -359,9 +359,17 @@ class NotificationPreference(Base):
         if current_time is None:
             current_time = datetime.now(timezone.utc)
 
-        # Convert to user's timezone and check
-        # This is a simplified version - in production you'd use proper timezone handling
-        current_hour_minute = current_time.strftime("%H:%M")
+        # Convert UTC to Taipei (the institution's locale) before extracting
+        # HH:MM. quiet_hours_start / quiet_hours_end are stored as local
+        # wall-clock strings, so comparing them against a UTC %H:%M would
+        # silently shift the quiet window 8 hours.
+        try:
+            from zoneinfo import ZoneInfo
+
+            local_time = current_time.astimezone(ZoneInfo("Asia/Taipei"))
+        except Exception:
+            local_time = current_time
+        current_hour_minute = local_time.strftime("%H:%M")
 
         if self.quiet_hours_start <= self.quiet_hours_end:
             # Same day quiet hours (e.g., 09:00 to 17:00)
