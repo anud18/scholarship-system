@@ -502,6 +502,7 @@ class ScholarshipRule(Base):
             semester_label = {
                 Semester.first: "第一學期",
                 Semester.second: "第二學期",
+                Semester.yearly: "全年",
             }.get(self.semester, "")
             return f"{self.academic_year}學年度 {semester_label}"
         return f"{self.academic_year}學年度"
@@ -683,6 +684,7 @@ class ScholarshipConfiguration(Base):
             semester_label = {
                 Semester.first: "第一學期",
                 Semester.second: "第二學期",
+                Semester.yearly: "全年",
             }.get(self.semester, "")
             return f"{self.academic_year}學年度 {semester_label}"
         return f"{self.academic_year}學年度"

@@ -120,10 +120,16 @@ def format_academic_period(academic_year: int, semester: str, lang: str = "zh") 
         (114, 'first', 'en') -> "AY 114 First Semester"
     """
     if lang == "en":
-        semester_name = "First" if semester == "first" else "Second"
+        semester_name = {"first": "First", "second": "Second", "yearly": "Yearly"}.get(
+            semester, "Yearly"
+        )
+        if semester_name == "Yearly":
+            return f"AY {academic_year} Yearly"
         return f"AY {academic_year} {semester_name} Semester"
     else:
-        semester_name = "第一學期" if semester == "first" else "第二學期"
+        semester_name = {"first": "第一學期", "second": "第二學期", "yearly": "全年"}.get(
+            semester, "全年"
+        )
         return f"{academic_year}學年度{semester_name}"
 
 
