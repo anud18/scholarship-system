@@ -408,7 +408,7 @@ class RuleTemplateRequest(BaseModel):
     template_name: str = Field(..., min_length=1, max_length=100, description="Template name")
     template_description: Optional[str] = Field(None, description="Template description")
     scholarship_type_id: int = Field(..., ge=1, description="Scholarship type ID")
-    rule_ids: List[int] = Field(..., min_items=1, description="Rule IDs to include in template")
+    rule_ids: List[int] = Field(..., min_length=1, description="Rule IDs to include in template")
 
     @field_validator("rule_ids")
     @classmethod
@@ -446,7 +446,7 @@ class BulkRuleOperation(BaseModel):
     """Schema for bulk rule operations"""
 
     operation: str = Field(..., pattern=r"^(activate|deactivate|delete)$", description="Operation type")
-    rule_ids: List[int] = Field(..., min_items=1, description="Rule IDs to operate on")
+    rule_ids: List[int] = Field(..., min_length=1, description="Rule IDs to operate on")
     parameters: Optional[Dict[str, Any]] = Field(None, description="Operation-specific parameters")
 
     @field_validator("rule_ids")
