@@ -2,7 +2,7 @@
 -r requirements.txt
 
 # Testing framework
-pytest==8.3.0  # Updated for Python 3.13 compatibility
+pytest==9.0.3  # Security update — multiple medium-severity CVEs (<9.0.3)
 pytest-asyncio==0.24.0  # Updated for Python 3.13 compatibility
 pytest-cov==6.0.0  # Updated for Python 3.13 compatibility
 pytest-mock==3.14.0  # Updated for Python 3.13 compatibility
