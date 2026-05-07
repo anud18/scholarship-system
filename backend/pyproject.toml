@@ -125,7 +125,7 @@ dependencies = [
     "PyJWT[crypto]==2.9.0",
     "passlib[bcrypt]==1.7.4",
     "bcrypt==4.2.1",
-    "cryptography==46.0.5",
+    "cryptography==46.0.6",
     "python-decouple==3.8",
     
     # Data validation and serialization
