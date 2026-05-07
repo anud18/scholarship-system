@@ -203,7 +203,12 @@ async def get_matrix_quota_status(
         if "-" in period:
             academic_year_str, semester_str = period.split("-")
             academic_year = int(academic_year_str)
-            semester = Semester.first if semester_str == "1" else Semester.second
+            # Per APP-ID format: 1=first, 2=second, 0=yearly. The previous
+            # binary check silently misclassified '0' (yearly) as Semester.second.
+            semester_map = {"1": Semester.first, "2": Semester.second, "0": Semester.yearly}
+            semester = semester_map.get(semester_str)
+            if semester is None:
+                raise ValueError(f"Invalid semester code: {semester_str}")
         else:
             academic_year = int(period)
             semester = None
@@ -586,7 +591,11 @@ async def get_quota_overview(
         if "-" in period:
             academic_year_str, semester_str = period.split("-")
             academic_year = int(academic_year_str)
-            semester = Semester.first if semester_str == "1" else Semester.second
+            # Per APP-ID format: 1=first, 2=second, 0=yearly.
+            semester_map = {"1": Semester.first, "2": Semester.second, "0": Semester.yearly}
+            semester = semester_map.get(semester_str)
+            if semester is None:
+                raise ValueError(f"Invalid semester code: {semester_str}")
         else:
             academic_year = int(period)
             semester = None
