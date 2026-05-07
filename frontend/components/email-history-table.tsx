@@ -62,6 +62,16 @@ interface EmailHistoryFilters {
   date_to: string;
 }
 
+function isHtmlContent(body: string): boolean {
+  if (!body) return false;
+  const trimmed = body.trim();
+  return (
+    /^<!doctype/i.test(trimmed) ||
+    /^<html/i.test(trimmed) ||
+    /<(table|div|p|span|br|h[1-6]|ul|ol|li|a\s|img)\b/i.test(trimmed)
+  );
+}
+
 export function EmailHistoryTable({ className }: EmailHistoryTableProps) {
   const [emailHistory, setEmailHistory] = useState<EmailHistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -476,11 +486,23 @@ export function EmailHistoryTable({ className }: EmailHistoryTableProps) {
                                   <Label className="text-sm font-medium text-gray-700">
                                     郵件內容
                                   </Label>
-                                  <div className="bg-gray-50 p-4 rounded-md border max-h-96 overflow-y-auto">
-                                    <pre className="whitespace-pre-wrap text-sm leading-relaxed text-gray-900">
-                                      {selectedEmail.body}
-                                    </pre>
-                                  </div>
+                                  {isHtmlContent(selectedEmail.body) ? (
+                                    <div className="border rounded-md overflow-hidden">
+                                      <iframe
+                                        srcDoc={selectedEmail.body}
+                                        className="w-full"
+                                        style={{ height: "480px", border: "none" }}
+                                        sandbox="allow-same-origin"
+                                        title="郵件內容預覽"
+                                      />
+                                    </div>
+                                  ) : (
+                                    <div className="bg-gray-50 p-4 rounded-md border max-h-96 overflow-y-auto">
+                                      <pre className="whitespace-pre-wrap text-sm leading-relaxed text-gray-900">
+                                        {selectedEmail.body}
+                                      </pre>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             )}
