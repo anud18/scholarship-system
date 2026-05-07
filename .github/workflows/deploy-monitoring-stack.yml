@@ -273,9 +273,9 @@ jobs:
             "http://localhost:3000/api/v1/provisioning/alert-rules" \
             | jq 'length')
           # Total alert rules across rules-*.yml: 5 (system) + 4 (container)
-          # + 3 (monitoring) + 2 (database) = 14.
-          if [ "${RULE_COUNT:-0}" -lt 14 ]; then
-            echo "::error::Expected ≥14 provisioned alert rules, got $RULE_COUNT"
+          # + 3 (monitoring) + 2 (database) + 3 (application-logs) = 17.
+          if [ "${RULE_COUNT:-0}" -lt 17 ]; then
+            echo "::error::Expected ≥17 provisioned alert rules, got $RULE_COUNT"
             docker logs monitoring_grafana 2>&1 | grep -E 'provisioning.alerting.*level=error' | tail -20
             exit 1
           fi
