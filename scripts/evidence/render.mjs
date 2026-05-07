@@ -190,12 +190,21 @@ function md(text) {
   }
   return out.join("\n");
 }
+function safeUrl(url) {
+  const trimmed = url.trim();
+  if (/^(javascript|data|vbscript|file):/i.test(trimmed)) return "#";
+  return trimmed;
+}
 function inline2(s) {
   return escapeHtml(s)
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, "<em>$1</em>")
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    .replace(
+      /\[([^\]]+)\]\(([^)]+)\)/g,
+      (_m, text, url) =>
+        `<a href="${safeUrl(url)}" target="_blank" rel="noopener">${text}</a>`,
+    );
 }
 
 function readFileBlock(file) {
