@@ -273,8 +273,17 @@ class RosterService:
                                 logger.info(f"Updated {key} for application {application.id}: {old_value} -> {value}")
 
                         if has_changes:
-                            # 更新Application的student_data欄位（稽核用）
+                            # 更新Application的student_data欄位（稽核用）。
+                            # stored_student_data is the same dict reference as
+                            # application.student_data; flag_modified() is required
+                            # because SQLAlchemy's default JSON change detection
+                            # compares object identity, not contents — without
+                            # this, the in-place mutations on line 270 would be
+                            # silently discarded on commit.
+                            from sqlalchemy.orm.attributes import flag_modified
+
                             application.student_data = stored_student_data
+                            flag_modified(application, "student_data")
                             self.db.add(application)
 
                             # 記錄更新日誌

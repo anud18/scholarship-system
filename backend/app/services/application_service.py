@@ -1187,8 +1187,16 @@ class ApplicationService:
                 # 對於普通欄位，直接更新
                 current_student_data[field] = value
 
-        # 更新到資料庫
+        # 更新到資料庫。current_student_data may be the SAME dict reference
+        # as application.student_data (line 1165's `or {}` only branches when
+        # student_data is falsy), so plain `=` assignment doesn't change the
+        # column's object identity. SQLAlchemy's default JSON change detection
+        # compares identity, not contents, so without flag_modified() the
+        # in-place mutations above would be silently dropped on commit.
+        from sqlalchemy.orm.attributes import flag_modified
+
         application.student_data = current_student_data
+        flag_modified(application, "student_data")
 
         await self.db.commit()
         await self.db.refresh(application)
