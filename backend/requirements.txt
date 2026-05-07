@@ -2,7 +2,7 @@
 fastapi==0.129.0
 starlette==0.52.1  # Security update
 uvicorn[standard]==0.38.0  # Updated for Python 3.13 compatibility
-python-multipart==0.0.26  # Security: fixed memory exhaustion + DoS (<0.0.26 vulnerable)
+python-multipart==0.0.27  # Security: fixed memory exhaustion + DoS (<0.0.26 vulnerable)
 
 # Database and ORM
 sqlalchemy==2.0.44  # Updated for Python 3.13 compatibility
