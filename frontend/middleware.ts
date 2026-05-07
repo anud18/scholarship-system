@@ -43,6 +43,11 @@ export function middleware(request: NextRequest) {
     response.headers.set("Content-Security-Policy", csp);
   } else {
     // Production CSP: Strict with nonce-based script/style loading
+    const portalHost =
+      request.nextUrl.hostname.includes("test") ||
+      request.nextUrl.hostname.includes("staging")
+        ? "https://portal.test.nycu.edu.tw"
+        : "https://portal.nycu.edu.tw";
     const csp = [
       "default-src 'self'",
       `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`, // strict-dynamic for bundled scripts
@@ -51,7 +56,7 @@ export function middleware(request: NextRequest) {
       "font-src 'self'",
       "connect-src 'self' https://*.nycu.edu.tw",
       "base-uri 'self'",
-      "form-action 'self' https://portal.nycu.edu.tw",
+      `form-action 'self' ${portalHost}`,
       "frame-ancestors 'none'",
       "object-src 'none'",
       "upgrade-insecure-requests",
