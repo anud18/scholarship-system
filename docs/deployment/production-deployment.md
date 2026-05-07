@@ -45,7 +45,6 @@ graph TD
     subgraph "Monitoring"
         PROM[Prometheus]
         GRAF[Grafana]
-        ALERT[AlertManager]
     end
 
     LB --> API1
@@ -66,7 +65,6 @@ graph TD
     PROM --> API2
     PROM --> DB
     GRAF --> PROM
-    ALERT --> PROM
 ```
 
 ## Environment Configuration

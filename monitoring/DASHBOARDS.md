@@ -108,7 +108,6 @@ All dashboards reference datasources by UID for consistency:
 | Loki (Staging) | `loki-staging-uid` | loki | Staging logs |
 | Loki (Production) | `loki-prod-uid` | loki | Production logs |
 | Loki (Dev) | `loki-dev-uid` | loki | Development logs |
-| AlertManager | `alertmanager-uid` | alertmanager | Alert management |
 
 ### Datasource Features
 
@@ -121,10 +120,6 @@ All dashboards reference datasources by UID for consistency:
 - Multi-tenant with X-Scope-OrgID header
 - 1000 max lines per query
 - Derived fields for trace linking (future use)
-
-**AlertManager**:
-- Handles Grafana-managed alerts
-- Integration with Prometheus alert rules
 
 ## Dashboard Variables
 
