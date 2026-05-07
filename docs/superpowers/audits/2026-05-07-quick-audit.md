@@ -343,3 +343,31 @@ End of round 7: **23 commits**. Test coverage now pins:
 3. 連兩 chunk fail → 停寫 status note
 4. user 中斷
 5. 全 chunk 完成 → 寫總結 + 停
+
+---
+
+## Round 9 — worktree rescue + Pydantic v2 / datetime hygiene
+
+**Context**: external process (epitaxy / scheduled task / parallel agent) was
+flipping the main repo's branch back to `feat/monitoring-phase2` mid-session,
+overwriting unstaged work. Created a fresh isolated worktree at
+`.claude/worktrees/utcnow-batch` checking out `audit/monitoring-stack-phase1`
+and worked exclusively there for the rest of the round.
+
+| chunk | scope | commit |
+|-------|-------|--------|
+| chunk-18 | datetime.utcnow() → datetime.now(timezone.utc) across 14 production files (security.py JWT exp claims, services, endpoints) | 071f34c |
+| chunk-19 | Field(example=...) → Field(examples=[...]) across 9 occurrences (application.py, document_request.py) | d83f4be |
+| chunk-20 | Same datetime sweep in 3 test fixture files | d1fabb9 |
+| chunk-21 | Settings: nested `class Config` → `model_config = SettingsConfigDict(...)` | 69beadc |
+
+These four commits collectively clear the bulk of remaining
+PydanticDeprecatedSince20 warnings and the Python 3.12+ datetime.utcnow()
+warnings on every test run.
+
+## Cumulative session totals (round 9 end)
+
+- **31 commits** on `audit/monitoring-stack-phase1`
+- 8 issues fully closed (#45 #55 #60 #63 #64 #68 #81 #82)
+- 2 issues mostly closed (#59 part B, #66 main flow)
+- Worktree active at `.claude/worktrees/utcnow-batch`
