@@ -3,6 +3,14 @@
 
 apiVersion: 1
 
+# Explicitly remove leftover datasources from prior provisioning runs.
+# Without this, datasources removed from the `datasources` block below
+# stay in Grafana's sqlite volume and surface as 500 errors in health
+# checks (see PRODUCTION_LAUNCH_RUNBOOK.md → Gate 1).
+deleteDatasources:
+  - name: Alertmanager
+    orgId: 1
+
 datasources:
   # =========================================================================
   # PROMETHEUS - Metrics Database
