@@ -4,7 +4,7 @@ Roster-specific notification service
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from sqlalchemy.orm import Session
@@ -130,7 +130,7 @@ class RosterNotificationService:
                 "roster_id": roster.id,
                 "roster_code": roster.roster_code,
                 "statistics": statistics,
-                "completed_at": datetime.now().isoformat(),
+                "completed_at": datetime.now(timezone.utc).isoformat(),
             }
 
             notified_users = []
@@ -189,7 +189,7 @@ class RosterNotificationService:
                 "message": f"造冊處理過程中發生錯誤，需要人工介入。配置：{error_data.get('config_name', 'N/A')}，錯誤：{error_data.get('error', 'Unknown error')}",
                 "message_en": f"An error occurred during roster processing requiring manual intervention. Config: {error_data.get('config_name', 'N/A')}, Error: {error_data.get('error', 'Unknown error')}",
                 "error_data": error_data,
-                "error_time": datetime.now().isoformat(),
+                "error_time": datetime.now(timezone.utc).isoformat(),
             }
 
             notified_users = []
@@ -276,7 +276,7 @@ class RosterNotificationService:
                 "new_status": new_status.value,
                 "changed_by_user_id": changed_by_user_id,
                 "changed_by_name": changed_by_name,
-                "changed_at": datetime.now().isoformat(),
+                "changed_at": datetime.now(timezone.utc).isoformat(),
             }
 
             # 根據新狀態決定通知類型和優先級
@@ -350,7 +350,7 @@ class RosterNotificationService:
                 "message": f"今日造冊處理摘要：產生 {summary_data.get('generated_rosters', 0)} 個造冊，成功 {summary_data.get('successful_rosters', 0)} 個，失敗 {summary_data.get('failed_rosters', 0)} 個",
                 "message_en": f"Daily roster summary: {summary_data.get('generated_rosters', 0)} rosters generated, {summary_data.get('successful_rosters', 0)} successful, {summary_data.get('failed_rosters', 0)} failed",
                 "summary_data": summary_data,
-                "generated_at": datetime.now().isoformat(),
+                "generated_at": datetime.now(timezone.utc).isoformat(),
             }
 
             # 根據是否有失敗決定通知類型
@@ -424,7 +424,7 @@ class RosterNotificationService:
                 notification_type=NotificationType.info,
                 priority=NotificationPriority.normal,
                 related_resource_type="test",
-                metadata={"test": True, "sent_at": datetime.now().isoformat()},
+                metadata={"test": True, "sent_at": datetime.now(timezone.utc).isoformat()},
             )
             logger.info(f"Test notification sent to user {user_id}")
             return True

@@ -907,7 +907,7 @@ class ExcelExportService:
                 "preview_rows": len(preview_data),
                 "roster_code": roster.roster_code,
                 "period_label": getattr(roster, "period_label", ""),
-                "generated_at": datetime.now().isoformat(),
+                "generated_at": datetime.now(timezone.utc).isoformat(),
                 "std_up_mixlista_format": True,
             }
 

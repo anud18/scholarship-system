@@ -4,7 +4,7 @@ Roster audit logging service
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import Request
@@ -233,7 +233,7 @@ class AuditService:
             user_name=user_name,
             request=request,
             description="造冊已被鎖定，無法再進行修改",
-            new_values={"locked_by": user_id, "locked_at": datetime.now().isoformat()},
+            new_values={"locked_by": user_id, "locked_at": datetime.now(timezone.utc).isoformat()},
             level=RosterAuditLevel.INFO,
             tags=["lock"],
             db=db,
