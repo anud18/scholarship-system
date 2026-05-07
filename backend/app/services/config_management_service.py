@@ -4,7 +4,7 @@ Handles system configuration with encryption for sensitive values
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from cryptography.fernet import Fernet
@@ -162,7 +162,7 @@ class ConfigurationService:
             existing.value = stored_value
             existing.allow_empty = allow_empty
             existing.last_modified_by = user_id
-            existing.updated_at = datetime.utcnow()
+            existing.updated_at = datetime.now(timezone.utc)
             setting = existing
             action = "UPDATE"
         else:

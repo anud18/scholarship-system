@@ -4,7 +4,7 @@ Review Service
 統一審查服務，處理所有角色的審查邏輯
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select
@@ -520,7 +520,7 @@ class ReviewService:
             # 更新現有記錄
             existing_review.recommendation = overall_recommendation
             existing_review.comments = combined_comments
-            existing_review.reviewed_at = datetime.utcnow()
+            existing_review.reviewed_at = datetime.now(timezone.utc)
 
             # 刪除舊的子項目記錄
             for old_item in existing_review.items:
@@ -535,7 +535,7 @@ class ReviewService:
                 reviewer_id=reviewer_id,
                 recommendation=overall_recommendation,
                 comments=combined_comments,
-                reviewed_at=datetime.utcnow(),
+                reviewed_at=datetime.now(timezone.utc),
             )
             self.db.add(review)
 
@@ -644,7 +644,7 @@ class ReviewService:
         # 更新審查記錄
         review.recommendation = overall_recommendation
         review.comments = combined_comments
-        review.reviewed_at = datetime.utcnow()
+        review.reviewed_at = datetime.now(timezone.utc)
 
         await self.db.commit()
         await self.db.refresh(review)

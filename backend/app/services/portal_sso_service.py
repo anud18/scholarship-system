@@ -5,7 +5,7 @@ Handles real JWT token verification with Portal JWT server
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional
 
 import httpx
@@ -231,7 +231,7 @@ class PortalSSOService:
         )
 
         # Update last login time
-        user.last_login_at = datetime.utcnow()
+        user.last_login_at = datetime.now(timezone.utc)
         await self.db.commit()
 
         # Generate system tokens with debug data

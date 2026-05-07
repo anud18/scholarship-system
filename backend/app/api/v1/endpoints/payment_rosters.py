@@ -1200,7 +1200,7 @@ async def lock_roster(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="造冊已經被鎖定")
 
         roster.status = RosterStatus.LOCKED
-        roster.locked_at = datetime.utcnow()
+        roster.locked_at = datetime.now(timezone.utc)
         roster.locked_by_user_id = current_user.id
 
         await db.commit()

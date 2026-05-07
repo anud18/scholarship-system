@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select
@@ -19,9 +19,9 @@ class SystemSettingService:
         setting = await SystemSettingService.get_setting(db, key)
         if setting:
             setting.value = value
-            setting.updated_at = datetime.utcnow()
+            setting.updated_at = datetime.now(timezone.utc)
         else:
-            setting = SystemSetting(key=key, value=value, updated_at=datetime.utcnow())
+            setting = SystemSetting(key=key, value=value, updated_at=datetime.now(timezone.utc))
             db.add(setting)
         await db.commit()
         await db.refresh(setting)
@@ -57,7 +57,7 @@ class EmailTemplateService:
             template.body_template = body
             template.cc = cc
             template.bcc = bcc
-            template.updated_at = datetime.utcnow()
+            template.updated_at = datetime.now(timezone.utc)
         else:
             template = EmailTemplate(
                 key=key,
@@ -65,7 +65,7 @@ class EmailTemplateService:
                 body_template=body,
                 cc=cc,
                 bcc=bcc,
-                updated_at=datetime.utcnow(),
+                updated_at=datetime.now(timezone.utc),
             )
             db.add(template)
         await db.commit()

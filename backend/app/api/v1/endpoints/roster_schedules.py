@@ -4,7 +4,7 @@ Roster Schedule API endpoints
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -158,7 +158,7 @@ async def create_roster_schedule(
             notification_emails=schedule_data.notification_emails,
             notification_settings=schedule_data.notification_settings,
             created_by_user_id=current_user.id,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
 
         db.add(new_schedule)
@@ -269,7 +269,7 @@ async def update_roster_schedule(
         for field, value in update_data.items():
             setattr(schedule, field, value)
 
-        schedule.updated_at = datetime.utcnow()
+        schedule.updated_at = datetime.now(timezone.utc)
 
         await db.commit()
 
@@ -338,7 +338,7 @@ async def update_schedule_status(
 
         old_status = schedule.status
         schedule.status = status_data.status
-        schedule.updated_at = datetime.utcnow()
+        schedule.updated_at = datetime.now(timezone.utc)
 
         await db.commit()
 

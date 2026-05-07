@@ -6,7 +6,7 @@ Excel export service for payment roster generation
 import hashlib
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -197,7 +197,7 @@ class ExcelExportService:
 
         if async_mode:
             task_id = f"roster-export-{uuid4().hex}"
-            estimated_completion = (datetime.utcnow() + timedelta(minutes=5)).isoformat()
+            estimated_completion = (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()
             return {
                 "task_id": task_id,
                 "status": "queued",

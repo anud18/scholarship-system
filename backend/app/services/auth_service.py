@@ -2,7 +2,7 @@
 Authentication service for user login and registration
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select
@@ -67,7 +67,7 @@ class AuthService:
             raise AuthenticationError("Invalid nycu_id or email")
 
         # Update last login time
-        user.last_login_at = datetime.utcnow()
+        user.last_login_at = datetime.now(timezone.utc)
         await self.db.commit()
 
         return user
