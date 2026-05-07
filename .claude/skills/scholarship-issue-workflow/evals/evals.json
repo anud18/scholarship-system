@@ -1,0 +1,44 @@
+{
+  "skill_name": "scholarship-issue-workflow",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I want to fix issue #55 in the scholarship-system repo — when a student deletes their bank document, the file in MinIO isn't cleaned up. Can you read the issue, trace which files are involved, and give me a concrete implementation plan before touching any code?",
+      "expected_output": "Agent reads the issue via gh CLI, identifies the correct backend endpoint/service handling bank document deletion, checks whether MinIO cleanup is missing, and produces a plan that includes: file paths to edit, the specific change needed (add MinIO delete call), how to test locally, and notes the VPN requirement for staging validation.",
+      "files": [],
+      "assertions": [
+        "Agent runs 'gh issue view 55' or equivalent before doing anything else",
+        "Agent greps/searches the codebase to find the actual DELETE endpoint for bank documents — does not guess based on filename alone",
+        "Plan explicitly mentions calling the MinIO storage service to delete the file",
+        "Plan includes a local test step using the docker compose dev stack",
+        "Plan mentions staging validation on ss.test.nycu.edu.tw requires VPN (WireGuard peer2)"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "The admin 歷史申請 (history) page needs to show student nationality and identity as a dedicated column, not as inline badges. I think the file to edit is frontend/components/admin-management-interface.tsx — can you confirm and implement the fix?",
+      "expected_output": "Agent verifies the import chain: admin-management-interface.tsx is dead/unused code; the actual rendering path is AdminManagementShell.tsx → HistoryPanel.tsx via dynamic import. Agent edits HistoryPanel.tsx (not admin-management-interface.tsx), adds the 國籍/身分 column to both tables, and verifies via Playwright that the column appears.",
+      "files": [],
+      "assertions": [
+        "Agent greps to confirm admin-management-interface.tsx is NOT imported anywhere in the codebase before editing it",
+        "Agent identifies AdminManagementShell.tsx → HistoryPanel.tsx as the actual rendering chain",
+        "Agent edits HistoryPanel.tsx, NOT admin-management-interface.tsx",
+        "Agent adds a dedicated 國籍/身分 TableHead column header to the history table",
+        "Agent does not add the nationality as a badge inside an existing cell"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "I just merged a fix for issue #68 (admin history page nationality column). Can you verify it's deployed and working on ss.test.nycu.edu.tw using the E00001 test account, and then post a confirmation comment with a screenshot to issue #68?",
+      "expected_output": "Agent checks VPN reachability, uses the nycu-sso-login skill to get/refresh the E00001 session, drives Playwright to navigate Admin → 系統管理 → 歷史申請, confirms the 國籍/身分 column is the 3rd column in the table header, captures a screenshot showing the column and real data rows, and posts a comment to gh issue 68 with the screenshot embedded.",
+      "files": [],
+      "assertions": [
+        "Agent checks VPN reachability with curl before attempting to connect to ss.test.nycu.edu.tw",
+        "Agent uses E00001 (staff) account for admin panel access",
+        "Agent navigates to the 歷史申請 tab specifically, not just the admin dashboard",
+        "Agent extracts and logs the table header columns to confirm 國籍/身分 is present",
+        "Agent posts a comment to GitHub issue #68 with a screenshot or confirmation of the column"
+      ]
+    }
+  ]
+}
