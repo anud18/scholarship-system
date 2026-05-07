@@ -249,7 +249,7 @@ docker ps --filter "name=monitoring_"
 curl http://localhost:3000/api/health
 curl http://localhost:9090/-/healthy
 curl http://localhost:3100/ready
-curl http://localhost:9093/-/healthy
+docker exec monitoring_grafana wget --spider -q http://localhost:3000/api/health && echo OK
 ```
 
 ### Step 2: Deploy Alloy on Staging AP-VM (localhost)

@@ -63,7 +63,7 @@ postgres:connection_utilization:ratio{environment="prod"}
 curl -f http://localhost:3000/api/health && \
 curl -f http://localhost:9090/-/healthy && \
 curl -f http://localhost:3100/ready && \
-curl -f http://localhost:9093/-/healthy && \
+docker exec monitoring_grafana wget --spider -q http://localhost:3000/api/health && \
 echo "✓ All services healthy"
 ```
 
@@ -376,7 +376,11 @@ docker system df
 curl -s http://localhost:9090/api/v1/targets | jq '[.data.activeTargets[] | select(.health!="up")] | length'
 
 # 3. Review firing alerts
-curl -s http://localhost:9093/api/v2/alerts | jq '.[] | select(.status.state=="active") | {name:.labels.alertname, since:.startsAt}'
+# List currently firing alerts (Grafana unified alerting)
+docker exec monitoring_grafana wget -qO- \
+  --header "Authorization: Basic $(echo -n "$GRAFANA_ADMIN_USER:$GRAFANA_ADMIN_PASSWORD" | base64)" \
+  http://localhost:3000/api/v1/provisioning/alert-rules \
+  | jq '.[] | select(.execErrState != "OK") | {title, execErrState}'
 
 # 4. Check service logs for errors
 docker-compose -f monitoring/docker-compose.monitoring.yml logs --tail=100 | grep -i error

@@ -87,7 +87,7 @@ Comprehensive monitoring system for the Scholarship System using Grafana Stack (
 
 ### Alerting
 - ✅ 30+ pre-configured alert rules
-- ✅ Multi-channel notifications (email, Slack)
+- ✅ GitHub Issue notifications for alerts (one issue per alertname; auto-reopen on re-fire; resolved comments)
 - ✅ Severity-based routing (critical, warning)
 - ✅ Environment-based routing (prod, staging)
 - ✅ Alert inhibition rules
@@ -155,15 +155,8 @@ GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=<strong-password>
 GRAFANA_ROOT_URL=http://monitoring-server:3000
 
-# Optional: Email alerts
-ALERT_EMAIL_FROM=alerts@example.com
-ALERT_SMTP_HOST=smtp.gmail.com
-ALERT_SMTP_PORT=587
-ALERT_SMTP_USER=your-email@gmail.com
-ALERT_SMTP_PASSWORD=your-app-password
-
-# Optional: Slack alerts
-ALERT_SLACK_WEBHOOK=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+# Alerting is via Grafana → GitHub Issues; no SMTP/Slack env required.
+# See monitoring/PRODUCTION_RUNBOOK.md "Alerting" section.
 ```
 
 ### Step 2: Deploy Monitoring Server
@@ -652,7 +645,7 @@ curl -X POST http://localhost:9090/-/reload
 ### Preparation Checklist
 
 - [ ] Update `.env.monitoring` with production credentials
-- [ ] Configure production alert channels (email, Slack)
+- [ ] Verify GitHub Issue webhook contact point delivers alerts (smoke test in PRODUCTION_RUNBOOK.md)
 - [ ] Review and adjust resource limits for production load
 - [ ] Set up backup strategy for Prometheus and Loki data
 - [ ] Configure external storage (if needed)
