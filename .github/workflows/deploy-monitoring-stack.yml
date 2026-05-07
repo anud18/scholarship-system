@@ -450,38 +450,49 @@ jobs:
         run: |
           set -e
 
-          # Replace `sleep 30` with poll-until-targets-arrive
+          # Staging metrics arrive via Alloy → Prometheus remote_write —
+          # they don't appear in /api/v1/targets (which only lists local
+          # scrape configs). Query the up{} metric instead, which Alloy
+          # synthesizes for every scrape it forwards.
+          QUERY='count(up{environment="staging"}==1)'
+          query_count() {
+            curl -s -G "http://localhost:9090/api/v1/query" \
+              --data-urlencode "query=$1" \
+              | jq -r '.data.result[0].value[1] // "0"'
+          }
+
           for i in $(seq 1 18); do
-            STAGING_TOTAL=$(curl -s http://localhost:9090/api/v1/targets \
-              | jq '[.data.activeTargets[] | select(.labels.environment=="staging")] | length')
+            STAGING_TOTAL=$(query_count "$QUERY")
             if [ "${STAGING_TOTAL:-0}" -gt 0 ]; then
               break
             fi
-            echo "Waiting for staging targets to register... ($i/18)"
+            echo "Waiting for staging metrics to flow in... ($i/18)"
             sleep 10
           done
 
-          STAGING_TOTAL=$(curl -s http://localhost:9090/api/v1/targets \
-            | jq '[.data.activeTargets[] | select(.labels.environment=="staging")] | length')
-          STAGING_DOWN=$(curl -s http://localhost:9090/api/v1/targets \
-            | jq '[.data.activeTargets[] | select(.labels.environment=="staging") | select(.health!="up")] | length')
+          STAGING_TOTAL=$(query_count "$QUERY")
+          STAGING_DOWN=$(query_count 'count(up{environment="staging"}==0)')
 
-          # Tunable: minimum expected staging targets
           # AP-VM: node, cadvisor, nginx, redis, backend = 5
           # DB-VM (after F-ALLO-09): node, postgres = 2
           # Total = 7
           MIN_EXPECTED=7
-          if [ "$STAGING_TOTAL" -lt "$MIN_EXPECTED" ]; then
-            echo "::error::Only $STAGING_TOTAL staging targets found; expected at least $MIN_EXPECTED"
-            curl -s http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | {scrapeUrl, env: .labels.environment, vm: .labels.vm, job: .labels.job}'
+          if [ "${STAGING_TOTAL:-0}" -lt "$MIN_EXPECTED" ]; then
+            echo "::error::Only $STAGING_TOTAL staging up=1 metrics found; expected at least $MIN_EXPECTED"
+            echo "All up{} time series:"
+            curl -s -G "http://localhost:9090/api/v1/query" \
+              --data-urlencode 'query=up' \
+              | jq '.data.result[] | {labels: .metric, value: .value[1]}'
             exit 1
           fi
-          if [ "$STAGING_DOWN" -gt 0 ]; then
-            echo "::error::$STAGING_DOWN staging targets are DOWN"
-            curl -s http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | select(.labels.environment=="staging") | select(.health!="up")'
+          if [ "${STAGING_DOWN:-0}" -gt 0 ]; then
+            echo "::error::$STAGING_DOWN staging targets reporting up=0"
+            curl -s -G "http://localhost:9090/api/v1/query" \
+              --data-urlencode 'query=up{environment="staging"}==0' \
+              | jq '.data.result[].metric'
             exit 1
           fi
-          echo "✅ $STAGING_TOTAL staging targets all UP"
+          echo "✅ $STAGING_TOTAL staging targets reporting up=1"
 
           # Loki check (existing; keep)
           if curl -f -H "X-Scope-OrgID: staging" -G "http://localhost:3100/loki/api/v1/query" \
