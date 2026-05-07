@@ -14,20 +14,20 @@ class DocumentRequestCreate(BaseModel):
     requested_documents: List[str] = Field(
         ...,
         description="List of document types/categories needed",
-        example=["transcript", "recommendation_letter", "research_plan"],
+        examples=[["transcript", "recommendation_letter", "research_plan"]],
     )
     reason: str = Field(
         ...,
         description="Why these documents are needed",
         min_length=10,
         max_length=1000,
-        example="需要補充成績單以確認學業成績",
+        examples=["需要補充成績單以確認學業成績"],
     )
     notes: Optional[str] = Field(
         None,
         description="Additional notes or instructions for the student",
         max_length=2000,
-        example="請於一週內上傳，並確保文件清晰可讀",
+        examples=["請於一週內上傳，並確保文件清晰可讀"],
     )
 
 
@@ -45,7 +45,7 @@ class DocumentRequestCancel(BaseModel):
         description="Reason for cancelling the request",
         min_length=5,
         max_length=500,
-        example="申請已被駁回，無需補件",
+        examples=["申請已被駁回，無需補件"],
     )
 
 
