@@ -442,3 +442,27 @@ plus 1 deprecation:
    6. auth_service.register_user IntegrityError 500
    7. user_profile_service.create_user_profile race
    8. auth endpoints brute-force defense
+
+---
+
+## Round 13 — Semester.yearly coverage sweep + register-race regression test
+
+After fixing one Semester.yearly omission (`Application.get_semester_label`,
+chunk 35), grep'd for other places handling first/second but missing
+yearly. Found 4 more sites that produced wrong results or blank labels
+for yearly scholarships:
+
+| chunk | commit | scope |
+|-------|--------|-------|
+| chunk-35 | be08e9a | Application.get_semester_label adds Semester.yearly: "全年" |
+| chunk-36 | 9cc8864 | ScholarshipRule + ScholarshipConfiguration academic_year_label and academic_period.format_academic_term  — same yearly handling |
+| chunk-37 | 2c90aa1 | **P1**: scholarships.py and scholarship_configurations.py semester→enum mapping was missing yearly branch — the WHERE clause silently returned ALL semesters' configs when caller asked for yearly |
+| chunk-38 | e52e18d | docs: comment in application_helpers else-branch said "(semester is None)" but actually covers both None and Semester.yearly |
+| chunk-39 | 62de4e8 | test(auth): regression tests for register_user TOCTOU IntegrityError handling — pin the 0d06085 fix with two new test cases (nycu_id race + email race), both verify rollback() is called |
+
+## Cumulative session totals (round 13 end)
+
+- **51 commits** on `audit/monitoring-stack-phase1`
+- 8 issues fully closed + 2 mostly closed
+- **9 P1 bugs** uncovered + fixed across rounds 10-13 (counting yearly-filter as 1)
+- New regression test pins 1 of those P1s under pytest
