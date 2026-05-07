@@ -371,3 +371,27 @@ warnings on every test run.
 - 8 issues fully closed (#45 #55 #60 #63 #64 #68 #81 #82)
 - 2 issues mostly closed (#59 part B, #66 main flow)
 - Worktree active at `.claude/worktrees/utcnow-batch`
+
+---
+
+## Round 10 — real-bug pass + more deprecation cleanup
+
+After dispatching a deeper bug-hunt agent, shipped 4 real-bug fixes
+plus 1 deprecation:
+
+| chunk | scope | commit |
+|-------|-------|--------|
+| chunk-22 | `.dict()` → `.model_dump()` × 5 call sites (Pydantic v2) | 55219ab |
+| chunk-23 | SQLAlchemy mutable Column defaults → `lambda: ...` (5 columns; avoid shared-instance footgun) | 5e7a1aa |
+| chunk-24 | **P1 BUG**: `flag_modified()` on `student_data` in-place mutations — application_service.update_student_data and roster_service verification merge were both silently dropping JSONB updates because plain `JSON` column does identity comparison only | 782b460 |
+| chunk-25 | **P1 BUG**: roster_service period_label "year-month" parsing now rejects month_int outside 1..12; previously fell through both semester branches silently producing unfiltered queries | 8d29d81 |
+| chunk-26 | batch_import upload-data endpoint: tighten semester Query parameter to `^(first\|second\|yearly)$` so invalid input 422s rather than silently producing empty result sets | e0a33e9 |
+
+## Cumulative session totals (round 10 end)
+
+- **35 commits** on `audit/monitoring-stack-phase1`
+- 8 issues fully closed (#45 #55 #60 #63 #64 #68 #81 #82)
+- 2 issues mostly closed (#59 part B, #66 main flow)
+- 2 P1 bugs uncovered + fixed by deep bug-hunt:
+   - JSONB student_data flag_modified() (silent persistence loss)
+   - Out-of-range month silently bypassing semester filter
