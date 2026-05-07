@@ -27,7 +27,10 @@ router = APIRouter()
 async def get_file_proxy(
     application_id: int = Path(..., description="Application ID"),
     file_id: int = Path(..., description="File ID"),
-    token: Optional[str] = Query(None, description="Access token"),
+    # JWTs from this system are dot-separated base64url segments. Constrain
+    # length + charset at the FastAPI layer so malformed / oversized strings
+    # 422 before they reach verify_token() and get DoS-tested for free.
+    token: Optional[str] = Query(None, description="Access token", max_length=2048, pattern=r"^[A-Za-z0-9._-]+$"),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -127,7 +130,10 @@ async def get_file_proxy(
 async def download_file_proxy(
     application_id: int = Path(..., description="Application ID"),
     file_id: int = Path(..., description="File ID"),
-    token: Optional[str] = Query(None, description="Access token"),
+    # JWTs from this system are dot-separated base64url segments. Constrain
+    # length + charset at the FastAPI layer so malformed / oversized strings
+    # 422 before they reach verify_token() and get DoS-tested for free.
+    token: Optional[str] = Query(None, description="Access token", max_length=2048, pattern=r"^[A-Za-z0-9._-]+$"),
     db: AsyncSession = Depends(get_db),
 ):
     """
