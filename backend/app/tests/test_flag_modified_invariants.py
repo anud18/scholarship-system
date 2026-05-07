@@ -29,8 +29,7 @@ def test_application_service_uses_flag_modified():
     student_data dict mutations because plain `=` assignment to the same
     object identity didn't trigger SQLAlchemy's change tracking."""
     assert _has_flag_modified(application_service), (
-        "application_service must import + call flag_modified() — "
-        "regression of commit 782b460."
+        "application_service must import + call flag_modified() — " "regression of commit 782b460."
     )
 
 
@@ -38,8 +37,7 @@ def test_roster_service_uses_flag_modified():
     """Pre-fix (782b460): roster_service verification merge silently
     discarded fresh API data merged into application.student_data."""
     assert _has_flag_modified(roster_service), (
-        "roster_service must import + call flag_modified() — "
-        "regression of commit 782b460."
+        "roster_service must import + call flag_modified() — " "regression of commit 782b460."
     )
 
 
@@ -47,8 +45,7 @@ def test_bank_verification_service_uses_flag_modified():
     """Pre-fix (0b48324): both auto-verify and manual-review paths
     silently lost meta_data['bank_verification'] state changes."""
     assert _has_flag_modified(bank_verification_service), (
-        "bank_verification_service must import + call flag_modified() — "
-        "regression of commit 0b48324."
+        "bank_verification_service must import + call flag_modified() — " "regression of commit 0b48324."
     )
 
 
@@ -57,8 +54,7 @@ def test_application_service_flag_modified_call_count():
     subscript-mutates a JSON column."""
     src = inspect.getsource(application_service)
     assert src.count("flag_modified(application") >= 1, (
-        "application_service should call flag_modified(application, ...) "
-        "at least once."
+        "application_service should call flag_modified(application, ...) " "at least once."
     )
 
 
@@ -69,10 +65,7 @@ def test_bank_verification_flag_modified_call_count():
     src = inspect.getsource(bank_verification_service)
     meta_data_calls = src.count('flag_modified(application, "meta_data")')
     details_calls = src.count('flag_modified(roster_item, "bank_verification_details")')
-    assert meta_data_calls >= 2, (
-        f"expected ≥2 flag_modified() on application.meta_data, found {meta_data_calls}"
-    )
+    assert meta_data_calls >= 2, f"expected ≥2 flag_modified() on application.meta_data, found {meta_data_calls}"
     assert details_calls >= 1, (
-        f"expected ≥1 flag_modified() on roster_item.bank_verification_details, "
-        f"found {details_calls}"
+        f"expected ≥1 flag_modified() on roster_item.bank_verification_details, " f"found {details_calls}"
     )

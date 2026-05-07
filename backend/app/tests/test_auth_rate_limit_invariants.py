@@ -38,22 +38,19 @@ def _function_decorators(module, func_name: str) -> list[str]:
 def test_register_has_rate_limit_decorator():
     decorators = _function_decorators(auth, "register")
     assert any(d.startswith("@rate_limit") for d in decorators), (
-        "auth.register must have @rate_limit decorator (commit 001b14b). "
-        f"Found decorators: {decorators}"
+        "auth.register must have @rate_limit decorator (commit 001b14b). " f"Found decorators: {decorators}"
     )
 
 
 def test_login_has_rate_limit_decorator():
     decorators = _function_decorators(auth, "login")
     assert any(d.startswith("@rate_limit") for d in decorators), (
-        "auth.login must have @rate_limit decorator (commit 001b14b). "
-        f"Found decorators: {decorators}"
+        "auth.login must have @rate_limit decorator (commit 001b14b). " f"Found decorators: {decorators}"
     )
 
 
 def test_mock_sso_login_has_rate_limit_decorator():
     decorators = _function_decorators(auth, "mock_sso_login")
     assert any(d.startswith("@rate_limit") for d in decorators), (
-        "auth.mock_sso_login must have @rate_limit decorator (commit 001b14b). "
-        f"Found decorators: {decorators}"
+        "auth.mock_sso_login must have @rate_limit decorator (commit 001b14b). " f"Found decorators: {decorators}"
     )

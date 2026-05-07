@@ -66,9 +66,7 @@ async def test_passes_when_deadline_in_future(db: AsyncSession):
     db.add(college_user)
     await db.commit()
     await db.refresh(college_user)
-    sch, _ = await _make_scholarship_with_config(
-        db, "future", datetime.now(timezone.utc) + timedelta(days=3)
-    )
+    sch, _ = await _make_scholarship_with_config(db, "future", datetime.now(timezone.utc) + timedelta(days=3))
 
     service = CollegeReviewService(db)
     await service.assert_ranking_within_deadline(sch.id, 114, "first", college_user)
@@ -108,9 +106,7 @@ async def test_raises_when_deadline_in_past_for_college_user(db: AsyncSession):
     db.add(college_user)
     await db.commit()
     await db.refresh(college_user)
-    sch, _ = await _make_scholarship_with_config(
-        db, "past", datetime.now(timezone.utc) - timedelta(days=1)
-    )
+    sch, _ = await _make_scholarship_with_config(db, "past", datetime.now(timezone.utc) - timedelta(days=1))
 
     service = CollegeReviewService(db)
     with pytest.raises(AuthorizationError) as exc_info:
@@ -124,9 +120,7 @@ async def test_admin_bypasses_passed_deadline(db: AsyncSession):
     db.add(admin_user)
     await db.commit()
     await db.refresh(admin_user)
-    sch, _ = await _make_scholarship_with_config(
-        db, "bypass", datetime.now(timezone.utc) - timedelta(days=1)
-    )
+    sch, _ = await _make_scholarship_with_config(db, "bypass", datetime.now(timezone.utc) - timedelta(days=1))
 
     service = CollegeReviewService(db)
     # Admin bypass — should NOT raise even though deadline is in the past
@@ -139,9 +133,7 @@ async def test_super_admin_bypasses_passed_deadline(db: AsyncSession):
     db.add(super_admin)
     await db.commit()
     await db.refresh(super_admin)
-    sch, _ = await _make_scholarship_with_config(
-        db, "sbypass", datetime.now(timezone.utc) - timedelta(hours=1)
-    )
+    sch, _ = await _make_scholarship_with_config(db, "sbypass", datetime.now(timezone.utc) - timedelta(hours=1))
 
     service = CollegeReviewService(db)
     await service.assert_ranking_within_deadline(sch.id, 114, "first", super_admin)

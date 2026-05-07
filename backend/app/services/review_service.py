@@ -70,9 +70,7 @@ class ReviewService:
 
         if is_professor_review_locked(application):
             stage_value = getattr(application.review_stage, "value", application.review_stage)
-            raise AuthorizationError(
-                f"教授審核已鎖定：本申請已進入「{stage_value}」階段，學院審核中無法再修改"
-            )
+            raise AuthorizationError(f"教授審核已鎖定：本申請已進入「{stage_value}」階段，學院審核中無法再修改")
 
     async def get_subtype_cumulative_status(self, application_id: int) -> Dict[str, Dict[str, Any]]:
         """

@@ -1654,9 +1654,7 @@ async def exclude_roster_item(
     roster_id: int,
     item_id: int,
     request: Request,
-    reason_category: str = Body(
-        ..., description="排除原因分類:'returned'(繳回) / 'declined'(放棄) / 'other'(其他)"
-    ),
+    reason_category: str = Body(..., description="排除原因分類:'returned'(繳回) / 'declined'(放棄) / 'other'(其他)"),
     reason_note: Optional[str] = Body(None, description="補充說明,自由文字"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -1721,10 +1719,7 @@ async def exclude_roster_item(
         if not item.is_included:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    f"明細已被排除(原因:{item.exclusion_reason or '未填'})。"
-                    f"如需修改原因請先取消排除。"
-                ),
+                detail=(f"明細已被排除(原因:{item.exclusion_reason or '未填'})。" f"如需修改原因請先取消排除。"),
             )
 
         # Build the human-readable reason string
@@ -1733,9 +1728,7 @@ async def exclude_roster_item(
             "declined": "學生放棄",
             "other": "其他",
         }[reason_category]
-        full_reason = (
-            f"{category_label}: {reason_note}" if reason_note else category_label
-        )
+        full_reason = f"{category_label}: {reason_note}" if reason_note else category_label
 
         # Capture old/new for audit before mutation
         old_values = {
@@ -1757,8 +1750,7 @@ async def exclude_roster_item(
             action=RosterAuditAction.ITEM_REMOVE,
             title=f"排除造冊明細 #{item.id} ({item.student_name})",
             description=(
-                f"原因分類: {category_label}; 補充說明: {reason_note or '(無)'}; "
-                f"獎學金: {item.scholarship_name}"
+                f"原因分類: {category_label}; 補充說明: {reason_note or '(無)'}; " f"獎學金: {item.scholarship_name}"
             ),
             user_id=current_user.id,
             user_name=current_user.name,

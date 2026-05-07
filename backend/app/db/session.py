@@ -14,9 +14,7 @@ from app.core.config import settings
 # Pool tuning kwargs are PostgreSQL-only — SQLite/StaticPool (used by tests)
 # rejects them with TypeError under SQLAlchemy 2.0+.
 _async_pool_kwargs = (
-    {"pool_size": 10, "max_overflow": 20, "pool_timeout": 60}
-    if "postgresql" in settings.database_url
-    else {}
+    {"pool_size": 10, "max_overflow": 20, "pool_timeout": 60} if "postgresql" in settings.database_url else {}
 )
 _sync_pool_kwargs = (
     {"pool_size": 10, "max_overflow": 20, "pool_timeout": 60, "poolclass": QueuePool}

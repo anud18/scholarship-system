@@ -197,9 +197,7 @@ async def create_ranking(
         service = CollegeReviewService(db)
         # #63: block ranking writes once college-review deadline has passed
         # (admins / super_admins bypass).
-        await service.assert_ranking_within_deadline(
-            scholarship_type_id, academic_year, semester, current_user
-        )
+        await service.assert_ranking_within_deadline(scholarship_type_id, academic_year, semester, current_user)
         ranking = await service.create_ranking(
             scholarship_type_id=scholarship_type_id,
             sub_type_code=sub_type_code,

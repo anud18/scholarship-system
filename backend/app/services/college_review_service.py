@@ -127,9 +127,7 @@ class CollegeReviewService:
         now = datetime.now(timezone.utc)
         if deadline < now:
             formatted = deadline.strftime("%Y-%m-%d %H:%M %Z").strip()
-            raise AuthorizationError(
-                f"已過排名截止時間 ({formatted})，如需修改請聯絡管理員延期"
-            )
+            raise AuthorizationError(f"已過排名截止時間 ({formatted})，如需修改請聯絡管理員延期")
 
     async def assert_ranking_within_deadline_by_ranking(
         self,

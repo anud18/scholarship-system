@@ -42,11 +42,7 @@ async def get_professor_student_relationships(
         # Authorization: a professor passing professor_id != self was previously
         # accepted, letting any prof query other profs' student relationships.
         # Reject before building the query.
-        if (
-            professor_id is not None
-            and current_user.role == UserRole.professor
-            and professor_id != current_user.id
-        ):
+        if professor_id is not None and current_user.role == UserRole.professor and professor_id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Professors may only query their own student relationships",

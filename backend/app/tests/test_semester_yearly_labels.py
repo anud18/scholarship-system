@@ -17,7 +17,6 @@ from app.models.enums import Semester
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
 from app.utils.academic_period import format_academic_term
 
-
 # ---- Application.get_semester_label ----------------------------------------
 
 

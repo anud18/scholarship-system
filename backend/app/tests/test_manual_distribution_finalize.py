@@ -118,8 +118,9 @@ async def test_finalize_keeps_status_for_non_allocated_apps(db: AsyncSession):
 
     # Assert — allocated path
     await db.refresh(app_a)
-    assert app_a.status == ApplicationStatus.approved.value or \
-        app_a.status == ApplicationStatus.approved, "allocated app status should be approved"
+    assert (
+        app_a.status == ApplicationStatus.approved.value or app_a.status == ApplicationStatus.approved
+    ), "allocated app status should be approved"
     assert app_a.quota_allocation_status == "allocated"
     assert app_a.sub_scholarship_type == "general"
     assert app_a.approved_at is not None
