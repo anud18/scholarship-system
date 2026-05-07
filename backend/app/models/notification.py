@@ -124,7 +124,7 @@ class Notification(Base):
     )
 
     # Enhanced metadata and context
-    data = Column(JSON, default={})  # Facebook-style flexible data storage
+    data = Column(JSON, default=lambda: {})  # Facebook-style flexible data storage
     href = Column(String(500))  # Direct click-through link
 
     # Legacy fields (maintain backward compatibility)
@@ -398,7 +398,7 @@ class NotificationTemplate(Base):
     )
 
     # Template variables documentation
-    variables = Column(JSON, default={})  # Available template variables and their descriptions
+    variables = Column(JSON, default=lambda: {})  # Available template variables and their descriptions
 
     # Settings
     is_active = Column(Boolean, default=True, nullable=False)

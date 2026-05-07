@@ -83,7 +83,7 @@ class Application(Base):
     )  # Specific configuration applied for
     scholarship_name = Column(String(200))
     amount = Column(Numeric(10, 2))
-    scholarship_subtype_list = Column(JSON, nullable=False, default=[])
+    scholarship_subtype_list = Column(JSON, nullable=False, default=lambda: [])
     sub_type_selection_mode = Column(
         Enum(SubTypeSelectionMode, values_callable=lambda obj: [e.value for e in obj]), nullable=False
     )
