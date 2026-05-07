@@ -187,6 +187,7 @@ export function ScholarshipApplicationStep({
       savePersonalInfo: "儲存個人資料",
       personalInfoSaved: "個人資料已儲存",
       personalInfoSaveFailed: "儲存個人資料失敗",
+      saved: "已儲存",
       selectScholarship: "選擇獎學金",
       selectScholarshipPlaceholder: "請選擇要申請的獎學金",
       selectPrograms: "選擇申請項目",
@@ -215,6 +216,54 @@ export function ScholarshipApplicationStep({
       viewTerms: "查看申請條款",
       agreeTerms: "我已閱讀並同意申請條款",
       mustAgreeTerms: "請先閱讀並同意申請條款",
+      // Personal info section headings
+      personalInfoSectionTitle: "指導教授資訊與本人郵局帳號資料",
+      personalInfoSectionDescription: "請填寫指導教授資訊與學生本人郵局帳號資料",
+      // Scholarship application section headings
+      applyForScholarship: "申請獎學金",
+      applyForScholarshipDescription: "選擇獎學金類型並填寫申請資料",
+      // Sub-type preference ordering
+      preferenceOrderInstruction: "選擇志願序（請按 ▲▼ 箭頭調整志願序）",
+      // Toast messages
+      documentDeleted: "文件已刪除",
+      deleteFailed: "刪除失敗",
+      applicationDocumentDeleted: "申請文件已刪除",
+      // Submit preview dialog
+      submitPreview: {
+        title: "申請資料預覽",
+        description: "請確認以下資料無誤後再送出申請",
+        studentInfo: "學籍資料",
+        name: "姓名",
+        studentId: "學號",
+        department: "系所",
+        degree: "學位",
+        enrollment: "入學年度學期",
+        personalInfo: "個人資料",
+        advisor: "指導教授",
+        advisorEmail: "教授 Email",
+        advisorNycuId: "指導教授本校人事編號",
+        postOfficeAccount: "郵局局號加帳號共 14 碼",
+        uploadedDocuments: "上傳文件",
+        passbookCover: "存摺封面",
+        applicationDocument: "申請文件",
+        uploaded: "已上傳",
+        notUploaded: "未上傳",
+        pending: "待上傳",
+        previewBtn: "預覽",
+        scholarshipApplication: "申請獎學金",
+        scholarship: "獎學金",
+        programs: "申請項目",
+        preferenceOrder: "志願序",
+        warning: "送出後將無法修改申請內容，請確認資料無誤。",
+        goBack: "返回修改",
+        confirmSubmit: "確認送出",
+      },
+      // Degree map (preview dialog)
+      degreeShort: {
+        博士: "博士",
+        碩士: "碩士",
+        學士: "學士",
+      } as Record<string, string>,
     },
     en: {
       title: "Fill Info & Apply for Scholarship",
@@ -242,6 +291,7 @@ export function ScholarshipApplicationStep({
       savePersonalInfo: "Save Personal Info",
       personalInfoSaved: "Personal info saved",
       personalInfoSaveFailed: "Failed to save personal info",
+      saved: "Saved",
       selectScholarship: "Select Scholarship",
       selectScholarshipPlaceholder: "Please select a scholarship to apply",
       selectPrograms: "Select Programs",
@@ -271,6 +321,59 @@ export function ScholarshipApplicationStep({
       viewTerms: "View Application Terms",
       agreeTerms: "I have read and agree to the application terms",
       mustAgreeTerms: "Please read and agree to the application terms first",
+      // Personal info section headings
+      personalInfoSectionTitle: "Advisor & Bank Account Information",
+      personalInfoSectionDescription:
+        "Please provide advisor information and bank account details",
+      // Scholarship application section headings
+      applyForScholarship: "Apply for Scholarship",
+      applyForScholarshipDescription:
+        "Select scholarship type and fill in application details",
+      // Sub-type preference ordering
+      preferenceOrderInstruction:
+        "Set Preference Order (use ▲▼ arrows to reorder)",
+      // Toast messages
+      documentDeleted: "Document deleted",
+      deleteFailed: "Delete failed",
+      applicationDocumentDeleted: "Application document deleted",
+      // Submit preview dialog
+      submitPreview: {
+        title: "Application Preview",
+        description:
+          "Please verify the following information before submitting",
+        studentInfo: "Student Information",
+        name: "Name",
+        studentId: "Student ID",
+        department: "Department",
+        degree: "Degree",
+        enrollment: "Enrollment",
+        personalInfo: "Personal Information",
+        advisor: "Advisor",
+        advisorEmail: "Advisor Email",
+        advisorNycuId: "Advisor NYCU ID",
+        postOfficeAccount: "Post Office Account",
+        uploadedDocuments: "Uploaded Documents",
+        passbookCover: "Passbook Cover",
+        applicationDocument: "Application Document",
+        uploaded: "Uploaded",
+        notUploaded: "Not uploaded",
+        pending: "Pending",
+        previewBtn: "Preview",
+        scholarshipApplication: "Scholarship Application",
+        scholarship: "Scholarship",
+        programs: "Programs",
+        preferenceOrder: "Preference Order",
+        warning:
+          "You cannot modify the application after submission. Please verify all information is correct.",
+        goBack: "Go Back",
+        confirmSubmit: "Confirm Submit",
+      },
+      // Degree map (preview dialog)
+      degreeShort: {
+        博士: "PhD",
+        碩士: "Master",
+        學士: "Bachelor",
+      } as Record<string, string>,
     },
   };
 
@@ -411,14 +514,14 @@ export function ScholarshipApplicationStep({
     try {
       const response = await api.userProfiles.deleteBankDocument();
       if (response.success) {
-        toast.success(locale === "zh" ? "文件已刪除" : "Document deleted");
+        toast.success(text.documentDeleted);
         setExistingBankDocument(null);
         await refreshProfile();
       } else {
         throw new Error(response.message || "Delete failed");
       }
     } catch (err: any) {
-      toast.error(err.message || "刪除失敗");
+      toast.error(err.message || text.deleteFailed);
     }
   };
 
@@ -428,14 +531,14 @@ export function ScholarshipApplicationStep({
     try {
       const response = await api.applications.deleteApplicationDocument(appId);
       if (response.success) {
-        toast.success(locale === "zh" ? "申請文件已刪除" : "Document deleted");
+        toast.success(text.applicationDocumentDeleted);
         setExistingApplicationDocument(null);
         setExistingApplicationDocumentName("");
       } else {
         throw new Error(response.message || "Delete failed");
       }
     } catch (err: any) {
-      toast.error(err.message || "刪除失敗");
+      toast.error(err.message || text.deleteFailed);
     }
   };
 
@@ -995,20 +1098,16 @@ export function ScholarshipApplicationStep({
             </div>
             <div>
               <CardTitle className="text-xl font-bold">
-                {locale === "zh"
-                  ? "指導教授資訊與本人郵局帳號資料"
-                  : "Advisor & Bank Account Information"}
+                {text.personalInfoSectionTitle}
               </CardTitle>
               <CardDescription className="mt-1">
-                {locale === "zh"
-                  ? "請填寫指導教授資訊與學生本人郵局帳號資料"
-                  : "Please provide advisor information and bank account details"}
+                {text.personalInfoSectionDescription}
               </CardDescription>
             </div>
             {personalInfoSaved && (
               <Badge className="ml-auto bg-green-100 text-green-700 border-green-200">
                 <CheckCircle className="h-3 w-3 mr-1" />
-                {locale === "zh" ? "已儲存" : "Saved"}
+                {text.saved}
               </Badge>
             )}
           </div>
@@ -1183,7 +1282,7 @@ export function ScholarshipApplicationStep({
               ) : personalInfoSaved ? (
                 <>
                   <CheckCircle className="h-4 w-4 mr-2" />
-                  {locale === "zh" ? "已儲存" : "Saved"}
+                  {text.saved}
                 </>
               ) : (
                 <>
@@ -1205,12 +1304,10 @@ export function ScholarshipApplicationStep({
             </div>
             <div>
               <CardTitle className="text-2xl">
-                {locale === "zh" ? "申請獎學金" : "Apply for Scholarship"}
+                {text.applyForScholarship}
               </CardTitle>
               <CardDescription>
-                {locale === "zh"
-                  ? "選擇獎學金類型並填寫申請資料"
-                  : "Select scholarship type and fill in application details"}
+                {text.applyForScholarshipDescription}
               </CardDescription>
             </div>
           </div>
@@ -1320,9 +1417,7 @@ export function ScholarshipApplicationStep({
                   <h4 className="text-sm font-semibold mb-2">
                     <span>2. </span>
                     <span className="text-red-600">
-                      {locale === "zh"
-                        ? "選擇志願序（請按 ▲▼ 箭頭調整志願序）"
-                        : "Set Preference Order (use ▲▼ arrows to reorder)"}
+                      {text.preferenceOrderInstruction}
                     </span>
                   </h4>
                   <div className="space-y-2">
@@ -1595,12 +1690,10 @@ export function ScholarshipApplicationStep({
           <DialogHeader>
             <DialogTitle className="text-xl flex items-center gap-2">
               <Eye className="h-5 w-5" />
-              {locale === "zh" ? "申請資料預覽" : "Application Preview"}
+              {text.submitPreview.title}
             </DialogTitle>
             <DialogDescription>
-              {locale === "zh"
-                ? "請確認以下資料無誤後再送出申請"
-                : "Please verify the following information before submitting"}
+              {text.submitPreview.description}
             </DialogDescription>
           </DialogHeader>
 
@@ -1609,24 +1702,24 @@ export function ScholarshipApplicationStep({
             {userInfo && (
               <div>
                 <h3 className="text-sm font-semibold text-gray-500 mb-2">
-                  {locale === "zh" ? "學籍資料" : "Student Information"}
+                  {text.submitPreview.studentInfo}
                 </h3>
                 <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm bg-gray-50 rounded-lg p-4">
                   <div>
                     <span className="text-gray-500">
-                      {locale === "zh" ? "姓名" : "Name"}
+                      {text.submitPreview.name}
                     </span>
                     <p className="font-medium">{userInfo.name || "-"}</p>
                   </div>
                   <div>
                     <span className="text-gray-500">
-                      {locale === "zh" ? "學號" : "Student ID"}
+                      {text.submitPreview.studentId}
                     </span>
                     <p className="font-medium">{userInfo.nycu_id || "-"}</p>
                   </div>
                   <div>
                     <span className="text-gray-500">
-                      {locale === "zh" ? "系所" : "Department"}
+                      {text.submitPreview.department}
                     </span>
                     <p className="font-medium">{userInfo.dept_name || "-"}</p>
                   </div>
@@ -1634,30 +1727,27 @@ export function ScholarshipApplicationStep({
                     <>
                       <div>
                         <span className="text-gray-500">
-                          {locale === "zh" ? "學位" : "Degree"}
+                          {text.submitPreview.degree}
                         </span>
                         <p className="font-medium">
                           {(() => {
-                            const degreeMapZh: Record<string, string> = {
+                            const degreeCodeToZh: Record<string, string> = {
                               "1": "博士",
                               "2": "碩士",
                               "3": "學士",
                             };
-                            const degreeMapEn: Record<string, string> = {
-                              "1": "PhD",
-                              "2": "Master",
-                              "3": "Bachelor",
-                            };
                             const val = String(studentInfo.std_degree || "");
-                            const map =
-                              locale === "zh" ? degreeMapZh : degreeMapEn;
-                            return map[val] || val || "-";
+                            const zhKey = degreeCodeToZh[val];
+                            if (zhKey) {
+                              return text.degreeShort[zhKey] || zhKey;
+                            }
+                            return val || "-";
                           })()}
                         </p>
                       </div>
                       <div>
                         <span className="text-gray-500">
-                          {locale === "zh" ? "入學年度學期" : "Enrollment"}
+                          {text.submitPreview.enrollment}
                         </span>
                         <p className="font-medium">
                           {studentInfo.std_enrollyear
@@ -1678,34 +1768,30 @@ export function ScholarshipApplicationStep({
             {/* Personal Info */}
             <div>
               <h3 className="text-sm font-semibold text-gray-500 mb-2">
-                {locale === "zh" ? "個人資料" : "Personal Information"}
+                {text.submitPreview.personalInfo}
               </h3>
               <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm bg-gray-50 rounded-lg p-4">
                 <div>
                   <span className="text-gray-500">
-                    {locale === "zh" ? "指導教授" : "Advisor"}
+                    {text.submitPreview.advisor}
                   </span>
                   <p className="font-medium">{advisorName || "-"}</p>
                 </div>
                 <div>
                   <span className="text-gray-500">
-                    {locale === "zh" ? "教授 Email" : "Advisor Email"}
+                    {text.submitPreview.advisorEmail}
                   </span>
                   <p className="font-medium">{advisorEmail || "-"}</p>
                 </div>
                 <div>
                   <span className="text-gray-500">
-                    {locale === "zh"
-                      ? "指導教授本校人事編號"
-                      : "Advisor NYCU ID"}
+                    {text.submitPreview.advisorNycuId}
                   </span>
                   <p className="font-medium">{advisorNycuId || "-"}</p>
                 </div>
                 <div className="col-span-2">
                   <span className="text-gray-500">
-                    {locale === "zh"
-                      ? "郵局局號加帳號共 14 碼"
-                      : "Post Office Account"}
+                    {text.submitPreview.postOfficeAccount}
                   </span>
                   <p className="font-medium">{accountNumber || "-"}</p>
                 </div>
@@ -1717,20 +1803,20 @@ export function ScholarshipApplicationStep({
             {/* Uploaded Documents */}
             <div>
               <h3 className="text-sm font-semibold text-gray-500 mb-2">
-                {locale === "zh" ? "上傳文件" : "Uploaded Documents"}
+                {text.submitPreview.uploadedDocuments}
               </h3>
               <div className="space-y-2 text-sm bg-gray-50 rounded-lg p-4">
                 {/* Passbook */}
                 <div className="flex items-center justify-between">
                   <span className="text-gray-500">
-                    {locale === "zh" ? "存摺封面" : "Passbook Cover"}
+                    {text.submitPreview.passbookCover}
                   </span>
                   <div className="flex items-center gap-2">
                     {existingBankDocument ? (
                       <>
                         <CheckCircle className="h-4 w-4 text-green-600" />
                         <span className="text-green-700 font-medium">
-                          {locale === "zh" ? "已上傳" : "Uploaded"}
+                          {text.submitPreview.uploaded}
                         </span>
                         <Button
                           variant="ghost"
@@ -1739,7 +1825,7 @@ export function ScholarshipApplicationStep({
                           className="h-6 px-2 text-nycu-blue-600"
                         >
                           <Eye className="h-3 w-3 mr-1" />
-                          {locale === "zh" ? "預覽" : "Preview"}
+                          {text.submitPreview.previewBtn}
                         </Button>
                       </>
                     ) : bankDocumentFiles.length > 0 ? (
@@ -1747,15 +1833,15 @@ export function ScholarshipApplicationStep({
                         <CheckCircle className="h-4 w-4 text-green-600" />
                         <span className="text-green-700 font-medium">
                           {locale === "zh"
-                            ? `待上傳：${bankDocumentFiles[0].name}`
-                            : `Pending: ${bankDocumentFiles[0].name}`}
+                            ? `${text.submitPreview.pending}：${bankDocumentFiles[0].name}`
+                            : `${text.submitPreview.pending}: ${bankDocumentFiles[0].name}`}
                         </span>
                       </>
                     ) : (
                       <>
                         <AlertCircle className="h-4 w-4 text-amber-500" />
                         <span className="text-amber-700">
-                          {locale === "zh" ? "未上傳" : "Not uploaded"}
+                          {text.submitPreview.notUploaded}
                         </span>
                       </>
                     )}
@@ -1765,14 +1851,14 @@ export function ScholarshipApplicationStep({
                 {/* Application Document */}
                 <div className="flex items-center justify-between">
                   <span className="text-gray-500">
-                    {locale === "zh" ? "申請文件" : "Application Document"}
+                    {text.submitPreview.applicationDocument}
                   </span>
                   <div className="flex items-center gap-2">
                     {existingApplicationDocument ? (
                       <>
                         <CheckCircle className="h-4 w-4 text-green-600" />
                         <span className="text-green-700 font-medium">
-                          {locale === "zh" ? "已上傳" : "Uploaded"}
+                          {text.submitPreview.uploaded}
                         </span>
                         <Button
                           variant="ghost"
@@ -1781,7 +1867,7 @@ export function ScholarshipApplicationStep({
                           className="h-6 px-2 text-nycu-blue-600"
                         >
                           <Eye className="h-3 w-3 mr-1" />
-                          {locale === "zh" ? "預覽" : "Preview"}
+                          {text.submitPreview.previewBtn}
                         </Button>
                       </>
                     ) : applicationDocumentFiles.length > 0 ? (
@@ -1789,15 +1875,15 @@ export function ScholarshipApplicationStep({
                         <CheckCircle className="h-4 w-4 text-green-600" />
                         <span className="text-green-700 font-medium">
                           {locale === "zh"
-                            ? `待上傳：${applicationDocumentFiles[0].name}`
-                            : `Pending: ${applicationDocumentFiles[0].name}`}
+                            ? `${text.submitPreview.pending}：${applicationDocumentFiles[0].name}`
+                            : `${text.submitPreview.pending}: ${applicationDocumentFiles[0].name}`}
                         </span>
                       </>
                     ) : (
                       <>
                         <AlertCircle className="h-4 w-4 text-amber-500" />
                         <span className="text-amber-700">
-                          {locale === "zh" ? "未上傳" : "Not uploaded"}
+                          {text.submitPreview.notUploaded}
                         </span>
                       </>
                     )}
@@ -1811,12 +1897,12 @@ export function ScholarshipApplicationStep({
             {/* Scholarship Info */}
             <div>
               <h3 className="text-sm font-semibold text-gray-500 mb-2">
-                {locale === "zh" ? "申請獎學金" : "Scholarship Application"}
+                {text.submitPreview.scholarshipApplication}
               </h3>
               <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm bg-gray-50 rounded-lg p-4">
                 <div className="col-span-2">
                   <span className="text-gray-500">
-                    {locale === "zh" ? "獎學金" : "Scholarship"}
+                    {text.submitPreview.scholarship}
                   </span>
                   <p className="font-medium">
                     {selectedScholarship
@@ -1831,7 +1917,7 @@ export function ScholarshipApplicationStep({
                   <>
                     <div className="col-span-2">
                       <span className="text-gray-500">
-                        {locale === "zh" ? "申請項目" : "Programs"}
+                        {text.submitPreview.programs}
                       </span>
                       <div className="flex flex-wrap gap-1 mt-1">
                         {selectedSubTypes.map(st => {
@@ -1851,7 +1937,7 @@ export function ScholarshipApplicationStep({
                     {subTypePreferences.length >= 2 && (
                       <div className="col-span-2">
                         <span className="text-gray-500">
-                          {locale === "zh" ? "志願序" : "Preference Order"}
+                          {text.submitPreview.preferenceOrder}
                         </span>
                         <div className="mt-1 space-y-1">
                           {subTypePreferences.map((st, i) => {
@@ -1884,9 +1970,7 @@ export function ScholarshipApplicationStep({
           <Alert className="border-amber-200 bg-amber-50">
             <AlertCircle className="h-4 w-4 text-amber-600" />
             <AlertDescription className="text-amber-800 font-medium">
-              {locale === "zh"
-                ? "送出後將無法修改申請內容，請確認資料無誤。"
-                : "You cannot modify the application after submission. Please verify all information is correct."}
+              {text.submitPreview.warning}
             </AlertDescription>
           </Alert>
 
@@ -1895,7 +1979,7 @@ export function ScholarshipApplicationStep({
               variant="outline"
               onClick={() => setShowSubmitPreview(false)}
             >
-              {locale === "zh" ? "返回修改" : "Go Back"}
+              {text.submitPreview.goBack}
             </Button>
             <Button
               onClick={() => {
@@ -1913,7 +1997,7 @@ export function ScholarshipApplicationStep({
               ) : (
                 <>
                   <Send className="h-4 w-4 mr-2" />
-                  {locale === "zh" ? "確認送出" : "Confirm Submit"}
+                  {text.submitPreview.confirmSubmit}
                 </>
               )}
             </Button>

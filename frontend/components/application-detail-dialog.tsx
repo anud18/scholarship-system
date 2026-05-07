@@ -28,6 +28,7 @@ import {
   ShieldX,
 } from "lucide-react";
 import { Locale } from "@/lib/validators";
+import { getTranslation } from "@/lib/i18n";
 import { Application, User as UserType } from "@/lib/api";
 import api from "@/lib/api";
 import { ApplicationFormDataDisplay } from "@/components/application-form-data-display";
@@ -89,6 +90,8 @@ export function ApplicationDetailDialog({
   const [professorReview, setProfessorReview] = useState<any>(null);
   const [bankVerificationLoading, setBankVerificationLoading] = useState(false);
 
+  const t = (k: string) => getTranslation(locale, k);
+
   // Get reference data for degree names
   const { degrees } = useReferenceData();
 
@@ -135,14 +138,17 @@ export function ApplicationDetailDialog({
         application.id
       );
       if (response.success) {
-        toast.success("銀行帳戶驗證已完成");
+        toast.success(t("dialogs.application_detail.bank_verification_completed"));
         // You might want to refresh the application data here to show updated status
       } else {
-        toast.error(response.message || "無法完成銀行帳戶驗證");
+        toast.error(
+          response.message ||
+            t("dialogs.application_detail.bank_verification_unable")
+        );
       }
     } catch (error) {
       console.error("Bank verification error:", error);
-      toast.error("銀行帳戶驗證過程中發生錯誤");
+      toast.error(t("dialogs.application_detail.bank_verification_error"));
     } finally {
       setBankVerificationLoading(false);
     }
@@ -163,44 +169,36 @@ export function ApplicationDetailDialog({
       return {
         status: "verified",
         icon: <ShieldCheck className="h-5 w-5 text-green-600" />,
-        label: locale === "zh" ? "已驗證" : "Verified",
-        description:
-          locale === "zh"
-            ? "銀行帳戶已通過驗證"
-            : "Bank account has been verified",
+        label: t("dialogs.application_detail.bank_verified"),
+        description: t("dialogs.application_detail.bank_verified_desc"),
         variant: "default" as const,
       };
     } else if (bankVerificationFailed) {
       return {
         status: "failed",
         icon: <ShieldX className="h-5 w-5 text-red-600" />,
-        label: locale === "zh" ? "驗證失敗" : "Verification Failed",
-        description:
-          locale === "zh"
-            ? "銀行帳戶驗證失敗"
-            : "Bank account verification failed",
+        label: t("dialogs.application_detail.bank_verification_failed"),
+        description: t(
+          "dialogs.application_detail.bank_verification_failed_desc"
+        ),
         variant: "destructive" as const,
       };
     } else if (bankVerificationPending) {
       return {
         status: "pending",
         icon: <Shield className="h-5 w-5 text-yellow-600" />,
-        label: locale === "zh" ? "驗證中" : "Verification Pending",
-        description:
-          locale === "zh"
-            ? "銀行帳戶驗證進行中"
-            : "Bank account verification in progress",
+        label: t("dialogs.application_detail.bank_verification_pending"),
+        description: t(
+          "dialogs.application_detail.bank_verification_pending_desc"
+        ),
         variant: "secondary" as const,
       };
     } else {
       return {
         status: "not_verified",
         icon: <CreditCard className="h-5 w-5 text-gray-500" />,
-        label: locale === "zh" ? "未驗證" : "Not Verified",
-        description:
-          locale === "zh"
-            ? "銀行帳戶尚未驗證"
-            : "Bank account not verified yet",
+        label: t("dialogs.application_detail.bank_not_verified"),
+        description: t("dialogs.application_detail.bank_not_verified_desc"),
         variant: "outline" as const,
       };
     }
@@ -249,7 +247,7 @@ export function ApplicationDetailDialog({
           if (scholarshipResponse.success && scholarshipResponse.data) {
             scholarshipType = scholarshipResponse.data.code;
           } else {
-            const errorMsg = `無法獲取獎學金類型信息: ${scholarshipResponse.message}`;
+            const errorMsg = `${t("dialogs.application_detail.scholarship_type_fetch_failed")}: ${scholarshipResponse.message}`;
             console.error(errorMsg);
             setError(errorMsg);
             setDocumentLabels({});
@@ -260,7 +258,7 @@ export function ApplicationDetailDialog({
             return;
           }
         } catch (error) {
-          const errorMsg = `獲取獎學金類型時發生錯誤: ${error instanceof Error ? error.message : "未知錯誤"}`;
+          const errorMsg = `${t("dialogs.application_detail.scholarship_type_fetch_error")}: ${error instanceof Error ? error.message : "未知錯誤"}`;
           console.error(errorMsg);
           setError(errorMsg);
           setDocumentLabels({});
@@ -273,7 +271,9 @@ export function ApplicationDetailDialog({
       }
 
       if (!scholarshipType) {
-        const errorMsg = "無法確定獎學金類型";
+        const errorMsg = t(
+          "dialogs.application_detail.scholarship_type_undetermined"
+        );
         console.error(errorMsg);
         setError(errorMsg);
         setDocumentLabels({});
@@ -317,7 +317,7 @@ export function ApplicationDetailDialog({
           setApplicationFields(fieldNames);
         }
       } else {
-        const errorMsg = `無法載入表單配置: ${response.message}`;
+        const errorMsg = `${t("dialogs.application_detail.form_config_load_failed")}: ${response.message}`;
         console.error(errorMsg);
         setError(errorMsg);
         setDocumentLabels({});
@@ -325,7 +325,7 @@ export function ApplicationDetailDialog({
         setApplicationFields([]);
       }
     } catch (error) {
-      const errorMsg = `載入表單配置時發生錯誤: ${error instanceof Error ? error.message : "未知錯誤"}`;
+      const errorMsg = `${t("dialogs.application_detail.form_config_load_error")}: ${error instanceof Error ? error.message : "未知錯誤"}`;
       console.error(errorMsg);
       setError(errorMsg);
       setDocumentLabels({});
@@ -525,12 +525,10 @@ export function ApplicationDetailDialog({
       <Dialog open={isOpen} onOpenChange={onClose}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
-              {locale === "zh" ? "申請詳情" : "Application Details"}
-            </DialogTitle>
+            <DialogTitle>{t("dialogs.application_detail.title")}</DialogTitle>
             <DialogDescription>
               <span>
-                {locale === "zh" ? "申請編號" : "Application ID"}:{" "}
+                {t("dialogs.application_detail.application_id")}:{" "}
                 {application.app_id || `APP-${application.id}`}
               </span>
             </DialogDescription>
@@ -541,14 +539,14 @@ export function ApplicationDetailDialog({
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">
-                  {locale === "zh" ? "基本資訊" : "Basic Information"}
+                  {t("dialogs.application_detail.basic_info")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="font-medium">
-                      {locale === "zh" ? "申請者" : "Applicant"}
+                      {t("dialogs.application_detail.applicant")}
                     </Label>
                     <p className="text-sm">
                       {application.student_name ||
@@ -558,7 +556,7 @@ export function ApplicationDetailDialog({
                   </div>
                   <div>
                     <Label className="font-medium">
-                      {locale === "zh" ? "學號" : "Student ID"}
+                      {t("dialogs.application_detail.student_id")}
                     </Label>
                     <p className="text-sm">
                       {application.student_no ||
@@ -570,7 +568,7 @@ export function ApplicationDetailDialog({
                   {getAcademyName(application.student_data) && (
                     <div>
                       <Label className="font-medium">
-                        {locale === "zh" ? "學院" : "Academy"}
+                        {t("dialogs.application_detail.academy")}
                       </Label>
                       <p className="text-sm">{getAcademyName(application.student_data)}</p>
                     </div>
@@ -579,7 +577,7 @@ export function ApplicationDetailDialog({
                   {getDepartmentName(application.student_data) && (
                     <div>
                       <Label className="font-medium">
-                        {locale === "zh" ? "系所" : "Department"}
+                        {t("dialogs.application_detail.department")}
                       </Label>
                       <p className="text-sm">{getDepartmentName(application.student_data)}</p>
                     </div>
@@ -588,7 +586,7 @@ export function ApplicationDetailDialog({
                   {getDegreeCode(application.student_data) && (
                     <div>
                       <Label className="font-medium">
-                        {locale === "zh" ? "學位" : "Degree"}
+                        {t("dialogs.application_detail.degree")}
                       </Label>
                       <p className="text-sm">
                         {getDegreeName(getDegreeCode(application.student_data)!, degrees)}
@@ -599,20 +597,20 @@ export function ApplicationDetailDialog({
                   {getTermCount(application.student_data) !== null && (
                     <div>
                       <Label className="font-medium">
-                        {locale === "zh" ? "就讀學期數" : "Terms Enrolled"}
+                        {t("dialogs.application_detail.terms_enrolled")}
                       </Label>
                       <p className="text-sm">{getTermCount(application.student_data)}</p>
                     </div>
                   )}
                   <div>
                     <Label className="font-medium">
-                      {locale === "zh" ? "獎學金類型" : "Scholarship Type"}
+                      {t("dialogs.application_detail.scholarship_type")}
                     </Label>
                     <p className="text-sm">{application.scholarship_type_zh}</p>
                   </div>
                   <div>
                     <Label className="font-medium">
-                      {locale === "zh" ? "申請狀態" : "Status"}
+                      {t("dialogs.application_detail.status")}
                     </Label>
                     <p>
                       <Badge
@@ -629,7 +627,7 @@ export function ApplicationDetailDialog({
                   </div>
                   <div>
                     <Label className="font-medium">
-                      {locale === "zh" ? "建立時間" : "Created At"}
+                      {t("dialogs.application_detail.created_at")}
                     </Label>
                     <p className="text-sm">
                       {new Date(application.created_at).toLocaleDateString(
@@ -640,7 +638,7 @@ export function ApplicationDetailDialog({
                   {application.submitted_at && (
                     <div>
                       <Label className="font-medium">
-                        {locale === "zh" ? "提交時間" : "Submitted At"}
+                        {t("dialogs.application_detail.submitted_at")}
                       </Label>
                       <p className="text-sm">
                         {new Date(application.submitted_at).toLocaleDateString(
@@ -657,7 +655,7 @@ export function ApplicationDetailDialog({
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">
-                  {locale === "zh" ? "審核進度" : "Review Progress"}
+                  {t("dialogs.application_detail.review_progress")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -672,14 +670,14 @@ export function ApplicationDetailDialog({
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">
-                    {locale === "zh" ? "申請欄位" : "Application Fields"}
+                    {t("dialogs.application_detail.application_fields")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   {error ? (
                     <Alert variant="destructive">
                       <AlertDescription>
-                        {locale === "zh" ? "載入失敗" : "Loading failed"}:{" "}
+                        {t("dialogs.application_detail.loading_failed")}:{" "}
                         {error}
                         <Button
                           variant="outline"
@@ -690,7 +688,7 @@ export function ApplicationDetailDialog({
                             loadFormConfig();
                           }}
                         >
-                          {locale === "zh" ? "重試" : "Retry"}
+                          {t("applications.retry")}
                         </Button>
                       </AlertDescription>
                     </Alert>
@@ -698,9 +696,7 @@ export function ApplicationDetailDialog({
                     <div className="flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       <span className="text-sm text-muted-foreground">
-                        {locale === "zh"
-                          ? "載入申請欄位中..."
-                          : "Loading application fields..."}
+                        {t("dialogs.application_detail.loading_fields")}
                       </span>
                     </div>
                   ) : (
@@ -719,9 +715,7 @@ export function ApplicationDetailDialog({
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">
-                    {locale === "zh"
-                      ? "申請表單欄位"
-                      : "Application Form Fields"}
+                    {t("dialogs.application_detail.application_form_fields")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -753,7 +747,7 @@ export function ApplicationDetailDialog({
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">
-                    {locale === "zh" ? "個人陳述" : "Personal Statement"}
+                    {t("dialogs.application_detail.personal_statement")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -809,16 +803,14 @@ export function ApplicationDetailDialog({
                                 {bankVerificationLoading ? (
                                   <>
                                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                    {locale === "zh"
-                                      ? "驗證中..."
-                                      : "Verifying..."}
+                                    {t("dialogs.application_detail.verifying")}
                                   </>
                                 ) : (
                                   <>
                                     <Shield className="h-4 w-4 mr-2" />
-                                    {locale === "zh"
-                                      ? "開始驗證"
-                                      : "Start Verification"}
+                                    {t(
+                                      "dialogs.application_detail.start_verification"
+                                    )}
                                   </>
                                 )}
                               </Button>
@@ -829,17 +821,18 @@ export function ApplicationDetailDialog({
                         {application.meta_data?.bank_verification_details && (
                           <div className="p-3 bg-muted rounded-lg">
                             <h4 className="text-sm font-medium mb-2">
-                              {locale === "zh"
-                                ? "驗證詳情"
-                                : "Verification Details"}
+                              {t(
+                                "dialogs.application_detail.verification_details"
+                              )}
                             </h4>
                             <div className="text-sm text-muted-foreground space-y-1">
                               {application.meta_data.bank_verification_details
                                 .verified_at && (
                                 <p>
-                                  {locale === "zh"
-                                    ? "驗證時間: "
-                                    : "Verified at: "}
+                                  {t(
+                                    "dialogs.application_detail.verified_at"
+                                  )}
+                                  :{" "}
                                   {new Date(
                                     application.meta_data.bank_verification_details.verified_at
                                   ).toLocaleString()}
@@ -848,9 +841,10 @@ export function ApplicationDetailDialog({
                               {application.meta_data.bank_verification_details
                                 .account_holder && (
                                 <p>
-                                  {locale === "zh"
-                                    ? "帳戶持有人: "
-                                    : "Account holder: "}
+                                  {t(
+                                    "dialogs.application_detail.account_holder"
+                                  )}
+                                  :{" "}
                                   {
                                     application.meta_data
                                       .bank_verification_details.account_holder
@@ -860,9 +854,10 @@ export function ApplicationDetailDialog({
                               {application.meta_data.bank_verification_details
                                 .confidence_score && (
                                 <p>
-                                  {locale === "zh"
-                                    ? "信心分數: "
-                                    : "Confidence score: "}
+                                  {t(
+                                    "dialogs.application_detail.confidence_score"
+                                  )}
+                                  :{" "}
                                   {(
                                     application.meta_data
                                       .bank_verification_details
@@ -881,9 +876,10 @@ export function ApplicationDetailDialog({
                             <Alert variant="destructive">
                               <AlertCircle className="h-4 w-4" />
                               <AlertDescription>
-                                {locale === "zh"
-                                  ? "驗證失敗原因: "
-                                  : "Verification failed: "}
+                                {t(
+                                  "dialogs.application_detail.verification_failure_reason"
+                                )}
+                                :{" "}
                                 {application.meta_data.bank_verification_error}
                               </AlertDescription>
                             </Alert>
@@ -1012,7 +1008,7 @@ export function ApplicationDetailDialog({
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">
-                  {locale === "zh" ? "已上傳文件" : "Uploaded Files"}
+                  {t("dialogs.application_detail.uploaded_files")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -1020,7 +1016,7 @@ export function ApplicationDetailDialog({
                   <div className="flex items-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     <span className="text-sm text-muted-foreground">
-                      {locale === "zh" ? "載入文件中..." : "Loading files..."}
+                      {t("dialogs.application_detail.loading_files")}
                     </span>
                   </div>
                 ) : applicationFiles.length > 0 ? (
@@ -1039,9 +1035,7 @@ export function ApplicationDetailDialog({
                               </p>
                               {file.file_type === "bank_account_proof" && (
                                 <Badge variant="secondary" className="text-xs">
-                                  {locale === "zh"
-                                    ? "固定文件"
-                                    : "Fixed Document"}
+                                  {t("dialogs.application_detail.fixed_document")}
                                 </Badge>
                               )}
                             </div>
@@ -1075,9 +1069,7 @@ export function ApplicationDetailDialog({
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    {locale === "zh"
-                      ? "尚未上傳任何文件"
-                      : "No files uploaded yet"}
+                    {t("dialogs.application_detail.no_files")}
                   </p>
                 )}
               </CardContent>
