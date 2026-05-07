@@ -26,7 +26,20 @@ jobs:
           FIRED_AT: ${{ github.event.client_payload.fired_at }}
           GRAFANA_URL: ${{ github.event.client_payload.grafana_url }}
         run: |
-          echo "title=Monitoring Alert: $ALERT ($ENV/$SEVERITY)" >> "$GITHUB_OUTPUT"
+          # Defaults for missing fields (Grafana may send partial payloads)
+          ALERT="${ALERT:-(unknown alert)}"
+          ENV="${ENV:-(unknown env)}"
+          STATUS="${STATUS:-firing}"
+          SEVERITY="${SEVERITY:-warning}"
+          SUMMARY="${SUMMARY:-(no summary)}"
+          DESCRIPTION="${DESCRIPTION:-(no description)}"
+          INSTANCE="${INSTANCE:-(unknown)}"
+          VALUE="${VALUE:-(no value)}"
+          FIRED_AT="${FIRED_AT:-$(date -u -Iseconds)}"
+          GRAFANA_URL="${GRAFANA_URL:-https://ss.test.nycu.edu.tw/monitoring}"
+
+          TITLE=$(printf 'Monitoring Alert: %s (%s/%s)' "$ALERT" "$ENV" "$SEVERITY" | tr -d '\n\r')
+          printf 'title=%s\n' "$TITLE" >> "$GITHUB_OUTPUT"
           cat > /tmp/body.md <<EOF
           ## $STATUS — $ALERT
 
@@ -103,4 +116,4 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh issue comment ${{ steps.find.outputs.number }} --repo "${{ github.repository }}" \
-            --body "✅ Alert resolved at ${{ github.event.client_payload.fired_at }}. Closing left to operator after verifying root cause."
+            --body "✅ Alert resolved at $(date -u -Iseconds). Original fired_at: ${{ github.event.client_payload.fired_at }}. Closing left to operator after verifying root cause."

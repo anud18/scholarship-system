@@ -109,10 +109,6 @@ jobs:
           # Start/restart monitoring stack
           docker compose -f docker-compose.monitoring.yml up -d
 
-          # Wait for services to be healthy
-          echo "Waiting for services to start..."
-          sleep 60
-
       - name: Health check monitoring services
         run: |
           set -e
