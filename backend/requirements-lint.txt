@@ -1,4 +1,4 @@
-black==24.8.0
+black==26.3.1  # Security: fixes arbitrary file writes from unsanitized cache filename (<26.3.1)
 flake8
 mypy
 pylint

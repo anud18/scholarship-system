@@ -43,7 +43,7 @@ fastapi-mail==1.4.1
 jinja2==3.1.6  # Security: Fixed sandbox escape vulnerability (GHSA-cpwx-vrp4-4pq7)
 
 # File processing and OCR
-pillow==12.1.1  # Security update
+pillow==12.2.0  # Security: fixes OOB write + FITS GZIP decompression bomb (10.3.0<=v<12.2.0 vulnerable)
 opencv-python==4.12.0.88  # Updated for Python 3.13 compatibility
 pytesseract==0.3.10
 google-generativeai==0.8.3
