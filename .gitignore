@@ -174,3 +174,14 @@ playwright-report/
 
 # Git worktrees
 .worktrees/
+
+# ─────────────────────────────────────────────────────────────────────────
+# Staging-test evidence (see scripts/evidence/render.mjs +
+# .github/workflows/staging-evidence.yml).
+# Live in dedicated `evidence/<date>` orphan branches, NOT on feature
+# branches. Only REPORT.md, .gitkeep, and README.md may be committed on a
+# feature branch (REPORT.md as a code-PR companion summary).
+docs/staging-tests/**/*
+!docs/staging-tests/**/REPORT.md
+!docs/staging-tests/.gitkeep
+!docs/staging-tests/README.md

@@ -59,6 +59,31 @@ jobs:
               - 'backend/requirements*.txt'
               - 'frontend/package*.json'
 
+      # Guard: feature-branch PRs may NOT include raw evidence files. They
+      # belong on `evidence/<date>` orphan branches (see docs/staging-tests/
+      # README.md). The .gitignore already declines them, but this catches
+      # `git add -f` overrides.
+      - name: Reject raw evidence on feature branches
+        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'evidence/')
+        run: |
+          set -euo pipefail
+          bad=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- \
+            'docs/staging-tests/*/*.png' \
+            'docs/staging-tests/*/*.json' \
+            'docs/staging-tests/*/*.txt' \
+            'docs/staging-tests/*/*.js' \
+            'docs/staging-tests/**/*/*.png' \
+            'docs/staging-tests/**/*/*.json' \
+            'docs/staging-tests/**/*/*.txt' \
+            'docs/staging-tests/**/*/*.js' 2>/dev/null || true)
+          if [ -n "$bad" ]; then
+            echo "::error::Raw staging-test evidence files committed to a feature branch:"
+            echo "$bad" | sed 's/^/  - /'
+            echo "::error::Run scripts/evidence/publish.sh <date> to push to evidence/<date>"
+            echo "::error::orphan branch instead. See docs/staging-tests/README.md."
+            exit 1
+          fi
+
   # Quick validation jobs - run in parallel
   quick-checks:
     name: Quick Checks
