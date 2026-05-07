@@ -113,6 +113,35 @@ jobs:
           # Start/restart monitoring stack
           docker compose -f docker-compose.monitoring.yml up -d
 
+      - name: Cleanup leftover Phase-2 datasources
+        env:
+          ADMIN_USER: ${{ secrets.GRAFANA_ADMIN_USER }}
+          ADMIN_PASS: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+        run: |
+          set -e
+          # Wait for Grafana to be reachable
+          for i in $(seq 1 24); do
+            if docker exec monitoring_grafana wget --spider -q http://localhost:3000/api/health 2>/dev/null; then
+              break
+            fi
+            sleep 5
+          done
+
+          # Phase 2 removed alertmanager from compose, but a previously
+          # provisioned `alertmanager-uid` datasource sticks around in
+          # grafana_data/grafana.db. Provisioning's deleteDatasources only
+          # supports name match (we don't know the original name); the API
+          # accepts UID directly. 404 is the success case (already gone).
+          NET="monitoring_monitoring_network"
+          STATUS=$(docker run --rm --network "$NET" curlimages/curl:8.10.1 \
+            -sS -o /dev/null -w "%{http_code}" -X DELETE \
+            -u "$ADMIN_USER:$ADMIN_PASS" \
+            "http://monitoring_grafana:3000/api/datasources/uid/alertmanager-uid" || echo "000")
+          case "$STATUS" in
+            200|404) echo "✅ leftover alertmanager-uid handled (HTTP $STATUS)" ;;
+            *)       echo "::error::Unexpected status deleting alertmanager-uid: $STATUS" ; exit 1 ;;
+          esac
+
       - name: Health check monitoring services
         run: |
           set -e
