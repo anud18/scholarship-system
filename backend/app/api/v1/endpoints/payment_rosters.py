@@ -8,7 +8,7 @@ import os
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1647,6 +1647,162 @@ async def get_roster_statistics(
     except Exception as e:
         logger.error(f"Failed to get roster statistics for {roster_id}: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="取得造冊統計失敗")
+
+
+@router.post("/{roster_id}/items/{item_id}/exclude")
+async def exclude_roster_item(
+    roster_id: int,
+    item_id: int,
+    request: Request,
+    reason_category: str = Body(
+        ..., description="排除原因分類:'returned'(繳回) / 'declined'(放棄) / 'other'(其他)"
+    ),
+    reason_note: Optional[str] = Body(None, description="補充說明,自由文字"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    從造冊明細中排除指定項目(學生繳回 / 放棄獎學金等情境)。
+
+    Soft-deletes by setting `is_included=False` + `exclusion_reason` so the
+    item still appears in audit trails / re-exports with the exclusion
+    metadata, rather than being hard-deleted (#66).
+
+    Notes:
+      - Only admins may exclude items. Roster must NOT be LOCKED.
+      - This does NOT decrement the student's cumulative received_months;
+        if the funds are actually being returned, the admin should adjust
+        received_months separately (it lives on CollegeRankingItem and the
+        update path is intentionally manual).
+      - A RosterAuditLog row is created with action=ITEM_REMOVE.
+    """
+    check_user_roles([UserRole.admin], current_user)
+
+    if reason_category not in {"returned", "declined", "other"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="reason_category must be one of: returned / declined / other",
+        )
+    if reason_category == "other" and not reason_note:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="reason_note is required when reason_category is 'other'",
+        )
+
+    try:
+        # Load item with its parent roster in one round-trip
+        stmt = (
+            select(PaymentRosterItem)
+            .options(selectinload(PaymentRosterItem.roster))
+            .where(PaymentRosterItem.id == item_id)
+        )
+        result = await db.execute(stmt)
+        item = result.scalar_one_or_none()
+
+        if not item:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定的造冊明細")
+
+        if item.roster_id != roster_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="造冊明細不屬於指定的造冊",
+            )
+
+        roster = item.roster
+        if roster is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定的造冊")
+        if roster.status == RosterStatus.LOCKED:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="造冊已鎖定,無法排除明細;請先解鎖",
+            )
+
+        # Idempotent: refuse if already excluded so the audit trail isn't muddled
+        if not item.is_included:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"明細已被排除(原因:{item.exclusion_reason or '未填'})。"
+                    f"如需修改原因請先取消排除。"
+                ),
+            )
+
+        # Build the human-readable reason string
+        category_label = {
+            "returned": "學生繳回",
+            "declined": "學生放棄",
+            "other": "其他",
+        }[reason_category]
+        full_reason = (
+            f"{category_label}: {reason_note}" if reason_note else category_label
+        )
+
+        # Capture old/new for audit before mutation
+        old_values = {
+            "is_included": item.is_included,
+            "exclusion_reason": item.exclusion_reason,
+        }
+        item.is_included = False
+        item.exclusion_reason = full_reason
+        new_values = {
+            "is_included": False,
+            "exclusion_reason": full_reason,
+        }
+
+        # Audit log
+        from app.models.roster_audit import RosterAuditAction, RosterAuditLog
+
+        audit = RosterAuditLog.create_audit_log(
+            roster_id=roster.id,
+            action=RosterAuditAction.ITEM_REMOVE,
+            title=f"排除造冊明細 #{item.id} ({item.student_name})",
+            description=(
+                f"原因分類: {category_label}; 補充說明: {reason_note or '(無)'}; "
+                f"獎學金: {item.scholarship_name}"
+            ),
+            user_id=current_user.id,
+            user_name=current_user.name,
+            user_role=current_user.role.value if current_user.role else None,
+            client_ip=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+            old_values=old_values,
+            new_values=new_values,
+            api_endpoint=str(request.url.path),
+            request_method=request.method,
+            request_payload={
+                "reason_category": reason_category,
+                "reason_note": reason_note,
+            },
+            affected_items_count=1,
+        )
+        db.add(audit)
+        await db.commit()
+        await db.refresh(item)
+
+        logger.info(
+            "Roster item %s excluded by user %s (%s)",
+            item.id,
+            current_user.id,
+            reason_category,
+        )
+
+        return ApiResponse(
+            success=True,
+            message="造冊明細已排除",
+            data={
+                "id": item.id,
+                "roster_id": item.roster_id,
+                "is_included": item.is_included,
+                "exclusion_reason": item.exclusion_reason,
+            },
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to exclude roster item {item_id}: {e}")
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="排除造冊明細失敗")
 
 
 @router.delete("/{roster_id}")
