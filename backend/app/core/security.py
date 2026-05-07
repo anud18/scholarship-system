@@ -213,7 +213,7 @@ async def check_college_academic_year_permission(user: User, academic_year: int,
         return True
 
     # College users can only access current and previous academic year
-    current_year = datetime.now().year - 1911  # ROC year
+    current_year = datetime.now(timezone.utc).year - 1911  # ROC year
     allowed_years = [current_year - 1, current_year, current_year + 1]
     return academic_year in allowed_years
 

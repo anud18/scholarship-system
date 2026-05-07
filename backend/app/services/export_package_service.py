@@ -17,7 +17,7 @@ import re
 from xml.sax.saxutils import escape as xml_escape  # nosec B406
 import zipfile
 from collections import Counter, defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 from reportlab.lib import colors
@@ -266,7 +266,7 @@ class ExportPackageService:
         degree_label = DEGREE_LABELS.get(degree_raw, degree_raw or "—")
         semester_map = {"first": "第一學期", "second": "第二學期"}
         semester_label = semester_map.get(semester, "全學年") if semester else "全學年"
-        export_time = datetime.now().strftime("%Y-%m-%d %H:%M")
+        export_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
 
         # Styles
         s_normal = ParagraphStyle("CJK", fontName="WQY", fontSize=10, leading=14)
