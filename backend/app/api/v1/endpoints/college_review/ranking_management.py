@@ -293,22 +293,22 @@ async def get_ranking(
 
         normalized_ranking_semester = normalize_semester_value(ranking.semester)
 
-        if user_college_code:
-            config_stmt = select(ScholarshipConfiguration).where(
-                and_(
-                    ScholarshipConfiguration.scholarship_type_id == ranking.scholarship_type_id,
-                    ScholarshipConfiguration.academic_year == ranking.academic_year,
-                    ScholarshipConfiguration.is_active.is_(True),
-                )
+        # Fetch scholarship config once — used for quota calculation AND deadline banner (#91)
+        _cfg_stmt = select(ScholarshipConfiguration).where(
+            and_(
+                ScholarshipConfiguration.scholarship_type_id == ranking.scholarship_type_id,
+                ScholarshipConfiguration.academic_year == ranking.academic_year,
+                ScholarshipConfiguration.is_active.is_(True),
             )
-            if normalized_ranking_semester:
-                config_stmt = config_stmt.where(ScholarshipConfiguration.semester == normalized_ranking_semester)
-            else:
-                config_stmt = config_stmt.where(ScholarshipConfiguration.semester.is_(None))
+        )
+        if normalized_ranking_semester:
+            _cfg_stmt = _cfg_stmt.where(ScholarshipConfiguration.semester == normalized_ranking_semester)
+        else:
+            _cfg_stmt = _cfg_stmt.where(ScholarshipConfiguration.semester.is_(None))
+        _cfg_result = await db.execute(_cfg_stmt)
+        config = _cfg_result.scalar_one_or_none()
 
-            config_result = await db.execute(config_stmt)
-            config = config_result.scalar_one_or_none()
-
+        if user_college_code:
             if config and config.has_college_quota and isinstance(config.quotas, dict):
 
                 def _record_quota(sub_type_code: str, quota_value: Any) -> None:
@@ -525,6 +525,7 @@ async def get_ranking(
                 "sub_type_metadata": list(sub_type_metadata_map.values()),
                 "items": items,
                 "created_at": ranking.created_at.isoformat(),
+                "college_review_end": config.college_review_end.isoformat() if config and config.college_review_end else None,
             },
         )
 
