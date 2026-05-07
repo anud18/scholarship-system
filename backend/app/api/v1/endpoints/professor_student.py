@@ -113,7 +113,7 @@ async def create_professor_student_relationship(
     professor_id: int,
     student_id: int,
     relationship_type: str,
-    status: Optional[str] = "active",
+    active_status: Optional[str] = Query("active", alias="status", description="active|inactive"),
     start_date: Optional[str] = None,
     notes: Optional[str] = None,
     current_user: User = Depends(require_admin),
@@ -163,7 +163,7 @@ async def create_professor_student_relationship(
             professor_id=professor_id,
             student_id=student_id,
             relationship_type=relationship_type,
-            is_active=(status == "active"),
+            is_active=(active_status == "active"),
             notes=notes,
             created_by=current_user.id,
         )
@@ -203,7 +203,7 @@ async def create_professor_student_relationship(
 async def update_professor_student_relationship(
     id: int = Path(..., description="Relationship ID"),
     relationship_type: Optional[str] = None,
-    status: Optional[str] = None,
+    active_status: Optional[str] = Query(None, alias="status", description="active|inactive"),
     end_date: Optional[str] = None,
     notes: Optional[str] = None,
     current_user: User = Depends(require_admin),
@@ -229,8 +229,8 @@ async def update_professor_student_relationship(
         if relationship_type is not None:
             relationship.relationship_type = relationship_type
 
-        if status is not None:
-            relationship.is_active = status == "active"
+        if active_status is not None:
+            relationship.is_active = active_status == "active"
 
         if notes is not None:
             relationship.notes = notes
