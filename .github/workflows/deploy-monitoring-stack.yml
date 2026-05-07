@@ -101,7 +101,10 @@ jobs:
           sudo chmod 600 /opt/scholarship/secrets/gh_pat
           # Grafana container UID is 472
           sudo chown 472:472 /opt/scholarship/secrets/gh_pat
-          if [ ! -s /opt/scholarship/secrets/gh_pat ]; then
+          # Parent dir is mode 700 root-owned — runner user has no traversal
+          # rights, so `[ -s file ]` would always fail with permission denied
+          # instead of telling us the actual size. Use `sudo test` instead.
+          if sudo test ! -s /opt/scholarship/secrets/gh_pat; then
             echo "::error::GH_PAT file is empty after write"
             exit 1
           fi
