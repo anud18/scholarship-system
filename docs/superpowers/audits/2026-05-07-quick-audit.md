@@ -466,3 +466,38 @@ for yearly scholarships:
 - 8 issues fully closed + 2 mostly closed
 - **9 P1 bugs** uncovered + fixed across rounds 10-13 (counting yearly-filter as 1)
 - New regression test pins 1 of those P1s under pytest
+
+---
+
+## Round 13 (continued) — Frontend Semester.yearly mirror
+
+After grep'ing the FE for the same first/second omission, found 6 more
+display sites + 1 stale "annual" string:
+
+| chunk | commit | scope |
+|-------|--------|-------|
+| chunk-40 | 483c5e7 | admin-configuration-management.tsx + whitelist-management-dialog.tsx + roster/CompactConfigSelector.tsx — 3 components |
+| chunk-41 | b230f72 | admin/history/HistoryPanel.tsx (2) + admin-management-interface.tsx (2) + common/ApplicationReviewDialog.tsx (1, fixed stale "annual" → "yearly") |
+
+## Cumulative session totals (round 13 final)
+
+- **54 commits** on `audit/monitoring-stack-phase1`
+- 8 issues fully closed: #45 #55 #60 #63 #64 #68 #81 #82
+- 2 issues mostly closed: #59 (B), #66 (main flow)
+- **9 P1 bug categories** closed across rounds 10-13:
+   1. JSONB student_data flag_modified() (2 services)
+   2. JSONB meta_data + bank_verification_details flag_modified() (3 sites)
+   3. Out-of-range month silently bypassing semester filter
+   4. notification_service TZ-mismatch (6 sites)
+   5. files.py token DoS hardening
+   6. auth_service.register_user IntegrityError 500
+   7. user_profile_service.create_user_profile race
+   8. auth endpoints brute-force defense (3 endpoints)
+   9. Semester.yearly silent omission across labels + filters (BE: 4 sites + 2 endpoints; FE: 6 sites)
+- **Misc deprecation cleanup**: datetime.utcnow → now(timezone.utc) in 14 prod + 3 test files; Pydantic `.dict()` → `.model_dump()`; class Config → ConfigDict; Field(example=) → Field(examples=[]); SQLAlchemy mutable defaults → lambda
+
+## Branch state for handoff
+
+- All commits on `audit/monitoring-stack-phase1` (worktree-isolated; main repo's branch flipper no longer affecting work)
+- No pushes (per plan rules; weekly stays well below 5%)
+- Next-session pickup: close on #59 part A (needs 勞保 SOP source text from user) or #67 (續領彙整匯入, needs source format) or expand test coverage for the 9 P1 fixes
