@@ -5,6 +5,7 @@ import { Check, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WizardStep } from "./types";
 import { Card } from "@/components/ui/card";
+import { getTranslation } from "@/lib/i18n";
 
 interface ApplicationSidebarProps {
   steps: WizardStep[];
@@ -23,12 +24,10 @@ export function ApplicationSidebar({
     <div className="w-64 min-h-screen border-r border-gray-200 bg-gradient-to-b from-nycu-blue-50 to-white p-6">
       <div className="mb-8">
         <h2 className="text-xl font-bold text-nycu-navy-800 mb-2">
-          {locale === "zh" ? "申請流程" : "Application Process"}
+          {getTranslation(locale, "wizard.sidebar.title")}
         </h2>
         <p className="text-sm text-nycu-navy-600">
-          {locale === "zh"
-            ? "請依序完成以下步驟"
-            : "Complete the following steps in order"}
+          {getTranslation(locale, "wizard.sidebar.subtitle")}
         </p>
       </div>
 
@@ -129,7 +128,7 @@ export function ApplicationSidebar({
       <div className="mt-8 p-4 bg-white rounded-lg border border-gray-200">
         <div className="flex items-center justify-between text-sm mb-2">
           <span className="text-gray-600">
-            {locale === "zh" ? "整體進度" : "Overall Progress"}
+            {getTranslation(locale, "wizard.sidebar.overall_progress")}
           </span>
           <span className="font-semibold text-nycu-blue-700">
             {Math.round(

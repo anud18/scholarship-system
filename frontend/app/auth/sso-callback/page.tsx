@@ -96,33 +96,30 @@ function SSOCallbackContent() {
 
           // Redirect based on user role
           const userRole = userData.role;
-          let redirectPath = "/";
+          let finalPath = "/";
 
           console.log("🎯 Determining redirect path based on role:", userRole);
 
           // Role-based redirection
           if (userRole === "admin" || userRole === "super_admin") {
-            redirectPath = "/#dashboard"; // Admin dashboard
+            finalPath = "/#dashboard"; // Admin dashboard
             console.log("👑 Admin/Super Admin - redirecting to dashboard");
           } else if (userRole === "professor") {
-            redirectPath = "/#main"; // Professor review page
+            finalPath = "/#main"; // Professor review page
             console.log("🎓 Professor - redirecting to main");
           } else if (userRole === "college") {
-            redirectPath = "/#main"; // College dashboard
+            finalPath = "/#main"; // College dashboard
             console.log("🏫 College - redirecting to main");
           } else {
-            redirectPath = "/#main"; // Student portal
+            finalPath = "/#main"; // Student portal
             console.log("🎒 Student - redirecting to main");
           }
 
-          console.log("🚀 Final redirect path:", redirectPath);
-          console.log("⏰ Setting 1.5 second delay before redirect...");
+          console.log("🚀 Final redirect path:", finalPath);
 
           setTimeout(() => {
-            console.log("⏰ Timeout reached, executing router.push...");
-            router.push(redirectPath);
-            console.log("✅ router.push() called");
-          }, 1500);
+            router.push(finalPath);
+          }, 200);
         } catch (decodeError) {
           console.error("💥 Token decoding failed:", decodeError);
           console.error(

@@ -1,6 +1,7 @@
 "use client";
+import { useEffect, useState } from "react";
 import { Separator } from "@/components/ui/separator";
-import { Mail, Phone, MapPin, ExternalLink, GraduationCap } from "lucide-react";
+import { Mail, Phone, MapPin, ExternalLink, GraduationCap, ChevronDown } from "lucide-react";
 
 interface FooterProps {
   locale?: "zh" | "en";
@@ -8,10 +9,20 @@ interface FooterProps {
 
 export function Footer({ locale = "zh" }: FooterProps) {
   const currentYear = new Date().getFullYear();
+  // Render the "Last updated" date only after mount to avoid SSR/CSR
+  // hydration mismatches caused by the server and client rendering with
+  // different locale-formatted strings (or different system clocks crossing
+  // a date boundary). The footer's other content stays SSR-rendered.
+  const [lastUpdated, setLastUpdated] = useState<string>("");
+  useEffect(() => {
+    setLastUpdated(
+      new Date().toLocaleDateString(locale === "zh" ? "zh-TW" : "en-US")
+    );
+  }, [locale]);
 
   return (
     <footer className="bg-gradient-to-br from-nycu-navy-50 to-nycu-blue-50 border-t-4 border-nycu-blue-600 mt-12">
-      <div className="container mx-auto px-4 py-12">
+      <div className="container mx-auto px-4 py-8 md:py-12">
         <div className="grid gap-8 md:grid-cols-4">
           {/* University Logo & System Info */}
           <div className="md:col-span-2">
@@ -53,12 +64,20 @@ export function Footer({ locale = "zh" }: FooterProps) {
             </div>
           </div>
 
-          {/* Contact Information */}
-          <div>
-            <h4 className="font-bold text-nycu-navy-800 mb-4 text-lg">
-              {locale === "zh" ? "聯絡資訊" : "Contact Information"}
-            </h4>
-            <div className="space-y-6">
+          {/* Contact Information — collapsible on mobile via native <details>
+              (closed by default below md). Above md it renders flat without
+              a disclosure widget so desktop layout is unchanged. */}
+          <details className="group [&_summary::-webkit-details-marker]:hidden" open>
+            <summary className="flex items-center justify-between cursor-pointer md:cursor-default list-none">
+              <h4 className="font-bold text-nycu-navy-800 text-lg">
+                {locale === "zh" ? "聯絡資訊" : "Contact Information"}
+              </h4>
+              <ChevronDown
+                className="h-5 w-5 text-nycu-navy-600 transition-transform group-open:rotate-180 md:hidden"
+                aria-hidden="true"
+              />
+            </summary>
+            <div className="space-y-6 mt-4">
               {/* 交大校區 */}
               <div className="space-y-3">
                 <h5 className="font-semibold text-nycu-navy-700 flex items-center gap-2">
@@ -140,14 +159,20 @@ export function Footer({ locale = "zh" }: FooterProps) {
                 </div>
               </div>
             </div>
-          </div>
+          </details>
 
-          {/* Related Links */}
-          <div>
-            <h4 className="font-bold text-nycu-navy-800 mb-4 text-lg">
-              {locale === "zh" ? "相關連結" : "Related Links"}
-            </h4>
-            <div className="space-y-3">
+          {/* Related Links — same collapsible pattern as Contact Information. */}
+          <details className="group [&_summary::-webkit-details-marker]:hidden" open>
+            <summary className="flex items-center justify-between cursor-pointer md:cursor-default list-none">
+              <h4 className="font-bold text-nycu-navy-800 text-lg">
+                {locale === "zh" ? "相關連結" : "Related Links"}
+              </h4>
+              <ChevronDown
+                className="h-5 w-5 text-nycu-navy-600 transition-transform group-open:rotate-180 md:hidden"
+                aria-hidden="true"
+              />
+            </summary>
+            <div className="space-y-3 mt-4">
               <a
                 href="https://www.nycu.edu.tw"
                 target="_blank"
@@ -202,7 +227,7 @@ export function Footer({ locale = "zh" }: FooterProps) {
                 {locale === "zh" ? "系統操作手冊" : "User Manual"}
               </a>
             </div>
-          </div>
+          </details>
         </div>
 
         <Separator className="my-8 bg-nycu-blue-200" />
@@ -250,9 +275,9 @@ export function Footer({ locale = "zh" }: FooterProps) {
               </span>
               <span>
                 {locale === "zh" ? "最後更新" : "Last Updated"}:{" "}
-                {new Date().toLocaleDateString(
-                  locale === "zh" ? "zh-TW" : "en-US"
-                )}
+                {/* lastUpdated is empty during SSR; populated on client mount
+                    to avoid hydration mismatch (locale/timezone-dependent). */}
+                <span suppressHydrationWarning>{lastUpdated || " "}</span>
               </span>
             </div>
           </div>

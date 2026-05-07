@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { FileUpload } from "@/components/file-upload";
 import type { Application } from "@/lib/api";
+import { getTranslation } from "@/lib/i18n";
 
 interface DocumentType {
   value: string;
@@ -53,6 +54,7 @@ export function ApplicationFileUploadDialog({
   onUploadComplete,
   locale = "zh",
 }: ApplicationFileUploadDialogProps) {
+  const t = (key: string) => getTranslation(locale, key);
   const [selectedDocumentType, setSelectedDocumentType] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -79,9 +81,7 @@ export function ApplicationFileUploadDialog({
       if (allSuccess) {
         setUploadStatus("success");
         setUploadMessage(
-          locale === "zh"
-            ? `成功上傳 ${files.length} 個檔案`
-            : `Successfully uploaded ${files.length} file(s)`
+          `${t("form_dialog.upload_success_prefix")} ${files.length} ${t("form_dialog.upload_success_suffix")}`
         );
         setFiles([]);
         setSelectedDocumentType("");
@@ -93,15 +93,11 @@ export function ApplicationFileUploadDialog({
         }, 1500);
       } else {
         setUploadStatus("error");
-        setUploadMessage(
-          locale === "zh" ? "部分檔案上傳失敗" : "Some files failed to upload"
-        );
+        setUploadMessage(t("form_dialog.partial_upload_failed"));
       }
     } catch (err: any) {
       setUploadStatus("error");
-      setUploadMessage(
-        err.message || (locale === "zh" ? "上傳失敗" : "Upload failed")
-      );
+      setUploadMessage(err.message || t("form_dialog.upload_failed"));
     } finally {
       setUploading(false);
     }
@@ -124,12 +120,10 @@ export function ApplicationFileUploadDialog({
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>
-            {locale === "zh" ? "上傳申請文件" : "Upload Application Documents"}
-          </DialogTitle>
+          <DialogTitle>{t("form_dialog.upload_application_documents")}</DialogTitle>
           <DialogDescription>
-            {locale === "zh" ? "學號" : "Student ID"}: {application.student_id} |{" "}
-            {locale === "zh" ? "申請 ID" : "Application ID"}: {applicationId}
+            {t("profile_management.id_number")}: {application.student_id} |{" "}
+            {t("form_dialog.application_id")}: {applicationId}
             {application.form_data?.name && ` | ${application.form_data.name}`}
           </DialogDescription>
         </DialogHeader>
@@ -139,7 +133,7 @@ export function ApplicationFileUploadDialog({
           {scholarshipDocuments.length > 0 ? (
             <div className="space-y-2">
               <label className="text-sm font-medium">
-                {locale === "zh" ? "文件類型" : "Document Type"}
+                {t("form_dialog.document_type")}
               </label>
               <Select
                 value={selectedDocumentType}
@@ -148,9 +142,7 @@ export function ApplicationFileUploadDialog({
               >
                 <SelectTrigger>
                   <SelectValue
-                    placeholder={
-                      locale === "zh" ? "選擇文件類型" : "Select document type"
-                    }
+                    placeholder={t("form_dialog.select_document_type")}
                   />
                 </SelectTrigger>
                 <SelectContent>
@@ -166,9 +158,7 @@ export function ApplicationFileUploadDialog({
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
-                {locale === "zh"
-                  ? "此獎學金類型尚未設定文件需求，請聯繫管理員"
-                  : "No document requirements configured for this scholarship type"}
+                {t("form_dialog.no_document_requirements")}
               </AlertDescription>
             </Alert>
           )}
@@ -191,7 +181,7 @@ export function ApplicationFileUploadDialog({
             <div className="space-y-2">
               <Progress value={75} className="h-2" />
               <p className="text-sm text-center text-muted-foreground">
-                {locale === "zh" ? "上傳中..." : "Uploading..."}
+                {t("form_dialog.uploading")}
               </p>
             </div>
           )}
@@ -206,7 +196,7 @@ export function ApplicationFileUploadDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={handleClose} disabled={uploading}>
-            {locale === "zh" ? "取消" : "Cancel"}
+            {t("form_dialog.cancel")}
           </Button>
           <Button
             onClick={handleUpload}
@@ -215,12 +205,12 @@ export function ApplicationFileUploadDialog({
             {uploading ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                {locale === "zh" ? "上傳中..." : "Uploading..."}
+                {t("form_dialog.uploading")}
               </>
             ) : (
               <>
                 <Upload className="h-4 w-4 mr-2" />
-                {locale === "zh" ? "上傳" : "Upload"}
+                {t("form_dialog.upload")}
               </>
             )}
           </Button>

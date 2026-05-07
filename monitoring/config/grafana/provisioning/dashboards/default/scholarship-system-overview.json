@@ -604,7 +604,7 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "((sum(rate(http_errors_total{environment=\"$environment\", vm=~\"$vm\", job=\"backend\"}[5m])) / sum(rate(http_requests_total{environment=\"$environment\", vm=~\"$vm\", job=\"backend\"}[5m]))) * 100) or 0",
+          "expr": "((sum(rate(http_requests_total{environment=\"$environment\", vm=~\"$vm\", job=\"backend\", status=~\"5..\"}[5m])) / sum(rate(http_requests_total{environment=\"$environment\", vm=~\"$vm\", job=\"backend\"}[5m]))) * 100)",
           "refId": "A"
         }
       ],
@@ -1097,7 +1097,8 @@
           "uid": "prometheus-uid"
         },
         "definition": "label_values(up, environment)",
-        "refresh": 1
+        "refresh": 1,
+        "regex": "/^(?!monitoring).*$/"
       },
       {
         "current": {

@@ -9,6 +9,7 @@ import { WizardStep } from "./types";
 import { FileText, User, Award } from "lucide-react";
 import { User as UserType } from "@/types/user";
 import { Application } from "@/lib/api";
+import { getTranslation } from "@/lib/i18n";
 
 interface StudentApplicationWizardProps {
   user: UserType;
@@ -44,31 +45,31 @@ export function StudentApplicationWizard({
   const initialSteps: WizardStep[] = [
     {
       id: "notice",
-      label: "注意事項與同意",
-      label_en: "Notice & Agreement",
+      label: getTranslation("zh", "wizard.steps.notice.label"),
+      label_en: getTranslation("en", "wizard.steps.notice.label"),
       icon: FileText,
-      description: "閱讀並同意申請須知",
-      description_en: "Read and agree to application notice",
+      description: getTranslation("zh", "wizard.steps.notice.description"),
+      description_en: getTranslation("en", "wizard.steps.notice.description"),
       isCompleted: false,
       isAccessible: true,
     },
     {
       id: "student-data",
-      label: "確認學籍資料",
-      label_en: "Verify Student Data",
+      label: getTranslation("zh", "wizard.steps.review.label"),
+      label_en: getTranslation("en", "wizard.steps.review.label"),
       icon: User,
-      description: "檢視學校資料庫資料",
-      description_en: "Review database information",
+      description: getTranslation("zh", "wizard.steps.review.description"),
+      description_en: getTranslation("en", "wizard.steps.review.description"),
       isCompleted: false,
       isAccessible: false,
     },
     {
       id: "scholarship",
-      label: "填寫資料與申請獎學金",
-      label_en: "Fill Info & Apply",
+      label: getTranslation("zh", "wizard.steps.apply.label"),
+      label_en: getTranslation("en", "wizard.steps.apply.label"),
       icon: Award,
-      description: "填寫個人資料並申請獎學金",
-      description_en: "Fill personal info and apply for scholarship",
+      description: getTranslation("zh", "wizard.steps.apply.description"),
+      description_en: getTranslation("en", "wizard.steps.apply.description"),
       isCompleted: false,
       isAccessible: false,
     },
@@ -184,8 +185,8 @@ export function StudentApplicationWizard({
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm text-gray-600">
-              {locale === "zh" ? "步驟" : "Step"} {currentStepIndex + 1} /{" "}
-              {steps.length}
+              {getTranslation(locale, "wizard.mobile_step_label")}{" "}
+              {currentStepIndex + 1} / {steps.length}
             </p>
             <p className="font-semibold text-nycu-navy-800">
               {locale === "zh"

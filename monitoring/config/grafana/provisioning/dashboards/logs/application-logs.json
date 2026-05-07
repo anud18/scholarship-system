@@ -400,7 +400,8 @@
           "uid": "prometheus-uid"
         },
         "definition": "label_values(up, environment)",
-        "refresh": 1
+        "refresh": 1,
+        "regex": "/^(?!monitoring).*$/"
       },
       {
         "current": {
@@ -412,22 +413,15 @@
         "includeAll": false,
         "multi": false,
         "name": "vm",
-        "options": [
-          {
-            "selected": true,
-            "text": "ap-vm",
-            "value": "ap-vm"
-          },
-          {
-            "selected": false,
-            "text": "db-vm",
-            "value": "db-vm"
-          }
-        ],
-        "query": "ap-vm,db-vm",
-        "queryValue": "",
+        "query": "label_values({environment=\"$environment\"}, vm)",
         "skipUrlSync": false,
-        "type": "custom"
+        "type": "query",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki-staging-uid"
+        },
+        "definition": "label_values({environment=\"$environment\"}, vm)",
+        "refresh": 2
       },
       {
         "current": {

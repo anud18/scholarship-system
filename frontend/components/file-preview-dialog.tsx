@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Eye, FileText } from "lucide-react";
 import { Locale } from "@/lib/validators";
+import { getTranslation } from "@/lib/i18n";
 
 interface FilePreviewDialogProps {
   isOpen: boolean;
@@ -32,6 +33,7 @@ export function FilePreviewDialog({
   locale,
 }: FilePreviewDialogProps) {
   const [isLoading, setIsLoading] = useState(true);
+  const t = (k: string) => getTranslation(locale, k);
 
   // Reset loading state when dialog opens or file changes
   useEffect(() => {
@@ -73,9 +75,7 @@ export function FilePreviewDialog({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
         <DialogHeader>
-          <DialogTitle>
-            {locale === "zh" ? "文件預覽" : "File Preview"}
-          </DialogTitle>
+          <DialogTitle>{t("dialogs.preview.title")}</DialogTitle>
           <DialogDescription>{file.filename}</DialogDescription>
         </DialogHeader>
 
@@ -98,7 +98,7 @@ export function FilePreviewDialog({
                       <Skeleton className="h-6 w-[92%]" />
                     </div>
                     <p className="text-sm text-muted-foreground text-center pt-4">
-                      {locale === "zh" ? "載入中..." : "Loading..."}
+                      {t("dialogs.preview.loading")}
                     </p>
                   </div>
                 </div>
@@ -136,13 +136,11 @@ export function FilePreviewDialog({
               <FileText className="h-16 w-16 text-muted-foreground mb-4" />
               <p className="text-lg font-medium mb-2">{file.filename}</p>
               <p className="text-sm text-muted-foreground mb-4">
-                {locale === "zh"
-                  ? "此文件類型無法預覽"
-                  : "This file type cannot be previewed"}
+                {t("dialogs.preview.cannot_preview")}
               </p>
               <Button onClick={handleOpenInNewWindow} variant="outline">
                 <Eye className="h-4 w-4 mr-2" />
-                {locale === "zh" ? "在新視窗開啟" : "Open in New Window"}
+                {t("dialogs.preview.open_in_new_window")}
               </Button>
             </div>
           )}
@@ -151,15 +149,15 @@ export function FilePreviewDialog({
             <div className="flex gap-2">
               <Button variant="outline" onClick={handleOpenInNewWindow}>
                 <Eye className="h-4 w-4 mr-2" />
-                {locale === "zh" ? "在新視窗開啟" : "Open in New Window"}
+                {t("dialogs.preview.open_in_new_window")}
               </Button>
               <Button variant="outline" onClick={handleDownload}>
                 <FileText className="h-4 w-4 mr-2" />
-                {locale === "zh" ? "下載" : "Download"}
+                {t("dialogs.preview.download")}
               </Button>
             </div>
             <Button variant="outline" onClick={onClose}>
-              {locale === "zh" ? "關閉" : "Close"}
+              {t("dialogs.preview.close")}
             </Button>
           </div>
         </div>

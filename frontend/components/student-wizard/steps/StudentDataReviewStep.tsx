@@ -76,6 +76,44 @@ export function StudentDataReviewStep({
       retry: "重新載入",
       student: "學生",
       employee: "職員",
+      reference_data: {
+        degrees: {
+          博士: "博士",
+          碩士: "碩士",
+          學士: "學士",
+        } as Record<string, string>,
+        studying_status: {
+          在學: "在學",
+          應畢: "應畢",
+          延畢: "延畢",
+          休學: "休學",
+          期中退學: "期中退學",
+          期末退學: "期末退學",
+          開除學籍: "開除學籍",
+          死亡: "死亡",
+          保留學籍: "保留學籍",
+          放棄入學: "放棄入學",
+          畢業: "畢業",
+        } as Record<string, string>,
+        identity: {
+          一般生: "一般生",
+          原住民: "原住民",
+          "僑生(目前有中華民國國籍生)": "僑生(目前有中華民國國籍生)",
+          "外籍生(目前有中華民國國籍生)": "外籍生(目前有中華民國國籍生)",
+          外交子女: "外交子女",
+          身心障礙生: "身心障礙生",
+          運動成績優良甄試學生: "運動成績優良甄試學生",
+          離島: "離島",
+          退伍軍人: "退伍軍人",
+          一般公費生: "一般公費生",
+          原住民公費生: "原住民公費生",
+          離島公費生: "離島公費生",
+          退伍軍人公費生: "退伍軍人公費生",
+          願景計畫生: "願景計畫生",
+          陸生: "陸生",
+          其他: "其他",
+        } as Record<string, string>,
+      },
     },
     en: {
       title: "Verify Student Data",
@@ -107,18 +145,60 @@ export function StudentDataReviewStep({
       retry: "Retry",
       student: "Student",
       employee: "Employee",
+      reference_data: {
+        degrees: {
+          博士: "Doctoral",
+          碩士: "Master's",
+          學士: "Bachelor's",
+        } as Record<string, string>,
+        studying_status: {
+          在學: "Enrolled",
+          應畢: "Pending Graduation",
+          延畢: "Extended Study",
+          休學: "On Leave",
+          期中退學: "Withdrawn (Mid-term)",
+          期末退學: "Withdrawn (End of Term)",
+          開除學籍: "Expelled",
+          死亡: "Deceased",
+          保留學籍: "Enrollment Reserved",
+          放棄入學: "Enrollment Forfeited",
+          畢業: "Graduated",
+        } as Record<string, string>,
+        identity: {
+          一般生: "Regular Student",
+          原住民: "Indigenous Student",
+          "僑生(目前有中華民國國籍生)":
+            "Overseas Chinese Student (Currently holds R.O.C. nationality)",
+          "外籍生(目前有中華民國國籍生)":
+            "Foreign Student (Currently holds R.O.C. nationality)",
+          外交子女: "Diplomat's Child",
+          身心障礙生: "Student with Disability",
+          運動成績優良甄試學生:
+            "Outstanding Athletic Performance Admission Student",
+          離島: "Outlying Islands Student",
+          退伍軍人: "Veteran",
+          一般公費生: "Regular Government-Funded Student",
+          原住民公費生: "Indigenous Government-Funded Student",
+          離島公費生: "Outlying Islands Government-Funded Student",
+          退伍軍人公費生: "Veteran Government-Funded Student",
+          願景計畫生: "Vision Project Student",
+          陸生: "Mainland Chinese Student",
+          其他: "Other",
+        } as Record<string, string>,
+      },
     },
   };
 
   const text = t[locale];
 
-  const degreeMap: Record<string, string> = {
+  // Numeric code -> canonical zh key (lookup happens via t[locale].reference_data)
+  const degreeCodeToKey: Record<string, string> = {
     "1": "博士",
     "2": "碩士",
     "3": "學士",
   };
 
-  const studyingStatusMap: Record<string, string> = {
+  const studyingStatusCodeToKey: Record<string, string> = {
     "1": "在學",
     "2": "應畢",
     "3": "延畢",
@@ -132,7 +212,7 @@ export function StudentDataReviewStep({
     "11": "畢業",
   };
 
-  const identityMap: Record<string, string> = {
+  const identityCodeToKey: Record<string, string> = {
     "1": "一般生",
     "2": "原住民",
     "3": "僑生(目前有中華民國國籍生)",
@@ -149,6 +229,24 @@ export function StudentDataReviewStep({
     "14": "願景計畫生",
     "17": "陸生",
     "30": "其他",
+  };
+
+  const lookupDegree = (code: string | number): string => {
+    const key = degreeCodeToKey[String(code)];
+    if (key) return text.reference_data.degrees[key] || key;
+    return String(code);
+  };
+
+  const lookupStudyingStatus = (code: string | number): string => {
+    const key = studyingStatusCodeToKey[String(code)];
+    if (key) return text.reference_data.studying_status[key] || key;
+    return String(code);
+  };
+
+  const lookupIdentity = (code: string | number): string => {
+    const key = identityCodeToKey[String(code)];
+    if (key) return text.reference_data.identity[key] || key;
+    return String(code);
   };
 
   const handleConfirm = () => {
@@ -323,8 +421,7 @@ export function StudentDataReviewStep({
                           <BookOpen className="h-4 w-4 text-gray-500" />
                           <div className="text-base text-gray-700">
                             {studentInfo.std_degree
-                              ? degreeMap[String(studentInfo.std_degree)] ||
-                                studentInfo.std_degree
+                              ? lookupDegree(studentInfo.std_degree)
                               : "-"}
                           </div>
                         </div>
@@ -337,9 +434,9 @@ export function StudentDataReviewStep({
                         </label>
                         <div className="text-base font-semibold text-green-700">
                           {studentInfo.std_studingstatus
-                            ? studyingStatusMap[
-                                String(studentInfo.std_studingstatus)
-                              ] || studentInfo.std_studingstatus
+                            ? lookupStudyingStatus(
+                                studentInfo.std_studingstatus
+                              )
                             : "-"}
                         </div>
                       </div>
@@ -388,9 +485,7 @@ export function StudentDataReviewStep({
                         </label>
                         <div className="text-base text-gray-700">
                           {studentInfo.std_identity
-                            ? identityMap[
-                                String(studentInfo.std_identity)
-                              ] || studentInfo.std_identity
+                            ? lookupIdentity(studentInfo.std_identity)
                             : "-"}
                         </div>
                       </div>
