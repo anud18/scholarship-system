@@ -121,6 +121,9 @@ export function RankingManagementPanel({
     fetchRankings,
   } = useCollegeManagement();
 
+  // #91 fix: store the college_review_end fetched for the active ranking's config.
+  const [activeConfigDeadline, setActiveConfigDeadline] = useState<string | null>(null);
+
   const fetchRankingDetails = useCallback(
     async (rankingId: number) => {
       setIsRankingLoading(true);
@@ -621,8 +624,6 @@ export function RankingManagementPanel({
     const id = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(id);
   }, []);
-  // #91 fix: store the college_review_end fetched for the active ranking's config.
-  const [activeConfigDeadline, setActiveConfigDeadline] = useState<string | null>(null);
   const deadlineISO = activeConfigDeadline;
   const deadlineInfo = useMemo(
     () => computeDeadlineInfo(deadlineISO),
