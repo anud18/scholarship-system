@@ -454,7 +454,20 @@ jobs:
 
             # Show running containers
             docker ps --filter "name=staging_db" --format "table {{.Names}}\t{{.Status}}"
+
+            # Diagnostic: confirm Alloy got MONITORING_SERVER_URL
+            echo "--- DB-VM Alloy env ---"
+            docker inspect scholarship_alloy_staging_db --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -E "MONITORING_SERVER_URL" || echo "(env var missing)"
           EOF
+
+      - name: DB-VM Alloy startup diagnostics
+        if: always()
+        run: |
+          echo "Sleeping 25s for Alloy to attempt first scrape + remote_write..."
+          sleep 25
+          ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} \
+            "docker logs --tail 80 scholarship_alloy_staging_db 2>&1" \
+            | head -100 || true
 
       - name: Verify staging metrics
         run: |
