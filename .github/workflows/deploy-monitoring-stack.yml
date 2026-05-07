@@ -462,12 +462,22 @@ jobs:
 
       - name: DB-VM Alloy startup diagnostics
         if: always()
+        env:
+          MONITORING_URL: ${{ secrets.STAGING_MONITORING_SERVER_URL }}
         run: |
-          echo "Sleeping 25s for Alloy to attempt first scrape + remote_write..."
-          sleep 25
+          echo "Sleeping 60s for Alloy to attempt scrape + remote_write..."
+          sleep 60
+          echo "--- Alloy logs (last 200 lines) ---"
           ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} \
-            "docker logs --tail 80 scholarship_alloy_staging_db 2>&1" \
-            | head -100 || true
+            "docker logs --tail 200 scholarship_alloy_staging_db 2>&1 | grep -Ei 'error|remote_write|push|fail|200|context|push_total'" \
+            | tail -50 || true
+          echo
+          echo "--- DB-VM → AP-VM:9090 reachability ---"
+          # Check whether DB-VM can talk to the monitoring server URL.
+          # Strip scheme so curl can resolve hostname or IP either way.
+          ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} \
+            "curl -sS -o /dev/null -w 'HTTP %{http_code} — connect=%{time_connect}s total=%{time_total}s\n' ${MONITORING_URL}:9090/-/healthy" \
+            || echo "(reachability check failed; URL=${MONITORING_URL})"
 
       - name: Verify staging metrics
         run: |
