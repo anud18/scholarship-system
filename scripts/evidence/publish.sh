@@ -34,12 +34,14 @@ if [ ! -d "$SRC_DIR" ]; then
   exit 2
 fi
 
-# Capture a clean copy of the evidence tree before switching branches; the
-# subsequent checkout would either delete the dir (if it's gitignored) or fail
-# (if it has uncommitted tracked changes).
+# Capture a clean copy of the evidence tree AND a working copy of the
+# renderer before switching branches. The orphan-branch clear-out below
+# wipes the worktree (including scripts/evidence/render.mjs), so we need
+# both available outside the repo to survive the switch.
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 cp -r "$SRC_DIR" "$TMP/$DATE"
+cp "$REPO_ROOT/scripts/evidence/render.mjs" "$TMP/render.mjs"
 
 ORIG_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 STASH_REF=""
@@ -70,7 +72,7 @@ mkdir -p "$SRC_DIR"
 cp -r "$TMP/$DATE/." "$SRC_DIR/"
 
 echo "==> generating index.html"
-node "$REPO_ROOT/scripts/evidence/render.mjs" --date "$DATE" --src "$SRC_DIR" --out "$REPO_ROOT" >&2 || {
+node "$TMP/render.mjs" --date "$DATE" --src "$SRC_DIR" --out "$REPO_ROOT" >&2 || {
   echo "render.mjs failed" >&2
   exit 1
 }
