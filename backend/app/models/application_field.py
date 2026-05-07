@@ -61,6 +61,10 @@ class ApplicationField(Base):
     validation_rules = Column(JSON)  # 額外驗證規則
     conditional_rules = Column(JSON)  # 條件顯示規則
 
+    # College export settings
+    include_in_college_export = Column(Boolean, default=False, nullable=False, server_default="false")
+    export_column_label = Column(String(200), nullable=True)
+
     # Meta data
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
