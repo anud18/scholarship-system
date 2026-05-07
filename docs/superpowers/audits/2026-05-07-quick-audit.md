@@ -262,6 +262,30 @@ test_manual_distribution_service.py          14/14
 5. **#71** 續領完整功能 — large
 6. **#72** 遞補 — needs spec confirmation
 
+---
+
+## Round 6 — chunk-13: #66 UI (RosterDetailDialog)
+
+| chunk | status | issue | commit |
+|-------|--------|-------|--------|
+| chunk-13 | ✅ closes #66 (main flow) | RosterDetailDialog: per-row "排除" X button → confirmation dialog with Reason category Select (學生繳回 / 學生放棄 / 其他) + optional/required note + loading state. Wired to POST /payment-rosters/{rid}/items/{iid}/exclude with toast feedback + auto-refresh. | 296048c |
+
+#66 main acceptance criteria are now met:
+  - Admin can remove a single student's record  ✅
+  - Reason captured (繳回/放棄/其他 + 備註)       ✅
+  - Backend writes audit log                     ✅
+  - Soft-delete preserves audit trail            ✅
+  - Excel re-export trigger                       ⏳ (manual re-export via existing endpoint)
+  - 累計領取月份數 auto-update                   ⏳ (deferred per spec ambiguity)
+
+## Cumulative session totals (round 6 end)
+
+- **22 commits** on the branch
+- **7 issues fully closed**: #45, #55, #60, #63, #64, #81, #82
+- **3 issues mostly closed**: #59 (B), #66 (main flow), #68 (ranking)
+  — each has a small follow-up tracked in commits' "out of scope" notes
+- 33 regression tests still passing
+
 ## New issues filed during execution
 
 | Issue | Title | Severity |
