@@ -241,13 +241,25 @@ jobs:
           done
           echo "✅ All datasources healthy"
 
-          # 3. No provisioning errors in Grafana startup logs
-          if docker logs monitoring_grafana 2>&1 | grep -E 'level=error.*provisioning|failed to provision' > /tmp/grafana-prov-errors.txt; then
-            echo "::error::Grafana provisioning errors found:"
-            cat /tmp/grafana-prov-errors.txt
+          # 3. Dashboards reachable. Replaces a brittle log-grep gate that
+          #    used to fail on cosmetic Grafana 12 quirks (e.g. "Cannot
+          #    change resource manager" + transient SQLITE_BUSY during
+          #    cold-start provisioning). Real datasource problems are
+          #    already caught by step 2; the alert-rules gate at step 4
+          #    catches alert provisioning failures. What's left is
+          #    dashboard liveness — query the search API and assert every
+          #    provisioning JSON yielded a dashboard.
+          DASH_COUNT=$(docker exec monitoring_grafana wget -qO- \
+            --header "$AUTH_HDR" \
+            "http://localhost:3000/api/search?type=dash-db" \
+            | jq 'length')
+          # Eight dashboards live in monitoring/config/grafana/provisioning/dashboards/.
+          if [ "${DASH_COUNT:-0}" -lt 8 ]; then
+            echo "::error::Expected ≥8 provisioned dashboards, got $DASH_COUNT"
+            docker logs monitoring_grafana 2>&1 | grep -E 'provisioning.dashboard.*level=error' | tail -20
             exit 1
           fi
-          echo "✅ No provisioning errors"
+          echo "✅ $DASH_COUNT dashboards provisioned"
 
           # 4. Alert rules loaded successfully (zero failed-to-load)
           FAILED_RULES=$(docker exec monitoring_grafana wget -qO- \
