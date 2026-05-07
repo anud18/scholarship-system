@@ -151,7 +151,7 @@ async def create_scholarship_rule(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship type not found")
 
     # Create new rule
-    new_rule = ScholarshipRule(**rule_data.dict(), created_by=current_user.id, updated_by=current_user.id)
+    new_rule = ScholarshipRule(**rule_data.model_dump(), created_by=current_user.id, updated_by=current_user.id)
 
     db.add(new_rule)
     await db.commit()
@@ -234,7 +234,7 @@ async def update_scholarship_rule(
     allowed_fields = set(rule_data.model_fields.keys())
     allowed_fields.add("updated_by")  # Allow system field
 
-    update_data = rule_data.dict(exclude_unset=True)
+    update_data = rule_data.model_dump(exclude_unset=True)
     update_data["updated_by"] = current_user.id
 
     for field, value in update_data.items():

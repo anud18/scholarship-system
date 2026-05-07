@@ -609,7 +609,7 @@ async def update_ranking_order(
         # #63: block once college-review deadline has passed (admins bypass).
         await service.assert_ranking_within_deadline_by_ranking(ranking_id, current_user)
         ranking = await service.update_ranking_order(
-            ranking_id=ranking_id, new_order=[item.dict() for item in new_order]
+            ranking_id=ranking_id, new_order=[item.model_dump() for item in new_order]
         )
 
         return ApiResponse(
