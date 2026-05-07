@@ -461,38 +461,37 @@ jobs:
           set -e
 
           # Staging metrics arrive via Alloy → Prometheus remote_write —
-          # they don't appear in /api/v1/targets (which only lists local
-          # scrape configs). Query the up{} metric instead, which Alloy
-          # synthesizes for every scrape it forwards.
-          QUERY='count(up{environment="staging"}==1)'
+          # they don't appear in /api/v1/targets. Query up{} instead.
+          # AP-VM exporters (5): node, cadvisor, nginx, redis, backend
+          # DB-VM exporters (2): node, postgres
+          MIN_EXPECTED=7
           query_count() {
             curl -s -G "http://localhost:9090/api/v1/query" \
               --data-urlencode "query=$1" \
               | jq -r '.data.result[0].value[1] // "0"'
           }
 
-          for i in $(seq 1 18); do
-            STAGING_TOTAL=$(query_count "$QUERY")
-            if [ "${STAGING_TOTAL:-0}" -gt 0 ]; then
+          # Poll until we hit the full expected count, not just any count —
+          # DB-VM Alloy only just started, so its first scrape needs ~15s
+          # to land in remote_write.
+          for i in $(seq 1 24); do
+            STAGING_TOTAL=$(query_count 'count(up{environment="staging"}==1)')
+            if [ "${STAGING_TOTAL:-0}" -ge "$MIN_EXPECTED" ]; then
               break
             fi
-            echo "Waiting for staging metrics to flow in... ($i/18)"
+            echo "Have $STAGING_TOTAL/$MIN_EXPECTED staging up=1 metrics, waiting... ($i/24)"
             sleep 10
           done
 
-          STAGING_TOTAL=$(query_count "$QUERY")
+          STAGING_TOTAL=$(query_count 'count(up{environment="staging"}==1)')
           STAGING_DOWN=$(query_count 'count(up{environment="staging"}==0)')
 
-          # AP-VM: node, cadvisor, nginx, redis, backend = 5
-          # DB-VM (after F-ALLO-09): node, postgres = 2
-          # Total = 7
-          MIN_EXPECTED=7
           if [ "${STAGING_TOTAL:-0}" -lt "$MIN_EXPECTED" ]; then
             echo "::error::Only $STAGING_TOTAL staging up=1 metrics found; expected at least $MIN_EXPECTED"
-            echo "All up{} time series:"
+            echo "Per-vm/job breakdown of what we DO see:"
             curl -s -G "http://localhost:9090/api/v1/query" \
-              --data-urlencode 'query=up' \
-              | jq '.data.result[] | {labels: .metric, value: .value[1]}'
+              --data-urlencode 'query=up{environment="staging"}' \
+              | jq '.data.result[] | {vm: .metric.vm, job: .metric.job, instance: .metric.instance, up: .value[1]}'
             exit 1
           fi
           if [ "${STAGING_DOWN:-0}" -gt 0 ]; then
