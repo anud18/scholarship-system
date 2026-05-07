@@ -2436,6 +2436,7 @@ class ApplicationService:
                         meta_data=app.meta_data,
                         application_document_url=app.application_document_url,
                         application_document_original_filename=app.application_document_original_filename,
+                        review_stage=serialize_value(app.review_stage),
                         # Display fields
                         student_name=app.student_data.get("std_cname", "") if app.student_data else "",
                         student_no=app.student_data.get("std_stdcode", "") if app.student_data else "",
