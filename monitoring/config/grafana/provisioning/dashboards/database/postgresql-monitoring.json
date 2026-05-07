@@ -936,7 +936,7 @@
           "type": "prometheus",
           "uid": "prometheus-uid"
         },
-        "definition": "label_values(pg_up{environment=\"$environment\", vm=\"db-vm\"}, datname)",
+        "definition": "label_values(pg_stat_database_xact_commit{environment=\"$environment\", vm=\"db-vm\"}, datname)",
         "hide": 0,
         "includeAll": true,
         "label": "Database",
@@ -944,7 +944,7 @@
         "name": "database",
         "options": [],
         "query": {
-          "query": "label_values(pg_up{environment=\"$environment\", vm=\"db-vm\"}, datname)",
+          "query": "label_values(pg_stat_database_xact_commit{environment=\"$environment\", vm=\"db-vm\"}, datname)",
           "refId": "StandardVariableQuery"
         },
         "refresh": 1,
