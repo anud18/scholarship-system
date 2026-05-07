@@ -289,10 +289,15 @@ jobs:
           sudo mkdir -p /opt/scholarship/monitoring/config/alloy
           cp ./monitoring/config/alloy/staging-ap-vm.alloy /opt/scholarship/monitoring/config/alloy/
 
-          # Restart Alloy service if it's running
-          cd /opt/scholarship
-          if docker ps -q -f name=alloy > /dev/null 2>&1; then
-            docker compose -f docker-compose.staging.yml restart alloy || true
+          # `docker ps -q -f name=alloy` exits 0 even when nothing matches,
+          # so the previous bare `if` always entered then silently failed
+          # on a missing compose file (|| true). Inspect the output instead.
+          ALLOY_CIDS=$(docker ps -q -f name=alloy)
+          if [ -n "$ALLOY_CIDS" ]; then
+            echo "Restarting Alloy container(s): $ALLOY_CIDS"
+            docker restart $ALLOY_CIDS
+          else
+            echo "::warning::No alloy container running on AP-VM — staging metrics from this host will be missing until the main staging stack deploys it."
           fi
 
   deploy-staging-db-monitoring:
@@ -430,15 +435,20 @@ jobs:
             ./monitoring/config/alloy/staging-db-vm.alloy \
             ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }}:/opt/scholarship/monitoring/config/alloy/
 
-          # Deploy monitoring stack using docker-compose
+          # Deploy monitoring stack using docker-compose. We need
+          # --env-file to actually load .env.staging-db-monitoring;
+          # without it, ${MONITORING_SERVER_URL} ends up empty and Alloy
+          # has nowhere to push metrics.
           ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} << 'EOF'
             cd /opt/scholarship
 
             # Stop existing monitoring services if any
-            docker compose -f docker-compose.staging-db-monitoring.yml down || true
+            docker compose --env-file .env.staging-db-monitoring \
+              -f docker-compose.staging-db-monitoring.yml down || true
 
             # Start monitoring stack
-            docker compose -f docker-compose.staging-db-monitoring.yml up -d
+            docker compose --env-file .env.staging-db-monitoring \
+              -f docker-compose.staging-db-monitoring.yml up -d
 
             echo "✅ Monitoring stack deployed successfully"
 
