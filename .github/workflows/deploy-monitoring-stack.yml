@@ -198,6 +198,30 @@ jobs:
           fi
           echo "✅ leftover datasource '$DS_NAME' removed via provisioning"
 
+      - name: Reload Grafana provisioning
+        env:
+          ADMIN_USER: ${{ secrets.GRAFANA_ADMIN_USER }}
+          ADMIN_PASS: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+        run: |
+          # Bind-mounted config files in /etc/grafana/provisioning are
+          # visible to the container immediately, but Grafana only reads
+          # them at boot or on explicit reload. Without this step, newly
+          # added alert rules / dashboards stay invisible until the next
+          # full container restart (which the rest of this workflow only
+          # does in the leftover-datasource cleanup branch).
+          NET="monitoring_monitoring_network"
+          for path in dashboards datasources alerting plugins; do
+            STATUS=$(docker run --rm --network "$NET" curlimages/curl:8.10.1 \
+              -sS -o /dev/null -w "%{http_code}" \
+              -X POST -u "$ADMIN_USER:$ADMIN_PASS" \
+              "http://monitoring_grafana:3000/api/admin/provisioning/${path}/reload" || echo "000")
+            case "$STATUS" in
+              200) echo "✅ reloaded $path" ;;
+              404) echo "(no $path reload endpoint — older Grafana?)" ;;
+              *)   echo "::warning::$path reload returned $STATUS" ;;
+            esac
+          done
+
       - name: Health check monitoring services
         run: |
           set -e
