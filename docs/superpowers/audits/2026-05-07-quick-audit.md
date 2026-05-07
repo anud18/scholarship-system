@@ -301,6 +301,28 @@ End of round 7: **23 commits**. Test coverage now pins:
   - distribution finalize non-allocated status preservation (#45)
   - test infra unblockers (#81, #82)
 
+---
+
+## Round 8 — burn-down sprint while 5h reset approaches
+
+| chunk | status | issue | commit |
+|-------|--------|-------|--------|
+| chunk-15 | ✅ #68 admin app list | HistoricalApplicationResponse + endpoint extract std_nation/std_identity from app.student_data; FE renders badges in HistoryPanel student-info cell | e979b8c |
+| chunk-16 | ✅ closes #68 (3rd UI surface) | ApplicationReviewPanel: add "國籍 / 身分" column between College/Dept and Terms — with same identity mapping as ranking page + admin history | 6c618bf |
+| chunk-17 | ✅ schema hygiene | email_automation.py: nested `class Config:` → `model_config = ConfigDict(...)` (Pydantic v2 deprecation) | 2e32e67 |
+
+#68 final acceptance:
+  - ✅ Admin 申請列表 (chunk-15)
+  - ✅ 學院審核 / 排名畫面 (chunks 11 + 16)
+  - ⏳ Excel 匯出 — investigated; no actionable target (Treasury roster is fixed-format and explicitly out of scope; whitelist export and batch import template don't touch student_data)
+
+## Cumulative session totals (round 8 end)
+
+- **27 commits** on the branch
+- **8 issues fully closed**: #45, #55, #60, #63, #64, **#68**, #81, #82
+- **2 issues mostly closed**: #59 (B), #66 (main flow)
+- 34 regression tests passing
+
 ## New issues filed during execution
 
 | Issue | Title | Severity |
