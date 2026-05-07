@@ -256,6 +256,7 @@ class Application(Base):
         return {
             Semester.first: "第一學期",
             Semester.second: "第二學期",
+            Semester.yearly: "全年",
         }.get(self.semester, "")
 
     @property
