@@ -160,24 +160,8 @@ export function RankingManagementPanel({
             })
           );
 
-          // #91: fetch the matching scholarship config to surface college_review_end
-          try {
-            const cfgResp = await apiClient.admin.getScholarshipConfigurations({
-              scholarship_type_id: response.data.scholarship_type_id,
-              academic_year: response.data.academic_year,
-            });
-            if (cfgResp.success && Array.isArray(cfgResp.data)) {
-              const rankingSem = response.data.semester ?? null;
-              const match = cfgResp.data.find(
-                (c: any) => (c.semester ?? null) === rankingSem
-              );
-              setActiveConfigDeadline(match?.college_review_end ?? null);
-            } else {
-              setActiveConfigDeadline(null);
-            }
-          } catch {
-            setActiveConfigDeadline(null);
-          }
+          // #91: college_review_end is now returned directly by the ranking detail endpoint
+          setActiveConfigDeadline((response.data as any).college_review_end ?? null);
 
           setRankingData({
             applications: transformedApplications,
