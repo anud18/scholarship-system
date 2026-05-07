@@ -15,7 +15,6 @@ MONITORING_HOST="${MONITORING_HOST:-localhost}"
 PROMETHEUS_PORT="${PROMETHEUS_PORT:-9090}"
 LOKI_PORT="${LOKI_PORT:-3100}"
 GRAFANA_PORT="${GRAFANA_PORT:-3000}"
-ALERTMANAGER_PORT="${ALERTMANAGER_PORT:-9093}"
 
 # Test counters
 TESTS_PASSED=0
@@ -176,30 +175,6 @@ test_grafana() {
     fi
 }
 
-test_alertmanager() {
-    echo ""
-    echo "=== Testing AlertManager ==="
-
-    # Health check
-    test_service_health "AlertManager" "http://$MONITORING_HOST:$ALERTMANAGER_PORT/-/healthy"
-
-    # Check status
-    print_info "Checking AlertManager status..."
-    STATUS=$(curl -s "http://$MONITORING_HOST:$ALERTMANAGER_PORT/api/v2/status" | jq -r '.uptime')
-
-    if [ -n "$STATUS" ]; then
-        print_success "AlertManager uptime: $STATUS"
-    else
-        print_error "Unable to get AlertManager status"
-    fi
-
-    # Check active alerts
-    print_info "Checking for active alerts..."
-    ACTIVE_ALERTS=$(curl -s "http://$MONITORING_HOST:$ALERTMANAGER_PORT/api/v2/alerts" | jq -r 'length')
-
-    print_info "AlertManager has $ACTIVE_ALERTS active alerts"
-}
-
 test_docker_containers() {
     echo ""
     echo "=== Testing Docker Containers ==="
@@ -212,7 +187,7 @@ test_docker_containers() {
 
     # Check monitoring containers
     print_info "Checking monitoring containers..."
-    CONTAINERS=("monitoring_grafana" "monitoring_loki" "monitoring_prometheus" "monitoring_alertmanager")
+    CONTAINERS=("monitoring_grafana" "monitoring_loki" "monitoring_prometheus")
 
     for container in "${CONTAINERS[@]}"; do
         if docker ps --format '{{.Names}}' | grep -q "^$container$"; then
@@ -237,7 +212,6 @@ test_network_connectivity() {
         "Prometheus:$MONITORING_HOST:$PROMETHEUS_PORT"
         "Loki:$MONITORING_HOST:$LOKI_PORT"
         "Grafana:$MONITORING_HOST:$GRAFANA_PORT"
-        "AlertManager:$MONITORING_HOST:$ALERTMANAGER_PORT"
     )
 
     for service_info in "${SERVICES[@]}"; do
@@ -267,7 +241,6 @@ main() {
     test_prometheus
     test_loki
     test_grafana
-    test_alertmanager
 
     # Print summary
     echo ""

@@ -41,9 +41,10 @@ services:
       - grafana_data:/var/lib/grafana
       - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./config/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - /opt/scholarship/secrets/gh_pat:/etc/grafana/secrets/gh_pat:ro
     networks:
       - monitoring_network
-      - scholarship_staging_network
+      - app_network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
@@ -72,7 +73,7 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
     networks:
       - monitoring_network
-      - scholarship_staging_network
+      - app_network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3100/ready"]
@@ -115,7 +116,7 @@ services:
       - '--web.enable-remote-write-receiver'  # Enable remote write
     networks:
       - monitoring_network
-      - scholarship_staging_network
+      - app_network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
@@ -157,6 +158,6 @@ networks:
       driver: default
       config:
         - subnet: 172.30.0.0/16
-  scholarship_staging_network:
+  app_network:
     external: true
-    name: scholarship_staging_network
+    name: ${APP_NETWORK_NAME}

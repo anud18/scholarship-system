@@ -44,7 +44,7 @@ sleep 30
 docker-compose -f docker-compose.monitoring.yml ps
 ```
 
-Expected output: ✅ grafana, loki, prometheus, alertmanager all "Up"
+Expected output: ✅ grafana, loki, prometheus all "Up"
 
 ## Step 3: Start Staging Services (2 minutes)
 
@@ -73,7 +73,7 @@ Expected: 8+ containers with "alloy", "exporter", or "cadvisor" in their names
 curl -s http://localhost:3000/api/health && echo " ✅ Grafana OK"
 curl -s http://localhost:9090/-/healthy && echo " ✅ Prometheus OK"
 curl -s http://localhost:3100/ready && echo " ✅ Loki OK"
-curl -s http://localhost:9093/-/healthy && echo " ✅ AlertManager OK"
+docker exec monitoring_grafana wget --spider -q http://localhost:3000/api/health && echo " ✅ Grafana OK"
 ```
 
 ### Check Prometheus Targets
@@ -164,7 +164,7 @@ docker-compose -f monitoring/docker-compose.monitoring.yml restart grafana
 ## Next Steps
 
 1. **Create Dashboards**: Import pre-built dashboards or create custom ones
-2. **Configure Alerts**: Edit `monitoring/config/alertmanager/alertmanager.yml`
+2. **Configure Alerts**: Edit `monitoring/config/grafana/provisioning/alerting/rules-*.yml` (Grafana unified alerting)
 3. **Test Alerts**: Trigger a test alert to verify notification channels
 4. **Production Setup**: Follow full README.md for production deployment
 

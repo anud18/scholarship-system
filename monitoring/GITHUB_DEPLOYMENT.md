@@ -15,7 +15,7 @@ Complete guide for deploying the monitoring infrastructure using GitHub Actions 
 ## Overview
 
 The monitoring stack is deployed using GitHub Actions workflows that:
-1. Deploy the central monitoring server (Grafana, Loki, Prometheus, AlertManager) **on Staging AP-VM**
+1. Deploy the central monitoring server (Grafana, Loki, Prometheus) **on Staging AP-VM**
 2. Deploy monitoring agents on Staging AP-VM (localhost)
 3. Deploy monitoring agents on Staging DB-VM (via SSH)
 4. Perform health checks to ensure all services are running
@@ -37,7 +37,7 @@ The monitoring stack is deployed using GitHub Actions workflows that:
 │  └───────────────────────────────────────────────────┘  │
 │  ┌───────────────────────────────────────────────────┐  │
 │  │  Monitoring Stack                                 │  │
-│  │  - Grafana, Prometheus, Loki, AlertManager        │  │
+│  │  - Grafana, Prometheus, Loki                       │  │
 │  │  - Grafana Alloy (staging-ap-vm.alloy)            │  │
 │  │  - Node Exporter, cAdvisor, Nginx Exporter        │  │
 │  └───────────────────────────────────────────────────┘  │
@@ -90,16 +90,11 @@ Configure these in GitHub repository settings → Secrets and variables → Acti
 
 **Note**: The workflow is configured to use SSH port **8822** for DB-VM connections (not the default port 22).
 
-### Alert Configuration Secrets (Optional)
+### Alert Configuration
 
-| Secret Name | Description | Required |
-|-------------|-------------|----------|
-| `ALERT_EMAIL_FROM` | Email sender address for alerts | No |
-| `ALERT_SMTP_HOST` | SMTP server hostname | No |
-| `ALERT_SMTP_PORT` | SMTP server port | No |
-| `ALERT_SMTP_USER` | SMTP username | No |
-| `ALERT_SMTP_PASSWORD` | SMTP password | No |
-| `ALERT_SLACK_WEBHOOK` | Slack webhook URL for alerts | No |
+Alerts are now handled by Grafana unified alerting + GitHub Issues. See `monitoring/PRODUCTION_RUNBOOK.md` for operational guidance and Phase 2 spec §6.2 for design rationale.
+
+The only alerting-related secret is `GH_PAT` (already used by `mirror-to-production.yml`); it is read by Grafana via `/etc/grafana/secrets/gh_pat` mounted from `/opt/scholarship/secrets/gh_pat` on the host (provisioned by `deploy-monitoring-stack.yml`).
 
 ### Secrets Summary
 
@@ -188,7 +183,7 @@ The workflow performs these steps in 2 jobs:
 3. **Deploy configuration**: Copy monitoring configs to `/opt/scholarship/monitoring/`
 4. **Set environment variables**: Create `.env.monitoring` from GitHub secrets
 5. **Pull images**: Update to latest Docker images
-6. **Deploy stack**: Start monitoring services (Grafana, Prometheus, Loki, AlertManager)
+6. **Deploy stack**: Start monitoring services (Grafana, Prometheus, Loki)
 7. **Health check**: Verify all 4 services are healthy
 8. **Deploy Alloy**: Copy `staging-ap-vm.alloy` config and restart Alloy
 
@@ -211,7 +206,6 @@ The workflow performs comprehensive health checks:
 - ✅ Grafana API health check (`/api/health`)
 - ✅ Prometheus health check (`/-/healthy`)
 - ✅ Loki readiness check (`/ready`)
-- ✅ AlertManager health check (`/-/healthy`)
 - ✅ Prometheus targets status (all staging targets UP)
 - ✅ Loki log ingestion (staging logs being received)
 
@@ -255,7 +249,7 @@ docker ps --filter "name=monitoring_"
 curl http://localhost:3000/api/health
 curl http://localhost:9090/-/healthy
 curl http://localhost:3100/ready
-curl http://localhost:9093/-/healthy
+docker exec monitoring_grafana wget --spider -q http://localhost:3000/api/health && echo OK
 ```
 
 ### Step 2: Deploy Alloy on Staging AP-VM (localhost)
@@ -462,8 +456,6 @@ docker-compose -f /opt/scholarship/monitoring/docker-compose.monitoring.yml logs
 docker logs monitoring_grafana -f
 docker logs monitoring_prometheus -f
 docker logs monitoring_loki -f
-docker logs monitoring_alertmanager -f
-
 # View Alloy logs on AP-VM
 docker logs scholarship_alloy_staging_ap -f
 ```
@@ -560,3 +552,42 @@ This workflow is designed for **staging only**. When ready for production:
 **Last Updated**: 2025-01-11
 **Architecture**: Self-hosted runner on Staging AP-VM (localhost deployment)
 **Maintained By**: Scholarship System Development Team
+
+---
+
+## Repo Migration Checklist (post-2026-05-06)
+
+The deploy workflow on `anud18/scholarship-system` has zero successful runs after the migration from `jotpalch/scholarship-system`. Before any monitoring config change deploys, complete this checklist on `anud18/scholarship-system`.
+
+### Required GitHub Repository Secrets
+
+Set these via Settings → Secrets and variables → Actions:
+
+| Name | Source | Notes |
+|---|---|---|
+| `GRAFANA_ADMIN_USER` | `admin` | Grafana admin login |
+| `GRAFANA_ADMIN_PASSWORD` | password manager | rotate to a strong value before prod launch |
+| `GRAFANA_ROOT_URL` | `https://ss.test.nycu.edu.tw/monitoring` | nginx public URL |
+| `STAGING_DB_HOST` | DB-VM IP (e.g., `10.113.74.25`) | private subnet IP |
+| `STAGING_DB_USER` | DB-VM SSH username | dedicated deploy user |
+| `STAGING_DB_SSH_KEY` | private key file content | full file including BEGIN/END markers |
+| `STAGING_MONITORING_SERVER_URL` | AP-VM internal URL (e.g., `http://10.113.74.X`) | NO port; alloy appends `:3100` / `:9090` |
+
+`GRAFANA_SECRET_KEY` is intentionally NOT set; Grafana generates a session key at startup. Trade-off: session cookies don't survive Grafana restart. Set it before launch if persistent sessions are required.
+
+### Self-Hosted Runner
+
+The deploy workflow declares `runs-on: self-hosted`. The runner labelled `self-hosted, Linux, X64` must be registered to `anud18/scholarship-system` (Settings → Actions → Runners). The same physical machine that hosted the staging AP-VM runner on `jotpalch/scholarship-system` can be re-registered to the new repo; deregister from the OLD repo first to avoid double-claim.
+
+### Verification
+
+After secrets and runner are in place:
+
+```bash
+gh workflow run deploy-monitoring-stack.yml --repo anud18/scholarship-system
+gh run watch --repo anud18/scholarship-system
+```
+
+Expected: both jobs (`Deploy Monitoring Server (Staging AP-VM)` and `Deploy Staging DB-VM Monitoring`) succeed.
+
+If the run stays in `queued` for more than 30 seconds, the runner is not picking up the job — re-check runner registration and labels.

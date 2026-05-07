@@ -1,0 +1,126 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: system_health
+    folder: Alerts
+    interval: 30s
+    rules:
+      - uid: alert-high-cpu-usage
+        title: HighCPUUsage
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus-uid
+            model:
+              expr: 100 - (avg by(instance, environment) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+              refId: A
+              instant: true
+        noDataState: NoData
+        execErrState: Error
+        for: 5m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is above 80% on {{ $labels.instance }} ({{ $labels.environment }}) for more than 5 minutes. Current value: {{ $value | humanize }}%"
+        isPaused: false
+
+      - uid: alert-high-memory-usage
+        title: HighMemoryUsage
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus-uid
+            model:
+              expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+              refId: A
+              instant: true
+        noDataState: NoData
+        execErrState: Error
+        for: 5m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage is above 85% on {{ $labels.instance }} ({{ $labels.environment }}). Current value: {{ $value | humanize }}%"
+        isPaused: false
+
+      - uid: alert-disk-space-low
+        title: DiskSpaceLow
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-uid
+            model:
+              expr: (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs|vfat"} / node_filesystem_size_bytes)) * 100 > 80
+              refId: A
+              instant: true
+        noDataState: NoData
+        execErrState: Error
+        for: 10m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }}"
+          description: "Disk usage is above 80% on {{ $labels.instance }} ({{ $labels.environment }}) at mount point {{ $labels.mountpoint }}. Current value: {{ $value | humanize }}%"
+        isPaused: false
+
+      - uid: alert-disk-space-critical
+        title: DiskSpaceCritical
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus-uid
+            model:
+              expr: (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs|vfat"} / node_filesystem_size_bytes)) * 100 > 90
+              refId: A
+              instant: true
+        noDataState: NoData
+        execErrState: Error
+        for: 5m
+        labels:
+          severity: critical
+          category: system
+        annotations:
+          summary: "Critical disk space on {{ $labels.instance }}"
+          description: "Disk usage is above 90% on {{ $labels.instance }} ({{ $labels.environment }}) at mount point {{ $labels.mountpoint }}. Immediate action required! Current value: {{ $value | humanize }}%"
+        isPaused: false
+
+      - uid: alert-high-system-load
+        title: HighSystemLoad
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-uid
+            model:
+              expr: node_load5 / count(node_cpu_seconds_total{mode="idle"}) without(cpu, mode) > 2
+              refId: A
+              instant: true
+        noDataState: NoData
+        execErrState: Error
+        for: 10m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "High system load on {{ $labels.instance }}"
+          description: "5-minute load average is more than 2x the number of CPUs on {{ $labels.instance }} ({{ $labels.environment }}). Current value: {{ $value | humanize }}"
+        isPaused: false

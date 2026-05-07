@@ -338,7 +338,7 @@ jobs:
 
           # Remove all markdown documentation files
           echo "::notice::Removing markdown documentation files"
-          find . -type f -name "*.md" 2>/dev/null | xargs -r git rm -f 2>/dev/null || true
+          find . -type f -name "*.md" -not -path './monitoring/*' 2>/dev/null | xargs -r git rm -f 2>/dev/null || true
 
           if git diff --cached --quiet --name-only | grep -q "\.md$"; then
             REMOVED_DIRS="${REMOVED_DIRS}- Documentation files (*.md)\n"

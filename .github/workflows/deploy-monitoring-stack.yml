@@ -23,6 +23,33 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Pre-flight secret check
+        env:
+          REQUIRED_SECRETS: |
+            GRAFANA_ADMIN_USER GRAFANA_ADMIN_PASSWORD GRAFANA_ROOT_URL
+            STAGING_DB_HOST STAGING_DB_USER STAGING_DB_SSH_KEY
+            STAGING_MONITORING_SERVER_URL
+          GRAFANA_ADMIN_USER: ${{ secrets.GRAFANA_ADMIN_USER }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          GRAFANA_ROOT_URL: ${{ secrets.GRAFANA_ROOT_URL }}
+          STAGING_DB_HOST: ${{ secrets.STAGING_DB_HOST }}
+          STAGING_DB_USER: ${{ secrets.STAGING_DB_USER }}
+          STAGING_DB_SSH_KEY: ${{ secrets.STAGING_DB_SSH_KEY }}
+          STAGING_MONITORING_SERVER_URL: ${{ secrets.STAGING_MONITORING_SERVER_URL }}
+        run: |
+          missing=()
+          for var in $REQUIRED_SECRETS; do
+            if [ -z "${!var}" ]; then
+              missing+=("$var")
+            fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required secrets: ${missing[*]}"
+            echo "::error::See monitoring/GITHUB_DEPLOYMENT.md → Repo Migration Checklist"
+            exit 1
+          fi
+          echo "✅ All required secrets present"
+
       - name: Create monitoring directories
         run: |
           sudo mkdir -p /opt/scholarship/monitoring
@@ -33,16 +60,12 @@ jobs:
           # Copy monitoring directory to /opt/scholarship/monitoring
           cp -r ./monitoring/* /opt/scholarship/monitoring/
 
-          # Initialize Grafana config from example if it doesn't exist
-          # This allows grafana.ini to be excluded from git while still functioning in deployment
-          if [ ! -f /opt/scholarship/monitoring/config/grafana/grafana.ini ]; then
-            echo "Creating Grafana configuration from example..."
-            cp /opt/scholarship/monitoring/config/grafana/grafana.ini.example \
-               /opt/scholarship/monitoring/config/grafana/grafana.ini
-            echo "✅ Grafana configuration initialized"
-          else
-            echo "✅ Grafana configuration already exists"
-          fi
+          # Always overwrite grafana.ini from the example so updates to the
+          # example propagate. Secrets are injected via GF_SECURITY_* env
+          # vars in compose, not from the ini file itself.
+          cp /opt/scholarship/monitoring/config/grafana/grafana.ini.example \
+             /opt/scholarship/monitoring/config/grafana/grafana.ini
+          echo "✅ Grafana configuration written from example (always overwrites)"
 
       - name: Pull latest monitoring images
         run: |
@@ -53,61 +76,102 @@ jobs:
         run: |
           cd /opt/scholarship/monitoring
 
-          # Export required environment variables from GitHub secrets
+          # Required env vars; unset values fail-fast below
+          export APP_NETWORK_NAME="scholarship_staging_network"
           export GRAFANA_ADMIN_USER="${{ secrets.GRAFANA_ADMIN_USER }}"
           export GRAFANA_ADMIN_PASSWORD="${{ secrets.GRAFANA_ADMIN_PASSWORD }}"
-          export GRAFANA_SECRET_KEY="${{ secrets.GRAFANA_SECRET_KEY }}"
           export GRAFANA_ROOT_URL="${{ secrets.GRAFANA_ROOT_URL }}"
 
-          # Optional alert configuration
-          export ALERT_EMAIL_FROM="${{ secrets.ALERT_EMAIL_FROM }}"
-          export ALERT_SMTP_HOST="${{ secrets.ALERT_SMTP_HOST }}"
-          export ALERT_SMTP_PORT="${{ secrets.ALERT_SMTP_PORT }}"
-          export ALERT_SMTP_USER="${{ secrets.ALERT_SMTP_USER }}"
-          export ALERT_SMTP_PASSWORD="${{ secrets.ALERT_SMTP_PASSWORD }}"
-          export ALERT_SLACK_WEBHOOK="${{ secrets.ALERT_SLACK_WEBHOOK }}"
+          for var in APP_NETWORK_NAME GRAFANA_ADMIN_USER GRAFANA_ADMIN_PASSWORD GRAFANA_ROOT_URL; do
+            if [ -z "${!var}" ]; then
+              echo "::error::Required env var $var is unset"
+              exit 1
+            fi
+          done
+
+          # Verify the named external network exists; create if missing
+          docker network inspect "$APP_NETWORK_NAME" >/dev/null 2>&1 || \
+            docker network create "$APP_NETWORK_NAME"
+
+          # Write GH_PAT to a secrets file Grafana can mount via $__file{}
+          sudo mkdir -p /opt/scholarship/secrets
+          sudo chmod 700 /opt/scholarship/secrets
+          echo "${{ secrets.GH_PAT }}" | sudo tee /opt/scholarship/secrets/gh_pat > /dev/null
+          sudo chmod 600 /opt/scholarship/secrets/gh_pat
+          # Grafana container UID is 472
+          sudo chown 472:472 /opt/scholarship/secrets/gh_pat
+          if [ ! -s /opt/scholarship/secrets/gh_pat ]; then
+            echo "::error::GH_PAT file is empty after write"
+            exit 1
+          fi
+          echo "✅ GH_PAT secrets file written"
 
           # Start/restart monitoring stack
           docker compose -f docker-compose.monitoring.yml up -d
 
-          # Wait for services to be healthy
-          echo "Waiting for services to start..."
-          sleep 60
-
       - name: Health check monitoring services
         run: |
-          echo "Checking service health..."
+          set -e
 
-          # Check if all services are running
-          docker ps --filter "name=monitoring_" --format "table {{.Names}}\t{{.Status}}"
+          # Wait for Grafana to start (replaces hardcoded sleep 60)
+          for i in $(seq 1 24); do
+            if docker exec monitoring_grafana wget --spider -q http://localhost:3000/api/health 2>/dev/null; then
+              break
+            fi
+            echo "Waiting for Grafana... ($i/24)"
+            sleep 5
+          done
+          docker exec monitoring_grafana wget --spider -q http://localhost:3000/api/health || {
+            echo "::error::Grafana did not start in 120s"; exit 1; }
 
-          # Test Grafana (using docker exec since port 3000 is not exposed to host)
-          if docker exec monitoring_grafana wget --spider -q http://localhost:3000/api/health; then
-            echo "✅ Grafana is healthy"
-          else
-            echo "❌ Grafana health check failed"
+          # 1. Container liveness
+          for service in grafana prometheus loki; do
+            container="monitoring_${service}"
+            if ! docker ps --filter "name=${container}" --filter "status=running" --format '{{.Names}}' | grep -q "${container}"; then
+              echo "::error::${container} is not running"
+              exit 1
+            fi
+          done
+          echo "✅ All monitoring containers running"
+
+          # 2. Datasource health: every datasource must report status:ok
+          AUTH_HDR="Authorization: Basic $(echo -n "${{ secrets.GRAFANA_ADMIN_USER }}:${{ secrets.GRAFANA_ADMIN_PASSWORD }}" | base64)"
+          UIDS=$(docker exec monitoring_grafana wget -qO- \
+            --header "$AUTH_HDR" \
+            "http://localhost:3000/api/datasources" \
+            | jq -r '.[].uid')
+          for uid in $UIDS; do
+            STATUS=$(docker exec monitoring_grafana wget -qO- \
+              --header "$AUTH_HDR" \
+              "http://localhost:3000/api/datasources/uid/$uid/health" \
+              | jq -r '.status // "missing"')
+            if [ "$STATUS" != "OK" ]; then
+              echo "::error::Datasource $uid is not OK (status=$STATUS)"
+              exit 1
+            fi
+          done
+          echo "✅ All datasources healthy"
+
+          # 3. No provisioning errors in Grafana startup logs
+          if docker logs monitoring_grafana 2>&1 | grep -E 'level=error.*provisioning|failed to provision' > /tmp/grafana-prov-errors.txt; then
+            echo "::error::Grafana provisioning errors found:"
+            cat /tmp/grafana-prov-errors.txt
             exit 1
           fi
+          echo "✅ No provisioning errors"
 
-          # Test Prometheus
-          if curl -f http://localhost:9090/-/healthy > /dev/null 2>&1; then
-            echo "✅ Prometheus is healthy"
-          else
-            echo "❌ Prometheus health check failed"
+          # 4. Alert rules loaded successfully (zero failed-to-load)
+          FAILED_RULES=$(docker exec monitoring_grafana wget -qO- \
+            --header "$AUTH_HDR" \
+            "http://localhost:3000/api/v1/provisioning/alert-rules" \
+            | jq '[.[] | select(.execErrState=="Error")] | length')
+          if [ "${FAILED_RULES:-0}" -gt 0 ]; then
+            echo "::error::$FAILED_RULES alert rules failed to load"
             exit 1
           fi
+          echo "✅ All alert rules loaded"
 
-          # Test Loki
-          if curl -f http://localhost:3100/ready > /dev/null 2>&1; then
-            echo "✅ Loki is healthy"
-          else
-            echo "❌ Loki health check failed"
-            exit 1
-          fi
-
-          # Note: AlertManager has been removed from the monitoring stack
-
-          echo "All monitoring services are healthy! (Grafana, Prometheus, Loki)"
+          echo "All monitoring services are healthy"
 
       - name: Deploy Alloy to Staging AP-VM (localhost)
         run: |
@@ -130,6 +194,33 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Pre-flight secret check
+        env:
+          REQUIRED_SECRETS: |
+            GRAFANA_ADMIN_USER GRAFANA_ADMIN_PASSWORD GRAFANA_ROOT_URL
+            STAGING_DB_HOST STAGING_DB_USER STAGING_DB_SSH_KEY
+            STAGING_MONITORING_SERVER_URL
+          GRAFANA_ADMIN_USER: ${{ secrets.GRAFANA_ADMIN_USER }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          GRAFANA_ROOT_URL: ${{ secrets.GRAFANA_ROOT_URL }}
+          STAGING_DB_HOST: ${{ secrets.STAGING_DB_HOST }}
+          STAGING_DB_USER: ${{ secrets.STAGING_DB_USER }}
+          STAGING_DB_SSH_KEY: ${{ secrets.STAGING_DB_SSH_KEY }}
+          STAGING_MONITORING_SERVER_URL: ${{ secrets.STAGING_MONITORING_SERVER_URL }}
+        run: |
+          missing=()
+          for var in $REQUIRED_SECRETS; do
+            if [ -z "${!var}" ]; then
+              missing+=("$var")
+            fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required secrets: ${missing[*]}"
+            echo "::error::See monitoring/GITHUB_DEPLOYMENT.md → Repo Migration Checklist"
+            exit 1
+          fi
+          echo "✅ All required secrets present"
 
       - name: Set up SSH key for DB-VM
         run: |
@@ -247,21 +338,42 @@ jobs:
 
       - name: Verify staging metrics
         run: |
-          echo "Waiting for metrics to be collected..."
-          sleep 30
+          set -e
 
-          # Check if staging targets are UP in Prometheus
-          TARGETS_DOWN=$(curl -s http://localhost:9090/api/v1/targets | jq '[.data.activeTargets[] | select(.labels.environment=="staging") | select(.health!="up")] | length')
+          # Replace `sleep 30` with poll-until-targets-arrive
+          for i in $(seq 1 18); do
+            STAGING_TOTAL=$(curl -s http://localhost:9090/api/v1/targets \
+              | jq '[.data.activeTargets[] | select(.labels.environment=="staging")] | length')
+            if [ "${STAGING_TOTAL:-0}" -gt 0 ]; then
+              break
+            fi
+            echo "Waiting for staging targets to register... ($i/18)"
+            sleep 10
+          done
 
-          if [ "$TARGETS_DOWN" -eq "0" ]; then
-            echo "✅ All staging targets are UP"
-          else
-            echo "⚠️  Warning: $TARGETS_DOWN staging targets are DOWN"
-            echo "Check Prometheus targets at http://localhost:9090/targets"
+          STAGING_TOTAL=$(curl -s http://localhost:9090/api/v1/targets \
+            | jq '[.data.activeTargets[] | select(.labels.environment=="staging")] | length')
+          STAGING_DOWN=$(curl -s http://localhost:9090/api/v1/targets \
+            | jq '[.data.activeTargets[] | select(.labels.environment=="staging") | select(.health!="up")] | length')
+
+          # Tunable: minimum expected staging targets
+          # AP-VM: node, cadvisor, nginx, redis, backend = 5
+          # DB-VM (after F-ALLO-09): node, postgres = 2
+          # Total = 7
+          MIN_EXPECTED=7
+          if [ "$STAGING_TOTAL" -lt "$MIN_EXPECTED" ]; then
+            echo "::error::Only $STAGING_TOTAL staging targets found; expected at least $MIN_EXPECTED"
+            curl -s http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | {scrapeUrl, env: .labels.environment, vm: .labels.vm, job: .labels.job}'
+            exit 1
           fi
+          if [ "$STAGING_DOWN" -gt 0 ]; then
+            echo "::error::$STAGING_DOWN staging targets are DOWN"
+            curl -s http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | select(.labels.environment=="staging") | select(.health!="up")'
+            exit 1
+          fi
+          echo "✅ $STAGING_TOTAL staging targets all UP"
 
-          # Show staging logs in Loki
-          echo "Checking Loki logs..."
+          # Loki check (existing; keep)
           if curl -f -H "X-Scope-OrgID: staging" -G "http://localhost:3100/loki/api/v1/query" \
             --data-urlencode 'query={environment="staging"}' \
             --data-urlencode 'limit=1' > /dev/null 2>&1; then
@@ -274,6 +386,10 @@ jobs:
         if: always()
         run: |
           rm -f ~/.ssh/staging_db
+
+      - name: Cleanup monitoring image tar files (AP-VM)
+        if: always()
+        run: rm -rf /tmp/monitoring-images
 
       - name: Deployment summary
         if: success()
@@ -288,6 +404,6 @@ jobs:
           echo "  Loki:         http://localhost:3100"
           echo ""
           echo "Note: Grafana is only accessible via HTTPS reverse proxy"
-          echo "Note: AlertManager has been removed from the monitoring stack"
+          echo "Note: Alerts route to GitHub Issues via Grafana unified alerting"
           echo "Staging environment monitoring is active"
           echo ""

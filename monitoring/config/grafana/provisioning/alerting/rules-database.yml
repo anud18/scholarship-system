@@ -1,0 +1,59 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: database_health
+    folder: Alerts
+    interval: 30s
+    # Note: 3 PostgreSQL alerts (PostgreSQLDown, PostgreSQLTooManyConnections,
+    # PostgreSQLHighConnections) are intentionally deferred to Phase 3.
+    # They depend on the DB-VM scrape pipeline (F-PROM-05 / F-ALLO-06) which
+    # Phase 3 fixes. Once postgres-exporter is reaching Prometheus, the rules
+    # will be added here. Tracking issue: filed at PR-2.B merge time.
+    rules:
+      - uid: alert-redis-down
+        title: RedisDown
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: prometheus-uid
+            model:
+              expr: redis_up == 0
+              refId: A
+              instant: true
+        noDataState: NoData
+        execErrState: Error
+        for: 1m
+        labels:
+          severity: critical
+          category: database
+        annotations:
+          summary: "Redis is down on {{ $labels.instance }}"
+          description: "Redis cache on {{ $labels.instance }} ({{ $labels.environment }}) is not responding"
+        isPaused: false
+
+      - uid: alert-redis-high-memory
+        title: RedisHighMemory
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus-uid
+            model:
+              expr: (redis_memory_used_bytes / redis_memory_max_bytes) * 100 > 80
+              refId: A
+              instant: true
+        noDataState: NoData
+        execErrState: Error
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+        annotations:
+          summary: "Redis memory usage is high"
+          description: "Redis on {{ $labels.instance }} ({{ $labels.environment }}) is using more than 80% of its max memory. Current value: {{ $value | humanize }}%"
+        isPaused: false

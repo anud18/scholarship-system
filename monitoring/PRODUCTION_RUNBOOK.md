@@ -20,7 +20,7 @@ Quick reference guide for production monitoring operations, troubleshooting, and
 | Grafana | http://monitoring-server:3000 | Dashboards & visualization |
 | Prometheus | http://monitoring-server:9090 | Metrics & queries |
 | Loki | http://monitoring-server:3100 | Log aggregation |
-| AlertManager | http://monitoring-server:9093 | Alert management |
+| Grafana Alerting | Grafana → Alerting → Alert rules | Alert management (via GitHub Issues) |
 
 ### Key Metrics
 
@@ -63,7 +63,7 @@ postgres:connection_utilization:ratio{environment="prod"}
 curl -f http://localhost:3000/api/health && \
 curl -f http://localhost:9090/-/healthy && \
 curl -f http://localhost:3100/ready && \
-curl -f http://localhost:9093/-/healthy && \
+docker exec monitoring_grafana wget --spider -q http://localhost:3000/api/health && \
 echo "✓ All services healthy"
 ```
 
@@ -274,37 +274,32 @@ du -sh /var/lib/docker/volumes/monitoring_*
 ### Issue 6: Alerts Not Firing
 
 **Symptoms**:
-- Expected alerts not appearing
-- AlertManager shows no alerts
-- Email/Slack notifications not received
+- Expected alerts not appearing in GitHub Issues
+- No `monitoring-alert` issues created
 
 **Diagnosis**:
 ```bash
-# Check if alert rules are loaded
-curl -s http://localhost:9090/api/v1/rules | jq '.data.groups[].rules[] | select(.type=="alerting") | {name:.name, state:.state}'
+# Check if alert rules are loaded in Grafana
+curl -s -u admin:$GRAFANA_ADMIN_PASSWORD \
+  http://localhost:3000/api/v1/provisioning/alert-rules | jq '.[].title'
 
-# Check AlertManager configuration
-docker exec monitoring_alertmanager amtool check-config /etc/alertmanager/alertmanager.yml
+# Check Grafana logs for provisioning errors
+docker logs monitoring_grafana 2>&1 | grep -i "level=error.*alert"
 
-# Test alert route
-curl -X POST http://localhost:9093/api/v2/alerts -H "Content-Type: application/json" -d '[{
-  "labels": {"alertname": "TestAlert", "severity": "critical"},
-  "annotations": {"summary": "Test alert"}
-}]'
+# Test contact point via Grafana UI:
+# Alerting → Contact points → github-issue → Test
 ```
 
 **Solutions**:
-1. Reload Prometheus rules:
+1. Check that GH_PAT file is present and non-empty:
    ```bash
-   curl -X POST http://localhost:9090/-/reload
+   ls -la /opt/scholarship/secrets/gh_pat
    ```
 
-2. Check AlertManager routing:
-   ```bash
-   docker logs monitoring_alertmanager --tail=50
-   ```
+2. Verify Grafana alert rules are loaded:
+   Open Grafana → Alerting → Alert rules; check for "Error" state rules.
 
-3. Verify SMTP/Slack configuration in `alertmanager.yml`
+3. Check GitHub Issues with label `monitoring-alert` for recent events.
 
 ## Incident Response
 
@@ -320,7 +315,7 @@ curl -X POST http://localhost:9093/api/v2/alerts -H "Content-Type: application/j
 ### Incident Response Checklist
 
 **1. Acknowledge**
-- [ ] Alert acknowledged in AlertManager
+- [ ] Alert acknowledged (comment on GitHub Issue with label `monitoring-alert`)
 - [ ] Incident logged in tracking system
 - [ ] Team notified (if P0/P1)
 
@@ -381,7 +376,11 @@ docker system df
 curl -s http://localhost:9090/api/v1/targets | jq '[.data.activeTargets[] | select(.health!="up")] | length'
 
 # 3. Review firing alerts
-curl -s http://localhost:9093/api/v2/alerts | jq '.[] | select(.status.state=="active") | {name:.labels.alertname, since:.startsAt}'
+# List currently firing alerts (Grafana unified alerting)
+docker exec monitoring_grafana wget -qO- \
+  --header "Authorization: Basic $(echo -n "$GRAFANA_ADMIN_USER:$GRAFANA_ADMIN_PASSWORD" | base64)" \
+  http://localhost:3000/api/v1/provisioning/alert-rules \
+  | jq '.[] | select(.execErrState != "OK") | {title, execErrState}'
 
 # 4. Check service logs for errors
 docker-compose -f monitoring/docker-compose.monitoring.yml logs --tail=100 | grep -i error
@@ -434,6 +433,24 @@ docker-compose -f docker-compose.monitoring.yml up -d
 2. **Not resolved in 30 minutes**: Escalate to secondary on-call
 3. **Not resolved in 1 hour**: Escalate to team lead
 4. **Critical business impact**: Escalate to management
+
+## Alerting
+
+Alerts are managed by Grafana unified alerting (Phase 2, 2026-05-06).
+
+### Where to look
+
+| Need | Where |
+|---|---|
+| Currently firing alerts | Grafana → Alerting → Alert rules (filter by State: Firing) |
+| Alert event history | GitHub Issues, label `monitoring-alert` |
+| Specific alert ongoing? | GitHub Issues with `alert:<AlertName>` label |
+| Acknowledge an alert | Comment on the GitHub issue; close it after RCA |
+| Silence an alert temporarily | Grafana → Alerting → Silences |
+
+### Pre-launch smoke test
+
+To verify the alert pipeline end-to-end, see Phase 2 spec §7.2.
 
 ---
 

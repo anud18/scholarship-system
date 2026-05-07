@@ -94,7 +94,7 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "minio_bucket_usage_total_bytes{environment=\"$environment\", vm=\"db-vm\"}",
+          "expr": "minio_bucket_usage_total_bytes{environment=\"$environment\", vm=\"ap-vm\"}",
           "legendFormat": "{{bucket}}",
           "refId": "A"
         }
@@ -154,7 +154,7 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "sum(minio_bucket_usage_object_total{environment=\"$environment\", vm=\"db-vm\"})",
+          "expr": "sum(minio_bucket_usage_object_total{environment=\"$environment\", vm=\"ap-vm\"})",
           "legendFormat": "Total Objects",
           "refId": "A"
         }
@@ -214,7 +214,7 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "count(minio_bucket_usage_total_bytes{environment=\"$environment\", vm=\"db-vm\"})",
+          "expr": "count(minio_bucket_usage_total_bytes{environment=\"$environment\", vm=\"ap-vm\"})",
           "legendFormat": "Buckets",
           "refId": "A"
         }
@@ -289,7 +289,7 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "minio_cluster_health_status{environment=\"$environment\", vm=\"db-vm\"}",
+          "expr": "minio_cluster_health_status{environment=\"$environment\", vm=\"ap-vm\"}",
           "legendFormat": "Status",
           "refId": "A"
         }
@@ -392,7 +392,7 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "rate(minio_s3_requests_total{environment=\"$environment\", vm=\"db-vm\"}[5m])",
+          "expr": "rate(minio_s3_requests_total{environment=\"$environment\", vm=\"ap-vm\"}[5m])",
           "legendFormat": "{{api}}",
           "refId": "A"
         }
@@ -498,7 +498,7 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "rate(minio_s3_requests_errors_total{environment=\"$environment\", vm=\"db-vm\"}[5m])",
+          "expr": "rate(minio_s3_requests_errors_total{environment=\"$environment\", vm=\"ap-vm\"}[5m])",
           "legendFormat": "{{api}} - errors",
           "refId": "A"
         }
@@ -615,7 +615,7 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "rate(minio_s3_traffic_received_bytes{environment=\"$environment\", vm=\"db-vm\"}[5m])",
+          "expr": "rate(minio_s3_traffic_received_bytes{environment=\"$environment\", vm=\"ap-vm\"}[5m])",
           "legendFormat": "Received",
           "refId": "A"
         },
@@ -624,7 +624,7 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "rate(minio_s3_traffic_sent_bytes{environment=\"$environment\", vm=\"db-vm\"}[5m])",
+          "expr": "rate(minio_s3_traffic_sent_bytes{environment=\"$environment\", vm=\"ap-vm\"}[5m])",
           "legendFormat": "Sent",
           "refId": "B"
         }
@@ -713,7 +713,7 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "minio_bucket_usage_total_bytes{environment=\"$environment\", vm=\"db-vm\"}",
+          "expr": "minio_bucket_usage_total_bytes{environment=\"$environment\", vm=\"ap-vm\"}",
           "legendFormat": "{{bucket}}",
           "refId": "A"
         }
@@ -757,7 +757,8 @@
           "uid": "prometheus-uid"
         },
         "definition": "label_values(up, environment)",
-        "refresh": 1
+        "refresh": 1,
+        "regex": "/^(?!monitoring).*$/"
       }
     ]
   },

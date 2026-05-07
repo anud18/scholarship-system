@@ -1,6 +1,6 @@
 # Monitoring Infrastructure Documentation
 
-Comprehensive monitoring system for the Scholarship System using Grafana Stack (Alloy, Loki, Prometheus, Grafana, AlertManager).
+Comprehensive monitoring system for the Scholarship System using Grafana Stack (Alloy, Loki, Prometheus, Grafana).
 
 ## Table of Contents
 
@@ -23,11 +23,12 @@ Comprehensive monitoring system for the Scholarship System using Grafana Stack (
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                    MONITORING SERVER                         │
-│  ┌────────────┐  ┌────────────┐  ┌──────────┐  ┌──────────┐│
-│  │  Grafana   │  │    Loki    │  │Prometheus│  │AlertMgr  ││
-│  │   :3000    │  │   :3100    │  │  :9090   │  │  :9093   ││
-│  └────────────┘  └────────────┘  └──────────┘  └──────────┘│
-└──────────────────────────────────────────────────────────────┘
+│  ┌────────────┐  ┌────────────┐  ┌──────────┐              │
+│  │  Grafana   │  │    Loki    │  │Prometheus│              │
+│  │   :3000    │  │   :3100    │  │  :9090   │              │
+│  └────┬───────┘  └────────────┘  └──────────┘              │
+│       │ Alerting → GitHub Issues                            │
+└───────┼──────────────────────────────────────────────────────┘
                            ▲
                            │ Logs & Metrics
                            │
@@ -55,7 +56,7 @@ Comprehensive monitoring system for the Scholarship System using Grafana Stack (
 - **Grafana**: Visualization and dashboards (port 3000)
 - **Loki**: Log aggregation with multi-tenancy (port 3100)
 - **Prometheus**: Metrics storage and querying (port 9090)
-- **AlertManager**: Alert routing and management (port 9093)
+- **Grafana Alerting**: Unified alert management → GitHub Issues
 
 #### Application VM (staging-ap-vm)
 - **Grafana Alloy**: Unified telemetry collector (logs + metrics)
@@ -86,7 +87,7 @@ Comprehensive monitoring system for the Scholarship System using Grafana Stack (
 
 ### Alerting
 - ✅ 30+ pre-configured alert rules
-- ✅ Multi-channel notifications (email, Slack)
+- ✅ GitHub Issue notifications for alerts (one issue per alertname; auto-reopen on re-fire; resolved comments)
 - ✅ Severity-based routing (critical, warning)
 - ✅ Environment-based routing (prod, staging)
 - ✅ Alert inhibition rules
@@ -154,15 +155,8 @@ GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=<strong-password>
 GRAFANA_ROOT_URL=http://monitoring-server:3000
 
-# Optional: Email alerts
-ALERT_EMAIL_FROM=alerts@example.com
-ALERT_SMTP_HOST=smtp.gmail.com
-ALERT_SMTP_PORT=587
-ALERT_SMTP_USER=your-email@gmail.com
-ALERT_SMTP_PASSWORD=your-app-password
-
-# Optional: Slack alerts
-ALERT_SLACK_WEBHOOK=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+# Alerting is via Grafana → GitHub Issues; no SMTP/Slack env required.
+# See monitoring/PRODUCTION_RUNBOOK.md "Alerting" section.
 ```
 
 ### Step 2: Deploy Monitoring Server
@@ -185,7 +179,6 @@ NAME                    STATUS    PORTS
 monitoring_grafana      Up        0.0.0.0:3000->3000/tcp
 monitoring_loki         Up        0.0.0.0:3100->3100/tcp
 monitoring_prometheus   Up        0.0.0.0:9090->9090/tcp
-monitoring_alertmanager Up        0.0.0.0:9093->9093/tcp
 ```
 
 ### Step 3: Deploy Staging Application VM Monitoring
@@ -234,8 +227,6 @@ curl -G -s "http://localhost:3100/loki/api/v1/query" \
   --data-urlencode 'query={environment="staging"}' \
   -H "X-Scope-OrgID: staging" | jq '.data.result'
 
-# Check AlertManager status
-curl http://localhost:9093/api/v2/status | jq
 ```
 
 ## Accessing Services
@@ -285,14 +276,14 @@ curl -G -s "http://localhost:3100/loki/api/v1/query" \
 curl http://localhost:3100/ready
 ```
 
-### AlertManager
+### Grafana Alerting
 
-**URL**: http://localhost:9093
+Alerts are managed via Grafana unified alerting and delivered to GitHub Issues.
 
-**Usage**:
-- View active alerts: http://localhost:9093/#/alerts
-- Silence alerts: http://localhost:9093/#/silences
-- View configuration: http://localhost:9093/api/v2/status
+**Where to look**:
+- Firing alerts: Grafana → Alerting → Alert rules (filter by State: Firing)
+- Alert history: GitHub Issues with label `monitoring-alert`
+- Silence alerts: Grafana → Alerting → Silences
 
 ## Multi-Tenancy Configuration
 
@@ -358,81 +349,36 @@ curl -G "http://localhost:3100/loki/api/v1/query" \
 ### Alert Rules Location
 
 ```
-monitoring/config/prometheus/alerts/
-└── basic-alerts.yml (30+ pre-configured rules)
+monitoring/config/grafana/provisioning/alerting/
+├── rules-system.yml      (5 rules: CPU, memory, disk, load)
+├── rules-container.yml   (4 rules: container down, CPU, memory, restarts)
+├── rules-database.yml    (2 rules: Redis down, Redis memory)
+├── rules-monitoring.yml  (3 rules: Prometheus target down, Loki, storage)
+├── contact-points.yml    (GitHub Issue webhook)
+└── notification-policies.yml
 ```
 
 ### Alert Categories
 
-1. **System Health**: CPU, memory, disk, network
+1. **System Health**: CPU, memory, disk, load
 2. **Container Health**: Container status, resource usage, restarts
-3. **Database Health**: PostgreSQL, Redis connectivity and performance
-4. **Application Health**: HTTP errors, response times, MinIO status
-5. **Monitoring Stack**: Prometheus, Loki, Grafana health
+3. **Database Health**: Redis connectivity and performance (PostgreSQL deferred to Phase 3)
+4. **Monitoring Stack**: Prometheus targets, Loki ingestion, storage
 
-### Configuring Email Alerts
+### Alert Delivery
 
-Edit `monitoring/config/alertmanager/alertmanager.yml`:
-
-```yaml
-global:
-  smtp_smarthost: 'smtp.gmail.com:587'
-  smtp_from: 'alerts@example.com'
-  smtp_auth_username: 'your-email@gmail.com'
-  smtp_auth_password: 'your-app-password'
-  smtp_require_tls: true
-
-receivers:
-  - name: 'critical-alerts'
-    email_configs:
-      - to: 'admin@example.com'
-        headers:
-          Subject: '[CRITICAL] Scholarship System Alert'
-```
-
-**Restart AlertManager**:
-```bash
-docker-compose -f monitoring/docker-compose.monitoring.yml restart alertmanager
-```
-
-### Configuring Slack Alerts
-
-1. Create Slack Incoming Webhook: https://api.slack.com/messaging/webhooks
-2. Add to `.env.monitoring`:
-   ```bash
-   ALERT_SLACK_WEBHOOK=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
-   ```
-3. Uncomment Slack configuration in `alertmanager.yml`:
-   ```yaml
-   receivers:
-     - name: 'critical-alerts'
-       slack_configs:
-         - api_url: '${ALERT_SLACK_WEBHOOK}'
-           channel: '#critical-alerts'
-           title: '[CRITICAL] {{ .GroupLabels.alertname }}'
-   ```
-4. Restart AlertManager
+All alerts fire to GitHub Issues via `repository_dispatch`. The receiver workflow
+`.github/workflows/monitoring-alert-issue.yml` handles:
+- Creating new issues (label: `monitoring-alert`, `alert:<name>`, `env:<env>`)
+- Reopening closed issues if the same alert re-fires
+- Appending resolved comments
 
 ### Testing Alerts
 
-**Trigger a test alert manually**:
-```bash
-curl -X POST http://localhost:9093/api/v2/alerts -H "Content-Type: application/json" -d '[
-  {
-    "labels": {
-      "alertname": "TestAlert",
-      "severity": "warning",
-      "environment": "staging"
-    },
-    "annotations": {
-      "summary": "Test alert from manual trigger",
-      "description": "This is a test alert to verify AlertManager is working"
-    }
-  }
-]'
-```
-
-**View test alert**: http://localhost:9093/#/alerts
+**Test contact point via Grafana UI**:
+1. Navigate to Grafana → Alerting → Contact points
+2. Click `github-issue` → Test
+3. Verify a GitHub Issue is created at `anud18/scholarship-system`
 
 ## Testing and Verification
 
@@ -463,7 +409,7 @@ curl -G -s "http://localhost:3100/loki/api/v1/query" \
 # Login to Grafana
 curl -X GET http://admin:admin@localhost:3000/api/datasources
 
-# Should show Prometheus, Loki (Staging), Loki (Production), AlertManager
+# Should show Prometheus, Loki (Staging), Loki (Production), Loki (Dev)
 ```
 
 ### 4. Test Metrics Collection
@@ -516,17 +462,13 @@ echo "3. Loki Health:"
 curl -s http://localhost:3100/ready
 echo ""
 
-echo "4. AlertManager Health:"
-curl -s http://localhost:9093/-/healthy
-echo ""
-
-echo "5. Prometheus Targets (should all be UP):"
+echo "4. Prometheus Targets (should all be UP):"
 curl -s http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | {job: .labels.job, instance: .labels.instance, health: .health}'
 echo ""
 
-echo "6. Active Alerts:"
-curl -s http://localhost:9093/api/v2/alerts | jq 'length'
-echo " active alerts"
+echo "5. Grafana Alert Rules:"
+curl -s -u admin:admin http://localhost:3000/api/v1/provisioning/alert-rules | jq '.[].title'
+echo ""
 EOF
 
 chmod +x /tmp/monitoring-health-check.sh
@@ -694,9 +636,6 @@ docker exec -it monitoring_prometheus sh
 # Check Prometheus configuration
 docker exec monitoring_prometheus promtool check config /etc/prometheus/prometheus.yml
 
-# Check AlertManager configuration
-docker exec monitoring_alertmanager amtool check-config /etc/alertmanager/alertmanager.yml
-
 # Reload Prometheus configuration (without restart)
 curl -X POST http://localhost:9090/-/reload
 ```
@@ -706,7 +645,7 @@ curl -X POST http://localhost:9090/-/reload
 ### Preparation Checklist
 
 - [ ] Update `.env.monitoring` with production credentials
-- [ ] Configure production alert channels (email, Slack)
+- [ ] Verify GitHub Issue webhook contact point delivers alerts (smoke test in PRODUCTION_RUNBOOK.md)
 - [ ] Review and adjust resource limits for production load
 - [ ] Set up backup strategy for Prometheus and Loki data
 - [ ] Configure external storage (if needed)
