@@ -550,3 +550,21 @@ display sites + 1 stale "annual" string:
 - All commits cleanly land on `audit/monitoring-stack-phase1`
 - No pushes (per plan — weekly stays below 5%)
 - 5h: 18% used / weekly: 27% used at end of round 15
+
+---
+
+## Round 16 — PR #89 opened + P1 auth bypass + FE key hygiene
+
+| chunk | commit | scope |
+|-------|--------|-------|
+| (PR) | https://github.com/anud18/scholarship-system/pull/89 | comprehensive PR opened against main with rich body describing all 9 P1 categories + issues + hygiene |
+| chunk-50 | ff15c0d | **P1 auth bypass**: professor_student.py — passing professor_id=<colleague-id> bypassed self-only filter via `if/elif` short-circuit; now 403 immediately |
+| chunk-51 | 73833ff | chore(fe): replace `key={index}` with content-derived keys on PermissionStatusPanel (defensive against future client-side sort) |
+
+## Cumulative session totals (round 16 end)
+
+- **70+ commits** on `audit/monitoring-stack-phase1`
+- PR #89 open against main with comprehensive description
+- 8 issues fully closed + 2 mostly closed
+- **11 P1 bug categories** (added: professor_student auth bypass)
+- 5 regression test files
