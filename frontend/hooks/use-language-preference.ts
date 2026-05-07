@@ -12,15 +12,26 @@ export function useLanguagePreference(
   // 只有學生角色才使用語言偏好儲存
   const shouldUsePreference = userRole === "student";
 
-  const [locale, setLocale] = useState<Locale>(() => {
-    if (!shouldUsePreference) return "zh";
+  // Always start with `defaultLocale` so the SSR-rendered HTML matches the
+  // initial CSR render. Reading localStorage in the lazy initializer produced
+  // a server/client mismatch on every page load (server returned
+  // `defaultLocale`, client returned the stored preference) and was the
+  // source of the hydration warnings flagged in the Phase 1 audit. The
+  // stored preference is applied via the useEffect below, after first paint.
+  const [locale, setLocale] = useState<Locale>(defaultLocale);
 
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY);
-      return (stored as Locale) || defaultLocale;
+  // Hydrate the stored preference on mount.
+  useEffect(() => {
+    if (!shouldUsePreference) return;
+    if (typeof window === "undefined") return;
+    const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY) as Locale | null;
+    if (stored && stored !== locale) {
+      setLocale(stored);
     }
-    return defaultLocale;
-  });
+    // Run on mount + when role-eligibility changes; the cross-tab `storage`
+    // listener below handles subsequent external updates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldUsePreference]);
 
   const changeLocale = (newLocale: Locale) => {
     if (!shouldUsePreference) return;

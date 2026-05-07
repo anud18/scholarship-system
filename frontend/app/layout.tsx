@@ -42,10 +42,17 @@ export default async function RootLayout({
 
   return (
     <html lang="zh-TW" className="scroll-smooth">
-      <head nonce={nonce}>
+      {/* The nonce attribute is injected per-request by the CSP middleware
+          (see NonceProvider). It's only available server-side, so React's
+          hydration always sees a mismatch (server: real nonce, client: ""
+          because the middleware never runs in the browser). The rendered
+          HTML is correct; suppressHydrationWarning is React's standard
+          escape hatch for SSR-only attributes like this. Resolves the
+          remaining hydration warnings flagged in the Phase 1 audit. */}
+      <head nonce={nonce} suppressHydrationWarning>
         {/* Next.js will automatically apply nonce to all injected scripts */}
       </head>
-      <body className="antialiased" nonce={nonce}>
+      <body className="antialiased" nonce={nonce} suppressHydrationWarning>
         <AppProvider>
           <SessionExpiredProvider>
             {children}
