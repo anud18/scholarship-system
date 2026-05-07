@@ -395,3 +395,25 @@ plus 1 deprecation:
 - 2 P1 bugs uncovered + fixed by deep bug-hunt:
    - JSONB student_data flag_modified() (silent persistence loss)
    - Out-of-range month silently bypassing semester filter
+
+---
+
+## Round 11 — second bug-hunt pass (P1 fixes batch)
+
+| chunk | commit | scope |
+|-------|--------|-------|
+| chunk-27 | 0b48324 | **P1**: bank_verification_service — 3 missing `flag_modified()` calls (auto-verify + manual-review meta_data + roster_item bank_verification_details) |
+| chunk-28 | 4d05f0e | **P1**: notification_service — 6 naive `datetime.now()` against `DateTime(timezone=True)` columns (Asia/Taipei vs UTC mismatch silently corrupted expiry/comparison logic) |
+| chunk-29 | b839839 | **P1 hardening**: files.py token Query parameter — added max_length + base64url charset pattern to avoid DoS via oversized random strings |
+| chunk-30 | fbb68a3 | **Hygiene**: standardize JSON-embedded timestamps to UTC-aware in audit_service / roster_notification_service / excel_export_service (9 sites) |
+
+## Cumulative session totals (round 11 end)
+
+- **40 commits** on `audit/monitoring-stack-phase1`
+- 8 issues fully closed (#45 #55 #60 #63 #64 #68 #81 #82) + 2 partial (#59 #66)
+- **5 P1 bugs** uncovered + fixed by deep bug-hunt rounds:
+   - JSONB student_data flag_modified() (silent persistence loss in 2 services)
+   - JSONB meta_data + bank_verification_details flag_modified() (silent persistence loss in bank_verification, 3 sites)
+   - Out-of-range month silently bypassing semester filter
+   - notification_service TZ-mismatch (6 sites)
+   - files.py token DoS hardening
