@@ -2,7 +2,7 @@
 Unit tests for core security utilities
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 
 import jwt
@@ -127,7 +127,7 @@ class TestTokenOperations:
         mock_settings.algorithm = "HS256"
 
         # Create an expired token
-        past_time = datetime.utcnow() - timedelta(hours=1)
+        past_time = datetime.now(timezone.utc) - timedelta(hours=1)
         data = {"sub": "123", "exp": past_time}
         expired_token = jwt.encode(data, "test_secret", algorithm="HS256")
 
