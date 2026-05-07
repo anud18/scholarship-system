@@ -8,6 +8,12 @@ on:
       - 'monitoring/**'
       - '.github/workflows/deploy-monitoring-stack.yml'
   workflow_dispatch:
+    inputs:
+      reset_grafana_volume:
+        description: "DESTRUCTIVE: nuke grafana_data before deploy (loses manually-saved dashboards, annotations, etc.). Default off."
+        type: boolean
+        required: false
+        default: false
 
 # SECURITY: Limit GITHUB_TOKEN permissions to minimum required
 permissions:
@@ -109,6 +115,16 @@ jobs:
             exit 1
           fi
           echo "✅ GH_PAT secrets file written"
+
+          # One-shot volume nuke. Provisioning re-seeds Prometheus/Loki
+          # datasources + dashboards on next boot, so this is destructive
+          # only of in-Grafana state (manually-saved dashboards, alerts,
+          # annotations). Use sparingly — ideally once after a clean
+          # provisioning-only migration.
+          if [ "${{ inputs.reset_grafana_volume }}" = "true" ]; then
+            echo "⚠️  reset_grafana_volume=true — wiping grafana_data volume"
+            docker compose -f docker-compose.monitoring.yml down -v
+          fi
 
           # Start/restart monitoring stack
           docker compose -f docker-compose.monitoring.yml up -d

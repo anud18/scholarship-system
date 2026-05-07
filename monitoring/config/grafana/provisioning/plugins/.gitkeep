@@ -1,0 +1,6 @@
+# Empty plugins provisioning dir.
+# Without this, Grafana logs:
+#   level=error msg="Failed to read plugin provisioning files from directory"
+#       path=/etc/grafana/provisioning/plugins
+#       error="open /etc/grafana/provisioning/plugins: no such file or directory"
+# which trips the deploy workflow's provisioning-error gate.
