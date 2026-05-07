@@ -678,6 +678,11 @@ class RosterService:
                 year, month = period_label.split("-")
                 try:
                     month_int = int(month)
+                    if not 1 <= month_int <= 12:
+                        # Out-of-range months (e.g. 0, 13, 999) used to fall through
+                        # both `if` branches silently — no semester filter applied,
+                        # caller got an unfiltered query and didn't know.
+                        raise ValueError(f"month must be 1-12, got {month_int}")
                     # 2-7月 = 下學期(second), 8-1月 = 上學期(first)
                     if month_int in [2, 3, 4, 5, 6, 7]:
                         semester = "second"
@@ -685,14 +690,15 @@ class RosterService:
                         logger.info(
                             f"Filtering semester-based scholarship for semester '{semester}' (month {month_int})"
                         )
-                    elif month_int in [8, 9, 10, 11, 12, 1]:
+                    else:
+                        # months 1, 8, 9, 10, 11, 12 → first semester
                         semester = "first"
                         query = query.filter(Application.semester == semester)
                         logger.info(
                             f"Filtering semester-based scholarship for semester '{semester}' (month {month_int})"
                         )
-                except ValueError:
-                    logger.warning(f"Invalid month in period_label: {month}")
+                except ValueError as e:
+                    logger.warning(f"Invalid month in period_label: {month} ({e})")
         else:
             # 學年制獎學金：不應用學期過濾
             # 申請的 semester 應該是 NULL
