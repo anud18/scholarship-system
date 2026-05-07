@@ -524,3 +524,29 @@ display sites + 1 stale "annual" string:
    - test_semester_yearly_labels.py (12 tests)
    - test_notification_timezone.py (2 tests)
    - test_flag_modified_invariants.py (5 tests)
+
+---
+
+## Round 15 — final datetime sweep + more regression invariants
+
+| chunk | commit | scope |
+|-------|--------|-------|
+| chunk-47 | cf519e6 | test(models): mutable Column default lambda invariant — pin commit 5e7a1aa |
+| chunk-48 | 026b596 | test(auth): rate-limit decorator invariant — pin commit 001b14b for register/login/mock_sso_login |
+| chunk-49 | 74a60a5 | chore(datetime): 14 more naive datetime.now() sites swept across core/security.py + models/application.py + 2 services |
+
+## Cumulative session totals (round 15 end)
+
+- **64 commits** on `audit/monitoring-stack-phase1`
+- 8 issues fully closed: #45 #55 #60 #63 #64 #68 #81 #82
+- 2 issues mostly closed: #59 (B), #66 (main flow)
+- **10 P1 bug categories** closed
+- **5 regression test files** with source-grep + unit invariants pinning the fixes
+- **datetime.utcnow()** → **datetime.now(timezone.utc)** sweep complete across production code (28+ sites in 18 files); naive `datetime.now()` also swept across remaining production paths (14+ more sites in 4 files)
+
+## Branch state for handoff
+
+- Worktree at `.claude/worktrees/utcnow-batch/` exclusively used after main-repo branch flipper started flipping mid-session
+- All commits cleanly land on `audit/monitoring-stack-phase1`
+- No pushes (per plan — weekly stays below 5%)
+- 5h: 18% used / weekly: 27% used at end of round 15
