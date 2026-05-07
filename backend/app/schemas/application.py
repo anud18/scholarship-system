@@ -665,6 +665,11 @@ class HistoricalApplicationResponse(BaseModel):
     student_id: Optional[str] = None
     student_email: Optional[str] = None
     student_department: Optional[str] = None
+    # #68: nationality + identity from student_data snapshot, surfaced so
+    # admin reviewers can apply scholarship-specific eligibility rules
+    # (NSTC excludes mainland/HK/Macau, MoE caveats, etc.).
+    student_nationality: Optional[str] = None
+    student_identity: Optional[int] = None
 
     # Scholarship information
     scholarship_name: Optional[str] = None

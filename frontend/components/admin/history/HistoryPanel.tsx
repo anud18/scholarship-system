@@ -474,6 +474,41 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                                       {application.student_department}
                                     </div>
                                   )}
+                                  {/* #68: nationality + identity */}
+                                  {(application.student_nationality ||
+                                    application.student_identity) && (
+                                    <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-1">
+                                      {application.student_nationality && (
+                                        <Badge
+                                          variant="outline"
+                                          className="text-[10px] px-1 py-0"
+                                        >
+                                          {application.student_nationality}
+                                        </Badge>
+                                      )}
+                                      {application.student_identity != null && (
+                                        <Badge
+                                          variant="outline"
+                                          className="text-[10px] px-1 py-0"
+                                        >
+                                          {(() => {
+                                            const idMap: Record<number, string> = {
+                                              1: "本國生",
+                                              2: "僑生",
+                                              3: "外籍生",
+                                              4: "陸生",
+                                              5: "港澳生",
+                                              6: "外籍交換生",
+                                            };
+                                            return (
+                                              idMap[application.student_identity!] ||
+                                              `身分別 ${application.student_identity}`
+                                            );
+                                          })()}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                               </TableCell>
                               <TableCell>
