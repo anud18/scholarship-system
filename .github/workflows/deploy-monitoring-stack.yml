@@ -261,16 +261,25 @@ jobs:
           fi
           echo "✅ $DASH_COUNT dashboards provisioned"
 
-          # 4. Alert rules loaded successfully (zero failed-to-load)
-          FAILED_RULES=$(docker exec monitoring_grafana wget -qO- \
+          # 4. Alert rules loaded. The previous filter (execErrState=="Error")
+          #    matched the rule's *config* for what to do when its query
+          #    fails — it's "Error" by default, so it counted every rule.
+          #    Instead, count present rules and assert it matches the
+          #    YAML-shipped total. Cold-boot transient evaluation errors
+          #    are expected on first start (Prometheus targets not scraped
+          #    yet) and shouldn't fail the deploy.
+          RULE_COUNT=$(docker exec monitoring_grafana wget -qO- \
             --header "$AUTH_HDR" \
             "http://localhost:3000/api/v1/provisioning/alert-rules" \
-            | jq '[.[] | select(.execErrState=="Error")] | length')
-          if [ "${FAILED_RULES:-0}" -gt 0 ]; then
-            echo "::error::$FAILED_RULES alert rules failed to load"
+            | jq 'length')
+          # Total alert rules across rules-*.yml: 5 (system) + 4 (container)
+          # + 3 (monitoring) + 2 (database) = 14.
+          if [ "${RULE_COUNT:-0}" -lt 14 ]; then
+            echo "::error::Expected ≥14 provisioned alert rules, got $RULE_COUNT"
+            docker logs monitoring_grafana 2>&1 | grep -E 'provisioning.alerting.*level=error' | tail -20
             exit 1
           fi
-          echo "✅ All alert rules loaded"
+          echo "✅ $RULE_COUNT alert rules provisioned"
 
           echo "All monitoring services are healthy"
 
