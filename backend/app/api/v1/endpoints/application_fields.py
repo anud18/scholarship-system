@@ -78,7 +78,7 @@ async def update_field(
     merged_field_type = update_payload.get("field_type", existing_field.field_type)
     merged_include_flag = update_payload.get(
         "include_in_college_export",
-        getattr(existing_field, "include_in_college_export", False),
+        existing_field.include_in_college_export,
     )
 
     # Re-check export flag against the merged field_type (validator on the
