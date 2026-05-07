@@ -417,3 +417,28 @@ plus 1 deprecation:
    - Out-of-range month silently bypassing semester filter
    - notification_service TZ-mismatch (6 sites)
    - files.py token DoS hardening
+
+---
+
+## Round 12 — security pass
+
+| chunk | commit | scope |
+|-------|--------|-------|
+| chunk-31 | 0d06085 | **P1**: auth_service.register_user — handle IntegrityError on concurrent registration (was 500ing) |
+| chunk-32 | 2e540b4 | user_profile_service.create_user_profile — same TOCTOU pattern as register, IntegrityError → ValueError |
+| chunk-33 | 001b14b | **P1 hardening**: rate limit decorators on /auth/register (10/10min), /auth/login (20/5min), /auth/mock-sso/login (30/5min) using existing core.rate_limiting infrastructure |
+| chunk-34 | deb076d | **P2 DoS**: OCR endpoints (bank-passbook + document) now check `UploadFile.size` from Content-Length before buffering 10GB into memory |
+
+## Cumulative session totals (round 12 end)
+
+- **45 commits** on `audit/monitoring-stack-phase1`
+- 8 issues fully closed + 2 mostly closed
+- **8 P1 bugs** uncovered + fixed across rounds 10-12:
+   1. JSONB student_data flag_modified() (2 services, 2 sites)
+   2. JSONB meta_data + bank_verification_details flag_modified() (3 sites)
+   3. Out-of-range month silently bypassing semester filter
+   4. notification_service TZ-mismatch (6 sites in one file)
+   5. files.py token DoS hardening
+   6. auth_service.register_user IntegrityError 500
+   7. user_profile_service.create_user_profile race
+   8. auth endpoints brute-force defense
