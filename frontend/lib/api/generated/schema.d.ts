@@ -7511,6 +7511,8 @@ export interface components {
             enroll_type?: number | null;
             /** Term Count */
             term_count?: number | null;
+            /** Student Nationality */
+            student_nationality?: string | null;
             /** Student Identity */
             student_identity?: number | null;
             /** School Identity */
