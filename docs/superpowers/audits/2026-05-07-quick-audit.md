@@ -233,6 +233,35 @@ test_manual_distribution_service.py          14/14
 
 **18 commits** on `audit/monitoring-stack-phase1`. Issues fully closed: #45, #55, #60, #63, #64, #81, #82 (seven). Issues partially closed: #59 (B done, A needs source), #68 (ranking page done, admin list + Excel deferred).
 
+---
+
+## Round 4 + 5 (after chunk-11 wakeup)
+
+| chunk | status | issue | commit |
+|-------|--------|-------|--------|
+| chunk-12a | ✅ schema hygiene | (no issue) — Pydantic v2 `min_items=1` → `min_length=1` (2 occurrences) | a1ad705 |
+| chunk-12b | 🔄 #66 partial | new POST /payment-rosters/{rid}/items/{iid}/exclude with reason capture + RosterAuditLog. 4-path live validation green. Excel re-export trigger + received_months decrement deferred. | 3f2282a |
+
+## Cumulative session totals (round 5 end)
+
+- **20 commits** on the branch
+- **7 issues fully closed**: #45, #55, #60, #63, #64, #81, #82
+- **3 issues partially closed**:
+   - #59 — part B (scroll-to-bottom) done; part A (勞保 SOP) needs source text
+   - #66 — exclude endpoint done; UI + Excel re-export trigger deferred
+   - #68 — ranking-table column done; admin app list + Excel exports deferred
+- **33 tests pass** (test_health 3, test_user_profile_service_bank_document 3, test_review_service_lock 7, test_college_review_deadline 6, test_manual_distribution_service 14)
+- Quota at end of round 5: weekly 16% used / 5h 21% used / 5h reset in 1h34m
+
+## Next round candidates (priority order)
+
+1. **#66 UI**: admin button to call the new exclude endpoint from the roster details view
+2. **#68 admin app list**: surface 國籍 / 身分 in the admin's application list
+3. **#67** 續領彙整匯入 — large; needs source format
+4. **#59 part A** — needs 勞保 SOP source text from user
+5. **#71** 續領完整功能 — large
+6. **#72** 遞補 — needs spec confirmation
+
 ## New issues filed during execution
 
 | Issue | Title | Severity |
