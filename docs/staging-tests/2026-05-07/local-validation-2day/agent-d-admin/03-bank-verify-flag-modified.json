@@ -1,0 +1,38 @@
+=== Bank-verify flag_modified() persistence (commit 0b48324) ===
+
+--- container source: bank_verification_service.py — search for flag_modified ---
+0
+(0 = pre-fix, 3 = post-fix)
+
+386:        application.meta_data["bank_verification"] = {
+653:            application.meta_data["bank_verification"] = {
+693:                roster_item.bank_verification_details = verification_details
+711:                        ai_confidence = application.meta_data["bank_verification"].get("average_confidence")
+
+VERDICT: Container has 0 flag_modified() calls in bank_verification_service.py.
+The pre-fix bug: assigning to application.meta_data['bank_verification'] mutates
+the dict in-place; SQLAlchemy JSON column uses identity-based change detection,
+so the commit silently no-ops. Manual bank-review state changes are dropped.
+
+Cannot reproduce mutation/persistence test on running stack because:
+  - Test data has 0 applications with passbook_document set up for OCR
+  - Without manipulating MinIO + OCR pipeline, can't trigger verify-bank successfully
+  - However, bug pattern is statically observable in the running source
+
+=== Endpoint discovery ===
+POST /api/v1/auth/portal-sso/verify
+GET /api/v1/auth/portal-sso/verify/{username}
+POST /api/v1/admin/bank-verification
+POST /api/v1/admin/bank-verification/batch
+GET /api/v1/admin/bank-verification/{application_id}/init
+POST /api/v1/admin/bank-verification/manual-review
+POST /api/v1/admin/bank-verification/batch-async
+GET /api/v1/admin/bank-verification/tasks/{task_id}
+GET /api/v1/admin/bank-verification/tasks
+PUT /api/v1/user-profiles/me/bank-info
+POST /api/v1/user-profiles/me/bank-document
+DELETE /api/v1/user-profiles/me/bank-document
+POST /api/v1/user-profiles/me/bank-document/file
+GET /api/v1/user-profiles/files/bank_documents/{filename}
+POST /api/v1/user-profiles/bank-passbook-ocr
+GET /api/v1/student-bank-accounts/my-verified-account

@@ -1,0 +1,488 @@
+
+=== student (stuunder1) ===
+Final URL: http://localhost:3000/
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] 🌐 Typed API Client (Browser mode - Nginx proxy)
+[log] 🌐 API Client Browser mode - using relative path (Nginx proxy)
+[error] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+%s%s https://react.dev/link/hydration-mismatch 
+
+  ...
+    <HotReload assetPrefix="" globalError={[...]}>
+      <AppDevOverlayErrorBoundary globalError={[...]}>
+        <ReplaySsrOnlyErrors>
+        <DevRootHTTPAccessFallbackBoundary>
+          <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>
+            <HTTPAccessFallbackErrorBoundary pathname="/" notFound={<NotAllowedRootHTTPFallbackError>} ...>
+              <RedirectBoundary>
+                <RedirectErrorBoundary router={{...}}>
+                  <Head>
+                  <__next_root_layout_boundary__>
+                    <SegmentViewNode type="layout" pagePath="/layout.tsx">
+                      <SegmentTrieNode>
+                      <link>
+                      <script>
+                      <script>
+                      <script>
+                      <script>
+                      <RootLayout>
+                        <html lang="zh-TW" className="scroll-smooth">
+                          <head
++                           nonce="DNjBXb/rVNLbVmp5fnrjNA=="
+-                           nonce=""
+                          >
+                          <body
+                            className="antialiased"
++                           nonce="DNjBXb/rVNLbVmp5fnrjNA=="
+-                           nonce=""
+                          >
+                  ...
+
+[log] 🌐 Current URL after tab change: http://localhost:3000/
+[log] 🔍 URL search params: {}
+[log] ❌ Auth Error: null
+[log] LocalStorage token exists: true
+[log] LocalStorage user exists: true
+[log] API client has token: true
+[log] Token preview: eyJhbGciOiJIUzI1NiIs...
+[log] ❌ No user found, cannot set active tab
+[log] Checking existing authentication...
+[log] Found token: true Found user data: true
+[log] Parsed user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] Authentication restored from localStorage
+[log] ❌ Auth Error: null
+[log] LocalStorage token exists: true
+[log] LocalStorage user exists: true
+[log] API client has token: true
+[log] Token preview: eyJhbGciOiJIUzI1NiIs...
+[log] 🌐 Current URL after tab change: http://localhost:3000/
+[log] EnhancedStudentPortal mounted with user: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] Current auth token exists: true
+[log] Token preview: eyJhbGciOiJIUzI1NiIs...
+[log] EnhancedStudentPortal mounted with user: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] Current auth token exists: true
+[log] Token preview: eyJhbGciOiJIUzI1NiIs...
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1I...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiI1IiwibnljdV9pZCI6InN0dXVuZGVyMSIsInJvbG...
+[log] 🔍 Decoded JWT payload: {sub: 5, nycu_id: stuunder1, role: student, debug_mode: true, exp: 1778140364}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Fetching live student data from API...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1I...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiI1IiwibnljdV9pZCI6InN0dXVuZGVyMSIsInJvbG...
+[log] 🔍 Decoded JWT payload: {sub: 5, nycu_id: stuunder1, role: student, debug_mode: true, exp: 1778140364}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Fetching live student data from API...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 178ms
+[log] 🔍 Portal-sourced user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] 🔍 Portal-sourced user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] 🔍 Live student data fetched: {student: Object, semesters: Array(6)}
+[log] 🔍 Semesters data: [Object, Object, Object, Object, Object, Object]
+[log] Debug: Raw API response: {success: true, message: Eligible scholarships retrieved successfully, data: Array(0)}
+[log] Debug: API response success: true
+[log] Debug: API response data: []
+[log] 🔍 Live student data fetched: {student: Object, semesters: Array(6)}
+[log] 🔍 Semesters data: [Object, Object, Object, Object, Object, Object]
+[log] Debug: Raw API response: {success: true, message: Eligible scholarships retrieved successfully, data: Array(0)}
+[log] Debug: API response success: true
+[log] Debug: API response data: []
+
+=== professor (cs_professor) ===
+Final URL: http://localhost:3000/
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] 🌐 Typed API Client (Browser mode - Nginx proxy)
+[log] 🌐 API Client Browser mode - using relative path (Nginx proxy)
+[error] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+%s%s https://react.dev/link/hydration-mismatch 
+
+  ...
+    <HotReload assetPrefix="" globalError={[...]}>
+      <AppDevOverlayErrorBoundary globalError={[...]}>
+        <ReplaySsrOnlyErrors>
+        <DevRootHTTPAccessFallbackBoundary>
+          <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>
+            <HTTPAccessFallbackErrorBoundary pathname="/" notFound={<NotAllowedRootHTTPFallbackError>} ...>
+              <RedirectBoundary>
+                <RedirectErrorBoundary router={{...}}>
+                  <Head>
+                  <__next_root_layout_boundary__>
+                    <SegmentViewNode type="layout" pagePath="/layout.tsx">
+                      <SegmentTrieNode>
+                      <link>
+                      <script>
+                      <script>
+                      <script>
+                      <script>
+                      <RootLayout>
+                        <html lang="zh-TW" className="scroll-smooth">
+                          <head
++                           nonce="we2YNYNbk8m3zkoxITz+SA=="
+-                           nonce=""
+                          >
+                          <body
+                            className="antialiased"
++                           nonce="we2YNYNbk8m3zkoxITz+SA=="
+-                           nonce=""
+                          >
+                  ...
+
+[log] 🌐 Current URL after tab change: http://localhost:3000/
+[log] 🔍 URL search params: {}
+[log] ❌ Auth Error: null
+[log] LocalStorage token exists: true
+[log] LocalStorage user exists: true
+[log] API client has token: true
+[log] Token preview: eyJhbGciOiJIUzI1NiIs...
+[log] ❌ No user found, cannot set active tab
+[log] Checking existing authentication...
+[log] Found token: true Found user data: true
+[log] Parsed user data: {id: 12, nycu_id: cs_professor, name: 李資訊教授, email: cs_professor@nycu.edu.tw, user_type: employee}
+[log] Authentication restored from localStorage
+[log] ❌ Auth Error: null
+[log] LocalStorage token exists: true
+[log] LocalStorage user exists: true
+[log] API client has token: true
+[log] Token preview: eyJhbGciOiJIUzI1NiIs...
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxM...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiIxMiIsIm55Y3VfaWQiOiJjc19wcm9mZXNzb3IiLC...
+[log] 🔍 Decoded JWT payload: {sub: 12, nycu_id: cs_professor, role: professor, debug_mode: true, exp: 1778140348}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxM...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiIxMiIsIm55Y3VfaWQiOiJjc19wcm9mZXNzb3IiLC...
+[log] 🔍 Decoded JWT payload: {sub: 12, nycu_id: cs_professor, role: professor, debug_mode: true, exp: 1778140348}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] 🔍 Portal-sourced user data: {id: 12, nycu_id: cs_professor, name: 李資訊教授, email: cs_professor@nycu.edu.tw, user_type: employee}
+[log] 🔍 Portal-sourced user data: {id: 12, nycu_id: cs_professor, name: 李資訊教授, email: cs_professor@nycu.edu.tw, user_type: employee}
+
+=== college (cs_college) ===
+Final URL: http://localhost:3000/
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] 🌐 Typed API Client (Browser mode - Nginx proxy)
+[log] 🌐 API Client Browser mode - using relative path (Nginx proxy)
+[error] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+%s%s https://react.dev/link/hydration-mismatch 
+
+  ...
+    <HotReload assetPrefix="" globalError={[...]}>
+      <AppDevOverlayErrorBoundary globalError={[...]}>
+        <ReplaySsrOnlyErrors>
+        <DevRootHTTPAccessFallbackBoundary>
+          <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>
+            <HTTPAccessFallbackErrorBoundary pathname="/" notFound={<NotAllowedRootHTTPFallbackError>} ...>
+              <RedirectBoundary>
+                <RedirectErrorBoundary router={{...}}>
+                  <Head>
+                  <__next_root_layout_boundary__>
+                    <SegmentViewNode type="layout" pagePath="/layout.tsx">
+                      <SegmentTrieNode>
+                      <link>
+                      <script>
+                      <script>
+                      <script>
+                      <script>
+                      <RootLayout>
+                        <html lang="zh-TW" className="scroll-smooth">
+                          <head
++                           nonce="YD6Vww0aJO7RvmZQ2d+Fnw=="
+-                           nonce=""
+                          >
+                          <body
+                            className="antialiased"
++                           nonce="YD6Vww0aJO7RvmZQ2d+Fnw=="
+-                           nonce=""
+                          >
+                  ...
+
+[log] 🌐 Current URL after tab change: http://localhost:3000/
+[log] 🔍 URL search params: {}
+[log] ❌ Auth Error: null
+[log] LocalStorage token exists: true
+[log] LocalStorage user exists: true
+[log] API client has token: true
+[log] Token preview: eyJhbGciOiJIUzI1NiIs...
+[log] ❌ No user found, cannot set active tab
+[log] Checking existing authentication...
+[log] Found token: true Found user data: true
+[log] Parsed user data: {id: 13, nycu_id: cs_college, name: 資訊學院審核員, email: cs_college@nycu.edu.tw, user_type: employee}
+[log] Authentication restored from localStorage
+[log] ❌ Auth Error: null
+[log] LocalStorage token exists: true
+[log] LocalStorage user exists: true
+[log] API client has token: true
+[log] Token preview: eyJhbGciOiJIUzI1NiIs...
+[log] Fetching available combinations...
+[log] Fetching available combinations...
+[log] fetchAvailableOptions response: {success: true, message: Available combinations retrieved successfully, data: Object}
+[warning] API returned no scholarship types in available combinations.
+[log] Available options not loaded yet, fetching now...
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxM...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiIxMyIsIm55Y3VfaWQiOiJjc19jb2xsZWdlIiwicm...
+[log] 🔍 Decoded JWT payload: {sub: 13, nycu_id: cs_college, role: college, debug_mode: true, exp: 1778140474}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxM...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiIxMyIsIm55Y3VfaWQiOiJjc19jb2xsZWdlIiwicm...
+[log] 🔍 Decoded JWT payload: {sub: 13, nycu_id: cs_college, role: college, debug_mode: true, exp: 1778140474}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] 🔍 Portal-sourced user data: {id: 13, nycu_id: cs_college, name: 資訊學院審核員, email: cs_college@nycu.edu.tw, user_type: employee}
+[log] fetchAvailableOptions response: {success: true, message: Available combinations retrieved successfully, data: Object}
+[warning] API returned no scholarship types in available combinations.
+[log] Available options not loaded yet, fetching now...
+[log] 🔍 Portal-sourced user data: {id: 13, nycu_id: cs_college, name: 資訊學院審核員, email: cs_college@nycu.edu.tw, user_type: employee}
+[log] Available combinations API response: {success: true, message: Available combinations retrieved successfully, data: Object}
+[error] Scholarship types array is empty
+[log] Available combinations API response: {success: true, message: Available combinations retrieved successfully, data: Object}
+[error] Scholarship types array is empty
+
+=== admin (super_admin) ===
+Final URL: http://localhost:3000/
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] 🌐 Typed API Client (Browser mode - Nginx proxy)
+[log] 🌐 API Client Browser mode - using relative path (Nginx proxy)
+[error] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+%s%s https://react.dev/link/hydration-mismatch 
+
+  ...
+    <HotReload assetPrefix="" globalError={[...]}>
+      <AppDevOverlayErrorBoundary globalError={[...]}>
+        <ReplaySsrOnlyErrors>
+        <DevRootHTTPAccessFallbackBoundary>
+          <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>
+            <HTTPAccessFallbackErrorBoundary pathname="/" notFound={<NotAllowedRootHTTPFallbackError>} ...>
+              <RedirectBoundary>
+                <RedirectErrorBoundary router={{...}}>
+                  <Head>
+                  <__next_root_layout_boundary__>
+                    <SegmentViewNode type="layout" pagePath="/layout.tsx">
+                      <SegmentTrieNode>
+                      <link>
+                      <script>
+                      <script>
+                      <script>
+                      <script>
+                      <RootLayout>
+                        <html lang="zh-TW" className="scroll-smooth">
+                          <head
++                           nonce="exJX+oqQI7uU+5OV+liFgA=="
+-                           nonce=""
+                          >
+                          <body
+                            className="antialiased"
++                           nonce="exJX+oqQI7uU+5OV+liFgA=="
+-                           nonce=""
+                          >
+                  ...
+
+[log] 🌐 Current URL after tab change: http://localhost:3000/
+[log] 🔍 URL search params: {}
+[log] ❌ Auth Error: null
+[log] LocalStorage token exists: true
+[log] LocalStorage user exists: true
+[log] API client has token: true
+[log] Token preview: eyJhbGciOiJIUzI1NiIs...
+[log] ❌ No user found, cannot set active tab
+[log] Checking existing authentication...
+[log] Found token: true Found user data: true
+[log] Parsed user data: {id: 2, nycu_id: super_admin, name: 超級管理員, email: super_admin@nycu.edu.tw, user_type: employee}
+[log] Authentication restored from localStorage
+[log] ScholarshipSpecificDashboard render: {scholarshipTypes: Array(0), scholarshipStats: Object, applicationsByType: Object, isLoading: false, error: null}
+[log] ScholarshipSpecificDashboard render: {scholarshipTypes: Array(0), scholarshipStats: Object, applicationsByType: Object, isLoading: false, error: null}
+[log] ScholarshipSpecificDashboard render: {scholarshipTypes: Array(0), scholarshipStats: Object, applicationsByType: Object, isLoading: false, error: null}
+[log] ScholarshipSpecificDashboard render: {scholarshipTypes: Array(0), scholarshipStats: Object, applicationsByType: Object, isLoading: false, error: null}
+[log] useScholarshipPermissions: fetchPermissions called for user: super_admin 2
+[log] useScholarshipPermissions: Fetching allowed scholarships from API...
+[log] Fetching scholarship types...
+[log] useScholarshipPermissions: fetchPermissions called for user: super_admin 2
+[log] useScholarshipPermissions: Fetching allowed scholarships from API...
+[log] Fetching recent applications...
+[log] ❌ Auth Error: null
+[log] LocalStorage token exists: true
+[log] LocalStorage user exists: true
+[log] API client has token: true
+[log] Token preview: eyJhbGciOiJIUzI1NiIs...
+[log] useScholarshipPermissions: fetchPermissions called for user: super_admin 2
+[log] useScholarshipPermissions: Fetching allowed scholarships from API...
+[log] Fetching scholarship types...
+[log] useScholarshipPermissions: fetchPermissions called for user: super_admin 2
+[log] useScholarshipPermissions: Fetching allowed scholarships from API...
+[log] ScholarshipSpecificDashboard render: {scholarshipTypes: Array(0), scholarshipStats: Object, applicationsByType: Object, isLoading: true, error: null}
+[log] ScholarshipSpecificDashboard render: {scholarshipTypes: Array(0), scholarshipStats: Object, applicationsByType: Object, isLoading: true, error: null}
+[log] 🌐 Current URL after tab change: http://localhost:3000/
+[log] useScholarshipPermissions: fetchPermissions called for user: super_admin 2
+[log] useScholarshipPermissions: Fetching allowed scholarships from API...
+[log] ScholarshipTimeline: Starting fetch for user: super_admin 2
+[log] ScholarshipTimeline: Fetching all scholarships for super_admin {academicYear: undefined, semester: undefined}
+[log] useScholarshipPermissions: fetchPermissions called for user: super_admin 2
+[log] useScholarshipPermissions: Fetching allowed scholarships from API...
+[log] useScholarshipPermissions: fetchPermissions called for user: super_admin 2
+[log] useScholarshipPermissions: Fetching allowed scholarships from API...
+[log] ScholarshipTimeline: Starting fetch for user: super_admin 2
+[log] ScholarshipTimeline: Fetching all scholarships for super_admin {academicYear: undefined, semester: undefined}
+[log] useScholarshipPermissions: fetchPermissions called for user: super_admin 2
+[log] useScholarshipPermissions: Fetching allowed scholarships from API...
+[log] ScholarshipTimeline: Raw scholarships data: [Object, Object, Object]
+[log] filterScholarshipsByPermission: Called with scholarships: 3
+[log] filterScholarshipsByPermission: User role: super_admin
+[log] filterScholarshipsByPermission: Super admin, returning all scholarships
+[log] ScholarshipTimeline: Filtered scholarships based on permissions: [Object, Object, Object]
+[log] ScholarshipTimeline: Processing 學士班新生獎學金, application_cycle: semester
+[log] ScholarshipTimeline: Processing 博士生獎學金, application_cycle: yearly
+[log] ScholarshipTimeline: Processing 逕讀博士獎學金, application_cycle: yearly
+[log] useScholarshipPermissions: API response: {success: true, message: Retrieved 3 scholarships for current user, data: Array(3)}
+[log] useScholarshipPermissions: Setting allowed scholarships: [Object, Object, Object]
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyI...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiIyIiwibnljdV9pZCI6InN1cGVyX2FkbWluIiwicm...
+[log] 🔍 Decoded JWT payload: {sub: 2, nycu_id: super_admin, role: super_admin, debug_mode: true, exp: 1778140473}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyI...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiIyIiwibnljdV9pZCI6InN1cGVyX2FkbWluIiwicm...
+[log] 🔍 Decoded JWT payload: {sub: 2, nycu_id: super_admin, role: super_admin, debug_mode: true, exp: 1778140473}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] Scholarship types received: [undergraduate_freshman, phd, direct_phd]
+[log] Fetching applications for scholarship type: undergraduate_freshman
+[log] Recent applications response: {success: true, message: Retrieved 1 recent applications, data: Array(1)}
+[log] Setting recent applications: [Object]
+[log] ❌ Auth Error: null
+[log] LocalStorage token exists: true
+[log] LocalStorage user exists: true
+[log] API client has token: true
+[log] Token preview: eyJhbGciOiJIUzI1NiIs...
+[log] 🔍 Portal-sourced user data: {id: 2, nycu_id: super_admin, name: 超級管理員, email: super_admin@nycu.edu.tw, user_type: employee}
+[log] useScholarshipPermissions: API response: {success: true, message: Retrieved 3 scholarships for current user, data: Array(3)}
+[log] useScholarshipPermissions: Setting allowed scholarships: [Object, Object, Object]
+[log] ScholarshipTimeline: Raw scholarships data: [Object, Object, Object]
+[log] filterScholarshipsByPermission: Called with scholarships: 3
+[log] filterScholarshipsByPermission: User role: super_admin
+[log] filterScholarshipsByPermission: Super admin, returning all scholarships
+[log] ScholarshipTimeline: Filtered scholarships based on permissions: [Object, Object, Object]
+[log] ScholarshipTimeline: Processing 學士班新生獎學金, application_cycle: semester
+[log] ScholarshipTimeline: Processing 博士生獎學金, application_cycle: yearly
+[log] ScholarshipTimeline: Processing 逕讀博士獎學金, application_cycle: yearly
+[log] Response for undergraduate_freshman: {success: true, message: Applications for scholarship undergraduate_freshman retrieved successfully, data: Array(0)}
+[log] Found 0 applications for undergraduate_freshman
+[log] Fetching applications for scholarship type: phd
+[log] Scholarship types received: [undergraduate_freshman, phd, direct_phd]
+[log] Fetching applications for scholarship type: undergraduate_freshman
+[log] 🔍 Portal-sourced user data: {id: 2, nycu_id: super_admin, name: 超級管理員, email: super_admin@nycu.edu.tw, user_type: employee}
+[log] useScholarshipPermissions: API response: {success: true, message: Retrieved 3 scholarships for current user, data: Array(3)}
+[log] useScholarshipPermissions: Setting allowed scholarships: [Object, Object, Object]
+[log] Response for undergraduate_freshman: {success: true, message: Applications for scholarship undergraduate_freshman retrieved successfully, data: Array(0)}
+[log] Found 0 applications for undergraduate_freshman
+[log] Fetching applications for scholarship type: phd
+[log] Response for phd: {success: true, message: Applications for scholarship phd retrieved successfully, data: Array(1)}
+[log] Found 1 applications for phd
+[log] Fetching applications for scholarship type: direct_phd
+[log] useScholarshipPermissions: API response: {success: true, message: Retrieved 3 scholarships for current user, data: Array(3)}
+[log] useScholarshipPermissions: Setting allowed scholarships: [Object, Object, Object]
+[log] useScholarshipPermissions: API response: {success: true, message: Retrieved 3 scholarships for current user, data: Array(3)}
+[log] useScholarshipPermissions: Setting allowed scholarships: [Object, Object, Object]
+[log] ScholarshipTimeline: Starting fetch for user: super_admin 2
+[log] ScholarshipTimeline: Fetching all scholarships for super_admin {academicYear: undefined, semester: undefined}
+[log] Response for phd: {success: true, message: Applications for scholarship phd retrieved successfully, data: Array(1)}
+[log] Found 1 applications for phd
+[log] Fetching applications for scholarship type: direct_phd
+[log] Response for direct_phd: {success: true, message: Applications for scholarship direct_phd retrieved successfully, data: Array(0)}
+[log] Found 0 applications for direct_phd
+[log] Final applications by type: {undergraduate_freshman: Array(0), phd: Array(1), direct_phd: Array(0)}
+[log] useScholarshipPermissions: API response: {success: true, message: Retrieved 3 scholarships for current user, data: Array(3)}
+[log] useScholarshipPermissions: Setting allowed scholarships: [Object, Object, Object]
+[log] ScholarshipTimeline: Raw scholarships data: [Object, Object, Object]
+[log] filterScholarshipsByPermission: Called with scholarships: 3
+[log] filterScholarshipsByPermission: User role: super_admin
+[log] filterScholarshipsByPermission: Super admin, returning all scholarships
+[log] ScholarshipTimeline: Filtered scholarships based on permissions: [Object, Object, Object]
+[log] ScholarshipTimeline: Processing 學士班新生獎學金, application_cycle: semester
+[log] ScholarshipTimeline: Processing 博士生獎學金, application_cycle: yearly
+[log] ScholarshipTimeline: Processing 逕讀博士獎學金, application_cycle: yearly
+[log] Response for direct_phd: {success: true, message: Applications for scholarship direct_phd retrieved successfully, data: Array(0)}
+[log] Found 0 applications for direct_phd
+[log] Final applications by type: {undergraduate_freshman: Array(0), phd: Array(1), direct_phd: Array(0)}
+[log] useScholarshipPermissions: API response: {success: true, message: Retrieved 3 scholarships for current user, data: Array(3)}
+[log] useScholarshipPermissions: Setting allowed scholarships: [Object, Object, Object]
+[log] useScholarshipPermissions: API response: {success: true, message: Retrieved 3 scholarships for current user, data: Array(3)}
+[log] useScholarshipPermissions: Setting allowed scholarships: [Object, Object, Object]
+[log] ScholarshipTimeline: Starting fetch for user: super_admin 2
+[log] ScholarshipTimeline: Fetching all scholarships for super_admin {academicYear: 114, semester: second}
+[log] ScholarshipTimeline: Raw scholarships data: [Object, Object, Object]
+[log] filterScholarshipsByPermission: Called with scholarships: 3
+[log] filterScholarshipsByPermission: User role: super_admin
+[log] filterScholarshipsByPermission: Super admin, returning all scholarships
+[log] ScholarshipTimeline: Filtered scholarships based on permissions: [Object, Object, Object]
+[log] ScholarshipTimeline: Processing 學士班新生獎學金, application_cycle: semester
+[log] ScholarshipTimeline: Processing 博士生獎學金, application_cycle: yearly
+[log] ScholarshipTimeline: Processing 逕讀博士獎學金, application_cycle: yearly

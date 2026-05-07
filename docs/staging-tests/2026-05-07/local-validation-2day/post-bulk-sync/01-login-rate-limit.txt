@@ -1,0 +1,12 @@
+Login burst: hit 429 at attempt 1
+{
+    "success": false,
+    "message": {
+        "error": "Rate limit exceeded",
+        "limit": 20,
+        "window_seconds": 300,
+        "remaining": 0,
+        "retry_after": 300
+    },
+    "trace_id": "8c8fc9e6-1706-48f3-b795-7cd3209a9a1e"
+}

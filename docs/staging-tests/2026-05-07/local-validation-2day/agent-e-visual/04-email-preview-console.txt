@@ -1,0 +1,160 @@
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] 🌐 Typed API Client (Browser mode - Nginx proxy)
+[log] 🌐 API Client Browser mode - using relative path (Nginx proxy)
+[log] 🌐 Current URL after tab change: http://localhost:3000/
+[log] 🔍 URL search params: {}
+[log] ❌ Auth Error: null
+[log] LocalStorage token exists: true
+[log] LocalStorage user exists: true
+[log] API client has token: true
+[log] Token preview: eyJhbGciOiJIUzI1NiIs...
+[log] ❌ No user found, cannot set active tab
+[log] Checking existing authentication...
+[log] Found token: true Found user data: true
+[log] Parsed user data: {id: 2, nycu_id: super_admin, name: 超級管理員, email: super_admin@nycu.edu.tw, user_type: employee}
+[log] Authentication restored from localStorage
+[log] ScholarshipSpecificDashboard render: {scholarshipTypes: Array(0), scholarshipStats: Object, applicationsByType: Object, isLoading: false, error: null}
+[log] ScholarshipSpecificDashboard render: {scholarshipTypes: Array(0), scholarshipStats: Object, applicationsByType: Object, isLoading: false, error: null}
+[log] ScholarshipSpecificDashboard render: {scholarshipTypes: Array(0), scholarshipStats: Object, applicationsByType: Object, isLoading: false, error: null}
+[log] ScholarshipSpecificDashboard render: {scholarshipTypes: Array(0), scholarshipStats: Object, applicationsByType: Object, isLoading: false, error: null}
+[log] useScholarshipPermissions: fetchPermissions called for user: super_admin 2
+[log] useScholarshipPermissions: Fetching allowed scholarships from API...
+[log] Fetching scholarship types...
+[log] useScholarshipPermissions: fetchPermissions called for user: super_admin 2
+[log] useScholarshipPermissions: Fetching allowed scholarships from API...
+[log] Fetching recent applications...
+[log] ❌ Auth Error: null
+[log] LocalStorage token exists: true
+[log] LocalStorage user exists: true
+[log] API client has token: true
+[log] Token preview: eyJhbGciOiJIUzI1NiIs...
+[log] useScholarshipPermissions: fetchPermissions called for user: super_admin 2
+[log] useScholarshipPermissions: Fetching allowed scholarships from API...
+[log] Fetching scholarship types...
+[log] useScholarshipPermissions: fetchPermissions called for user: super_admin 2
+[log] useScholarshipPermissions: Fetching allowed scholarships from API...
+[log] ScholarshipSpecificDashboard render: {scholarshipTypes: Array(0), scholarshipStats: Object, applicationsByType: Object, isLoading: true, error: null}
+[log] ScholarshipSpecificDashboard render: {scholarshipTypes: Array(0), scholarshipStats: Object, applicationsByType: Object, isLoading: true, error: null}
+[log] 🌐 Current URL after tab change: http://localhost:3000/
+[log] useScholarshipPermissions: fetchPermissions called for user: super_admin 2
+[log] useScholarshipPermissions: Fetching allowed scholarships from API...
+[log] ScholarshipTimeline: Starting fetch for user: super_admin 2
+[log] ScholarshipTimeline: Fetching all scholarships for super_admin {academicYear: undefined, semester: undefined}
+[log] useScholarshipPermissions: fetchPermissions called for user: super_admin 2
+[log] useScholarshipPermissions: Fetching allowed scholarships from API...
+[log] useScholarshipPermissions: fetchPermissions called for user: super_admin 2
+[log] useScholarshipPermissions: Fetching allowed scholarships from API...
+[log] ScholarshipTimeline: Starting fetch for user: super_admin 2
+[log] ScholarshipTimeline: Fetching all scholarships for super_admin {academicYear: undefined, semester: undefined}
+[log] useScholarshipPermissions: fetchPermissions called for user: super_admin 2
+[log] useScholarshipPermissions: Fetching allowed scholarships from API...
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 108ms
+[log] useScholarshipPermissions: API response: {success: true, message: Retrieved 3 scholarships for current user, data: Array(3)}
+[log] useScholarshipPermissions: Setting allowed scholarships: [Object, Object, Object]
+[log] Scholarship types received: [undergraduate_freshman, phd, direct_phd]
+[log] Fetching applications for scholarship type: undergraduate_freshman
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyI...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiIyIiwibnljdV9pZCI6InN1cGVyX2FkbWluIiwicm...
+[log] 🔍 Decoded JWT payload: {sub: 2, nycu_id: super_admin, role: super_admin, debug_mode: true, exp: 1778140473}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyI...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiIyIiwibnljdV9pZCI6InN1cGVyX2FkbWluIiwicm...
+[log] 🔍 Decoded JWT payload: {sub: 2, nycu_id: super_admin, role: super_admin, debug_mode: true, exp: 1778140473}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] Recent applications response: {success: true, message: Retrieved 1 recent applications, data: Array(1)}
+[log] Setting recent applications: [Object]
+[log] ScholarshipTimeline: Raw scholarships data: [Object, Object, Object]
+[log] filterScholarshipsByPermission: Called with scholarships: 3
+[log] filterScholarshipsByPermission: User role: super_admin
+[log] filterScholarshipsByPermission: Super admin, returning all scholarships
+[log] ScholarshipTimeline: Filtered scholarships based on permissions: [Object, Object, Object]
+[log] ScholarshipTimeline: Processing 學士班新生獎學金, application_cycle: semester
+[log] ScholarshipTimeline: Processing 博士生獎學金, application_cycle: yearly
+[log] ScholarshipTimeline: Processing 逕讀博士獎學金, application_cycle: yearly
+[log] ❌ Auth Error: null
+[log] LocalStorage token exists: true
+[log] LocalStorage user exists: true
+[log] API client has token: true
+[log] Token preview: eyJhbGciOiJIUzI1NiIs...
+[log] ScholarshipTimeline: Raw scholarships data: [Object, Object, Object]
+[log] filterScholarshipsByPermission: Called with scholarships: 3
+[log] filterScholarshipsByPermission: User role: super_admin
+[log] filterScholarshipsByPermission: Super admin, returning all scholarships
+[log] ScholarshipTimeline: Filtered scholarships based on permissions: [Object, Object, Object]
+[log] ScholarshipTimeline: Processing 學士班新生獎學金, application_cycle: semester
+[log] ScholarshipTimeline: Processing 博士生獎學金, application_cycle: yearly
+[log] ScholarshipTimeline: Processing 逕讀博士獎學金, application_cycle: yearly
+[log] useScholarshipPermissions: API response: {success: true, message: Retrieved 3 scholarships for current user, data: Array(3)}
+[log] useScholarshipPermissions: Setting allowed scholarships: [Object, Object, Object]
+[log] Response for undergraduate_freshman: {success: true, message: Applications for scholarship undergraduate_freshman retrieved successfully, data: Array(0)}
+[log] Found 0 applications for undergraduate_freshman
+[log] Fetching applications for scholarship type: phd
+[log] Scholarship types received: [undergraduate_freshman, phd, direct_phd]
+[log] Fetching applications for scholarship type: undergraduate_freshman
+[log] 🔍 Portal-sourced user data: {id: 2, nycu_id: super_admin, name: 超級管理員, email: super_admin@nycu.edu.tw, user_type: employee}
+[log] useScholarshipPermissions: API response: {success: true, message: Retrieved 3 scholarships for current user, data: Array(3)}
+[log] useScholarshipPermissions: Setting allowed scholarships: [Object, Object, Object]
+[log] Response for undergraduate_freshman: {success: true, message: Applications for scholarship undergraduate_freshman retrieved successfully, data: Array(0)}
+[log] Found 0 applications for undergraduate_freshman
+[log] Fetching applications for scholarship type: phd
+[log] 🔍 Portal-sourced user data: {id: 2, nycu_id: super_admin, name: 超級管理員, email: super_admin@nycu.edu.tw, user_type: employee}
+[log] Response for phd: {success: true, message: Applications for scholarship phd retrieved successfully, data: Array(1)}
+[log] Found 1 applications for phd
+[log] Fetching applications for scholarship type: direct_phd
+[log] useScholarshipPermissions: API response: {success: true, message: Retrieved 3 scholarships for current user, data: Array(3)}
+[log] useScholarshipPermissions: Setting allowed scholarships: [Object, Object, Object]
+[log] Response for direct_phd: {success: true, message: Applications for scholarship direct_phd retrieved successfully, data: Array(0)}
+[log] Found 0 applications for direct_phd
+[log] Final applications by type: {undergraduate_freshman: Array(0), phd: Array(1), direct_phd: Array(0)}
+[log] useScholarshipPermissions: API response: {success: true, message: Retrieved 3 scholarships for current user, data: Array(3)}
+[log] useScholarshipPermissions: Setting allowed scholarships: [Object, Object, Object]
+[log] ScholarshipTimeline: Starting fetch for user: super_admin 2
+[log] ScholarshipTimeline: Fetching all scholarships for super_admin {academicYear: undefined, semester: undefined}
+[log] Response for phd: {success: true, message: Applications for scholarship phd retrieved successfully, data: Array(1)}
+[log] Found 1 applications for phd
+[log] Fetching applications for scholarship type: direct_phd
+[log] useScholarshipPermissions: API response: {success: true, message: Retrieved 3 scholarships for current user, data: Array(3)}
+[log] useScholarshipPermissions: Setting allowed scholarships: [Object, Object, Object]
+[log] ScholarshipTimeline: Raw scholarships data: [Object, Object, Object]
+[log] filterScholarshipsByPermission: Called with scholarships: 3
+[log] filterScholarshipsByPermission: User role: super_admin
+[log] filterScholarshipsByPermission: Super admin, returning all scholarships
+[log] ScholarshipTimeline: Filtered scholarships based on permissions: [Object, Object, Object]
+[log] ScholarshipTimeline: Processing 學士班新生獎學金, application_cycle: semester
+[log] ScholarshipTimeline: Processing 博士生獎學金, application_cycle: yearly
+[log] ScholarshipTimeline: Processing 逕讀博士獎學金, application_cycle: yearly
+[log] useScholarshipPermissions: API response: {success: true, message: Retrieved 3 scholarships for current user, data: Array(3)}
+[log] useScholarshipPermissions: Setting allowed scholarships: [Object, Object, Object]
+[log] Response for direct_phd: {success: true, message: Applications for scholarship direct_phd retrieved successfully, data: Array(0)}
+[log] Found 0 applications for direct_phd
+[log] Final applications by type: {undergraduate_freshman: Array(0), phd: Array(1), direct_phd: Array(0)}
+[log] useScholarshipPermissions: API response: {success: true, message: Retrieved 3 scholarships for current user, data: Array(3)}
+[log] useScholarshipPermissions: Setting allowed scholarships: [Object, Object, Object]
+[log] ScholarshipTimeline: Starting fetch for user: super_admin 2
+[log] ScholarshipTimeline: Fetching all scholarships for super_admin {academicYear: 114, semester: second}
+[log] ScholarshipTimeline: Raw scholarships data: [Object, Object, Object]
+[log] filterScholarshipsByPermission: Called with scholarships: 3
+[log] filterScholarshipsByPermission: User role: super_admin
+[log] filterScholarshipsByPermission: Super admin, returning all scholarships
+[log] ScholarshipTimeline: Filtered scholarships based on permissions: [Object, Object, Object]
+[log] ScholarshipTimeline: Processing 學士班新生獎學金, application_cycle: semester
+[log] ScholarshipTimeline: Processing 博士生獎學金, application_cycle: yearly
+[log] ScholarshipTimeline: Processing 逕讀博士獎學金, application_cycle: yearly
+[log] 🌐 Current URL after tab change: http://localhost:3000/
+[log] 🌐 API Client Browser mode - using relative path (Nginx proxy)
+[log] 🌐 API Client Browser mode - using relative path (Nginx proxy)
+[log] 📧 React Email Templates API response: {success: true, message: 成功獲取 8 個 React Email 模板, data: Array(8)}
+[log] ✅ Found 8 React Email templates
+[log] 📧 React Email Templates API response: {success: true, message: 成功獲取 8 個 React Email 模板, data: Array(8)}
+[log] ✅ Found 8 React Email templates

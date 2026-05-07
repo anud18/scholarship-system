@@ -1,0 +1,50 @@
+[
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/applications"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/document-requests/my-requests?status=pending"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/notifications/unread-count"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/scholarships/eligible"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/users/me"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/application-fields/form-config/phd?include_inactive=false"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/reference-data/all"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/users/student-info"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/applications"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/document-requests/my-requests?status=pending"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/scholarships/eligible"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/application-fields/form-config/phd?include_inactive=false"
+  }
+]

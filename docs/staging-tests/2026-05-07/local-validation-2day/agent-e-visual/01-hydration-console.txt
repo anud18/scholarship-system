@@ -1,0 +1,159 @@
+
+--- Reload 1 ---
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] 🌐 Typed API Client (Browser mode - Nginx proxy)
+[log] 🌐 API Client Browser mode - using relative path (Nginx proxy)
+[log] 🌐 Current URL after tab change: http://localhost:3000/
+[log] 🔍 URL search params: {}
+[log] ❌ Auth Error: null
+[log] LocalStorage token exists: false
+[log] LocalStorage user exists: false
+[log] API client has token: false
+[log] ❌ No user found, cannot set active tab
+[log] Checking existing authentication...
+[log] Found token: false Found user data: false
+[log] No existing authentication found
+[log] DevLoginPage component rendering...
+[log] DevLoginPage state: {selectedUser: null, isLoggingIn: false, error: null, usersCount: 0}
+[log] DevLoginPage component rendering...
+[log] DevLoginPage state: {selectedUser: null, isLoggingIn: false, error: null, usersCount: 0}
+[log] DevLoginPage component rendering...
+[log] DevLoginPage state: {selectedUser: null, isLoggingIn: false, error: null, usersCount: 0}
+[log] DevLoginPage component rendering...
+[log] DevLoginPage state: {selectedUser: null, isLoggingIn: false, error: null, usersCount: 0}
+[log] DevLoginPage useEffect running, NODE_ENV: development
+[log] Current hostname: localhost
+[log] API client: ExtendedApiClient
+[log] Is localhost: true
+[log] Is dev-login path: false
+[log] Allowing dev login access
+[log] Loading mock users from API...
+[log] ❌ Auth Error: null
+[log] LocalStorage token exists: false
+[log] LocalStorage user exists: false
+[log] API client has token: false
+[log] DevLoginPage useEffect running, NODE_ENV: development
+[log] Current hostname: localhost
+[log] API client: ExtendedApiClient
+[log] Is localhost: true
+[log] Is dev-login path: false
+[log] Allowing dev login access
+[log] Loading mock users from API...
+[log] Mock users response: {success: true, message: Mock users retrieved successfully, data: Array(17)}
+[log] DevLoginPage component rendering...
+[log] DevLoginPage state: {selectedUser: null, isLoggingIn: false, error: null, usersCount: 17}
+[log] DevLoginPage component rendering...
+[log] DevLoginPage state: {selectedUser: null, isLoggingIn: false, error: null, usersCount: 17}
+[log] Mock users response: {success: true, message: Mock users retrieved successfully, data: Array(17)}
+[log] DevLoginPage component rendering...
+[log] DevLoginPage state: {selectedUser: null, isLoggingIn: false, error: null, usersCount: 17}
+[log] DevLoginPage component rendering...
+[log] DevLoginPage state: {selectedUser: null, isLoggingIn: false, error: null, usersCount: 17}
+[log] 🔍 Debug Panel: No token available
+[log] 🔍 Debug Panel: No token available
+
+--- Reload 2 ---
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] 🌐 Typed API Client (Browser mode - Nginx proxy)
+[log] 🌐 API Client Browser mode - using relative path (Nginx proxy)
+[log] 🌐 Current URL after tab change: http://localhost:3000/
+[log] 🔍 URL search params: {}
+[log] ❌ Auth Error: null
+[log] LocalStorage token exists: false
+[log] LocalStorage user exists: false
+[log] API client has token: false
+[log] ❌ No user found, cannot set active tab
+[log] Checking existing authentication...
+[log] Found token: false Found user data: false
+[log] No existing authentication found
+[log] DevLoginPage component rendering...
+[log] DevLoginPage state: {selectedUser: null, isLoggingIn: false, error: null, usersCount: 0}
+[log] DevLoginPage component rendering...
+[log] DevLoginPage state: {selectedUser: null, isLoggingIn: false, error: null, usersCount: 0}
+[log] DevLoginPage component rendering...
+[log] DevLoginPage state: {selectedUser: null, isLoggingIn: false, error: null, usersCount: 0}
+[log] DevLoginPage component rendering...
+[log] DevLoginPage state: {selectedUser: null, isLoggingIn: false, error: null, usersCount: 0}
+[log] DevLoginPage useEffect running, NODE_ENV: development
+[log] Current hostname: localhost
+[log] API client: ExtendedApiClient
+[log] Is localhost: true
+[log] Is dev-login path: false
+[log] Allowing dev login access
+[log] Loading mock users from API...
+[log] ❌ Auth Error: null
+[log] LocalStorage token exists: false
+[log] LocalStorage user exists: false
+[log] API client has token: false
+[log] DevLoginPage useEffect running, NODE_ENV: development
+[log] Current hostname: localhost
+[log] API client: ExtendedApiClient
+[log] Is localhost: true
+[log] Is dev-login path: false
+[log] Allowing dev login access
+[log] Loading mock users from API...
+[log] Mock users response: {success: true, message: Mock users retrieved successfully, data: Array(17)}
+[log] DevLoginPage component rendering...
+[log] DevLoginPage state: {selectedUser: null, isLoggingIn: false, error: null, usersCount: 17}
+[log] DevLoginPage component rendering...
+[log] DevLoginPage state: {selectedUser: null, isLoggingIn: false, error: null, usersCount: 17}
+[log] Mock users response: {success: true, message: Mock users retrieved successfully, data: Array(17)}
+[log] DevLoginPage component rendering...
+[log] DevLoginPage state: {selectedUser: null, isLoggingIn: false, error: null, usersCount: 17}
+[log] DevLoginPage component rendering...
+[log] DevLoginPage state: {selectedUser: null, isLoggingIn: false, error: null, usersCount: 17}
+[log] 🔍 Debug Panel: No token available
+[log] 🔍 Debug Panel: No token available
+
+--- Reload 3 ---
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] 🌐 Typed API Client (Browser mode - Nginx proxy)
+[log] 🌐 API Client Browser mode - using relative path (Nginx proxy)
+[log] 🌐 Current URL after tab change: http://localhost:3000/
+[log] 🔍 URL search params: {}
+[log] ❌ Auth Error: null
+[log] LocalStorage token exists: false
+[log] LocalStorage user exists: false
+[log] API client has token: false
+[log] ❌ No user found, cannot set active tab
+[log] Checking existing authentication...
+[log] Found token: false Found user data: false
+[log] No existing authentication found
+[log] DevLoginPage component rendering...
+[log] DevLoginPage state: {selectedUser: null, isLoggingIn: false, error: null, usersCount: 0}
+[log] DevLoginPage component rendering...
+[log] DevLoginPage state: {selectedUser: null, isLoggingIn: false, error: null, usersCount: 0}
+[log] DevLoginPage component rendering...
+[log] DevLoginPage state: {selectedUser: null, isLoggingIn: false, error: null, usersCount: 0}
+[log] DevLoginPage component rendering...
+[log] DevLoginPage state: {selectedUser: null, isLoggingIn: false, error: null, usersCount: 0}
+[log] DevLoginPage useEffect running, NODE_ENV: development
+[log] Current hostname: localhost
+[log] API client: ExtendedApiClient
+[log] Is localhost: true
+[log] Is dev-login path: false
+[log] Allowing dev login access
+[log] Loading mock users from API...
+[log] ❌ Auth Error: null
+[log] LocalStorage token exists: false
+[log] LocalStorage user exists: false
+[log] API client has token: false
+[log] DevLoginPage useEffect running, NODE_ENV: development
+[log] Current hostname: localhost
+[log] API client: ExtendedApiClient
+[log] Is localhost: true
+[log] Is dev-login path: false
+[log] Allowing dev login access
+[log] Loading mock users from API...
+[log] Mock users response: {success: true, message: Mock users retrieved successfully, data: Array(17)}
+[log] DevLoginPage component rendering...
+[log] DevLoginPage state: {selectedUser: null, isLoggingIn: false, error: null, usersCount: 17}
+[log] DevLoginPage component rendering...
+[log] DevLoginPage state: {selectedUser: null, isLoggingIn: false, error: null, usersCount: 17}
+[log] Mock users response: {success: true, message: Mock users retrieved successfully, data: Array(17)}
+[log] DevLoginPage component rendering...
+[log] DevLoginPage state: {selectedUser: null, isLoggingIn: false, error: null, usersCount: 17}
+[log] DevLoginPage component rendering...
+[log] DevLoginPage state: {selectedUser: null, isLoggingIn: false, error: null, usersCount: 17}
+[log] 🔍 Debug Panel: No token available
+[log] 🔍 Debug Panel: No token available

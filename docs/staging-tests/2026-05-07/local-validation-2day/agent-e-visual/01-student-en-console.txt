@@ -1,0 +1,356 @@
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] 🌐 Typed API Client (Browser mode - Nginx proxy)
+[log] 🌐 API Client Browser mode - using relative path (Nginx proxy)
+[log] 🌐 Current URL after tab change: http://localhost:3000/
+[log] 🔍 URL search params: {}
+[log] ❌ Auth Error: null
+[log] LocalStorage token exists: true
+[log] LocalStorage user exists: true
+[log] API client has token: true
+[log] Token preview: eyJhbGciOiJIUzI1NiIs...
+[log] ❌ No user found, cannot set active tab
+[log] Checking existing authentication...
+[log] Found token: true Found user data: true
+[log] Parsed user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] Authentication restored from localStorage
+[log] ❌ Auth Error: null
+[log] LocalStorage token exists: true
+[log] LocalStorage user exists: true
+[log] API client has token: true
+[log] Token preview: eyJhbGciOiJIUzI1NiIs...
+[log] 🌐 Current URL after tab change: http://localhost:3000/
+[log] EnhancedStudentPortal mounted with user: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] Current auth token exists: true
+[log] Token preview: eyJhbGciOiJIUzI1NiIs...
+[log] EnhancedStudentPortal mounted with user: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] Current auth token exists: true
+[log] Token preview: eyJhbGciOiJIUzI1NiIs...
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1I...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiI1IiwibnljdV9pZCI6InN0dXVuZGVyMSIsInJvbG...
+[log] 🔍 Decoded JWT payload: {sub: 5, nycu_id: stuunder1, role: student, debug_mode: true, exp: 1778140364}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Fetching live student data from API...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1I...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiI1IiwibnljdV9pZCI6InN0dXVuZGVyMSIsInJvbG...
+[log] 🔍 Decoded JWT payload: {sub: 5, nycu_id: stuunder1, role: student, debug_mode: true, exp: 1778140364}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Fetching live student data from API...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] 🔍 Portal-sourced user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] 🔍 Portal-sourced user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] Debug: Raw API response: {success: true, message: Eligible scholarships retrieved successfully, data: Array(0)}
+[log] Debug: API response success: true
+[log] Debug: API response data: []
+[log] 🔍 Live student data fetched: {student: Object, semesters: Array(6)}
+[log] 🔍 Semesters data: [Object, Object, Object, Object, Object, Object]
+[log] Debug: Raw API response: {success: true, message: Eligible scholarships retrieved successfully, data: Array(0)}
+[log] Debug: API response success: true
+[log] Debug: API response data: []
+[log] 🔍 Live student data fetched: {student: Object, semesters: Array(6)}
+[log] 🔍 Semesters data: [Object, Object, Object, Object, Object, Object]
+[error] Failed to load resource: the server responded with a status of 404 (Not Found)
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] 🌐 Typed API Client (Browser mode - Nginx proxy)
+[log] 🌐 API Client Browser mode - using relative path (Nginx proxy)
+[log] Checking existing authentication...
+[log] Found token: true Found user data: true
+[log] Parsed user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] Authentication restored from localStorage
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1I...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiI1IiwibnljdV9pZCI6InN0dXVuZGVyMSIsInJvbG...
+[log] 🔍 Decoded JWT payload: {sub: 5, nycu_id: stuunder1, role: student, debug_mode: true, exp: 1778140364}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Fetching live student data from API...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1I...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiI1IiwibnljdV9pZCI6InN0dXVuZGVyMSIsInJvbG...
+[log] 🔍 Decoded JWT payload: {sub: 5, nycu_id: stuunder1, role: student, debug_mode: true, exp: 1778140364}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Fetching live student data from API...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] 🔍 Portal-sourced user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] 🔍 Portal-sourced user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] 🔍 Live student data fetched: {student: Object, semesters: Array(6)}
+[log] 🔍 Semesters data: [Object, Object, Object, Object, Object, Object]
+[log] 🔍 Live student data fetched: {student: Object, semesters: Array(6)}
+[log] 🔍 Semesters data: [Object, Object, Object, Object, Object, Object]
+[error] Failed to load resource: the server responded with a status of 404 (Not Found)
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] 🌐 Typed API Client (Browser mode - Nginx proxy)
+[log] 🌐 API Client Browser mode - using relative path (Nginx proxy)
+[log] Checking existing authentication...
+[log] Found token: true Found user data: true
+[log] Parsed user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] Authentication restored from localStorage
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1I...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiI1IiwibnljdV9pZCI6InN0dXVuZGVyMSIsInJvbG...
+[log] 🔍 Decoded JWT payload: {sub: 5, nycu_id: stuunder1, role: student, debug_mode: true, exp: 1778140364}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Fetching live student data from API...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1I...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiI1IiwibnljdV9pZCI6InN0dXVuZGVyMSIsInJvbG...
+[log] 🔍 Decoded JWT payload: {sub: 5, nycu_id: stuunder1, role: student, debug_mode: true, exp: 1778140364}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Fetching live student data from API...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] 🔍 Portal-sourced user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] 🔍 Portal-sourced user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] 🔍 Live student data fetched: {student: Object, semesters: Array(6)}
+[log] 🔍 Semesters data: [Object, Object, Object, Object, Object, Object]
+[log] 🔍 Live student data fetched: {student: Object, semesters: Array(6)}
+[log] 🔍 Semesters data: [Object, Object, Object, Object, Object, Object]
+[error] Failed to load resource: the server responded with a status of 404 (Not Found)
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] 🌐 Typed API Client (Browser mode - Nginx proxy)
+[log] 🌐 API Client Browser mode - using relative path (Nginx proxy)
+[log] Checking existing authentication...
+[log] Found token: true Found user data: true
+[log] Parsed user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] Authentication restored from localStorage
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1I...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiI1IiwibnljdV9pZCI6InN0dXVuZGVyMSIsInJvbG...
+[log] 🔍 Decoded JWT payload: {sub: 5, nycu_id: stuunder1, role: student, debug_mode: true, exp: 1778140364}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Fetching live student data from API...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1I...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiI1IiwibnljdV9pZCI6InN0dXVuZGVyMSIsInJvbG...
+[log] 🔍 Decoded JWT payload: {sub: 5, nycu_id: stuunder1, role: student, debug_mode: true, exp: 1778140364}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Fetching live student data from API...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] 🔍 Portal-sourced user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] 🔍 Portal-sourced user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] 🔍 Live student data fetched: {student: Object, semesters: Array(6)}
+[log] 🔍 Semesters data: [Object, Object, Object, Object, Object, Object]
+[log] 🔍 Live student data fetched: {student: Object, semesters: Array(6)}
+[log] 🔍 Semesters data: [Object, Object, Object, Object, Object, Object]
+[error] Failed to load resource: the server responded with a status of 404 (Not Found)
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] 🌐 Typed API Client (Browser mode - Nginx proxy)
+[log] 🌐 API Client Browser mode - using relative path (Nginx proxy)
+[log] Checking existing authentication...
+[log] Found token: true Found user data: true
+[log] Parsed user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] Authentication restored from localStorage
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1I...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiI1IiwibnljdV9pZCI6InN0dXVuZGVyMSIsInJvbG...
+[log] 🔍 Decoded JWT payload: {sub: 5, nycu_id: stuunder1, role: student, debug_mode: true, exp: 1778140364}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Fetching live student data from API...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1I...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiI1IiwibnljdV9pZCI6InN0dXVuZGVyMSIsInJvbG...
+[log] 🔍 Decoded JWT payload: {sub: 5, nycu_id: stuunder1, role: student, debug_mode: true, exp: 1778140364}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Fetching live student data from API...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] 🔍 Portal-sourced user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] 🔍 Portal-sourced user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] 🔍 Live student data fetched: {student: Object, semesters: Array(6)}
+[log] 🔍 Semesters data: [Object, Object, Object, Object, Object, Object]
+[log] 🔍 Live student data fetched: {student: Object, semesters: Array(6)}
+[log] 🔍 Semesters data: [Object, Object, Object, Object, Object, Object]
+[error] Failed to load resource: the server responded with a status of 404 (Not Found)
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] 🌐 Typed API Client (Browser mode - Nginx proxy)
+[log] 🌐 API Client Browser mode - using relative path (Nginx proxy)
+[log] Checking existing authentication...
+[log] Found token: true Found user data: true
+[log] Parsed user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] Authentication restored from localStorage
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1I...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiI1IiwibnljdV9pZCI6InN0dXVuZGVyMSIsInJvbG...
+[log] 🔍 Decoded JWT payload: {sub: 5, nycu_id: stuunder1, role: student, debug_mode: true, exp: 1778140364}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Fetching live student data from API...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1I...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiI1IiwibnljdV9pZCI6InN0dXVuZGVyMSIsInJvbG...
+[log] 🔍 Decoded JWT payload: {sub: 5, nycu_id: stuunder1, role: student, debug_mode: true, exp: 1778140364}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Fetching live student data from API...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] 🔍 Portal-sourced user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] 🔍 Portal-sourced user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] 🔍 Live student data fetched: {student: Object, semesters: Array(6)}
+[log] 🔍 Semesters data: [Object, Object, Object, Object, Object, Object]
+[log] 🔍 Live student data fetched: {student: Object, semesters: Array(6)}
+[log] 🔍 Semesters data: [Object, Object, Object, Object, Object, Object]
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] 🌐 Typed API Client (Browser mode - Nginx proxy)
+[log] 🌐 API Client Browser mode - using relative path (Nginx proxy)
+[log] 🌐 Current URL after tab change: http://localhost:3000/
+[log] 🔍 URL search params: {}
+[log] ❌ Auth Error: null
+[log] LocalStorage token exists: true
+[log] LocalStorage user exists: true
+[log] API client has token: true
+[log] Token preview: eyJhbGciOiJIUzI1NiIs...
+[log] ❌ No user found, cannot set active tab
+[log] Checking existing authentication...
+[log] Found token: true Found user data: true
+[log] Parsed user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] Authentication restored from localStorage
+[log] ❌ Auth Error: null
+[log] LocalStorage token exists: true
+[log] LocalStorage user exists: true
+[log] API client has token: true
+[log] Token preview: eyJhbGciOiJIUzI1NiIs...
+[log] 🌐 Current URL after tab change: http://localhost:3000/
+[log] EnhancedStudentPortal mounted with user: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] Current auth token exists: true
+[log] Token preview: eyJhbGciOiJIUzI1NiIs...
+[log] EnhancedStudentPortal mounted with user: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] Current auth token exists: true
+[log] Token preview: eyJhbGciOiJIUzI1NiIs...
+[log] Debug: Raw API response: {success: true, message: Eligible scholarships retrieved successfully, data: Array(0)}
+[log] Debug: API response success: true
+[log] Debug: API response data: []
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1I...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiI1IiwibnljdV9pZCI6InN0dXVuZGVyMSIsInJvbG...
+[log] 🔍 Decoded JWT payload: {sub: 5, nycu_id: stuunder1, role: student, debug_mode: true, exp: 1778140364}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Fetching live student data from API...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1I...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiI1IiwibnljdV9pZCI6InN0dXVuZGVyMSIsInJvbG...
+[log] 🔍 Decoded JWT payload: {sub: 5, nycu_id: stuunder1, role: student, debug_mode: true, exp: 1778140364}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Fetching live student data from API...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] 🔍 Portal-sourced user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] 🔍 Portal-sourced user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] Debug: Raw API response: {success: true, message: Eligible scholarships retrieved successfully, data: Array(0)}
+[log] Debug: API response success: true
+[log] Debug: API response data: []
+[log] 🔍 Live student data fetched: {student: Object, semesters: Array(6)}
+[log] 🔍 Semesters data: [Object, Object, Object, Object, Object, Object]
+[log] 🔍 Live student data fetched: {student: Object, semesters: Array(6)}
+[log] 🔍 Semesters data: [Object, Object, Object, Object, Object, Object]
+[error] Failed to load resource: the server responded with a status of 404 (Not Found)
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] 🌐 Typed API Client (Browser mode - Nginx proxy)
+[log] 🌐 API Client Browser mode - using relative path (Nginx proxy)
+[log] Checking existing authentication...
+[log] Found token: true Found user data: true
+[log] Parsed user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] Authentication restored from localStorage
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1I...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiI1IiwibnljdV9pZCI6InN0dXVuZGVyMSIsInJvbG...
+[log] 🔍 Decoded JWT payload: {sub: 5, nycu_id: stuunder1, role: student, debug_mode: true, exp: 1778140364}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Fetching live student data from API...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1I...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiI1IiwibnljdV9pZCI6InN0dXVuZGVyMSIsInJvbG...
+[log] 🔍 Decoded JWT payload: {sub: 5, nycu_id: stuunder1, role: student, debug_mode: true, exp: 1778140364}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Fetching live student data from API...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] 🔍 Portal-sourced user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] 🔍 Portal-sourced user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] 🔍 Live student data fetched: {student: Object, semesters: Array(6)}
+[log] 🔍 Semesters data: [Object, Object, Object, Object, Object, Object]
+[log] 🔍 Live student data fetched: {student: Object, semesters: Array(6)}
+[log] 🔍 Semesters data: [Object, Object, Object, Object, Object, Object]
+[error] Failed to load resource: the server responded with a status of 404 (Not Found)
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] 🌐 Typed API Client (Browser mode - Nginx proxy)
+[log] 🌐 API Client Browser mode - using relative path (Nginx proxy)
+[log] Checking existing authentication...
+[log] Found token: true Found user data: true
+[log] Parsed user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] Authentication restored from localStorage
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1I...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiI1IiwibnljdV9pZCI6InN0dXVuZGVyMSIsInJvbG...
+[log] 🔍 Decoded JWT payload: {sub: 5, nycu_id: stuunder1, role: student, debug_mode: true, exp: 1778140364}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Fetching live student data from API...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] 🔍 Debug Panel: Processing token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1I...
+[log] 🔍 JWT Parts count: 3
+[log] 🔍 Decoding JWT payload: eyJzdWIiOiI1IiwibnljdV9pZCI6InN0dXVuZGVyMSIsInJvbG...
+[log] 🔍 Decoded JWT payload: {sub: 5, nycu_id: stuunder1, role: student, debug_mode: true, exp: 1778140364}
+[log] 🔍 No portal_data found in JWT
+[log] 🔍 No student_data found in JWT
+[log] 🔍 Detected data sources: {portalSource: mock, studentApiSource: mock, environment: dev}
+[log] 🔍 Auto-fetching live API data...
+[log] 🔍 Fetching live student data from API...
+[log] 🔍 Assembling portal data from current user and JWT...
+[log] 🔍 Portal-sourced user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] 🔍 Portal-sourced user data: {id: 5, nycu_id: stuunder1, name: 陳小明, email: stuunder1@nycu.edu.tw, user_type: student}
+[log] 🔍 Live student data fetched: {student: Object, semesters: Array(6)}
+[log] 🔍 Semesters data: [Object, Object, Object, Object, Object, Object]
+[log] 🔍 Live student data fetched: {student: Object, semesters: Array(6)}
+[log] 🔍 Semesters data: [Object, Object, Object, Object, Object, Object]

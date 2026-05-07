@@ -1,0 +1,10 @@
+{
+  "status": 200,
+  "body": {
+    "success": true,
+    "message": "銀行帳戶證明文件上傳成功",
+    "data": {
+      "document_url": "/api/v1/user-profiles/files/bank_documents/4a3d8a027ed9445db83a741d37cd2f1b.pdf"
+    }
+  }
+}

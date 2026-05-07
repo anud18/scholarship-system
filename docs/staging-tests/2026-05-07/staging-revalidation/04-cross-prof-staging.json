@@ -1,0 +1,22 @@
+{
+  "endpoint": "/api/v1/professor-student",
+  "selfId": null,
+  "attempts": [
+    { "professorIdParam": 1, "status": 401, "body": { "success": false, "message": "Token has expired", "error_code": "AUTHENTICATION_ERROR" } },
+    { "professorIdParam": 2, "status": 401, "body": { "success": false, "message": "Token has expired", "error_code": "AUTHENTICATION_ERROR" } }
+  ],
+  "statusShadowAttempt": {
+    "professorIdParam": 1,
+    "query": "professor_id=1&status=active",
+    "status": 401,
+    "body": { "success": false, "message": "Token has expired", "error_code": "AUTHENTICATION_ERROR" }
+  },
+  "_test_status": "INCONCLUSIVE",
+  "_reason": "Same expired-professor-token issue as section 3. Auth is rejected at the auth middleware before the route handler runs, so the 401 here tells us nothing about whether the status= shadow bug (#93) is fixed. Endpoint exists (otherwise we would see 404), and auth middleware short-circuits properly (400/422 would suggest input validation reaches earlier than auth).",
+  "_action_required": "Need a fresh professor session. Re-login of A00123 / G01873 via nycu-sso-login skill failed silently (form bounces back, password rejected). Parent agent should supply correct portal password for a professor account, or wait for the fix on commit 34c54a1 to merge to main and deploy.",
+  "_expected_pre_fix_on_staging": {
+    "status": 500,
+    "note": "Per parent agent's instruction: 'Expected on staging (still pre-fix): 500 (the bug). On a deployed-fix env: 403.' Commit 34c54a1 lives on branch audit/monitoring-stack-phase1, not yet merged to main as of merge of PR #89 (2026-05-07T05:49Z), so staging is pre-fix and would 500 with a fresh professor token.",
+    "expected_post_fix": 403
+  }
+}

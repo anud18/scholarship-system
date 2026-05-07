@@ -1,0 +1,11 @@
+=== Cross-professor query auth (commit ff15c0d) — corrected URL ===
+self  (professor_id=12) -> HTTP 200
+cross (professor_id=11) -> HTTP 500
+none  (no filter)       -> HTTP 200
+
+=== Cross-query body ===
+{
+    "success": false,
+    "message": "Internal server error",
+    "trace_id": "6d5183fd-a7f3-443f-9096-8a2042da3357"
+}

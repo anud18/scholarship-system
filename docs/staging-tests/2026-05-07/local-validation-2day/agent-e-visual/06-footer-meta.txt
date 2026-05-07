@@ -1,0 +1,4 @@
+Clicked toggle: true
+Summaries in footer: 2
+State before: [{"open":true,"summary":"聯絡資訊"},{"open":true,"summary":"相關連結"}]
+State after: [{"open":false,"summary":"聯絡資訊"},{"open":true,"summary":"相關連結"}]

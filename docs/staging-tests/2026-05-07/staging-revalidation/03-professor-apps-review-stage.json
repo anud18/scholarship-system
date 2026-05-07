@@ -1,0 +1,16 @@
+{
+  "endpoint": "/api/v1/professor/applications",
+  "status": 401,
+  "totalItems": 0,
+  "reviewStageInResponse": false,
+  "sample": [],
+  "firstItemKeys": [],
+  "_test_status": "INCONCLUSIVE",
+  "_reason": "Saved auth state /tmp/pw-test/auth-G01873.json (and dev_user nycu_id A00123) is expired ('Token has expired'). Re-login via nycu-sso-login skill failed for both G01873 and A00123 — credentials at /tmp/pw-test/.password (15-byte file shared across student accounts) appear not to match the professor account. Re-login screenshot at /tmp/pw-test/login-failed-A00123.png shows the portal bouncing back to an empty form (rejected silently).",
+  "_action_required": "Parent agent / user needs to either (a) supply the professor portal password for A00123 (or another professor nycu_id), or (b) accept that staging review_stage deployment is verified solely from main-branch commit history. Per memory note PR #89 was merged 2026-05-07T05:49Z and commit 34c54a1 (which adds review_stage to the professor apps response) is on branch audit/monitoring-stack-phase1, NOT yet merged to main, NOT yet on staging. Therefore: review_stage is expected to be MISSING on staging until that branch ships.",
+  "_expected_after_fix_lands": {
+    "status": 200,
+    "review_stage_in_response_items": true,
+    "first_item_should_include": ["id", "app_id", "status", "review_stage", "..."]
+  }
+}

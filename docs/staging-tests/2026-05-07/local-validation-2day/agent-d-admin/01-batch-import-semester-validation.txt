@@ -1,0 +1,27 @@
+=== Endpoint: http://localhost:8000/api/v1/college-review/batch-import/upload-data ===
+=== Container running pre-fix code (no pattern= constraint on semester) ===
+
+--- semester=first ---
+HTTP 200
+Body (first 250 chars): {"success":true,"message":"檔案上傳完成，發現 1 個驗證錯誤","data":{"batch_id":1,"file_name":"t.csv","total_records":0,"preview_data":[],"validation_summary":{"valid_count":-1,"invalid_count":1,"warnings":[],"errors":[{"row":0,"field":"
+
+--- semester=invalid ---
+HTTP 200
+Body (first 250 chars): {"success":true,"message":"檔案上傳完成，發現 1 個驗證錯誤","data":{"batch_id":2,"file_name":"t.csv","total_records":0,"preview_data":[],"validation_summary":{"valid_count":-1,"invalid_count":1,"warnings":[],"errors":[{"row":0,"field":"
+
+--- semester=%27%20OR%201%3D1 ---
+HTTP 200
+Body (first 250 chars): {"success":true,"message":"檔案上傳完成，發現 1 個驗證錯誤","data":{"batch_id":3,"file_name":"t.csv","total_records":0,"preview_data":[],"validation_summary":{"valid_count":-1,"invalid_count":1,"warnings":[],"errors":[{"row":0,"field":"
+
+--- semester=EMPTY ---
+HTTP 200
+Body (first 250 chars): {"success":true,"message":"檔案上傳完成，發現 1 個驗證錯誤","data":{"batch_id":4,"file_name":"t.csv","total_records":0,"preview_data":[],"validation_summary":{"valid_count":-1,"invalid_count":1,"warnings":[],"errors":[{"row":0,"field":"
+
+--- semester=yearly ---
+HTTP 200
+Body (first 250 chars): {"success":true,"message":"檔案上傳完成，發現 1 個驗證錯誤","data":{"batch_id":5,"file_name":"t.csv","total_records":0,"preview_data":[],"validation_summary":{"valid_count":-1,"invalid_count":1,"warnings":[],"errors":[{"row":0,"field":"
+
+--- semester=second ---
+HTTP 200
+Body (first 250 chars): {"success":true,"message":"檔案上傳完成，發現 1 個驗證錯誤","data":{"batch_id":6,"file_name":"t.csv","total_records":0,"preview_data":[],"validation_summary":{"valid_count":-1,"invalid_count":1,"warnings":[],"errors":[{"row":0,"field":"
+

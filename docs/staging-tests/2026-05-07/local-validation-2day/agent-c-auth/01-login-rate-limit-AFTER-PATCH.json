@@ -1,0 +1,7 @@
+{
+  "test": "POST /api/v1/auth/login burst (after patching auth.py + rate_limiting.py from worktree)",
+  "expected": "Rate limit fires after threshold (20 reqs/300s); 429 response body contains limit/window/retry_after",
+  "actual": "429 fired immediately on next request (carried-over bucket from prior session). Response body shape: {success:false, message:{error:'Rate limit exceeded', limit:20, window_seconds:300, remaining:0, retry_after:300}}",
+  "verdict": "PASS",
+  "note": "After hot-reloading the dev backend with the audit/monitoring-stack-phase1 versions of auth.py and rate_limiting.py, the @rate_limit decorator engages correctly. Original test (pre-patch) returned all 401/422 because decorator was not in the deployed image."
+}

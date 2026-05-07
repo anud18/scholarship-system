@@ -1,0 +1,70 @@
+[
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/notifications/unread-count"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/college-review/applications"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/college-review/managed-college"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/college-review/available-combinations"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/college-review/available-combinations"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/college-review/rankings"
+  },
+  {
+    "status": 500,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/college-review/applications?academic_year=115&semester=yearly&scholarship_type=phd"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/scholarships"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/college-review/quota-status?scholarship_type_id=2&academic_year=115&semester=yearly"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/scholarships"
+  },
+  {
+    "status": 500,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/college-review/applications?academic_year=115&semester=yearly&scholarship_type=phd"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/system-settings/public-docs"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/reference-data/all"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/college-review/sub-type-translations"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/users/me"
+  },
+  {
+    "status": 500,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/college-review/applications?academic_year=115&semester=yearly&scholarship_type=phd"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/college-review/rankings"
+  }
+]

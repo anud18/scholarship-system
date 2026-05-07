@@ -1,0 +1,23 @@
+{
+  "selfId": 266,
+  "selfNycuId": "414551001",
+  "beforeProfileStatus": 200,
+  "beforeBankDocFields": {
+    "bank_document_photo_url": null,
+    "has_complete_bank_info": null,
+    "account_number": null
+  },
+  "deleteStatus": 200,
+  "deleteBody": {
+    "success": false,
+    "message": "沒有找到銀行帳戶證明文件"
+  },
+  "afterProfileStatus": 200,
+  "afterBankDocFields": {
+    "bank_document_photo_url": null,
+    "has_complete_bank_info": null,
+    "account_number": null
+  },
+  "note": "no bank_document_photo_url after delete; cycle complete or pre-empty",
+  "fileEndpointStatus": null
+}
