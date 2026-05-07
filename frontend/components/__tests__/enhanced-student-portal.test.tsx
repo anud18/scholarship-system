@@ -202,7 +202,7 @@ describe("EnhancedStudentPortal", () => {
 
     // Wait for applications view to load
     await waitFor(() => {
-      expect(screen.getByText("No application records")).toBeInTheDocument();
+      expect(screen.getByText("No application records yet")).toBeInTheDocument();
     });
     expect(screen.getByText(/Click 'New Application' to start/)).toBeInTheDocument();
   });
