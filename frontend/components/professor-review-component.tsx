@@ -78,6 +78,18 @@ function ProfessorReviewComponentInner({
 
   // Review form states
   const [subTypes, setSubTypes] = useState<SubTypeOption[]>([]);
+  // When the scholarship has no configured sub-types, fall back to a single
+  // "default" entry so the professor can still submit an overall yes/no
+  // recommendation (sub_type_code "default" is accepted by ReviewService —
+  // see backend/app/services/review_service.py:140).
+  const FALLBACK_SUB_TYPE: SubTypeOption = {
+    value: "default",
+    label: "整體推薦",
+    label_en: "Overall recommendation",
+    is_default: true,
+  };
+  const effectiveSubTypes: SubTypeOption[] =
+    subTypes.length > 0 ? subTypes : [FALLBACK_SUB_TYPE];
   const [reviewData, setReviewData] = useState<ReviewData>({
     recommendation: "",
     items: [],
@@ -172,10 +184,13 @@ function ProfessorReviewComponentInner({
     }
   }, [searchQuery, applications]);
 
-  // Ensure reviewData.items is always initialized when subTypes change
+  // Ensure reviewData.items is always initialized when the modal opens.
+  // Uses effectiveSubTypes so an empty API response still gets a single
+  // "default" item — otherwise the modal would render with no recommendation
+  // form and a permanently-disabled submit button.
   useEffect(() => {
-    if (subTypes.length > 0 && reviewData.items.length === 0) {
-      const initialItems = subTypes.map(subType => ({
+    if (reviewModalOpen && reviewData.items.length === 0) {
+      const initialItems = effectiveSubTypes.map(subType => ({
         sub_type_code: subType.value,
         recommendation: 'pending' as const,
         comments: "",
@@ -186,7 +201,9 @@ function ProfessorReviewComponentInner({
         items: initialItems,
       }));
     }
-  }, [subTypes, reviewData.items.length]);
+    // effectiveSubTypes depends on subTypes.length; tracking subTypes is enough.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewModalOpen, subTypes, reviewData.items.length]);
 
   // Get status badge variant
   const getStatusVariant = (status: string) => {
@@ -230,9 +247,13 @@ function ProfessorReviewComponentInner({
         setSubTypes(availableSubTypes);
       }
 
-      // Always initialize items based on available sub-types
+      // Always initialize items based on available sub-types. When the
+      // scholarship has none, fall back to a single "default" item so the
+      // review form is still functional (see FALLBACK_SUB_TYPE at top of
+      // component).
       const initializeItems = (subTypes: SubTypeOption[]) => {
-        return subTypes.map(subType => ({
+        const usable = subTypes.length > 0 ? subTypes : [FALLBACK_SUB_TYPE];
+        return usable.map(subType => ({
           sub_type_code: subType.value,
           recommendation: 'pending' as const,
           comments: "",
@@ -258,7 +279,9 @@ function ProfessorReviewComponentInner({
 
           // Merge existing review items with all available sub-types
           const existingItems: ReviewItem[] = reviewResponse.data.items || [];
-          const mergedItems = availableSubTypes.map(subType => {
+          const mergeBase =
+            availableSubTypes.length > 0 ? availableSubTypes : [FALLBACK_SUB_TYPE];
+          const mergedItems = mergeBase.map(subType => {
             const existingItem = existingItems.find(
               item => item.sub_type_code === subType.value
             );
@@ -395,8 +418,12 @@ function ProfessorReviewComponentInner({
     });
   };
 
-  // Get sub-type label
+  // Get sub-type label. Returns the fallback label when the scholarship
+  // has no configured sub-types and we're showing the default recommendation.
   const getSubTypeLabel = (subTypeCode: string) => {
+    if (subTypeCode === FALLBACK_SUB_TYPE.value && subTypes.length === 0) {
+      return FALLBACK_SUB_TYPE.label;
+    }
     const subType = subTypes.find(st => st.value === subTypeCode);
     return subType?.label || subTypeCode;
   };
@@ -670,8 +697,10 @@ function ProfessorReviewComponentInner({
                 </CardContent>
               </Card>
 
-              {/* Sub-type Reviews - SIMPLIFIED VERSION */}
-              {subTypes.length > 0 && (
+              {/* Sub-type Reviews — renders one block per sub-type. Falls
+                  back to a single "default" block when the scholarship has
+                  no configured sub-types (see effectiveSubTypes above). */}
+              {(
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-lg flex items-center gap-2">
@@ -679,11 +708,13 @@ function ProfessorReviewComponentInner({
                       是否同意學生申請
                     </CardTitle>
                     <p className="text-sm text-muted-foreground">
-                      請針對每個獎學金申請進行評估，並提供您的推薦意見
+                      {subTypes.length > 0
+                        ? "請針對每個獎學金申請進行評估，並提供您的推薦意見"
+                        : "此獎學金未設定子類型，請對整體申請提供推薦意見"}
                     </p>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {subTypes.map(subType => {
+                    {effectiveSubTypes.map(subType => {
                       const reviewItem = reviewData.items.find(
                         item => item.sub_type_code === subType.value
                       );
