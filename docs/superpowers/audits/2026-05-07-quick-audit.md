@@ -594,3 +594,23 @@ Net Dependabot alert state after these commits: ~1 CRITICAL closed, ~30 HIGH ale
 - 11 P1 bug categories
 - **1 CRITICAL + 30 HIGH dependency vulnerabilities closed** via dep bumps
 - 5 regression test files
+
+---
+
+## Round 18 — merge-conflict + CI fix + 2 more TZ bugs
+
+| commit | scope |
+|--------|-------|
+| 67d6baa | Merge origin/main into branch (resolved requirements-lint.txt conflict — kept the patched black==26.3.1) |
+| fc85eff | Regen package-lock.json + drop postcss override conflict — fixes Bundle Size + Frontend Security CI checks (`npm ci` was bailing on missing/stale lockfile) |
+| d861b6e | npm audit fix — close 1 moderate (ajv) without semver-major bumps |
+| 0597f76 | **P2 TZ fix**: notification quiet-hours compared UTC %H:%M against locally-stored quiet_hours_start (8h shift bug); roster filename now UTC for cross-server consistency |
+
+PR #89 → MERGEABLE, 0 CI failures, 17 pending checks.
+
+## Cumulative session totals (round 18 end)
+
+- **85+ commits** on `audit/monitoring-stack-phase1`
+- PR #89 clean and ready for review
+- 8 issues fully closed + 2 mostly closed
+- **12 P1 bug categories** + Dependabot vuln sweep (1 CRITICAL + 30 HIGH closed)
