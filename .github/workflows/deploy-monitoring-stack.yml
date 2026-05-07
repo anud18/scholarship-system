@@ -155,16 +155,22 @@ jobs:
           echo "Found leftover datasource: name='$DS_NAME' uid=alertmanager-uid"
 
           # Drop a deleteDatasources file alongside the existing
-          # datasources.yml. GF_DATASOURCE_SIGHUP=true is set in compose,
-          # so HUP triggers a re-provision.
+          # datasources.yml. SIGHUP didn't trigger a re-provision in
+          # practice, so just restart Grafana — it's <30s and bulletproof.
           {
             echo "apiVersion: 1"
             echo "deleteDatasources:"
             echo "  - name: ${DS_NAME}"
             echo "    orgId: 1"
           } | sudo tee /opt/scholarship/monitoring/config/grafana/provisioning/datasources/cleanup-leftovers.yml > /dev/null
-          docker kill -s HUP monitoring_grafana
-          sleep 5
+
+          docker restart monitoring_grafana
+          for i in $(seq 1 24); do
+            if docker exec monitoring_grafana wget --spider -q http://localhost:3000/api/health 2>/dev/null; then
+              break
+            fi
+            sleep 5
+          done
 
           STATUS=$(docker run --rm --network "$NET" curlimages/curl:8.10.1 \
             -sS -o /dev/null -w "%{http_code}" \
