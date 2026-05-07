@@ -104,11 +104,20 @@ class UserProfileService:
         if existing_profile:
             raise ValueError("User profile already exists")
 
-        # Create profile
+        # Create profile. The check above is racy under concurrent requests
+        # for the same user_id — convert IntegrityError on the unique
+        # constraint to a 1-line ValueError matching the upfront-check
+        # contract, so callers always see a clean error rather than a 500.
+        from sqlalchemy.exc import IntegrityError
+
         profile = UserProfile(user_id=user_id, **profile_data.model_dump(exclude_unset=True))
 
         self.db.add(profile)
-        await self.db.commit()
+        try:
+            await self.db.commit()
+        except IntegrityError as e:
+            await self.db.rollback()
+            raise ValueError("User profile already exists") from e
         await self.db.refresh(profile)
 
         # Log profile creation
