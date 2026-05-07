@@ -540,7 +540,9 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                                     <div className="text-xs text-gray-500">
                                       {application.semester === "first"
                                         ? "第一學期"
-                                        : "第二學期"}
+                                        : application.semester === "second"
+                                          ? "第二學期"
+                                          : "全年"}
                                     </div>
                                   )}
                                 </div>
@@ -834,7 +836,9 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                                     <div className="text-xs text-gray-500">
                                       {application.semester === "first"
                                         ? "第一學期"
-                                        : "第二學期"}
+                                        : application.semester === "second"
+                                          ? "第二學期"
+                                          : "全年"}
                                     </div>
                                   )}
                                 </div>
