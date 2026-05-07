@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.rate_limiting import rate_limit
 from app.core.security import get_current_user
 from app.db.deps import get_db
 from app.models.user import User, UserRole
@@ -36,7 +37,8 @@ async def populate_college_info(user_data: UserResponse, db: AsyncSession, user:
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
+@rate_limit(requests=10, window_seconds=600)  # 10 registrations / 10 min per IP
+async def register(request: Request, user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     """Register a new user"""
     auth_service = AuthService(db)
     user = await auth_service.register_user(user_data)
@@ -59,7 +61,8 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/login")
-async def login(login_data: UserLogin, db: AsyncSession = Depends(get_db)):
+@rate_limit(requests=20, window_seconds=300)  # 20 attempts / 5 min per IP — slows brute force
+async def login(request: Request, login_data: UserLogin, db: AsyncSession = Depends(get_db)):
     """Login user and return access token"""
     auth_service = AuthService(db)
     token_response = await auth_service.login(login_data)
@@ -153,7 +156,8 @@ async def get_mock_users(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/mock-sso/login")
-async def mock_sso_login(request_data: PortalSSORequest, db: AsyncSession = Depends(get_db)):
+@rate_limit(requests=30, window_seconds=300)  # dev path; still rate-limited so prod misconfigs don't open it wide
+async def mock_sso_login(request: Request, request_data: PortalSSORequest, db: AsyncSession = Depends(get_db)):
     """Login as mock user for development"""
     if not settings.enable_mock_sso:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mock SSO is disabled")

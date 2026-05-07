@@ -58,7 +58,7 @@ class ScholarshipType(Base):
     # 類別設定
     # category removed - no longer needed for classification
     # Sub-types are configuration-driven, default to "general"
-    sub_type_list = Column(JSON, default=["general"])  # ["nstc", "moe_1w", "moe_2w", "custom_type", ...]
+    sub_type_list = Column(JSON, default=lambda: ["general"])  # ["nstc", "moe_1w", "moe_2w", "custom_type", ...]
     sub_type_selection_mode = Column(
         Enum(SubTypeSelectionMode, values_callable=lambda obj: [e.value for e in obj]),
         default=SubTypeSelectionMode.single,
@@ -502,6 +502,7 @@ class ScholarshipRule(Base):
             semester_label = {
                 Semester.first: "第一學期",
                 Semester.second: "第二學期",
+                Semester.yearly: "全年",
             }.get(self.semester, "")
             return f"{self.academic_year}學年度 {semester_label}"
         return f"{self.academic_year}學年度"
@@ -605,7 +606,7 @@ class ScholarshipConfiguration(Base):
     currency = Column(String(10), default="TWD")
 
     whitelist_student_ids = Column(
-        JSON, default={}
+        JSON, default=lambda: {}
     )  # 白名單學號列表，依子獎學金區分 {"general": ["0856001", "0856002"], "nstc": ["0856003"]}
 
     # 申請時間 (從 ScholarshipType 移至此處)
@@ -683,6 +684,7 @@ class ScholarshipConfiguration(Base):
             semester_label = {
                 Semester.first: "第一學期",
                 Semester.second: "第二學期",
+                Semester.yearly: "全年",
             }.get(self.semester, "")
             return f"{self.academic_year}學年度 {semester_label}"
         return f"{self.academic_year}學年度"

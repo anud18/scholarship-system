@@ -76,6 +76,38 @@ import { ApplicationReviewDialog } from "@/components/common/ApplicationReviewDi
 import { Application as ApplicationType, User } from "@/lib/api";
 import { ApplicationStatus, getApplicationStatusLabel } from "@/lib/enums";
 
+// #68: identity-code -> Chinese label. Mapping derived from the SIS API
+// "std_identity" enum used in Taiwanese student record systems. Unknown
+// codes fall through to "身分別 N" / "Identity N" so reviewers still see
+// the raw value rather than a blank cell.
+const IDENTITY_LABEL_ZH: Record<number | string, string> = {
+  1: "本國生",
+  2: "僑生",
+  3: "外籍生",
+  4: "陸生",
+  5: "港澳生",
+  6: "外籍交換生",
+};
+
+const IDENTITY_LABEL_EN: Record<number | string, string> = {
+  1: "Local",
+  2: "Overseas Chinese",
+  3: "Foreign",
+  4: "Mainland",
+  5: "HK/Macau",
+  6: "Exchange",
+};
+
+function formatIdentityLabel(
+  code: number | string | undefined | null,
+  locale: "zh" | "en"
+): string {
+  if (code === undefined || code === null || code === "") return "-";
+  const map = locale === "zh" ? IDENTITY_LABEL_ZH : IDENTITY_LABEL_EN;
+  if (code in map) return map[code as keyof typeof map];
+  return locale === "zh" ? `身分別 ${code}` : `Identity ${code}`;
+}
+
 interface Application {
   id: number;
   app_id: string;
@@ -87,6 +119,14 @@ interface Application {
   department_code?: string;
   scholarship_type: string;
   sub_type: string;
+  // #68: surface nationality + identity from the student_data snapshot so
+  // college reviewers can apply scholarship-specific eligibility rules
+  // (e.g. NSTC excludes mainland/HK/Macau students; MoE has identity caveats).
+  student_data?: {
+    std_nation?: string | null;
+    std_identity?: number | string | null;
+    [key: string]: unknown;
+  };
   eligible_subtypes?: Array<{
     code: string;
     is_rejected: boolean;
@@ -327,6 +367,20 @@ function SortableItem({
           </span>
           <span className="text-xs text-muted-foreground">
             {application.department_name || "-"}
+          </span>
+        </div>
+      </TableCell>
+
+      <TableCell className="text-center">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-sm">
+            {application.student_data?.std_nation || "-"}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {formatIdentityLabel(
+              application.student_data?.std_identity ?? null,
+              locale
+            )}
           </span>
         </div>
       </TableCell>
@@ -1002,6 +1056,9 @@ export function CollegeRankingTable({
                   </TableHead>
                   <TableHead className="w-40 text-center">
                     {locale === "zh" ? "學院/系所" : "College/Dept"}
+                  </TableHead>
+                  <TableHead className="w-32 text-center">
+                    {locale === "zh" ? "國籍 / 身分" : "Nationality / Identity"}
                   </TableHead>
                   <TableHead className="text-center">
                     {locale === "zh" ? "獎學金類別" : "Eligible Types"}

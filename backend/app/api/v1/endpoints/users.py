@@ -571,9 +571,9 @@ async def get_user_stats(current_user: User = Depends(require_admin), db: AsyncS
         status_stats[employee_status.value] = user_count
 
     # Recent registrations (last 30 days)
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
-    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
     recent_stmt = select(count(User.id)).where(User.created_at >= thirty_days_ago)
     recent_result = await db.execute(recent_stmt)
     recent_count = recent_result.scalar()

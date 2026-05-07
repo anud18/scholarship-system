@@ -6,7 +6,7 @@ Multi-role review operations (professor, college, admin)
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -92,7 +92,7 @@ async def create_review(
     combined_comments = await review_service.combine_comments(items_dict)
 
     # 創建審查記錄
-    reviewed_at = datetime.utcnow()
+    reviewed_at = datetime.now(timezone.utc)
     new_review = ApplicationReview(
         application_id=review_data.application_id,
         reviewer_id=current_user.id,

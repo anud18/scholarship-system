@@ -1459,8 +1459,8 @@ export function ApplicationReviewDialog({
                               ? (locale === "zh" ? "上學期" : "First")
                               : displayData.semester === "second"
                               ? (locale === "zh" ? "下學期" : "Second")
-                              : displayData.semester === "annual"
-                              ? (locale === "zh" ? "全年" : "Annual")
+                              : displayData.semester === "yearly"
+                              ? (locale === "zh" ? "全年" : "Yearly")
                               : displayData.semester || "-"}
                           </p>
                         </div>

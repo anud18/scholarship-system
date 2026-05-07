@@ -2,10 +2,11 @@
 Authentication service for user login and registration
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AuthenticationError, ConflictError
@@ -51,7 +52,20 @@ class AuthService:
         )
 
         self.db.add(user)
-        await self.db.commit()
+        try:
+            await self.db.commit()
+        except IntegrityError as e:
+            # Concurrent registration race: another request inserted a row
+            # with the same nycu_id (or email) between our check above and
+            # this commit. The DB-level unique constraint catches it; convert
+            # to ConflictError so the caller gets a 409 instead of a 500.
+            await self.db.rollback()
+            msg = str(e.orig) if getattr(e, "orig", None) else str(e)
+            if "nycu_id" in msg:
+                raise ConflictError("NYCU ID already exists") from e
+            if "email" in msg:
+                raise ConflictError("Email already registered") from e
+            raise ConflictError("Conflict during registration") from e
         await self.db.refresh(user)
 
         return UserResponse.model_validate(user)
@@ -67,7 +81,7 @@ class AuthService:
             raise AuthenticationError("Invalid nycu_id or email")
 
         # Update last login time
-        user.last_login_at = datetime.utcnow()
+        user.last_login_at = datetime.now(timezone.utc)
         await self.db.commit()
 
         return user

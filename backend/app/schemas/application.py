@@ -112,26 +112,30 @@ class ApplicationFormData(BaseModel):
     fields: Dict[str, DynamicFormField] = Field(
         ...,
         description="動態表單欄位",
-        example={
-            "bank_account": {
-                "field_id": "bank_account",
-                "field_type": "text",
-                "value": "123123",
-                "required": True,
+        examples=[
+            {
+                "bank_account": {
+                    "field_id": "bank_account",
+                    "field_type": "text",
+                    "value": "123123",
+                    "required": True,
+                }
             }
-        },
+        ],
     )
     documents: List[DocumentData] = Field(
         default=[],
         description="文件列表",
-        example=[
-            {
-                "document_id": "bank_account_cover",
-                "document_type": "存摺封面",
-                "file_path": "test.pdf",
-                "original_filename": "test.pdf",
-                "upload_time": "2024-03-19T10:00:00Z",
-            }
+        examples=[
+            [
+                {
+                    "document_id": "bank_account_cover",
+                    "document_type": "存摺封面",
+                    "file_path": "test.pdf",
+                    "original_filename": "test.pdf",
+                    "upload_time": "2024-03-19T10:00:00Z",
+                }
+            ]
         ],
     )
 
@@ -165,12 +169,12 @@ class ApplicationFormData(BaseModel):
 class ApplicationCreate(BaseModel):
     """建立申請"""
 
-    scholarship_type: str = Field(..., description="獎學金類型代碼", example="undergraduate_freshman")
+    scholarship_type: str = Field(..., description="獎學金類型代碼", examples=["undergraduate_freshman"])
     configuration_id: int = Field(
-        ..., description="獎學金配置ID (必須從eligible scholarships取得，確保學生有申請資格)", example=1
+        ..., description="獎學金配置ID (必須從eligible scholarships取得，確保學生有申請資格)", examples=[1]
     )
     scholarship_subtype_list: List[str] = Field(
-        default=[], description="獎學金子類型列表", example=["general", "special"]
+        default=[], description="獎學金子類型列表", examples=[["general", "special"]]
     )
     form_data: ApplicationFormData = Field(..., description="表單資料")
     agree_terms: Optional[bool] = Field(False, description="同意條款")
@@ -665,6 +669,11 @@ class HistoricalApplicationResponse(BaseModel):
     student_id: Optional[str] = None
     student_email: Optional[str] = None
     student_department: Optional[str] = None
+    # #68: nationality + identity from student_data snapshot, surfaced so
+    # admin reviewers can apply scholarship-specific eligibility rules
+    # (NSTC excludes mainland/HK/Macau, MoE caveats, etc.).
+    student_nationality: Optional[str] = None
+    student_identity: Optional[int] = None
 
     # Scholarship information
     scholarship_name: Optional[str] = None

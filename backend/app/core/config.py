@@ -7,7 +7,7 @@ import os
 from typing import List, Optional
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -299,9 +299,7 @@ class Settings(BaseSettings):
         """Check if we're in a testing environment"""
         return bool(os.getenv("PYTEST_CURRENT_TEST") or os.getenv("CI") or os.getenv("TESTING"))
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 
 
 # Global settings instance

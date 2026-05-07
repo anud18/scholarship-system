@@ -6,7 +6,7 @@ from the browser. Used for monitoring and debugging CSP issues.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Request, status
 from fastapi.responses import JSONResponse
@@ -38,7 +38,7 @@ async def report_csp_violation(request: Request):
 
         # Log violation with structured data
         violation_data = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "blocked_uri": csp_report.get("blocked-uri", "unknown"),
             "violated_directive": csp_report.get("violated-directive", "unknown"),
             "original_policy": csp_report.get("original-policy", "unknown"),

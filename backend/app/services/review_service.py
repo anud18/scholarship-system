@@ -4,16 +4,49 @@ Review Service
 統一審查服務，處理所有角色的審查邏輯
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from app.core.exceptions import AuthorizationError, NotFoundError
 from app.models.application import Application
+from app.models.enums import ReviewStage
 from app.models.review import ApplicationReview, ApplicationReviewItem
-from app.models.user import User
+from app.models.user import User, UserRole
+
+# Stages at or beyond "college review starts" — once an application reaches any
+# of these, professor review edits/submits are locked for non-admin users.
+# (See issue #64.)  professor_review and professor_reviewed remain editable so
+# professors can still iterate on their own input before the college takes over.
+LOCKED_STAGES_FOR_PROFESSOR_REVIEW = frozenset(
+    {
+        ReviewStage.college_review.value,
+        ReviewStage.college_reviewed.value,
+        ReviewStage.college_ranking.value,
+        ReviewStage.college_ranked.value,
+        ReviewStage.admin_review.value,
+        ReviewStage.admin_reviewed.value,
+        ReviewStage.quota_distribution.value,
+        ReviewStage.quota_distributed.value,
+        ReviewStage.roster_preparation.value,
+        ReviewStage.roster_prepared.value,
+        ReviewStage.roster_submitted.value,
+        ReviewStage.completed.value,
+        ReviewStage.archived.value,
+    }
+)
+
+
+def is_professor_review_locked(application: Application) -> bool:
+    """True if professor review on this application is locked because college
+    review (or a later stage) has begun."""
+    stage = application.review_stage
+    # SQLAlchemy may return either the enum instance or its string value
+    stage_value = getattr(stage, "value", stage)
+    return stage_value in LOCKED_STAGES_FOR_PROFESSOR_REVIEW
 
 
 class ReviewService:
@@ -21,6 +54,23 @@ class ReviewService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    async def assert_professor_review_unlocked(self, application_id: int, current_user: User) -> None:
+        """
+        Guard: raise AuthorizationError if professor review on this application is
+        locked because college review (or beyond) has begun. Admins / super_admins
+        bypass the lock to keep the manual-intervention escape hatch open (#64).
+        """
+        if current_user.role in (UserRole.admin, UserRole.super_admin):
+            return
+
+        application = await self.db.get(Application, application_id)
+        if not application:
+            raise NotFoundError(f"Application {application_id} not found")
+
+        if is_professor_review_locked(application):
+            stage_value = getattr(application.review_stage, "value", application.review_stage)
+            raise AuthorizationError(f"教授審核已鎖定：本申請已進入「{stage_value}」階段，學院審核中無法再修改")
 
     async def get_subtype_cumulative_status(self, application_id: int) -> Dict[str, Dict[str, Any]]:
         """
@@ -468,7 +518,7 @@ class ReviewService:
             # 更新現有記錄
             existing_review.recommendation = overall_recommendation
             existing_review.comments = combined_comments
-            existing_review.reviewed_at = datetime.utcnow()
+            existing_review.reviewed_at = datetime.now(timezone.utc)
 
             # 刪除舊的子項目記錄
             for old_item in existing_review.items:
@@ -483,7 +533,7 @@ class ReviewService:
                 reviewer_id=reviewer_id,
                 recommendation=overall_recommendation,
                 comments=combined_comments,
-                reviewed_at=datetime.utcnow(),
+                reviewed_at=datetime.now(timezone.utc),
             )
             self.db.add(review)
 
@@ -592,7 +642,7 @@ class ReviewService:
         # 更新審查記錄
         review.recommendation = overall_recommendation
         review.comments = combined_comments
-        review.reviewed_at = datetime.utcnow()
+        review.reviewed_at = datetime.now(timezone.utc)
 
         await self.db.commit()
         await self.db.refresh(review)

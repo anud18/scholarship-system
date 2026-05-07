@@ -2,7 +2,7 @@
 fastapi==0.129.0
 starlette==0.52.1  # Security update
 uvicorn[standard]==0.38.0  # Updated for Python 3.13 compatibility
-python-multipart==0.0.22  # Security update
+python-multipart==0.0.26  # Security: fixed memory exhaustion + DoS (<0.0.26 vulnerable)
 
 # Database and ORM
 sqlalchemy==2.0.44  # Updated for Python 3.13 compatibility
@@ -12,10 +12,10 @@ psycopg2-binary==2.9.11  # Updated for Python 3.13 compatibility
 greenlet>=3.0,<4  # Required by SQLAlchemy sync engine (used by health check + APScheduler)
 
 # Authentication and Security
-PyJWT[crypto]==2.9.0  # Replaced python-jose (unmaintained, has CVE-2024-33663)
+PyJWT[crypto]==2.12.0  # Security update + replaced python-jose (had CVE-2024-33663)
 passlib[bcrypt]==1.7.4
 bcrypt==4.2.1  # Updated for Python 3.13 compatibility
-cryptography==46.0.6  # Security update
+cryptography==46.0.7  # Security update — multiple CVEs across HIGH/medium/low (<46.0.7)
 python-decouple==3.8
 
 # Data validation and serialization
@@ -43,7 +43,7 @@ fastapi-mail==1.4.1
 jinja2==3.1.6  # Security: Fixed sandbox escape vulnerability (GHSA-cpwx-vrp4-4pq7)
 
 # File processing and OCR
-pillow==12.1.1  # Security update
+pillow==12.2.0  # Security: fixes OOB write + FITS GZIP decompression bomb (10.3.0<=v<12.2.0 vulnerable)
 opencv-python==4.12.0.88  # Updated for Python 3.13 compatibility
 pytesseract==0.3.10
 google-generativeai==0.8.3

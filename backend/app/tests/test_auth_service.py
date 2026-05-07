@@ -130,6 +130,55 @@ class TestAuthService:
                 await service.register_user(mock_user_create_data)
 
     @pytest.mark.asyncio
+    async def test_register_user_concurrent_race_nycu_id(self, service, mock_user_create_data):
+        """Pre-fix: concurrent registration with same nycu_id 500'd; now ConflictError.
+
+        Simulates the TOCTOU window between the upfront uniqueness check and
+        the INSERT — both checks pass (no existing user found), but commit
+        trips the DB-level UNIQUE constraint. Without the fix in 0d06085,
+        callers got an uncaught IntegrityError → 500. After the fix, they
+        get the same ConflictError that the upfront check would have raised.
+        """
+        from sqlalchemy.exc import IntegrityError
+
+        with (
+            patch.object(service.db, "execute") as mock_execute,
+            patch.object(service.db, "add"),
+            patch.object(service.db, "commit") as mock_commit,
+            patch.object(service.db, "rollback") as mock_rollback,
+        ):
+            # Both upfront checks find no existing user
+            mock_execute.return_value.scalar_one_or_none.return_value = None
+            # Commit trips on the DB unique constraint at the last moment
+            mock_commit.side_effect = IntegrityError(
+                "INSERT INTO users ...", None, Exception("UNIQUE constraint failed: users.nycu_id")
+            )
+
+            with pytest.raises(ConflictError, match="NYCU ID already exists"):
+                await service.register_user(mock_user_create_data)
+            mock_rollback.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_register_user_concurrent_race_email(self, service, mock_user_create_data):
+        """Same TOCTOU defense, but the racing constraint is the email UNIQUE."""
+        from sqlalchemy.exc import IntegrityError
+
+        with (
+            patch.object(service.db, "execute") as mock_execute,
+            patch.object(service.db, "add"),
+            patch.object(service.db, "commit") as mock_commit,
+            patch.object(service.db, "rollback") as mock_rollback,
+        ):
+            mock_execute.return_value.scalar_one_or_none.return_value = None
+            mock_commit.side_effect = IntegrityError(
+                "INSERT INTO users ...", None, Exception("UNIQUE constraint failed: users.email")
+            )
+
+            with pytest.raises(ConflictError, match="Email already registered"):
+                await service.register_user(mock_user_create_data)
+            mock_rollback.assert_called_once()
+
+    @pytest.mark.asyncio
     async def test_authenticate_user_success(self, service, mock_user_login_data, mock_user):
         """Test successful user authentication"""
         with patch.object(service.db, "execute") as mock_execute, patch.object(service.db, "commit") as mock_commit:

@@ -267,7 +267,7 @@ class ApplicationFieldService:
         scholarship_type: str = "fixed",
     ) -> Dict[str, Any]:
         """Create fixed bank account field definition"""
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         return {
             "id": 0,  # Temporary ID for fixed field
@@ -286,8 +286,8 @@ class ApplicationFieldService:
             "help_text": "請填寫正確的郵局帳號以便獎學金匯款",
             "help_text_en": "Please provide your correct Post Office or ESUN Bank account number for scholarship remittance",
             "prefill_value": prefill_data.get("account_number", "") if prefill_data else "",
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
             "created_by": 0,
             "updated_by": 0,
         }
@@ -299,7 +299,7 @@ class ApplicationFieldService:
         scholarship_type: str = "fixed",
     ) -> Dict[str, Any]:
         """Create fixed bank statement cover document definition"""
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         return {
             "id": 0,  # Temporary ID for fixed document
@@ -318,8 +318,8 @@ class ApplicationFieldService:
             "upload_instructions": "請確保存摺封面清晰可讀，包含戶名、帳號、銀行名稱等資訊",
             "upload_instructions_en": "Please ensure the bank statement cover is clear and readable, including account name, account number, bank name, etc.",
             "existing_file_url": prefill_data.get("bank_document_photo_url", "") if prefill_data else "",
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
             "created_by": 0,
             "updated_by": 0,
         }
@@ -331,7 +331,7 @@ class ApplicationFieldService:
         scholarship_type: str = "fixed",
     ) -> List[Dict[str, Any]]:
         """Create fixed advisor information fields"""
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         fields = []
 
@@ -354,8 +354,8 @@ class ApplicationFieldService:
                 "help_text": "請填寫指導教授的姓名",
                 "help_text_en": "Please provide the name of the advisor",
                 "prefill_value": prefill_data.get("advisor_name", "") if prefill_data else "",
-                "created_at": datetime.now().isoformat(),
-                "updated_at": datetime.now().isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
                 "created_by": 0,
                 "updated_by": 0,
             }
@@ -380,8 +380,8 @@ class ApplicationFieldService:
                 "help_text": "請填寫指導教授的Email",
                 "help_text_en": "Please provide the email of the advisor",
                 "prefill_value": prefill_data.get("advisor_email", "") if prefill_data else "",
-                "created_at": datetime.now().isoformat(),
-                "updated_at": datetime.now().isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
                 "created_by": 0,
                 "updated_by": 0,
             }
@@ -406,8 +406,8 @@ class ApplicationFieldService:
                 "help_text": "請填寫指導教授的本校人事編號（必填）",
                 "help_text_en": "Please provide the advisor NYCU ID (required)",
                 "prefill_value": prefill_data.get("advisor_nycu_id", "") if prefill_data else "",
-                "created_at": datetime.now().isoformat(),
-                "updated_at": datetime.now().isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
                 "created_by": 0,
                 "updated_by": 0,
             }

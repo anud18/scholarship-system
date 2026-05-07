@@ -486,9 +486,19 @@ async def extract_bank_info_from_passbook(
                 detail="File must be an image (JPEG, PNG, etc.)",
             )
 
-        # Check file size (max 10MB)
+        # Check file size (max 10MB) — reject early via Content-Length header
+        # so we don't buffer 10GB into memory before checking. file.size is
+        # populated by Starlette ≥0.27 from the multipart parser; fall back to
+        # reading if it's None (older clients without Content-Length).
+        max_bytes = 10 * 1024 * 1024
+        declared_size = getattr(file, "size", None)
+        if declared_size is not None and declared_size > max_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File size must be less than 10MB",
+            )
         file_content = await file.read()
-        if len(file_content) > 10 * 1024 * 1024:
+        if len(file_content) > max_bytes:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="File size must be less than 10MB",
@@ -585,9 +595,19 @@ async def extract_text_from_document(
                 detail="File must be an image (JPEG, PNG, etc.)",
             )
 
-        # Check file size (max 10MB)
+        # Check file size (max 10MB) — reject early via Content-Length header
+        # so we don't buffer 10GB into memory before checking. file.size is
+        # populated by Starlette ≥0.27 from the multipart parser; fall back to
+        # reading if it's None (older clients without Content-Length).
+        max_bytes = 10 * 1024 * 1024
+        declared_size = getattr(file, "size", None)
+        if declared_size is not None and declared_size > max_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File size must be less than 10MB",
+            )
         file_content = await file.read()
-        if len(file_content) > 10 * 1024 * 1024:
+        if len(file_content) > max_bytes:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="File size must be less than 10MB",

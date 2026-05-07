@@ -721,7 +721,7 @@ class NotificationService:
         Returns:
             Notification: 創建的通知對象
         """
-        days_left = (deadline - datetime.now()).days if deadline else 0
+        days_left = (deadline - datetime.now(timezone.utc)).days if deadline else 0
 
         if days_left > 1:
             message = f"{title}的截止日期將在 {days_left} 天後到期"
@@ -844,7 +844,7 @@ class NotificationService:
         base_query = base_query.where(
             or_(
                 Notification.expires_at.is_(None),
-                Notification.expires_at > datetime.now(),
+                Notification.expires_at > datetime.now(timezone.utc),
             )
         )
 
@@ -950,7 +950,7 @@ class NotificationService:
                 Notification.is_read.is_(False),
                 or_(
                     Notification.expires_at.is_(None),
-                    Notification.expires_at > datetime.now(),
+                    Notification.expires_at > datetime.now(timezone.utc),
                 ),
             )
         )
@@ -964,7 +964,7 @@ class NotificationService:
                 ~Notification.id.in_(read_subquery),
                 or_(
                     Notification.expires_at.is_(None),
-                    Notification.expires_at > datetime.now(),
+                    Notification.expires_at > datetime.now(timezone.utc),
                 ),
             )
         )
@@ -1035,7 +1035,7 @@ class NotificationService:
         personal_update = (
             update(Notification)
             .where(and_(Notification.user_id == user_id, Notification.is_read.is_(False)))
-            .values(is_read=True, read_at=datetime.now())
+            .values(is_read=True, read_at=datetime.now(timezone.utc))
         )
 
         personal_result = await self.db.execute(personal_update)
@@ -1050,7 +1050,7 @@ class NotificationService:
                 ~Notification.id.in_(read_subquery),
                 or_(
                     Notification.expires_at.is_(None),
-                    Notification.expires_at > datetime.now(),
+                    Notification.expires_at > datetime.now(timezone.utc),
                 ),
             )
         )

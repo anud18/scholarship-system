@@ -38,13 +38,16 @@ async def check_database_health() -> Dict[str, Any]:
                 health_info["connection"] = True
                 health_info["status"] = "healthy"
 
-            # Get pool information
+            # Get pool information. StaticPool (used by SQLite tests) doesn't
+            # expose size/checkedin/etc — guard each attribute so the health
+            # check stays honest about connection success regardless of
+            # pool flavor.
             pool = async_engine.pool
             health_info["pool_info"] = {
-                "size": pool.size(),
-                "checked_in": pool.checkedin(),
-                "checked_out": pool.checkedout(),
-                "overflow": pool.overflow(),
+                "size": pool.size() if hasattr(pool, "size") else 0,
+                "checked_in": pool.checkedin() if hasattr(pool, "checkedin") else 0,
+                "checked_out": pool.checkedout() if hasattr(pool, "checkedout") else 0,
+                "overflow": pool.overflow() if hasattr(pool, "overflow") else 0,
                 "invalid": pool.invalidated_count() if hasattr(pool, "invalidated_count") else 0,
             }
 

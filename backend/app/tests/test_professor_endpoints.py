@@ -351,7 +351,7 @@ class TestProfessorReviewEndpoints:
             mock_service.submit_professor_review.assert_called_once_with(
                 application_id=10,
                 professor_id=1,
-                review_data=sample_review_create.dict(),
+                review_data=sample_review_create.model_dump(),
             )
 
     @pytest.mark.asyncio

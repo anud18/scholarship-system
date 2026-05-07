@@ -104,11 +104,20 @@ class UserProfileService:
         if existing_profile:
             raise ValueError("User profile already exists")
 
-        # Create profile
+        # Create profile. The check above is racy under concurrent requests
+        # for the same user_id — convert IntegrityError on the unique
+        # constraint to a 1-line ValueError matching the upfront-check
+        # contract, so callers always see a clean error rather than a 500.
+        from sqlalchemy.exc import IntegrityError
+
         profile = UserProfile(user_id=user_id, **profile_data.model_dump(exclude_unset=True))
 
         self.db.add(profile)
-        await self.db.commit()
+        try:
+            await self.db.commit()
+        except IntegrityError as e:
+            await self.db.rollback()
+            raise ValueError("User profile already exists") from e
         await self.db.refresh(profile)
 
         # Log profile creation
@@ -419,16 +428,19 @@ class UserProfileService:
         if not profile or not profile.bank_document_photo_url:
             return False
 
-        # Delete file if it exists
-        if profile.bank_document_photo_url.startswith("/api/v1/user-profiles/files/bank_documents/"):
-            filename = profile.bank_document_photo_url.split("/")[-1]
-            file_path = os.path.join(self.upload_path, filename)
-            if os.path.exists(file_path):
-                os.remove(file_path)
+        # Remove from MinIO using stored object_name (symmetric with upload path).
+        # delete_file() swallows + logs its own exceptions and returns bool, so
+        # DB cleanup proceeds regardless — DB consistency takes precedence over
+        # leaving a MinIO orphan.
+        if profile.bank_document_object_name:
+            minio_service.delete_file(profile.bank_document_object_name)
 
-        # Update profile
+        # Clear BOTH columns. The original code only nulled bank_document_photo_url,
+        # leaving bank_document_object_name as a dangling pointer to a now-deleted
+        # MinIO object (or a still-present one if MinIO removal failed) — see #55.
         old_document_url = profile.bank_document_photo_url
         profile.bank_document_photo_url = None
+        profile.bank_document_object_name = None
         profile.updated_at = datetime.now(timezone.utc)
 
         await self.db.commit()

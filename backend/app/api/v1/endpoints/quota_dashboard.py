@@ -263,7 +263,7 @@ async def get_quota_alerts(
 async def export_quota_data(
     academic_year: int = Query(..., description="Academic year"),
     semester: Optional[str] = Query(None),
-    format: str = Query("json", regex="^(json|csv)$"),
+    format: str = Query("json", pattern="^(json|csv)$"),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):

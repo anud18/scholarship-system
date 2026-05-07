@@ -162,6 +162,10 @@ async def submit_professor_review(
         ):
             raise AuthorizationError("Professor not authorized to submit review at this time or for this application")
 
+        # Block professor edits once the college has started reviewing (#64).
+        # Admins/super_admins are allowed through inside the helper.
+        await review_service.assert_professor_review_unlocked(application_id, current_user)
+
         # Create review using unified ReviewService - use new format directly
         items_data = [item.model_dump() for item in review_data.items]
         review = await review_service.create_review(
@@ -240,6 +244,9 @@ async def update_professor_review(
         # Verify the review belongs to the specified application
         if existing_review.application_id != application_id:
             raise AuthorizationError("Review does not belong to the specified application")
+
+        # Block professor edits once the college has started reviewing (#64).
+        await review_service.assert_professor_review_unlocked(application_id, current_user)
 
         # Update review using unified ReviewService - use new format directly
         items_data = [item.model_dump() for item in review_data.items]

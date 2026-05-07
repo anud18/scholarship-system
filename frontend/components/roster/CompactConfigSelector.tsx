@@ -187,7 +187,9 @@ export function CompactConfigSelector({ onConfigSelect, disabled = false }: Comp
 
   const formatPeriod = (year: number, semester?: string | null): string => {
     if (!semester) return `${year}-整學年`
-    return semester === "first" ? `${year}-上學期` : `${year}-下學期`
+    if (semester === "first") return `${year}-上學期`
+    if (semester === "second") return `${year}-下學期`
+    return `${year}-整學年`
   }
 
   return (

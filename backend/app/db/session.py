@@ -11,54 +11,56 @@ from sqlalchemy.pool import QueuePool
 
 from app.core.config import settings
 
+# Pool tuning kwargs are PostgreSQL-only — SQLite/StaticPool (used by tests)
+# rejects them with TypeError under SQLAlchemy 2.0+.
+_async_pool_kwargs = (
+    {"pool_size": 10, "max_overflow": 20, "pool_timeout": 60} if "postgresql" in settings.database_url else {}
+)
+_sync_pool_kwargs = (
+    {"pool_size": 10, "max_overflow": 20, "pool_timeout": 60, "poolclass": QueuePool}
+    if "postgresql" in settings.database_url_sync
+    else {}
+)
+
 # Enhanced async engine configuration for PostgreSQL with better error handling
 # Note: Async engines use AsyncAdaptedQueuePool by default (no need to specify poolclass)
-# Python 3.13 + SQLAlchemy 2.0+ requires proper async pool handling
 async_engine = create_async_engine(
     settings.database_url,
-    echo=False,  # 關閉詳細 SQL 日誌
-    pool_pre_ping=True,  # Test connections before using them
-    pool_recycle=300,  # Recycle connections after 5 minutes
-    pool_size=10,  # Increased from 5 to 10 for better concurrency
-    max_overflow=20,  # Increased from 10 to 20 for burst traffic
-    pool_timeout=60,  # Increased timeout to 60 seconds
-    # poolclass is omitted - async engines use AsyncAdaptedQueuePool by default
-    # Additional async engine parameters for better connection management
+    echo=False,
+    pool_pre_ping=True,
+    pool_recycle=300,
     connect_args=(
         {
-            "prepared_statement_cache_size": 0,  # Disable prepared statement cache
-            "statement_cache_size": 0,  # Disable statement cache
-            "command_timeout": 60,  # Command timeout in seconds
-            "timeout": 30,  # Connection timeout in seconds
+            "prepared_statement_cache_size": 0,
+            "statement_cache_size": 0,
+            "command_timeout": 60,
+            "timeout": 30,
             "server_settings": {
                 "application_name": "scholarship_system_async",
-                "jit": "off",  # Disable JIT compilation for faster query startup
+                "jit": "off",
             },
         }
         if "postgresql" in settings.database_url
         else {}
     ),
+    **_async_pool_kwargs,
 )
 
 # Enhanced sync engine configuration for PostgreSQL
 sync_engine = create_engine(
     settings.database_url_sync,
-    echo=False,  # 關閉詳細 SQL 日誌
-    pool_pre_ping=True,  # Test connections before using them
-    pool_recycle=300,  # Recycle connections after 5 minutes
-    pool_size=10,  # Increased from 5 to 10 for better concurrency
-    max_overflow=20,  # Increased from 10 to 20 for burst traffic
-    pool_timeout=60,  # Increased timeout to 60 seconds
-    poolclass=QueuePool,
-    # Additional sync engine parameters for better connection management
+    echo=False,
+    pool_pre_ping=True,
+    pool_recycle=300,
     connect_args=(
         {
-            "connect_timeout": 30,  # Connection timeout in seconds
+            "connect_timeout": 30,
             "options": "-c application_name=scholarship_system_sync -c jit=off",
         }
         if "postgresql" in settings.database_url_sync
         else {}
     ),
+    **_sync_pool_kwargs,
 )
 
 # Async session maker (SQLAlchemy 2.0 style)

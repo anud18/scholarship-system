@@ -173,7 +173,7 @@ class TestSecurityFunctions:
 
         # Assert
         exp_time = datetime.fromtimestamp(payload["exp"])
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         expected_exp = now + custom_expiry
 
         # Allow 1 minute tolerance for test execution time

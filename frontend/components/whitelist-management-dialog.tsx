@@ -226,7 +226,15 @@ export function WhitelistManagementDialog({
             <DialogTitle>申請白名單管理</DialogTitle>
             <DialogDescription>
               {configuration.scholarship_type_name} - {configuration.academic_year}學年度
-              {configuration.semester ? ` ${configuration.semester === "first" ? "第一學期" : "第二學期"}` : ""}
+              {configuration.semester
+                ? ` ${
+                    configuration.semester === "first"
+                      ? "第一學期"
+                      : configuration.semester === "second"
+                        ? "第二學期"
+                        : "全年"
+                  }`
+                : ""}
             </DialogDescription>
           </DialogHeader>
 

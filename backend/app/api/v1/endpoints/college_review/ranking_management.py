@@ -17,6 +17,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.exceptions import AuthorizationError, NotFoundError
 from app.core.security import require_college
 from app.db.deps import get_db
 from app.models.college_review import CollegeRanking, CollegeRankingItem
@@ -194,6 +195,9 @@ async def create_ranking(
 
     try:
         service = CollegeReviewService(db)
+        # #63: block ranking writes once college-review deadline has passed
+        # (admins / super_admins bypass).
+        await service.assert_ranking_within_deadline(scholarship_type_id, academic_year, semester, current_user)
         ranking = await service.create_ranking(
             scholarship_type_id=scholarship_type_id,
             sub_type_code=sub_type_code,
@@ -220,6 +224,10 @@ async def create_ranking(
             },
         )
 
+    except AuthorizationError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ValueError as e:
         logger.warning(f"Invalid ranking creation data: {str(e)}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid ranking data: {str(e)}")
@@ -596,8 +604,10 @@ async def update_ranking_order(
 
     try:
         service = CollegeReviewService(db)
+        # #63: block once college-review deadline has passed (admins bypass).
+        await service.assert_ranking_within_deadline_by_ranking(ranking_id, current_user)
         ranking = await service.update_ranking_order(
-            ranking_id=ranking_id, new_order=[item.dict() for item in new_order]
+            ranking_id=ranking_id, new_order=[item.model_dump() for item in new_order]
         )
 
         return ApiResponse(
@@ -606,6 +616,10 @@ async def update_ranking_order(
             data={"id": ranking.id, "updated_at": ranking.updated_at.isoformat()},
         )
 
+    except AuthorizationError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except RankingNotFoundError as e:
         logger.warning(f"Ranking not found for order update: {str(e)}")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
@@ -660,6 +674,8 @@ async def finalize_ranking(
         }
 
         service = CollegeReviewService(db)
+        # #63: block once college-review deadline has passed (admins bypass).
+        await service.assert_ranking_within_deadline_by_ranking(ranking_id, current_user)
         ranking = await service.finalize_ranking(ranking_id=ranking_id, finalizer_id=current_user.id)
 
         # Log the finalize ranking operation
@@ -699,6 +715,10 @@ async def finalize_ranking(
             },
         )
 
+    except AuthorizationError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except RankingNotFoundError as e:
         logger.warning(f"Ranking not found for finalization: {str(e)}")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
@@ -750,6 +770,8 @@ async def unfinalize_ranking(
         }
 
         service = CollegeReviewService(db)
+        # #63: block once college-review deadline has passed (admins bypass).
+        await service.assert_ranking_within_deadline_by_ranking(ranking_id, current_user)
         ranking = await service.unfinalize_ranking(ranking_id=ranking_id)
 
         # Log the unfinalize ranking operation
@@ -787,6 +809,10 @@ async def unfinalize_ranking(
             },
         )
 
+    except AuthorizationError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except RankingNotFoundError as e:
         logger.warning(f"Ranking not found for unfinalization: {str(e)}")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

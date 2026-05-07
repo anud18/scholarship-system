@@ -94,7 +94,7 @@ async def create_application(
                 detail={
                     "message": "Scholarship type is required",
                     "error_code": "MISSING_SCHOLARSHIP_TYPE",
-                    "received_data": application_data.dict(exclude_none=True),
+                    "received_data": application_data.model_dump(exclude_none=True),
                 },
             )
 
@@ -107,7 +107,7 @@ async def create_application(
                 detail={
                     "message": "Form data is required",
                     "error_code": "MISSING_FORM_DATA",
-                    "received_data": application_data.dict(exclude_none=True),
+                    "received_data": application_data.model_dump(exclude_none=True),
                 },
             )
 

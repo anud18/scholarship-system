@@ -276,6 +276,13 @@ async def get_historical_applications(
         # Extract student data from JSON if available
         student_data = app.student_data or {}
         student_department = student_data.get("department") or student_data.get("dept_name")
+        # #68: surface nationality + identity from the SIS snapshot
+        student_nationality = student_data.get("std_nation") or student_data.get("nationality")
+        raw_identity = student_data.get("std_identity") or student_data.get("identity")
+        try:
+            student_identity = int(raw_identity) if raw_identity is not None else None
+        except (TypeError, ValueError):
+            student_identity = None
 
         historical_app = HistoricalApplicationResponse(
             id=app.id,
@@ -287,6 +294,8 @@ async def get_historical_applications(
             student_id=row.student_nycu_id,
             student_email=row.student_email,
             student_department=student_department,
+            student_nationality=student_nationality,
+            student_identity=student_identity,
             # Scholarship information
             scholarship_name=row.scholarship_name,
             scholarship_type_code=row.scholarship_type_code,

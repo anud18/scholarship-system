@@ -1049,6 +1049,9 @@ export interface HistoricalApplication {
   student_id?: string;
   student_email?: string;
   student_department?: string;
+  // #68: nationality + identity from the SIS student_data snapshot
+  student_nationality?: string;
+  student_identity?: number;
 
   // Scholarship information
   scholarship_name?: string;

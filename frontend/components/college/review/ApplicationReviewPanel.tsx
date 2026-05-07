@@ -860,6 +860,9 @@ export function ApplicationReviewPanel({
                       {locale === "zh" ? "學院系所" : "College/Dept"}
                     </TableHead>
                     <TableHead>
+                      {locale === "zh" ? "國籍 / 身分" : "Nationality / Identity"}
+                    </TableHead>
+                    <TableHead>
                       {locale === "zh" ? "在學學期數" : "Terms"}
                     </TableHead>
                     <TableHead>
@@ -913,7 +916,44 @@ export function ApplicationReviewPanel({
                         </div>
                       </TableCell>
 
-                      {/* 3. 在學學期數 */}
+                      {/* 3. 國籍/身分 — #68 */}
+                      <TableCell>
+                        {(() => {
+                          const sd =
+                            ((app as unknown) as {
+                              student_data?: {
+                                std_nation?: string | null;
+                                std_identity?: number | string | null;
+                              };
+                            })?.student_data ?? null;
+                          const idMap: Record<number | string, string> = {
+                            1: "本國生",
+                            2: "僑生",
+                            3: "外籍生",
+                            4: "陸生",
+                            5: "港澳生",
+                            6: "外籍交換生",
+                          };
+                          const idCode = sd?.std_identity;
+                          const idLabel =
+                            idCode != null && idCode !== ""
+                              ? idMap[idCode as keyof typeof idMap] ||
+                                `${locale === "zh" ? "身分別" : "Identity"} ${idCode}`
+                              : null;
+                          return (
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-sm">
+                                {sd?.std_nation || "-"}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {idLabel || "-"}
+                              </span>
+                            </div>
+                          );
+                        })()}
+                      </TableCell>
+
+                      {/* 4. 在學學期數 */}
                       <TableCell>{app.student_termcount || "-"}</TableCell>
 
                       {/* 4. 在學狀態（獎學金期間） */}

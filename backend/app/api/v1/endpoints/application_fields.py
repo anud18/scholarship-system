@@ -145,7 +145,7 @@ async def delete_document(
 # and used only in parameterized SQL queries.
 @router.get("/form-config/{scholarship_type}")
 async def get_scholarship_form_config(
-    scholarship_type: str = Path(..., regex=r"^[a-z_]{1,50}$"),
+    scholarship_type: str = Path(..., pattern=r"^[a-z_]{1,50}$"),
     include_inactive: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),

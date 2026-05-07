@@ -491,7 +491,7 @@ class ApplicationService:
         )
 
         if not is_draft:
-            application.submitted_at = datetime.utcnow()
+            application.submitted_at = datetime.now(timezone.utc)
 
         return application
 
@@ -1187,8 +1187,16 @@ class ApplicationService:
                 # 對於普通欄位，直接更新
                 current_student_data[field] = value
 
-        # 更新到資料庫
+        # 更新到資料庫。current_student_data may be the SAME dict reference
+        # as application.student_data (line 1165's `or {}` only branches when
+        # student_data is falsy), so plain `=` assignment doesn't change the
+        # column's object identity. SQLAlchemy's default JSON change detection
+        # compares identity, not contents, so without flag_modified() the
+        # in-place mutations above would be silently dropped on commit.
+        from sqlalchemy.orm.attributes import flag_modified
+
         application.student_data = current_student_data
+        flag_modified(application, "student_data")
 
         await self.db.commit()
         await self.db.refresh(application)
@@ -1572,7 +1580,7 @@ class ApplicationService:
         from app.utils.i18n import ScholarshipI18n
 
         if status_update.status == ApplicationStatus.approved.value:
-            application.approved_at = datetime.utcnow()
+            application.approved_at = datetime.now(timezone.utc)
             application.status_name = ScholarshipI18n.get_application_status_text(ApplicationStatus.approved.value)
         elif status_update.status == ApplicationStatus.rejected.value:
             application.status_name = ScholarshipI18n.get_application_status_text(ApplicationStatus.rejected.value)
@@ -1593,11 +1601,11 @@ class ApplicationService:
                 ),
                 comments=getattr(status_update, "comments", None),
                 decision_reason=getattr(status_update, "rejection_reason", None),
-                reviewed_at=datetime.utcnow(),
+                reviewed_at=datetime.now(timezone.utc),
             )
             self.db.add(review)
 
-        application.reviewed_at = datetime.utcnow()
+        application.reviewed_at = datetime.now(timezone.utc)
 
         await self.db.commit()
 
@@ -1775,7 +1783,7 @@ class ApplicationService:
             file_type=file_type,
             file_size=file_size,
             object_name=object_name,  # This is now UUID-based path
-            uploaded_at=datetime.utcnow(),
+            uploaded_at=datetime.now(timezone.utc),
             content_type=file.content_type or "application/octet-stream",
             mime_type=file.content_type or "application/octet-stream",
         )

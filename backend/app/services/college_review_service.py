@@ -18,12 +18,13 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.exceptions import BusinessLogicError, NotFoundError
+from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFoundError
 from app.models.application import Application, ApplicationStatus
 from app.models.college_review import CollegeRanking, CollegeRankingItem, QuotaDistribution
 from app.models.enums import Semester
 from app.models.review import ApplicationReview  # Unified review system
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
+from app.models.user import User, UserRole
 from app.services.email_automation_service import email_automation_service
 
 func: Any = sa_func
@@ -67,6 +68,83 @@ class CollegeReviewService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    async def assert_ranking_within_deadline(
+        self,
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: Optional[str],
+        current_user: User,
+    ) -> None:
+        """
+        Guard for ranking write operations (#63): block college users from
+        creating / updating / finalizing / unfinalizing a ranking once the
+        scholarship's college-review deadline has passed. Admins / super_admins
+        bypass to keep the manual-extension escape hatch open.
+
+        The deadline lives on ScholarshipConfiguration, scoped by
+        (scholarship_type_id, academic_year, semester). If no matching
+        configuration is found OR the configuration has no deadline set,
+        the guard is a no-op (don't block what isn't constrained).
+        """
+        if current_user.role in (UserRole.admin, UserRole.super_admin):
+            return
+
+        # Resolve the matching ScholarshipConfiguration row.
+        # Yearly cycles store semester as either NULL or "yearly" — match both.
+        normalized_semester = self._normalize_semester_value(semester) if semester else None
+        is_yearly = self._is_yearly_semester(semester) if semester else False
+
+        conditions = [
+            ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+            ScholarshipConfiguration.academic_year == academic_year,
+        ]
+        if is_yearly or normalized_semester is None:
+            conditions.append(
+                or_(
+                    ScholarshipConfiguration.semester.is_(None),
+                    ScholarshipConfiguration.semester == Semester.yearly.value,
+                )
+            )
+        else:
+            conditions.append(ScholarshipConfiguration.semester == normalized_semester)
+
+        stmt = select(ScholarshipConfiguration).where(and_(*conditions)).limit(1)
+        result = await self.db.execute(stmt)
+        config = result.scalar_one_or_none()
+
+        if config is None:
+            return  # no configuration → don't block (let other validation surface the missing config)
+
+        deadline = config.college_review_end
+        if deadline is None:
+            return  # no deadline configured → don't block
+
+        # Normalize naive deadlines to UTC so comparison with timezone-aware now() works.
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=timezone.utc)
+
+        now = datetime.now(timezone.utc)
+        if deadline < now:
+            formatted = deadline.strftime("%Y-%m-%d %H:%M %Z").strip()
+            raise AuthorizationError(f"已過排名截止時間 ({formatted})，如需修改請聯絡管理員延期")
+
+    async def assert_ranking_within_deadline_by_ranking(
+        self,
+        ranking_id: int,
+        current_user: User,
+    ) -> None:
+        """Same as assert_ranking_within_deadline but resolves
+        scholarship_type_id / academic_year / semester from a ranking_id first."""
+        ranking = await self.db.get(CollegeRanking, ranking_id)
+        if not ranking:
+            raise NotFoundError(f"Ranking {ranking_id} not found")
+        await self.assert_ranking_within_deadline(
+            ranking.scholarship_type_id,
+            ranking.academic_year,
+            ranking.semester,
+            current_user,
+        )
 
     async def check_ranking_roster_status(self, ranking_id: int) -> Dict[str, Any]:
         """

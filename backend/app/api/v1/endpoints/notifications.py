@@ -2,7 +2,7 @@
 Notification endpoints for managing user notifications and system announcements
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -585,7 +585,7 @@ async def updateAnnouncement(
         if notification_data.metadata is not None:
             notification.meta_data = notification_data.metadata
 
-        notification.updated_at = datetime.utcnow()
+        notification.updated_at = datetime.now(timezone.utc)
 
         await db.commit()
         await db.refresh(notification)

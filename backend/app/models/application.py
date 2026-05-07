@@ -3,7 +3,7 @@ Application models for scholarship applications
 """
 
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import (
@@ -83,7 +83,7 @@ class Application(Base):
     )  # Specific configuration applied for
     scholarship_name = Column(String(200))
     amount = Column(Numeric(10, 2))
-    scholarship_subtype_list = Column(JSON, nullable=False, default=[])
+    scholarship_subtype_list = Column(JSON, nullable=False, default=lambda: [])
     sub_type_selection_mode = Column(
         Enum(SubTypeSelectionMode, values_callable=lambda obj: [e.value for e in obj]), nullable=False
     )
@@ -239,7 +239,7 @@ class Application(Base):
         """Check if application review is overdue"""
         if not self.review_deadline:
             return False
-        return bool(datetime.now().replace(tzinfo=None) > self.review_deadline.replace(tzinfo=None))
+        return bool(datetime.now(timezone.utc).replace(tzinfo=None) > self.review_deadline.replace(tzinfo=None))
 
     # get_main_type_enum() removed - main_scholarship_type field no longer exists
 
@@ -256,6 +256,7 @@ class Application(Base):
         return {
             Semester.first: "第一學期",
             Semester.second: "第二學期",
+            Semester.yearly: "全年",
         }.get(self.semester, "")
 
     @property

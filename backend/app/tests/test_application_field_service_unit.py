@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from itertools import count
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -30,7 +30,7 @@ def dummy_session():
 
 
 def _build_field(**overrides):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     defaults = dict(
         id=1,
         scholarship_type="NSTC",
@@ -65,7 +65,7 @@ def _build_field(**overrides):
 
 
 def _build_document(**overrides):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     defaults = dict(
         id=5,
         scholarship_type="NSTC",
@@ -123,10 +123,10 @@ async def test_bulk_update_fields_replaces_existing_entries(dummy_session):
         if getattr(obj, "id", None) is None:
             obj.id = next(id_counter)
         if getattr(obj, "created_at", None) is None:
-            obj.created_at = datetime.utcnow()
+            obj.created_at = datetime.now(timezone.utc)
         if getattr(obj, "is_active", None) is None:
             obj.is_active = True
-        obj.updated_at = datetime.utcnow()
+        obj.updated_at = datetime.now(timezone.utc)
 
     dummy_session.refresh.side_effect = fake_refresh
 
