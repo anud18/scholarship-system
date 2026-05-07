@@ -2452,6 +2452,7 @@ export function AdminManagementInterface({
                               <TableRow>
                                 <TableHead>申請編號</TableHead>
                                 <TableHead>學生資訊</TableHead>
+                                <TableHead>國籍/身分</TableHead>
                                 <TableHead>獎學金類型</TableHead>
                                 <TableHead>學年度/學期</TableHead>
                                 <TableHead>狀態</TableHead>
@@ -2463,7 +2464,7 @@ export function AdminManagementInterface({
                               {historicalApplications.length === 0 ? (
                                 <TableRow>
                                   <TableCell
-                                    colSpan={7}
+                                    colSpan={8}
                                     className="text-center py-8 text-gray-500"
                                   >
                                     沒有找到符合條件的申請記錄
@@ -2489,6 +2490,16 @@ export function AdminManagementInterface({
                                           </div>
                                         )}
                                       </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="text-sm">
+                                        {application.student_nationality || "-"}
+                                      </div>
+                                      {application.student_identity != null && (
+                                        <div className="text-xs text-gray-500">
+                                          身分 {application.student_identity}
+                                        </div>
+                                      )}
                                     </TableCell>
                                     <TableCell>
                                       <div>
@@ -2770,6 +2781,7 @@ export function AdminManagementInterface({
                               <TableRow>
                                 <TableHead>申請編號</TableHead>
                                 <TableHead>學生資訊</TableHead>
+                                <TableHead>國籍/身分</TableHead>
                                 <TableHead>學年度/學期</TableHead>
                                 <TableHead>狀態</TableHead>
                                 <TableHead>申請時間</TableHead>
@@ -2781,7 +2793,7 @@ export function AdminManagementInterface({
                                 .length === 0 ? (
                                 <TableRow>
                                   <TableCell
-                                    colSpan={6}
+                                    colSpan={7}
                                     className="text-center py-8 text-gray-500"
                                   >
                                     沒有找到 {scholarshipType} 的申請記錄
@@ -2809,6 +2821,16 @@ export function AdminManagementInterface({
                                           </div>
                                         )}
                                       </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="text-sm">
+                                        {application.student_nationality || "-"}
+                                      </div>
+                                      {application.student_identity != null && (
+                                        <div className="text-xs text-gray-500">
+                                          身分 {application.student_identity}
+                                        </div>
+                                      )}
                                     </TableCell>
                                     <TableCell>
                                       <div className="text-sm">

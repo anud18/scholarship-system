@@ -126,6 +126,7 @@ class ApplicationService:
             "enroll_type": student_data.get("std_enrolltype"),
             "term_count": student_data.get("trm_termcount") or student_data.get("std_termcount"),
             # Identity
+            "student_nationality": student_data.get("std_nation"),
             "student_identity": student_data.get("std_identity"),
             "school_identity": student_data.get("std_schoolid"),
             "gender": student_data.get("std_sex"),

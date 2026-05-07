@@ -362,6 +362,7 @@ class ApplicationResponse(BaseModel):
     term_count: Optional[int] = None  # std_termcount / trm_termcount
 
     # === Identity & Status ===
+    student_nationality: Optional[str] = None  # std_nation
     student_identity: Optional[int] = None  # std_identity
     school_identity: Optional[int] = None  # std_schoolid
     gender: Optional[int] = None  # std_sex
@@ -484,6 +485,7 @@ class ApplicationStatusUpdateResponse(BaseModel):
     term_count: Optional[int] = None
 
     # === Identity & Status ===
+    student_nationality: Optional[str] = None
     student_identity: Optional[int] = None
     school_identity: Optional[int] = None
     gender: Optional[int] = None
@@ -574,6 +576,7 @@ class ApplicationListResponse(BaseModel):
     term_count: Optional[int] = None  # std_termcount / trm_termcount
 
     # === Identity & Status ===
+    student_nationality: Optional[str] = None  # std_nation
     student_identity: Optional[int] = None  # std_identity
     school_identity: Optional[int] = None  # std_schoolid
     gender: Optional[int] = None  # std_sex

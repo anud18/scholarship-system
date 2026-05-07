@@ -764,6 +764,8 @@ export function CollegeRankingTable({
           排名: app.rank_position,
           學號: app.student_id || "",
           姓名: app.student_name || "",
+          國籍: app.student_data?.std_nation || "-",
+          身分別: formatIdentityLabel(app.student_data?.std_identity ?? null, "zh"),
           學院: app.academy_name || "-",
           系所: app.department_name || "-",
           獎學金類別: eligibleSubtypes,
@@ -779,6 +781,8 @@ export function CollegeRankingTable({
         { wch: 8 }, // 排名
         { wch: 15 }, // 學號
         { wch: 20 }, // 姓名
+        { wch: 15 }, // 國籍
+        { wch: 15 }, // 身分別
         { wch: 20 }, // 學院
         { wch: 25 }, // 系所
         { wch: 30 }, // 獎學金類別
