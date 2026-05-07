@@ -17545,6 +17545,7 @@ export interface operations {
                 professor_id: number;
                 student_id: number;
                 relationship_type: string;
+                /** @description active|inactive */
                 status?: string | null;
                 start_date?: string | null;
                 notes?: string | null;
@@ -17579,6 +17580,7 @@ export interface operations {
         parameters: {
             query?: {
                 relationship_type?: string | null;
+                /** @description active|inactive */
                 status?: string | null;
                 end_date?: string | null;
                 notes?: string | null;
