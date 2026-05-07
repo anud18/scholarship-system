@@ -428,20 +428,25 @@ jobs:
 
       - name: Sync staging-db.yml + recreate MinIO for prom auth=public
         run: |
-          # MinIO_PROMETHEUS_AUTH_TYPE=public has to land via env-var, which
+          # MINIO_PROMETHEUS_AUTH_TYPE=public has to land via env var, which
           # means the minio container needs --force-recreate. The main
-          # staging-db stack isn't deployed by this workflow, so push the
-          # latest compose file and bounce just the minio service. Idempotent —
-          # if MinIO already has the env var, --force-recreate is a no-op for
-          # config (still does a brief restart).
+          # staging-db stack isn't deployed by this workflow, and the
+          # existing minio container was created under a different compose
+          # project name, so a plain `docker compose up` hits a name
+          # conflict. Force-remove first (volumes persist), then up.
           scp -P 8822 -i ~/.ssh/staging_db \
             ./docker-compose.staging-db.yml \
             ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }}:/opt/scholarship/
           ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} << 'EOF'
             cd /opt/scholarship
             if [ -f docker-compose.staging-db.yml ]; then
-              docker compose -f docker-compose.staging-db.yml up -d --force-recreate minio || \
-                echo "::warning::MinIO recreate failed (service may not be running)"
+              # Idempotent: if container doesn't exist, rm is a no-op.
+              docker rm -f scholarship_minio_staging 2>/dev/null || true
+              # Match the original compose project name so future deploys
+              # don't keep recreating it under a different name.
+              docker compose -p scholarship_staging_db \
+                -f docker-compose.staging-db.yml up -d minio || \
+                echo "::warning::MinIO recreate failed"
             fi
           EOF
 
