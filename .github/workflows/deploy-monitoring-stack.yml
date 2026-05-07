@@ -426,6 +426,25 @@ jobs:
             ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }}:/opt/scholarship/
           echo "✅ docker-compose.staging-db-monitoring.yml transferred"
 
+      - name: Sync staging-db.yml + recreate MinIO for prom auth=public
+        run: |
+          # MinIO_PROMETHEUS_AUTH_TYPE=public has to land via env-var, which
+          # means the minio container needs --force-recreate. The main
+          # staging-db stack isn't deployed by this workflow, so push the
+          # latest compose file and bounce just the minio service. Idempotent —
+          # if MinIO already has the env var, --force-recreate is a no-op for
+          # config (still does a brief restart).
+          scp -P 8822 -i ~/.ssh/staging_db \
+            ./docker-compose.staging-db.yml \
+            ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }}:/opt/scholarship/
+          ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} << 'EOF'
+            cd /opt/scholarship
+            if [ -f docker-compose.staging-db.yml ]; then
+              docker compose -f docker-compose.staging-db.yml up -d --force-recreate minio || \
+                echo "::warning::MinIO recreate failed (service may not be running)"
+            fi
+          EOF
+
       - name: Deploy monitoring stack to Staging DB-VM
         run: |
           echo "Deploying monitoring services on DB-VM..."
