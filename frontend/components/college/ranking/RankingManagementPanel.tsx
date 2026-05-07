@@ -160,6 +160,25 @@ export function RankingManagementPanel({
             })
           );
 
+          // #91: fetch the matching scholarship config to surface college_review_end
+          try {
+            const cfgResp = await apiClient.admin.getScholarshipConfigurations({
+              scholarship_type_id: response.data.scholarship_type_id,
+              academic_year: response.data.academic_year,
+            });
+            if (cfgResp.success && Array.isArray(cfgResp.data)) {
+              const rankingSem = response.data.semester ?? null;
+              const match = cfgResp.data.find(
+                (c: any) => (c.semester ?? null) === rankingSem
+              );
+              setActiveConfigDeadline(match?.college_review_end ?? null);
+            } else {
+              setActiveConfigDeadline(null);
+            }
+          } catch {
+            setActiveConfigDeadline(null);
+          }
+
           setRankingData({
             applications: transformedApplications,
             totalQuota: response.data.total_quota || 0,
@@ -186,7 +205,7 @@ export function RankingManagementPanel({
         setIsRankingLoading(false);
       }
     },
-    [setIsRankingLoading, setRankingData]
+    [setIsRankingLoading, setRankingData, setActiveConfigDeadline]
   );
 
   // Auto-refresh when switching to ranking tab or when data version changes
@@ -538,6 +557,7 @@ export function RankingManagementPanel({
         if (selectedRanking === rankingToDelete.id) {
           setSelectedRanking(null);
           setRankingData(null);
+          setActiveConfigDeadline(null);
         }
         await fetchRankings();
         incrementDataVersion();
@@ -617,9 +637,9 @@ export function RankingManagementPanel({
     const id = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(id);
   }, []);
-  const deadlineISO =
-    (scholarshipConfig as { college_review_end?: string | null } | undefined)
-      ?.college_review_end ?? null;
+  // #91 fix: store the college_review_end fetched for the active ranking's config.
+  const [activeConfigDeadline, setActiveConfigDeadline] = useState<string | null>(null);
+  const deadlineISO = activeConfigDeadline;
   const deadlineInfo = useMemo(
     () => computeDeadlineInfo(deadlineISO),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `now` triggers re-eval

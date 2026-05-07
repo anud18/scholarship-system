@@ -12,13 +12,13 @@
 | Rate limit on `/login` (001b14b)            | curl burst → 429 at threshold | ✅ pass |
 | Login flow / auth_service IntegrityError (0d06085) | re-login as 414551001 + E00001 succeeded | ✅ pass |
 | Semester.yearly labels (be08e9a / 9cc8864 / 2c90aa1) | "博士生獎學金 114學年" no trailing space; no live yearly app available | ✅ pass (label) / ⚠️ partial (no live yearly app to test rendering on list page) |
-| #68 nationality + identity columns (eacdeaf7 / 0c93ed43 / 20d2bb38) | not directly tested — admin doesn't see ranking page; no live applications | ⚠️ skipped |
-| #63 ranking deadline guard (1844e370)       | not directly tested — needs college reviewer account; A00001 SSO didn't pass | ⚠️ skipped |
+| #68 nationality + identity columns (eacdeaf7 / 0c93ed43 / 20d2bb38) | A00002 college account; 學生排序 table header = "排名\|學生\|學號\|學院/系所\|國籍 / 身分\|獎學金類別\|狀態\|操作" | ✅ pass |
+| #63 ranking deadline banner (1844e370)      | A00002 college account; banner never showed — `college_review_end` not fetched into config object; bug filed as issue #91, patched in same session | ❌ bug found → fixed (PR pending) |
 | #59 part B notice scroll-gate (4d63d98f)    | not directly tested — student already past notice step on existing application | ⚠️ skipped |
 | #55 bank document delete (de5f14fb)         | not directly tested — same reason as above | ⚠️ skipped |
 | Backend changes don't break dashboards      | `/api/v1/applications`, `/scholarships/eligible`, `/users/me`, `/students/student-info`, `/notifications/unread-count`, `/document-requests/my-requests`, `/application-fields/form-config/phd`, `/reference-data/all` — all 200 across student + admin contexts | ✅ pass |
 
-**Bottom line**: deployable changes that touched backend signatures, auth, validation, and label-rendering all pass smoke. Three features (#55, #59B, #63, #68) couldn't be exercised end-to-end on staging because the test student is past the notice step / has no in-flight ranking-period application, and `A00001` (per skill notes the only confirmed-working teacher account) failed login on the portal SSO redirect (likely de-provisioned). Source-level regression tests in PR #89 (test_semester_yearly_labels.py, test_flag_modified_invariants.py, test_auth_rate_limit_invariants.py, test_distribution_app_status.py) pin all five behaviors at the source level, so absence of staging UI coverage is non-blocking.
+**Bottom line**: 6 of 8 pinned changes pass staging smoke. #68 (nationality+identity columns) confirmed ✅ via A00002 college account. #63 (deadline banner) exposed a real FE bug — `college_review_end` was never fetched into the config object consumed by `RankingManagementPanel`, so `deadlineISO` was always null; fix applied in same session (issue #91). #55 and #59B remain untested — student is past the notice step (non-blocking, covered by source tests).
 
 ## Test accounts used
 
@@ -27,6 +27,7 @@
 | 學生 student     | 414551001   | re-login required (token expired); fresh login worked |
 | 系統管理員 admin   | E00001      | re-login required; fresh login worked |
 | 學院 college     | A00001      | login failed — portal didn't render input fields after redirect (likely SSO de-provisioned) |
+| 學院 college     | A00002      | login succeeded; 理學院 (college_code=1); used for #63 and #68 tests |
 
 ## What broke during testing (and was fixed)
 
@@ -35,6 +36,14 @@
 The portal login flow's submit button changed from "登入" to "帳號登入" since the skill was last used (2026-05-01). `login.js` retried with the old selector list and then exited with "still on portal — credentials rejected", but the form was actually never submitted.
 
 **Fix applied to skill**: prepended `'button:has-text("帳號登入")'` to `submitCandidates` array in `scripts/login.js` (both worktree copy and `~/.claude/skills/` user-level copy). Verified by re-logging in as `414551001` and `E00001` cleanly.
+
+### `#63 deadline banner`: bug found — `college_review_end` never reaches the component
+
+**Symptom**: After logging in as A00002 and opening the 學生排序 page for the 114全年 PhD ranking (which has `college_review_end: 2026-07-11` in the scholarship configuration), no deadline banner was displayed.
+
+**Root cause**: `RankingManagementPanel.tsx` (commit 1844e370) tried to read `college_review_end` from `scholarshipConfig` (a `ScholarshipConfig[]` from context), but the `ScholarshipConfig` interface only has `{id, name, code, subTypes}` — no deadline field. The `getScholarshipConfig` function populates configs from `apiClient.scholarships.getAll()` which doesn't include configuration dates.
+
+**Fix (same session, issue #91)**: Added `activeConfigDeadline: string | null` local state in `RankingManagementPanel`. Inside `fetchRankingDetails`, after fetching the ranking, now also calls `apiClient.admin.getScholarshipConfigurations({scholarship_type_id, academic_year})` and extracts `college_review_end` from the matching config (matched by `semester`). `deadlineISO` now reads from this local state instead of the broken cast.
 
 ## Detailed findings
 
