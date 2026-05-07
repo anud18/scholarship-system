@@ -1,0 +1,13 @@
+{
+  "before": {},
+  "afterUpload": {},
+  "afterDelete": {},
+  "fetched": {
+    "status": 200,
+    "contentType": "application/pdf",
+    "len": null
+  },
+  "refetch": {
+    "status": 200
+  }
+}

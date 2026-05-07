@@ -1,0 +1,23 @@
+{
+  "self": {
+    "uid": "310",
+    "role": "professor"
+  },
+  "tests": [
+    {
+      "professor_id": 1,
+      "status": 500,
+      "message": "Internal server error"
+    },
+    {
+      "professor_id": 2,
+      "status": 500,
+      "message": "Internal server error"
+    },
+    {
+      "professor_id": 311,
+      "status": 500,
+      "message": "Internal server error"
+    }
+  ]
+}

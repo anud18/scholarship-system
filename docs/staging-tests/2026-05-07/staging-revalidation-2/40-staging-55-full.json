@@ -1,0 +1,10 @@
+{
+  "upload_url": "/api/v1/user-profiles/files/bank_documents/6b38833295d14ad9a0caa3e5cc82b079.pdf",
+  "pre_delete_fetch_status": 200,
+  "pre_delete_content_type": "application/pdf",
+  "pre_delete_content_length": null,
+  "delete_status": 200,
+  "delete_message": "銀行帳戶證明文件刪除成功",
+  "post_delete_refetch_status": 200,
+  "verdict": "FAIL — MinIO file still accessible after DELETE"
+}

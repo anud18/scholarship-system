@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "body": {
+    "success": true,
+    "message": "銀行帳戶證明文件刪除成功"
+  }
+}
