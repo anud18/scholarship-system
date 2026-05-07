@@ -26,7 +26,7 @@ async def get_professor_student_relationships(
     professor_id: Optional[int] = Query(None, description="Filter by professor ID"),
     student_id: Optional[int] = Query(None, description="Filter by student ID"),
     relationship_type: Optional[str] = Query(None, description="Filter by relationship type"),
-    status: Optional[str] = Query(None, description="Filter by active status (active/inactive)"),
+    active_status: Optional[str] = Query(None, alias="status", description="Filter by active status (active/inactive)"),
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(20, ge=1, le=100, description="Items per page"),
     current_user: User = Depends(require_roles(UserRole.professor, UserRole.admin, UserRole.super_admin)),
@@ -64,8 +64,8 @@ async def get_professor_student_relationships(
         if relationship_type:
             query = query.where(ProfessorStudentRelationship.relationship_type == relationship_type)
 
-        if status:
-            is_active = status.lower() == "active"
+        if active_status:
+            is_active = active_status.lower() == "active"
             query = query.where(ProfessorStudentRelationship.is_active == is_active)
 
         # Apply pagination
@@ -98,6 +98,8 @@ async def get_professor_student_relationships(
             "data": relationships_data,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching professor-student relationships: {str(e)}")
         raise HTTPException(
