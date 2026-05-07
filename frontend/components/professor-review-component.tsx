@@ -530,120 +530,200 @@ function ProfessorReviewComponentInner({
               </div>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>學生資訊</TableHead>
-                  <TableHead>就讀學期數</TableHead>
-                  <TableHead>獎學金類型</TableHead>
-                  <TableHead>提交日期</TableHead>
-                  <TableHead>狀態</TableHead>
-                  <TableHead>操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredApplications.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12">
-                      <div className="flex flex-col items-center gap-4">
-                        <div className="p-4 bg-muted rounded-full">
-                          <Eye className="h-8 w-8 text-muted-foreground" />
-                        </div>
-                        <div className="text-center space-y-2">
-                          <p className="text-lg font-medium text-muted-foreground">
-                            {error
-                              ? "載入申請時發生錯誤"
-                              : searchQuery
-                                ? "沒有符合搜尋條件的申請"
-                                : "目前沒有需要審查的申請"}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {error
-                              ? "請重新整理頁面或聯繫系統管理員"
-                              : searchQuery
-                                ? "請嘗試不同的搜尋關鍵字"
-                                : "新的申請提交後會顯示在這裡"}
-                          </p>
-                          {error && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={fetchApplications}
-                              className="mt-2"
-                            >
-                              重新載入
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredApplications.map(app => (
-                    <TableRow key={app.id}>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">
-                            {app.student_name || "未知學生"}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {app.student_no}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {app.student_data?.std_termcount || "-"}
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p>{app.scholarship_name}</p>
-                          {app.is_renewal && (
-                            <Badge variant="outline" className="text-xs mt-1">
-                              續領
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {app.submitted_at
-                          ? new Date(app.submitted_at).toLocaleDateString()
-                          : "未提交"}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          {(() => {
-                            const statusInfo = getDisplayStatusInfo(app, "zh");
-                            return (
-                              <>
-                                <Badge variant={statusInfo.statusVariant}>
-                                  {statusInfo.statusLabel}
-                                </Badge>
-                                {statusInfo.showStage && statusInfo.stageLabel && (
-                                  <Badge variant={statusInfo.stageVariant}>
-                                    {statusInfo.stageLabel}
-                                  </Badge>
-                                )}
-                              </>
-                            );
-                          })()}
-                        </div>
-                      </TableCell>
-                      <TableCell>
+            <>
+              {/* Empty state — shown on every viewport */}
+              {filteredApplications.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="p-4 bg-muted rounded-full">
+                      <Eye className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                    <div className="text-center space-y-2">
+                      <p className="text-lg font-medium text-muted-foreground">
+                        {error
+                          ? "載入申請時發生錯誤"
+                          : searchQuery
+                            ? "沒有符合搜尋條件的申請"
+                            : "目前沒有需要審查的申請"}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {error
+                          ? "請重新整理頁面或聯繫系統管理員"
+                          : searchQuery
+                            ? "請嘗試不同的搜尋關鍵字"
+                            : "新的申請提交後會顯示在這裡"}
+                      </p>
+                      {error && (
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => openReviewModal(app)}
-                          disabled={loading}
+                          onClick={fetchApplications}
+                          className="mt-2"
                         >
-                          <Eye className="h-4 w-4 mr-1" />
-                          審查
+                          重新載入
                         </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Desktop / tablet — table layout (md and up) */}
+                  <div className="hidden md:block">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>學生資訊</TableHead>
+                          <TableHead>就讀學期數</TableHead>
+                          <TableHead>獎學金類型</TableHead>
+                          <TableHead>提交日期</TableHead>
+                          <TableHead>狀態</TableHead>
+                          <TableHead>操作</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredApplications.map(app => (
+                          <TableRow key={app.id}>
+                            <TableCell>
+                              <div>
+                                <p className="font-medium">
+                                  {app.student_name || "未知學生"}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {app.student_no}
+                                </p>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {app.student_data?.std_termcount || "-"}
+                            </TableCell>
+                            <TableCell>
+                              <div>
+                                <p>{app.scholarship_name}</p>
+                                {app.is_renewal && (
+                                  <Badge variant="outline" className="text-xs mt-1">
+                                    續領
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {app.submitted_at
+                                ? new Date(app.submitted_at).toLocaleDateString()
+                                : "未提交"}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-2">
+                                {(() => {
+                                  const statusInfo = getDisplayStatusInfo(app, "zh");
+                                  return (
+                                    <>
+                                      <Badge variant={statusInfo.statusVariant}>
+                                        {statusInfo.statusLabel}
+                                      </Badge>
+                                      {statusInfo.showStage && statusInfo.stageLabel && (
+                                        <Badge variant={statusInfo.stageVariant}>
+                                          {statusInfo.stageLabel}
+                                        </Badge>
+                                      )}
+                                    </>
+                                  );
+                                })()}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openReviewModal(app)}
+                                disabled={loading}
+                              >
+                                <Eye className="h-4 w-4 mr-1" />
+                                審查
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* Mobile — card layout (below md breakpoint).
+                      Each application becomes a vertically stacked card with
+                      a full-width "審查" button so the action is never clipped
+                      offscreen as it was in the table layout (P1 audit). */}
+                  <div className="md:hidden divide-y">
+                    {filteredApplications.map(app => {
+                      const statusInfo = getDisplayStatusInfo(app, "zh");
+                      return (
+                        <div key={app.id} className="p-4 space-y-3">
+                          {/* Header: name + status */}
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium truncate">
+                                {app.student_name || "未知學生"}
+                              </p>
+                              <p className="text-sm text-muted-foreground truncate">
+                                {app.student_no}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap items-start gap-1 justify-end">
+                              <Badge variant={statusInfo.statusVariant}>
+                                {statusInfo.statusLabel}
+                              </Badge>
+                              {statusInfo.showStage && statusInfo.stageLabel && (
+                                <Badge variant={statusInfo.stageVariant}>
+                                  {statusInfo.stageLabel}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Details grid */}
+                          <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                            <div>
+                              <dt className="text-muted-foreground text-xs">獎學金類型</dt>
+                              <dd className="flex flex-wrap items-center gap-1">
+                                <span>{app.scholarship_name}</span>
+                                {app.is_renewal && (
+                                  <Badge variant="outline" className="text-xs">
+                                    續領
+                                  </Badge>
+                                )}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="text-muted-foreground text-xs">就讀學期數</dt>
+                              <dd>{app.student_data?.std_termcount || "-"}</dd>
+                            </div>
+                            <div className="col-span-2">
+                              <dt className="text-muted-foreground text-xs">提交日期</dt>
+                              <dd>
+                                {app.submitted_at
+                                  ? new Date(app.submitted_at).toLocaleDateString()
+                                  : "未提交"}
+                              </dd>
+                            </div>
+                          </dl>
+
+                          {/* Action: full-width so it can never be clipped */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openReviewModal(app)}
+                            disabled={loading}
+                            className="w-full"
+                          >
+                            <Eye className="h-4 w-4 mr-1" />
+                            審查
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
