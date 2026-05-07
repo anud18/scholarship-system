@@ -1,0 +1,5 @@
+.password
+auth-*.json
+dashboard-*.png
+session-*.png
+login-failed-*.png

@@ -1,0 +1,12 @@
+HTTP/2 429 
+server: nginx/1.29.1
+date: Thu, 07 May 2026 06:18:23 GMT
+content-type: application/json
+content-length: 173
+x-trace-id: 89b876a6-443f-49d0-8534-6f86ade027c4
+x-frame-options: DENY
+x-content-type-options: nosniff
+referrer-policy: strict-origin-when-cross-origin
+strict-transport-security: max-age=31536000; includeSubDomains
+
+{"success":false,"message":{"error":"Rate limit exceeded","limit":20,"window_seconds":300,"remaining":0,"retry_after":300},"trace_id":"89b876a6-443f-49d0-8534-6f86ade027c4"}

@@ -1,0 +1,70 @@
+[
+  {
+    "status": 401,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/notifications/unread-count"
+  },
+  {
+    "status": 401,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/admin/scholarships/stats"
+  },
+  {
+    "status": 401,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/admin/scholarships/my-scholarships"
+  },
+  {
+    "status": 401,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/admin/dashboard/stats"
+  },
+  {
+    "status": 401,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/admin/recent-applications?limit=5"
+  },
+  {
+    "status": 401,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/admin/system-announcements?limit=5"
+  },
+  {
+    "status": 401,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/admin/applications?page=1&size=20"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/scholarships"
+  },
+  {
+    "status": 401,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/admin/scholarships/my-scholarships"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/scholarships"
+  },
+  {
+    "status": 401,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/admin/scholarships/my-scholarships"
+  },
+  {
+    "status": 401,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/admin/scholarships/sub-type-translations"
+  },
+  {
+    "status": 401,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/admin/scholarships/my-scholarships"
+  },
+  {
+    "status": 401,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/scholarship-configurations/available-semesters?scholarship_code=undergraduate_freshman"
+  },
+  {
+    "status": 200,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/scholarships"
+  },
+  {
+    "status": 401,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/scholarship-configurations/available-semesters?scholarship_code=undergraduate_freshman"
+  },
+  {
+    "status": 401,
+    "url": "https://ss.test.nycu.edu.tw/api/v1/users/me"
+  }
+]
