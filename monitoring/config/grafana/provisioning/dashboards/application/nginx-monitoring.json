@@ -408,7 +408,8 @@
           "uid": "prometheus-uid"
         },
         "definition": "label_values(up, environment)",
-        "refresh": 1
+        "refresh": 1,
+        "regex": "/^(?!monitoring).*$/"
       }
     ]
   },
