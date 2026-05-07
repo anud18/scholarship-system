@@ -275,13 +275,15 @@ export function EnhancedStudentPortal({
         if (response.success && response.data) {
           scholarshipData = response.data;
         } else {
-          setScholarshipsError(response.message || "無法獲取獎學金資料");
+          setScholarshipsError(
+            response.message || t("portal.fetch_scholarships_error")
+          );
           setEligibleScholarships([]);
           return;
         }
 
         if (scholarshipData.length === 0) {
-          setScholarshipsError("目前沒有符合資格的獎學金");
+          setScholarshipsError(t("messages.no_eligible_scholarships"));
         } else {
           // Debug: Check the structure of scholarship data
           console.log(
@@ -307,7 +309,7 @@ export function EnhancedStudentPortal({
       } catch (error) {
         console.error("Error fetching scholarships:", error); // Debug log
         setScholarshipsError(
-          error instanceof Error ? error.message : "發生未知錯誤"
+          error instanceof Error ? error.message : t("messages.unknown_error")
         );
         setEligibleScholarships([]);
       } finally {
@@ -352,24 +354,17 @@ export function EnhancedStudentPortal({
       if (response.success) {
         // Remove fulfilled request from the list
         setDocumentRequests(prev => prev.filter(req => req.id !== requestId));
-        alert(
-          locale === "zh"
-            ? "文件補件已標記為完成"
-            : "Document request marked as fulfilled"
-        );
+        alert(t("portal.document_request.marked_complete"));
       } else {
         alert(
-          response.message ||
-            (locale === "zh" ? "操作失敗" : "Operation failed")
+          response.message || t("portal.document_request.operation_failed")
         );
       }
     } catch (error: any) {
       console.error("Failed to fulfill document request:", error);
       alert(
         error?.response?.data?.message ||
-          (locale === "zh"
-            ? "標記完成時發生錯誤"
-            : "Error marking as fulfilled")
+          t("portal.document_request.mark_complete_error")
       );
     }
   };
@@ -415,7 +410,8 @@ export function EnhancedStudentPortal({
             fields: [],
             documents: [],
             isLoading: false,
-            error: response.message || "無法獲取申請資訊",
+            error:
+              response.message || t("portal.fetch_application_info_error"),
           },
         }));
       }
@@ -431,7 +427,9 @@ export function EnhancedStudentPortal({
           documents: [],
           isLoading: false,
           error:
-            error instanceof Error ? error.message : "獲取申請資訊時發生錯誤",
+            error instanceof Error
+              ? error.message
+              : t("portal.fetch_application_info_exception"),
         },
       }));
     }
@@ -609,18 +607,12 @@ export function EnhancedStudentPortal({
 
   const handleSubmitApplication = async () => {
     if (!newApplicationData.scholarship_type) {
-      alert(
-        locale === "zh" ? "請選擇獎學金類型" : "Please select scholarship type"
-      );
+      alert(t("applications.please_select_scholarship"));
       return;
     }
 
     if (!agreeTerms) {
-      alert(
-        locale === "zh"
-          ? "您必須同意申請條款才能提交申請"
-          : "You must agree to the terms and conditions to submit the application"
-      );
+      alert(t("applications.terms_must_agree"));
       return;
     }
 
@@ -765,20 +757,12 @@ export function EnhancedStudentPortal({
       // 通知父組件切換到「我的申請」tab
       onApplicationSubmitted?.();
 
-      alert(
-        locale === "zh"
-          ? "申請提交成功！"
-          : "Application submitted successfully!"
-      );
+      alert(t("messages.application_success"));
     } catch (error) {
       console.error("Failed to submit application:", error);
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
-      alert(
-        locale === "zh"
-          ? `提交失敗: ${errorMessage}`
-          : `Failed to submit application: ${errorMessage}`
-      );
+      alert(`${t("applications.submit_failed")}: ${errorMessage}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -786,9 +770,7 @@ export function EnhancedStudentPortal({
 
   const handleSaveDraft = async () => {
     if (!newApplicationData.scholarship_type) {
-      alert(
-        locale === "zh" ? "請選擇獎學金類型" : "Please select scholarship type"
-      );
+      alert(t("applications.please_select_scholarship"));
       return;
     }
 
@@ -860,7 +842,7 @@ export function EnhancedStudentPortal({
           }
         }
 
-        alert(locale === "zh" ? "草稿已更新" : "Draft updated successfully");
+        alert(t("messages.draft_updated"));
       } else {
         // 新建模式 - 創建新草稿
         console.log("Saving new draft with data:", applicationData);
@@ -876,13 +858,9 @@ export function EnhancedStudentPortal({
             }
           }
 
-          alert(
-            locale === "zh"
-              ? "草稿已保存，您可以繼續編輯"
-              : "Draft saved successfully. You can continue editing."
-          );
+          alert(t("messages.draft_saved"));
         } else {
-          alert(locale === "zh" ? "儲存草稿失敗" : "Failed to save draft");
+          alert(t("messages.draft_save_failed"));
           return;
         }
       }
@@ -910,11 +888,7 @@ export function EnhancedStudentPortal({
       console.error("Failed to save draft:", error);
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
-      alert(
-        locale === "zh"
-          ? `保存失敗: ${errorMessage}`
-          : `Failed to save draft: ${errorMessage}`
-      );
+      alert(`${t("messages.save_failed")}: ${errorMessage}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -929,13 +903,7 @@ export function EnhancedStudentPortal({
   };
 
   const handleDeleteApplication = async (applicationId: number) => {
-    if (
-      !confirm(
-        locale === "zh"
-          ? "確定要刪除此草稿嗎？此操作無法復原。"
-          : "Are you sure you want to delete this draft? This action cannot be undone."
-      )
-    ) {
+    if (!confirm(t("messages.confirm_delete_draft"))) {
       return;
     }
 
@@ -947,14 +915,10 @@ export function EnhancedStudentPortal({
         onClearEditing?.();
       }
 
-      alert(locale === "zh" ? "草稿已成功刪除" : "Draft deleted successfully");
+      alert(t("messages.draft_deleted"));
     } catch (error) {
       console.error("Failed to delete application:", error);
-      alert(
-        locale === "zh"
-          ? "刪除草稿時發生錯誤"
-          : "Error occurred while deleting draft"
-      );
+      alert(t("messages.delete_error"));
     }
   };
 
@@ -1018,11 +982,7 @@ export function EnhancedStudentPortal({
 
     // Optionally show a success message
     // You can use a toast library if available
-    alert(
-      locale === "zh"
-        ? "申請提交成功！請在「我的申請」查看進度"
-        : "Application submitted successfully! View progress in 'My Applications'"
-    );
+    alert(t("messages.application_success_with_progress"));
   };
   const handleEditApplication = async (application: Application) => {
     // 通知父組件開始編輯（這會設置 editingApplicationId 和切換 Tab）
@@ -1142,9 +1102,7 @@ export function EnhancedStudentPortal({
           <CardHeader>
             <CardTitle>{t("portal.application_records")}</CardTitle>
             <CardDescription>
-              {locale === "zh"
-                ? "查看您的獎學金申請狀態與進度"
-                : "View your scholarship application status and progress"}
+              {t("portal.applications_subtitle")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1164,14 +1122,10 @@ export function EnhancedStudentPortal({
                 <div className="flex flex-col items-center gap-2">
                   <FileText className="h-12 w-12 text-muted-foreground" />
                   <p className="text-lg font-medium text-muted-foreground">
-                    {locale === "zh"
-                      ? "尚無申請記錄"
-                      : "No application records"}
+                    {t("portal.no_applications")}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    {locale === "zh"
-                      ? "您可以點擊「新增申請」開始申請獎學金"
-                      : "Click 'New Application' to start your scholarship application"}
+                    {t("portal.click_new_application_hint")}
                   </p>
                 </div>
               </div>
@@ -1185,7 +1139,7 @@ export function EnhancedStudentPortal({
                           {getScholarshipTypeName(app.scholarship_type)}
                         </h4>
                         <p className="text-sm text-muted-foreground">
-                          {locale === "zh" ? "申請編號" : "Application ID"}:{" "}
+                          {t("applications.application_id")}:{" "}
                           {app.app_id || `APP-${app.id}`}
                         </p>
                       </div>
@@ -1206,7 +1160,7 @@ export function EnhancedStudentPortal({
                       <CardHeader>
                         <CardTitle className="text-base flex items-center gap-2">
                           <Calendar className="h-4 w-4" />
-                          {locale === "zh" ? "審核進度" : "Review Progress"}
+                          {t("portal.review_progress")}
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
@@ -1224,7 +1178,7 @@ export function EnhancedStudentPortal({
                         onClick={() => handleViewDetails(app)}
                       >
                         <Eye className="h-4 w-4 mr-1" />
-                        {locale === "zh" ? "查看詳情" : "View Details"}
+                        {t("applications.view_details")}
                       </Button>
                       {app.status === "draft" && (
                         <>
@@ -1234,7 +1188,7 @@ export function EnhancedStudentPortal({
                             onClick={() => handleEditApplication(app)}
                           >
                             <Edit className="h-4 w-4 mr-1" />
-                            {locale === "zh" ? "編輯" : "Edit"}
+                            {t("form.edit")}
                           </Button>
                           <Button
                             variant="outline"
@@ -1243,7 +1197,7 @@ export function EnhancedStudentPortal({
                             className="text-destructive hover:text-destructive"
                           >
                             <Trash2 className="h-4 w-4 mr-1" />
-                            {locale === "zh" ? "刪除草稿" : "Delete Draft"}
+                            {t("applications.delete_draft")}
                           </Button>
                         </>
                       )}
@@ -1385,12 +1339,10 @@ export function EnhancedStudentPortal({
                                 .filter((s): s is string => Boolean(s));
                               const reasonText =
                                 failedTagLabels.length > 0
-                                  ? `${locale === "zh" ? "不符" : "Missing"}：${failedTagLabels.join(
+                                  ? `${t("applications.missing")}：${failedTagLabels.join(
                                       "、"
                                     )}`
-                                  : locale === "zh"
-                                    ? "不符資格"
-                                    : "Not eligible";
+                                  : t("applications.not_eligible_short");
 
                               return (
                                 <Badge
@@ -1565,9 +1517,9 @@ export function EnhancedStudentPortal({
                                       {subTypeLabel}
                                       {!isSubEligible && (
                                         <span className="ml-2 text-xs text-gray-400">
-                                          {locale === "zh"
-                                            ? "（不符資格）"
-                                            : "(Not eligible)"}
+                                          {t(
+                                            "applications.not_eligible_parenthetical"
+                                          )}
                                         </span>
                                       )}
                                     </p>
@@ -1632,7 +1584,7 @@ export function EnhancedStudentPortal({
                             scholarship.warnings.length > 0 && (
                               <div>
                                 <p className="text-sm font-medium text-amber-700 mb-2">
-                                  {locale === "zh" ? "注意事項" : "Warnings"}
+                                  {t("applications.warnings")}
                                 </p>
                                 <div className="flex flex-wrap gap-1">
                                   {scholarship.warnings?.map(rule => (
@@ -1692,9 +1644,7 @@ export function EnhancedStudentPortal({
                           <div className="flex items-center gap-2">
                             <Loader2 className="h-4 w-4 animate-spin text-sky-500" />
                             <p className="text-sm font-medium">
-                              {locale === "zh"
-                                ? "申請資訊"
-                                : "Application Info"}
+                              {t("applications.application_info")}
                             </p>
                           </div>
                           <p className="text-sm text-gray-600 mt-2">

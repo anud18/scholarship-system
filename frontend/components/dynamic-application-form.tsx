@@ -37,6 +37,7 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { getTranslation } from "@/lib/i18n";
 import type {
   ApplicationField,
   ApplicationDocument,
@@ -76,6 +77,7 @@ export function DynamicApplicationForm({
   selectedSubTypes,
   currentUserId,
 }: DynamicApplicationFormProps) {
+  const t = (key: string) => getTranslation(locale, key);
   // State
   const [formConfig, setFormConfig] = useState<ScholarshipFormConfig | null>(
     null
@@ -143,19 +145,11 @@ export function DynamicApplicationForm({
           });
         }
       } else {
-        setError(
-          locale === "zh"
-            ? "無法載入表單配置"
-            : "Failed to load form configuration"
-        );
+        setError(t("form_upload.load_form_config_failed"));
       }
     } catch (err) {
       console.error("Failed to load form configuration:", err);
-      setError(
-        locale === "zh"
-          ? "載入表單配置時發生錯誤"
-          : "Error loading form configuration"
-      );
+      setError(t("form_upload.load_form_config_error"));
     } finally {
       setIsLoading(false);
     }
@@ -541,7 +535,7 @@ export function DynamicApplicationForm({
           </Label>
           {files.length > 0 && (
             <Badge variant="secondary" className="text-xs">
-              {files.length} {locale === "zh" ? "個檔案" : "files"}
+              {files.length} {t("form_upload.files_suffix")}
             </Badge>
           )}
         </div>
@@ -549,10 +543,7 @@ export function DynamicApplicationForm({
         {isFixedDocument && document.existing_file_url && (
           <div className="space-y-2">
             <h4 className="text-sm font-medium">
-              {locale === "zh"
-                ? "已上傳檔案 (1/1) - "
-                : "Uploaded files (1/1) - "}
-              {documentName}
+              {t("form_upload.uploaded_files")} (1/1) - {documentName}
             </h4>
             <Card>
               <CardContent className="flex items-center justify-between p-3">
@@ -560,11 +551,11 @@ export function DynamicApplicationForm({
                   <FileText className="h-4 w-4 text-muted-foreground" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">
-                      {locale === "zh" ? "存摺封面" : "Bank Book Cover"}
+                      {t("form_upload.bankbook_cover")}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       <span className="ml-1 text-blue-600">
-                        {locale === "zh" ? "已上傳" : "Uploaded"}
+                        {t("form_upload.uploaded")}
                       </span>
                     </p>
                   </div>
@@ -580,15 +571,13 @@ export function DynamicApplicationForm({
                   </Button>
                   <Badge variant="outline" className="text-xs">
                     <CheckCircle className="h-3 w-3 mr-1" />
-                    {locale === "zh" ? "已存在" : "Exists"}
+                    {t("form_upload.exists")}
                   </Badge>
                 </div>
               </CardContent>
             </Card>
             <p className="text-xs text-blue-600">
-              {locale === "zh"
-                ? "您可以上傳新檔案來替換現有檔案"
-                : "You can upload a new file to replace the existing one"}
+              {t("form_upload.replace_existing_notice")}
             </p>
           </div>
         )}
@@ -615,16 +604,14 @@ export function DynamicApplicationForm({
 
         <div className="text-xs text-muted-foreground space-y-1">
           <p>
-            {locale === "zh" ? "接受格式：" : "Accepted formats: "}
+            {t("form_upload.accepted_formats_label")}{" "}
             {document.accepted_file_types.join(", ")}
           </p>
           <p>
-            {locale === "zh" ? "檔案大小限制：" : "File size limit: "}
-            {document.max_file_size}
+            {t("form_upload.file_size_limit_label")} {document.max_file_size}
           </p>
           <p>
-            {locale === "zh" ? "最多檔案數：" : "Maximum files: "}
-            {document.max_file_count}
+            {t("form_upload.max_files_label")} {document.max_file_count}
           </p>
           {instructions && <p className="text-blue-600">{instructions}</p>}
 
@@ -652,7 +639,7 @@ export function DynamicApplicationForm({
                   link.click();
                 } catch (error) {
                   console.error("Failed to build preview URL:", error);
-                  alert("無法開啟預覽，請稍後再試");
+                  alert(t("form_upload.preview_open_failed"));
                 }
               }}
               className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm font-medium mt-2"
@@ -677,7 +664,7 @@ export function DynamicApplicationForm({
                   d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
                 />
               </svg>
-              {locale === "zh" ? "查看範例文件" : "View Example"}
+              {t("form_upload.view_sample_document")}
             </button>
           )}
         </div>
@@ -689,9 +676,7 @@ export function DynamicApplicationForm({
     return (
       <div className={`flex items-center justify-center py-8 ${className}`}>
         <Loader2 className="h-8 w-8 animate-spin" />
-        <span className="ml-2">
-          {locale === "zh" ? "載入表單中..." : "Loading form..."}
-        </span>
+        <span className="ml-2">{t("form_upload.loading_form")}</span>
       </div>
     );
   }
@@ -713,9 +698,7 @@ export function DynamicApplicationForm({
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            {locale === "zh"
-              ? "尚未設定表單配置"
-              : "Form configuration not available"}
+            {t("form_upload.form_config_not_set")}
           </AlertDescription>
         </Alert>
       </div>
@@ -738,12 +721,10 @@ export function DynamicApplicationForm({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FormInput className="h-5 w-5" />
-              {locale === "zh" ? "申請資訊" : "Application Information"}
+              {t("form_upload.application_information")}
             </CardTitle>
             <CardDescription>
-              {locale === "zh"
-                ? "請填寫所有必要資訊"
-                : "Please fill in all required information"}
+              {t("form_upload.please_complete_required_info")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -758,12 +739,10 @@ export function DynamicApplicationForm({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
-              {locale === "zh" ? "必要文件" : "Required Documents"}
+              {t("form_upload.required_documents")}
             </CardTitle>
             <CardDescription>
-              {locale === "zh"
-                ? "請上傳所有必要文件"
-                : "Please upload all required documents"}
+              {t("form_upload.please_upload_required_docs")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -776,9 +755,7 @@ export function DynamicApplicationForm({
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            {locale === "zh"
-              ? "此獎學金類型尚未設定申請要求"
-              : "No application requirements configured for this scholarship type"}
+            {t("form_upload.no_requirements_configured")}
           </AlertDescription>
         </Alert>
       )}

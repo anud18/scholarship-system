@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Upload, File, X, CheckCircle, AlertCircle, Eye } from "lucide-react";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { Locale } from "@/lib/validators";
+import { getTranslation } from "@/lib/i18n";
 
 interface FileUploadProps {
   onFilesChange: (files: File[]) => void;
@@ -30,6 +31,7 @@ export function FileUpload({
   fileType = "",
   locale = "zh",
 }: FileUploadProps) {
+  const t = (key: string) => getTranslation(locale, key);
   const [files, setFiles] = useState<File[]>(initialFiles);
   const [dragActive, setDragActive] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{
@@ -249,10 +251,10 @@ export function FileUpload({
         <CardContent className="flex flex-col items-center justify-center p-6 text-center">
           <Upload className="h-10 w-10 text-muted-foreground mb-4" />
           <div className="space-y-2">
-            <p className="text-sm font-medium">拖放檔案到此處或點擊上傳</p>
+            <p className="text-sm font-medium">{t("form_upload.drag_drop")}</p>
             <p className="text-xs text-muted-foreground">
-              支援格式: {acceptedTypes.join(", ")} | 最大檔案大小:{" "}
-              {formatFileSize(maxSize)}
+              {t("form_upload.supported_formats")}: {acceptedTypes.join(", ")} |{" "}
+              {t("form_upload.max_file_size")}: {formatFileSize(maxSize)}
             </p>
           </div>
 
@@ -266,7 +268,7 @@ export function FileUpload({
           />
           <Button asChild className="mt-4">
             <label htmlFor={inputId} className="cursor-pointer">
-              選擇檔案
+              {t("form_upload.choose_file")}
             </label>
           </Button>
         </CardContent>
@@ -275,7 +277,8 @@ export function FileUpload({
       {files.length > 0 && (
         <div className="space-y-2">
           <h4 className="text-sm font-medium">
-            已上傳檔案 ({files.length}/{maxFiles}) - {fileType || "未指定類型"}
+            {t("form_upload.uploaded_files")} ({files.length}/{maxFiles}) -{" "}
+            {fileType || "未指定類型"}
           </h4>
           {files.map((file, index) => (
             <Card key={index}>
@@ -287,7 +290,9 @@ export function FileUpload({
                     <p className="text-xs text-muted-foreground">
                       {getFileDisplaySize(file)}
                       {isUploadedFile(file) && (
-                        <span className="ml-1 text-blue-600">已上傳</span>
+                        <span className="ml-1 text-blue-600">
+                          {t("form_upload.uploaded")}
+                        </span>
                       )}
                     </p>
                   </div>
@@ -312,7 +317,7 @@ export function FileUpload({
                       return (
                         <Badge variant="outline" className="text-xs">
                           <CheckCircle className="h-3 w-3 mr-1" />
-                          已存在
+                          {t("form_upload.exists")}
                         </Badge>
                       );
                     }
@@ -335,14 +340,14 @@ export function FileUpload({
                         {uploadStatus[fileName] === "success" && (
                           <Badge variant="default" className="text-xs">
                             <CheckCircle className="h-3 w-3 mr-1" />
-                            完成
+                            {t("form_upload.complete")}
                           </Badge>
                         )}
 
                         {uploadStatus[fileName] === "error" && (
                           <Badge variant="destructive" className="text-xs">
                             <AlertCircle className="h-3 w-3 mr-1" />
-                            失敗
+                            {t("form_upload.failed")}
                           </Badge>
                         )}
                       </>
