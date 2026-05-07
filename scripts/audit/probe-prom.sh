@@ -9,6 +9,13 @@ OUT=${AUDIT_OUT_DIR:-docs/superpowers/audits/working}
 STATE="$NYCU_DIR/auth-grafana-admin.json"
 BASE='https://ss.test.nycu.edu.tw/monitoring'
 
+# Quick freshness probe: if the Grafana storage state is older than 8 hours,
+# warn the operator (sessions typically expire around this window).
+STATE_AGE_S=$(( $(date +%s) - $(stat -f %m "$STATE" 2>/dev/null || stat -c %Y "$STATE" 2>/dev/null) ))
+if [ "$STATE_AGE_S" -gt 28800 ]; then
+  echo "WARN: Grafana session is $((STATE_AGE_S / 3600))h old; consider refreshing via /tmp/pw-test/grafana-login.js" >&2
+fi
+
 need() { command -v "$1" >/dev/null 2>&1 || { echo "missing: $1" >&2; exit 1; }; }
 need node; need jq
 
@@ -34,6 +41,11 @@ const { chromium } = require('playwright');
     const x = await fetch('/monitoring/api/datasources/proxy/uid/$PROM_UID/api/v1/$EP', { credentials: 'include' });
     return { http: x.status, body: await x.text() };
   });
+  if (r.http === 401 || r.http === 403) {
+    console.error('ERROR: Grafana session expired or unauthorized (HTTP ' + r.http + ').');
+    console.error('Re-run /tmp/pw-test/grafana-login.js to refresh session.');
+    process.exit(1);
+  }
   console.log(r.body);
   await b.close();
 })();
@@ -55,6 +67,11 @@ const { chromium } = require('playwright');
     const x = await fetch(u, { credentials: 'include' });
     return { http: x.status, body: await x.text() };
   }, '$Q');
+  if (r.http === 401 || r.http === 403) {
+    console.error('ERROR: Grafana session expired or unauthorized (HTTP ' + r.http + ').');
+    console.error('Re-run /tmp/pw-test/grafana-login.js to refresh session.');
+    process.exit(1);
+  }
   console.log(r.body);
   await b.close();
 })();
