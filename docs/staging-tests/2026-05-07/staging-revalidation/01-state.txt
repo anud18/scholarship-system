@@ -1,0 +1,35 @@
+Section 1 — #59 part B notice scroll-gate on staging
+=====================================================
+
+notice step reached: NO
+final URL: https://ss.test.nycu.edu.tw/
+entry attempted: tab "學生申請" on the student portal landing page
+
+Reason
+------
+414551001 already has an active 博士生獎學金 114全年 application
+(visible on the dashboard tab "學生申請"). When the "學生申請" tab is
+clicked, `enhanced-student-portal.tsx` evaluates:
+
+    eligibleScholarships.some(isSelectableScholarship)
+
+This returns false because the only eligible scholarship for this
+student is the one already applied for. The wizard short-circuits
+to the "目前沒有符合資格的獎學金" empty card (visible in
+01-notice-before.png) and never mounts NoticeAgreementStep.
+
+To exercise the scroll-gate on staging the parent agent will need
+either:
+  (a) a different student account with an open eligible scholarship
+      and no in-flight application
+  (b) a backend reset of 414551001's draft, OR
+  (c) opening a second eligible scholarship type for that student
+
+Local-dev validation of the same component already passed in the
+prior session (see ../REPORT.md → "#59 part B notice scroll-gate"
+row). The component code in
+frontend/components/student-wizard/steps/NoticeAgreementStep.tsx
+hasn't changed in PR #89, so behaviour is expected to match.
+
+Verdict: ⚠️ deferred — staging account state blocks the test, not
+a code regression.

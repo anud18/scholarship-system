@@ -1,0 +1,53 @@
+{
+  "run_at_utc": "2026-05-07T07:50:00Z",
+  "tester": "claude opus-4.7 staging-revalidation pass",
+  "vpn": { "tunnel": "wireguard peer2", "health": "https://ss.test.nycu.edu.tw/health = healthy" },
+  "auth_state": {
+    "414551001": "freshly re-logged in this run (login.js succeeded)",
+    "G01873 / A00123": "EXPIRED — re-login attempts failed silently; portal rejected the shared /tmp/pw-test/.password for the professor account"
+  },
+  "section1_notice_scroll_gate": {
+    "result": "DEFERRED",
+    "verdict": "could not exercise: 414551001 has an active 博士生獎學金 114全年 application, so the 學生申請 tab shows '目前沒有符合資格的獎學金' and the wizard never mounts NoticeAgreementStep",
+    "snapshots": ["01-notice-before.png", "01-state.txt"],
+    "remediation": "use a different student account with an open eligible scholarship and no in-flight application"
+  },
+  "section2_bank_doc_delete": {
+    "result": "PARTIAL PASS",
+    "verdict": "DELETE /api/v1/user-profiles/me/bank-document returns 200 with success:false 'no doc found' when no doc exists; profile remains consistent (bank_document_photo_url stays null). Endpoint is wired and behaves; but the upload→delete→404 round-trip cycle could not be exercised because 414551001 has no bank doc on staging and uploading a real file to staging without permission was avoided.",
+    "endpoint_path_correction": "the local-dev recipe used /api/v1/users/me/bank-document; the actual staging path is /api/v1/user-profiles/me/bank-document (per generated schema.d.ts)",
+    "snapshots": ["02-bank-doc-state.json"]
+  },
+  "section3_review_stage_deployment": {
+    "result": "INCONCLUSIVE — but expected NULL based on branch state",
+    "endpoint_exists_on_staging": true,
+    "endpoint_unauthed_status": 401,
+    "fix_commit": "34c54a1 (branch audit/monitoring-stack-phase1)",
+    "fix_on_main": false,
+    "fix_on_staging": false,
+    "verdict": "Commit 34c54a1 has NOT been merged into main as of this run. main HEAD is 555e987 (fix(email-preview)). Staging deploys from main, so review_stage is expected to be MISSING from /api/v1/professor/applications until 34c54a1 lands. A re-deploy is required after the fix merges.",
+    "snapshots": ["03-professor-apps-review-stage.json"]
+  },
+  "section4_cross_prof_status_shadow": {
+    "result": "INCONCLUSIVE — but staging is expected to 500 based on branch state",
+    "endpoint_exists_on_staging": true,
+    "endpoint_unauthed_status": 401,
+    "fix_commit": "34c54a1 (branch audit/monitoring-stack-phase1)",
+    "fix_on_main": false,
+    "fix_on_staging": false,
+    "verdict": "Same as section 3 — fix not on main, so staging is pre-fix. Once a fresh professor token is available, hitting /api/v1/professor-student?professor_id=<other> with G01873/A00123 should still 500 (the bug). A re-deploy is required after the fix merges.",
+    "snapshots": ["04-cross-prof-staging.json"]
+  },
+  "section5_student_dashboard_smoke": {
+    "result": "PASS",
+    "url": "https://ss.test.nycu.edu.tw/",
+    "fourxx_5xx_responses": 0,
+    "console_errors": 0,
+    "verdict": "414551001 dashboard loads cleanly with the existing 博士生獎學金 114全年 application visible (state '系統審核' / 不符合條件 banner per scholarship config). All 12 page-load API calls returned 2xx. No console errors.",
+    "snapshots": ["05-student-dashboard.png", "05-student-network.txt"]
+  },
+  "redeploy_needed_after": [
+    "PR for #92 fix (commit 34c54a1) merges to main",
+    "PR for #93 fix (same branch / commit) merges to main"
+  ]
+}
