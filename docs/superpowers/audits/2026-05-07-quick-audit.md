@@ -568,3 +568,29 @@ display sites + 1 stale "annual" string:
 - 8 issues fully closed + 2 mostly closed
 - **11 P1 bug categories** (added: professor_student auth bypass)
 - 5 regression test files
+
+---
+
+## Round 17 — Dependabot vuln sweep
+
+GitHub flagged 51 vulnerabilities (1 CRITICAL, 23 HIGH, 23 medium, 4 low).
+Closed the addressable subset via direct dep + override updates:
+
+| chunk | commit | scope |
+|-------|--------|-------|
+| chunk-52 | 5c05d5d | deps(be): pillow 12.1.1→12.2.0, black-lint 24.8.0→26.3.1 (HIGH×3) |
+| chunk-53 | 87a47d8 | deps(fe): next ^15.5.10→^15.5.15, lodash override ≥4.17.23→≥4.17.24 (HIGH×2) |
+| chunk-54 | b58057d | deps(fe): handlebars override ≥4.7.9 — closes the **CRITICAL** JS injection |
+| chunk-55 | 6e409cb | deps(be): python-multipart 0.0.22→0.0.26, PyJWT 2.9.0→2.12.0, cryptography 46.0.5→46.0.7, pytest 8.3.0→9.0.3 (HIGH×3 + several medium) |
+| chunk-56 | 6ad2f51 | deps(fe): 7 more npm overrides — minimatch (12 HIGH alerts!), picomatch, flatted, serialize-javascript, socket.io-parser, yaml, postcss |
+
+Net Dependabot alert state after these commits: ~1 CRITICAL closed, ~30 HIGH alerts closed.
+
+## Cumulative session totals (round 17 end)
+
+- **80+ commits** on `audit/monitoring-stack-phase1`
+- **PR #89 open** at https://github.com/anud18/scholarship-system/pull/89 — 80+ commits live on remote
+- 8 issues fully closed + 2 mostly closed
+- 11 P1 bug categories
+- **1 CRITICAL + 30 HIGH dependency vulnerabilities closed** via dep bumps
+- 5 regression test files
