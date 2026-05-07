@@ -129,18 +129,52 @@ jobs:
 
           # Phase 2 removed alertmanager from compose, but a previously
           # provisioned `alertmanager-uid` datasource sticks around in
-          # grafana_data/grafana.db. Provisioning's deleteDatasources only
-          # supports name match (we don't know the original name); the API
-          # accepts UID directly. 404 is the success case (already gone).
+          # grafana_data/grafana.db. The API rejects DELETE with 403 on
+          # provisioned datasources (read-only by design), so the only
+          # way to remove it is to drop a deleteDatasources entry into
+          # the provisioning dir and trigger Grafana to reprovision.
           NET="monitoring_monitoring_network"
+          RESP=$(docker run --rm --network "$NET" curlimages/curl:8.10.1 \
+            -sS -u "$ADMIN_USER:$ADMIN_PASS" \
+            -w '\n__HTTP_CODE__:%{http_code}' \
+            "http://monitoring_grafana:3000/api/datasources/uid/alertmanager-uid")
+          HTTP_CODE=$(echo "$RESP" | grep '^__HTTP_CODE__:' | cut -d: -f2)
+          BODY=$(echo "$RESP" | sed '/^__HTTP_CODE__:/d')
+
+          if [ "$HTTP_CODE" = "404" ]; then
+            echo "✅ no leftover alertmanager-uid datasource — nothing to do"
+            exit 0
+          fi
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Unexpected status reading alertmanager-uid: $HTTP_CODE"
+            echo "$BODY"
+            exit 1
+          fi
+
+          DS_NAME=$(echo "$BODY" | jq -r '.name')
+          echo "Found leftover datasource: name='$DS_NAME' uid=alertmanager-uid"
+
+          # Drop a deleteDatasources file alongside the existing
+          # datasources.yml. GF_DATASOURCE_SIGHUP=true is set in compose,
+          # so HUP triggers a re-provision.
+          {
+            echo "apiVersion: 1"
+            echo "deleteDatasources:"
+            echo "  - name: ${DS_NAME}"
+            echo "    orgId: 1"
+          } | sudo tee /opt/scholarship/monitoring/config/grafana/provisioning/datasources/cleanup-leftovers.yml > /dev/null
+          docker kill -s HUP monitoring_grafana
+          sleep 5
+
           STATUS=$(docker run --rm --network "$NET" curlimages/curl:8.10.1 \
-            -sS -o /dev/null -w "%{http_code}" -X DELETE \
+            -sS -o /dev/null -w "%{http_code}" \
             -u "$ADMIN_USER:$ADMIN_PASS" \
             "http://monitoring_grafana:3000/api/datasources/uid/alertmanager-uid" || echo "000")
-          case "$STATUS" in
-            200|404) echo "✅ leftover alertmanager-uid handled (HTTP $STATUS)" ;;
-            *)       echo "::error::Unexpected status deleting alertmanager-uid: $STATUS" ; exit 1 ;;
-          esac
+          if [ "$STATUS" != "404" ]; then
+            echo "::error::Cleanup did not take effect (uid still returns $STATUS)"
+            exit 1
+          fi
+          echo "✅ leftover datasource '$DS_NAME' removed via provisioning"
 
       - name: Health check monitoring services
         run: |
