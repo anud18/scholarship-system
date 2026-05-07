@@ -8,6 +8,12 @@ on:
       - 'monitoring/**'
       - '.github/workflows/deploy-monitoring-stack.yml'
   workflow_dispatch:
+    inputs:
+      reset_grafana_volume:
+        description: "DESTRUCTIVE: nuke grafana_data before deploy (loses manually-saved dashboards, annotations, etc.). Default off."
+        type: boolean
+        required: false
+        default: false
 
 # SECURITY: Limit GITHUB_TOKEN permissions to minimum required
 permissions:
@@ -28,7 +34,7 @@ jobs:
           REQUIRED_SECRETS: |
             GRAFANA_ADMIN_USER GRAFANA_ADMIN_PASSWORD GRAFANA_ROOT_URL
             STAGING_DB_HOST STAGING_DB_USER STAGING_DB_SSH_KEY
-            STAGING_MONITORING_SERVER_URL
+            STAGING_MONITORING_SERVER_URL GH_PAT
           GRAFANA_ADMIN_USER: ${{ secrets.GRAFANA_ADMIN_USER }}
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
           GRAFANA_ROOT_URL: ${{ secrets.GRAFANA_ROOT_URL }}
@@ -36,6 +42,7 @@ jobs:
           STAGING_DB_USER: ${{ secrets.STAGING_DB_USER }}
           STAGING_DB_SSH_KEY: ${{ secrets.STAGING_DB_SSH_KEY }}
           STAGING_MONITORING_SERVER_URL: ${{ secrets.STAGING_MONITORING_SERVER_URL }}
+          GH_PAT: ${{ secrets.GH_PAT }}
         run: |
           missing=()
           for var in $REQUIRED_SECRETS; do
@@ -100,14 +107,96 @@ jobs:
           sudo chmod 600 /opt/scholarship/secrets/gh_pat
           # Grafana container UID is 472
           sudo chown 472:472 /opt/scholarship/secrets/gh_pat
-          if [ ! -s /opt/scholarship/secrets/gh_pat ]; then
+          # Parent dir is mode 700 root-owned — runner user has no traversal
+          # rights, so `[ -s file ]` would always fail with permission denied
+          # instead of telling us the actual size. Use `sudo test` instead.
+          if sudo test ! -s /opt/scholarship/secrets/gh_pat; then
             echo "::error::GH_PAT file is empty after write"
             exit 1
           fi
           echo "✅ GH_PAT secrets file written"
 
+          # One-shot volume nuke. Provisioning re-seeds Prometheus/Loki
+          # datasources + dashboards on next boot, so this is destructive
+          # only of in-Grafana state (manually-saved dashboards, alerts,
+          # annotations). Use sparingly — ideally once after a clean
+          # provisioning-only migration.
+          if [ "${{ inputs.reset_grafana_volume }}" = "true" ]; then
+            echo "⚠️  reset_grafana_volume=true — wiping grafana_data volume"
+            docker compose -f docker-compose.monitoring.yml down -v
+          fi
+
           # Start/restart monitoring stack
           docker compose -f docker-compose.monitoring.yml up -d
+
+      - name: Cleanup leftover Phase-2 datasources
+        env:
+          ADMIN_USER: ${{ secrets.GRAFANA_ADMIN_USER }}
+          ADMIN_PASS: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+        run: |
+          set -e
+          # Wait for Grafana to be reachable
+          for i in $(seq 1 24); do
+            if docker exec monitoring_grafana wget --spider -q http://localhost:3000/api/health 2>/dev/null; then
+              break
+            fi
+            sleep 5
+          done
+
+          # Phase 2 removed alertmanager from compose, but a previously
+          # provisioned `alertmanager-uid` datasource sticks around in
+          # grafana_data/grafana.db. The API rejects DELETE with 403 on
+          # provisioned datasources (read-only by design), so the only
+          # way to remove it is to drop a deleteDatasources entry into
+          # the provisioning dir and trigger Grafana to reprovision.
+          NET="monitoring_monitoring_network"
+          RESP=$(docker run --rm --network "$NET" curlimages/curl:8.10.1 \
+            -sS -u "$ADMIN_USER:$ADMIN_PASS" \
+            -w '\n__HTTP_CODE__:%{http_code}' \
+            "http://monitoring_grafana:3000/api/datasources/uid/alertmanager-uid")
+          HTTP_CODE=$(echo "$RESP" | grep '^__HTTP_CODE__:' | cut -d: -f2)
+          BODY=$(echo "$RESP" | sed '/^__HTTP_CODE__:/d')
+
+          if [ "$HTTP_CODE" = "404" ]; then
+            echo "✅ no leftover alertmanager-uid datasource — nothing to do"
+            exit 0
+          fi
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Unexpected status reading alertmanager-uid: $HTTP_CODE"
+            echo "$BODY"
+            exit 1
+          fi
+
+          DS_NAME=$(echo "$BODY" | jq -r '.name')
+          echo "Found leftover datasource: name='$DS_NAME' uid=alertmanager-uid"
+
+          # Drop a deleteDatasources file alongside the existing
+          # datasources.yml. SIGHUP didn't trigger a re-provision in
+          # practice, so just restart Grafana — it's <30s and bulletproof.
+          {
+            echo "apiVersion: 1"
+            echo "deleteDatasources:"
+            echo "  - name: ${DS_NAME}"
+            echo "    orgId: 1"
+          } | sudo tee /opt/scholarship/monitoring/config/grafana/provisioning/datasources/cleanup-leftovers.yml > /dev/null
+
+          docker restart monitoring_grafana
+          for i in $(seq 1 24); do
+            if docker exec monitoring_grafana wget --spider -q http://localhost:3000/api/health 2>/dev/null; then
+              break
+            fi
+            sleep 5
+          done
+
+          STATUS=$(docker run --rm --network "$NET" curlimages/curl:8.10.1 \
+            -sS -o /dev/null -w "%{http_code}" \
+            -u "$ADMIN_USER:$ADMIN_PASS" \
+            "http://monitoring_grafana:3000/api/datasources/uid/alertmanager-uid" || echo "000")
+          if [ "$STATUS" != "404" ]; then
+            echo "::error::Cleanup did not take effect (uid still returns $STATUS)"
+            exit 1
+          fi
+          echo "✅ leftover datasource '$DS_NAME' removed via provisioning"
 
       - name: Health check monitoring services
         run: |
@@ -152,24 +241,45 @@ jobs:
           done
           echo "✅ All datasources healthy"
 
-          # 3. No provisioning errors in Grafana startup logs
-          if docker logs monitoring_grafana 2>&1 | grep -E 'level=error.*provisioning|failed to provision' > /tmp/grafana-prov-errors.txt; then
-            echo "::error::Grafana provisioning errors found:"
-            cat /tmp/grafana-prov-errors.txt
+          # 3. Dashboards reachable. Replaces a brittle log-grep gate that
+          #    used to fail on cosmetic Grafana 12 quirks (e.g. "Cannot
+          #    change resource manager" + transient SQLITE_BUSY during
+          #    cold-start provisioning). Real datasource problems are
+          #    already caught by step 2; the alert-rules gate at step 4
+          #    catches alert provisioning failures. What's left is
+          #    dashboard liveness — query the search API and assert every
+          #    provisioning JSON yielded a dashboard.
+          DASH_COUNT=$(docker exec monitoring_grafana wget -qO- \
+            --header "$AUTH_HDR" \
+            "http://localhost:3000/api/search?type=dash-db" \
+            | jq 'length')
+          # Eight dashboards live in monitoring/config/grafana/provisioning/dashboards/.
+          if [ "${DASH_COUNT:-0}" -lt 8 ]; then
+            echo "::error::Expected ≥8 provisioned dashboards, got $DASH_COUNT"
+            docker logs monitoring_grafana 2>&1 | grep -E 'provisioning.dashboard.*level=error' | tail -20
             exit 1
           fi
-          echo "✅ No provisioning errors"
+          echo "✅ $DASH_COUNT dashboards provisioned"
 
-          # 4. Alert rules loaded successfully (zero failed-to-load)
-          FAILED_RULES=$(docker exec monitoring_grafana wget -qO- \
+          # 4. Alert rules loaded. The previous filter (execErrState=="Error")
+          #    matched the rule's *config* for what to do when its query
+          #    fails — it's "Error" by default, so it counted every rule.
+          #    Instead, count present rules and assert it matches the
+          #    YAML-shipped total. Cold-boot transient evaluation errors
+          #    are expected on first start (Prometheus targets not scraped
+          #    yet) and shouldn't fail the deploy.
+          RULE_COUNT=$(docker exec monitoring_grafana wget -qO- \
             --header "$AUTH_HDR" \
             "http://localhost:3000/api/v1/provisioning/alert-rules" \
-            | jq '[.[] | select(.execErrState=="Error")] | length')
-          if [ "${FAILED_RULES:-0}" -gt 0 ]; then
-            echo "::error::$FAILED_RULES alert rules failed to load"
+            | jq 'length')
+          # Total alert rules across rules-*.yml: 5 (system) + 4 (container)
+          # + 3 (monitoring) + 2 (database) = 14.
+          if [ "${RULE_COUNT:-0}" -lt 14 ]; then
+            echo "::error::Expected ≥14 provisioned alert rules, got $RULE_COUNT"
+            docker logs monitoring_grafana 2>&1 | grep -E 'provisioning.alerting.*level=error' | tail -20
             exit 1
           fi
-          echo "✅ All alert rules loaded"
+          echo "✅ $RULE_COUNT alert rules provisioned"
 
           echo "All monitoring services are healthy"
 
@@ -179,10 +289,15 @@ jobs:
           sudo mkdir -p /opt/scholarship/monitoring/config/alloy
           cp ./monitoring/config/alloy/staging-ap-vm.alloy /opt/scholarship/monitoring/config/alloy/
 
-          # Restart Alloy service if it's running
-          cd /opt/scholarship
-          if docker ps -q -f name=alloy > /dev/null 2>&1; then
-            docker compose -f docker-compose.staging.yml restart alloy || true
+          # `docker ps -q -f name=alloy` exits 0 even when nothing matches,
+          # so the previous bare `if` always entered then silently failed
+          # on a missing compose file (|| true). Inspect the output instead.
+          ALLOY_CIDS=$(docker ps -q -f name=alloy)
+          if [ -n "$ALLOY_CIDS" ]; then
+            echo "Restarting Alloy container(s): $ALLOY_CIDS"
+            docker restart $ALLOY_CIDS
+          else
+            echo "::warning::No alloy container running on AP-VM — staging metrics from this host will be missing until the main staging stack deploys it."
           fi
 
   deploy-staging-db-monitoring:
@@ -320,58 +435,74 @@ jobs:
             ./monitoring/config/alloy/staging-db-vm.alloy \
             ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }}:/opt/scholarship/monitoring/config/alloy/
 
-          # Deploy monitoring stack using docker-compose
+          # Deploy monitoring stack using docker-compose. We need
+          # --env-file to actually load .env.staging-db-monitoring;
+          # without it, ${MONITORING_SERVER_URL} ends up empty and Alloy
+          # has nowhere to push metrics.
           ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} << 'EOF'
             cd /opt/scholarship
 
             # Stop existing monitoring services if any
-            docker compose -f docker-compose.staging-db-monitoring.yml down || true
+            docker compose --env-file .env.staging-db-monitoring \
+              -f docker-compose.staging-db-monitoring.yml down || true
 
             # Start monitoring stack
-            docker compose -f docker-compose.staging-db-monitoring.yml up -d
+            docker compose --env-file .env.staging-db-monitoring \
+              -f docker-compose.staging-db-monitoring.yml up -d
 
             echo "✅ Monitoring stack deployed successfully"
 
             # Show running containers
             docker ps --filter "name=staging_db" --format "table {{.Names}}\t{{.Status}}"
+
           EOF
 
       - name: Verify staging metrics
         run: |
           set -e
 
-          # Replace `sleep 30` with poll-until-targets-arrive
-          for i in $(seq 1 18); do
-            STAGING_TOTAL=$(curl -s http://localhost:9090/api/v1/targets \
-              | jq '[.data.activeTargets[] | select(.labels.environment=="staging")] | length')
-            if [ "${STAGING_TOTAL:-0}" -gt 0 ]; then
+          # Staging metrics arrive via Alloy → Prometheus remote_write —
+          # they don't appear in /api/v1/targets. Query up{} instead.
+          # AP-VM exporters (5): node, cadvisor, nginx, redis, backend
+          # DB-VM exporters (2): node, postgres
+          MIN_EXPECTED=7
+          query_count() {
+            curl -s -G "http://localhost:9090/api/v1/query" \
+              --data-urlencode "query=$1" \
+              | jq -r '.data.result[0].value[1] // "0"'
+          }
+
+          # Poll until we hit the full expected count, not just any count —
+          # DB-VM Alloy only just started, so its first scrape needs ~15s
+          # to land in remote_write.
+          for i in $(seq 1 24); do
+            STAGING_TOTAL=$(query_count 'count(up{environment="staging"}==1)')
+            if [ "${STAGING_TOTAL:-0}" -ge "$MIN_EXPECTED" ]; then
               break
             fi
-            echo "Waiting for staging targets to register... ($i/18)"
+            echo "Have $STAGING_TOTAL/$MIN_EXPECTED staging up=1 metrics, waiting... ($i/24)"
             sleep 10
           done
 
-          STAGING_TOTAL=$(curl -s http://localhost:9090/api/v1/targets \
-            | jq '[.data.activeTargets[] | select(.labels.environment=="staging")] | length')
-          STAGING_DOWN=$(curl -s http://localhost:9090/api/v1/targets \
-            | jq '[.data.activeTargets[] | select(.labels.environment=="staging") | select(.health!="up")] | length')
+          STAGING_TOTAL=$(query_count 'count(up{environment="staging"}==1)')
+          STAGING_DOWN=$(query_count 'count(up{environment="staging"}==0)')
 
-          # Tunable: minimum expected staging targets
-          # AP-VM: node, cadvisor, nginx, redis, backend = 5
-          # DB-VM (after F-ALLO-09): node, postgres = 2
-          # Total = 7
-          MIN_EXPECTED=7
-          if [ "$STAGING_TOTAL" -lt "$MIN_EXPECTED" ]; then
-            echo "::error::Only $STAGING_TOTAL staging targets found; expected at least $MIN_EXPECTED"
-            curl -s http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | {scrapeUrl, env: .labels.environment, vm: .labels.vm, job: .labels.job}'
+          if [ "${STAGING_TOTAL:-0}" -lt "$MIN_EXPECTED" ]; then
+            echo "::error::Only $STAGING_TOTAL staging up=1 metrics found; expected at least $MIN_EXPECTED"
+            echo "Per-vm/job breakdown of what we DO see:"
+            curl -s -G "http://localhost:9090/api/v1/query" \
+              --data-urlencode 'query=up{environment="staging"}' \
+              | jq '.data.result[] | {vm: .metric.vm, job: .metric.job, instance: .metric.instance, up: .value[1]}'
             exit 1
           fi
-          if [ "$STAGING_DOWN" -gt 0 ]; then
-            echo "::error::$STAGING_DOWN staging targets are DOWN"
-            curl -s http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | select(.labels.environment=="staging") | select(.health!="up")'
+          if [ "${STAGING_DOWN:-0}" -gt 0 ]; then
+            echo "::error::$STAGING_DOWN staging targets reporting up=0"
+            curl -s -G "http://localhost:9090/api/v1/query" \
+              --data-urlencode 'query=up{environment="staging"}==0' \
+              | jq '.data.result[].metric'
             exit 1
           fi
-          echo "✅ $STAGING_TOTAL staging targets all UP"
+          echo "✅ $STAGING_TOTAL staging targets reporting up=1"
 
           # Loki check (existing; keep)
           if curl -f -H "X-Scope-OrgID: staging" -G "http://localhost:3100/loki/api/v1/query" \
@@ -381,6 +512,27 @@ jobs:
           else
             echo "⚠️  Warning: No staging logs found in Loki yet"
           fi
+
+      - name: DB-VM Alloy diagnostics (on failure)
+        if: failure()
+        env:
+          MONITORING_URL: ${{ secrets.STAGING_MONITORING_SERVER_URL }}
+        run: |
+          echo "--- DB-VM Alloy env ---"
+          ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} \
+            "docker inspect scholarship_alloy_staging_db --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -E 'MONITORING_SERVER_URL' || echo '(env var missing)'" || true
+
+          echo
+          echo "--- Alloy logs (errors/remote_write/push) ---"
+          ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} \
+            "docker logs --tail 200 scholarship_alloy_staging_db 2>&1 | grep -Ei 'error|remote_write|push|fail|context|push_total'" \
+            | tail -50 || true
+
+          echo
+          echo "--- DB-VM → AP-VM:9090 reachability ---"
+          ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} \
+            "curl -sS -o /dev/null -w 'HTTP %{http_code} — connect=%{time_connect}s total=%{time_total}s\n' ${MONITORING_URL}:9090/-/healthy" \
+            || echo "(reachability check failed; URL=${MONITORING_URL})"
 
       - name: Cleanup SSH keys
         if: always()
