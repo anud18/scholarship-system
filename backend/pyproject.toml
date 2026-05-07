@@ -112,7 +112,7 @@ dependencies = [
     "fastapi==0.129.0",
     "starlette==0.52.1",
     "uvicorn[standard]==0.38.0",
-    "python-multipart==0.0.22",
+    "python-multipart==0.0.27",
     
     # Database and ORM
     "sqlalchemy==2.0.44",
@@ -125,7 +125,7 @@ dependencies = [
     "PyJWT[crypto]==2.9.0",
     "passlib[bcrypt]==1.7.4",
     "bcrypt==4.2.1",
-    "cryptography==46.0.6",
+    "cryptography==46.0.7",
     "python-decouple==3.8",
     
     # Data validation and serialization
@@ -153,7 +153,7 @@ dependencies = [
     "jinja2==3.1.6",
     
     # File processing and OCR
-    "pillow==12.1.1",
+    "pillow==12.2.0",
     "opencv-python==4.12.0.88",
     "pytesseract==0.3.10",
     "google-generativeai==0.8.3",
