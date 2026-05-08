@@ -402,27 +402,54 @@ class TestApplicationService:
     async def test_get_application_by_id_admin_access(self, service):
         """Test getting application by ID with admin access"""
         application_id = 1
-        user_id = 1
         other_user_id = 2
 
         mock_user = Mock(spec=User)
-        mock_user.id = user_id
+        mock_user.id = 1
         mock_user.role = UserRole.admin
 
         mock_application = Mock(spec=Application)
         mock_application.id = application_id
         mock_application.user_id = other_user_id
+        mock_application.app_id = "APP-2024-001"
+        mock_application.scholarship_type_id = 1
+        mock_application.status = ApplicationStatus.draft.value
+        mock_application.status_name = "草稿"
+        mock_application.review_stage = None
+        mock_application.is_renewal = False
+        mock_application.academic_year = 2024
+        mock_application.semester = "first"
+        mock_application.student_data = {}
         mock_application.submitted_form_data = {}
+        mock_application.agree_terms = True
+        mock_application.professor_id = None
+        mock_application.reviewer_id = None
+        mock_application.final_approver_id = None
+        mock_application.submitted_at = None
+        mock_application.reviewed_at = None
+        mock_application.approved_at = None
+        mock_application.created_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        mock_application.updated_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        mock_application.meta_data = None
+        mock_application.application_document_url = None
+        mock_application.application_document_original_filename = None
+        mock_application.amount = None
         mock_application.files = []
+        mock_application.reviews = []
+        mock_application.scholarship_configuration = None
+        mock_application.scholarship = None
+        mock_application.student = None
+        mock_application.scholarship_subtype_list = []
 
-        with patch.object(service.db, "execute") as mock_execute:
-            mock_result = Mock()
-            mock_result.scalar_one_or_none.return_value = mock_application
-            mock_execute.return_value = mock_result
+        with patch.object(service, "_get_application_model", new_callable=AsyncMock) as mock_get_model:
+            mock_get_model.return_value = mock_application
 
             result = await service.get_application_by_id(application_id, mock_user)
 
-            assert result == mock_application
+            assert result is not None
+            assert result.id == application_id
+            assert result.user_id == other_user_id
+            mock_get_model.assert_called_once_with(application_id, mock_user)
 
     @pytest.mark.asyncio
     async def test_update_application_success(self, service):
