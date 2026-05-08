@@ -63,7 +63,11 @@ groups:
               to: 0
             datasourceUid: prometheus-uid
             model:
-              expr: (container_memory_usage_bytes{name!=""} / container_spec_memory_limit_bytes{name!=""}) * 100 > 85
+              # Guard against containers without a memory limit set:
+              # container_spec_memory_limit_bytes == 0 → division → +Inf →
+              # always > 85. The `and ... > 0` clause filters those out so
+              # we only alert on containers that actually have a limit.
+              expr: (container_memory_usage_bytes{name!=""} / container_spec_memory_limit_bytes{name!=""}) * 100 > 85 and container_spec_memory_limit_bytes{name!=""} > 0
               refId: A
               instant: true
         noDataState: OK
@@ -87,7 +91,14 @@ groups:
               to: 0
             datasourceUid: prometheus-uid
             model:
-              expr: rate(container_last_seen{name!=""}[15m]) > 0.1
+              # container_last_seen is a monotonically-increasing timestamp
+              # gauge: each cadvisor scrape advances it by the scrape
+              # interval. For any stably-running container, rate() ≈ 1.0
+              # always — so the original `> 0.1` query fired for every
+              # healthy container, not actual restarts. Use changes() over
+              # container_start_time_seconds, which only ticks when the
+              # container is recreated.
+              expr: changes(container_start_time_seconds{name!=""}[15m]) > 1
               refId: A
               instant: true
         noDataState: OK
