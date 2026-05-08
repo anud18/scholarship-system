@@ -217,28 +217,21 @@ jobs:
         include:
           - test-suite: smoke
             # Explicit file list (not "app/tests") so pytest doesn't try to
-            # import unrelated broken test files at collection. Several
-            # pre-existing files (test_college_review_*, test_professor_endpoints,
-            # test_semester_yearly_labels) have stale imports.
-            test-path: "app/tests/test_health.py app/tests/test_mock_sso.py app/tests/test_auth_service.py app/tests/test_critical_workflows.py app/tests/test_application_service.py app/tests/test_scholarship_rules_service.py app/tests/test_eligibility_service.py"
+            # import unrelated broken test files at collection. The previously
+            # broken files (test_college_review_*, test_professor_endpoints,
+            # test_semester_yearly_labels) had stale imports fixed in this PR;
+            # they are kept off the smoke list because their test bodies still
+            # exercise removed schemas and are not smoke-marked.
+            test-path: "app/tests/test_health.py app/tests/test_mock_sso.py app/tests/test_auth_service.py app/tests/test_critical_workflows.py app/tests/test_application_service.py app/tests/test_scholarship_rules_service.py app/tests/test_eligibility_service.py app/tests/test_roster_service_generation.py"
             test-mark: "smoke"
-            # NOTE: Soft-gated (continue-on-error: true) for now — same as the
-            # other three rows. Several smoke-marked tests have pre-existing
-            # bugs that this PR uncovered but does not aim to fix:
-            #   * test_mock_sso uses TestClient against the FastAPI app, but
-            #     conftest only creates tables on a separate test_engine_sync
-            #     so DB queries hit "no such table: users".
-            #   * test_auth_service mocks AsyncSession.execute() returning a
-            #     plain Mock; under pytest-asyncio 1.3 / asyncio_mode=auto the
-            #     coroutine isn't awaited.
-            #   * test_register_user_success fixture sends status="active",
-            #     but UserCreate.status now requires the EmployeeStatus enum
-            #     ('在職', '退休', '在學', '畢業').
-            #   * pytest.ini uses [tool:pytest] (setup.cfg syntax), so addopts
-            #     including --strict-markers are not honored — every custom
-            #     mark is "Unknown pytest.mark.*".
-            # Hard-gating moves to a follow-up PR after those are fixed.
-            continue-on-error: true
+            # All four bugs documented in PR #166 (ci.yml:225-241) are now fixed:
+            #   * pytest.ini: [tool:pytest] → [pytest] so --strict-markers works
+            #   * test_mock_sso: replaced module-level TestClient with fixture-
+            #     based AsyncClient + student001 DB seed (fixes "no such table")
+            #   * test_auth_service: AsyncMock for execute/commit/refresh/rollback
+            #   * test_register_user_success: status=EmployeeStatus.active (not "active")
+            # Smoke lane is now hard-gated (continue-on-error: false).
+            continue-on-error: false
           - test-suite: unit
             test-path: app/tests/test_*.py
             test-mark: "not integration and not asyncio"
