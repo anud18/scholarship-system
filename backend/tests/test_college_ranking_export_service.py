@@ -75,10 +75,7 @@ def _build_workbook(
     # cells read back as None. The service writes "" for empty static and
     # dynamic fields; normalise None -> "" here so the per-test assertions
     # can compare against literal "" as written below.
-    return [
-        [("" if value is None else value) for value in row]
-        for row in ws.iter_rows(values_only=True)
-    ]
+    return [[("” if value is None else value) for value in row] for row in ws.iter_rows(values_only=True)]
 
 
 class TestStaticColumns:
@@ -93,12 +90,12 @@ class TestStaticColumns:
         )
         # rows[0] = title, rows[1] = headers, rows[2] = first data row
         data = rows[2]
-        assert data[0] == 1                  # NO. (1-based row index)
-        assert data[1] == 2                  # 學院初審會議之學院排序
-        assert data[2] == "國科會"           # 申請獎學金類別 (sub_type_labels lookup happens externally)
+        assert data[0] == 1  # NO. (1-based row index)
+        assert data[1] == 2  # 學院初審會議之學院排序
+        assert data[2] == "國科會"  # 申請獎學金類別 (sub_type_labels lookup happens externally)
         assert data[3] == "工學院"
         assert data[4] == "土木工程學系"
-        assert data[5] == 3                  # 年級 = ceil(5/2)
+        assert data[5] == 3  # 年級 = ceil(5/2)
         assert data[6] == "王小明"
         assert data[7] == "WANG, XIAO-MING"
         assert data[8] == "中華民國"
@@ -159,9 +156,7 @@ class TestStaticFieldEdgeCases:
         ],
     )
     def test_enrollment_date(self, year, term, expected):
-        app = FakeApplication(
-            student_data={"std_enrollyear": year, "std_enrollterm": term}
-        )
+        app = FakeApplication(student_data={"std_enrollyear": year, "std_enrollterm": term})
         rows = _build_workbook([_make_row(app=app)])
         assert rows[2][10] == expected
 
@@ -177,9 +172,7 @@ class TestStaticFieldEdgeCases:
 class TestSubTypeRendering:
     def test_zero_preferences_uses_fallback(self):
         app = FakeApplication(sub_type_preferences=[], sub_scholarship_type="moe_1w")
-        rows = _build_workbook(
-            [_make_row(app=app)], sub_type_labels={"moe_1w": "教育部"}
-        )
+        rows = _build_workbook([_make_row(app=app)], sub_type_labels={"moe_1w": "教育部"})
         assert rows[2][2] == "教育部"
 
     def test_zero_preferences_unknown_code_uses_raw_code(self):
@@ -189,9 +182,7 @@ class TestSubTypeRendering:
 
     def test_one_preference(self):
         app = FakeApplication(sub_type_preferences=["nstc"])
-        rows = _build_workbook(
-            [_make_row(app=app)], sub_type_labels={"nstc": "國科會"}
-        )
+        rows = _build_workbook([_make_row(app=app)], sub_type_labels={"nstc": "國科會"})
         assert rows[2][2] == "國科會"
 
     def test_two_preferences(self):
@@ -204,9 +195,7 @@ class TestSubTypeRendering:
 
     def test_unknown_sub_type_in_preferences_uses_code(self):
         app = FakeApplication(sub_type_preferences=["nstc", "unknown_code"])
-        rows = _build_workbook(
-            [_make_row(app=app)], sub_type_labels={"nstc": "國科會"}
-        )
+        rows = _build_workbook([_make_row(app=app)], sub_type_labels={"nstc": "國科會"})
         assert rows[2][2] == "國科會(第一志願)暨unknown_code(第二志願)"
 
 
@@ -214,26 +203,22 @@ class TestDynamicColumns:
     def test_dynamic_field_appended_after_static(self):
         app = FakeApplication(
             student_data=_full_student_data(),
-            submitted_form_data={
-                "fields": {"master_school": {"value": "台大土木系"}}
-            },
+            submitted_form_data={"fields": {"master_school": {"value": "台大土木系"}}},
         )
         fields = [
             DynamicFieldSpec(
                 field_name="master_school",
-                field_label="碩士畢業學校",
+                field_label="碑士畢業學校",
                 export_column_label=None,
                 display_order=10,
             )
         ]
         rows = _build_workbook([_make_row(app=app)], dynamic_fields=fields)
-        assert rows[1][14] == "碩士畢業學校"
+        assert rows[1][14] == "碑士畢業學校"
         assert rows[2][14] == "台大土木系"
 
     def test_export_column_label_overrides_field_label(self):
-        app = FakeApplication(
-            submitted_form_data={"fields": {"phone": {"value": "0912345678"}}}
-        )
+        app = FakeApplication(submitted_form_data={"fields": {"phone": {"value": "0912345678"}}})
         fields = [
             DynamicFieldSpec(
                 field_name="phone",
@@ -270,17 +255,13 @@ class TestDynamicColumns:
         assert rows[2][14] == ""
 
     def test_none_value_renders_empty(self):
-        app = FakeApplication(
-            submitted_form_data={"fields": {"phone": {"value": None}}}
-        )
+        app = FakeApplication(submitted_form_data={"fields": {"phone": {"value": None}}})
         fields = [DynamicFieldSpec("phone", "手機", None, display_order=1)]
         rows = _build_workbook([_make_row(app=app)], dynamic_fields=fields)
         assert rows[2][14] == ""
 
     def test_non_string_value_coerced_to_string(self):
-        app = FakeApplication(
-            submitted_form_data={"fields": {"count": {"value": 42}}}
-        )
+        app = FakeApplication(submitted_form_data={"fields": {"count": {"value": 42}}})
         fields = [DynamicFieldSpec("count", "次數", None, display_order=1)]
         rows = _build_workbook([_make_row(app=app)], dynamic_fields=fields)
         assert rows[2][14] == "42"
@@ -290,15 +271,13 @@ class TestEmptyRanking:
     def test_empty_rows_produces_valid_workbook_with_headers(self):
         rows = _build_workbook([])
         assert rows[0][0].startswith("114學年度")  # title row
-        assert rows[1][0] == "NO."                # header row
-        assert len(rows) == 2                      # title + header, no data
+        assert rows[1][0] == "NO."  # header row
+        assert len(rows) == 2  # title + header, no data
 
 
 class TestTitleAndSheet:
     def test_workbook_title_row(self):
-        rows = _build_workbook(
-            [], title="115學年度大學部獎學金學生資料彙整表"
-        )
+        rows = _build_workbook([], title="115學年度大學部獎學金學生資料彙整表")
         assert rows[0][0] == "115學年度大學部獎學金學生資料彙整表"
 
     def test_sheet_name_used(self):
