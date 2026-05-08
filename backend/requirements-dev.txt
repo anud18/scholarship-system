@@ -3,7 +3,8 @@
 
 # Testing framework
 pytest==9.0.3  # Security update — multiple medium-severity CVEs (<9.0.3)
-pytest-asyncio==0.24.0  # Updated for Python 3.13 compatibility
+pytest-asyncio==0.25.3  # 0.24 is pytest<9 only; pytest.ini asyncio_mode=auto + --strict-config requires the plugin to load
+
 pytest-cov==6.0.0  # Updated for Python 3.13 compatibility
 pytest-mock==3.14.0  # Updated for Python 3.13 compatibility
 httpx==0.28.1  # Match main requirements
