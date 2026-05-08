@@ -475,6 +475,7 @@ async def update_matrix_quota(
         # surfaces. quota:* prefix is owned by PR 2 (quota_service caching).
         await invalidate("refdata:")
         await invalidate("formconfig:")
+        await invalidate("quota:")
 
         return ApiResponse(
             success=True,
@@ -795,6 +796,7 @@ async def create_scholarship_configuration(
 
         await invalidate("refdata:")
         await invalidate("formconfig:")
+        await invalidate("quota:")
 
         return ApiResponse(
             success=True,
@@ -1043,6 +1045,7 @@ async def update_scholarship_configuration(
 
         await invalidate("refdata:")
         await invalidate("formconfig:")
+        await invalidate("quota:")
 
         return ApiResponse(
             success=True, message="配置更新成功", data={"id": config.id, "config_code": config.config_code}
@@ -1096,6 +1099,7 @@ async def deactivate_scholarship_configuration(
 
         await invalidate("refdata:")
         await invalidate("formconfig:")
+        await invalidate("quota:")
 
         return ApiResponse(
             success=True, message="配置已停用", data={"id": config.id, "config_code": config.config_code}
@@ -1182,6 +1186,7 @@ async def duplicate_scholarship_configuration(
 
         await invalidate("refdata:")
         await invalidate("formconfig:")
+        await invalidate("quota:")
 
         return ApiResponse(
             success=True, message="配置複製成功", data={"id": new_config.id, "config_code": new_config.config_code}

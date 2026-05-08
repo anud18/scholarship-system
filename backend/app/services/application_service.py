@@ -13,6 +13,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.cache import invalidate as cache_invalidate
 from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFoundError, ValidationError
 from app.core.schema_validation import serialize_value
 from app.models.application import Application, ApplicationStatus, ReviewStatus
@@ -72,6 +73,19 @@ class ApplicationService:
         self.db = db
         self.emailService = EmailService()
         self.student_service = StudentService()
+
+    @staticmethod
+    async def _invalidate_app_caches() -> None:
+        """Invalidate dashboard + quota caches after an application status change.
+
+        Best-effort: failures here never raise, so a Redis outage degrades to
+        "cache shows stale stats up to TTL" not "request fails."
+        """
+        try:
+            await cache_invalidate("dashboard:")
+            await cache_invalidate("quota:")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("cache invalidation failed (non-fatal): %s", exc)
 
     def _serialize_for_json(self, data: Any) -> Any:
         """Serialize data for JSON response"""
@@ -1098,6 +1112,8 @@ class ApplicationService:
 
         await self.db.commit()
         await self.db.refresh(application)
+        if update_data.status:
+            await self._invalidate_app_caches()
 
         # Clone bank account proof document when saving draft or updating application
         # This ensures the document is available in the application
@@ -1266,6 +1282,7 @@ class ApplicationService:
                     )
 
         await self.db.commit()
+        await self._invalidate_app_caches()
 
         # Re-query with eager loading to avoid MissingGreenlet on expired attributes
         stmt = (
@@ -1609,6 +1626,7 @@ class ApplicationService:
         application.reviewed_at = datetime.now(timezone.utc)
 
         await self.db.commit()
+        await self._invalidate_app_caches()
 
         # Return fresh copy with all relationships loaded
         return await self.get_application_by_id(application_id, user)
@@ -2025,6 +2043,7 @@ class ApplicationService:
             # Delete from database (cascade will delete related ApplicationFile records)
             await self.db.delete(application)
             await self.db.commit()
+            await self._invalidate_app_caches()
 
             logger.info(f"Hard deleted draft application {application.app_id} from database")
             return application
@@ -2040,6 +2059,7 @@ class ApplicationService:
 
             await self.db.commit()
             await self.db.refresh(application)
+            await self._invalidate_app_caches()
 
             logger.info(f"Soft deleted application {application.app_id}")
             return application
@@ -2101,6 +2121,7 @@ class ApplicationService:
 
         await self.db.commit()
         await self.db.refresh(application)
+        await self._invalidate_app_caches()
 
         return application
 
@@ -2126,6 +2147,7 @@ class ApplicationService:
 
         await self.db.commit()
         await self.db.refresh(application)
+        await self._invalidate_app_caches()
 
         return application
 
@@ -2735,6 +2757,7 @@ class ApplicationService:
 
             logger.info("Step 7: Committing transaction")
             await self.db.commit()
+            await self._invalidate_app_caches()
 
             # Return the created review
             logger.info("Step 8: Fetching created review to return")

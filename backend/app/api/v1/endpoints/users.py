@@ -9,6 +9,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.functions import count
 
+from app.core.cache import invalidate as cache_invalidate
 from app.core.security import get_current_user, require_admin
 from app.db.deps import get_db
 from app.models.user import EmployeeStatus, User, UserRole, UserType
@@ -351,6 +352,8 @@ async def update_user(
 
     await db.commit()
     await db.refresh(user)
+    # Role / college_code change can affect dashboard scope for this admin.
+    await cache_invalidate("dashboard:")
 
     return {
         "success": True,
@@ -382,6 +385,7 @@ async def delete_user(
 
     await db.delete(user)
     await db.commit()
+    await cache_invalidate("dashboard:")
 
     return {
         "success": True,
@@ -439,6 +443,7 @@ async def update_user_college(
     user.college_code = college_code
     await db.commit()
     await db.refresh(user)
+    await cache_invalidate("dashboard:")
 
     return {
         "success": True,
@@ -518,6 +523,8 @@ async def bulk_assign_scholarships(
         raise HTTPException(status_code=400, detail="Invalid operation. Use 'set' or 'add'")
 
     await db.commit()
+    # Admin scope changed: dashboard cache for this admin must be rebuilt.
+    await cache_invalidate("dashboard:")
 
     # Get final scholarship list
     final_stmt = (

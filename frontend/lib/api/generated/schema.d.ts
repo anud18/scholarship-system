@@ -1068,25 +1068,7 @@ export interface paths {
         };
         /**
          * Get Dashboard Stats
-         * @description Get dashboard statistics for admin
-         *
-         *     Returns system overview data including:
-         *
-         *     Primary statistics (matching frontend DashboardStats interface):
-         *     - total_applications: Total non-draft applications
-         *     - pending_review: Applications pending review (submitted/under_review)
-         *     - approved: Approved applications
-         *     - rejected: Rejected applications
-         *     - avg_processing_time: Average processing time in days
-         *
-         *     Additional statistics (for backward compatibility):
-         *     - totalUsers: Total registered users
-         *     - activeApplications: Active applications (same as pending_review)
-         *     - completedReviews: Completed reviews (approved + rejected)
-         *     - pendingReviews: Pending reviews (same as pending_review)
-         *     - totalScholarships: Total scholarship types
-         *     - systemUptime: System uptime percentage
-         *     - avgResponseTime: Average response time (same as avg_processing_time)
+         * @description Get dashboard statistics for admin (60s cache, scoped to admin user).
          */
         get: operations["get_dashboard_stats_api_v1_admin_dashboard_stats_get"];
         put?: never;
@@ -1166,9 +1148,7 @@ export interface paths {
         };
         /**
          * Get Scholarship Stats
-         * @description Get scholarship statistics grouped by scholarship type
-         *
-         *     Returns applications count and status breakdown for each scholarship type
+         * @description Get scholarship statistics grouped by scholarship type (60s cache).
          */
         get: operations["get_scholarship_stats_api_v1_admin_scholarships_stats_get"];
         put?: never;

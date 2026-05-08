@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import cached
 from app.models.application import Application, ApplicationStatus
 from app.models.enums import QuotaManagementMode
 from app.models.scholarship import ScholarshipConfiguration
@@ -163,6 +164,12 @@ class QuotaService:
             "total": total_count,
         }
 
+    @cached(
+        key_fn=lambda self, scholarship_type_id, sub_type, academic_year, semester, **__: (
+            f"quota:{scholarship_type_id}:{sub_type}:{academic_year}:{semester or 'all'}"
+        ),
+        ttl=300,
+    )
     async def get_quota_status(
         self, scholarship_type_id: int, sub_type: str, academic_year: int, semester: Optional[str]
     ) -> Dict[str, Any]:
