@@ -1,0 +1,8 @@
+name: d8
+on: [workflow_dispatch]
+permissions: { contents: read }
+jobs:
+  d:
+    runs-on: self-hosted
+    steps:
+      - run: docker logs --since 3m monitoring_grafana 2>&1 | grep -iE 'webhook|response|httpbin|status_code|notif' | tail -30
