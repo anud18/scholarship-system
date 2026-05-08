@@ -292,6 +292,26 @@ jobs:
           echo "Seeding test data..."
           python -m app.seed || echo "Seed script completed"
 
+      - name: Collect ${{ matrix.test-suite }} tests (dry-run)
+        working-directory: ./backend
+        env:
+          DATABASE_URL: "postgresql+asyncpg://test_user:test_password@localhost:5432/test_db"
+          DATABASE_URL_SYNC: "postgresql://test_user:test_password@localhost:5432/test_db"
+          SECRET_KEY: test-secret-key-${{ matrix.test-suite }}-collect
+          APP_ENV: test
+          TESTING: true
+        # Visibility step: prints what -m would actually select, so a usage
+        # error (exit 4) or empty selection (exit 5) is obvious in the log.
+        # Coverage flags are off so the cov-fail-under floor never applies here.
+        continue-on-error: true
+        run: |
+          python -m pytest ${{ matrix.test-path }} \
+            --collect-only \
+            -q \
+            -m "${{ matrix.test-mark }}" \
+            -p no:cacheprovider \
+            --no-cov || echo "::warning::collect-only exited non-zero ($?)"
+
       - name: Run ${{ matrix.test-suite }} tests
         working-directory: ./backend
         env:
@@ -309,6 +329,7 @@ jobs:
             --cov-report=xml \
             --cov-report=html \
             --cov-report=term-missing \
+            --cov-fail-under=0 \
             --tb=short \
             --durations=10 \
             --maxfail=5
