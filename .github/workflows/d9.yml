@@ -1,0 +1,14 @@
+name: d9
+on: [workflow_dispatch]
+permissions: { contents: read }
+jobs:
+  d:
+    runs-on: self-hosted
+    steps:
+      - run: |
+          echo "=== current contact-point url Grafana sees ==="
+          curl -fsS -u "$ADMIN_USER:$ADMIN_PASS" http://localhost:3000/monitoring/api/v1/provisioning/contact-points 2>/dev/null | python3 -c "import json,sys;[print(c.get('settings',{}).get('url')) for c in json.load(sys.stdin) if c.get('name')=='github-issue']" 2>&1 || echo skipping
+          docker exec monitoring_grafana wget -qO- --header "Authorization: Basic $(echo -n admin:admin123 | base64)" http://localhost:3000/api/v1/provisioning/contact-points 2>/dev/null | python3 -c "import json,sys;[print(c.get('settings',{}).get('url')) for c in json.load(sys.stdin) if c.get('name')=='github-issue']"
+          echo
+          echo "=== webhook delivery logs since 5m ==="
+          docker logs --since 5m monitoring_grafana 2>&1 | grep -iE 'webhook|response|sender|httpbin|notif|status_code|^.*POST' | grep -v "ngalert.sender.router" | tail -40
