@@ -408,7 +408,12 @@ async def _get_scholarship_stats_cached(current_user: User, db: AsyncSession) ->
         )
 
         result = await db.execute(stmt)
-        status_counts = {row[0]: row[1] for row in result.fetchall()}
+        # row[0] is an ApplicationStatus enum; cast to its string value so the
+        # surrounding dict can be JSON-serialised by the Redis cache layer
+        # (json.dumps rejects enum keys; the response was previously fine
+        # because FastAPI's jsonable_encoder normalises them, but the cache
+        # path uses plain json.dumps and would log an error every call).
+        status_counts = {row[0].value: row[1] for row in result.fetchall()}
 
         # Get unique sub-types for this scholarship
         stmt = select(Application.scholarship_subtype_list).where(
