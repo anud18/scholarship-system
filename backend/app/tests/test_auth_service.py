@@ -70,7 +70,9 @@ class TestAuthService:
             patch.object(service.db, "refresh", new_callable=AsyncMock) as mock_refresh,
         ):
             # Mock no existing users with same email or nycu_id
-            mock_execute.return_value.scalar_one_or_none.return_value = None
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.return_value = None
+            mock_execute.return_value = mock_result
 
             # Mock user creation
             mock_user = Mock(spec=User)
@@ -191,7 +193,9 @@ class TestAuthService:
             patch.object(service.db, "execute", new_callable=AsyncMock) as mock_execute,
             patch.object(service.db, "commit", new_callable=AsyncMock) as mock_commit,
         ):
-            mock_execute.return_value.scalar_one_or_none.return_value = mock_user
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.return_value = mock_user
+            mock_execute.return_value = mock_result
 
             result = await service.authenticate_user(mock_user_login_data)
 
@@ -222,7 +226,9 @@ class TestAuthService:
             patch.object(service.db, "execute", new_callable=AsyncMock) as mock_execute,
             patch.object(service.db, "commit", new_callable=AsyncMock) as mock_commit,
         ):
-            mock_execute.return_value.scalar_one_or_none.return_value = mock_user
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.return_value = mock_user
+            mock_execute.return_value = mock_result
 
             result = await service.authenticate_user(login_data)
 
@@ -264,6 +270,7 @@ class TestAuthService:
                 "sub": str(mock_user.id),
                 "nycu_id": mock_user.nycu_id,
                 "role": mock_user.role.value,
+                "debug_mode": True,
             }
 
             mock_access_token.assert_called_once_with(expected_token_data)

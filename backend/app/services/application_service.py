@@ -300,6 +300,9 @@ class ApplicationService:
         # Handle None semester (for yearly scholarships)
         if semester is None:
             semester = "yearly"
+        # Normalise Semester enum to its string value so SQLite (String column) can bind it
+        if hasattr(semester, "value"):
+            semester = semester.value
 
         # Use database lock to ensure thread-safe sequence generation
         from sqlalchemy import and_, select

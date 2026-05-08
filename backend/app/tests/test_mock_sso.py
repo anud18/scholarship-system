@@ -13,7 +13,7 @@ from app.models.user import User, UserRole, UserType
 class TestMockSSO:
     """Test mock SSO functionality"""
 
-    @pytest_asyncio.fixture
+    @pytest.fixture
     async def student001(self, db: AsyncSession) -> User:
         """Seed student001 user required by smoke SSO tests.
 

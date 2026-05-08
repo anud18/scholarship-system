@@ -11,7 +11,7 @@ import pytest
 from app.core.exceptions import AuthorizationError, ConflictError, ValidationError
 from app.models.application import Application, ApplicationStatus
 from app.models.enums import QuotaManagementMode, Semester
-from app.models.scholarship import ScholarshipConfiguration
+from app.models.scholarship import ScholarshipConfiguration, SubTypeSelectionMode
 from app.models.user import User, UserRole
 from app.schemas.application import ApplicationCreate, ApplicationFormData
 from app.services.application_service import ApplicationService
@@ -47,19 +47,23 @@ class TestCriticalApplicationWorkflow:
         await db.commit()
         await db.refresh(config)
 
-        service = ApplicationService(db)
-
-        # Mock student service
+        # Instantiate inside the patch block so ApplicationService.__init__
+        # picks up the mocked StudentService class (not the real one).
         with patch("app.services.application_service.StudentService") as mock_student:
             mock_instance = AsyncMock()
             mock_student.return_value = mock_instance
-            mock_instance.get_student_basic_info.return_value = {
-                "student_id": "112550001",
-                "name": "Test Student",
-                "std_gpa": 3.8,
+            _student_snapshot = {
                 "std_stdcode": "112550001",
+                "std_cname": "Test Student",
+                "std_academyno": "A",
+                "std_depno": "4460",
+                "_api_fetched_at": "2025-10-22T17:27:08Z",
+                "_term_data_status": "success",
             }
+            mock_instance.get_student_basic_info.return_value = _student_snapshot
+            mock_instance.get_student_snapshot.return_value = _student_snapshot
 
+            service = ApplicationService(db)
             app_data = ApplicationCreate(
                 scholarship_type="test_scholarship",
                 configuration_id=config.id,
@@ -288,6 +292,7 @@ class TestCriticalBusinessLogic:
             app = Application(
                 user_id=user.id,
                 scholarship_type_id=test_scholarship.id,
+                sub_type_selection_mode=SubTypeSelectionMode.single,
                 status=ApplicationStatus.submitted.value,
                 app_id=f"QUOTA-{i}",
                 academic_year=113,
@@ -392,11 +397,13 @@ class TestCriticalDataIntegrity:
         config1 = ScholarshipConfiguration(
             scholarship_type_id=test_scholarship.id,
             config_code="UNIQUE_TEST",
+            config_name="Unique Test Config 1",
             academic_year=113,
             semester=Semester.first,
+            amount=50000,
             is_active=True,
-            effective_date_start=datetime.now(timezone.utc),
-            effective_date_end=datetime.now(timezone.utc) + timedelta(days=30),
+            effective_start_date=datetime.now(timezone.utc),
+            effective_end_date=datetime.now(timezone.utc) + timedelta(days=30),
         )
         db.add(config1)
         await db.commit()
@@ -405,11 +412,13 @@ class TestCriticalDataIntegrity:
         config2 = ScholarshipConfiguration(
             scholarship_type_id=test_scholarship.id,
             config_code="UNIQUE_TEST",  # Same code
+            config_name="Unique Test Config 2",
             academic_year=113,
             semester=Semester.second,
+            amount=50000,
             is_active=True,
-            effective_date_start=datetime.now(timezone.utc),
-            effective_date_end=datetime.now(timezone.utc) + timedelta(days=30),
+            effective_start_date=datetime.now(timezone.utc),
+            effective_end_date=datetime.now(timezone.utc) + timedelta(days=30),
         )
         db.add(config2)
 
