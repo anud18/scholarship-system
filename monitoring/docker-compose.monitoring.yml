@@ -9,7 +9,7 @@ services:
   # GRAFANA - Visualization Platform (Enterprise Edition)
   # =========================================================================
   grafana:
-    image: grafana/grafana-enterprise:latest
+    image: grafana/grafana-enterprise:12.2.1
     container_name: monitoring_grafana
     expose:
       - "3000"
@@ -62,7 +62,7 @@ services:
   # LOKI - Log Aggregation with Multi-Tenancy
   # =========================================================================
   loki:
-    image: grafana/loki:latest
+    image: grafana/loki:3.5.5
     container_name: monitoring_loki
     ports:
       - "3100:3100"
@@ -99,7 +99,7 @@ services:
   # PROMETHEUS - Metrics Collection & Storage
   # =========================================================================
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.6.0
     container_name: monitoring_prometheus
     ports:
       - "9090:9090"
