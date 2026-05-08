@@ -78,7 +78,7 @@ test.describe("Whitelist grants access to undergraduate_freshman", () => {
     }
   });
 
-  test("admin grants stuunder1 access via whitelist", async ({ browser }) => {
+  test("@smoke admin grants stuunder1 access via whitelist", async ({ browser }) => {
     // 1. Pre: student does NOT see undergraduate_freshman.
     const studentLogin = await loginAs(browser, STUDENT);
     pushTrace(runState, studentLogin.traceId);
