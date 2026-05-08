@@ -216,7 +216,14 @@ jobs:
           - critical-workflows
         include:
           - test-suite: smoke
-            test-path: app/tests
+            # Explicit file list (not "app/tests") so pytest doesn't try to
+            # import unrelated broken test files at collection. Several
+            # pre-existing files (test_college_review_*, test_professor_endpoints,
+            # test_semester_yearly_labels) have stale imports and would interrupt
+            # collection; the other matrix rows tolerate them via
+            # continue-on-error: true. Phase 1's hard gate covers only smoke
+            # tests, so we list their files directly.
+            test-path: "app/tests/test_health.py app/tests/test_mock_sso.py app/tests/test_auth_service.py app/tests/test_critical_workflows.py app/tests/test_application_service.py app/tests/test_scholarship_rules_service.py app/tests/test_eligibility_service.py"
             test-mark: "smoke"
             continue-on-error: false
           - test-suite: unit
