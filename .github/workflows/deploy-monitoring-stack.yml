@@ -203,14 +203,15 @@ jobs:
           ADMIN_USER: ${{ secrets.GRAFANA_ADMIN_USER }}
           ADMIN_PASS: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
         run: |
-          # Bind-mounted config files in /etc/grafana/provisioning are
-          # visible to the container immediately, but Grafana only reads
-          # them at boot or on explicit reload. Without this step, newly
-          # added alert rules / dashboards stay invisible until the next
-          # full container restart (which the rest of this workflow only
-          # does in the leftover-datasource cleanup branch).
+          # The /api/admin/provisioning reload endpoints work for alerting,
+          # datasources, and plugins, but for dashboards Grafana compares
+          # JSON `version` against the DB row. Once both sides match it
+          # skips updates even when query exprs change in the file. The
+          # only reliable way to land in-place dashboard edits is to
+          # restart the container after triggering the other reloads.
+          # ~30s downtime, acceptable on staging.
           NET="monitoring_monitoring_network"
-          for path in dashboards datasources alerting plugins; do
+          for path in datasources alerting plugins; do
             STATUS=$(docker run --rm --network "$NET" curlimages/curl:8.10.1 \
               -sS -o /dev/null -w "%{http_code}" \
               -X POST -u "$ADMIN_USER:$ADMIN_PASS" \
@@ -221,6 +222,16 @@ jobs:
               *)   echo "::warning::$path reload returned $STATUS" ;;
             esac
           done
+
+          echo "Restarting Grafana to force dashboard reprovision from disk..."
+          docker restart monitoring_grafana
+          for i in $(seq 1 24); do
+            if docker exec monitoring_grafana wget --spider -q http://localhost:3000/api/health 2>/dev/null; then
+              break
+            fi
+            sleep 5
+          done
+          echo "✅ Grafana back up after restart"
 
       - name: Health check monitoring services
         run: |
