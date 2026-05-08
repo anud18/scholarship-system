@@ -292,48 +292,18 @@ jobs:
           echo "Seeding test data..."
           python -m app.seed || echo "Seed script completed"
 
-      - name: Diagnose pytest stack (${{ matrix.test-suite }})
-        working-directory: ./backend
-        env:
-          DATABASE_URL: "postgresql+asyncpg://test_user:test_password@localhost:5432/test_db"
-          DATABASE_URL_SYNC: "postgresql://test_user:test_password@localhost:5432/test_db"
-          SECRET_KEY: test-secret-key-${{ matrix.test-suite }}-diag
-          APP_ENV: test
-          TESTING: true
-        continue-on-error: true
-        run: |
-          set +e
-          echo "::group::pytest plugin versions"
-          python -m pytest --version 2>&1 || true
-          python - <<'PY'
-          import importlib
-          for mod in ("pytest", "pytest_asyncio", "pytest_cov", "pytest_mock"):
-              try:
-                  m = importlib.import_module(mod)
-                  print(f"{mod} {getattr(m, '__version__', '?')}")
-              except Exception as e:
-                  print(f"{mod} IMPORT-ERROR: {e}")
-          PY
-          echo "::endgroup::"
-          echo "::group::pytest --collect-only -m ${{ matrix.test-mark }} (full output, stderr merged)"
-          python -m pytest ${{ matrix.test-path }} \
-            --collect-only \
-            -q \
-            -m "${{ matrix.test-mark }}" \
-            -p no:cacheprovider \
-            --no-cov 2>&1
-          rc=$?
-          echo "::endgroup::"
-          if [ "$rc" -ne 0 ] && [ "$rc" -ne 5 ]; then
-            echo "::error title=pytest collection failed::exit=$rc on suite=${{ matrix.test-suite }}"
-          fi
-
       - name: Run ${{ matrix.test-suite }} tests
         working-directory: ./backend
         env:
           DATABASE_URL: "postgresql+asyncpg://test_user:test_password@localhost:5432/test_db"
           DATABASE_URL_SYNC: "postgresql://test_user:test_password@localhost:5432/test_db"
           SECRET_KEY: test-secret-key-${{ matrix.test-suite }}
+          # MINIO_* are required by app.core.config.Settings() (pydantic-settings).
+          # The alembic + seed steps already set them; this step previously did not,
+          # which caused conftest.py to fail to import settings → exit 4 at collection
+          # on every matrix row (masked by continue-on-error: true on three of them).
+          MINIO_ACCESS_KEY: ci-test-minio-access
+          MINIO_SECRET_KEY: ci-test-minio-secret
           APP_ENV: test
           TESTING: true
           PYTEST_CURRENT_TEST: true
