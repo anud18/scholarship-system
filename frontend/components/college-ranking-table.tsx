@@ -153,6 +153,11 @@ interface CollegeRankingTableProps {
   academicYear: number;
   semester?: string | null;
   isFinalized: boolean;
+  // #63: when the college_review_end deadline has passed for non-admin users,
+  // we treat the ranking as edit-locked the same way isFinalized does. The
+  // deadline banner above the table already explains *why*; this prop just
+  // hides the edit affordances so users don't try edits the backend will reject.
+  lockedByDeadline?: boolean;
   rankingId?: number;
   onRankingChange: (newOrder: Application[]) => void;
   onReviewApplication: (
@@ -445,6 +450,7 @@ export function CollegeRankingTable({
   academicYear,
   semester,
   isFinalized,
+  lockedByDeadline = false,
   rankingId,
   onRankingChange,
   onReviewApplication,
@@ -454,6 +460,10 @@ export function CollegeRankingTable({
   subTypeMeta,
   saveStatus = "idle",
 }: CollegeRankingTableProps) {
+  // Treat finalized OR deadline-passed as "no more edits". isFinalized
+  // remains used on its own for the "this ranking is locked-finalised"
+  // banner which is a different concept than the deadline lock.
+  const editingLocked = isFinalized || lockedByDeadline;
   const t = (key: string) => getTranslation(locale, key);
   const formatSemesterLabel = (value?: string | null) => {
     if (!value) {
@@ -501,7 +511,7 @@ export function CollegeRankingTable({
   const handleDragEnd = (event: any) => {
     const { active, over } = event;
 
-    if (!over || active.id === over.id || isFinalized) {
+    if (!over || active.id === over.id || editingLocked) {
       return;
     }
 
@@ -864,7 +874,7 @@ export function CollegeRankingTable({
             </div>
 
             <div className="flex gap-2">
-              {!isFinalized && saveStatus !== "idle" && (
+              {!editingLocked && saveStatus !== "idle" && (
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-gray-50 border">
                   {saveStatus === "saving" && (
                     <>
@@ -892,7 +902,7 @@ export function CollegeRankingTable({
                   )}
                 </div>
               )}
-              {!isFinalized && (
+              {!editingLocked && (
                 <>
                   <Dialog
                     open={isImportDialogOpen}
@@ -1087,7 +1097,7 @@ export function CollegeRankingTable({
                       index={index}
                       totalQuota={totalQuota}
                       locale={locale}
-                      isFinalized={isFinalized}
+                      isFinalized={editingLocked}
                       onReviewApplication={onReviewApplication}
                       reviewScores={reviewScores}
                       handleScoreUpdate={handleScoreUpdate}
