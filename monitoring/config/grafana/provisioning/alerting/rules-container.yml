@@ -18,7 +18,7 @@ groups:
               expr: time() - container_last_seen{name!=""} > 60
               refId: A
               instant: true
-        noDataState: NoData
+        noDataState: OK
         execErrState: Error
         for: 2m
         labels:
@@ -42,7 +42,7 @@ groups:
               expr: sum(rate(container_cpu_usage_seconds_total{name!=""}[5m])) by (name, instance, environment) * 100 > 80
               refId: A
               instant: true
-        noDataState: NoData
+        noDataState: OK
         execErrState: Error
         for: 5m
         labels:
@@ -50,7 +50,7 @@ groups:
           category: container
         annotations:
           summary: "High CPU usage in container {{ $labels.name }}"
-          description: "Container {{ $labels.name }} on {{ $labels.instance }} ({{ $labels.environment }}) is using more than 80% CPU. Current value: {{ $value | humanize }}%"
+          description: "Container {{ $labels.name }} on {{ $labels.instance }} ({{ $labels.environment }}) is using more than 80% CPU. Current value: {{ if eq $value 0.0 }}0{{ else }}{{ $value | humanize }}{{ end }}%"
         isPaused: false
 
       - uid: alert-container-high-memory
@@ -66,7 +66,7 @@ groups:
               expr: (container_memory_usage_bytes{name!=""} / container_spec_memory_limit_bytes{name!=""}) * 100 > 85
               refId: A
               instant: true
-        noDataState: NoData
+        noDataState: OK
         execErrState: Error
         for: 5m
         labels:
@@ -74,7 +74,7 @@ groups:
           category: container
         annotations:
           summary: "High memory usage in container {{ $labels.name }}"
-          description: "Container {{ $labels.name }} on {{ $labels.instance }} ({{ $labels.environment }}) is using more than 85% of its memory limit. Current value: {{ $value | humanize }}%"
+          description: "Container {{ $labels.name }} on {{ $labels.instance }} ({{ $labels.environment }}) is using more than 85% of its memory limit. Current value: {{ if eq $value 0.0 }}0{{ else }}{{ $value | humanize }}{{ end }}%"
         isPaused: false
 
       - uid: alert-container-restarting-frequently
@@ -90,7 +90,7 @@ groups:
               expr: rate(container_last_seen{name!=""}[15m]) > 0.1
               refId: A
               instant: true
-        noDataState: NoData
+        noDataState: OK
         execErrState: Error
         for: 5m
         labels:
