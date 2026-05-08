@@ -109,9 +109,14 @@ jobs:
           sudo mkdir -p /opt/scholarship/secrets
           sudo chmod 700 /opt/scholarship/secrets
           echo "${{ secrets.GH_PAT }}" | sudo tee /opt/scholarship/secrets/gh_pat > /dev/null
-          sudo chmod 600 /opt/scholarship/secrets/gh_pat
-          # Grafana container UID is 472
-          sudo chown 472:472 /opt/scholarship/secrets/gh_pat
+          # Multiple containers (Grafana UID 472, webhook-bridge UID 1100)
+          # need to read this file. Setting group "monitoring" with mode 0640
+          # would be cleaner, but creating a host-side group requires extra
+          # plumbing. The file lives behind a 0700 root-owned dir that only
+          # docker-mounted containers see, so 0444 here is acceptable —
+          # the secret isn't world-readable on the host.
+          sudo chown root:root /opt/scholarship/secrets/gh_pat
+          sudo chmod 0444 /opt/scholarship/secrets/gh_pat
           # Parent dir is mode 700 root-owned — runner user has no traversal
           # rights, so `[ -s file ]` would always fail with permission denied
           # instead of telling us the actual size. Use `sudo test` instead.
