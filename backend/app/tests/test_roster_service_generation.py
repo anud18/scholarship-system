@@ -27,9 +27,10 @@ from unittest.mock import patch
 
 import pytest
 
-from app.core.exceptions import RosterAlreadyExistsError, RosterLockedError
+from app.core.exceptions import RosterAlreadyExistsError, RosterGenerationError, RosterLockedError
 from app.models.application import Application
 from app.models.enums import QuotaManagementMode, Semester
+from app.models.scholarship import SubTypeSelectionMode
 from app.models.payment_roster import (
     PaymentRoster,
     PaymentRosterItem,
@@ -69,10 +70,6 @@ def _make_scholarship(db_sync, code: str = "roster_test") -> ScholarshipType:
         code=code,
         name="Roster Contract Test",
         description="Phase 3 fixture",
-        is_active=True,
-        is_application_period=True,
-        category="undergraduate_freshman",
-        eligible_student_types=["undergraduate"],
     )
     db_sync.add(s)
     db_sync.commit()
@@ -95,6 +92,7 @@ def _make_config(
         semester=Semester.first,
         quota_management_mode=quota_mode,
         has_quota_limit=False,
+        amount=50000,
     )
     db_sync.add(c)
     db_sync.commit()
@@ -117,6 +115,7 @@ def _make_approved_application(
         scholarship_type_id=scholarship.id,
         scholarship_configuration_id=config.id,
         scholarship_subtype_list=[],
+        sub_type_selection_mode=SubTypeSelectionMode.single,
         status="approved",
         app_id=app_id,
         academic_year=113,
@@ -191,7 +190,10 @@ class TestRosterServiceGenerate:
         assert roster.scholarship_configuration_id == config.id
         assert roster.period_label == "2024-01"
         assert roster.academic_year == 113
-        assert roster.status == RosterStatus.COMPLETED
+        # generate_roster() intentionally does not commit or set COMPLETED —
+        # the caller (API endpoint) is responsible for the final commit and
+        # status flip. The service returns PROCESSING.
+        assert roster.status == RosterStatus.PROCESSING
         assert roster.total_applications == 1
 
         items = db_sync.query(PaymentRosterItem).filter_by(roster_id=roster.id).all()
@@ -222,7 +224,9 @@ class TestRosterServiceGenerate:
             student_verification_enabled=False,
         )
 
-        with pytest.raises(RosterAlreadyExistsError):
+        # generate_roster() wraps all internal exceptions (including
+        # RosterAlreadyExistsError) in RosterGenerationError before surfacing.
+        with pytest.raises(RosterGenerationError):
             svc.generate_roster(
                 scholarship_configuration_id=config.id,
                 period_label="2024-01",
