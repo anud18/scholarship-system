@@ -55,11 +55,11 @@ def read_pat() -> str:
         return f.read().strip()
 
 
-def transform(envelope: dict[str, Any]) -> dict[str, Any]:
-    """Pick the first alert from Grafana's webhook envelope and produce
-    a GitHub-/dispatches-shaped payload (max 10 client_payload keys)."""
-    alerts = envelope.get("alerts") or []
-    a = (alerts[0] if alerts else {}) or {}
+def transform_one(
+    a: dict[str, Any], envelope_status: str, external_url: str
+) -> dict[str, Any]:
+    """Build one GitHub-/dispatches-shaped payload for a single alert
+    (max 10 client_payload keys)."""
     labels = a.get("labels") or {}
     annotations = a.get("annotations") or {}
     return {
@@ -67,14 +67,14 @@ def transform(envelope: dict[str, Any]) -> dict[str, Any]:
         "client_payload": {
             "alertname": labels.get("alertname") or "(unknown)",
             "severity": labels.get("severity") or "info",
-            "status": envelope.get("status") or a.get("status") or "firing",
+            "status": envelope_status or a.get("status") or "firing",
             "summary": annotations.get("summary") or "(no summary)",
             "description": annotations.get("description") or "(no description)",
             "instance": labels.get("instance") or "",
             "environment": labels.get("environment") or "",
             "value": str(a.get("valueString") or ""),
             "fired_at": str(a.get("startsAt") or ""),
-            "grafana_url": envelope.get("externalURL") or "",
+            "grafana_url": external_url or "",
         },
     }
 
@@ -97,7 +97,8 @@ async def grafana(request: Request):
         log.warning("invalid JSON from grafana: %s", exc)
         raise HTTPException(400, f"invalid json: {exc}") from exc
 
-    if not envelope.get("alerts"):
+    alerts = envelope.get("alerts") or []
+    if not alerts:
         log.info("no alerts in envelope; ignoring")
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -107,34 +108,56 @@ async def grafana(request: Request):
         log.error("failed to read PAT file: %s", exc)
         raise HTTPException(500, f"failed to read PAT file: {exc}") from exc
 
-    payload = transform(envelope)
-    cp = payload["client_payload"]
-    log.info(
-        "forwarding alertname=%s severity=%s status=%s",
-        cp["alertname"], cp["severity"], cp["status"],
-    )
+    envelope_status = envelope.get("status") or ""
+    external_url = envelope.get("externalURL") or ""
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {pat}",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "grafana-github-webhook-bridge/1.0",
+    }
 
+    # Fan out: send one /dispatches per alert. Grafana groups alerts by
+    # (alertname, environment) so a single envelope can carry 25+ alerts
+    # for the same rule firing across multiple instances. The previous
+    # implementation only forwarded the first alert and silently dropped
+    # the rest. The handler workflow already deduplicates by labels, so
+    # repeats from the same group append a comment instead of opening
+    # duplicate issues.
+    sent = 0
+    failures: list[str] = []
     async with httpx.AsyncClient(timeout=10.0) as client:
-        try:
-            r = await client.post(
-                f"https://api.github.com/repos/{GH_REPO}/dispatches",
-                json=payload,
-                headers={
-                    "Accept": "application/vnd.github+json",
-                    "Authorization": f"Bearer {pat}",
-                    "X-GitHub-Api-Version": "2022-11-28",
-                    "User-Agent": "grafana-github-webhook-bridge/1.0",
-                },
+        for a in alerts:
+            payload = transform_one(a, envelope_status, external_url)
+            cp = payload["client_payload"]
+            log.info(
+                "forwarding alertname=%s severity=%s status=%s instance=%s",
+                cp["alertname"], cp["severity"], cp["status"], cp["instance"],
             )
-        except httpx.HTTPError as exc:
-            log.error("upstream connection failed: %s", exc)
-            raise HTTPException(502, f"upstream connection failed: {exc}") from exc
+            try:
+                r = await client.post(
+                    f"https://api.github.com/repos/{GH_REPO}/dispatches",
+                    json=payload,
+                    headers=headers,
+                )
+            except httpx.HTTPError as exc:
+                log.error("upstream connection failed: %s", exc)
+                failures.append(f"connection: {exc}")
+                continue
 
-    if 200 <= r.status_code < 300:
-        log.info("github accepted: %s", r.status_code)
-        return {"status": "ok", "github_status": r.status_code}
-    log.warning("github rejected: %s body=%s", r.status_code, r.text[:200])
-    raise HTTPException(502, f"upstream {r.status_code}: {r.text[:200]}")
+            if 200 <= r.status_code < 300:
+                sent += 1
+            else:
+                log.warning(
+                    "github rejected: %s body=%s",
+                    r.status_code, r.text[:200],
+                )
+                failures.append(f"{r.status_code}: {r.text[:80]}")
+
+    if failures and sent == 0:
+        raise HTTPException(502, f"all {len(alerts)} dispatches failed; first: {failures[0]}")
+    log.info("forwarded %d/%d alerts", sent, len(alerts))
+    return {"status": "ok", "sent": sent, "total": len(alerts), "failures": failures}
 
 
 def main():

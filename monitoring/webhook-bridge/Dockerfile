@@ -1,6 +1,10 @@
 # Grafana → GitHub /dispatches webhook bridge.
 # FastAPI + uvicorn, deps installed via uv.
-FROM ghcr.io/astral-sh/uv:python3.12-alpine
+#
+# Pin the uv image to a specific version so deploys are reproducible —
+# floating tags have bitten us before when an upstream Alpine update
+# changed transitive Python behaviour.
+FROM ghcr.io/astral-sh/uv:0.5.7-python3.12-alpine
 
 # Install deps system-wide so we don't have to deal with venv ownership
 # when we drop privileges below.
