@@ -23,7 +23,7 @@ groups:
               expr: redis_up == 0
               refId: A
               instant: true
-        noDataState: NoData
+        noDataState: OK
         execErrState: Error
         for: 1m
         labels:
@@ -47,7 +47,7 @@ groups:
               expr: (redis_memory_used_bytes / redis_memory_max_bytes) * 100 > 80
               refId: A
               instant: true
-        noDataState: NoData
+        noDataState: OK
         execErrState: Error
         for: 5m
         labels:
@@ -55,5 +55,5 @@ groups:
           category: database
         annotations:
           summary: "Redis memory usage is high"
-          description: "Redis on {{ $labels.instance }} ({{ $labels.environment }}) is using more than 80% of its max memory. Current value: {{ $value | humanize }}%"
+          description: "Redis on {{ $labels.instance }} ({{ $labels.environment }}) is using more than 80% of its max memory. Current value: {{ if eq $value 0.0 }}0{{ else }}{{ $value | humanize }}{{ end }}%"
         isPaused: false
