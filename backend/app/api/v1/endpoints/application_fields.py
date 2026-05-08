@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import cached, invalidate
 from app.core.deps import get_db
 from app.core.path_security import validate_upload_file
 from app.core.security import get_current_user, require_admin
@@ -37,10 +38,17 @@ async def get_fields_by_scholarship_type(
     scholarship_type: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
     """Get all fields for a scholarship type"""
-    service = ApplicationFieldService(db)
-    fields = await service.get_fields_by_scholarship_type(scholarship_type)
-
+    fields = await _get_fields_by_scholarship_type_cached(scholarship_type, db)
     return ApiResponse(success=True, message=f"Fields retrieved for {scholarship_type}", data=fields)
+
+
+@cached(
+    key_fn=lambda scholarship_type, *_, **__: f"fields:{scholarship_type}",
+    ttl=86400,  # 24 h
+)
+async def _get_fields_by_scholarship_type_cached(scholarship_type: str, db: AsyncSession):
+    service = ApplicationFieldService(db)
+    return await service.get_fields_by_scholarship_type(scholarship_type)
 
 
 @router.post("/fields")
@@ -50,7 +58,8 @@ async def create_field(
     """Create a new application field"""
     service = ApplicationFieldService(db)
     field = await service.create_field(field_data, current_user.id)
-
+    await invalidate(f"fields:{field_data.scholarship_type}")
+    await invalidate(f"formconfig:{field_data.scholarship_type}")
     return ApiResponse(success=True, message="Application field created successfully", data=field)
 
 
@@ -68,6 +77,16 @@ async def update_field(
     if not field:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application field not found")
 
+    # `field` is a Pydantic response; pull scholarship_type either from response
+    # or fall back to a broad invalidate.
+    sct = getattr(field, "scholarship_type", None)
+    if sct:
+        await invalidate(f"fields:{sct}")
+        await invalidate(f"formconfig:{sct}")
+    else:
+        await invalidate("fields:")
+        await invalidate("formconfig:")
+
     return ApiResponse(success=True, message="Application field updated successfully", data=field)
 
 
@@ -80,6 +99,10 @@ async def delete_field(field_id: int, db: AsyncSession = Depends(get_db), curren
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application field not found")
 
+    # We don't have scholarship_type cheaply post-delete; clobber the namespace.
+    await invalidate("fields:")
+    await invalidate("formconfig:")
+
     return ApiResponse(success=True, message="Application field deleted successfully", data=True)
 
 
@@ -89,10 +112,17 @@ async def get_documents_by_scholarship_type(
     scholarship_type: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
     """Get all documents for a scholarship type"""
-    service = ApplicationFieldService(db)
-    documents = await service.get_documents_by_scholarship_type(scholarship_type)
-
+    documents = await _get_documents_by_scholarship_type_cached(scholarship_type, db)
     return ApiResponse(success=True, message=f"Documents retrieved for {scholarship_type}", data=documents)
+
+
+@cached(
+    key_fn=lambda scholarship_type, *_, **__: f"documents:{scholarship_type}",
+    ttl=86400,  # 24 h
+)
+async def _get_documents_by_scholarship_type_cached(scholarship_type: str, db: AsyncSession):
+    service = ApplicationFieldService(db)
+    return await service.get_documents_by_scholarship_type(scholarship_type)
 
 
 @router.post("/documents")
@@ -104,7 +134,8 @@ async def create_document(
     """Create a new application document"""
     service = ApplicationFieldService(db)
     document = await service.create_document(document_data, current_user.id)
-
+    await invalidate(f"documents:{document_data.scholarship_type}")
+    await invalidate(f"formconfig:{document_data.scholarship_type}")
     return ApiResponse(success=True, message="Application document created successfully", data=document)
 
 
@@ -122,6 +153,14 @@ async def update_document(
     if not document:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application document not found")
 
+    sct = getattr(document, "scholarship_type", None)
+    if sct:
+        await invalidate(f"documents:{sct}")
+        await invalidate(f"formconfig:{sct}")
+    else:
+        await invalidate("documents:")
+        await invalidate("formconfig:")
+
     return ApiResponse(success=True, message="Application document updated successfully", data=document)
 
 
@@ -135,6 +174,9 @@ async def delete_document(
 
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application document not found")
+
+    await invalidate("documents:")
+    await invalidate("formconfig:")
 
     return ApiResponse(success=True, message="Application document deleted successfully", data=True)
 
@@ -153,14 +195,17 @@ async def get_scholarship_form_config(
     """Get complete form configuration for a scholarship type"""
     try:
         logger.debug(f"API: Getting form config for {scholarship_type}")
-        service = ApplicationFieldService(db)
 
         # 管理員可以看到所有欄位（包括停用的），其他用戶只能看到啟用的
         is_admin = current_user.role in ["admin", "super_admin"]
         should_include_inactive = include_inactive or is_admin
 
-        config = await service.get_scholarship_form_config(
-            scholarship_type, should_include_inactive, user_id=current_user.id
+        # We key cache on the *resolved* should_include_inactive so admin and
+        # non-admin views never share an entry. user_id is intentionally NOT
+        # part of the key — the config is identical for everyone in the same
+        # admin/non-admin bucket; user_id is only forwarded for audit logging.
+        config = await _get_scholarship_form_config_cached(
+            scholarship_type, should_include_inactive, db, current_user.id
         )
 
         logger.info(f"API: Form config retrieved successfully for {scholarship_type}")
@@ -172,6 +217,21 @@ async def get_scholarship_form_config(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Form configuration not found for scholarship type: {scholarship_type}",
         )
+
+
+@cached(
+    key_fn=lambda scholarship_type, should_include_inactive, *_, **__: (
+        f"formconfig:{scholarship_type}:{'all' if should_include_inactive else 'active'}"
+    ),
+    ttl=21600,  # 6 h
+)
+async def _get_scholarship_form_config_cached(
+    scholarship_type: str, should_include_inactive: bool, db: AsyncSession, user_id: int
+):
+    service = ApplicationFieldService(db)
+    return await service.get_scholarship_form_config(
+        scholarship_type, should_include_inactive, user_id=user_id
+    )
 
 
 class FormConfigSaveRequest(BaseModel):
@@ -197,6 +257,10 @@ async def save_scholarship_form_config(
         documents_data=config_data.documents,
         user_id=current_user.id,
     )
+
+    await invalidate(f"fields:{scholarship_type}")
+    await invalidate(f"documents:{scholarship_type}")
+    await invalidate(f"formconfig:{scholarship_type}")
 
     return ApiResponse(success=True, message=f"Form configuration saved for {scholarship_type}", data=config)
 
