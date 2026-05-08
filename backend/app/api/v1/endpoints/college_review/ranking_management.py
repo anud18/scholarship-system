@@ -1103,9 +1103,7 @@ async def export_ranking_excel(
         .where(CollegeRanking.id == ranking_id)
         .options(
             selectinload(CollegeRanking.items).selectinload(CollegeRankingItem.application),
-            selectinload(CollegeRanking.scholarship_type).selectinload(
-                ScholarshipType.sub_type_configs
-            ),
+            selectinload(CollegeRanking.scholarship_type).selectinload(ScholarshipType.sub_type_configs),
             selectinload(CollegeRanking.creator),
         )
     )
@@ -1117,14 +1115,10 @@ async def export_ranking_excel(
     if current_user.role not in (UserRole.admin, UserRole.super_admin):
         creator_college = getattr(ranking.creator, "college_code", None)
         if not creator_college or creator_college != current_user.college_code:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="無權限匯出此學院之資料"
-            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限匯出此學院之資料")
 
     # 3. Load dynamic text fields flagged for export
-    scholarship_type_code = (
-        ranking.scholarship_type.code if ranking.scholarship_type else None
-    )
+    scholarship_type_code = ranking.scholarship_type.code if ranking.scholarship_type else None
     dynamic_fields: list[DynamicFieldSpec] = []
     if scholarship_type_code:
         df_stmt = (
@@ -1165,9 +1159,7 @@ async def export_ranking_excel(
 
     # 6. Title + sheet name + filename
     scholarship_name = (
-        ranking.scholarship_type.name
-        if ranking.scholarship_type and ranking.scholarship_type.name
-        else "獎學金"
+        ranking.scholarship_type.name if ranking.scholarship_type and ranking.scholarship_type.name else "獎學金"
     )
     title = f"{ranking.academic_year}學年度{scholarship_name}學生資料彙整表"
     sheet_name = f"{ranking.academic_year}學年"
