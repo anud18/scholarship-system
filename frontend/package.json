@@ -12,6 +12,7 @@
     "start": "next start",
     "lint": "next lint",
     "test": "jest --coverage --watchAll=false",
+    "test:smoke": "jest --testPathPattern='(api|use-auth|setup)' --watchAll=false --passWithNoTests",
     "test:ci": "NODE_OPTIONS=--max-old-space-size=4096 jest --coverage --watchAll=false --ci --passWithNoTests --maxWorkers=2 --reporters=default --reporters=jest-junit",
     "test:coverage": "jest --coverage --watchAll=false --ci --reporters=default",
     "test:watch": "jest --watch",

@@ -23,6 +23,7 @@ from app.services.bulk_approval_service import BulkApprovalService
 class TestCriticalApplicationWorkflow:
     """Test critical application creation and submission workflows"""
 
+    @pytest.mark.smoke
     async def test_create_application_with_eligibility_validation(self, db, test_user, test_scholarship):
         """CRITICAL: Test application creation with eligibility checks"""
         # Create configuration
@@ -193,6 +194,7 @@ class TestCriticalAuthorizationPaths:
         with pytest.raises(AuthorizationError):
             await service.get_application_by_id(app.id, test_user)
 
+    @pytest.mark.smoke
     async def test_cannot_edit_submitted_application(self, db, test_user, test_application):
         """CRITICAL: Cannot edit application after submission"""
         # Change status to submitted
@@ -248,6 +250,7 @@ class TestCriticalAuthorizationPaths:
 class TestCriticalBusinessLogic:
     """Test critical business logic and calculations"""
 
+    @pytest.mark.smoke
     async def test_quota_limit_enforcement(self, db, test_scholarship):
         """CRITICAL: Enforce quota limits during bulk approval"""
         # Create configuration with quota limit
@@ -383,6 +386,7 @@ class TestCriticalDataIntegrity:
         result = await db.execute(stmt)
         assert result.scalar_one_or_none() is not None
 
+    @pytest.mark.smoke
     async def test_unique_constraint_on_config_code(self, db, test_scholarship):
         """CRITICAL: Ensure unique constraints on config codes"""
         config1 = ScholarshipConfiguration(

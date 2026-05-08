@@ -2,6 +2,7 @@
 Tests for Mock SSO functionality
 """
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -13,6 +14,7 @@ client = TestClient(app)
 class TestMockSSO:
     """Test mock SSO functionality"""
 
+    @pytest.mark.smoke
     def test_get_mock_users_success(self):
         """Test retrieving mock users list"""
         response = client.get("/api/v1/auth/mock-sso/users")
@@ -30,6 +32,7 @@ class TestMockSSO:
         assert "role" in first_user
         assert "description" in first_user
 
+    @pytest.mark.smoke
     def test_mock_sso_login_success(self):
         """Test successful mock SSO login with existing user from init_db"""
         # Attempt login with existing user from init_db

@@ -390,12 +390,3 @@ def performance_monitor():
             assert self.duration < max_duration, f"Operation took {self.duration:.2f}s, expected < {max_duration}s"
 
     return PerformanceMonitor()
-
-
-# Markers for different test types
-pytest.mark.unit = pytest.mark.mark(name="unit")
-pytest.mark.integration = pytest.mark.mark(name="integration")
-pytest.mark.smoke = pytest.mark.mark(name="smoke")
-pytest.mark.slow = pytest.mark.mark(name="slow")
-pytest.mark.security = pytest.mark.mark(name="security")
-pytest.mark.performance = pytest.mark.mark(name="performance")

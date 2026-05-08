@@ -8,6 +8,8 @@ from httpx import ASGITransport, AsyncClient
 
 from app.main import app
 
+pytestmark = pytest.mark.smoke
+
 
 def test_health_endpoint():
     """Test health check endpoint"""

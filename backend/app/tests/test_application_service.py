@@ -210,6 +210,7 @@ class TestApplicationService:
                 )
 
     @pytest.mark.asyncio
+    @pytest.mark.smoke
     async def test_create_application_draft(self, service, mock_application_data):
         """Test creating a draft application"""
         user_id = 1
@@ -272,6 +273,7 @@ class TestApplicationService:
             assert result == mock_final_app
 
     @pytest.mark.asyncio
+    @pytest.mark.smoke
     async def test_create_application_submitted(self, service, mock_application_data):
         """Test creating a submitted application"""
         user_id = 1
@@ -379,6 +381,7 @@ class TestApplicationService:
             assert result is None
 
     @pytest.mark.asyncio
+    @pytest.mark.smoke
     async def test_get_application_by_id_admin_access(self, service):
         """Test getting application by ID with admin access"""
         application_id = 1

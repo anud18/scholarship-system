@@ -210,10 +210,15 @@ jobs:
       fail-fast: false
       matrix:
         test-suite:
+          - smoke
           - unit
           - integration
           - critical-workflows
         include:
+          - test-suite: smoke
+            test-path: app/tests
+            test-mark: "smoke"
+            continue-on-error: false
           - test-suite: unit
             test-path: app/tests/test_*.py
             test-mark: "not integration and not asyncio"
