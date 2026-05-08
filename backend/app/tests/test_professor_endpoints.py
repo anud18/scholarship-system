@@ -17,7 +17,8 @@ from app.api.v1.endpoints.professor import (
     submit_professor_review,
 )
 from app.models.user import User, UserRole
-from app.schemas.application import ApplicationListResponse  # ProfessorReviewCreate/ItemCreate removed; unified review schema now in app.schemas.review
+# ProfessorReviewCreate/ItemCreate removed; unified review schema now in app.schemas.review
+from app.schemas.application import ApplicationListResponse
 from app.schemas.common import PaginatedResponse
 
 
