@@ -15,7 +15,7 @@
       }
     ]
   },
-  "editable": true,
+  "editable": false,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": null,
@@ -1141,6 +1141,6 @@
   "timezone": "browser",
   "title": "Scholarship System Overview",
   "uid": "scholarship-overview",
-  "version": 3,
+  "version": 8,
   "weekStart": ""
 }

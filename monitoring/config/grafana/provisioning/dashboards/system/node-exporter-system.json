@@ -15,7 +15,7 @@
       }
     ]
   },
-  "editable": true,
+  "editable": false,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": null,
@@ -637,6 +637,6 @@
   "timezone": "browser",
   "title": "System Monitoring (Node Exporter)",
   "uid": "node-exporter-system",
-  "version": 1,
+  "version": 6,
   "weekStart": ""
 }

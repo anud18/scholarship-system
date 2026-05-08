@@ -15,7 +15,7 @@
       }
     ]
   },
-  "editable": true,
+  "editable": false,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": null,
@@ -964,6 +964,6 @@
   "timezone": "browser",
   "title": "PostgreSQL Monitoring",
   "uid": "postgresql-monitoring",
-  "version": 2,
+  "version": 7,
   "weekStart": ""
 }
