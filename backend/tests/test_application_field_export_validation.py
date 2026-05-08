@@ -12,7 +12,7 @@ def _create_payload(**overrides):
     base = {
         "scholarship_type": "phd",
         "field_name": "master_school",
-        "field_label": "碩士畢業學校",
+        "field_label": "碑士畢業學校",
         "field_type": "text",
     }
     base.update(overrides)
@@ -25,21 +25,15 @@ class TestApplicationFieldCreateExportValidation:
 
     def test_textarea_field_with_export_flag_rejected(self):
         with pytest.raises(ValueError, match="僅支援"):
-            ApplicationFieldCreate(
-                **_create_payload(field_type="textarea", include_in_college_export=True)
-            )
+            ApplicationFieldCreate(**_create_payload(field_type="textarea", include_in_college_export=True))
 
     def test_number_field_with_export_flag_rejected(self):
         with pytest.raises(ValueError, match="僅支援"):
-            ApplicationFieldCreate(
-                **_create_payload(field_type="number", include_in_college_export=True)
-            )
+            ApplicationFieldCreate(**_create_payload(field_type="number", include_in_college_export=True))
 
     def test_select_field_with_export_flag_rejected(self):
         with pytest.raises(ValueError, match="僅支援"):
-            ApplicationFieldCreate(
-                **_create_payload(field_type="select", include_in_college_export=True)
-            )
+            ApplicationFieldCreate(**_create_payload(field_type="select", include_in_college_export=True))
 
     def test_text_field_without_export_flag_ok(self):
         ApplicationFieldCreate(**_create_payload(include_in_college_export=False))
@@ -48,7 +42,7 @@ class TestApplicationFieldCreateExportValidation:
         ApplicationFieldCreate(
             **_create_payload(
                 include_in_college_export=False,
-                export_column_label="任意值",
+                export_column_label="任意値",
             )
         )
 

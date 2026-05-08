@@ -16,7 +16,6 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-
 STATIC_HEADERS: List[str] = [
     "NO.",
     "學院初審會議之學院排序",
@@ -74,9 +73,7 @@ class CollegeRankingExportService:
         ws.title = sheet_name
 
         sorted_dynamic = sorted(dynamic_fields, key=lambda f: (f.display_order, f.field_name))
-        headers = STATIC_HEADERS + [
-            (f.export_column_label or f.field_label) for f in sorted_dynamic
-        ]
+        headers = STATIC_HEADERS + [(f.export_column_label or f.field_label) for f in sorted_dynamic]
         total_cols = len(headers)
 
         # Row 1: title (merged across all columns)
@@ -138,9 +135,7 @@ class CollegeRankingExportService:
         ws.cell(
             row=excel_row,
             column=11,
-            value=self._render_enrollment_date(
-                sd.get("std_enrollyear"), sd.get("std_enrollterm")
-            ),
+            value=self._render_enrollment_date(sd.get("std_enrollyear"), sd.get("std_enrollterm")),
         )
         ws.cell(row=excel_row, column=12, value=self._safe_str(sd.get("std_stdcode")))
         ws.cell(row=excel_row, column=13, value=self._safe_str(sd.get("std_pid")))
@@ -177,9 +172,7 @@ class CollegeRankingExportService:
         month = 9 if term in (None, "", 1, "1") else 2
         return f"{year_int}.{month}.1"
 
-    def _render_scholarship_type(
-        self, application: Any, sub_type_labels: Dict[str, str]
-    ) -> str:
+    def _render_scholarship_type(self, application: Any, sub_type_labels: Dict[str, str]) -> str:
         prefs: Optional[List[str]] = getattr(application, "sub_type_preferences", None)
         if prefs:
             labels = [sub_type_labels.get(code, code) for code in prefs]
