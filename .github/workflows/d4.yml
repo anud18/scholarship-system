@@ -1,0 +1,8 @@
+name: Debug — webhook errors after toString removed
+on: [workflow_dispatch]
+permissions: { contents: read }
+jobs:
+  d:
+    runs-on: self-hosted
+    steps:
+      - run: docker logs --since 5m monitoring_grafana 2>&1 | grep -iE 'webhook|notif.*err|template' | tail -30
