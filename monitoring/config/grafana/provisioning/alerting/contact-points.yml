@@ -25,15 +25,15 @@ contactPoints:
               "event_type": "monitoring-alert",
               "client_payload": {
                 "alertname": {{ printf "%q" (index .Alerts 0).Labels.alertname }},
-                "severity": {{ printf "%q" (index .Alerts 0).Labels.severity }},
-                "category": {{ printf "%q" (index .Alerts 0).Labels.category }},
+                "severity": {{ printf "%q" (or (index .Alerts 0).Labels.severity "info") }},
+                "category": {{ printf "%q" (or (index .Alerts 0).Labels.category "general") }},
                 "status": {{ printf "%q" .Status }},
-                "summary": {{ printf "%q" (index .Alerts 0).Annotations.summary }},
-                "description": {{ printf "%q" (index .Alerts 0).Annotations.description }},
-                "instance": {{ printf "%q" (index .Alerts 0).Labels.instance }},
-                "environment": {{ printf "%q" (index .Alerts 0).Labels.environment }},
-                "value": {{ printf "%q" (index .Alerts 0).ValueString }},
-                "fired_at": {{ printf "%q" ((index .Alerts 0).StartsAt | toString) }},
+                "summary": {{ printf "%q" (or (index .Alerts 0).Annotations.summary "(no summary)") }},
+                "description": {{ printf "%q" (or (index .Alerts 0).Annotations.description "(no description)") }},
+                "instance": {{ printf "%q" (or (index .Alerts 0).Labels.instance "") }},
+                "environment": {{ printf "%q" (or (index .Alerts 0).Labels.environment "") }},
+                "value": {{ printf "%q" (or (index .Alerts 0).ValueString "") }},
+                "fired_at": "(see grafana_url)",
                 "grafana_url": {{ printf "%q" .ExternalURL }}
               }
             }
