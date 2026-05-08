@@ -4,6 +4,7 @@ Reuses the FakeRedis pattern from test_rate_limiting_unit.py — we deliberately
 do NOT add the `fakeredis` package to dependencies. The shape needed is small:
 get/set/scan/delete/eval/expiry-aware NX SET. ~80 lines.
 """
+
 from __future__ import annotations
 
 import asyncio

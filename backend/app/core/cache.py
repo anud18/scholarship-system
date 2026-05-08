@@ -32,6 +32,7 @@ Notes for future maintainers:
     counts as fail-open). A Redis outage degrades the app to "no cache,"
     not "site down."
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -146,9 +147,9 @@ def cached(key_fn: Callable[..., str], ttl: int, jitter: float = 0.1):
                 # E.g. `lambda **_:` rejects positional. Surface loudly so
                 # the bug doesn't masquerade as "cache silently disabled".
                 logger.error(
-                    "cache: key_fn for %s rejected its args (%s) — "
-                    "caching disabled for this call. Fix the lambda.",
-                    fn.__qualname__, exc,
+                    "cache: key_fn for %s rejected its args (%s) — " "caching disabled for this call. Fix the lambda.",
+                    fn.__qualname__,
+                    exc,
                 )
                 return await fn(*args, **kwargs)
             except Exception as exc:  # noqa: BLE001
@@ -184,7 +185,8 @@ def cached(key_fn: Callable[..., str], ttl: int, jitter: float = 0.1):
                 # convert to dict, but still return the live value.
                 logger.error(
                     "cache: value for key=%s is not JSON-serialisable: %s",
-                    key, exc,
+                    key,
+                    exc,
                 )
             except Exception as exc:  # noqa: BLE001
                 logger.warning("cache: SET failed (%s); not cached", exc)
@@ -238,11 +240,7 @@ class LockBusy(RuntimeError):
 # Lua so check-and-del is atomic; otherwise a stale lock holder could
 # delete someone else's freshly-acquired lock if its TTL elapsed mid-op.
 _RELEASE_LUA = (
-    "if redis.call('get', KEYS[1]) == ARGV[1] then "
-    "  return redis.call('del', KEYS[1]) "
-    "else "
-    "  return 0 "
-    "end"
+    "if redis.call('get', KEYS[1]) == ARGV[1] then " "  return redis.call('del', KEYS[1]) " "else " "  return 0 " "end"
 )
 
 

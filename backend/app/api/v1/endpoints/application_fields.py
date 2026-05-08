@@ -229,9 +229,7 @@ async def _get_scholarship_form_config_cached(
     scholarship_type: str, should_include_inactive: bool, db: AsyncSession, user_id: int
 ):
     service = ApplicationFieldService(db)
-    return await service.get_scholarship_form_config(
-        scholarship_type, should_include_inactive, user_id=user_id
-    )
+    return await service.get_scholarship_form_config(scholarship_type, should_include_inactive, user_id=user_id)
 
 
 class FormConfigSaveRequest(BaseModel):
