@@ -140,6 +140,7 @@ htmlcov/
 .coverage
 .coverage.*
 coverage.json
+coverage.xml
 
 # pytest
 .pytest_cache/
