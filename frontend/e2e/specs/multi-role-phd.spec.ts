@@ -70,7 +70,7 @@ test.describe("Multi-role PhD review chain", () => {
     }
   });
 
-  test("stuphd001 → professor → cs_college → admin", async ({ browser }) => {
+  test("@smoke stuphd001 → professor → cs_college → admin", async ({ browser }) => {
     // 1. Student creates a submitted application.
     const studentLogin = await loginAs(browser, "stuphd001");
     pushTrace(runState, studentLogin.traceId);

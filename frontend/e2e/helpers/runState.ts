@@ -5,6 +5,7 @@ export interface RunState {
   traceIds: string[];
   appId?: string;
   configId?: number;
+  rosterId?: number;
   classificationHint?: "codebase" | "seed" | "frontend" | "test";
   notes?: string[];
 }

@@ -472,6 +472,96 @@ jobs:
         BASE_URL: ${{ vars.K6_BASE_URL_STAGING }}
       continue-on-error: true
 
+  # End-to-end smoke (Phase 4 of test-surface-hardening plan)
+  # Brings up docker-compose.dev.yml and runs Playwright specs tagged
+  # with @smoke. Soft-gated initially (continue-on-error: true) until
+  # the smoke set is validated to be flake-free in CI.
+  e2e-smoke:
+    name: E2E Smoke
+    runs-on: ubuntu-latest
+    needs: [changes, backend-tests, frontend-tests]
+    if: ${{ always() && !failure() && github.event_name == 'pull_request' && (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true') }}
+    timeout-minutes: 15
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Bring up docker-compose.dev.yml
+        # Best-effort bringup. The compose file references private GHCR
+        # images alongside `build:` directives — pulls may fail without
+        # ghcr.io auth, then `up --build` rebuilds locally. We tolerate
+        # both pull and build failures here because the whole job is
+        # continue-on-error: true; the readiness check below decides
+        # whether the suite can actually run.
+        continue-on-error: true
+        run: |
+          docker compose -f docker-compose.dev.yml pull --quiet 2>&1 | tail -5 || true
+          docker compose -f docker-compose.dev.yml up -d --build 2>&1 | tail -50 || true
+          echo "Waiting for backend (/health) and frontend (:3000)..."
+          ready=0
+          for i in $(seq 1 90); do
+            if curl -fsS http://localhost:8000/health > /dev/null 2>&1 \
+               && curl -fsS http://localhost:3000 > /dev/null 2>&1; then
+              echo "Services up after ${i}s"
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo "::warning title=e2e-smoke skipped::Services did not become ready; subsequent steps will no-op."
+            docker compose -f docker-compose.dev.yml ps || true
+            docker compose -f docker-compose.dev.yml logs --tail=100 || true
+          fi
+          echo "READY=$ready" >> "$GITHUB_ENV"
+
+      - name: Skip-on-not-ready guard
+        if: env.READY != '1'
+        run: |
+          echo "::notice::Compose stack failed to come up; skipping Playwright run."
+          exit 0
+
+      - name: Install Playwright browsers
+        if: env.READY == '1'
+        working-directory: ./frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run @smoke specs
+        if: env.READY == '1'
+        working-directory: ./frontend
+        run: npx playwright test --grep=@smoke
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+
+      - name: Dump backend logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.dev.yml logs backend frontend --tail=200 || true
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-smoke
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
+
+      - name: Tear down docker-compose.dev.yml
+        if: always()
+        run: docker compose -f docker-compose.dev.yml down -v || true
+
   # Notification
   notify:
     name: Notify
