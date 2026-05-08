@@ -75,7 +75,7 @@ def _build_workbook(
     # cells read back as None. The service writes "" for empty static and
     # dynamic fields; normalise None -> "" here so the per-test assertions
     # can compare against literal "" as written below.
-    return [[("” if value is None else value) for value in row] for row in ws.iter_rows(values_only=True)]
+    return [[("" if value is None else value) for value in row] for row in ws.iter_rows(values_only=True)]
 
 
 class TestStaticColumns:
