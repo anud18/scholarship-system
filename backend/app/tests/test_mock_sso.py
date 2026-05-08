@@ -3,21 +3,39 @@ Tests for Mock SSO functionality
 """
 
 import pytest
-from fastapi.testclient import TestClient
+import pytest_asyncio
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.main import app
-from app.models.user import UserRole
-
-client = TestClient(app)
+from app.models.user import User, UserRole, UserType
 
 
 class TestMockSSO:
     """Test mock SSO functionality"""
 
+    @pytest_asyncio.fixture
+    async def student001(self, db: AsyncSession) -> User:
+        """Seed student001 user required by smoke SSO tests.
+
+        The mock-sso/users endpoint queries the DB, and mock-sso/login looks
+        up by nycu_id — both fail with an empty test DB without this fixture.
+        """
+        user = User(
+            nycu_id="student001",
+            name="Student 001",
+            email="student001@nycu.edu.tw",
+            user_type=UserType.student,
+            role=UserRole.student,
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+        return user
+
     @pytest.mark.smoke
-    def test_get_mock_users_success(self):
+    async def test_get_mock_users_success(self, client: AsyncClient, student001: User):
         """Test retrieving mock users list"""
-        response = client.get("/api/v1/auth/mock-sso/users")
+        response = await client.get("/api/v1/auth/mock-sso/users")
 
         assert response.status_code == 200
         data = response.json()
@@ -33,10 +51,9 @@ class TestMockSSO:
         assert "description" in first_user
 
     @pytest.mark.smoke
-    def test_mock_sso_login_success(self):
+    async def test_mock_sso_login_success(self, client: AsyncClient, student001: User):
         """Test successful mock SSO login with existing user from init_db"""
-        # Attempt login with existing user from init_db
-        response = client.post("/api/v1/auth/mock-sso/login", json={"username": "student001"})
+        response = await client.post("/api/v1/auth/mock-sso/login", json={"username": "student001"})
 
         assert response.status_code == 200
         data = response.json()
@@ -45,23 +62,23 @@ class TestMockSSO:
         assert "user" in data["data"]
         assert data["data"]["user"]["role"] == "student"
 
-    def test_mock_sso_login_invalid_user(self):
+    async def test_mock_sso_login_invalid_user(self, client: AsyncClient):
         """Test mock SSO login with invalid username"""
-        response = client.post("/api/v1/auth/mock-sso/login", json={"username": "nonexistent_user"})
+        response = await client.post("/api/v1/auth/mock-sso/login", json={"username": "nonexistent_user"})
 
         assert response.status_code == 400
 
-    def test_mock_sso_login_missing_username(self):
+    async def test_mock_sso_login_missing_username(self, client: AsyncClient):
         """Test mock SSO login without username"""
-        response = client.post("/api/v1/auth/mock-sso/login", json={})
+        response = await client.post("/api/v1/auth/mock-sso/login", json={})
 
         assert response.status_code == 400
         data = response.json()
         assert "Username is required" in data["detail"]
 
-    def test_mock_users_contain_all_roles(self):
+    async def test_mock_users_contain_all_roles(self, client: AsyncClient):
         """Test that mock users include all user roles"""
-        response = client.get("/api/v1/auth/mock-sso/users")
+        response = await client.get("/api/v1/auth/mock-sso/users")
 
         assert response.status_code == 200
         data = response.json()
@@ -77,15 +94,14 @@ class TestMockSSO:
 
         assert roles >= expected_roles  # Contains all expected roles
 
-    def test_mock_sso_disabled_in_production(self, monkeypatch):
+    async def test_mock_sso_disabled_in_production(self, client: AsyncClient, monkeypatch):
         """Test that mock SSO is properly disabled when setting is False"""
-        # Mock the settings to disable mock SSO
         from app.core import config
 
         monkeypatch.setattr(config.settings, "enable_mock_sso", False)
 
-        response = client.get("/api/v1/auth/mock-sso/users")
+        response = await client.get("/api/v1/auth/mock-sso/users")
         assert response.status_code == 404
 
-        response = client.post("/api/v1/auth/mock-sso/login", json={"username": "student001"})
+        response = await client.post("/api/v1/auth/mock-sso/login", json={"username": "student001"})
         assert response.status_code == 404
