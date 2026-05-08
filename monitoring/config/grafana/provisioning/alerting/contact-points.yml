@@ -26,7 +26,6 @@ contactPoints:
               "client_payload": {
                 "alertname": {{ printf "%q" (index .Alerts 0).Labels.alertname }},
                 "severity": {{ printf "%q" (or (index .Alerts 0).Labels.severity "info") }},
-                "category": {{ printf "%q" (or (index .Alerts 0).Labels.category "general") }},
                 "status": {{ printf "%q" .Status }},
                 "summary": {{ printf "%q" (or (index .Alerts 0).Annotations.summary "(no summary)") }},
                 "description": {{ printf "%q" (or (index .Alerts 0).Annotations.description "(no description)") }},
