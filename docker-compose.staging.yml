@@ -152,7 +152,7 @@ services:
 
   # cAdvisor - Container metrics
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.54.2
+    image: gcr.io/cadvisor/cadvisor:v0.55.1
     container_name: cadvisor_staging_ap
     privileged: true
     devices:
