@@ -297,7 +297,7 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "sum(pg_database_size_bytes{environment=\"$environment\", vm=\"db-vm\", datname=\"$database\"})",
+          "expr": "sum(pg_database_size_bytes{environment=\"$environment\", vm=\"db-vm\", datname=~\"$database\"})",
           "legendFormat": "Total Size",
           "refId": "A"
         }
@@ -593,7 +593,7 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "rate(pg_stat_database_xact_commit{environment=\"$environment\", vm=\"db-vm\", datname=\"$database\"}[5m])",
+          "expr": "rate(pg_stat_database_xact_commit{environment=\"$environment\", vm=\"db-vm\", datname=~\"$database\"}[5m])",
           "legendFormat": "Commits",
           "refId": "A"
         },
@@ -602,7 +602,7 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "rate(pg_stat_database_xact_rollback{environment=\"$environment\", vm=\"db-vm\", datname=\"$database\"}[5m])",
+          "expr": "rate(pg_stat_database_xact_rollback{environment=\"$environment\", vm=\"db-vm\", datname=~\"$database\"}[5m])",
           "legendFormat": "Rollbacks",
           "refId": "B"
         }
@@ -692,7 +692,7 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "rate(pg_stat_database_tup_fetched{environment=\"$environment\", vm=\"db-vm\", datname=\"$database\"}[5m])",
+          "expr": "rate(pg_stat_database_tup_fetched{environment=\"$environment\", vm=\"db-vm\", datname=~\"$database\"}[5m])",
           "legendFormat": "Rows Fetched",
           "refId": "A"
         },
@@ -701,7 +701,7 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "rate(pg_stat_database_tup_returned{environment=\"$environment\", vm=\"db-vm\", datname=\"$database\"}[5m])",
+          "expr": "rate(pg_stat_database_tup_returned{environment=\"$environment\", vm=\"db-vm\", datname=~\"$database\"}[5m])",
           "legendFormat": "Rows Returned",
           "refId": "B"
         }
@@ -791,7 +791,7 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "100 * (sum(rate(pg_stat_database_blks_hit{environment=\"$environment\", vm=\"db-vm\", datname=\"$database\"}[5m])) / (sum(rate(pg_stat_database_blks_hit{environment=\"$environment\", vm=\"db-vm\", datname=\"$database\"}[5m])) + sum(rate(pg_stat_database_blks_read{environment=\"$environment\", vm=\"db-vm\", datname=\"$database\"}[5m]))))",
+          "expr": "100 * (sum(rate(pg_stat_database_blks_hit{environment=\"$environment\", vm=\"db-vm\", datname=~\"$database\"}[5m])) / (sum(rate(pg_stat_database_blks_hit{environment=\"$environment\", vm=\"db-vm\", datname=~\"$database\"}[5m])) + sum(rate(pg_stat_database_blks_read{environment=\"$environment\", vm=\"db-vm\", datname=~\"$database\"}[5m]))))",
           "legendFormat": "Cache Hit Ratio",
           "refId": "A"
         }
@@ -880,7 +880,7 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "pg_stat_database_deadlocks{environment=\"$environment\", vm=\"db-vm\", datname=\"$database\"}",
+          "expr": "pg_stat_database_deadlocks{environment=\"$environment\", vm=\"db-vm\", datname=~\"$database\"}",
           "legendFormat": "{{datname}}",
           "refId": "A"
         }
@@ -951,7 +951,8 @@
         "regex": "",
         "skipUrlSync": false,
         "sort": 1,
-        "type": "query"
+        "type": "query",
+        "allValue": ".+"
       }
     ]
   },
@@ -963,6 +964,6 @@
   "timezone": "browser",
   "title": "PostgreSQL Monitoring",
   "uid": "postgresql-monitoring",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }
