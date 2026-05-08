@@ -1,0 +1,10 @@
+name: Debug — webhook errors latest
+on: [workflow_dispatch]
+permissions: { contents: read }
+jobs:
+  d:
+    runs-on: self-hosted
+    steps:
+      - run: |
+          echo "=== last 2m of webhook traffic ==="
+          docker logs --since 2m monitoring_grafana 2>&1 | grep -iE 'webhook|notif.*err|template:.*not defined' | tail -20
