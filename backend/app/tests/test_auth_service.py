@@ -3,13 +3,13 @@ Unit tests for AuthService
 """
 
 from datetime import datetime
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AuthenticationError, ConflictError
-from app.models.user import User, UserRole
+from app.models.user import EmployeeStatus, User, UserRole
 from app.schemas.user import TokenResponse, UserCreate, UserLogin, UserResponse
 from app.services.auth_service import AuthService
 
@@ -30,7 +30,7 @@ class TestAuthService:
             name="Test User",
             email="test@nycu.edu.tw",
             user_type="student",
-            status="active",
+            status=EmployeeStatus.active,
             dept_code="CS",
             dept_name="Computer Science",
             role=UserRole.student,
@@ -51,10 +51,12 @@ class TestAuthService:
         user.email = "test@nycu.edu.tw"
         user.role = UserRole.student
         user.user_type = "student"
-        user.status = "active"
+        user.status = EmployeeStatus.active
         user.dept_code = "CS"
         user.dept_name = "Computer Science"
         user.last_login_at = None
+        user.created_at = datetime(2024, 1, 1)
+        user.updated_at = datetime(2024, 1, 1)
         return user
 
     @pytest.mark.smoke
@@ -62,10 +64,10 @@ class TestAuthService:
     async def test_register_user_success(self, service, mock_user_create_data):
         """Test successful user registration"""
         with (
-            patch.object(service.db, "execute") as mock_execute,
+            patch.object(service.db, "execute", new_callable=AsyncMock) as mock_execute,
             patch.object(service.db, "add") as mock_add,
-            patch.object(service.db, "commit") as mock_commit,
-            patch.object(service.db, "refresh") as mock_refresh,
+            patch.object(service.db, "commit", new_callable=AsyncMock) as mock_commit,
+            patch.object(service.db, "refresh", new_callable=AsyncMock) as mock_refresh,
         ):
             # Mock no existing users with same email or nycu_id
             mock_execute.return_value.scalar_one_or_none.return_value = None
@@ -87,6 +89,8 @@ class TestAuthService:
                     role=mock_user_create_data.role,
                     user_type=mock_user_create_data.user_type,
                     status=mock_user_create_data.status,
+                    created_at=datetime(2024, 1, 1),
+                    updated_at=datetime(2024, 1, 1),
                 )
                 mock_validate.return_value = mock_response
 
@@ -107,7 +111,7 @@ class TestAuthService:
         existing_user = Mock(spec=User)
         existing_user.email = mock_user_create_data.email
 
-        with patch.object(service.db, "execute") as mock_execute:
+        with patch.object(service.db, "execute", new_callable=AsyncMock) as mock_execute:
             # Mock existing user with same email
             mock_execute.return_value.scalar_one_or_none.return_value = existing_user
 
@@ -120,7 +124,7 @@ class TestAuthService:
         existing_user = Mock(spec=User)
         existing_user.nycu_id = mock_user_create_data.nycu_id
 
-        with patch.object(service.db, "execute") as mock_execute:
+        with patch.object(service.db, "execute", new_callable=AsyncMock) as mock_execute:
             # Mock no user with same email, but user with same nycu_id
             mock_execute.return_value.scalar_one_or_none.side_effect = [
                 None,
@@ -143,10 +147,10 @@ class TestAuthService:
         from sqlalchemy.exc import IntegrityError
 
         with (
-            patch.object(service.db, "execute") as mock_execute,
+            patch.object(service.db, "execute", new_callable=AsyncMock) as mock_execute,
             patch.object(service.db, "add"),
-            patch.object(service.db, "commit") as mock_commit,
-            patch.object(service.db, "rollback") as mock_rollback,
+            patch.object(service.db, "commit", new_callable=AsyncMock) as mock_commit,
+            patch.object(service.db, "rollback", new_callable=AsyncMock) as mock_rollback,
         ):
             # Both upfront checks find no existing user
             mock_execute.return_value.scalar_one_or_none.return_value = None
@@ -165,10 +169,10 @@ class TestAuthService:
         from sqlalchemy.exc import IntegrityError
 
         with (
-            patch.object(service.db, "execute") as mock_execute,
+            patch.object(service.db, "execute", new_callable=AsyncMock) as mock_execute,
             patch.object(service.db, "add"),
-            patch.object(service.db, "commit") as mock_commit,
-            patch.object(service.db, "rollback") as mock_rollback,
+            patch.object(service.db, "commit", new_callable=AsyncMock) as mock_commit,
+            patch.object(service.db, "rollback", new_callable=AsyncMock) as mock_rollback,
         ):
             mock_execute.return_value.scalar_one_or_none.return_value = None
             mock_commit.side_effect = IntegrityError(
@@ -183,7 +187,10 @@ class TestAuthService:
     @pytest.mark.asyncio
     async def test_authenticate_user_success(self, service, mock_user_login_data, mock_user):
         """Test successful user authentication"""
-        with patch.object(service.db, "execute") as mock_execute, patch.object(service.db, "commit") as mock_commit:
+        with (
+            patch.object(service.db, "execute", new_callable=AsyncMock) as mock_execute,
+            patch.object(service.db, "commit", new_callable=AsyncMock) as mock_commit,
+        ):
             mock_execute.return_value.scalar_one_or_none.return_value = mock_user
 
             result = await service.authenticate_user(mock_user_login_data)
@@ -196,7 +203,7 @@ class TestAuthService:
     @pytest.mark.asyncio
     async def test_authenticate_user_not_found(self, service, mock_user_login_data):
         """Test user authentication when user not found"""
-        with patch.object(service.db, "execute") as mock_execute:
+        with patch.object(service.db, "execute", new_callable=AsyncMock) as mock_execute:
             mock_execute.return_value.scalar_one_or_none.return_value = None
 
             with pytest.raises(AuthenticationError, match="Invalid nycu_id or email"):
@@ -211,7 +218,10 @@ class TestAuthService:
             password="testpassword123",
         )
 
-        with patch.object(service.db, "execute") as mock_execute, patch.object(service.db, "commit") as mock_commit:
+        with (
+            patch.object(service.db, "execute", new_callable=AsyncMock) as mock_execute,
+            patch.object(service.db, "commit", new_callable=AsyncMock) as mock_commit,
+        ):
             mock_execute.return_value.scalar_one_or_none.return_value = mock_user
 
             result = await service.authenticate_user(login_data)
@@ -242,6 +252,8 @@ class TestAuthService:
                 role=mock_user.role,
                 user_type=mock_user.user_type,
                 status=mock_user.status,
+                created_at=mock_user.created_at,
+                updated_at=mock_user.updated_at,
             )
             mock_validate.return_value = mock_user_response
 
@@ -286,6 +298,8 @@ class TestAuthService:
                     role=mock_user.role,
                     user_type=mock_user.user_type,
                     status=mock_user.status,
+                    created_at=mock_user.created_at,
+                    updated_at=mock_user.updated_at,
                 ),
             )
             mock_create_tokens.return_value = mock_token_response
@@ -304,7 +318,7 @@ class TestAuthService:
         """Test getting user by ID successfully"""
         user_id = 1
 
-        with patch.object(service.db, "get") as mock_get:
+        with patch.object(service.db, "get", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = mock_user
 
             result = await service.get_user_by_id(user_id)
@@ -317,7 +331,7 @@ class TestAuthService:
         """Test getting user by ID when user not found"""
         user_id = 999
 
-        with patch.object(service.db, "get") as mock_get:
+        with patch.object(service.db, "get", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = None
 
             result = await service.get_user_by_id(user_id)
@@ -330,7 +344,7 @@ class TestAuthService:
         """Test getting user by NYCU ID successfully"""
         nycu_id = "112550001"
 
-        with patch.object(service.db, "execute") as mock_execute:
+        with patch.object(service.db, "execute", new_callable=AsyncMock) as mock_execute:
             mock_execute.return_value.scalar_one_or_none.return_value = mock_user
 
             result = await service.get_user_by_nycu_id(nycu_id)
@@ -342,7 +356,7 @@ class TestAuthService:
         """Test getting user by NYCU ID when user not found"""
         nycu_id = "999999999"
 
-        with patch.object(service.db, "execute") as mock_execute:
+        with patch.object(service.db, "execute", new_callable=AsyncMock) as mock_execute:
             mock_execute.return_value.scalar_one_or_none.return_value = None
 
             result = await service.get_user_by_nycu_id(nycu_id)
@@ -354,7 +368,7 @@ class TestAuthService:
         """Test getting user by email successfully"""
         email = "test@nycu.edu.tw"
 
-        with patch.object(service.db, "execute") as mock_execute:
+        with patch.object(service.db, "execute", new_callable=AsyncMock) as mock_execute:
             mock_execute.return_value.scalar_one_or_none.return_value = mock_user
 
             result = await service.get_user_by_email(email)
@@ -366,7 +380,7 @@ class TestAuthService:
         """Test getting user by email when user not found"""
         email = "nonexistent@nycu.edu.tw"
 
-        with patch.object(service.db, "execute") as mock_execute:
+        with patch.object(service.db, "execute", new_callable=AsyncMock) as mock_execute:
             mock_execute.return_value.scalar_one_or_none.return_value = None
 
             result = await service.get_user_by_email(email)
@@ -398,7 +412,10 @@ class TestAuthService:
         """Test that authentication updates the user's last login time"""
         original_last_login = mock_user.last_login_at
 
-        with patch.object(service.db, "execute") as mock_execute, patch.object(service.db, "commit") as mock_commit:
+        with (
+            patch.object(service.db, "execute", new_callable=AsyncMock) as mock_execute,
+            patch.object(service.db, "commit", new_callable=AsyncMock) as mock_commit,
+        ):
             mock_execute.return_value.scalar_one_or_none.return_value = mock_user
 
             await service.authenticate_user(mock_user_login_data)
