@@ -1,0 +1,22 @@
+name: Debug — broader grafana log search
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  debug:
+    runs-on: self-hosted
+    steps:
+      - name: Broad grafana log search
+        run: |
+          echo "=== ALL alertmanager / receiver / sender log lines (last 1500) ==="
+          docker logs --tail 5000 monitoring_grafana 2>&1 | grep -iE 'alertmanager|receiver|sending notif|webhook|github-issue|contact.point' | tail -40
+          echo
+          echo "=== was 'github-issue' receiver ever named in any log? ==="
+          docker logs monitoring_grafana 2>&1 | grep -i 'github-issue' | head -10
+          echo
+          echo "=== alertmanager grafana config (active state) ==="
+          docker exec monitoring_grafana sh -c "test -f /var/lib/grafana/alerting/1/silences && wc -l /var/lib/grafana/alerting/1/silences || echo no silences file"
+          echo
+          echo "=== Try fetching active alertmanager status ==="
+          docker exec monitoring_grafana wget -qO- http://localhost:3000/api/alertmanager/grafana/api/v2/status 2>&1 | head -c 1000 || echo "(not available unauth)"
