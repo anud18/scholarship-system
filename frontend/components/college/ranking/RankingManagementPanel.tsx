@@ -737,6 +737,9 @@ export function RankingManagementPanel({
           <CardDescription>選擇要管理的排名清單</CardDescription>
         </CardHeader>
         <CardContent>
+          {/* #63: when deadline has passed and user isn't admin, hide
+              edit/delete/finalize affordances. Backend enforces the same
+              constraint via assert_ranking_within_deadline. */}
           <RankingCardList
             rankings={filteredRankings}
             selectedRankingId={selectedRanking}
@@ -749,28 +752,43 @@ export function RankingManagementPanel({
             emptyStateConfig={{
               title: "暫無符合條件的排名",
               description: `${scholarshipType.name} 目前在選定的學年度與學期沒有排名`,
-              actionButton: {
-                label: "立即建立排名",
-                onClick: createNewRanking,
-              },
+              actionButton:
+                deadlineInfo.state === "passed" && !isAdmin
+                  ? undefined
+                  : {
+                      label: "立即建立排名",
+                      onClick: createNewRanking,
+                    },
             }}
             editingId={editingRankingId}
             editingName={editingRankingName}
-            onEdit={handleEditRankingName}
+            onEdit={
+              deadlineInfo.state === "passed" && !isAdmin
+                ? undefined
+                : handleEditRankingName
+            }
             onEditNameChange={setEditingRankingName}
             onEditNameSave={handleSaveRankingName}
             onEditNameCancel={handleCancelEditRankingName}
-            onDelete={ranking => {
-              setRankingToDelete(ranking);
-              setShowDeleteRankingDialog(true);
-            }}
-            onToggleLock={(id, isLocked) => {
-              if (isLocked) {
-                handleUnfinalizeRanking(id);
-              } else {
-                handleFinalizeRanking(id);
-              }
-            }}
+            onDelete={
+              deadlineInfo.state === "passed" && !isAdmin
+                ? undefined
+                : ranking => {
+                    setRankingToDelete(ranking);
+                    setShowDeleteRankingDialog(true);
+                  }
+            }
+            onToggleLock={
+              deadlineInfo.state === "passed" && !isAdmin
+                ? undefined
+                : (id, isLocked) => {
+                    if (isLocked) {
+                      handleUnfinalizeRanking(id);
+                    } else {
+                      handleFinalizeRanking(id);
+                    }
+                  }
+            }
             locale={locale}
           />
         </CardContent>
@@ -791,6 +809,9 @@ export function RankingManagementPanel({
               academicYear={rankingData.academicYear}
               semester={rankingData.semester}
               isFinalized={rankingData.isFinalized}
+              lockedByDeadline={
+                deadlineInfo.state === "passed" && !isAdmin
+              }
               rankingId={selectedRanking}
               onRankingChange={handleRankingChange}
               onReviewApplication={handleReviewApplication}
