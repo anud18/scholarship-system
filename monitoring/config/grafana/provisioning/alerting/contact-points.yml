@@ -33,7 +33,7 @@ contactPoints:
                 "instance": {{ printf "%q" (index .Alerts 0).Labels.instance }},
                 "environment": {{ printf "%q" (index .Alerts 0).Labels.environment }},
                 "value": {{ printf "%q" (index .Alerts 0).ValueString }},
-                "fired_at": {{ printf "%q" ((index .Alerts 0).StartsAt | toString) }},
+                "fired_at": {{ printf "%q" (index .Alerts 0).StartsAt }},
                 "grafana_url": {{ printf "%q" .ExternalURL }}
               }
             }
