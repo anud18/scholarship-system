@@ -12,22 +12,28 @@ contactPoints:
           authorization_scheme: token
           # GH_PAT mounted as a file at runtime; Grafana reads via $__file{...}
           authorization_credentials: $__file{/etc/grafana/secrets/gh_pat}
-          # Override default webhook body so GitHub's dispatches API accepts it
-          # (event_type + client_payload wrapper required by repository_dispatch).
+          # Override default webhook body so GitHub's dispatches API accepts
+          # it (event_type + client_payload wrapper required by
+          # repository_dispatch). Use `printf "%q"` for every interpolated
+          # value so quotes, newlines, and control chars in annotations get
+          # JSON-escaped — without this GitHub returns 422 Unprocessable
+          # Entity on alerts whose summary / description happen to contain
+          # double quotes (which is most of them once template expansion
+          # injects `{{ $value | humanize }}` output).
           message: |-
             {
               "event_type": "monitoring-alert",
               "client_payload": {
-                "alertname": "{{ (index .Alerts 0).Labels.alertname }}",
-                "severity": "{{ (index .Alerts 0).Labels.severity }}",
-                "category": "{{ (index .Alerts 0).Labels.category }}",
-                "status": "{{ .Status }}",
-                "summary": "{{ (index .Alerts 0).Annotations.summary }}",
-                "description": "{{ (index .Alerts 0).Annotations.description }}",
-                "instance": "{{ (index .Alerts 0).Labels.instance }}",
-                "environment": "{{ (index .Alerts 0).Labels.environment }}",
-                "value": "{{ (index .Alerts 0).ValueString }}",
-                "fired_at": "{{ (index .Alerts 0).StartsAt }}",
-                "grafana_url": "{{ .ExternalURL }}"
+                "alertname": {{ printf "%q" (index .Alerts 0).Labels.alertname }},
+                "severity": {{ printf "%q" (index .Alerts 0).Labels.severity }},
+                "category": {{ printf "%q" (index .Alerts 0).Labels.category }},
+                "status": {{ printf "%q" .Status }},
+                "summary": {{ printf "%q" (index .Alerts 0).Annotations.summary }},
+                "description": {{ printf "%q" (index .Alerts 0).Annotations.description }},
+                "instance": {{ printf "%q" (index .Alerts 0).Labels.instance }},
+                "environment": {{ printf "%q" (index .Alerts 0).Labels.environment }},
+                "value": {{ printf "%q" (index .Alerts 0).ValueString }},
+                "fired_at": {{ printf "%q" ((index .Alerts 0).StartsAt | toString) }},
+                "grafana_url": {{ printf "%q" .ExternalURL }}
               }
             }
