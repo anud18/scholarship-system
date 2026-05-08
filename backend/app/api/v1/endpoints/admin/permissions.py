@@ -13,6 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.cache import invalidate as cache_invalidate
 from app.core.security import check_scholarship_permission, get_current_user, require_admin
 from app.db.deps import get_db
 from app.models.scholarship import ScholarshipType
@@ -230,6 +231,7 @@ async def create_scholarship_permission(
     db.add(new_permission)
     await db.commit()
     await db.refresh(new_permission)
+    await cache_invalidate("dashboard:")
 
     return {
         "success": True,
@@ -313,5 +315,6 @@ async def delete_scholarship_permission(
     # Delete permission
     await db.delete(permission)
     await db.commit()
+    await cache_invalidate("dashboard:")
 
     return {"success": True, "message": "Scholarship permission deleted successfully", "data": None}
