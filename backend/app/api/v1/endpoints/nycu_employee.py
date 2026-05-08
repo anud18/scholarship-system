@@ -7,11 +7,13 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from app.core.cache import cached
 from app.integrations.nycu_emp import (
     NYCUEmpAuthenticationError,
     NYCUEmpConnectionError,
     NYCUEmpError,
     NYCUEmpItem,
+    NYCUEmpPage,
     NYCUEmpTimeoutError,
     NYCUEmpValidationError,
     create_nycu_emp_client_from_env,
@@ -37,6 +39,33 @@ class EmployeeSearchResponse(BaseModel):
     employees: List[NYCUEmpItem]
     total_count: int
     filtered_count: int
+
+
+@cached(
+    key_fn=lambda status, **__: f"nycu:employees:{status}",
+    ttl=3600,
+)
+async def _get_all_employees_cached(status: str) -> List[dict]:
+    """Fetch the full upstream employee directory once per hour.
+
+    Returns a list of ``NYCUEmpPage.model_dump()`` dicts. Callers rehydrate
+    via ``NYCUEmpPage.model_validate(...)``. We cache *post-aggregation*
+    pages (not the raw HTTP), so repeated /search keystrokes filter
+    in-process against a single cached payload.
+    """
+    client = create_nycu_emp_client_from_env()
+    if hasattr(client, "__aenter__"):
+        async with client as c:
+            pages = await c.get_all_employees(status=status)
+    else:
+        pages = await client.get_all_employees(status=status)
+    return [page.model_dump() for page in pages]
+
+
+async def _get_all_pages(status: str) -> List[NYCUEmpPage]:
+    """Convenience: return rehydrated NYCUEmpPage objects."""
+    raw = await _get_all_employees_cached(status)
+    return [NYCUEmpPage.model_validate(p) for p in raw]
 
 
 @router.get("/employees")
@@ -106,15 +135,7 @@ async def get_all_employees(status: str = Query("01", description="Employee stat
         HTTPException: When API request fails
     """
     try:
-        # Create client based on environment
-        client = create_nycu_emp_client_from_env()
-
-        # Use context manager for HTTP client if needed
-        if hasattr(client, "__aenter__"):
-            async with client as c:
-                pages = await c.get_all_employees(status=status)
-        else:
-            pages = await client.get_all_employees(status=status)
+        pages = await _get_all_pages(status)
 
         # Convert to response format
         response_pages = []
@@ -169,15 +190,7 @@ async def search_employees(
         HTTPException: When API request fails
     """
     try:
-        # Create client based on environment
-        client = create_nycu_emp_client_from_env()
-
-        # Get all employees first
-        if hasattr(client, "__aenter__"):
-            async with client as c:
-                pages = await c.get_all_employees(status=status)
-        else:
-            pages = await client.get_all_employees(status=status)
+        pages = await _get_all_pages(status)
 
         # Combine all employees from all pages
         all_employees = []
@@ -245,15 +258,7 @@ async def get_employee_by_no(
         HTTPException: When API request fails
     """
     try:
-        # Create client based on environment
-        client = create_nycu_emp_client_from_env()
-
-        # Get all employees and search for the specific one
-        if hasattr(client, "__aenter__"):
-            async with client as c:
-                pages = await c.get_all_employees(status=status)
-        else:
-            pages = await client.get_all_employees(status=status)
+        pages = await _get_all_pages(status)
 
         # Search for employee across all pages
         for page in pages:

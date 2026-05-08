@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.sql.functions import count
 
+from app.core.cache import LockBusy, with_lock_sync
 from app.core.deps import get_current_user
 from app.core.exceptions import RosterAlreadyExistsError, RosterGenerationError, RosterLockedError, RosterNotFoundError
 from app.core.path_security import validate_object_name_minio
@@ -48,20 +49,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/generate")
-def generate_payment_roster(
+def _generate_payment_roster_inner(
     request: RosterCreateRequest,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_sync_db),
-    current_user: User = Depends(get_current_user),
+    db: Session,
+    current_user: User,
 ):
-    """
-    產生造冊
-    Generate payment roster
-    """
-    # 檢查權限：只有管理員和處理人員可以產生造冊
-    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
-
+    """Body of generate_payment_roster — runs inside the Redis idempotency lock."""
     roster = None  # 用於錯誤處理時檢查是否需要標記為 FAILED
     try:
         roster_service = RosterService(db)
@@ -253,6 +246,39 @@ def generate_payment_roster(
             db.rollback()
 
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"造冊產生失敗: {str(e)}")
+
+
+@router.post("/generate")
+def generate_payment_roster(
+    request: RosterCreateRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_sync_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    產生造冊 / Generate payment roster.
+
+    Wraps the generation in a Redis SET-NX-EX mutex so a double-click on
+    "產生造冊" can't produce two parallel rosters for the same
+    (scholarship_configuration_id, period_label). The 300s TTL also acts
+    as a safety net if the backend dies mid-generation — the lock auto-
+    expires and the next attempt succeeds.
+    """
+    # 檢查權限：只有管理員和處理人員可以產生造冊
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
+
+    lock_key = f"roster:{request.scholarship_configuration_id}:{request.period_label}"
+    try:
+        with with_lock_sync(lock_key, ttl_seconds=300):
+            return _generate_payment_roster_inner(request, db, current_user)
+    except LockBusy:
+        # Concurrent generation in flight — fail fast rather than queue.
+        # UI already handles 409 from RosterAlreadyExistsError, so the
+        # path is well-trodden.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="造冊產生中，請稍候再試",
+        )
 
 
 @router.get("/available-rankings")
