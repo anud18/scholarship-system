@@ -233,6 +233,18 @@ jobs:
           done
           echo "✅ Grafana back up after restart"
 
+      - name: Debug — verify dashboard file content reached Grafana
+        run: |
+          echo "--- file on host (/opt/scholarship/...) ---"
+          grep -E '"version"' /opt/scholarship/monitoring/config/grafana/provisioning/dashboards/logs/application-logs.json | head -2
+          grep -c "or vector" /opt/scholarship/monitoring/config/grafana/provisioning/dashboards/logs/application-logs.json || true
+          echo
+          echo "--- file inside grafana container ---"
+          docker exec monitoring_grafana sh -c "grep -E '\"version\"' /etc/grafana/provisioning/dashboards/logs/application-logs.json | head -2; grep -c 'or vector' /etc/grafana/provisioning/dashboards/logs/application-logs.json"
+          echo
+          echo "--- grafana provisioning logs for application-logs ---"
+          docker logs monitoring_grafana 2>&1 | grep -i "application-logs\|provisioning.dashboard" | tail -20
+
       - name: Health check monitoring services
         run: |
           set -e
