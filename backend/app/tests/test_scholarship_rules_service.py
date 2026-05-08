@@ -32,6 +32,7 @@ class TestScholarshipRulesServiceCreate:
             sub_type_list=["type_a", "type_b"],
         )
 
+    @pytest.mark.smoke
     async def test_create_rule_success(self, service, mock_scholarship_type):
         """Test successful rule creation"""
         rule_data = ScholarshipRuleCreate(
@@ -186,6 +187,7 @@ class TestScholarshipRulesServiceFilters:
         db = Mock(spec=AsyncSession)
         return ScholarshipRulesService(db)
 
+    @pytest.mark.smoke
     async def test_get_rules_basic_filters(self, service):
         """Test basic filter application"""
         mock_result = Mock()
@@ -417,6 +419,7 @@ class TestScholarshipRulesServiceValidation:
         db = Mock(spec=AsyncSession)
         return ScholarshipRulesService(db)
 
+    @pytest.mark.smoke
     async def test_validate_rule_condition_valid_operator(self, service):
         """Test validation with valid operator"""
         is_valid, message = await service.validate_rule_condition(

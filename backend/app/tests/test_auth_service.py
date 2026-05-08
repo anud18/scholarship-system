@@ -57,6 +57,7 @@ class TestAuthService:
         user.last_login_at = None
         return user
 
+    @pytest.mark.smoke
     @pytest.mark.asyncio
     async def test_register_user_success(self, service, mock_user_create_data):
         """Test successful user registration"""
@@ -178,6 +179,7 @@ class TestAuthService:
                 await service.register_user(mock_user_create_data)
             mock_rollback.assert_called_once()
 
+    @pytest.mark.smoke
     @pytest.mark.asyncio
     async def test_authenticate_user_success(self, service, mock_user_login_data, mock_user):
         """Test successful user authentication"""
@@ -200,6 +202,7 @@ class TestAuthService:
             with pytest.raises(AuthenticationError, match="Invalid nycu_id or email"):
                 await service.authenticate_user(mock_user_login_data)
 
+    @pytest.mark.smoke
     @pytest.mark.asyncio
     async def test_authenticate_user_by_email(self, service, mock_user):
         """Test user authentication using email instead of nycu_id"""
@@ -217,6 +220,7 @@ class TestAuthService:
             assert result == mock_user
             mock_commit.assert_called_once()
 
+    @pytest.mark.smoke
     @pytest.mark.asyncio
     async def test_create_tokens(self, service, mock_user):
         """Test token creation for authenticated user"""
@@ -260,6 +264,7 @@ class TestAuthService:
             assert result.expires_in == 3600
             assert result.user == mock_user_response
 
+    @pytest.mark.smoke
     @pytest.mark.asyncio
     async def test_login_success(self, service, mock_user_login_data, mock_user):
         """Test complete login flow"""

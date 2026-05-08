@@ -21,6 +21,7 @@ class TestEligibilityServiceDevMode:
         db = Mock(spec=AsyncSession)
         return EligibilityService(db)
 
+    @pytest.mark.smoke
     def test_is_dev_mode_debug_true(self, service):
         """Test dev mode detection with debug=True"""
         with patch("app.services.eligibility_service.settings") as mock_settings:
