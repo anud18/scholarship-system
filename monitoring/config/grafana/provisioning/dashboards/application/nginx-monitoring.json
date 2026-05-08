@@ -421,6 +421,6 @@
   "timezone": "browser",
   "title": "Nginx Monitoring",
   "uid": "nginx-monitoring",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }

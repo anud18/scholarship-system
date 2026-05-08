@@ -770,6 +770,6 @@
   "timezone": "browser",
   "title": "MinIO Monitoring",
   "uid": "minio-monitoring",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }

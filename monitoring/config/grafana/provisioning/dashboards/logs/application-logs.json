@@ -475,6 +475,6 @@
   "timezone": "",
   "title": "Application Logs",
   "uid": "application-logs",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }
