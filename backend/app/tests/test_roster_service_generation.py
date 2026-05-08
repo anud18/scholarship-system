@@ -201,9 +201,7 @@ class TestRosterServiceGenerate:
         assert audit.log_roster_creation.call_count == 1
 
     @pytest.mark.smoke
-    def test_generate_roster_raises_on_duplicate_without_force(
-        self, db_sync, patch_dependencies
-    ):
+    def test_generate_roster_raises_on_duplicate_without_force(self, db_sync, patch_dependencies):
         """
         CONTRACT: regenerating the same (config_id, period_label) without
         force_regenerate=True raises RosterAlreadyExistsError. (Idempotency.)
@@ -235,9 +233,7 @@ class TestRosterServiceGenerate:
                 student_verification_enabled=False,
             )
 
-    def test_generate_roster_force_regenerate_clears_old_items(
-        self, db_sync, patch_dependencies
-    ):
+    def test_generate_roster_force_regenerate_clears_old_items(self, db_sync, patch_dependencies):
         """
         CONTRACT: force_regenerate=True on an existing roster wipes the prior
         PaymentRosterItem rows (roster_service.py:152) and re-runs against
@@ -276,14 +272,10 @@ class TestRosterServiceGenerate:
         )
 
         assert regenerated.id == first_id
-        items = (
-            db_sync.query(PaymentRosterItem).filter_by(roster_id=first_id).all()
-        )
+        items = db_sync.query(PaymentRosterItem).filter_by(roster_id=first_id).all()
         assert items == []
 
-    def test_generate_roster_locked_blocks_regeneration(
-        self, db_sync, patch_dependencies
-    ):
+    def test_generate_roster_locked_blocks_regeneration(self, db_sync, patch_dependencies):
         """
         CONTRACT: regenerating a locked roster raises RosterLockedError even
         with force_regenerate=True (roster_service.py:90).
@@ -317,9 +309,7 @@ class TestRosterServiceGenerate:
                 force_regenerate=True,
             )
 
-    def test_generate_roster_matrix_mode_with_unexecuted_ranking_raises(
-        self, db_sync, patch_dependencies
-    ):
+    def test_generate_roster_matrix_mode_with_unexecuted_ranking_raises(self, db_sync, patch_dependencies):
         """
         CONTRACT: under matrix_based quota mode, supplying a ranking_id whose
         distribution has not been executed raises ValueError
@@ -436,7 +426,5 @@ class TestRosterServiceLookup:
 
         assert svc.get_roster_by_id(created.id).id == created.id
         assert svc.get_roster_by_code(created.roster_code).id == created.id
-        assert (
-            svc.get_roster_by_period(config.id, "2024-04").id == created.id
-        )
+        assert svc.get_roster_by_period(config.id, "2024-04").id == created.id
         assert svc.get_roster_by_period(config.id, "nonexistent") is None
