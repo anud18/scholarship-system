@@ -6,6 +6,11 @@ apiVersion: 1
 # unhandled exceptions. They go through the same notification policy as
 # Prometheus alerts, so a firing rule eventually opens / updates a GitHub
 # issue via the repository_dispatch webhook.
+#
+# Grafana alert pipeline for Loki count_over_time queries needs three
+# stages: A (query) -> B (reduce last) -> C (threshold). Without the
+# reducer, evaluation fails with "looks like time series data, only
+# reduced data can be alerted on."
 groups:
   - orgId: 1
     name: application_logs
@@ -14,10 +19,7 @@ groups:
     rules:
       - uid: alert-backend-error-spike
         title: BackendErrorSpike
-        # Fire when the backend container emits more than 5 ERROR-level
-        # lines in any 5-minute window. Threshold is intentionally lenient
-        # for staging — bump for production once baseline is known.
-        condition: A
+        condition: C
         data:
           - refId: A
             relativeTimeRange:
@@ -25,10 +27,49 @@ groups:
               to: 0
             datasourceUid: loki-staging-uid
             model:
+              datasource:
+                type: loki
+                uid: loki-staging-uid
               expr: |
-                sum(count_over_time({environment="staging", container=~"scholarship_backend.*"} |~ "(?i)\\bERROR\\b" [5m])) > 5
+                sum(count_over_time({environment="staging", container=~"scholarship_backend.*"} |~ "(?i)\\bERROR\\b" [5m]))
               refId: A
-              instant: true
+              queryType: instant
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: B
+              type: reduce
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              refId: C
+              type: threshold
+              conditions:
+                - evaluator:
+                    params: [5]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    type: last
+                  type: query
         noDataState: OK
         execErrState: Error
         for: 1m
@@ -43,10 +84,7 @@ groups:
 
       - uid: alert-backend-traceback
         title: BackendUnhandledTraceback
-        # Any python traceback line is high-signal — a stack trace usually
-        # means an unhandled exception bubbled past the request middleware.
-        # 1 occurrence in 5 minutes is enough to fire.
-        condition: A
+        condition: C
         data:
           - refId: A
             relativeTimeRange:
@@ -54,10 +92,49 @@ groups:
               to: 0
             datasourceUid: loki-staging-uid
             model:
+              datasource:
+                type: loki
+                uid: loki-staging-uid
               expr: |
-                sum(count_over_time({environment="staging", container=~"scholarship_backend.*"} |= "Traceback (most recent call last)" [5m])) > 0
+                sum(count_over_time({environment="staging", container=~"scholarship_backend.*"} |= "Traceback (most recent call last)" [5m]))
               refId: A
-              instant: true
+              queryType: instant
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: B
+              type: reduce
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              refId: C
+              type: threshold
+              conditions:
+                - evaluator:
+                    params: [0]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    type: last
+                  type: query
         noDataState: OK
         execErrState: Error
         for: 1m
@@ -72,9 +149,7 @@ groups:
 
       - uid: alert-postgres-error-log
         title: PostgresErrorLog
-        # Postgres ERROR/FATAL lines that aren't routine "database does
-        # not exist" probe noise. Threshold of 3 in 5 minutes.
-        condition: A
+        condition: C
         data:
           - refId: A
             relativeTimeRange:
@@ -82,10 +157,49 @@ groups:
               to: 0
             datasourceUid: loki-staging-uid
             model:
+              datasource:
+                type: loki
+                uid: loki-staging-uid
               expr: |
-                sum(count_over_time({environment="staging", container="scholarship_postgres_staging"} |~ "(?i)\\b(ERROR|FATAL)\\b" [5m])) > 3
+                sum(count_over_time({environment="staging", container="scholarship_postgres_staging"} |~ "(?i)\\b(ERROR|FATAL)\\b" [5m]))
               refId: A
-              instant: true
+              queryType: instant
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: B
+              type: reduce
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              refId: C
+              type: threshold
+              conditions:
+                - evaluator:
+                    params: [3]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    type: last
+                  type: query
         noDataState: OK
         execErrState: Error
         for: 1m
