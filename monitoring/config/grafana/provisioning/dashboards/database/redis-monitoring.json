@@ -15,7 +15,7 @@
       }
     ]
   },
-  "editable": true,
+  "editable": false,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": null,
@@ -1026,6 +1026,6 @@
   "timezone": "browser",
   "title": "Redis Monitoring",
   "uid": "redis-monitoring",
-  "version": 1,
+  "version": 6,
   "weekStart": ""
 }

@@ -15,7 +15,7 @@
       }
     ]
   },
-  "editable": true,
+  "editable": false,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": null,
@@ -475,6 +475,6 @@
   "timezone": "",
   "title": "Application Logs",
   "uid": "application-logs",
-  "version": 2,
+  "version": 7,
   "weekStart": ""
 }

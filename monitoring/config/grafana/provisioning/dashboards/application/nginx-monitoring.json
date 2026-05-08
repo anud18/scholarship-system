@@ -2,7 +2,7 @@
   "annotations": {
     "list": []
   },
-  "editable": true,
+  "editable": false,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": null,
@@ -421,6 +421,6 @@
   "timezone": "browser",
   "title": "Nginx Monitoring",
   "uid": "nginx-monitoring",
-  "version": 2,
+  "version": 7,
   "weekStart": ""
 }
