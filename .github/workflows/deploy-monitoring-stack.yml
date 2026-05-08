@@ -77,7 +77,12 @@ jobs:
       - name: Pull latest monitoring images
         run: |
           cd /opt/scholarship/monitoring
-          docker compose -f docker-compose.monitoring.yml pull
+          # `pull` fails on the locally-built webhook-bridge image since
+          # it has no registry. Pull the third-party images that DO have
+          # one, then build the bridge from source.
+          docker compose -f docker-compose.monitoring.yml pull \
+            --ignore-buildable --ignore-pull-failures || true
+          docker compose -f docker-compose.monitoring.yml build webhook-bridge
 
       - name: Deploy monitoring stack
         run: |
