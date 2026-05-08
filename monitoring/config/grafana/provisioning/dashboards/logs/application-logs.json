@@ -474,7 +474,7 @@
   "timepicker": {},
   "timezone": "",
   "title": "Application Logs",
-  "uid": "application-logs",
-  "version": 7,
+  "uid": "application-logs-v2",
+  "version": 1,
   "weekStart": ""
 }
