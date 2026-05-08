@@ -3759,7 +3759,10 @@ export interface paths {
          * Get All Reference Data
          * @description Get all reference data in a single request.
          *
-         *     SECURITY: Sets no-cache headers to prevent sensitive organizational data from being cached.
+         *     SECURITY: Sets no-cache headers to prevent sensitive organizational data from
+         *     being cached by browsers / CDNs. Server-side Redis caching (24h) is still
+         *     applied — it's an internal performance optimisation that never leaks into
+         *     HTTP cache layers.
          */
         get: operations["get_all_reference_data_api_v1_reference_data_all_get"];
         put?: never;

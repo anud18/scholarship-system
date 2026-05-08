@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.cache import cached
 from app.core.deps import get_db
 from app.models.application import Application
 from app.models.enums import ApplicationCycle, Semester
@@ -149,14 +150,24 @@ async def get_all_reference_data(
     """
     Get all reference data in a single request.
 
-    SECURITY: Sets no-cache headers to prevent sensitive organizational data from being cached.
+    SECURITY: Sets no-cache headers to prevent sensitive organizational data from
+    being cached by browsers / CDNs. Server-side Redis caching (24h) is still
+    applied — it's an internal performance optimisation that never leaks into
+    HTTP cache layers.
     """
 
-    # SECURITY: Prevent caching of organizational structure data
+    # SECURITY: Prevent client-side / CDN caching of organizational structure
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
 
+    return await _get_all_reference_data_cached(session)
+
+
+@cached(key_fn=lambda *_, **__: "refdata:all", ttl=86400)  # 24 h
+async def _get_all_reference_data_cached(session: AsyncSession) -> dict:
+    """Server-side cached body of /reference-data/all. See the wrapper above for
+    the no-store HTTP header rationale."""
     # Get all reference data in parallel
     degrees_result = await session.execute(select(Degree))
     identities_result = await session.execute(select(Identity))
@@ -493,7 +504,11 @@ async def get_scholarship_types_with_cycles(
     session: AsyncSession = Depends(get_db),
 ) -> dict:
     """Get all scholarship types with their application cycles"""
+    return await _get_scholarship_types_with_cycles_cached(session)
 
+
+@cached(key_fn=lambda *_, **__: "refdata:scholarships:active", ttl=43200)  # 12 h
+async def _get_scholarship_types_with_cycles_cached(session: AsyncSession) -> dict:
     stmt = select(ScholarshipType).where(ScholarshipType.status == "active")
     result = await session.execute(stmt)
     scholarships = result.scalars().all()

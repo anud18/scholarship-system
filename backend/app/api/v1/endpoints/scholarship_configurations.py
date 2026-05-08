@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
+from app.core.cache import invalidate
 from app.core.security import require_admin, require_staff
 from app.db.deps import get_db
 
@@ -470,6 +471,11 @@ async def update_matrix_quota(
         await db.commit()
         await db.refresh(config)
 
+        # Cache invalidation: matrix quota changes affect refdata + form-config
+        # surfaces. quota:* prefix is owned by PR 2 (quota_service caching).
+        await invalidate("refdata:")
+        await invalidate("formconfig:")
+
         return ApiResponse(
             success=True,
             message=f"Matrix quota updated: {sub_type} - {college}: {old_quota} → {new_quota}",
@@ -787,6 +793,9 @@ async def create_scholarship_configuration(
         await db.commit()
         await db.refresh(new_config)
 
+        await invalidate("refdata:")
+        await invalidate("formconfig:")
+
         return ApiResponse(
             success=True,
             message="獎學金配置建立成功",
@@ -1032,6 +1041,9 @@ async def update_scholarship_configuration(
         await db.commit()
         await db.refresh(config)
 
+        await invalidate("refdata:")
+        await invalidate("formconfig:")
+
         return ApiResponse(
             success=True, message="配置更新成功", data={"id": config.id, "config_code": config.config_code}
         )
@@ -1081,6 +1093,9 @@ async def deactivate_scholarship_configuration(
         config.updated_by = current_user.id
 
         await db.commit()
+
+        await invalidate("refdata:")
+        await invalidate("formconfig:")
 
         return ApiResponse(
             success=True, message="配置已停用", data={"id": config.id, "config_code": config.config_code}
@@ -1164,6 +1179,9 @@ async def duplicate_scholarship_configuration(
         db.add(new_config)
         await db.commit()
         await db.refresh(new_config)
+
+        await invalidate("refdata:")
+        await invalidate("formconfig:")
 
         return ApiResponse(
             success=True, message="配置複製成功", data={"id": new_config.id, "config_code": new_config.config_code}
@@ -1417,6 +1435,9 @@ async def batch_add_whitelist(
 
     await db.commit()
 
+    # Whitelist mutations affect eligibility-driven reference UI.
+    await invalidate("refdata:")
+
     return ApiResponse(
         success=True,
         message=f"成功新增 {added_count} 位學生到白名單",
@@ -1460,6 +1481,8 @@ async def batch_remove_whitelist(
     config.updated_by = current_user.id
 
     await db.commit()
+
+    await invalidate("refdata:")
 
     return ApiResponse(success=True, message=f"成功移除 {removed_count} 位學生", data={"removed_count": removed_count})
 
@@ -1525,6 +1548,7 @@ async def import_whitelist_excel(
         flag_modified(config, "whitelist_student_ids")
         config.updated_by = current_user.id
         await db.commit()
+        await invalidate("refdata:")
 
     return ApiResponse(
         success=True,
