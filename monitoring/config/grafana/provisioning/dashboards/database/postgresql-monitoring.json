@@ -265,7 +265,7 @@
               }
             ]
           },
-          "unit": "bytes"
+          "unit": "decbytes"
         },
         "overrides": []
       },
@@ -297,7 +297,7 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "sum(pg_stat_database_tup_fetched{environment=\"$environment\", vm=\"db-vm\", datname=\"$database\"})",
+          "expr": "sum(pg_database_size_bytes{environment=\"$environment\", vm=\"db-vm\", datname=\"$database\"})",
           "legendFormat": "Total Size",
           "refId": "A"
         }

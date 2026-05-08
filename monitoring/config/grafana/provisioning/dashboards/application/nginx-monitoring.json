@@ -185,8 +185,8 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "histogram_quantile(0.50, sum(rate(nginx_http_request_duration_seconds_bucket{environment=\"$environment\"}[5m])) by (le))",
-          "legendFormat": "P50",
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{environment=\"$environment\", job=\"backend\"}[5m])) by (le))",
+          "legendFormat": "p50",
           "refId": "A"
         },
         {
@@ -194,8 +194,8 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "histogram_quantile(0.95, sum(rate(nginx_http_request_duration_seconds_bucket{environment=\"$environment\"}[5m])) by (le))",
-          "legendFormat": "P95",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{environment=\"$environment\", job=\"backend\"}[5m])) by (le))",
+          "legendFormat": "p95",
           "refId": "B"
         },
         {
@@ -203,8 +203,8 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "histogram_quantile(0.99, sum(rate(nginx_http_request_duration_seconds_bucket{environment=\"$environment\"}[5m])) by (le))",
-          "legendFormat": "P99",
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{environment=\"$environment\", job=\"backend\"}[5m])) by (le))",
+          "legendFormat": "p99",
           "refId": "C"
         }
       ],
@@ -356,7 +356,7 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "100 * sum(rate(nginx_http_requests_total{environment=\"$environment\",status=~\"5..\"}[5m])) / sum(rate(nginx_http_requests_total{environment=\"$environment\"}[5m]))",
+          "expr": "100 * (sum(rate(http_requests_total{environment=\"$environment\", job=\"backend\", status=~\"5..\"}[5m])) or vector(0)) / sum(rate(http_requests_total{environment=\"$environment\", job=\"backend\"}[5m]))",
           "legendFormat": "5xx Error Rate",
           "refId": "A"
         },
@@ -365,7 +365,7 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "100 * sum(rate(nginx_http_requests_total{environment=\"$environment\",status=~\"4..\"}[5m])) / sum(rate(nginx_http_requests_total{environment=\"$environment\"}[5m]))",
+          "expr": "100 * (sum(rate(http_requests_total{environment=\"$environment\", job=\"backend\", status=~\"4..\"}[5m])) or vector(0)) / sum(rate(http_requests_total{environment=\"$environment\", job=\"backend\"}[5m]))",
           "legendFormat": "4xx Error Rate",
           "refId": "B"
         }
