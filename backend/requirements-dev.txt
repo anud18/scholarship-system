@@ -13,6 +13,9 @@ httpx==0.28.1  # Match main requirements
 pytest-postgresql==6.1.1  # Updated for Python 3.13 compatibility
 aiosqlite==0.20.0  # For SQLite support in testing
 
+# Coverage tooling
+diff-cover==9.2.0  # Per-PR coverage ratchet (Phase 2 of test-surface-hardening plan)
+
 # Code quality and formatting
 black==26.3.1  # Updated for Python 3.13 compatibility
 isort==5.13.2  # Updated for Python 3.13 compatibility
