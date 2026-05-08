@@ -213,7 +213,7 @@
             "uid": "loki-staging-uid"
           },
           "editorMode": "code",
-          "expr": "count_over_time({container=~\".*backend.*\", environment=\"$environment\", vm=\"$vm\"} |~ \"ERROR\"[$__auto])",
+          "expr": "sum(count_over_time({container=~\".*backend.*\", environment=\"$environment\", vm=\"$vm\"} |~ \"ERROR\"[$__auto])) or vector(0)",
           "legendFormat": "Errors",
           "queryType": "range",
           "refId": "A"
@@ -283,7 +283,7 @@
             "uid": "loki-staging-uid"
           },
           "editorMode": "code",
-          "expr": "count_over_time({container=~\".*backend.*\", environment=\"$environment\", vm=\"$vm\"} |~ \"WARNING\"[$__auto])",
+          "expr": "sum(count_over_time({container=~\".*backend.*\", environment=\"$environment\", vm=\"$vm\"} |~ \"WARNING\"[$__auto])) or vector(0)",
           "legendFormat": "Warnings",
           "queryType": "range",
           "refId": "A"
