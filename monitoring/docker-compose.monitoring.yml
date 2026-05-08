@@ -143,6 +143,42 @@ services:
   # =========================================================================
   # If you need alerting, uncomment and configure AlertManager service here
 
+  # =========================================================================
+  # WEBHOOK BRIDGE - Grafana → GitHub /dispatches
+  # =========================================================================
+  # Grafana's webhook contact-point only customises the message *inside*
+  # an Alertmanager-style envelope; GitHub /dispatches strictly requires
+  # `{event_type, client_payload}` and rejects everything else with 422.
+  # This sidecar receives Grafana's envelope on POST /grafana, reformats
+  # it, and forwards to GitHub. The GH_PAT file is shared via a read-only
+  # bind mount.
+  webhook-bridge:
+    build: ./webhook-bridge
+    image: scholarship/webhook-bridge:latest
+    container_name: monitoring_webhook_bridge
+    expose:
+      - "8080"
+    environment:
+      GH_REPO: ${GH_REPO:-anud18/scholarship-system}
+      GH_EVENT_TYPE: ${GH_EVENT_TYPE:-monitoring-alert}
+      GH_PAT_FILE: /etc/webhook-bridge/gh_pat
+    volumes:
+      - /opt/scholarship/secrets/gh_pat:/etc/webhook-bridge/gh_pat:ro
+    networks:
+      - monitoring_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8080/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
 volumes:
   grafana_data:
     driver: local

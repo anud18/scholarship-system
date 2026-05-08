@@ -7,32 +7,12 @@ contactPoints:
         type: webhook
         disableResolveMessage: false
         settings:
-          url: https://api.github.com/repos/anud18/scholarship-system/dispatches
+          # Forward through our webhook-bridge sidecar (see
+          # docker-compose.monitoring.yml `webhook-bridge`). Grafana's
+          # webhook contact-point only lets us customize the message
+          # text inside its standard Alertmanager-style envelope, but
+          # GitHub /dispatches strictly requires `{event_type,
+          # client_payload}`. The bridge accepts Grafana's envelope and
+          # re-POSTs to GitHub in the right shape.
+          url: http://monitoring_webhook_bridge:8080/grafana
           httpMethod: POST
-          authorization_scheme: token
-          # GH_PAT mounted as a file at runtime; Grafana reads via $__file{...}
-          authorization_credentials: $__file{/etc/grafana/secrets/gh_pat}
-          # Override default webhook body so GitHub's dispatches API accepts
-          # it (event_type + client_payload wrapper required by
-          # repository_dispatch). Use `printf "%q"` for every interpolated
-          # value so quotes, newlines, and control chars in annotations get
-          # JSON-escaped — without this GitHub returns 422 Unprocessable
-          # Entity on alerts whose summary / description happen to contain
-          # double quotes (which is most of them once template expansion
-          # injects `{{ $value | humanize }}` output).
-          message: |-
-            {
-              "event_type": "monitoring-alert",
-              "client_payload": {
-                "alertname": {{ printf "%q" (index .Alerts 0).Labels.alertname }},
-                "severity": {{ printf "%q" (or (index .Alerts 0).Labels.severity "info") }},
-                "status": {{ printf "%q" .Status }},
-                "summary": {{ printf "%q" (or (index .Alerts 0).Annotations.summary "(no summary)") }},
-                "description": {{ printf "%q" (or (index .Alerts 0).Annotations.description "(no description)") }},
-                "instance": {{ printf "%q" (or (index .Alerts 0).Labels.instance "") }},
-                "environment": {{ printf "%q" (or (index .Alerts 0).Labels.environment "") }},
-                "value": {{ printf "%q" (or (index .Alerts 0).ValueString "") }},
-                "fired_at": "(see grafana_url)",
-                "grafana_url": {{ printf "%q" .ExternalURL }}
-              }
-            }
