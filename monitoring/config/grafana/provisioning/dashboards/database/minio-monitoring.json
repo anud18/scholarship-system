@@ -498,7 +498,7 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "sum(rate({__name__=~\"minio_s3_requests_rejected_.*\", environment=\"$environment\", vm=\"db-vm\"}[5m])) or vector(0)",
+          "expr": "sum(rate(minio_s3_requests_rejected_auth_total{environment=\"$environment\", vm=\"db-vm\"}[5m]) + rate(minio_s3_requests_rejected_header_total{environment=\"$environment\", vm=\"db-vm\"}[5m]) + rate(minio_s3_requests_rejected_invalid_total{environment=\"$environment\", vm=\"db-vm\"}[5m]) + rate(minio_s3_requests_rejected_timestamp_total{environment=\"$environment\", vm=\"db-vm\"}[5m])) or vector(0)",
           "legendFormat": "{{api}} - errors",
           "refId": "A"
         }
@@ -770,6 +770,6 @@
   "timezone": "browser",
   "title": "MinIO Monitoring",
   "uid": "minio-monitoring",
-  "version": 8,
+  "version": 9,
   "weekStart": ""
 }
