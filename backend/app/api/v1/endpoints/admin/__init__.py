@@ -26,6 +26,7 @@ from fastapi import APIRouter
 from .announcements import router as announcements_router
 from .applications import router as applications_router
 from .bank_verification import router as bank_verification_router
+from .cache import router as cache_router
 from .configurations import router as configurations_router
 from .dashboard import router as dashboard_router
 from .email_templates import router as email_templates_router
@@ -52,5 +53,6 @@ router.include_router(configurations_router, tags=["Admin - Configurations"])
 router.include_router(professors_router, tags=["Admin - Professors"])
 router.include_router(bank_verification_router, tags=["Admin - Bank Verification"])
 router.include_router(students_router, prefix="/students", tags=["Admin - Students"])
+router.include_router(cache_router, tags=["Admin - Cache"])
 
 __all__ = ["router"]

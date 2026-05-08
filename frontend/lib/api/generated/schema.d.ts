@@ -2346,6 +2346,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/cache/nycu-employees/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh Nycu Employee Cache
+         * @description Drop the cached NYCU employee directory.
+         *
+         *     The next /employees/all, /employees/search, or /employees/{no} call
+         *     will re-paginate the upstream directory. Useful right after a known
+         *     HR data change.
+         */
+        post: operations["refresh_nycu_employee_cache_api_v1_admin_cache_nycu_employees_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/scholarships": {
         parameters: {
             query?: never;
@@ -5875,8 +5899,13 @@ export interface paths {
         put?: never;
         /**
          * Generate Payment Roster
-         * @description 產生造冊
-         *     Generate payment roster
+         * @description 產生造冊 / Generate payment roster.
+         *
+         *     Wraps the generation in a Redis SET-NX-EX mutex so a double-click on
+         *     "產生造冊" can't produce two parallel rosters for the same
+         *     (scholarship_configuration_id, period_label). The 300s TTL also acts
+         *     as a safety net if the backend dies mid-generation — the lock auto-
+         *     expires and the next attempt succeeds.
          */
         post: operations["generate_payment_roster_api_v1_payment_rosters_generate_post"];
         delete?: never;
@@ -14137,6 +14166,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_nycu_employee_cache_api_v1_admin_cache_nycu_employees_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };
