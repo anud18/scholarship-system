@@ -9,7 +9,7 @@ services:
   # GRAFANA ALLOY - Unified Telemetry Collector
   # =========================================================================
   alloy:
-    image: grafana/alloy:latest
+    image: grafana/alloy:v1.11.0
     container_name: scholarship_alloy_staging_db
     volumes:
       - ./monitoring/config/alloy/staging-db-vm.alloy:/etc/alloy/config.alloy:ro
@@ -30,7 +30,7 @@ services:
   # NODE EXPORTER - System Metrics
   # =========================================================================
   node-exporter:
-    image: prom/node-exporter:latest
+    image: prom/node-exporter:v1.10.1
     container_name: node_exporter_staging_db
     command:
       - '--path.rootfs=/host'
@@ -54,7 +54,7 @@ services:
   # POSTGRESQL EXPORTER - Database Metrics
   # =========================================================================
   postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:latest
+    image: prometheuscommunity/postgres-exporter:v0.18.1
     container_name: postgres_exporter_staging
     environment:
       # postgres in docker-compose.staging-db.yml runs postgres:15-alpine

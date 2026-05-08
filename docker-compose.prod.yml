@@ -188,7 +188,7 @@ services:
 
   # Grafana Alloy - Unified telemetry collector
   alloy:
-    image: grafana/alloy:latest
+    image: grafana/alloy:v1.11.0
     container_name: scholarship_alloy_prod_ap
     volumes:
       - ./monitoring/config/alloy/prod-ap-vm.alloy:/etc/alloy/config.alloy:ro
@@ -209,7 +209,7 @@ services:
 
   # Node Exporter - System metrics
   node-exporter:
-    image: prom/node-exporter:latest
+    image: prom/node-exporter:v1.10.1
     container_name: node_exporter_prod_ap
     command:
       - '--path.rootfs=/host'
@@ -234,7 +234,7 @@ services:
   # and monitor Docker containers. This is a known requirement for cAdvisor.
   # Security: Ensure this service is not exposed to the public internet.
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:latest
+    image: gcr.io/cadvisor/cadvisor:v0.54.2
     container_name: cadvisor_prod_ap
     privileged: true
     devices:
@@ -258,7 +258,7 @@ services:
 
   # Nginx Prometheus Exporter
   nginx-exporter:
-    image: nginx/nginx-prometheus-exporter:latest
+    image: nginx/nginx-prometheus-exporter:1.5.0
     container_name: nginx_exporter_prod_ap
     command:
       - '-nginx.scrape-uri=http://nginx:80/nginx_status'
@@ -277,7 +277,7 @@ services:
 
   # Redis Exporter
   redis-exporter:
-    image: oliver006/redis_exporter:latest
+    image: oliver006/redis_exporter:v1.79.0
     container_name: redis_exporter_prod_ap
     command:
       - "-redis.addr=redis:6379"
