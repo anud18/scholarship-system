@@ -70,7 +70,6 @@ import {
 } from "lucide-react";
 import { getTranslation } from "@/lib/i18n";
 import { toast } from "sonner";
-import { apiClient } from "@/lib/api";
 import { exportRankingExcel } from "@/lib/api/modules/college";
 import * as XLSX from "xlsx";
 import { ApplicationReviewDialog } from "@/components/common/ApplicationReviewDialog";

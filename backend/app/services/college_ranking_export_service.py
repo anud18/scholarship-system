@@ -50,12 +50,6 @@ class DynamicFieldSpec:
     display_order: int
 
 
-@dataclass(frozen=True)
-class SubTypeLabel:
-    code: str
-    label: str
-
-
 @dataclass
 class ExportRow:
     """One ranked application's data."""

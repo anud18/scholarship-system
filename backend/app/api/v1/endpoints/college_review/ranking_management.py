@@ -1113,10 +1113,12 @@ async def export_ranking_excel(
     if ranking is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到該學院排序資料")
 
-    # 2. Authorization — admin OK; college users must share creator's college_code
+    # 2. Authorization — admin OK; college users must share creator's college_code.
+    # Both codes must be non-empty strings; empty strings are not a valid match.
     if current_user.role not in (UserRole.admin, UserRole.super_admin):
-        creator_college = getattr(ranking.creator, "college_code", None)
-        if not creator_college or creator_college != current_user.college_code:
+        creator_college = (getattr(ranking.creator, "college_code", None) or "").strip()
+        user_college = (current_user.college_code or "").strip()
+        if not creator_college or not user_college or creator_college != user_college:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限匯出此學院之資料")
 
     # 3. Load dynamic text fields flagged for export
@@ -1219,7 +1221,7 @@ async def export_ranking_excel(
         else (getattr(ranking.creator, "college_code", None) or "全校")
     )
     base_filename = f"{ranking.academic_year}學年度{scholarship_name}學生資料彙整表_{college_label}.xlsx"
-    encoded = _url_quote(base_filename)
+    encoded = _url_quote(base_filename, safe="")
 
     # 7. Render workbook
     service = CollegeRankingExportService()
