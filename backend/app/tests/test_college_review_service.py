@@ -14,7 +14,7 @@ import pytest
 
 from app.core.exceptions import BusinessLogicError, NotFoundError
 from app.models.application import Application
-from app.models.college_review import CollegeRanking, CollegeRankingItem, CollegeReview
+from app.models.college_review import CollegeRanking, CollegeRankingItem
 from app.services.college_review_service import (
     CollegeReviewError,
     CollegeReviewService,

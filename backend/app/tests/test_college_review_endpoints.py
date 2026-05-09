@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 
 from app.core.exceptions import NotFoundError
 from app.models.application import Application
-from app.models.college_review import CollegeReview
+from app.models.college_review import CollegeRanking  # CollegeReview removed in schema cleanup
 from app.models.user import EmployeeStatus, User, UserRole, UserType
 from app.services.college_review_service import CollegeReviewService
 

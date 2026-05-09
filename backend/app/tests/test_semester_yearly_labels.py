@@ -15,7 +15,7 @@ import pytest
 from app.models.application import Application
 from app.models.enums import Semester
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
-from app.utils.academic_period import format_academic_term
+from app.utils.academic_period import format_academic_period as format_academic_term  # renamed in utils refactor
 
 # ---- Application.get_semester_label ----------------------------------------
 

@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -37,7 +37,7 @@ from app.db.base_class import Base  # Use the correct Base class that models use
 from app.db.deps import get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.application import Application, ApplicationStatus  # noqa: E402
-from app.models.scholarship import ScholarshipType  # noqa: E402
+from app.models.scholarship import ScholarshipType, SubTypeSelectionMode  # noqa: E402
 from app.models.user import User, UserRole, UserType  # noqa: E402
 
 # Create test engines - use sync only for service tests
@@ -114,7 +114,7 @@ async def client(db: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 
     app.dependency_overrides[get_db] = override_get_db
 
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
     app.dependency_overrides.clear()
@@ -175,12 +175,6 @@ async def test_scholarship(db: AsyncSession) -> ScholarshipType:
         code="test_scholarship",
         name="Test Academic Excellence Scholarship",
         description="Test scholarship for academic excellence",
-        is_active=True,
-        is_application_period=True,
-        category="undergraduate_freshman",
-        eligible_student_types=["undergraduate"],
-        max_ranking_percent=10.0,
-        gpa_requirement=3.8,
     )
     db.add(scholarship)
     await db.commit()
@@ -194,6 +188,7 @@ async def test_application(db: AsyncSession, test_user: User, test_scholarship: 
     application = Application(
         user_id=test_user.id,
         scholarship_type_id=test_scholarship.id,
+        sub_type_selection_mode=SubTypeSelectionMode.single,
         status=ApplicationStatus.draft.value,
         app_id="TEST-2024-123456",
         academic_year=2024,
