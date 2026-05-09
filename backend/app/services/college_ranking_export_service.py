@@ -31,6 +31,7 @@ STATIC_HEADERS: List[str] = [
     "註冊入學日期",
     "學號",
     "學生身分證字號",
+    "學生匯款帳號",
     "學生E-mail",
 ]
 
@@ -59,6 +60,7 @@ class ExportRow:
 
     rank_position: int
     application: Any  # Duck-typed: needs sub_type_preferences, sub_scholarship_type, student_data, submitted_form_data
+    bank_account: Optional[str] = None  # 郵局帳號 (from user_profiles.account_number)
 
 
 class CollegeRankingExportService:
@@ -145,7 +147,8 @@ class CollegeRankingExportService:
         )
         ws.cell(row=excel_row, column=13, value=self._safe_str(sd.get("std_stdcode")))
         ws.cell(row=excel_row, column=14, value=self._safe_str(sd.get("std_pid")))
-        ws.cell(row=excel_row, column=15, value=self._safe_str(sd.get("com_email")))
+        ws.cell(row=excel_row, column=15, value=self._safe_str(row.bank_account))
+        ws.cell(row=excel_row, column=16, value=self._safe_str(sd.get("com_email")))
 
     def _safe_str(self, value: Any) -> str:
         if value is None:

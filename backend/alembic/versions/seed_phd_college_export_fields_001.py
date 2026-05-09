@@ -53,7 +53,11 @@ def upgrade() -> None:
         )
     )
 
-    # 2. Insert missing dynamic fields (idempotent via ON CONFLICT).
+    # 2. Insert the missing student_address dynamic field (idempotent via ON CONFLICT).
+    # NOTE: 學生匯款帳號 is intentionally NOT seeded as a dynamic field — that
+    # value already lives on user_profiles.account_number (collected by the
+    # application wizard's bank-account step) and is rendered as a STATIC
+    # column by CollegeRankingExportService.
     new_fields = [
         {
             "scholarship_type": "phd",
@@ -69,21 +73,6 @@ def upgrade() -> None:
             "is_active": True,
             "include_in_college_export": True,
             "export_column_label": "學生通訊地址",
-        },
-        {
-            "scholarship_type": "phd",
-            "field_name": "bank_account",
-            "field_label": "學生匯款帳號",
-            "field_label_en": "Student Bank Account",
-            "field_type": "text",
-            "is_required": True,
-            "placeholder": "EX:277506027171 請提供郵局帳戶",
-            "placeholder_en": "e.g., 277506027171 (please provide a Chunghwa Post account)",
-            "max_length": 50,
-            "display_order": 4,
-            "is_active": True,
-            "include_in_college_export": True,
-            "export_column_label": "學生匯款帳號",
         },
     ]
 
@@ -131,7 +120,7 @@ def downgrade() -> None:
             """
             DELETE FROM application_fields
              WHERE scholarship_type = 'phd'
-               AND field_name IN ('student_address', 'bank_account')
+               AND field_name = 'student_address'
             """
         )
     )

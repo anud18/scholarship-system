@@ -27,6 +27,7 @@ from app.models.college_review import CollegeRanking, CollegeRankingItem
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.student import Department
 from app.models.user import User, UserRole
+from app.models.user_profile import UserProfile
 from app.schemas.college_review import RankingImportItem, RankingOrderUpdate, RankingUpdate
 from app.schemas.response import ApiResponse
 from app.services.college_ranking_export_service import (
@@ -1149,10 +1150,27 @@ async def export_ranking_excel(
             if cfg.sub_type_code and cfg.name:
                 sub_type_labels[cfg.sub_type_code] = cfg.name
 
-    # 5. Build export rows
+    # 5. Bulk-load 郵局帳號 (user_profiles.account_number) for the applicants in
+    # this ranking. The bank account lives on the user's profile (collected by
+    # the application wizard), NOT on submitted_form_data — so we fetch it
+    # alongside the ranking rows and hand it to ExportRow.
     items_sorted = sorted(ranking.items or [], key=lambda x: x.rank_position)
+    user_ids = {item.application.user_id for item in items_sorted if item.application is not None}
+    profile_account_by_user: dict[int, str] = {}
+    if user_ids:
+        profile_stmt = select(UserProfile.user_id, UserProfile.account_number).where(
+            UserProfile.user_id.in_(user_ids)
+        )
+        for uid, acct in (await db.execute(profile_stmt)).all():
+            if acct:
+                profile_account_by_user[uid] = acct
+
     export_rows = [
-        ExportRow(rank_position=item.rank_position, application=item.application)
+        ExportRow(
+            rank_position=item.rank_position,
+            application=item.application,
+            bank_account=profile_account_by_user.get(item.application.user_id),
+        )
         for item in items_sorted
         if item.application is not None
     ]
