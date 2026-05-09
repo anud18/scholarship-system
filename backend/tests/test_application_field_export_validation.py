@@ -12,7 +12,7 @@ def _create_payload(**overrides):
     base = {
         "scholarship_type": "phd",
         "field_name": "master_school",
-        "field_label": "碑士畢業學校",
+        "field_label": "碩士畢業學校",
         "field_type": "text",
     }
     base.update(overrides)
