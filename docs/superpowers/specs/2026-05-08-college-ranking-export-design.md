@@ -71,21 +71,27 @@ def downgrade():
 | # | Header | Source |
 |---|---|---|
 | 1 | NO. | row index (1-based) |
-| 2 | 學院初審會議之學院排序 | `CollegeRankingItem.final_rank` ?? `preliminary_rank` ?? `""` |
+| 2 | 學院初審會議之學院排序 | `CollegeRankingItem.rank_position` (single field; the model has no preliminary/final split) |
 | 3 | 申請獎學金類別 | rendered from `application.sub_type_preferences` (see below) |
 | 4 | 學院 | `student_data.trm_academyname` |
 | 5 | 系所 | `student_data.trm_depname` |
-| 6 | 年級 | `((trm_termcount or 0) + 1) // 2`; empty when `trm_termcount` is None |
-| 7 | 學生中文姓名 | `student_data.std_cname` |
-| 8 | 學生英文姓名 | `student_data.std_ename` |
-| 9 | 國籍 | `student_data.std_nation` |
-| 10 | 性別 | `1→"男"`, `2→"女"`, otherwise `""` |
-| 11 | 註冊入學日期 | `f"{std_enrollyear}.{9 if std_enrollterm==1 else 2}.1"`; empty when `std_enrollyear` is None |
-| 12 | 學號 | `student_data.std_stdcode` |
-| 13 | 學生身分證字號 | `student_data.std_pid` |
-| 14 | 學生 E-mail | `student_data.com_email` |
+| 6 | 年級 | `ceil(trm_termcount / 2)`; empty when `trm_termcount` is None or non-positive |
+| 7 | 是否為逕博學生 | `std_enrolltype` ∈ {8, 9, 10, 11} → `是`; other valid codes → `否`; None/non-numeric → `""` |
+| 8 | 學生中文姓名 | `student_data.std_cname` |
+| 9 | 學生英文姓名 | `student_data.std_ename` |
+| 10 | 國籍 | `student_data.std_nation` |
+| 11 | 性別 | `std_sex == 1 → 男`, `2 → 女`, otherwise `""` |
+| 12 | 註冊入學日期 | `f"{std_enrollyear}.{9 if std_enrollterm==1 else 2}.1"`; empty when `std_enrollyear` is None |
+| 13 | 學號 | `student_data.std_stdcode` |
+| 14 | 學生身分證字號 | `student_data.std_pid` |
+| 15 | 學生匯款帳號 | `user_profiles.account_number` (郵局帳號 14 碼; collected by the wizard's bank-account step, NOT a dynamic form field) |
+| 16 | 學生 E-mail | `student_data.com_email` |
+| 17 | 學生通訊地址 | `student_data.com_commadd` (from SIS API, not a dynamic field) |
+| 18 | 指導教授姓名 | `professor_student_relationships` ⨯ `users.name` where `relationship_type ∈ {advisor, co_advisor} AND is_active`; multiple advisors joined with 「、」. Falls back to `user_profiles.advisor_name` when no relationship rows exist. |
 
-**Dynamic columns** (appended after column 14):
+**Why some columns are static rather than dynamic** — the four columns 學生匯款帳號 / 學生通訊地址 / 是否為逕博學生 / 指導教授姓名 all have authoritative sources elsewhere in the system (user_profile, SIS API, or relationships table). Modelling them as dynamic ApplicationFields would force students into duplicate data entry and would leave the export columns blank in practice, since no admin would flag a field that students never fill.
+
+**Dynamic columns** (appended after column 18):
 
 Filter:
 ```python
@@ -202,29 +208,34 @@ Sub-type Chinese labels come from `ScholarshipSubTypeConfig.name` keyed by `sub_
 
 ## Migration & rollout
 
-1. Alembic migration adds the two columns (idempotent guards in place).
-2. Backend service + endpoint shipped; existing frontend export keeps working until the swap.
-3. Frontend swap to new endpoint, remove `xlsx`-based logic, regen OpenAPI types.
-4. Admin UI changes ship together with the schema changes.
-5. No data backfill needed — every field defaults to `include_in_college_export=false`, so the new export starts with only the static 14 columns until admins opt fields in.
+1. Alembic migration `add_college_export_flag_001` adds the two ApplicationField columns (idempotent guards in place).
+2. Alembic migration `seed_phd_college_export_001` flips `include_in_college_export = true` on the existing PhD dynamic fields (`master_school_info`, `contact_phone` with `export_column_label='學生手機'`) so a fresh dev env produces the sample-matching layout out of the box.
+3. Backend service + endpoint shipped; existing frontend export keeps working until the swap.
+4. Frontend swap to new endpoint, remove in-browser `xlsx` logic, regen OpenAPI types.
+5. Admin UI changes ship together with the schema changes.
 
-## Files changed (anticipated)
+## Files changed (actual)
 
 **New:**
-- `backend/alembic/versions/{hash}_add_college_export_flag_to_application_field.py`
+- `backend/alembic/versions/add_college_export_flag_001.py`
+- `backend/alembic/versions/seed_phd_college_export_fields_001.py`
 - `backend/app/services/college_ranking_export_service.py`
 - `backend/tests/test_college_ranking_export_service.py`
 - `backend/tests/test_application_field_export_validation.py`
-- `backend/tests/test_college_ranking_export_endpoint.py`
+- `frontend/lib/api/modules/college.ts` (helper added to existing module — not a new file as the plan suggested)
 
 **Modified:**
 - `backend/app/models/application_field.py`
 - `backend/app/schemas/application_field.py`
-- `backend/app/api/v1/endpoints/college_review/ranking_management.py` (add export endpoint)
+- `backend/app/api/v1/endpoints/application_fields.py` (pre-flight guard for partial updates)
+- `backend/app/api/v1/endpoints/college_review/ranking_management.py` (export endpoint + bulk-load `UserProfile.account_number`, `UserProfile.advisor_name`, `ProfessorStudentRelationship`)
 - `frontend/components/application-field-form.tsx`
 - `frontend/components/college-ranking-table.tsx`
-- `frontend/lib/api/modules/college-review.ts`
+- `frontend/lib/api/types.ts` (hand-written types extended)
 - `frontend/lib/api/generated/schema.d.ts` (regenerated)
+
+**Deferred / not built:**
+- `backend/tests/test_college_ranking_export_endpoint.py` — endpoint integration tests blocked by pre-existing scaffolding gap in `backend/app/tests/conftest.py` (`aiosqlite` missing; outdated `httpx.AsyncClient(app=...)` API). Not in scope for this feature.
 
 ## Open questions / decisions deferred
 
