@@ -414,6 +414,29 @@ class ReviewService:
         application.review_stage = new_stage
         await self.db.flush()
 
+    async def _awaits_further_required_review(
+        self, application: Application, latest_reviewer_role: Optional[str]
+    ) -> bool:
+        """Whether the configured pipeline still expects another required reviewer.
+
+        Issue #182: a single professor "approve" used to flip ``status`` to
+        ``approved`` even when ``requires_college_review=True``, which both
+        bypassed college review and locked the student out of ``withdraw``
+        (only ``submitted``/``under_review`` are withdrawable). Returning
+        True here keeps the app at ``under_review`` until the college (or
+        any later required role) signs off.
+        """
+        if not latest_reviewer_role or not application.scholarship_configuration_id:
+            return False
+        from app.models.scholarship import ScholarshipConfiguration
+
+        config = await self.db.get(ScholarshipConfiguration, application.scholarship_configuration_id)
+        if not config:
+            return False
+        # College is the only post-professor required-reviewer surface today.
+        # Add chained gates here as the pipeline grows (admin, finance, …).
+        return latest_reviewer_role == "professor" and bool(config.requires_college_review)
+
     async def update_application_status(self, application_id: int) -> str:
         """
         根據子項目累積狀態更新 Application 狀態和階段
@@ -440,15 +463,8 @@ class ReviewService:
         all_approved = all(status["status"] == "approved" for status in subtype_status.values())
         all_rejected = all(status["status"] == "rejected" for status in subtype_status.values())
 
-        if all_approved:
-            application.status = ApplicationStatus.approved.value
-        elif all_rejected:
-            application.status = ApplicationStatus.rejected.value
-        else:
-            # 部分同意
-            application.status = ApplicationStatus.partial_approved.value
-
-        # 更新審核階段（基於最新審查者角色）
+        # Determine latest reviewer role first — used both for review_stage
+        # below AND for gating the terminal status transitions (issue #182).
         stmt = (
             select(ApplicationReview)
             .where(ApplicationReview.application_id == application_id)
@@ -458,20 +474,39 @@ class ReviewService:
         result = await self.db.execute(stmt)
         latest_review = result.scalar_one_or_none()
 
+        latest_reviewer_role: Optional[str] = None
         if latest_review and latest_review.reviewer:
-            reviewer_role = (
+            latest_reviewer_role = (
                 latest_review.reviewer.role.value
                 if hasattr(latest_review.reviewer.role, "value")
                 else str(latest_review.reviewer.role).lower()
             )
 
-            # 根據審查者角色更新階段
-            if reviewer_role == "professor":
-                application.review_stage = ReviewStage.professor_reviewed.value
-            elif reviewer_role == "college":
-                application.review_stage = ReviewStage.college_reviewed.value
-            elif reviewer_role in ["admin", "super_admin"]:
-                application.review_stage = ReviewStage.admin_reviewed.value
+        awaits_further = await self._awaits_further_required_review(application, latest_reviewer_role)
+
+        if all_approved:
+            application.status = (
+                ApplicationStatus.under_review.value if awaits_further else ApplicationStatus.approved.value
+            )
+        elif all_rejected:
+            # Outright rejection is terminal regardless of remaining reviewers —
+            # if every sub-type is rejected, no later role can rescue it.
+            application.status = ApplicationStatus.rejected.value
+        else:
+            # 部分同意 — also gated: if college hasn't weighed in yet, we
+            # shouldn't lock a partial outcome in (and the student should
+            # still be able to withdraw).
+            application.status = (
+                ApplicationStatus.under_review.value if awaits_further else ApplicationStatus.partial_approved.value
+            )
+
+        # 根據審查者角色更新階段
+        if latest_reviewer_role == "professor":
+            application.review_stage = ReviewStage.professor_reviewed.value
+        elif latest_reviewer_role == "college":
+            application.review_stage = ReviewStage.college_reviewed.value
+        elif latest_reviewer_role in ("admin", "super_admin"):
+            application.review_stage = ReviewStage.admin_reviewed.value
 
         return application.status
 
