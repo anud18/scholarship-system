@@ -26,6 +26,7 @@ from app.models.application_field import ApplicationField, FieldType
 from app.models.college_review import CollegeRanking, CollegeRankingItem
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.student import Department
+from app.models.professor_student import ProfessorStudentRelationship
 from app.models.user import User, UserRole
 from app.models.user_profile import UserProfile
 from app.schemas.college_review import RankingImportItem, RankingOrderUpdate, RankingUpdate
@@ -1150,26 +1151,54 @@ async def export_ranking_excel(
             if cfg.sub_type_code and cfg.name:
                 sub_type_labels[cfg.sub_type_code] = cfg.name
 
-    # 5. Bulk-load 郵局帳號 (user_profiles.account_number) for the applicants in
-    # this ranking. The bank account lives on the user's profile (collected by
-    # the application wizard), NOT on submitted_form_data — so we fetch it
-    # alongside the ranking rows and hand it to ExportRow.
+    # 5. Bulk-load 郵局帳號 (user_profiles.account_number) and 指導教授姓名 for
+    # the applicants in this ranking. Bank account lives on user_profiles
+    # (collected by the application wizard's bank-account step). Advisor names
+    # come from professor_student_relationships JOIN users; if no structured
+    # relationship rows exist, fall back to user_profiles.advisor_name.
     items_sorted = sorted(ranking.items or [], key=lambda x: x.rank_position)
     user_ids = {item.application.user_id for item in items_sorted if item.application is not None}
+
     profile_account_by_user: dict[int, str] = {}
+    profile_advisor_by_user: dict[int, str] = {}
     if user_ids:
-        profile_stmt = select(UserProfile.user_id, UserProfile.account_number).where(
-            UserProfile.user_id.in_(user_ids)
-        )
-        for uid, acct in (await db.execute(profile_stmt)).all():
+        profile_stmt = select(
+            UserProfile.user_id, UserProfile.account_number, UserProfile.advisor_name
+        ).where(UserProfile.user_id.in_(user_ids))
+        for uid, acct, adv in (await db.execute(profile_stmt)).all():
             if acct:
                 profile_account_by_user[uid] = acct
+            if adv:
+                profile_advisor_by_user[uid] = adv
+
+    advisor_names_by_user: dict[int, list[str]] = {uid: [] for uid in user_ids}
+    if user_ids:
+        rel_stmt = (
+            select(ProfessorStudentRelationship.student_id, User.name)
+            .join(User, User.id == ProfessorStudentRelationship.professor_id)
+            .where(
+                ProfessorStudentRelationship.student_id.in_(user_ids),
+                ProfessorStudentRelationship.is_active.is_(True),
+                ProfessorStudentRelationship.relationship_type.in_(["advisor", "co_advisor"]),
+            )
+            .order_by(ProfessorStudentRelationship.student_id, User.name)
+        )
+        for student_id, prof_name in (await db.execute(rel_stmt)).all():
+            if prof_name:
+                advisor_names_by_user[student_id].append(prof_name)
+
+    def _advisor_for(user_id: int) -> Optional[str]:
+        names = advisor_names_by_user.get(user_id) or []
+        if names:
+            return "、".join(names)
+        return profile_advisor_by_user.get(user_id)
 
     export_rows = [
         ExportRow(
             rank_position=item.rank_position,
             application=item.application,
             bank_account=profile_account_by_user.get(item.application.user_id),
+            advisor_names=_advisor_for(item.application.user_id),
         )
         for item in items_sorted
         if item.application is not None
