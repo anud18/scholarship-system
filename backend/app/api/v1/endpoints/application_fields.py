@@ -17,7 +17,7 @@ from app.core.cache import cached, invalidate
 from app.core.deps import get_db
 from app.core.path_security import validate_upload_file
 from app.core.security import get_current_user, require_admin
-from app.models.application_field import ApplicationDocument
+from app.models.application_field import ApplicationDocument, ApplicationField, FieldType
 from app.models.user import User
 from app.schemas.application_field import (
     ApplicationDocumentCreate,
@@ -72,6 +72,32 @@ async def update_field(
 ):
     """Update an application field"""
     service = ApplicationFieldService(db)
+
+    # Pre-fetch the existing row so we can re-check the export flag against
+    # the post-merge field_type. The validator on ApplicationFieldUpdate can't
+    # see the existing DB value when field_type is omitted from the payload.
+    existing_query = select(ApplicationField).where(ApplicationField.id == field_id)
+    existing_result = await db.execute(existing_query)
+    existing_field = existing_result.scalar_one_or_none()
+
+    if not existing_field:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application field not found")
+
+    update_payload = field_data.model_dump(exclude_unset=True)
+    merged_field_type = update_payload.get("field_type", existing_field.field_type)
+    merged_include_flag = update_payload.get(
+        "include_in_college_export",
+        existing_field.include_in_college_export,
+    )
+
+    # Re-check export flag against the merged field_type (validator on the
+    # update schema can't see the existing DB value when field_type is omitted).
+    if merged_include_flag and merged_field_type != FieldType.TEXT.value:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="include_in_college_export 僅支援 field_type='text'",
+        )
+
     field = await service.update_field(field_id, field_data, current_user.id)
 
     if not field:

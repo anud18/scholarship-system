@@ -923,6 +923,8 @@ export interface ApplicationField {
   help_text_en?: string;
   validation_rules?: Record<string, any>;
   conditional_rules?: Record<string, any>;
+  include_in_college_export?: boolean;
+  export_column_label?: string | null;
   created_at: string;
   updated_at: string;
   created_by?: number;
@@ -954,6 +956,8 @@ export interface ApplicationField {
   help_text_en?: string;
   validation_rules?: Record<string, any>;
   conditional_rules?: Record<string, any>;
+  include_in_college_export?: boolean;
+  export_column_label?: string | null;
   created_at: string;
   updated_at: string;
   created_by?: number;
@@ -984,6 +988,8 @@ export interface ApplicationFieldCreate {
   help_text_en?: string;
   validation_rules?: Record<string, any>;
   conditional_rules?: Record<string, any>;
+  include_in_college_export?: boolean;
+  export_column_label?: string | null;
 }
 
 export interface ApplicationFieldUpdate {
@@ -1004,6 +1010,8 @@ export interface ApplicationFieldUpdate {
   help_text_en?: string;
   validation_rules?: Record<string, any>;
   conditional_rules?: Record<string, any>;
+  include_in_college_export?: boolean;
+  export_column_label?: string | null;
 }
 
 export interface ApplicationDocument {

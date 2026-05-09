@@ -4594,6 +4594,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/college-review/rankings/{ranking_id}/export-excel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Ranking Excel
+         * @description Generate the 學生資料彙整表 Excel for a ranking.
+         *
+         *     Auth: admin/super_admin OR a college user whose `college_code` matches the
+         *     ranking creator's `college_code` (rankings are scoped per college via creator).
+         */
+        get: operations["export_ranking_excel_api_v1_college_review_rankings__ranking_id__export_excel_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/college-review/quota-status": {
         parameters: {
             query?: never;
@@ -7272,6 +7295,17 @@ export interface components {
              * @description Conditional rules
              */
             conditional_rules?: Record<string, never> | null;
+            /**
+             * Include In College Export
+             * @description Whether this field appears in the college Excel export
+             * @default false
+             */
+            include_in_college_export: boolean;
+            /**
+             * Export Column Label
+             * @description Override label for the college export column header
+             */
+            export_column_label?: string | null;
         };
         /**
          * ApplicationFieldUpdate
@@ -7312,6 +7346,10 @@ export interface components {
             validation_rules?: Record<string, never> | null;
             /** Conditional Rules */
             conditional_rules?: Record<string, never> | null;
+            /** Include In College Export */
+            include_in_college_export?: boolean | null;
+            /** Export Column Label */
+            export_column_label?: string | null;
         };
         /**
          * ApplicationFormData
@@ -18027,6 +18065,37 @@ export interface operations {
                 "application/json": components["schemas"]["RankingImportItem"][];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_ranking_excel_api_v1_college_review_rankings__ranking_id__export_excel_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ranking_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

@@ -469,6 +469,17 @@ export function createCollegeApi() {
     },
 
     /**
+     * Download the 學生資料彙整表 Excel for a ranking (backend-generated).
+     * Endpoint: GET /api/v1/college-review/rankings/{ranking_id}/export-excel
+     * Returns the binary blob and the filename parsed from Content-Disposition.
+     */
+    exportRankingExcel: async (
+      rankingId: number
+    ): Promise<{ blob: Blob; filename: string }> => {
+      return exportRankingExcel(rankingId);
+    },
+
+    /**
      * Download application materials export package as ZIP
      */
     exportPackage: async (params: {
@@ -508,4 +519,55 @@ export function createCollegeApi() {
       return { blob, filename };
     },
   };
+}
+
+/**
+ * Download the 學生資料彙整表 Excel for a college ranking.
+ *
+ * Endpoint: GET /api/v1/college-review/rankings/{ranking_id}/export-excel
+ *
+ * Returns the binary xlsx as a Blob along with the filename extracted from
+ * the `Content-Disposition: attachment; filename*=UTF-8''<encoded>` header.
+ * Falls back to `學生資料彙整表_${rankingId}.xlsx` if the header is missing.
+ */
+export async function exportRankingExcel(
+  rankingId: number
+): Promise<{ blob: Blob; filename: string }> {
+  const token = typedClient.getToken();
+  const baseURL =
+    typeof window !== "undefined"
+      ? ""
+      : process.env.INTERNAL_API_URL || "http://localhost:8000";
+
+  const response = await fetch(
+    `${baseURL}/api/v1/college-review/rankings/${rankingId}/export-excel`,
+    {
+      method: "GET",
+      credentials: "include",
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    }
+  );
+
+  if (!response.ok) {
+    let message = "無法匯出排名資料";
+    try {
+      const errorData = await response.json();
+      message = errorData?.detail || errorData?.error || message;
+    } catch {
+      // Non-JSON error body — keep default message.
+    }
+    throw new Error(message);
+  }
+
+  // Extract filename from Content-Disposition header (RFC 5987 UTF-8 form).
+  const disposition = response.headers.get("content-disposition") || "";
+  const filenameMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  const filename = filenameMatch
+    ? decodeURIComponent(filenameMatch[1].trim())
+    : `學生資料彙整表_${rankingId}.xlsx`;
+
+  const blob = await response.blob();
+  return { blob, filename };
 }

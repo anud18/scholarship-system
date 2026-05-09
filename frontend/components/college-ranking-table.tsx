@@ -70,7 +70,7 @@ import {
 } from "lucide-react";
 import { getTranslation } from "@/lib/i18n";
 import { toast } from "sonner";
-import { apiClient } from "@/lib/api";
+import { exportRankingExcel } from "@/lib/api/modules/college";
 import * as XLSX from "xlsx";
 import { ApplicationReviewDialog } from "@/components/common/ApplicationReviewDialog";
 import { Application as ApplicationType, User } from "@/lib/api";
@@ -751,66 +751,22 @@ export function CollegeRankingTable({
     }
   };
 
-  const handleExportRanking = () => {
+  const handleExportRanking = async () => {
+    if (!rankingId) {
+      toast.error("缺少排名 ID，無法匯出");
+      return;
+    }
     try {
-      // Prepare export data with all columns
-      const exportData = localApplications.map(app => {
-        // Format eligible subtypes
-        const eligibleSubtypes = app.eligible_subtypes
-          ? app.eligible_subtypes.join(", ")
-          : "-";
-
-        // Format status
-        let statusText = "";
-        if (app.status === "rejected") {
-          statusText = locale === "zh" ? "駁回" : "Rejected";
-        } else if (app.is_allocated) {
-          statusText = locale === "zh" ? "獲分配" : "Allocated";
-        } else {
-          statusText = locale === "zh" ? "未分配" : "Not Allocated";
-        }
-
-        return {
-          排名: app.rank_position,
-          學號: app.student_id || "",
-          姓名: app.student_name || "",
-          國籍: app.student_data?.std_nation || "-",
-          身分別: formatIdentityLabel(app.student_data?.std_identity ?? null, "zh"),
-          學院: app.academy_name || "-",
-          系所: app.department_name || "-",
-          獎學金類別: eligibleSubtypes,
-          狀態: statusText,
-        };
-      });
-
-      // Create worksheet
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
-
-      // Set column widths for better readability
-      worksheet["!cols"] = [
-        { wch: 8 }, // 排名
-        { wch: 15 }, // 學號
-        { wch: 20 }, // 姓名
-        { wch: 15 }, // 國籍
-        { wch: 15 }, // 身分別
-        { wch: 20 }, // 學院
-        { wch: 25 }, // 系所
-        { wch: 30 }, // 獎學金類別
-        { wch: 12 }, // 狀態
-      ];
-
-      // Create workbook
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "排名匯出");
-
-      // Generate filename with timestamp
-      const timestamp = new Date().toISOString().split("T")[0];
-      const filename = `排名匯出_${subTypeCode}_${academicYear}_${timestamp}.xlsx`;
-
-      // Download file
-      XLSX.writeFile(workbook, filename);
-
-      toast.success(`已匯出 ${exportData.length} 筆排名資料`);
+      const { blob, filename } = await exportRankingExcel(rankingId);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success(`已下載 ${filename}`);
     } catch (error) {
       console.error("Export error:", error);
       toast.error(error instanceof Error ? error.message : "無法匯出排名資料");
