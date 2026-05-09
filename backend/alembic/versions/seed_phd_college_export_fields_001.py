@@ -53,51 +53,12 @@ def upgrade() -> None:
         )
     )
 
-    # 2. Insert the missing student_address dynamic field (idempotent via ON CONFLICT).
-    # NOTE: 學生匯款帳號 is intentionally NOT seeded as a dynamic field — that
-    # value already lives on user_profiles.account_number (collected by the
-    # application wizard's bank-account step) and is rendered as a STATIC
-    # column by CollegeRankingExportService.
-    new_fields = [
-        {
-            "scholarship_type": "phd",
-            "field_name": "student_address",
-            "field_label": "學生通訊地址",
-            "field_label_en": "Student Mailing Address",
-            "field_type": "text",
-            "is_required": True,
-            "placeholder": "例:台北市北投區義理街3段5巷1號",
-            "placeholder_en": "e.g., No. 1, Lane 5, Sec. 3, Yili St., Beitou, Taipei",
-            "max_length": 200,
-            "display_order": 3,
-            "is_active": True,
-            "include_in_college_export": True,
-            "export_column_label": "學生通訊地址",
-        },
-    ]
-
-    for field in new_fields:
-        bind.execute(
-            sa.text(
-                """
-                INSERT INTO application_fields
-                    (scholarship_type, field_name, field_label, field_label_en,
-                     field_type, is_required, placeholder, placeholder_en,
-                     max_length, display_order, is_active,
-                     include_in_college_export, export_column_label)
-                VALUES
-                    (:scholarship_type, :field_name, :field_label, :field_label_en,
-                     :field_type, :is_required, :placeholder, :placeholder_en,
-                     :max_length, :display_order, :is_active,
-                     :include_in_college_export, :export_column_label)
-                ON CONFLICT (scholarship_type, field_name) DO UPDATE SET
-                    include_in_college_export = EXCLUDED.include_in_college_export,
-                    export_column_label = EXCLUDED.export_column_label,
-                    is_active = EXCLUDED.is_active
-                """
-            ),
-            field,
-        )
+    # NOTE: 學生匯款帳號 and 學生通訊地址 are NOT seeded as dynamic fields —
+    # the bank account lives on user_profiles.account_number (collected by
+    # the application wizard's bank-account step), and the address comes
+    # from the SIS API field student_data.com_commadd. Both are rendered as
+    # STATIC columns by CollegeRankingExportService.
+    # Only flag flips (above) are needed.
 
 
 def downgrade() -> None:
@@ -115,12 +76,4 @@ def downgrade() -> None:
         )
     )
 
-    bind.execute(
-        sa.text(
-            """
-            DELETE FROM application_fields
-             WHERE scholarship_type = 'phd'
-               AND field_name = 'student_address'
-            """
-        )
-    )
+    # No dynamic field rows to remove — only flag flips were applied in upgrade().

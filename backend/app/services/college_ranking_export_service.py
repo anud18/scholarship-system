@@ -33,6 +33,7 @@ STATIC_HEADERS: List[str] = [
     "學生身分證字號",
     "學生匯款帳號",
     "學生E-mail",
+    "學生通訊地址",
     "指導教授姓名",
 ]
 
@@ -151,7 +152,8 @@ class CollegeRankingExportService:
         ws.cell(row=excel_row, column=14, value=self._safe_str(sd.get("std_pid")))
         ws.cell(row=excel_row, column=15, value=self._safe_str(row.bank_account))
         ws.cell(row=excel_row, column=16, value=self._safe_str(sd.get("com_email")))
-        ws.cell(row=excel_row, column=17, value=self._safe_str(row.advisor_names))
+        ws.cell(row=excel_row, column=17, value=self._safe_str(sd.get("com_commadd")))
+        ws.cell(row=excel_row, column=18, value=self._safe_str(row.advisor_names))
 
     def _safe_str(self, value: Any) -> str:
         if value is None:

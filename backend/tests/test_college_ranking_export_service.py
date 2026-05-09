@@ -57,6 +57,7 @@ def _full_student_data() -> Dict[str, Any]:
         "trm_academyname": "工學院",
         "trm_depname": "土木工程學系",
         "com_email": "test@nycu.edu.tw",
+        "com_commadd": "新竹市東區大學路1001號",
     }
 
 
@@ -121,12 +122,13 @@ class TestStaticColumns:
         assert data[13] == "A123456789"
         assert data[14] == "277506027171"  # 學生匯款帳號 (from user_profile.account_number)
         assert data[15] == "test@nycu.edu.tw"
-        assert data[16] == "林教授、陳教授"  # 指導教授姓名 (joined when multiple)
+        assert data[16] == "新竹市東區大學路1001號"  # 學生通訊地址 (from student_data.com_commadd)
+        assert data[17] == "林教授、陳教授"  # 指導教授姓名 (joined when multiple)
 
     def test_header_row(self):
         rows = _build_workbook([])
         headers = rows[1]
-        assert headers[:17] == [
+        assert headers[:18] == [
             "NO.",
             "學院初審會議之學院排序",
             "申請獎學金類別",
@@ -143,6 +145,7 @@ class TestStaticColumns:
             "學生身分證字號",
             "學生匯款帳號",
             "學生E-mail",
+            "學生通訊地址",
             "指導教授姓名",
         ]
 
@@ -181,6 +184,20 @@ class TestStaticFieldEdgeCases:
     )
     def test_advisor_names_column(self, advisor_names, expected):
         rows = _build_workbook([_make_row(advisor_names=advisor_names)])
+        assert rows[2][17] == expected
+
+    @pytest.mark.parametrize(
+        "commadd,expected",
+        [
+            ("新竹市東區大學路1001號", "新竹市東區大學路1001號"),
+            ("台北市北投區義理街3段5巷1號", "台北市北投區義理街3段5巷1號"),
+            (None, ""),
+            ("", ""),
+        ],
+    )
+    def test_address_column(self, commadd, expected):
+        app = FakeApplication(student_data={"com_commadd": commadd})
+        rows = _build_workbook([_make_row(app=app)])
         assert rows[2][16] == expected
 
     @pytest.mark.parametrize(
@@ -234,8 +251,8 @@ class TestStaticFieldEdgeCases:
         # Static text columns should be "" not None. Indices map to:
         # 3=學院, 4=系所, 6=年級, 7=是否為逕博, 8=中文姓名, 9=英文姓名,
         # 12=註冊入學日期, 13=學號, 14=身分證, 15=匯款帳號 (None via default),
-        # 16=E-mail (col 17 = 指導教授, also defaults None -> "").
-        for idx in [3, 4, 6, 7, 8, 9, 12, 13, 14, 15, 16]:
+        # 16=E-mail, 17=通訊地址, 18=指導教授姓名 (default None -> "").
+        for idx in [3, 4, 6, 7, 8, 9, 12, 13, 14, 15, 16, 17]:
             assert data[idx] == "", f"col {idx} expected empty string, got {data[idx]!r}"
 
 
@@ -284,8 +301,8 @@ class TestDynamicColumns:
             )
         ]
         rows = _build_workbook([_make_row(app=app)], dynamic_fields=fields)
-        assert rows[1][17] == "碩士畢業學校"
-        assert rows[2][17] == "台大土木系"
+        assert rows[1][18] == "碩士畢業學校"
+        assert rows[2][18] == "台大土木系"
 
     def test_export_column_label_overrides_field_label(self):
         app = FakeApplication(submitted_form_data={"fields": {"phone": {"value": "0912345678"}}})
@@ -298,8 +315,8 @@ class TestDynamicColumns:
             )
         ]
         rows = _build_workbook([_make_row(app=app)], dynamic_fields=fields)
-        assert rows[1][17] == "學生手機"
-        assert rows[2][17] == "0912345678"
+        assert rows[1][18] == "學生手機"
+        assert rows[2][18] == "0912345678"
 
     def test_dynamic_fields_sorted_by_display_order(self):
         app = FakeApplication(
@@ -315,26 +332,26 @@ class TestDynamicColumns:
             DynamicFieldSpec("a_first", "First", None, display_order=10),
         ]
         rows = _build_workbook([_make_row(app=app)], dynamic_fields=fields)
-        assert rows[1][17:19] == ["First", "Second"]
-        assert rows[2][17:19] == ["A", "B"]
+        assert rows[1][18:20] == ["First", "Second"]
+        assert rows[2][18:20] == ["A", "B"]
 
     def test_missing_dynamic_value_renders_empty(self):
         app = FakeApplication(submitted_form_data={"fields": {}})
         fields = [DynamicFieldSpec("phone", "手機", None, display_order=1)]
         rows = _build_workbook([_make_row(app=app)], dynamic_fields=fields)
-        assert rows[2][17] == ""
+        assert rows[2][18] == ""
 
     def test_none_value_renders_empty(self):
         app = FakeApplication(submitted_form_data={"fields": {"phone": {"value": None}}})
         fields = [DynamicFieldSpec("phone", "手機", None, display_order=1)]
         rows = _build_workbook([_make_row(app=app)], dynamic_fields=fields)
-        assert rows[2][17] == ""
+        assert rows[2][18] == ""
 
     def test_non_string_value_coerced_to_string(self):
         app = FakeApplication(submitted_form_data={"fields": {"count": {"value": 42}}})
         fields = [DynamicFieldSpec("count", "次數", None, display_order=1)]
         rows = _build_workbook([_make_row(app=app)], dynamic_fields=fields)
-        assert rows[2][17] == "42"
+        assert rows[2][18] == "42"
 
 
 class TestEmptyRanking:
