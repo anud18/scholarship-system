@@ -26,8 +26,12 @@ jobs:
             Body: ${{ github.event.issue.body }}
 
       - name: Comment with AI summary
+        # Pass the AI response via env var rather than templating it into
+        # single quotes — apostrophes in the response (e.g. "repository's
+        # status") otherwise terminate the quoted string and break the
+        # shell command.
         run: |
-          gh issue comment $ISSUE_NUMBER --body '${{ steps.inference.outputs.response }}'
+          gh issue comment "$ISSUE_NUMBER" --body "$RESPONSE"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}

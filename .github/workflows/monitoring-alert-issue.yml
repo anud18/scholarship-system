@@ -81,6 +81,27 @@ jobs:
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Ensure dynamic labels exist
+        # gh issue create --label fails hard if the label doesn't already
+        # exist on the repo. The alert/env/severity values come from
+        # arbitrary Grafana payloads, so pre-create them on demand.
+        # `gh label create` returns non-zero if the label already exists,
+        # hence the `|| true` swallow.
+        if: github.event.client_payload.status == 'firing'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ALERT: ${{ github.event.client_payload.alertname }}
+          ENV: ${{ github.event.client_payload.environment }}
+          SEVERITY: ${{ github.event.client_payload.severity }}
+        run: |
+          for label in "alert:${ALERT:-unknown}" "env:${ENV:-unknown}" "severity:${SEVERITY:-warning}"; do
+            gh label create "$label" \
+              --repo "${{ github.repository }}" \
+              --color "ededed" \
+              --description "Auto-created by monitoring-alert workflow" \
+              2>/dev/null || true
+          done
+
       - name: Create new issue (no existing match, status=firing)
         if: steps.find.outputs.found != 'true' && github.event.client_payload.status == 'firing'
         env:
