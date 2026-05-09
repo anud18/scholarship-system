@@ -23,6 +23,7 @@ STATIC_HEADERS: List[str] = [
     "學院",
     "系所",
     "年級",
+    "是否為逕博學生",
     "學生中文姓名",
     "學生英文姓名",
     "國籍",
@@ -32,6 +33,10 @@ STATIC_HEADERS: List[str] = [
     "學生身分證字號",
     "學生E-mail",
 ]
+
+
+# std_enrolltype codes that indicate 逕讀博士 (direct-track PhD)
+DIRECT_PHD_ENROLLTYPE_CODES = {8, 9, 10, 11}
 
 
 @dataclass(frozen=True)
@@ -128,18 +133,19 @@ class CollegeRankingExportService:
         ws.cell(row=excel_row, column=4, value=self._safe_str(sd.get("trm_academyname")))
         ws.cell(row=excel_row, column=5, value=self._safe_str(sd.get("trm_depname")))
         ws.cell(row=excel_row, column=6, value=self._compute_grade(sd.get("trm_termcount")))
-        ws.cell(row=excel_row, column=7, value=self._safe_str(sd.get("std_cname")))
-        ws.cell(row=excel_row, column=8, value=self._safe_str(sd.get("std_ename")))
-        ws.cell(row=excel_row, column=9, value=self._safe_str(sd.get("std_nation")))
-        ws.cell(row=excel_row, column=10, value=self._render_gender(sd.get("std_sex")))
+        ws.cell(row=excel_row, column=7, value=self._render_direct_phd(sd.get("std_enrolltype")))
+        ws.cell(row=excel_row, column=8, value=self._safe_str(sd.get("std_cname")))
+        ws.cell(row=excel_row, column=9, value=self._safe_str(sd.get("std_ename")))
+        ws.cell(row=excel_row, column=10, value=self._safe_str(sd.get("std_nation")))
+        ws.cell(row=excel_row, column=11, value=self._render_gender(sd.get("std_sex")))
         ws.cell(
             row=excel_row,
-            column=11,
+            column=12,
             value=self._render_enrollment_date(sd.get("std_enrollyear"), sd.get("std_enrollterm")),
         )
-        ws.cell(row=excel_row, column=12, value=self._safe_str(sd.get("std_stdcode")))
-        ws.cell(row=excel_row, column=13, value=self._safe_str(sd.get("std_pid")))
-        ws.cell(row=excel_row, column=14, value=self._safe_str(sd.get("com_email")))
+        ws.cell(row=excel_row, column=13, value=self._safe_str(sd.get("std_stdcode")))
+        ws.cell(row=excel_row, column=14, value=self._safe_str(sd.get("std_pid")))
+        ws.cell(row=excel_row, column=15, value=self._safe_str(sd.get("com_email")))
 
     def _safe_str(self, value: Any) -> str:
         if value is None:
@@ -152,6 +158,13 @@ class CollegeRankingExportService:
         if std_sex == 2:
             return "女"
         return ""
+
+    def _render_direct_phd(self, std_enrolltype: Any) -> str:
+        try:
+            code = int(std_enrolltype)
+        except (TypeError, ValueError):
+            return ""
+        return "是" if code in DIRECT_PHD_ENROLLTYPE_CODES else "否"
 
     def _compute_grade(self, trm_termcount: Any):
         try:
