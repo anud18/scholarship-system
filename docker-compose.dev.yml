@@ -63,6 +63,13 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      # The Dockerfile bakes email templates into the image via
+      # `COPY --from=frontend_emails . /frontend/emails`. They live in
+      # ../frontend/emails relative to the backend build context, so we
+      # expose that path as a named build context here. (Required by
+      # BuildKit / Compose Spec; supported in Compose v2.4+.)
+      additional_contexts:
+        frontend_emails: ./frontend/emails
     image: ghcr.io/anud18/scholarship-system-backend:${TAG:-latest}
     container_name: scholarship_backend_dev
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload

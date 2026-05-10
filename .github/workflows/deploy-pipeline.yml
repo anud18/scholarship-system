@@ -117,15 +117,21 @@ jobs:
             type=raw,value=${{ needs.pre-deployment.outputs.version }}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
-      - name: Copy email templates for backend build
-        if: matrix.component == 'backend'
-        run: cp -r frontend/emails backend/emails
-
       - name: Build and push ${{ matrix.component }} image
         id: docker_build
         uses: docker/build-push-action@v5
         with:
           context: ./${{ matrix.component }}
+          # Expose frontend/emails to the backend Dockerfile via a named
+          # build context (BuildKit). The backend Dockerfile pulls templates
+          # via `COPY --from=frontend_emails . /frontend/emails`. This
+          # replaces the previous `cp -r frontend/emails backend/emails`
+          # workaround, which polluted the working tree and was missing in
+          # docker-compose.dev.yml (causing the nightly E2E build to fail).
+          # The frontend matrix entry resolves to an empty string, which the
+          # action ignores.
+          build-contexts: |
+            ${{ matrix.component == 'backend' && 'frontend_emails=./frontend/emails' || '' }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
