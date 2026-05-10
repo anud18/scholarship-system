@@ -104,7 +104,9 @@ class TestApplicationAuditServiceContract:
         row = await _last_log_for(db, 1003)
         assert row.action == AuditAction.update.value
         assert row.old_values == {"status": "submitted"}
-        assert row.new_values == {"status": "approved"}
+        # Production captures the transition reason alongside the new status so
+        # downstream audit consumers can render "approved because X".
+        assert row.new_values == {"status": "approved", "reason": "meets criteria"}
 
     async def test_log_application_submit(self, db, audit_user):
         svc = ApplicationAuditService(db)
@@ -140,27 +142,32 @@ class TestApplicationAuditServiceContract:
 
     async def test_log_application_create(self, db, audit_user):
         svc = ApplicationAuditService(db)
+        # scholarship_type is a required positional kwarg in production;
+        # callers in applications.py always supply it.
         await svc.log_application_create(
             application_id=1007,
             app_id="APP-113-1-00007",
             user=audit_user,
+            scholarship_type="undergraduate_freshman",
         )
         row = await _last_log_for(db, 1007)
         assert row.action == AuditAction.create.value
+        assert row.new_values["scholarship_type"] == "undergraduate_freshman"
 
     async def test_log_application_update(self, db, audit_user):
         svc = ApplicationAuditService(db)
+        # Production tracks updates as a list of changed field names rather than
+        # full before/after value dicts (see applications.py's update endpoint).
         await svc.log_application_update(
             application_id=1008,
             app_id="APP-113-1-00008",
             user=audit_user,
-            old_values={"amount": 1000},
-            new_values={"amount": 2000},
+            updated_fields=["amount", "bank_account"],
         )
         row = await _last_log_for(db, 1008)
         assert row.action == AuditAction.update.value
-        assert row.old_values["amount"] == 1000
-        assert row.new_values["amount"] == 2000
+        assert row.new_values == {"updated_fields": ["amount", "bank_account"]}
+        assert row.meta_data["update_type"] == "form_data"
 
     async def test_log_application_withdraw(self, db, audit_user):
         svc = ApplicationAuditService(db)
@@ -174,10 +181,19 @@ class TestApplicationAuditServiceContract:
 
     async def test_log_delete_application(self, db, audit_user):
         svc = ApplicationAuditService(db)
+        # `reason` is required: admin hard-delete in admin/applications.py
+        # always supplies it, and meta_data must persist scholarship_type_id /
+        # student_name so audit trails survive the row being hard-deleted.
         await svc.log_delete_application(
             application_id=1010,
             app_id="APP-113-1-00010",
             user=audit_user,
+            reason="duplicate submission",
+            scholarship_type_id=42,
+            student_name="王小明",
         )
         row = await _last_log_for(db, 1010)
         assert row.action == AuditAction.delete.value
+        assert row.meta_data["deletion_reason"] == "duplicate submission"
+        assert row.meta_data["scholarship_type_id"] == 42
+        assert row.meta_data["student_name"] == "王小明"
