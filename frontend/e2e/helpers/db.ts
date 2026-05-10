@@ -31,7 +31,7 @@ export async function getApplicationById(id: number): Promise<Record<string, unk
 export async function getReviews(applicationDbId: number): Promise<Array<Record<string, unknown>>> {
   const { rows } = await pool.query(
     `SELECT id, application_id, reviewer_id, recommendation, comments, reviewed_at
-     FROM reviews WHERE application_id = $1 ORDER BY id`,
+     FROM application_reviews WHERE application_id = $1 ORDER BY id`,
     [applicationDbId],
   );
   return rows;
@@ -79,12 +79,20 @@ export async function dumpRelated(opts: {
 }
 
 export async function deleteApplicationCascade(appId: string): Promise<void> {
-  // Best-effort idempotent cleanup. Order respects FKs: reviews → audit → application.
+  // Best-effort idempotent cleanup. Order respects FKs:
+  //   application_review_items → application_reviews → audit → application.
+  // The legacy `reviews`/`review_items` table names never existed in this
+  // schema; they came from an early draft of the helper. Each DELETE
+  // tolerates the absence of its table so older branches with partial
+  // schema still drain cleanly.
   const { rows } = await pool.query("SELECT id FROM applications WHERE app_id = $1", [appId]);
   if (!rows[0]) return;
   const id = rows[0].id as number;
-  await pool.query("DELETE FROM review_items WHERE review_id IN (SELECT id FROM reviews WHERE application_id = $1)", [id]).catch(() => undefined);
-  await pool.query("DELETE FROM reviews WHERE application_id = $1", [id]).catch(() => undefined);
+  await pool.query(
+    `DELETE FROM application_review_items
+     WHERE review_id IN (SELECT id FROM application_reviews WHERE application_id = $1)`,
+    [id],
+  ).catch(() => undefined);
   await pool.query("DELETE FROM application_reviews WHERE application_id = $1", [id]).catch(() => undefined);
   await pool.query("DELETE FROM application_audit_logs WHERE application_id = $1", [id]).catch(() => undefined);
   await pool.query("DELETE FROM applications WHERE id = $1", [id]);

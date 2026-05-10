@@ -29,7 +29,14 @@ import {
 } from "../helpers/runState";
 import { captureDiagnostics } from "../helpers/diagnose";
 
-const SCHOLARSHIP_CODE = "phd";
+// Use direct_phd (NOT phd): seed_scholarship_configs.py:258 sets
+// direct_phd_114 to QuotaManagementMode.simple, while phd_114 is
+// matrix_based — and matrix-mode rosters require a prior matrix
+// distribution before /payment-rosters/generate will accept them
+// (see roster_service.py: "找不到已執行分發的排名"). This spec only
+// exercises the HTTP → RosterService → Postgres path; the matrix
+// distribution flow is its own scenario.
+const SCHOLARSHIP_CODE = "direct_phd";
 // Use a far-future period_label so this spec never collides with seed data
 // or with the multi-role-phd spec running in the same Postgres.
 const PERIOD_LABEL = "2099-E2E";
