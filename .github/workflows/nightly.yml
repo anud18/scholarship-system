@@ -233,6 +233,15 @@ jobs:
         run: |
           today=$(date -u +%F)
           run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          # Pre-create the label so `gh issue create --label nightly-failure`
+          # doesn't 404 the very first time this fires on a fresh repo.
+          # `gh label create` exits non-zero if the label already exists,
+          # so swallow it.
+          gh label create nightly-failure \
+            --repo ${{ github.repository }} \
+            --color "d73a4a" \
+            --description "Auto-filed by nightly long-running lane" \
+            2>/dev/null || true
           # Find an existing nightly-failure issue from today, otherwise create one.
           existing=$(gh issue list \
             --repo ${{ github.repository }} \
