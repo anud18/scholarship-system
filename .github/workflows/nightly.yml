@@ -191,6 +191,14 @@ jobs:
       - name: Install Playwright browsers
         working-directory: ./frontend
         run: |
+          # Same workaround as ci.yml's E2E Smoke job (#190): the
+          # docker compose up --build above sometimes leaves
+          # frontend/node_modules with root ownership for a small
+          # set of transitive deps (notably @adobe/*), which then
+          # breaks the host-level `npm ci` with EACCES. Reclaim
+          # ownership before installing — no-op if already
+          # runner-owned or absent.
+          sudo chown -R "$(id -u):$(id -g)" node_modules 2>/dev/null || true
           npm ci
           npx playwright install --with-deps chromium
 
