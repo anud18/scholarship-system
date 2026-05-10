@@ -176,15 +176,23 @@ jobs:
       run: |
         VERSION=${{ needs.prepare-release.outputs.version }}
 
-        # Build backend
-        docker build -t ghcr.io/${{ github.repository }}/backend:$VERSION \
+        # Build backend. The Dockerfile pulls React Email templates from a
+        # named build context (`frontend_emails`) so the build context
+        # itself stays at ./backend (no working-tree pollution / massive
+        # context). Requires buildx, which is configured above.
+        docker buildx build \
+                     -t ghcr.io/${{ github.repository }}/backend:$VERSION \
                      -t ghcr.io/${{ github.repository }}/backend:latest \
+                     --build-context frontend_emails=./frontend/emails \
+                     --load \
                      ./backend
 
         # Build frontend
-        docker build -t ghcr.io/${{ github.repository }}/frontend:$VERSION \
+        docker buildx build \
+                     -t ghcr.io/${{ github.repository }}/frontend:$VERSION \
                      -t ghcr.io/${{ github.repository }}/frontend:latest \
                      --build-arg NEXT_PUBLIC_API_URL=${{ secrets.PRODUCTION_API_URL }} \
+                     --load \
                      ./frontend
 
         # Push images
