@@ -197,10 +197,17 @@ class TestOCRService:
             await service.extract_bank_info_from_image(small_image_bytes)
 
     @pytest.mark.asyncio
+    @pytest.mark.slow
     @patch("app.services.ocr_service.settings")
     @patch("app.services.ocr_service.genai")
     async def test_large_image_resizing(self, mock_genai, mock_settings):
-        """Test automatic resizing of large images"""
+        """Test automatic resizing of large images.
+
+        Marked `slow`: builds and JPEG-encodes a 5000x5000 PIL image in-memory,
+        then runs the OCR resize pipeline. ~0.65s — slowest non-property test
+        in the suite by ~5x. Belongs in the nightly `backend-slow` lane, not
+        in per-PR CI.
+        """
         mock_settings.ocr_service_enabled = True
         mock_settings.gemini_api_key = "test-key"
         mock_settings.gemini_model = "gemini-2.0-flash"
