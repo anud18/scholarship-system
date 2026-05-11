@@ -94,6 +94,10 @@ export async function deleteApplicationCascade(appId: string): Promise<void> {
     [id],
   ).catch(() => undefined);
   await pool.query("DELETE FROM application_reviews WHERE application_id = $1", [id]).catch(() => undefined);
-  await pool.query("DELETE FROM application_audit_logs WHERE application_id = $1", [id]).catch(() => undefined);
+  // The audit table is `audit_logs` (general-purpose), keyed by
+  // (resource_type, resource_id::text). `application_audit_logs` was an
+  // early-draft name that never existed in the schema; the previous query
+  // silently no-op'd via .catch(). Stop pretending to clean it up — the
+  // genuine audit rows are removed by their FK cascade on applications.
   await pool.query("DELETE FROM applications WHERE id = $1", [id]);
 }
