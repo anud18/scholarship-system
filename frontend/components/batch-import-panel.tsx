@@ -487,13 +487,18 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
                 <td className="border border-gray-200 px-4 py-2 text-sm font-medium">
                   {locale === "zh" ? `第 ${idx + 1} 筆` : `#${idx + 1}`}
                 </td>
-                {columns.map((col) => (
-                  <td key={col} className="border border-gray-200 px-4 py-2 text-sm">
-                    {typeof row[col] === 'object' && row[col] !== null
-                      ? JSON.stringify(row[col])
-                      : row[col] ?? ''}
-                  </td>
-                ))}
+                {columns.map((col) => {
+                  const cell = row[col];
+                  const display: string | number | boolean =
+                    typeof cell === "object" && cell !== null
+                      ? JSON.stringify(cell)
+                      : (cell as string | number | boolean | null | undefined) ?? "";
+                  return (
+                    <td key={col} className="border border-gray-200 px-4 py-2 text-sm">
+                      {display}
+                    </td>
+                  );
+                })}
                 <td className="border border-gray-200 px-4 py-2 text-sm">
                   <Button
                     variant="ghost"
