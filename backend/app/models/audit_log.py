@@ -44,6 +44,10 @@ class AuditAction(enum.Enum):
     verify_bank_account = "verify_bank_account"  # Verify single bank account
     batch_verify_bank_accounts = "batch_verify_bank_accounts"  # Batch verify bank accounts
 
+    # PII access (issue #73): logged when full-plaintext std_pid is exposed
+    # to a user (e.g. Excel ranking export).
+    pii_access = "pii_access"
+
 
 class AuditLog(Base):
     """Audit log model for tracking user activities"""

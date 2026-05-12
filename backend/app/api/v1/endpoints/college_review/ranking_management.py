@@ -23,6 +23,7 @@ from app.core.exceptions import AuthorizationError, NotFoundError
 from app.core.security import require_college
 from app.db.deps import get_db
 from app.models.application_field import ApplicationField, FieldType
+from app.models.audit_log import AuditAction, AuditLog
 from app.models.college_review import CollegeRanking, CollegeRankingItem
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.student import Department
@@ -1093,6 +1094,7 @@ async def import_ranking_from_excel(
 @router.get("/rankings/{ranking_id}/export-excel")
 async def export_ranking_excel(
     ranking_id: int,
+    request: Request,
     current_user: User = Depends(require_college),
     db: AsyncSession = Depends(get_db),
 ):
@@ -1235,6 +1237,43 @@ async def export_ranking_excel(
         title=title,
         sheet_name=sheet_name,
     )
+
+    # 8. Audit the PII access (issue #73): business confirmed Excel must show
+    # the full std_pid, so every export that includes plaintext IDs is logged.
+    exported_app_ids = [r.application.id for r in export_rows if r.application is not None]
+    try:
+        audit_log = AuditLog(
+            user_id=current_user.id,
+            action=AuditAction.pii_access.value,
+            resource_type="college_ranking",
+            resource_id=str(ranking_id),
+            resource_name=base_filename,
+            description=(
+                f"匯出學生資料彙整表（含身分證字號明文）: ranking_id={ranking_id}, "
+                f"records={len(exported_app_ids)}"
+            ),
+            ip_address=(request.client.host if request.client else None),
+            user_agent=request.headers.get("user-agent"),
+            request_method=request.method,
+            request_url=str(request.url.path),
+            status="success",
+            meta_data={
+                "ranking_id": ranking_id,
+                "scholarship_type_id": (
+                    ranking.scholarship_type.id if ranking.scholarship_type else None
+                ),
+                "academic_year": ranking.academic_year,
+                "record_count": len(exported_app_ids),
+                "application_ids": exported_app_ids,
+                "pii_fields": ["std_pid"],
+                "export_format": "xlsx",
+            },
+        )
+        db.add(audit_log)
+        await db.commit()
+    except Exception as exc:  # noqa: BLE001 — audit failure must not block download
+        logger.error(f"Failed to record pii_access audit log for ranking {ranking_id}: {exc}")
+        await db.rollback()
 
     return StreamingResponse(
         iter([payload]),
