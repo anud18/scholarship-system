@@ -100,6 +100,13 @@ class Settings(BaseSettings):
     metrics_include_endpoint_labels: bool = True  # Include detailed endpoint labels
     metrics_include_business_metrics: bool = True  # Include business-specific metrics
 
+    # PII encryption (issue #73)
+    # JSON map of {version: base64url 32-byte key}, e.g. '{"v1": "..."}'.
+    # In production this is populated by a KMS sidecar at boot; in development
+    # an empty value triggers a deterministic dev key in pii_crypto.py.
+    pii_encryption_keys: str = ""
+    pii_encryption_active_version: str = "v1"
+
     # Mock SSO for development
     enable_mock_sso: bool = True
     mock_sso_domain: str = "dev.university.edu"

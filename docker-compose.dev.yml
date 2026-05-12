@@ -88,6 +88,10 @@ services:
       MINIO_SECRET_KEY: minioadmin123
       MINIO_BUCKET_NAME: scholarship-documents
       MINIO_SECURE: "false"
+      # PII Encryption (issue #73): leave empty in dev to use the deterministic
+      # dev key. In staging/prod a KMS sidecar populates these vars.
+      PII_ENCRYPTION_KEYS: ""
+      PII_ENCRYPTION_ACTIVE_VERSION: "v1"
       # Mock SSO Configuration
       ENABLE_MOCK_SSO: "true"
       MOCK_SSO_DOMAIN: dev.university.edu

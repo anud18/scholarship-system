@@ -46,6 +46,10 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_BUCKET: ${MINIO_BUCKET}
       MINIO_SECURE: "false"
+      # PII Encryption keys (issue #73). JSON map of {version: base64url 32-byte key}.
+      # Populated by the KMS sidecar at deploy time.
+      PII_ENCRYPTION_KEYS: ${PII_ENCRYPTION_KEYS}
+      PII_ENCRYPTION_ACTIVE_VERSION: ${PII_ENCRYPTION_ACTIVE_VERSION:-v1}
       # Mock SSO Configuration for Testing (fallback)
       ENABLE_MOCK_SSO: "false"
       # Portal SSO Configuration (real Portal for testing)

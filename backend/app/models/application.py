@@ -22,6 +22,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
+from app.core.encrypted_json import StudentDataJSON
 from app.db.base_class import Base
 from app.models.enums import ApplicationStatus, ReviewStage, Semester
 from app.models.scholarship import SubTypeSelectionMode
@@ -126,7 +127,9 @@ class Application(Base):
     )  # Can be NULL for yearly scholarships
 
     # 申請資料 (申請當時)
-    student_data = Column(JSON)  # Student 資料
+    # std_pid (身分證字號) inside this JSON is transparently AES-256-GCM
+    # encrypted at rest by StudentDataJSON; the column is read as plaintext.
+    student_data = Column(StudentDataJSON)  # Student 資料
     submitted_form_data = Column(JSON)  # Field, Document 資料
 
     # 同意條款
