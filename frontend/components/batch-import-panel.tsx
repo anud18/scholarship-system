@@ -2,6 +2,18 @@
 
 import React, { useState, useCallback, useEffect, useTransition } from "react";
 import { apiClient } from "@/lib/api";
+
+/**
+ * Coerce a caught error to a user-presentable string. The `error` argument
+ * is `unknown` because TypeScript widens caught values for safety; this
+ * helper centralizes the narrowing so each catch block doesn't need its own
+ * `instanceof Error` boilerplate.
+ */
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "string" && error) return error;
+  return fallback;
+}
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -60,7 +72,7 @@ interface UploadedBatch {
   batch_id: number;
   file_name: string;
   total_records: number;
-  preview_data: Array<Record<string, any>>;
+  preview_data: Array<Record<string, unknown>>;
   validation_summary: {
     valid_count: number;
     invalid_count: number;
@@ -241,8 +253,10 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
 
     try {
       await apiClient.batchImport.downloadTemplate(selectedScholarship.code);
-    } catch (error: any) {
-      setError(error.message || (locale === "zh" ? "下載範例檔案失敗" : "Failed to download template"));
+    } catch (error) {
+      setError(
+        getErrorMessage(error, locale === "zh" ? "下載範例檔案失敗" : "Failed to download template")
+      );
     }
   };
 
@@ -274,8 +288,8 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
       } else {
         setError(response.message || (locale === "zh" ? "上傳失敗" : "Upload failed"));
       }
-    } catch (error: any) {
-      setError(error.message || (locale === "zh" ? "上傳時發生錯誤" : "Error during upload"));
+    } catch (error) {
+      setError(getErrorMessage(error, locale === "zh" ? "上傳時發生錯誤" : "Error during upload"));
     } finally {
       setIsUploading(false);
     }
@@ -309,8 +323,10 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
       } else {
         setError(response.message || (locale === "zh" ? "確認匯入失敗" : "Confirm import failed"));
       }
-    } catch (error: any) {
-      setError(error.message || (locale === "zh" ? "確認時發生錯誤" : "Error during confirmation"));
+    } catch (error) {
+      setError(
+        getErrorMessage(error, locale === "zh" ? "確認時發生錯誤" : "Error during confirmation")
+      );
     } finally {
       setIsConfirming(false);
     }
@@ -355,9 +371,12 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
           }
         }, 100);
       }
-    } catch (error: any) {
+    } catch (error) {
       setError(
-        error.message || (locale === "zh" ? "獲取批次詳情失敗" : "Failed to get batch details")
+        getErrorMessage(
+          error,
+          locale === "zh" ? "獲取批次詳情失敗" : "Failed to get batch details"
+        )
       );
     }
   };
@@ -386,9 +405,9 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
             (locale === "zh" ? "批次刪除成功" : "Batch deleted successfully")
         );
       }
-    } catch (error: any) {
+    } catch (error) {
       setError(
-        error.message || (locale === "zh" ? "刪除批次失敗" : "Failed to delete batch")
+        getErrorMessage(error, locale === "zh" ? "刪除批次失敗" : "Failed to delete batch")
       );
     }
   };
@@ -437,8 +456,10 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
         } else {
           setError(response.message || (locale === "zh" ? "刪除失敗" : "Delete failed"));
         }
-      } catch (error: any) {
-        setError(error.message || (locale === "zh" ? "刪除時發生錯誤" : "Error during deletion"));
+      } catch (error) {
+        setError(
+          getErrorMessage(error, locale === "zh" ? "刪除時發生錯誤" : "Error during deletion")
+        );
       }
     };
 
@@ -850,12 +871,14 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
                               onClick={async () => {
                                 try {
                                   await apiClient.batchImport.downloadFile(item.id);
-                                } catch (error: any) {
+                                } catch (error) {
                                   setError(
-                                    error.message ||
-                                      (locale === "zh"
+                                    getErrorMessage(
+                                      error,
+                                      locale === "zh"
                                         ? "下載檔案失敗"
-                                        : "Failed to download file")
+                                        : "Failed to download file"
+                                    )
                                   );
                                 }
                               }}
