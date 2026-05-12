@@ -22,13 +22,10 @@ from sqlalchemy.orm import selectinload
 from app.core.exceptions import AuthorizationError, NotFoundError
 from app.core.security import require_college
 from app.db.deps import get_db
-from app.models.application_field import ApplicationField, FieldType
 from app.models.college_review import CollegeRanking, CollegeRankingItem
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.student import Department
-from app.models.professor_student import ProfessorStudentRelationship
 from app.models.user import User, UserRole
-from app.models.user_profile import UserProfile
 from app.schemas.college_review import RankingImportItem, RankingOrderUpdate, RankingUpdate
 from app.schemas.response import ApiResponse
 from app.services.college_ranking_export_service import (
@@ -1124,86 +1121,26 @@ async def export_ranking_excel(
         if not creator_college or not user_college or creator_college != user_college:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限匯出此學院之資料")
 
-    # 3. Load dynamic text fields flagged for export
-    scholarship_type_code = ranking.scholarship_type.code if ranking.scholarship_type else None
-    dynamic_fields: list[DynamicFieldSpec] = []
-    if scholarship_type_code:
-        df_stmt = (
-            select(ApplicationField)
-            .where(
-                ApplicationField.scholarship_type == scholarship_type_code,
-                ApplicationField.include_in_college_export.is_(True),
-                ApplicationField.is_active.is_(True),
-                ApplicationField.field_type == FieldType.TEXT.value,
-            )
-            .order_by(ApplicationField.display_order, ApplicationField.id)
-        )
-        dynamic_rows = (await db.execute(df_stmt)).scalars().all()
-        dynamic_fields = [
-            DynamicFieldSpec(
-                field_name=f.field_name,
-                field_label=f.field_label,
-                export_column_label=f.export_column_label,
-                display_order=f.display_order or 0,
-            )
-            for f in dynamic_rows
-        ]
+    # 3-5. Bulk-load aux data (dynamic fields, sub-type labels, accounts, advisors)
+    from ._helpers import load_export_aux_data  # local import keeps top-of-file imports small
 
-    # 4. Build sub-type label map from configured sub_type_configs
-    sub_type_labels: dict[str, str] = {}
-    if ranking.scholarship_type:
-        for cfg in getattr(ranking.scholarship_type, "sub_type_configs", []) or []:
-            if cfg.sub_type_code and cfg.name:
-                sub_type_labels[cfg.sub_type_code] = cfg.name
-
-    # 5. Bulk-load 郵局帳號 (user_profiles.account_number) and 指導教授姓名 for
-    # the applicants in this ranking. Bank account lives on user_profiles
-    # (collected by the application wizard's bank-account step). Advisor names
-    # come from professor_student_relationships JOIN users; if no structured
-    # relationship rows exist, fall back to user_profiles.advisor_name.
     items_sorted = sorted(ranking.items or [], key=lambda x: x.rank_position)
-    user_ids = {item.application.user_id for item in items_sorted if item.application is not None}
+    apps_in_ranking = [item.application for item in items_sorted if item.application is not None]
 
-    profile_account_by_user: dict[int, str] = {}
-    profile_advisor_by_user: dict[int, str] = {}
-    if user_ids:
-        profile_stmt = select(UserProfile.user_id, UserProfile.account_number, UserProfile.advisor_name).where(
-            UserProfile.user_id.in_(user_ids)
+    dynamic_fields, sub_type_labels, account_number_by_user, advisor_string_by_user = (
+        await load_export_aux_data(
+            db,
+            scholarship_type=ranking.scholarship_type,
+            applications=apps_in_ranking,
         )
-        for uid, acct, adv in (await db.execute(profile_stmt)).all():
-            if acct:
-                profile_account_by_user[uid] = acct
-            if adv:
-                profile_advisor_by_user[uid] = adv
-
-    advisor_names_by_user: dict[int, list[str]] = {uid: [] for uid in user_ids}
-    if user_ids:
-        rel_stmt = (
-            select(ProfessorStudentRelationship.student_id, User.name)
-            .join(User, User.id == ProfessorStudentRelationship.professor_id)
-            .where(
-                ProfessorStudentRelationship.student_id.in_(user_ids),
-                ProfessorStudentRelationship.is_active.is_(True),
-                ProfessorStudentRelationship.relationship_type.in_(["advisor", "co_advisor"]),
-            )
-            .order_by(ProfessorStudentRelationship.student_id, User.name)
-        )
-        for student_id, prof_name in (await db.execute(rel_stmt)).all():
-            if prof_name:
-                advisor_names_by_user[student_id].append(prof_name)
-
-    def _advisor_for(user_id: int) -> Optional[str]:
-        names = advisor_names_by_user.get(user_id) or []
-        if names:
-            return "、".join(names)
-        return profile_advisor_by_user.get(user_id)
+    )
 
     export_rows = [
         ExportRow(
             rank_position=item.rank_position,
             application=item.application,
-            bank_account=profile_account_by_user.get(item.application.user_id),
-            advisor_names=_advisor_for(item.application.user_id),
+            bank_account=account_number_by_user.get(item.application.user_id),
+            advisor_names=advisor_string_by_user.get(item.application.user_id),
         )
         for item in items_sorted
         if item.application is not None
