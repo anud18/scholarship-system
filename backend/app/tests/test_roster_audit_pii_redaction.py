@@ -35,7 +35,6 @@ from unittest.mock import patch
 
 from app.core import pii_crypto
 
-
 _PLAINTEXT_PID = "A123456789"
 
 
