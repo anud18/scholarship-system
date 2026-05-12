@@ -218,6 +218,12 @@ async def create_ranking(
             ranking_name=ranking_name,
             force_new=force_new,
         )
+        # Commit before building the response so the row is visible to any
+        # read-after-write query the caller makes immediately after receiving
+        # the HTTP 200 (e.g. direct pool.query in the E2E test suite — see
+        # issue #199). get_db will commit again on context exit but that is a
+        # no-op on an already-clean session. Mirrors the fix in PR #200.
+        await db.commit()
 
         return ApiResponse(
             success=True,
