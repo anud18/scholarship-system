@@ -28,9 +28,31 @@
 import { test, expect } from "@playwright/test";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
-import { deleteApplicationCascade, getActiveConfig, getApplication } from "../helpers/db";
+import { deleteApplicationCascade, getActiveConfig, getApplication, pool } from "../helpers/db";
 import { attachRunState, newRunState, pushTrace, type RunState } from "../helpers/runState";
 import { captureDiagnostics } from "../helpers/diagnose";
+
+/**
+ * Pre-clean any existing applications for (student, scholarship_type) so the
+ * unique constraint `uq_user_scholarship_academic_term` doesn't fire when
+ * another spec's cleanup (`deleteApplicationCascade` in afterAll) hasn't
+ * propagated yet. Multi-role-phd.spec.ts uses the same seeded student
+ * `stuphd001` + `phd` triple, so without this the second spec to run in
+ * the worker collides on the unique key.
+ */
+async function purgeStudentApps(studentNycuId: string, scholarshipCode: string): Promise<void> {
+  const { rows } = await pool.query<{ app_id: string }>(
+    `SELECT a.app_id
+       FROM applications a
+       JOIN users u ON u.id = a.user_id
+       JOIN scholarship_types st ON st.id = a.scholarship_type_id
+      WHERE u.nycu_id = $1 AND st.code = $2`,
+    [studentNycuId, scholarshipCode],
+  );
+  for (const row of rows) {
+    await deleteApplicationCascade(row.app_id).catch(() => undefined);
+  }
+}
 
 const STUDENT_ID = "stuphd001";
 const SCHOLARSHIP_CODE = "phd"; // matches the seed used by multi-role-phd spec
@@ -60,6 +82,10 @@ test.describe("Student withdraws a submitted application", () => {
   });
 
   test("@smoke submit → withdraw → state=draft; second withdraw rejected", async ({ browser }) => {
+    // 0. Drain any leftover (stuphd001, phd) apps from concurrent
+    //    specs whose afterAll cleanup hasn't propagated yet.
+    await purgeStudentApps(STUDENT_ID, SCHOLARSHIP_CODE);
+
     // 1. Student creates a submitted application (no draft mode).
     const studentLogin = await loginAs(browser, STUDENT_ID);
     pushTrace(runState, studentLogin.traceId);
