@@ -25,9 +25,31 @@
 import { test, expect } from "@playwright/test";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
-import { deleteApplicationCascade, getActiveConfig } from "../helpers/db";
+import { deleteApplicationCascade, getActiveConfig, pool } from "../helpers/db";
 import { attachRunState, newRunState, pushTrace, type RunState } from "../helpers/runState";
 import { captureDiagnostics } from "../helpers/diagnose";
+
+/**
+ * Pre-clean any existing applications for (student, scholarship_type) —
+ * `multi-role-phd.spec.ts` uses the same seed pair, and its afterAll
+ * cleanup may not have propagated yet when this spec runs in the same
+ * worker. Without this the create-application step would 200 with
+ * body.success=false on the unique constraint
+ * `uq_user_scholarship_academic_term`.
+ */
+async function purgeStudentApps(studentNycuId: string, scholarshipCode: string): Promise<void> {
+  const { rows } = await pool.query<{ app_id: string }>(
+    `SELECT a.app_id
+       FROM applications a
+       JOIN users u ON u.id = a.user_id
+       JOIN scholarship_types st ON st.id = a.scholarship_type_id
+      WHERE u.nycu_id = $1 AND st.code = $2`,
+    [studentNycuId, scholarshipCode],
+  );
+  for (const row of rows) {
+    await deleteApplicationCascade(row.app_id).catch(() => undefined);
+  }
+}
 
 const STUDENT_ID = "stuphd001";
 const PROFESSOR_ID = "professor";
@@ -59,7 +81,11 @@ test.describe("Role-permission boundaries on applications endpoints", () => {
   });
 
   test("@smoke wrong-role callers are 403 on student/professor endpoints", async ({ browser }) => {
-    // 0. Seed: student submits an application. The fixture under test is
+    // 0a. Drain any leftover (stuphd001, phd) apps from concurrent specs
+    //     whose afterAll cleanup hasn't propagated yet.
+    await purgeStudentApps(STUDENT_ID, SCHOLARSHIP_CODE);
+
+    // 0b. Seed: student submits an application. The fixture under test is
     //    the *authorization* of the wrong-role calls below, not the
     //    submission itself.
     const studentLogin = await loginAs(browser, STUDENT_ID);
