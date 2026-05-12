@@ -4685,6 +4685,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/college-review/statistics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Review Statistics
+         * @description College review statistics scoped to the caller's scholarship permissions.
+         *
+         *     Aggregates reviewer-recommendation counts from the unified ApplicationReview
+         *     + ApplicationReviewItem tables (CLAUDE.md §7: no scoring system, recommendation-only).
+         *
+         *     Filters to scholarship_types this college user has permission for (via
+         *     AdminScholarship). Returns per-scholarship totals plus a system-wide rollup.
+         */
+        get: operations["get_review_statistics_api_v1_college_review_statistics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/college-review/available-combinations": {
         parameters: {
             query?: never;
@@ -18211,6 +18237,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_review_statistics_api_v1_college_review_statistics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };

@@ -11,15 +11,14 @@ Handles:
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.security import require_college
 from app.db.deps import get_db
-
-# Note: CollegeReview model removed - replaced by unified ApplicationReview system
-# from app.models.college_review import CollegeReview
+from app.models.application import Application
+from app.models.review import ApplicationReview, ApplicationReviewItem
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipStatus, ScholarshipType
 from app.models.student import Academy
 from app.models.user import AdminScholarship, User
@@ -30,11 +29,142 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-# REMOVED: GET /statistics endpoint
-# This endpoint was removed as part of CollegeReview table removal (Phase 3).
-# The CollegeReview model no longer exists. Statistics should be calculated from
-# the unified ApplicationReview system instead.
-# TODO: Implement new statistics endpoint using ApplicationReview + ApplicationReviewItem
+@router.get("/statistics")
+async def get_review_statistics(
+    current_user: User = Depends(require_college),
+    db: AsyncSession = Depends(get_db),
+):
+    """College review statistics scoped to the caller's scholarship permissions.
+
+    Aggregates reviewer-recommendation counts from the unified ApplicationReview
+    + ApplicationReviewItem tables (CLAUDE.md §7: no scoring system, recommendation-only).
+
+    Filters to scholarship_types this college user has permission for (via
+    AdminScholarship). Returns per-scholarship totals plus a system-wide rollup.
+    """
+    # Scope: which scholarship_types this college user can see.
+    permission_rows = await db.execute(
+        select(AdminScholarship.scholarship_id).where(AdminScholarship.admin_id == current_user.id)
+    )
+    allowed_scholarship_ids = [row[0] for row in permission_rows.fetchall()]
+
+    if not allowed_scholarship_ids:
+        logger.warning(
+            "College user %s (id=%s) has no scholarship permissions; returning empty statistics.",
+            current_user.nycu_id,
+            current_user.id,
+        )
+        return {
+            "success": True,
+            "message": "查詢成功",
+            "data": {
+                "per_scholarship": [],
+                "totals": {
+                    "applications": 0,
+                    "reviews": 0,
+                    "items_by_recommendation": {},
+                    "reviews_by_recommendation": {},
+                },
+            },
+        }
+
+    # ─── Per-scholarship breakdown ────────────────────────────────────────
+    # Applications count per scholarship_type (scoped to allowed types).
+    app_count_rows = await db.execute(
+        select(Application.scholarship_type_id, func.count(Application.id))
+        .where(Application.scholarship_type_id.in_(allowed_scholarship_ids))
+        .group_by(Application.scholarship_type_id)
+    )
+    apps_per_type: dict[int, int] = {row[0]: row[1] for row in app_count_rows.fetchall()}
+
+    # Review-level recommendation counts (top-level recommendation derived per CLAUDE.md §7):
+    # 'approve' | 'partial_approve' | 'reject'.
+    review_rec_rows = await db.execute(
+        select(
+            Application.scholarship_type_id,
+            ApplicationReview.recommendation,
+            func.count(ApplicationReview.id),
+        )
+        .join(Application, ApplicationReview.application_id == Application.id)
+        .where(Application.scholarship_type_id.in_(allowed_scholarship_ids))
+        .group_by(Application.scholarship_type_id, ApplicationReview.recommendation)
+    )
+    reviews_per_type: dict[int, dict[str, int]] = {}
+    for st_id, rec, count in review_rec_rows.fetchall():
+        reviews_per_type.setdefault(st_id, {})[rec] = count
+
+    # Item-level recommendation counts ('approve' | 'reject'), bucketed by sub_type_code.
+    item_rec_rows = await db.execute(
+        select(
+            Application.scholarship_type_id,
+            ApplicationReviewItem.sub_type_code,
+            ApplicationReviewItem.recommendation,
+            func.count(ApplicationReviewItem.id),
+        )
+        .join(ApplicationReview, ApplicationReviewItem.review_id == ApplicationReview.id)
+        .join(Application, ApplicationReview.application_id == Application.id)
+        .where(Application.scholarship_type_id.in_(allowed_scholarship_ids))
+        .group_by(
+            Application.scholarship_type_id,
+            ApplicationReviewItem.sub_type_code,
+            ApplicationReviewItem.recommendation,
+        )
+    )
+    items_per_type: dict[int, dict[str, dict[str, int]]] = {}
+    for st_id, sub_type, rec, count in item_rec_rows.fetchall():
+        bucket = items_per_type.setdefault(st_id, {}).setdefault(sub_type, {})
+        bucket[rec] = count
+
+    # Pull scholarship-type names so the response is human-readable
+    # without a second round trip from the caller.
+    name_rows = await db.execute(
+        select(ScholarshipType.id, ScholarshipType.code, ScholarshipType.name, ScholarshipType.name_en).where(
+            ScholarshipType.id.in_(allowed_scholarship_ids)
+        )
+    )
+    name_index = {row[0]: {"code": row[1], "name": row[2], "name_en": row[3] or row[2]} for row in name_rows.fetchall()}
+
+    per_scholarship = []
+    for st_id in allowed_scholarship_ids:
+        info = name_index.get(st_id) or {"code": None, "name": None, "name_en": None}
+        per_scholarship.append(
+            {
+                "scholarship_type_id": st_id,
+                "code": info["code"],
+                "name": info["name"],
+                "name_en": info["name_en"],
+                "applications": apps_per_type.get(st_id, 0),
+                "reviews_by_recommendation": reviews_per_type.get(st_id, {}),
+                "items_by_sub_type_and_recommendation": items_per_type.get(st_id, {}),
+            }
+        )
+
+    # ─── System-wide totals (scoped to allowed types) ─────────────────────
+    total_apps = sum(apps_per_type.values())
+    total_reviews_by_rec: dict[str, int] = {}
+    for buckets in reviews_per_type.values():
+        for rec, count in buckets.items():
+            total_reviews_by_rec[rec] = total_reviews_by_rec.get(rec, 0) + count
+
+    total_items_by_rec: dict[str, int] = {}
+    for sub_type_map in items_per_type.values():
+        for rec_map in sub_type_map.values():
+            for rec, count in rec_map.items():
+                total_items_by_rec[rec] = total_items_by_rec.get(rec, 0) + count
+
+    return {
+        "success": True,
+        "message": "查詢成功",
+        "data": {
+            "per_scholarship": per_scholarship,
+            "totals": {
+                "applications": total_apps,
+                "reviews": sum(total_reviews_by_rec.values()),
+                "reviews_by_recommendation": total_reviews_by_rec,
+                "items_by_recommendation": total_items_by_rec,
+            },
+        },
+    }
 
 
 @router.get("/available-combinations")
