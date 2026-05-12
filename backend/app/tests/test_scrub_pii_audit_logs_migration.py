@@ -22,7 +22,6 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import StaticPool
 
-
 # --- helpers -----------------------------------------------------------------
 
 
@@ -53,9 +52,7 @@ def _create_audit_logs_table(conn):
     drags in the full models package and triggers the StudentDataJSON
     type decorator, which would need real PII keys for the unrelated
     ``applications`` table."""
-    conn.execute(
-        text(
-            """
+    conn.execute(text("""
             CREATE TABLE audit_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
@@ -67,9 +64,7 @@ def _create_audit_logs_table(conn):
                 meta_data JSON,
                 request_headers JSON
             )
-            """
-        )
-    )
+            """))
 
 
 def _insert(conn, **cols):
