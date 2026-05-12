@@ -63,7 +63,12 @@ groups:
               to: 0
             datasourceUid: prometheus-uid
             model:
-              expr: (prometheus_tsdb_storage_blocks_bytes / prometheus_tsdb_retention_limit_bytes) > 0.8
+              # Guard against Prometheus deployments without `--storage.tsdb.retention.size`
+              # set: prometheus_tsdb_retention_limit_bytes == 0 → division → +Inf →
+              # always > 0.8 → the alert fires forever with value `+Inf%`. The
+              # `and ... > 0` clause filters those out so we only alert when a
+              # real retention target exists. See issue #184.
+              expr: (prometheus_tsdb_storage_blocks_bytes / prometheus_tsdb_retention_limit_bytes) > 0.8 and prometheus_tsdb_retention_limit_bytes > 0
               refId: A
               instant: true
         noDataState: OK
