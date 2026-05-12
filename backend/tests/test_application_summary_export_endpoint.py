@@ -286,3 +286,237 @@ class TestDepartmentSummaryExportEndpoint:
 
         assert response.status_code == 200
         assert response.content[:2] == b"PK"
+
+
+# ---------------------------------------------------------------------------
+# Bulk ZIP endpoint tests
+# ---------------------------------------------------------------------------
+
+from app.models.application import Application  # noqa: E402
+from app.models.enums import SubTypeSelectionMode  # noqa: E402
+
+
+class TestDepartmentSummaryExportBulkEndpoint:
+    """Integration tests for the bulk ZIP 申請總表 export endpoint."""
+
+    def setup_method(self):
+        _create_tables()
+
+    def teardown_method(self):
+        _drop_tables()
+        app.dependency_overrides.clear()
+
+    def _client_with_user(self, user: User) -> TestClient:
+        """Return a TestClient that bypasses auth and uses an in-process DB session."""
+
+        async def _fake_db():
+            async with _AsyncSession() as session:
+                yield session
+
+        def _fake_auth():
+            return user
+
+        app.dependency_overrides[get_db] = _fake_db
+        app.dependency_overrides[require_college] = _fake_auth
+        return TestClient(app, raise_server_exceptions=True)
+
+    def _seed_base(self):
+        """Seed two departments (same academy CE) + one scholarship type."""
+
+        async def _impl():
+            async with _AsyncSession() as session:
+                session.add(Department(code="CE4460", name="土木工程學系", academy_code="CE"))
+                session.add(Department(code="CE4461", name="環境工程學系", academy_code="CE"))
+                session.add(ScholarshipType(id=1, code="phd_scholarship", name="博士生獎學金"))
+                await session.commit()
+
+        _run_async(_impl())
+
+    def _seed_applications(self):
+        """Seed one application per department under CE academy."""
+
+        async def _impl():
+            async with _AsyncSession() as session:
+                session.add(
+                    Application(
+                        id=1001,
+                        app_id="APP-114-1-00001",
+                        user_id=101,
+                        scholarship_type_id=1,
+                        academic_year=114,
+                        semester="first",
+                        status="submitted",
+                        sub_type_selection_mode=SubTypeSelectionMode.single,
+                        student_data={"std_depno": "CE4460", "std_stdcode": "S001"},
+                    )
+                )
+                session.add(
+                    Application(
+                        id=1002,
+                        app_id="APP-114-1-00002",
+                        user_id=102,
+                        scholarship_type_id=1,
+                        academic_year=114,
+                        semester="first",
+                        status="submitted",
+                        sub_type_selection_mode=SubTypeSelectionMode.single,
+                        student_data={"std_depno": "CE4461", "std_stdcode": "S002"},
+                    )
+                )
+                await session.commit()
+
+        _run_async(_impl())
+
+    # ------------------------------------------------------------------
+    # 1. Admin scope=all returns a ZIP with one XLSX per department
+    # ------------------------------------------------------------------
+
+    def test_bulk_admin_scope_all_returns_zip(self):
+        """Admin user, scope=all: returns 200 ZIP containing 2 xlsx files (one per dept)."""
+        self._seed_base()
+        self._seed_applications()
+
+        admin = _make_admin_user()
+        client = self._client_with_user(admin)
+
+        response = client.get(
+            "/api/v1/college-review/applications/department-summary-export-bulk",
+            params={
+                "scholarship_type_id": 1,
+                "academic_year": 114,
+                "semester": "first",
+                "scope": "all",
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.headers["content-type"].startswith("application/zip")
+        content_disposition = response.headers["content-disposition"]
+        assert "filename*=UTF-8''" in content_disposition
+        # "全部" URL-encoded is %E5%85%A8%E9%83%A8
+        assert "%E5%85%A8%E9%83%A8" in content_disposition or "全部" in content_disposition
+
+        # ZIP magic bytes
+        assert response.content[:2] == b"PK"
+
+        # ZIP should contain 2 xlsx files
+        import io as _io
+        import zipfile as _zf
+
+        with _zf.ZipFile(_io.BytesIO(response.content)) as z:
+            names = z.namelist()
+
+        assert len(names) == 2
+        assert all(n.endswith(".xlsx") for n in names)
+
+    # ------------------------------------------------------------------
+    # 2. College user scope=college returns ZIP filtered to their academy
+    # ------------------------------------------------------------------
+
+    def test_bulk_college_user_scope_college(self):
+        """College user (CE), scope=college: ZIP contains entries for CE academy depts."""
+        self._seed_base()
+        self._seed_applications()
+
+        college_user = _make_college_user(college_code="CE")
+        client = self._client_with_user(college_user)
+
+        response = client.get(
+            "/api/v1/college-review/applications/department-summary-export-bulk",
+            params={
+                "scholarship_type_id": 1,
+                "academic_year": 114,
+                "semester": "first",
+                "scope": "college",
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.headers["content-type"].startswith("application/zip")
+
+        import io as _io
+        import zipfile as _zf
+
+        with _zf.ZipFile(_io.BytesIO(response.content)) as z:
+            names = z.namelist()
+
+        # Both departments belong to CE academy, so both files should appear
+        assert len(names) == 2
+        assert all(n.endswith(".xlsx") for n in names)
+
+    # ------------------------------------------------------------------
+    # 3. College user requesting scope=all gets 403
+    # ------------------------------------------------------------------
+
+    def test_bulk_college_user_scope_all_forbidden(self):
+        """College user, scope=all → 403 with 學院使用者 in message."""
+        self._seed_base()
+
+        college_user = _make_college_user(college_code="CE")
+        client = self._client_with_user(college_user)
+
+        response = client.get(
+            "/api/v1/college-review/applications/department-summary-export-bulk",
+            params={
+                "scholarship_type_id": 1,
+                "academic_year": 114,
+                "scope": "all",
+            },
+        )
+
+        assert response.status_code == 403
+        body = response.json()
+        msg = body.get("message", body.get("detail", ""))
+        assert "學院使用者" in msg
+
+    # ------------------------------------------------------------------
+    # 4. No matching applications → 404
+    # ------------------------------------------------------------------
+
+    def test_bulk_no_matches_returns_404(self):
+        """Admin, academic_year=9999 (no apps): 404 with 找不到 in message."""
+        self._seed_base()
+        # No applications seeded for year 9999
+
+        admin = _make_admin_user()
+        client = self._client_with_user(admin)
+
+        response = client.get(
+            "/api/v1/college-review/applications/department-summary-export-bulk",
+            params={
+                "scholarship_type_id": 1,
+                "academic_year": 9999,
+                "scope": "all",
+            },
+        )
+
+        assert response.status_code == 404
+        body = response.json()
+        msg = body.get("message", body.get("detail", ""))
+        assert "找不到" in msg
+
+    # ------------------------------------------------------------------
+    # 5. Admin without college_code requesting scope=college → 400
+    # ------------------------------------------------------------------
+
+    def test_bulk_admin_no_college_code_scope_college_400(self):
+        """Admin without college_code, scope=college → 400."""
+        self._seed_base()
+
+        # Admin user has no college_code set
+        admin = _make_admin_user()
+        client = self._client_with_user(admin)
+
+        response = client.get(
+            "/api/v1/college-review/applications/department-summary-export-bulk",
+            params={
+                "scholarship_type_id": 1,
+                "academic_year": 114,
+                "scope": "college",
+            },
+        )
+
+        assert response.status_code == 400
+        body = response.json()
+        msg = body.get("message", body.get("detail", ""))
+        assert "未設定學院" in msg
