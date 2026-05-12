@@ -138,7 +138,7 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
       }
       // Check if API URL points to mock service
       if (
-        studentData.api_url &&
+        typeof studentData.api_url === "string" &&
         studentData.api_url.includes("mock-student-api")
       ) {
         return "mock";
@@ -749,19 +749,19 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
                         <div>
                           <div className="font-semibold text-sm mb-2">基本資料</div>
                           <div className="font-mono text-xs overflow-x-auto bg-white p-2 rounded">
-                            {renderValue(studentData.student || studentData)}
+                            {renderValue((studentData.student as JsonValue) ?? (studentData as JsonValue))}
                           </div>
                         </div>
 
                         {/* Debug: Show what's in studentData */}
                         <div className="text-xs text-gray-500 bg-yellow-50 p-2 rounded">
                           Debug: semesters exists: {String(!!studentData.semesters)} |
-                          length: {studentData.semesters?.length || 0} |
+                          length: {Array.isArray(studentData.semesters) ? studentData.semesters.length : 0} |
                           keys: {Object.keys(studentData).join(', ')}
                         </div>
 
                         {/* Semester Data */}
-                        {studentData.semesters && studentData.semesters.length > 0 && (
+                        {Array.isArray(studentData.semesters) && studentData.semesters.length > 0 && (
                           <div>
                             <div className="font-semibold text-sm mb-2">
                               學期資料 ({studentData.semesters.length} 筆)
