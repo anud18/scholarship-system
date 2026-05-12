@@ -149,6 +149,21 @@ class TestStaticColumns:
             "指導教授姓名",
         ]
 
+    def test_rank_position_none_renders_empty_cell(self):
+        """Empty rank cell — used by 申請總表 export which has no rank yet."""
+        row = ExportRow(
+            rank_position=None,
+            application=FakeApplication(
+                sub_type_preferences=["nstc"],
+                student_data=_full_student_data(),
+            ),
+        )
+        rows = _build_workbook([row])
+        # rows[0] = title, rows[1] = headers, rows[2] = first data row
+        data = rows[2]
+        assert data[0] == 1  # NO. (1-based row index)
+        assert data[1] == ""  # rank should be empty when None
+
 
 class TestStaticFieldEdgeCases:
     @pytest.mark.parametrize(
