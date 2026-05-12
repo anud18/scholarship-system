@@ -14,6 +14,7 @@ This allows the router to be flexible and reusable.
 from fastapi import APIRouter
 
 from .application_review import router as application_router
+from .application_summary_export import router as application_summary_export_router
 from .distribution import router as distribution_router
 from .export_package import router as export_package_router
 from .ranking_management import router as ranking_router
@@ -24,6 +25,7 @@ router = APIRouter(tags=["College Review"])
 
 # Include all sub-routers with their respective tags
 router.include_router(application_router, tags=["College Review - Applications"])
+router.include_router(application_summary_export_router, tags=["College Review - Applications Summary"])
 router.include_router(ranking_router, tags=["College Review - Rankings"])
 router.include_router(distribution_router, tags=["College Review - Distribution"])
 router.include_router(utilities_router, tags=["College Review - Utilities"])
