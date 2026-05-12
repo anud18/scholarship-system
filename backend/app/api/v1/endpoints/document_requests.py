@@ -60,6 +60,7 @@ async def create_document_request(
         requested_documents=request_data.requested_documents,
         reason=request_data.reason,
         notes=request_data.notes,
+        deadline=request_data.deadline,
         status=DocumentRequestStatus.pending.value,
     )
 
