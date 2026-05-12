@@ -100,21 +100,7 @@ Empty result sets are handled per the table in the **Error handling** section: a
    - Single: `[department_code]` after auth check.
    - Bulk `scope=college`: `select Department.code where academy_code == current_user.college_code` (admins use their own `college_code`; the 400 above guards admins with no `college_code`).
    - Bulk `scope=all`: distinct `std_depno` values present in matching applications.
-2. Load applications:
-   ```python
-   stmt = (
-       select(Application)
-       .where(
-           Application.scholarship_type_id == scholarship_type_id,
-           Application.academic_year == academic_year,
-           Application.semester == normalised_semester,  # IS NULL when yearly
-           Application.status != ApplicationStatus.deleted.value,
-           Application.deleted_at.is_(None),
-           Application.student_data["std_depno"].astext.in_(department_codes),
-       )
-   )
-   ```
-   The JSON path predicate uses SQLAlchemy's `JSON.astext`. PostgreSQL is the only supported DB.
+2. Load applications by `(scholarship_type_id, academic_year, semester)` in SQL, then filter by `student_data.get("std_depno")` in Python. `student_data` is a plain `JSON` column (not `JSONB`); SQL-side JSON-path filtering (`student_data["std_depno"].astext`) is fragile across SQLAlchemy versions for plain JSON. Typical N per `(scholarship_type, year, semester)` is < 1k, so Python filtering is fine.
 3. Sort in Python by `student_data.get("std_stdcode") or ""` ASC, secondary by `application.id` ASC. (Doing this in Python avoids JSON-collation surprises across PG versions.)
 4. Load dynamic fields, sub-type labels, profile account numbers, and advisor names with the same bulk-load pattern as `ranking_management.export_ranking_excel` (lines 1127-1199). Refactor that block into a helper at `backend/app/api/v1/endpoints/college_review/_helpers.py` to avoid duplication. Helper signature:
    ```python
