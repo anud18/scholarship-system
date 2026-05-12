@@ -81,7 +81,7 @@ test.describe("Student withdraws a submitted application", () => {
     }
   });
 
-  test("@smoke submit → withdraw → state=draft; second withdraw rejected", async ({ browser }) => {
+  test("submit → withdraw → state=draft; second withdraw rejected", async ({ browser }) => {
     // 0. Drain any leftover (stuphd001, phd) apps from concurrent
     //    specs whose afterAll cleanup hasn't propagated yet.
     await purgeStudentApps(STUDENT_ID, SCHOLARSHIP_CODE);
