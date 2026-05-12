@@ -296,7 +296,7 @@ async def export_department_summary_bulk(
             )
             inner_name = (
                 f"{academic_year}學年度{scholarship_name}學生資料彙整表"
-                f"_{_sanitise_filename_part(dept_name)}.xlsx"
+                f"_{_sanitise_filename_part(dept_name)}_{_sanitise_filename_part(dept_code)}.xlsx"
             )
             zf.writestr(inner_name, xlsx_bytes)
 
