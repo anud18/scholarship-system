@@ -2895,44 +2895,47 @@ class ApplicationService:
             raise
 
     async def get_professor_review_stats(self, professor_id: int) -> dict:
-        """Get basic review statistics for a professor"""
-        try:
-            # Get applications in current review period - simplified approach to avoid column reference issues
-            pending_query = select(func.count(Application.id)).where(
-                Application.professor_id == professor_id,
-                Application.status.in_(
-                    [
-                        ApplicationStatus.submitted.value,
-                    ]
-                ),
-            )
+        """Professor dashboard review stats from the unified ApplicationReview table.
 
-            completed_query = select(func.count(ProfessorReview.id)).where(
-                ProfessorReview.professor_id == professor_id,
-                ProfessorReview.review_status == "completed",
-            )
+        Previously queried the placeholder `ProfessorReview` class (a `pass`
+        stub left over from an unfinished migration — see issue #218), which
+        would 500 on SQLAlchemy's unmapped-class check. The endpoint at
+        `professor.py:341` is wired live, so that bug was reachable in prod.
 
-            # Execute queries
-            pending_result = await self.db.execute(pending_query)
-            completed_result = await self.db.execute(completed_query)
+        - completed_reviews: rows where reviewer_id = professor_id
+        - pending_reviews: applications assigned to this professor in
+          submitted/under_review where this reviewer has no review row yet
+        - overdue_reviews: 0 (deadline tracking lives in the deadline_checker
+          task; surfacing it here is future work and would need a join on
+          ScholarshipConfiguration.professor_review_end_date)
 
-            pending_count = pending_result.scalar() or 0
-            completed_count = completed_result.scalar() or 0
+        Per CLAUDE.md §1, errors propagate — no silent zero-fallback.
+        """
+        already_reviewed = select(ApplicationReview.application_id).where(ApplicationReview.reviewer_id == professor_id)
 
-            # For overdue reviews, we'll use a simplified approach
-            # In production, this would need proper review period configuration
-            # For now, assume overdue = 0 (can be enhanced later)
-            overdue_count = 0
+        pending_query = select(sa_func.count(Application.id)).where(
+            Application.professor_id == professor_id,
+            Application.status.in_(
+                [
+                    ApplicationStatus.submitted.value,
+                    ApplicationStatus.under_review.value,
+                ]
+            ),
+            Application.id.not_in(already_reviewed),
+        )
 
-            return {
-                "pending_reviews": pending_count,
-                "completed_reviews": completed_count,
-                "overdue_reviews": overdue_count,
-            }
+        completed_query = select(sa_func.count(ApplicationReview.id)).where(
+            ApplicationReview.reviewer_id == professor_id
+        )
 
-        except Exception as e:
-            logger.error(f"Error fetching professor stats: {e}")
-            return {"pending_reviews": 0, "completed_reviews": 0, "overdue_reviews": 0}
+        pending_count = (await self.db.execute(pending_query)).scalar() or 0
+        completed_count = (await self.db.execute(completed_query)).scalar() or 0
+
+        return {
+            "pending_reviews": pending_count,
+            "completed_reviews": completed_count,
+            "overdue_reviews": 0,
+        }
 
     async def get_available_professors(self, user: User, search: Optional[str] = None) -> List[Dict[str, Any]]:
         """
