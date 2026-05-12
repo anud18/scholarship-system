@@ -571,3 +571,113 @@ export async function exportRankingExcel(
   const blob = await response.blob();
   return { blob, filename };
 }
+
+type DepartmentSummaryExportArgs = {
+  scholarship_type_id: number;
+  academic_year: number;
+  semester?: string | null;
+};
+
+/**
+ * Download a single department's 申請總表 Excel.
+ *
+ * Endpoint: GET /api/v1/college-review/applications/department-summary-export
+ */
+export async function exportDepartmentSummary(
+  args: DepartmentSummaryExportArgs & { department_code: string }
+): Promise<{ blob: Blob; filename: string }> {
+  const token = typedClient.getToken();
+  const baseURL =
+    typeof window !== "undefined"
+      ? ""
+      : process.env.INTERNAL_API_URL || "http://localhost:8000";
+
+  const params = new URLSearchParams();
+  params.set("scholarship_type_id", String(args.scholarship_type_id));
+  params.set("academic_year", String(args.academic_year));
+  if (args.semester) params.set("semester", args.semester);
+  params.set("department_code", args.department_code);
+
+  const response = await fetch(
+    `${baseURL}/api/v1/college-review/applications/department-summary-export?${params.toString()}`,
+    {
+      method: "GET",
+      credentials: "include",
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    }
+  );
+
+  if (!response.ok) {
+    let message = "無法匯出申請總表";
+    try {
+      const errorData = await response.json();
+      message = errorData?.detail || errorData?.message || errorData?.error || message;
+    } catch {
+      // Non-JSON error body — keep default message.
+    }
+    throw new Error(message);
+  }
+
+  const disposition = response.headers.get("content-disposition") || "";
+  const filenameMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  const filename = filenameMatch
+    ? decodeURIComponent(filenameMatch[1].trim())
+    : "申請總表.xlsx";
+
+  const blob = await response.blob();
+  return { blob, filename };
+}
+
+/**
+ * Download a ZIP of 申請總表 Excels, one per department.
+ *
+ * Endpoint: GET /api/v1/college-review/applications/department-summary-export-bulk
+ */
+export async function exportDepartmentSummaryBulk(
+  args: DepartmentSummaryExportArgs & { scope: "college" | "all" }
+): Promise<{ blob: Blob; filename: string }> {
+  const token = typedClient.getToken();
+  const baseURL =
+    typeof window !== "undefined"
+      ? ""
+      : process.env.INTERNAL_API_URL || "http://localhost:8000";
+
+  const params = new URLSearchParams();
+  params.set("scholarship_type_id", String(args.scholarship_type_id));
+  params.set("academic_year", String(args.academic_year));
+  if (args.semester) params.set("semester", args.semester);
+  params.set("scope", args.scope);
+
+  const response = await fetch(
+    `${baseURL}/api/v1/college-review/applications/department-summary-export-bulk?${params.toString()}`,
+    {
+      method: "GET",
+      credentials: "include",
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    }
+  );
+
+  if (!response.ok) {
+    let message = "無法匯出申請總表";
+    try {
+      const errorData = await response.json();
+      message = errorData?.detail || errorData?.message || errorData?.error || message;
+    } catch {
+      // Non-JSON error body — keep default message.
+    }
+    throw new Error(message);
+  }
+
+  const disposition = response.headers.get("content-disposition") || "";
+  const filenameMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  const filename = filenameMatch
+    ? decodeURIComponent(filenameMatch[1].trim())
+    : "申請總表.zip";
+
+  const blob = await response.blob();
+  return { blob, filename };
+}
