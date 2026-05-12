@@ -1249,8 +1249,7 @@ async def export_ranking_excel(
             resource_id=str(ranking_id),
             resource_name=base_filename,
             description=(
-                f"匯出學生資料彙整表（含身分證字號明文）: ranking_id={ranking_id}, "
-                f"records={len(exported_app_ids)}"
+                f"匯出學生資料彙整表（含身分證字號明文）: ranking_id={ranking_id}, " f"records={len(exported_app_ids)}"
             ),
             ip_address=(request.client.host if request.client else None),
             user_agent=request.headers.get("user-agent"),
@@ -1259,9 +1258,7 @@ async def export_ranking_excel(
             status="success",
             meta_data={
                 "ranking_id": ranking_id,
-                "scholarship_type_id": (
-                    ranking.scholarship_type.id if ranking.scholarship_type else None
-                ),
+                "scholarship_type_id": (ranking.scholarship_type.id if ranking.scholarship_type else None),
                 "academic_year": ranking.academic_year,
                 "record_count": len(exported_app_ids),
                 "application_ids": exported_app_ids,
