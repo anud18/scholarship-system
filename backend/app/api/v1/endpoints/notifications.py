@@ -2,6 +2,7 @@
 Notification endpoints for managing user notifications and system announcements
 """
 
+import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -17,6 +18,8 @@ from app.models.user import User
 from app.schemas.notification import NotificationCreate
 from app.schemas.response import ApiResponse
 from app.services.notification_service import NotificationService
+
+logger = logging.getLogger(__name__)
 
 func: Any = sa_func
 
@@ -49,6 +52,7 @@ async def getUserNotifications(
         return ApiResponse(success=True, message="通知列表獲取成功", data=notifications_data)
 
     except Exception as e:
+        logger.exception("Failed to fetch notifications for user_id=%s", current_user.id)
         raise HTTPException(status_code=500, detail=f"獲取通知失敗: {str(e)}")
 
 
@@ -67,6 +71,7 @@ async def getUnreadNotificationCount(
         return ApiResponse(success=True, message="未讀通知數量獲取成功", data=count)
 
     except Exception as e:
+        logger.exception("Failed to fetch unread notification count for user_id=%s", current_user.id)
         raise HTTPException(status_code=500, detail=f"獲取未讀通知數量失敗: {str(e)}")
 
 
@@ -91,6 +96,7 @@ async def markNotificationAsRead(
         raise
     except Exception as e:
         await db.rollback()
+        logger.exception("Failed to mark notification as read for user_id=%s", current_user.id)
         raise HTTPException(status_code=500, detail=f"標記通知為已讀失敗: {str(e)}")
 
 
@@ -112,6 +118,7 @@ async def markAllNotificationsAsRead(
 
     except Exception as e:
         await db.rollback()
+        logger.exception("Failed to mark all notifications as read for user_id=%s", current_user.id)
         raise HTTPException(status_code=500, detail=f"標記所有通知為已讀失敗: {str(e)}")
 
 
@@ -147,6 +154,7 @@ async def dismissNotification(
         raise
     except Exception as e:
         await db.rollback()
+        logger.exception("Failed to dismiss notification for user_id=%s", current_user.id)
         raise HTTPException(status_code=500, detail=f"關閉通知失敗: {str(e)}")
 
 
@@ -202,6 +210,7 @@ async def getNotificationDetail(
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("Failed to fetch notification detail for user_id=%s", current_user.id)
         raise HTTPException(status_code=500, detail=f"獲取通知詳情失敗: {str(e)}")
 
 
@@ -263,6 +272,7 @@ async def createSystemAnnouncement(
 
     except Exception as e:
         await db.rollback()
+        logger.exception("Failed to create system announcement by user_id=%s", current_user.id)
         raise HTTPException(status_code=500, detail=f"創建系統公告失敗: {str(e)}")
 
 
@@ -326,6 +336,7 @@ async def createTestNotifications(current_user: User = Depends(get_current_user)
 
     except Exception as e:
         await db.rollback()
+        logger.exception("Failed to create test notifications by user_id=%s", current_user.id)
         raise HTTPException(status_code=500, detail=f"創建測試通知失敗: {str(e)}")
 
 
@@ -414,6 +425,7 @@ async def getAllAnnouncements(
         )
 
     except Exception as e:
+        logger.exception("Failed to list system announcements for user_id=%s", current_user.id)
         raise HTTPException(status_code=500, detail=f"獲取系統公告列表失敗: {str(e)}")
 
 
@@ -473,6 +485,7 @@ async def getAnnouncement(
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("Failed to fetch system announcement detail for user_id=%s", current_user.id)
         raise HTTPException(status_code=500, detail=f"獲取系統公告詳情失敗: {str(e)}")
 
 
@@ -534,6 +547,7 @@ async def createAnnouncement(
 
     except Exception as e:
         await db.rollback()
+        logger.exception("Failed to create system announcement by user_id=%s", current_user.id)
         raise HTTPException(status_code=500, detail=f"創建系統公告失敗: {str(e)}")
 
 
@@ -622,6 +636,7 @@ async def updateAnnouncement(
         raise
     except Exception as e:
         await db.rollback()
+        logger.exception("Failed to update system announcement by user_id=%s", current_user.id)
         raise HTTPException(status_code=500, detail=f"更新系統公告失敗: {str(e)}")
 
 
@@ -668,4 +683,5 @@ async def deleteAnnouncement(
         raise
     except Exception as e:
         await db.rollback()
+        logger.exception("Failed to delete system announcement by user_id=%s", current_user.id)
         raise HTTPException(status_code=500, detail=f"刪除系統公告失敗: {str(e)}")
