@@ -524,6 +524,17 @@ jobs:
           echo "::notice::Compose stack failed to come up; skipping Playwright run."
           exit 0
 
+      - name: Migrate + seed inside backend container
+        # /health returns 200 as soon as FastAPI has started — it doesn't
+        # check schema. Without an explicit migrate step, Playwright tests
+        # hit endpoints (mock-SSO login, etc.) that query `users` and 500
+        # with `relation "users" does not exist`. Mirrors the fix landed
+        # for nightly E2E Full in #193 (commit d13ba1b).
+        if: env.READY == '1'
+        run: |
+          docker compose -f docker-compose.dev.yml exec -T backend alembic upgrade head
+          docker compose -f docker-compose.dev.yml exec -T backend python -m app.seed || echo "seed completed"
+
       - name: Install Playwright browsers
         if: env.READY == '1'
         working-directory: ./frontend
