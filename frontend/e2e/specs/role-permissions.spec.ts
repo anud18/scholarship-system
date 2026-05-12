@@ -80,7 +80,7 @@ test.describe("Role-permission boundaries on applications endpoints", () => {
     }
   });
 
-  test("@smoke wrong-role callers are 403 on student/professor endpoints", async ({ browser }) => {
+  test("wrong-role callers are 403 on student/professor endpoints", async ({ browser }) => {
     // 0a. Drain any leftover (stuphd001, phd) apps from concurrent specs
     //     whose afterAll cleanup hasn't propagated yet.
     await purgeStudentApps(STUDENT_ID, SCHOLARSHIP_CODE);
