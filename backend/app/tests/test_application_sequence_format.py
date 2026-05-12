@@ -20,7 +20,6 @@ import pytest
 
 from app.models.application_sequence import ApplicationSequence
 
-
 pytestmark = pytest.mark.smoke
 
 
@@ -94,9 +93,7 @@ class TestFormatAppId:
             (100, "yearly", 12345, "APP-100-0-12345"),
         ],
     )
-    def test_format_matrix_matches_docs(
-        self, year: int, semester: str, seq: int, expected: str
-    ) -> None:
+    def test_format_matrix_matches_docs(self, year: int, semester: str, seq: int, expected: str) -> None:
         """Matrix that mirrors the examples in CLAUDE.md §6. If anyone changes
         the format without updating CLAUDE.md, this regression fails first."""
         assert ApplicationSequence.format_app_id(year, semester, seq) == expected
@@ -118,9 +115,7 @@ class TestRoundTripParsability:
             (114, "yearly", 12345),
         ],
     )
-    def test_app_id_splits_into_four_parts(
-        self, year: int, semester: str, seq: int
-    ) -> None:
+    def test_app_id_splits_into_four_parts(self, year: int, semester: str, seq: int) -> None:
         app_id = ApplicationSequence.format_app_id(year, semester, seq)
         parts = app_id.split("-")
         assert len(parts) == 4
