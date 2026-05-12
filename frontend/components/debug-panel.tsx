@@ -22,11 +22,18 @@ interface DebugPanelProps {
   isTestMode?: boolean;
 }
 
+// JSON blobs fetched at runtime from JWT decoding and SIS API responses.
+// Shapes are intentionally loose because the panel renders whatever the
+// backend returned (including unknown / debug-only fields). Render code below
+// narrows specific fields on access.
+type JsonObject = Record<string, unknown>;
+type JsonValue = unknown;
+
 export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [portalData, setPortalData] = useState<any>(null);
-  const [studentData, setStudentData] = useState<any>(null);
-  const [jwtData, setJwtData] = useState<any>(null);
+  const [portalData, setPortalData] = useState<JsonObject | null>(null);
+  const [studentData, setStudentData] = useState<JsonObject | null>(null);
+  const [jwtData, setJwtData] = useState<JsonObject | null>(null);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(["jwt", "portal", "student"])
   );
@@ -88,8 +95,8 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
   };
 
   const detectPortalSource = (
-    jwtPayload: any,
-    portalData: any
+    jwtPayload: JsonObject | null,
+    portalData: JsonObject | null
   ): "mock" | "real" | "unknown" => {
     // If JWT has debug_mode flag, check portal data source
     if (jwtPayload?.debug_mode && portalData) {
@@ -120,8 +127,8 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
   };
 
   const detectStudentApiSource = (
-    jwtPayload: any,
-    studentData: any
+    jwtPayload: JsonObject | null,
+    studentData: JsonObject | null
   ): "mock" | "real" | "unknown" => {
     // If JWT has debug_mode flag, check student data source
     if (jwtPayload?.debug_mode && studentData) {
@@ -366,7 +373,11 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
     }
   };
 
-  const renderValue = (value: any, path: string = ""): JSX.Element => {
+  // Recursive JSON renderer. The input is intentionally `JsonValue` (= unknown)
+  // because the panel shows whatever shape the backend / JWT returned, including
+  // novel fields added by future endpoints. All property accesses inside narrow
+  // via typeof / Array.isArray checks first.
+  const renderValue = (value: JsonValue, path: string = ""): JSX.Element => {
     if (value === null || value === undefined) {
       return <span className="text-gray-400">null</span>;
     }
@@ -756,16 +767,22 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
                               學期資料 ({studentData.semesters.length} 筆)
                             </div>
                             <div className="space-y-2">
-                              {studentData.semesters.map((semester: any, index: number) => (
-                                <div key={index} className="bg-white p-3 rounded border border-gray-200">
-                                  <div className="font-semibold text-xs mb-2 text-blue-600">
-                                    {semester.academic_year || semester.trm_year} 學年 第 {semester.term || semester.trm_term} 學期
+                              {(studentData.semesters as JsonObject[]).map(
+                                (semester: JsonObject, index: number) => (
+                                  <div
+                                    key={index}
+                                    className="bg-white p-3 rounded border border-gray-200"
+                                  >
+                                    <div className="font-semibold text-xs mb-2 text-blue-600">
+                                      {String(semester.academic_year ?? semester.trm_year ?? "")} 學年 第{" "}
+                                      {String(semester.term ?? semester.trm_term ?? "")} 學期
+                                    </div>
+                                    <div className="font-mono text-xs overflow-x-auto">
+                                      {renderValue(semester)}
+                                    </div>
                                   </div>
-                                  <div className="font-mono text-xs overflow-x-auto">
-                                    {renderValue(semester)}
-                                  </div>
-                                </div>
-                              ))}
+                                )
+                              )}
                             </div>
                           </div>
                         )}
