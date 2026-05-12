@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Get latest CodeQL run ID
         if: ${{ github.event.inputs.run_id == '' }}
@@ -53,7 +53,7 @@ jobs:
           if_no_artifact_found: warn
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.13'
 
@@ -410,14 +410,14 @@ jobs:
         run: ls -lh codeql-security-report.pdf
 
       - name: Upload PDF Report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: codeql-security-report
           path: codeql-security-report.pdf
           retention-days: 90
 
       - name: Upload HTML Report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: codeql-security-report-html
           path: codeql-report.html
