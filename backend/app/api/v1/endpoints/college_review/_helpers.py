@@ -202,8 +202,6 @@ async def load_export_aux_data(
     # 4. Advisor names from relationships
     advisor_names_by_user: dict[int, list[str]] = {uid: [] for uid in user_ids}
     if user_ids:
-        from app.models.user import User  # local to avoid circular imports
-
         rel_stmt = (
             select(ProfessorStudentRelationship.student_id, User.name)
             .join(User, User.id == ProfessorStudentRelationship.professor_id)
