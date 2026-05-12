@@ -29,6 +29,10 @@ class DocumentRequestCreate(BaseModel):
         max_length=2000,
         examples=["請於一週內上傳，並確保文件清晰可讀"],
     )
+    deadline: Optional[datetime] = Field(
+        None,
+        description="When the student must fulfill this request by; null = no hard deadline.",
+    )
 
 
 class DocumentRequestFulfill(BaseModel):
@@ -65,6 +69,7 @@ class DocumentRequestResponse(BaseModel):
 
     status: str  # Using string value from enum
     fulfilled_at: Optional[datetime] = None
+    deadline: Optional[datetime] = None
     cancelled_at: Optional[datetime] = None
     cancelled_by_id: Optional[int] = None
     cancellation_reason: Optional[str] = None
@@ -93,6 +98,7 @@ class DocumentRequestListItem(BaseModel):
     reason: str
     status: str
     fulfilled_at: Optional[datetime] = None
+    deadline: Optional[datetime] = None
     cancelled_at: Optional[datetime] = None
     created_at: datetime
 
@@ -115,5 +121,6 @@ class StudentDocumentRequestResponse(BaseModel):
     reason: str
     notes: Optional[str] = None
     status: str
+    deadline: Optional[datetime] = None
 
     created_at: datetime

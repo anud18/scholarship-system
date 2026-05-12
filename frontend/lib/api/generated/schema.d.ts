@@ -8261,6 +8261,11 @@ export interface components {
              * @example 請於一週內上傳，並確保文件清晰可讀
              */
             notes?: string | null;
+            /**
+             * Deadline
+             * @description When the student must fulfill this request by; null = no hard deadline.
+             */
+            deadline?: string | null;
         };
         /**
          * DocumentRequestFulfill
