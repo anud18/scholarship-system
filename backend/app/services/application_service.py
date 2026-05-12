@@ -42,21 +42,6 @@ func: Any = sa_func
 logger = logging.getLogger(__name__)
 
 
-# TODO: DEPRECATED - Remove these after refactoring all professor review functions
-# These are placeholder classes to prevent undefined name errors
-# The unified review system (ApplicationReview) should be used instead
-class ProfessorReview:
-    """DEPRECATED: Use ApplicationReview instead"""
-
-    pass
-
-
-class ProfessorReviewItem:
-    """DEPRECATED: Use ApplicationReviewItem instead"""
-
-    pass
-
-
 async def get_student_data_from_user(user: User) -> Optional[Dict[str, Any]]:
     """Get student data from external API using user's nycu_id"""
     if user.role != UserRole.student or not user.nycu_id:
@@ -2613,326 +2598,47 @@ class ApplicationService:
             logger.error(f"Error checking professor review submission authorization: {e}")
             return False
 
-    async def get_professor_review(self, application_id: int, professor_id: int):
-        """Get existing professor review"""
-        try:
-            stmt = (
-                select(ProfessorReview)
-                .options(
-                    selectinload(ProfessorReview.items),
-                    selectinload(ProfessorReview.application),
-                )
-                .where(
-                    and_(
-                        ProfessorReview.application_id == application_id,
-                        ProfessorReview.professor_id == professor_id,
-                    )
-                )
-            )
-
-            result = await self.db.execute(stmt)
-            review = result.scalar_one_or_none()
-
-            if not review:
-                return None
-
-            from app.schemas.application import ProfessorReviewItemResponse, ProfessorReviewResponse
-
-            return ProfessorReviewResponse(
-                id=review.id,
-                application_id=review.application_id,
-                professor_id=review.professor_id,
-                recommendation=review.recommendation,
-                review_status=review.review_status,
-                reviewed_at=review.reviewed_at,
-                created_at=review.created_at,
-                items=[
-                    ProfessorReviewItemResponse(
-                        id=item.id,
-                        review_id=item.review_id,
-                        sub_type_code=item.sub_type_code,
-                        is_recommended=item.is_recommended,
-                        comments=item.comments,
-                        created_at=item.created_at,
-                    )
-                    for item in review.items
-                ],
-            )
-
-        except Exception as e:
-            logger.error(f"Error fetching professor review: {e}")
-            raise
-
-    async def get_professor_review_by_id(self, review_id: int):
-        """Get professor review by its ID (for authorization checks)"""
-        try:
-            stmt = (
-                select(ProfessorReview)
-                .options(selectinload(ProfessorReview.items))
-                .where(ProfessorReview.id == review_id)
-            )
-
-            result = await self.db.execute(stmt)
-            review = result.scalar_one_or_none()
-
-            if not review:
-                return None
-
-            from app.schemas.application import ProfessorReviewItemResponse, ProfessorReviewResponse
-
-            return ProfessorReviewResponse(
-                id=review.id,
-                application_id=review.application_id,
-                professor_id=review.professor_id,
-                recommendation=review.recommendation,
-                review_status=review.review_status,
-                reviewed_at=review.reviewed_at,
-                created_at=review.created_at,
-                items=[
-                    ProfessorReviewItemResponse(
-                        id=item.id,
-                        review_id=item.review_id,
-                        sub_type_code=item.sub_type_code,
-                        is_recommended=item.is_recommended,
-                        comments=item.comments,
-                        created_at=item.created_at,
-                    )
-                    for item in review.items
-                ],
-            )
-
-        except Exception as e:
-            logger.error(f"Error fetching professor review by ID {review_id}: {e}")
-            raise
-
-    async def submit_professor_review(self, application_id: int, professor_id: int, review_data: dict) -> dict:
-        """Submit professor review for an application"""
-        try:
-            logger.info(f"Step 1: Checking existing review for app {application_id}, prof {professor_id}")
-            # Check if review already exists
-            existing_review = await self.get_professor_review(application_id, professor_id)
-            if existing_review and existing_review.id > 0:  # ID > 0 means it's saved (not a new review template)
-                # Update existing review
-                logger.info(f"Found existing review {existing_review.id}, updating")
-                return await self.update_professor_review(existing_review.id, review_data)
-
-            logger.info("Step 2: Creating new professor review")
-            # Create new professor review
-            professor_review = ProfessorReview(
-                application_id=application_id,
-                professor_id=professor_id,
-                recommendation=review_data.get("recommendation"),
-                review_status="completed",
-                reviewed_at=datetime.now(timezone.utc),
-            )
-
-            self.db.add(professor_review)
-            logger.info("Step 3: Flushing to get review ID")
-            await self.db.flush()  # Get the review ID
-            logger.info(f"Created review with ID {professor_review.id}")
-
-            # Create review items for each sub-type
-            logger.info(f"Step 4: Creating {len(review_data.get('items', []))} review items")
-            review_items = review_data.get("items", [])
-            for item_data in review_items:
-                review_item = ProfessorReviewItem(
-                    review_id=professor_review.id,
-                    sub_type_code=item_data.get("sub_type_code"),
-                    is_recommended=item_data.get("is_recommended", False),
-                    comments=item_data.get("comments"),
-                )
-                self.db.add(review_item)
-
-            # Update application status
-            logger.info("Step 5: Updating application status")
-            stmt = select(Application).where(Application.id == application_id)
-            result = await self.db.execute(stmt)
-            application = result.scalar_one_or_none()
-
-            if application:
-                from app.utils.i18n import ScholarshipI18n
-
-                logger.info("Step 6: Setting status to under_review")
-                application.status = ApplicationStatus.under_review
-                application.status_name = ScholarshipI18n.get_application_status_text(
-                    ApplicationStatus.under_review.value
-                )
-
-            logger.info("Step 7: Committing transaction")
-            await self.db.commit()
-            await self._invalidate_app_caches()
-
-            # Return the created review
-            logger.info("Step 8: Fetching created review to return")
-            return await self.get_professor_review(application_id, professor_id)
-
-        except Exception as e:
-            await self.db.rollback()
-            logger.error(f"Error submitting professor review: {e}")
-            import traceback
-
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            raise
-
-    async def update_professor_review(self, review_id: int, review_data: dict) -> dict:
-        """Update an existing professor review"""
-        try:
-            # Get existing review
-            stmt = (
-                select(ProfessorReview)
-                .options(selectinload(ProfessorReview.items))
-                .where(ProfessorReview.id == review_id)
-            )
-
-            result = await self.db.execute(stmt)
-            review = result.scalar_one_or_none()
-
-            if not review:
-                raise NotFoundError("Professor review not found")
-
-            # Update review fields
-            review.recommendation = review_data.get("recommendation", review.recommendation)
-            review.review_status = "completed"
-            review.reviewed_at = datetime.now(timezone.utc)
-
-            # Update review items
-            existing_items = {item.sub_type_code: item for item in review.items}
-            new_items = review_data.get("items", [])
-
-            for item_data in new_items:
-                sub_type_code = item_data.get("sub_type_code")
-                if sub_type_code in existing_items:
-                    # Update existing item
-                    existing_item = existing_items[sub_type_code]
-                    existing_item.is_recommended = item_data.get("is_recommended", False)
-                    existing_item.comments = item_data.get("comments")
-                else:
-                    # Create new item
-                    new_item = ProfessorReviewItem(
-                        review_id=review.id,
-                        sub_type_code=sub_type_code,
-                        is_recommended=item_data.get("is_recommended", False),
-                        comments=item_data.get("comments"),
-                    )
-                    self.db.add(new_item)
-
-            await self.db.commit()
-
-            # Return updated review
-            return await self.get_professor_review(review.application_id, review.professor_id)
-
-        except Exception as e:
-            await self.db.rollback()
-            logger.error(f"Error updating professor review: {e}")
-            raise
-
-    async def get_application_available_sub_types(self, application_id: int) -> List[dict]:
-        """Get sub-types that the student actually applied for (not all possible sub-types)"""
-        try:
-            # Get application with scholarship type - use explicit join to avoid lazy loading
-            stmt = (
-                select(Application)
-                .options(selectinload(Application.scholarship_configuration))
-                .where(Application.id == application_id)
-            )
-
-            result = await self.db.execute(stmt)
-            application = result.scalar_one_or_none()
-
-            if not application:
-                return []
-
-            # Get the sub-types that the student actually applied for
-            applied_sub_types = application.scholarship_subtype_list or []
-
-            # If no specific sub-types or contains general, only show main scholarship (no sub-type selection)
-            if not applied_sub_types or "general" in applied_sub_types or len(applied_sub_types) == 0:
-                return []  # No sub-types to review for general applications
-
-            # Get scholarship type with sub_type_configs relationship loaded properly
-            from app.models.scholarship import ScholarshipType
-
-            stmt = (
-                select(ScholarshipType)
-                .options(selectinload(ScholarshipType.sub_type_configs))
-                .where(ScholarshipType.id == application.scholarship_type_id)
-            )
-            result = await self.db.execute(stmt)
-            scholarship_type = result.scalar_one_or_none()
-
-            if not scholarship_type:
-                return []
-
-            # Build translations from loaded sub_type_configs
-            translations = {"zh": {}, "en": {}}
-
-            # Get active sub-type configs that are already loaded
-            active_configs = [config for config in scholarship_type.sub_type_configs if config.is_active]
-            active_configs.sort(key=lambda x: x.display_order)
-
-            for config in active_configs:
-                translations["zh"][config.sub_type_code] = config.name
-                translations["en"][config.sub_type_code] = config.name_en or config.name
-
-            # Build response - only include sub-types that the student applied for
-            sub_type_list = []
-
-            for sub_type in applied_sub_types:
-                if sub_type and sub_type != "general":  # Skip general
-                    sub_type_list.append(
-                        {
-                            "value": sub_type,
-                            "label": translations.get("zh", {}).get(sub_type, sub_type),
-                            "label_en": translations.get("en", {}).get(sub_type, sub_type),
-                            "is_default": False,
-                        }
-                    )
-
-            return sub_type_list
-
-        except Exception as e:
-            logger.error(f"Error fetching application sub-types: {e}")
-            raise
-
     async def get_professor_review_stats(self, professor_id: int) -> dict:
-        """Get basic review statistics for a professor"""
-        try:
-            # Get applications in current review period - simplified approach to avoid column reference issues
-            pending_query = select(func.count(Application.id)).where(
-                Application.professor_id == professor_id,
-                Application.status.in_(
-                    [
-                        ApplicationStatus.submitted.value,
-                    ]
-                ),
-            )
+        """Professor dashboard review stats from the unified ApplicationReview table.
 
-            completed_query = select(func.count(ProfessorReview.id)).where(
-                ProfessorReview.professor_id == professor_id,
-                ProfessorReview.review_status == "completed",
-            )
+        Previously queried the placeholder `ProfessorReview` class (a `pass`
+        stub left over from an unfinished migration — issue #218), which
+        would 500 in production on SQLAlchemy's unmapped-class check.
+        The silent except handler masked it as `{0, 0, 0}` — itself a
+        CLAUDE.md §1 violation.
 
-            # Execute queries
-            pending_result = await self.db.execute(pending_query)
-            completed_result = await self.db.execute(completed_query)
+        - completed_reviews: rows where reviewer_id = professor_id
+        - pending_reviews: applications assigned to this professor in
+          submitted/under_review where this reviewer has no review row yet
+        - overdue_reviews: 0 (deadline tracking lives in deadline_checker;
+          surfacing it here would require a join on
+          ScholarshipConfiguration.professor_review_end_date)
+        """
+        already_reviewed = select(ApplicationReview.application_id).where(ApplicationReview.reviewer_id == professor_id)
 
-            pending_count = pending_result.scalar() or 0
-            completed_count = completed_result.scalar() or 0
+        pending_query = select(sa_func.count(Application.id)).where(
+            Application.professor_id == professor_id,
+            Application.status.in_(
+                [
+                    ApplicationStatus.submitted.value,
+                    ApplicationStatus.under_review.value,
+                ]
+            ),
+            Application.id.not_in(already_reviewed),
+        )
 
-            # For overdue reviews, we'll use a simplified approach
-            # In production, this would need proper review period configuration
-            # For now, assume overdue = 0 (can be enhanced later)
-            overdue_count = 0
+        completed_query = select(sa_func.count(ApplicationReview.id)).where(
+            ApplicationReview.reviewer_id == professor_id
+        )
 
-            return {
-                "pending_reviews": pending_count,
-                "completed_reviews": completed_count,
-                "overdue_reviews": overdue_count,
-            }
+        pending_count = (await self.db.execute(pending_query)).scalar() or 0
+        completed_count = (await self.db.execute(completed_query)).scalar() or 0
 
-        except Exception as e:
-            logger.error(f"Error fetching professor stats: {e}")
-            return {"pending_reviews": 0, "completed_reviews": 0, "overdue_reviews": 0}
+        return {
+            "pending_reviews": pending_count,
+            "completed_reviews": completed_count,
+            "overdue_reviews": 0,
+        }
 
     async def get_available_professors(self, user: User, search: Optional[str] = None) -> List[Dict[str, Any]]:
         """
@@ -2983,8 +2689,6 @@ class ApplicationService:
         """Assign professor to application with notification"""
         try:
             from app.core.exceptions import NotFoundError, ValidationError
-
-            #             from app.models.application import ApplicationReview, ProfessorReview
             from app.models.notification import NotificationChannel, NotificationPriority, NotificationType
             from app.models.user import UserRole
             from app.services.email_service import EmailService
