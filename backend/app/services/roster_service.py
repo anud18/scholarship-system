@@ -11,6 +11,7 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import RosterAlreadyExistsError, RosterGenerationError, RosterLockedError, RosterNotFoundError
+from app.core.pii_crypto import redact_dict_pii
 from app.models.application import Application
 from app.models.enums import QuotaManagementMode
 from app.models.payment_roster import (
@@ -294,10 +295,18 @@ class RosterService:
                                 user_id=created_by_user_id,
                                 user_name=user_name,
                                 description=f"學籍驗證後更新欄位: {', '.join(updated_fields)}",
-                                old_values={f: stored_student_data.get(f) for f in updated_fields},
-                                new_values={
-                                    f: fresh_student_data[f] for f in updated_fields if f in fresh_student_data
-                                },
+                                # Redact std_pid (and any other PII keys configured in
+                                # `redact_dict_pii` defaults) before persisting to
+                                # audit_logs.old_values / new_values. The ORM-loaded
+                                # `stored_student_data` has already been decrypted by
+                                # the PII TypeDecorator, so without this guard a
+                                # `std_pid` entry in `updated_fields` would write
+                                # plaintext into the audit trail and bypass at-rest
+                                # encryption. Defense in depth — see PR #202.
+                                old_values=redact_dict_pii({f: stored_student_data.get(f) for f in updated_fields}),
+                                new_values=redact_dict_pii(
+                                    {f: fresh_student_data[f] for f in updated_fields if f in fresh_student_data}
+                                ),
                                 level=RosterAuditLevel.INFO,
                                 metadata={
                                     "application_id": application.id,
