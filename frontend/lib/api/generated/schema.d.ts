@@ -16330,7 +16330,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": components["schemas"]["ApiResponse_List_dict__"];
                 };
             };
         };
@@ -16350,7 +16350,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": components["schemas"]["ApiResponse_List_dict__"];
                 };
             };
         };
@@ -16370,7 +16370,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": components["schemas"]["ApiResponse_List_dict__"];
                 };
             };
         };
@@ -16390,7 +16390,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": components["schemas"]["ApiResponse_List_dict__"];
                 };
             };
         };
@@ -16410,7 +16410,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": components["schemas"]["ApiResponse_List_dict__"];
                 };
             };
         };
@@ -16450,7 +16450,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": components["schemas"]["ApiResponse_List_dict__"];
                 };
             };
         };
@@ -16473,7 +16473,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": components["schemas"]["ApiResponse_List_dict__"];
                 };
             };
             /** @description Validation Error */
@@ -16522,7 +16522,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["ApiResponse_dict_"];
                 };
             };
         };
@@ -16545,7 +16545,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["ApiResponse_dict_"];
                 };
             };
             /** @description Validation Error */
@@ -16574,7 +16574,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["ApiResponse_dict_"];
                 };
             };
         };
