@@ -192,7 +192,11 @@ class DeadlineChecker:
                 )
 
             except Exception as e:
-                logger.error(f"Failed to trigger deadline notification for application {application.id}: {e}")
+                logger.exception(
+                    "Failed to trigger deadline notification for application %s: %s",
+                    application.id,
+                    e,
+                )
 
     async def check_document_request_deadlines(self):
         """Check for approaching document request deadlines"""
@@ -287,7 +291,11 @@ class DeadlineChecker:
             try:
                 await self._schedule_professor_deadline_reminder(application, config, now)
             except Exception as e:
-                logger.error(f"Failed to schedule deadline reminder for application {application.id}: {e}")
+                logger.exception(
+                    "Failed to schedule deadline reminder for application %s: %s",
+                    application.id,
+                    e,
+                )
 
     async def _schedule_professor_deadline_reminder(
         self, application: Application, config: ScholarshipConfiguration, now: datetime
@@ -335,7 +343,11 @@ class DeadlineChecker:
                 context=context,
             )
         except Exception as e:
-            logger.error(f"Failed to render deadline reminder HTML for application {application.id}: {e}")
+            logger.exception(
+                "Failed to render deadline reminder HTML for application %s: %s",
+                application.id,
+                e,
+            )
 
         await EmailService().schedule_email(
             db=self.db,

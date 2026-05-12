@@ -1069,6 +1069,10 @@ async def get_application_document_file(
         )
         file_content = response.read()
     except Exception as e:
+        logger.exception(
+            "Failed to fetch application document from MinIO",
+            extra={"application_id": application.id, "object_name": object_name},
+        )
         raise HTTPException(status_code=500, detail=f"無法取得文件: {str(e)}")
 
     content_type = "application/octet-stream"

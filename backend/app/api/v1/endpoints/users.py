@@ -2,6 +2,7 @@
 User management API endpoints
 """
 
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -15,6 +16,8 @@ from app.db.deps import get_db
 from app.models.user import EmployeeStatus, User, UserRole, UserType
 from app.schemas.user import BulkScholarshipAssignRequest, BulkScholarshipAssignResponse, UserCreate, UserUpdate
 from app.services.auth_service import AuthService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
