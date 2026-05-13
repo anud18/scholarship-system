@@ -30,7 +30,13 @@ from hypothesis import strategies as st
 
 from app.services.roster_service import RosterService
 
-pytestmark = pytest.mark.unit
+# Property-based fuzzing with hypothesis: each class burns 100-200 examples
+# per parametrize case, which dwarfs every other unit test in the suite
+# (~2.5s combined vs 0.05s typical). Mark `slow` so the nightly long-running
+# lane (.github/workflows/nightly.yml job `backend-slow`) collects it,
+# while the per-PR `unit` lane keeps moving. We can crank max_examples higher
+# in nightly later without touching per-PR runtime.
+pytestmark = [pytest.mark.unit, pytest.mark.slow]
 
 
 # Pairs of operators whose results must be inverses on the same input.

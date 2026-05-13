@@ -28,6 +28,37 @@ export class ApiValidationError extends Error {
   }
 }
 
+/**
+ * Minimal structural type for non-standard fetch responses (e.g. the React
+ * Native whatwg-fetch polyfill, or test mocks). Real production code receives
+ * a full `Response`; this type only exists so the defensive paths in
+ * `getContentType` / `readTextSafe` can be reached under a non-`any` annotation.
+ */
+interface FetchResponseLike {
+  headers?: Headers | Record<string, string>;
+  text?: () => Promise<string> | string;
+  json?: () => Promise<unknown>;
+  body?: string | ReadableStream<Uint8Array> | null;
+  ok?: boolean;
+  status?: number;
+  statusText?: string;
+}
+
+/**
+ * Shape of a typical error/status payload coming back from the backend. The
+ * fields are checked in order so the client surfaces the most specific message
+ * available. Backed by FastAPI's HTTPException (`.detail`), our ApiResponse
+ * envelope (`.message`), and a few legacy shapes (`.error`, `.title`).
+ */
+interface ApiErrorPayload {
+  detail?: string;
+  error?: string;
+  message?: string;
+  title?: string;
+  success?: boolean;
+  data?: unknown;
+}
+
 export class ApiClient {
   private baseURL: string;
   private token: string | null = null;
@@ -74,16 +105,31 @@ export class ApiClient {
     return this.token;
   }
 
-  private getContentType(res: any): string {
-    const h: any = res?.headers;
-    if (h?.get) return h.get("content-type") || "";
+  /**
+   * Extract the content-type header from a fetch Response, tolerating test
+   * mocks that pass a plain-object `headers` map instead of a real Headers
+   * instance.
+   */
+  private getContentType(res: Response | FetchResponseLike): string {
+    const h = res?.headers as Headers | Record<string, string> | undefined;
+    if (h && typeof (h as Headers).get === "function") {
+      return (h as Headers).get("content-type") || "";
+    }
     if (h && typeof h === "object") {
-      return h["content-type"] || h["Content-Type"] || h["Content-type"] || "";
+      const dict = h as Record<string, string>;
+      return (
+        dict["content-type"] || dict["Content-Type"] || dict["Content-type"] || ""
+      );
     }
     return "";
   }
 
-  private async readTextSafe(res: any): Promise<string> {
+  /**
+   * Read response body as text, tolerating non-standard fetch implementations
+   * (e.g. React Native's whatwg-fetch polyfill exposes `_bodyInit` rather than
+   * a working `text()`).
+   */
+  private async readTextSafe(res: Response | FetchResponseLike): Promise<string> {
     try {
       if (typeof res?.text === "function") return await res.text();
     } catch {}
@@ -92,9 +138,11 @@ export class ApiClient {
         return JSON.stringify(await res.json());
       } catch {}
     }
-    if (typeof res?.body === "string") return res.body;
-    if (typeof (res as any)?._bodyInit === "string")
-      return (res as any)._bodyInit;
+    if (typeof (res as FetchResponseLike)?.body === "string") {
+      return (res as FetchResponseLike).body as string;
+    }
+    const rnPolyfillBody = (res as { _bodyInit?: unknown })?._bodyInit;
+    if (typeof rnPolyfillBody === "string") return rnPolyfillBody;
     return "";
   }
 
@@ -148,14 +196,17 @@ export class ApiClient {
     };
 
     try {
-      const response: any = await fetch(url, config);
+      const response: Response = await fetch(url, config);
 
       const contentType = this.getContentType(response);
       const canJson =
         contentType.includes("application/json") ||
-        typeof response?.json === "function";
+        typeof (response as Response & { json?: unknown })?.json === "function";
 
-      let data: any;
+      // `data` is genuinely unknown here — the network response could be JSON
+      // matching ApiResponse, an error payload with `.detail`/`.message`, a
+      // bare string, or something else. Narrow at each access site below.
+      let data: unknown;
       if (canJson) {
         try {
           data = await response.json();
@@ -205,8 +256,13 @@ export class ApiClient {
           logger.warn("Rate limit exceeded", { endpoint });
         }
 
+        const errPayload =
+          data && typeof data === "object" ? (data as ApiErrorPayload) : null;
         const msg =
-          (data && (data.detail || data.error || data.message || data.title)) ||
+          errPayload?.detail ||
+          errPayload?.error ||
+          errPayload?.message ||
+          errPayload?.title ||
           (typeof data === "string" ? data : "") ||
           response.statusText ||
           `HTTP ${response.status}`;
@@ -218,7 +274,7 @@ export class ApiClient {
         try {
           // Validate the entire ApiResponse structure if data has success/message
           if (data && typeof data === "object" && "success" in data && "data" in data) {
-            schema.parse(data.data);
+            schema.parse((data as ApiErrorPayload).data);
           } else {
             // Validate raw data
             schema.parse(data);
@@ -245,46 +301,47 @@ export class ApiClient {
 
       // Handle different response formats from backend
       if (data && typeof data === "object") {
+        const obj = data as ApiErrorPayload & Record<string, unknown>;
         // If response already has success structure (with message or data), return as-is
-        if ("success" in data && ("message" in data || "data" in data)) {
+        if ("success" in obj && ("message" in obj || "data" in obj)) {
           // Ensure message property exists for consistency
-          const message = data.message || "Request completed successfully";
+          const message = obj.message || "Request completed successfully";
 
           // Log warning in development if message was missing
-          if (!data.message && process.env.NODE_ENV === 'development') {
+          if (!obj.message && process.env.NODE_ENV === 'development') {
             logger.warn('API Response missing message field', {
               endpoint,
-              success: data.success,
-              hasData: !!data.data,
+              success: obj.success,
+              hasData: !!obj.data,
             });
           }
 
           return {
-            success: data.success,
+            success: obj.success,
             message,
-            data: data.data,
+            data: obj.data,
           } as ApiResponse<T>;
         }
         // If it's a PaginatedResponse, wrap it
         else if (
-          "items" in data &&
-          "total" in data &&
-          "page" in data &&
-          "size" in data &&
-          "pages" in data
+          "items" in obj &&
+          "total" in obj &&
+          "page" in obj &&
+          "size" in obj &&
+          "pages" in obj
         ) {
           return {
             success: true,
             message: "Request completed successfully",
-            data: data as T,
+            data: obj as T,
           } as ApiResponse<T>;
         }
         // If it's a direct object, wrap it
-        else if ("id" in data) {
+        else if ("id" in obj) {
           return {
             success: true,
             message: "Request completed successfully",
-            data: data as T,
+            data: obj as T,
           } as ApiResponse<T>;
         }
         // If it's an array, wrap it

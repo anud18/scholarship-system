@@ -24,6 +24,7 @@ permissions:
 env:
   NODE_VERSION: '22'
   PYTHON_VERSION: '3.13'
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
   backend-slow:
@@ -47,9 +48,9 @@ jobs:
           - 5432:5432
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -116,9 +117,9 @@ jobs:
           - 5432:5432
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -167,9 +168,9 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -188,9 +189,26 @@ jobs:
             sleep 2
           done
 
+      - name: Migrate + seed inside backend container
+        # /health returns 200 as soon as FastAPI has started — it doesn't
+        # check schema. Without an explicit migrate step, Playwright tests
+        # hit endpoints (mock-SSO login, etc.) that query `users` and 500
+        # with `relation "users" does not exist`.
+        run: |
+          docker compose -f docker-compose.dev.yml exec -T backend alembic upgrade head
+          docker compose -f docker-compose.dev.yml exec -T backend python -m app.seed || echo "seed completed"
+
       - name: Install Playwright browsers
         working-directory: ./frontend
         run: |
+          # Same workaround as ci.yml's E2E Smoke job (#190): the
+          # docker compose up --build above sometimes leaves
+          # frontend/node_modules with root ownership for a small
+          # set of transitive deps (notably @adobe/*), which then
+          # breaks the host-level `npm ci` with EACCES. Reclaim
+          # ownership before installing — no-op if already
+          # runner-owned or absent.
+          sudo chown -R "$(id -u):$(id -g)" node_modules 2>/dev/null || true
           npm ci
           npx playwright install --with-deps chromium
 
@@ -206,7 +224,7 @@ jobs:
 
       - name: Upload Playwright report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: playwright-report-nightly
           path: |
@@ -233,6 +251,15 @@ jobs:
         run: |
           today=$(date -u +%F)
           run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          # Pre-create the label so `gh issue create --label nightly-failure`
+          # doesn't 404 the very first time this fires on a fresh repo.
+          # `gh label create` exits non-zero if the label already exists,
+          # so swallow it.
+          gh label create nightly-failure \
+            --repo ${{ github.repository }} \
+            --color "d73a4a" \
+            --description "Auto-filed by nightly long-running lane" \
+            2>/dev/null || true
           # Find an existing nightly-failure issue from today, otherwise create one.
           existing=$(gh issue list \
             --repo ${{ github.repository }} \

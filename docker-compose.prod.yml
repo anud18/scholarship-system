@@ -59,6 +59,10 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-scholarship-documents}
       MINIO_SECURE: ${MINIO_SECURE:-true}
+      # PII Encryption keys (issue #73). JSON map of {version: base64url 32-byte key}.
+      # Required in production. Populated by the KMS sidecar at deploy time.
+      PII_ENCRYPTION_KEYS: ${PII_ENCRYPTION_KEYS}
+      PII_ENCRYPTION_ACTIVE_VERSION: ${PII_ENCRYPTION_ACTIVE_VERSION:-v1}
       # Email Configuration
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT:-587}

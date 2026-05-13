@@ -37,8 +37,15 @@ RUN uv pip install --system -r pyproject.toml
 # Copy application code
 COPY . .
 
-# Copy frontend email templates
-COPY emails /frontend/emails
+# Copy frontend email templates from the repo's frontend/emails dir.
+# The build context is ./backend (see docker-compose.*.yml), which does
+# not contain an emails/ subdir, so we depend on the named build context
+# `frontend_emails` provided by compose (additional_contexts:) or by
+# `docker buildx build --build-context frontend_emails=./frontend/emails ...`
+# in CI. The image bakes templates at /frontend/emails so prod (which has
+# no bind mount) finds them; dev compose still bind-mounts ./frontend/emails
+# at /react-email-templates and points REACT_EMAIL_TEMPLATES_DIR there.
+COPY --from=frontend_emails . /frontend/emails
 
 # Create uploads directory
 RUN mkdir -p uploads

@@ -18,6 +18,9 @@ on:
           - patch
           - prerelease
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 permissions:
   contents: write
   packages: write
@@ -33,13 +36,13 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         fetch-depth: 0
         token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v5
       with:
         node-version: '22'
 
@@ -158,7 +161,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         fetch-depth: 0
 
@@ -176,15 +179,23 @@ jobs:
       run: |
         VERSION=${{ needs.prepare-release.outputs.version }}
 
-        # Build backend
-        docker build -t ghcr.io/${{ github.repository }}/backend:$VERSION \
+        # Build backend. The Dockerfile pulls React Email templates from a
+        # named build context (`frontend_emails`) so the build context
+        # itself stays at ./backend (no working-tree pollution / massive
+        # context). Requires buildx, which is configured above.
+        docker buildx build \
+                     -t ghcr.io/${{ github.repository }}/backend:$VERSION \
                      -t ghcr.io/${{ github.repository }}/backend:latest \
+                     --build-context frontend_emails=./frontend/emails \
+                     --load \
                      ./backend
 
         # Build frontend
-        docker build -t ghcr.io/${{ github.repository }}/frontend:$VERSION \
+        docker buildx build \
+                     -t ghcr.io/${{ github.repository }}/frontend:$VERSION \
                      -t ghcr.io/${{ github.repository }}/frontend:latest \
                      --build-arg NEXT_PUBLIC_API_URL=${{ secrets.PRODUCTION_API_URL }} \
+                     --load \
                      ./frontend
 
         # Push images
@@ -279,7 +290,7 @@ jobs:
 
     - name: Create release announcement
       if: needs.create-release.result == 'success'
-      uses: actions/github-script@v7
+      uses: actions/github-script@v8
       with:
         script: |
           const version = '${{ needs.prepare-release.outputs.version }}';

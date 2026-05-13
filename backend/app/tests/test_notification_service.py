@@ -351,7 +351,7 @@ class TestNotificationService:
             call_args = mock_create.call_args[1]
 
             assert "明天到期" in call_args["message"]
-            assert call_args["priority"] == NotificationPriority.URGENT.value
+            assert call_args["priority"] == NotificationPriority.urgent
 
             assert result == mock_notification
 
@@ -372,7 +372,7 @@ class TestNotificationService:
             call_args = mock_create.call_args[1]
 
             assert "已到期" in call_args["message"]
-            assert call_args["priority"] == NotificationPriority.URGENT.value
+            assert call_args["priority"] == NotificationPriority.urgent
 
             assert result == mock_notification
 

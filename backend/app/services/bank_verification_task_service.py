@@ -10,10 +10,12 @@ import uuid
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.application import Application
 from app.models.bank_verification_task import BankVerificationTask, BankVerificationTaskStatus
+from app.models.student_bank_account import StudentBankAccount
 from app.services.bank_verification_service import BankVerificationService
 
 logger = logging.getLogger(__name__)
@@ -207,8 +209,32 @@ class BankVerificationTaskService:
             # Process each application
             for idx, app_id in enumerate(application_ids):
                 try:
-                    # TODO: Check if application uses verified account (skip if yes)
-                    # For now, we'll just verify all
+                    # Skip if this application's bank account is already an
+                    # active verified StudentBankAccount for the same user.
+                    # Issue #217 / CLAUDE.md §7 — avoids re-verifying accounts
+                    # that have already been verified by another application.
+                    if await self._application_uses_verified_account(app_id, verification_service):
+                        logger.info(
+                            "Skipping bank verification for application %s: already-verified account",
+                            app_id,
+                        )
+                        skipped_count += 1
+                        results[app_id] = {
+                            "status": "skipped",
+                            "success": True,
+                            "reason": "Bank account already verified",
+                        }
+                        # Still advance progress for skipped items
+                        await self.update_task_progress(
+                            task_id=task_id,
+                            processed_count=idx + 1,
+                            verified_count=verified_count,
+                            needs_review_count=needs_review_count,
+                            failed_count=failed_count,
+                            skipped_count=skipped_count,
+                            results=results,
+                        )
+                        continue
 
                     # Perform verification
                     result = await verification_service.verify_bank_account(app_id)
@@ -273,3 +299,55 @@ class BankVerificationTaskService:
             logger.error(f"Fatal error processing task {task_id}: {str(e)}")
             await self.mark_task_as_failed(task_id, str(e))
             raise
+
+    async def _application_uses_verified_account(
+        self,
+        application_id: int,
+        verification_service: BankVerificationService,
+    ) -> bool:
+        """
+        Return True if this application's submitted bank account number matches
+        an active, verified StudentBankAccount for the same user.
+
+        Used by `process_batch_verification_task` to short-circuit
+        re-verification of accounts that the student has already had verified
+        through a previous application. Safe-by-default: any error (missing
+        application, unreadable form data, no account number) returns False so
+        the normal verification path runs.
+
+        Issue #217.
+        """
+        try:
+            application = await self.db.get(Application, application_id)
+            if application is None or not application.submitted_form_data:
+                return False
+
+            bank_fields = verification_service.extract_bank_fields_from_application(application)
+            account_number = bank_fields.get("account_number")
+            if not account_number:
+                return False
+
+            normalized = verification_service.normalize_account_number(account_number)
+            if not normalized:
+                return False
+
+            stmt = select(StudentBankAccount.id).where(
+                and_(
+                    StudentBankAccount.user_id == application.user_id,
+                    StudentBankAccount.account_number == normalized,
+                    StudentBankAccount.verification_status == "verified",
+                    StudentBankAccount.is_active.is_(True),
+                )
+            )
+            result = await self.db.execute(stmt)
+            return result.scalar_one_or_none() is not None
+        except Exception as exc:  # noqa: BLE001
+            # Fall through to normal verification on any lookup error — this is
+            # an optimisation, not a correctness boundary, so we don't want it
+            # to mask real verification work.
+            logger.warning(
+                "Skip-check failed for application %s; falling through to full verification: %s",
+                application_id,
+                exc,
+            )
+            return False

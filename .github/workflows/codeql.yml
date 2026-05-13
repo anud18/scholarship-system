@@ -19,6 +19,9 @@ on:
   # schedule:
   #   - cron: '37 13 * * 0'
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
@@ -59,7 +62,7 @@ jobs:
         # your codebase is analyzed, see https://docs.github.com/en/code-security/code-scanning/creating-an-advanced-setup-for-code-scanning/codeql-code-scanning-for-compiled-languages
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     # Add any setup steps before running the `github/codeql-action/init` action.
     # This includes steps like installing compilers or runtimes (`actions/setup-node`
@@ -149,7 +152,7 @@ jobs:
 
     - name: Upload SARIF as artifact for PDF generation
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: codeql-sarif-${{ matrix.language }}
         path: sarif-results/${{ steps.sarif-lang.outputs.name }}.sarif
