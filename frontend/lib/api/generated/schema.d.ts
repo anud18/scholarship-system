@@ -4455,6 +4455,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/college-review/applications/department-summary-export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Department Summary Single
+         * @description Generate the 申請總表 Excel for one department.
+         */
+        get: operations["export_department_summary_single_api_v1_college_review_applications_department_summary_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/applications/department-summary-export-bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Department Summary Bulk
+         * @description Generate a ZIP archive containing one 申請總表 xlsx per department.
+         */
+        get: operations["export_department_summary_bulk_api_v1_college_review_applications_department_summary_export_bulk_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/college-review/rankings": {
         parameters: {
             query?: never;
@@ -17797,6 +17837,78 @@ export interface operations {
             path: {
                 student_id: string;
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_department_summary_single_api_v1_college_review_applications_department_summary_export_get: {
+        parameters: {
+            query: {
+                /** @description Scholarship type ID */
+                scholarship_type_id: number;
+                /** @description Academic year */
+                academic_year: number;
+                /** @description first / second / yearly / null */
+                semester?: string | null;
+                /** @description Department code (Department.code) */
+                department_code: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_department_summary_bulk_api_v1_college_review_applications_department_summary_export_bulk_get: {
+        parameters: {
+            query: {
+                scholarship_type_id: number;
+                academic_year: number;
+                semester?: string | null;
+                scope: "college" | "all";
+            };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;

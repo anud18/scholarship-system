@@ -54,7 +54,7 @@ class DynamicFieldSpec:
 class ExportRow:
     """One ranked application's data."""
 
-    rank_position: int
+    rank_position: Optional[int]
     application: Any  # Duck-typed: needs sub_type_preferences, sub_scholarship_type, student_data, submitted_form_data
     bank_account: Optional[str] = None  # 郵局帳號 (from user_profiles.account_number)
     advisor_names: Optional[str] = None  # 指導教授姓名 (comma-joined if multiple advisors)
@@ -123,7 +123,11 @@ class CollegeRankingExportService:
         sd = getattr(row.application, "student_data", None) or {}
 
         ws.cell(row=excel_row, column=1, value=row_index)
-        ws.cell(row=excel_row, column=2, value=row.rank_position)
+        ws.cell(
+            row=excel_row,
+            column=2,
+            value=(row.rank_position if row.rank_position is not None else ""),
+        )
         ws.cell(
             row=excel_row,
             column=3,

@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useCollegeManagement } from "@/contexts/college-management-context";
+import { useReferenceData } from "@/hooks/use-reference-data";
 import { apiClient } from "@/lib/api";
+import {
+  exportDepartmentSummary,
+  exportDepartmentSummaryBulk,
+} from "@/lib/api/modules/college";
 import type {
   DistributionStudent,
   QuotaStatus,
@@ -16,6 +21,14 @@ import type {
 import { User } from "@/types/user";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -49,6 +62,9 @@ interface LocalAlloc {
   year: number;
 }
 
+const ALL_DEPTS_OWN = "__college_all__";
+const ALL_DEPTS_SYSTEM = "__all__";
+
 /** Composite key for a (sub_type, year) column: "nstc:114" */
 function makeColKey(sub_type: string, year: number) {
   return `${sub_type}:${year}`;
@@ -70,6 +86,7 @@ function getSubTypeShortName(sub_type: string, display_name: string): string {
 }
 
 export function ManualDistributionPanel({
+  user,
   scholarshipType,
 }: ManualDistributionPanelProps) {
   const {
@@ -89,6 +106,50 @@ export function ManualDistributionPanel({
 
   // Use the ID directly from the prop (provided by the admin available-combinations endpoint)
   const scholarshipTypeId = scholarshipType.id;
+
+  const { departments } = useReferenceData();
+  const [summaryDept, setSummaryDept] = useState<string>("");
+
+  const visibleDepartments = useMemo(() => {
+    if (!departments) return [];
+    if (user.role === "admin" || user.role === "super_admin") return departments;
+    return departments.filter(
+      (d: { code: string; name: string; academy_code?: string | null }) =>
+        d.academy_code === user.college_code
+    );
+  }, [departments, user]);
+
+  const handleDownloadSummary = useCallback(async () => {
+    if (!summaryDept || !scholarshipType.id || !selectedAcademicYear) {
+      toast.error("缺少必要的篩選條件");
+      return;
+    }
+    try {
+      const common = {
+        scholarship_type_id: scholarshipType.id,
+        academic_year: selectedAcademicYear,
+        semester: selectedSemester ?? null,
+      };
+      let result: { blob: Blob; filename: string };
+      if (summaryDept === ALL_DEPTS_OWN) {
+        result = await exportDepartmentSummaryBulk({ ...common, scope: "college" });
+      } else if (summaryDept === ALL_DEPTS_SYSTEM) {
+        result = await exportDepartmentSummaryBulk({ ...common, scope: "all" });
+      } else {
+        result = await exportDepartmentSummary({ ...common, department_code: summaryDept });
+      }
+      const url = URL.createObjectURL(result.blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = result.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error(`匯出失敗：${(err as Error).message}`);
+    }
+  }, [summaryDept, scholarshipType.id, selectedAcademicYear, selectedSemester]);
 
   const [students, setStudents] = useState<DistributionStudent[]>([]);
   const [quotaStatus, setQuotaStatus] = useState<QuotaStatus>({});
@@ -589,6 +650,37 @@ export function ManualDistributionPanel({
               手動分發 — {scholarshipType.name}
             </h2>
             <div className="flex gap-2 flex-wrap">
+              <Select value={summaryDept} onValueChange={setSummaryDept}>
+                <SelectTrigger className="w-[200px] h-9">
+                  <SelectValue placeholder="選擇系所匯出總表" />
+                </SelectTrigger>
+                <SelectContent>
+                  {visibleDepartments.map((d: { code: string; name: string }) => (
+                    <SelectItem key={d.code} value={d.code}>
+                      {d.name}
+                    </SelectItem>
+                  ))}
+                  {user.college_code && (
+                    <SelectItem value={ALL_DEPTS_OWN}>
+                      本學院全部 (ZIP)
+                    </SelectItem>
+                  )}
+                  {(user.role === "admin" || user.role === "super_admin") && (
+                    <SelectItem value={ALL_DEPTS_SYSTEM}>
+                      全部系所 (ZIP)
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!summaryDept || !scholarshipType.id || !selectedAcademicYear}
+                onClick={handleDownloadSummary}
+              >
+                <Download className="h-4 w-4 mr-1" />
+                匯出申請總表
+              </Button>
               <Button variant="outline" size="sm" disabled>
                 <Download className="h-4 w-4 mr-1" />
                 匯出 Excel
