@@ -389,6 +389,7 @@ class SupplementaryImportService:
                 academic_year=ranking.academic_year,
                 semester=ranking.semester,
                 status=ApplicationStatus.submitted,
+                sub_type_selection_mode=ranking.scholarship_type.sub_type_selection_mode,
                 student_data=sis_data,
                 sub_type_preferences=row.sub_type_preferences,
                 submitted_form_data=submitted_form_data,

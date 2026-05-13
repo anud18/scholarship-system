@@ -1319,6 +1319,12 @@ async def supplementary_import(
 
     # Parse Excel
     file_bytes = await file.read()
+    MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+    if len(file_bytes) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="檔案大小不能超過 10 MB",
+        )
     rows, parse_errors = SupplementaryImportService.parse_excel(
         file_bytes, label_to_code, dynamic_field_names
     )
@@ -1367,7 +1373,7 @@ async def supplementary_import(
     imported_count = await service.create_applications_and_items(
         rows, user_map, student_data_map, ranking, max_existing_rank
     )
-    ranking.total_applications = len(ranking.items) + imported_count
+    ranking.total_applications = max_existing_rank + imported_count
     await db.commit()
 
     logger.info(

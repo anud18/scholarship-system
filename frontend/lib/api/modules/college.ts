@@ -487,11 +487,15 @@ export function createCollegeApi() {
       rankingId: number,
       allow: boolean
     ): Promise<ApiResponse<{ ranking_id: number; allow_supplementary_import: boolean }>> => {
+      const token = typedClient.getToken();
       const resp = await fetch(
         `/api/v1/college-review/rankings/${rankingId}/supplementary-import`,
         {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
           body: JSON.stringify({ allow }),
         }
       );
@@ -516,11 +520,18 @@ export function createCollegeApi() {
         new_rank_range: string;
       }>
     > => {
+      const token = typedClient.getToken();
       const formData = new FormData();
       formData.append("file", file);
       const resp = await fetch(
         `/api/v1/college-review/rankings/${rankingId}/supplementary-import`,
-        { method: "POST", body: formData }
+        {
+          method: "POST",
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: formData,
+        }
       );
       if (!resp.ok) {
         const err = await resp.json().catch(() => null);
