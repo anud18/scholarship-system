@@ -9,9 +9,10 @@ Handles:
 """
 
 import logging
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -270,6 +271,72 @@ async def get_available_combinations(current_user: User = Depends(require_colleg
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve available combinations from database",
+        )
+
+
+@router.get("/active-config")
+async def get_active_config(
+    scholarship_type_id: int = Query(..., description="Scholarship type ID"),
+    academic_year: int = Query(..., description="Academic year (民國)"),
+    semester: Optional[str] = Query(None, description="Semester: first / second / yearly (or omit for yearly)"),
+    current_user: User = Depends(require_college),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return active scholarship configuration metadata (currently the
+    college-review deadline) for a specific (scholarship_type, year, semester).
+
+    Used by the ranking page to surface the deadline banner before any
+    ranking has been selected or created — the deadline is a property of
+    the configuration, not of any individual ranking.
+
+    Returns success=True with `data.college_review_end=None` when no config
+    matches; the caller decides whether to display a banner.
+    """
+    try:
+        # Yearly cycles store semester as either NULL or "yearly" — match both.
+        sem_raw = (semester or "").strip().lower()
+        if sem_raw.startswith("semester."):
+            sem_raw = sem_raw.split(".", 1)[1]
+        is_yearly = sem_raw in {"", "yearly"}
+
+        conditions = [
+            ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+            ScholarshipConfiguration.academic_year == academic_year,
+            ScholarshipConfiguration.is_active.is_(True),
+        ]
+        if is_yearly:
+            conditions.append(
+                or_(
+                    ScholarshipConfiguration.semester.is_(None),
+                    ScholarshipConfiguration.semester == "yearly",
+                )
+            )
+        else:
+            conditions.append(ScholarshipConfiguration.semester == sem_raw)
+
+        stmt = select(ScholarshipConfiguration).where(*conditions).limit(1)
+        config = (await db.execute(stmt)).scalar_one_or_none()
+
+        return ApiResponse(
+            success=True,
+            message="Active config retrieved",
+            data={
+                "scholarship_type_id": scholarship_type_id,
+                "academic_year": academic_year,
+                "semester": "yearly" if is_yearly else sem_raw,
+                "college_review_end": (
+                    config.college_review_end.isoformat() if config and config.college_review_end else None
+                ),
+                "college_review_start": (
+                    config.college_review_start.isoformat() if config and config.college_review_start else None
+                ),
+            },
+        )
+    except Exception as e:
+        logger.error(f"Error retrieving active config: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve active scholarship configuration",
         )
 
 
