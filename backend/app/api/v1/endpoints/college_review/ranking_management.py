@@ -13,12 +13,14 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote as _url_quote
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.deps import get_current_admin_user
 from app.core.exceptions import AuthorizationError, NotFoundError
 from app.core.security import require_college, require_scholarship_manager
 from app.db.deps import get_db
@@ -41,6 +43,7 @@ from app.services.college_review_service import (
     RankingNotFoundError,
 )
 from app.services.review_service import ReviewService
+from app.services.supplementary_import_service import SupplementaryImportService
 
 from ._helpers import (
     _check_academic_year_permission,
@@ -1233,5 +1236,150 @@ async def export_ranking_excel(
         headers={
             "Content-Disposition": f"attachment; filename*=UTF-8''{encoded}",
             "Content-Length": str(len(payload)),
+        },
+    )
+
+
+class SupplementaryImportToggle(BaseModel):
+    allow: bool
+
+
+@router.patch("/rankings/{ranking_id}/supplementary-import")
+async def toggle_supplementary_import(
+    ranking_id: int,
+    body: SupplementaryImportToggle,
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin toggle: open or close supplementary import for a ranking."""
+    stmt = select(CollegeRanking).where(CollegeRanking.id == ranking_id)
+    result = await db.execute(stmt)
+    ranking = result.scalar_one_or_none()
+    if not ranking:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
+
+    ranking.allow_supplementary_import = body.allow
+    await db.commit()
+    return ApiResponse(
+        success=True,
+        message=f"Supplementary import {'enabled' if body.allow else 'disabled'}",
+        data={"ranking_id": ranking_id, "allow_supplementary_import": body.allow},
+    )
+
+
+@router.post("/rankings/{ranking_id}/supplementary-import")
+async def supplementary_import(
+    ranking_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_college),
+    db: AsyncSession = Depends(get_db),
+):
+    """College upload: import new students via 學生資料彙整表 Excel after distribution."""
+    # Load ranking with items and scholarship_type
+    stmt = (
+        select(CollegeRanking)
+        .options(
+            selectinload(CollegeRanking.items),
+            selectinload(CollegeRanking.creator),
+            selectinload(CollegeRanking.scholarship_type).selectinload(ScholarshipType.sub_type_configs),
+        )
+        .where(CollegeRanking.id == ranking_id)
+    )
+    result = await db.execute(stmt)
+    ranking = result.scalar_one_or_none()
+    if not ranking:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
+
+    if not ranking.allow_supplementary_import:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="補充匯入功能尚未開放")
+
+    # College users may only import to rankings from their own college
+    if current_user.role not in (UserRole.admin, UserRole.super_admin):
+        creator_college = (getattr(ranking.creator, "college_code", None) or "").strip()
+        user_college = (current_user.college_code or "").strip()
+        if not creator_college or not user_college or creator_college != user_college:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限操作此學院之排名")
+
+    # Build label→code map from scholarship sub_type_configs
+    label_to_code = {
+        cfg.name: cfg.sub_type_code
+        for cfg in (getattr(ranking.scholarship_type, "sub_type_configs", None) or [])
+        if cfg.name and cfg.sub_type_code
+    }
+
+    # Load dynamic fields (same query as export)
+    dynamic_fields, _, _, _ = await load_export_aux_data(
+        db,
+        scholarship_type=ranking.scholarship_type,
+        applications=[],
+    )
+    dynamic_field_names = [f.field_name for f in dynamic_fields]
+
+    # Parse Excel
+    file_bytes = await file.read()
+    rows, parse_errors = SupplementaryImportService.parse_excel(
+        file_bytes, label_to_code, dynamic_field_names
+    )
+    if parse_errors:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="\n".join(parse_errors),
+        )
+
+    service = SupplementaryImportService(db)
+
+    # Validate no duplicate applications
+    semester_for_check = ranking.semester if ranking.semester else "yearly"
+    conflicts = await service.validate_no_duplicate_applications(
+        rows,
+        scholarship_type_id=ranking.scholarship_type_id,
+        academic_year=ranking.academic_year,
+        semester=semester_for_check,
+    )
+    if conflicts:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"以下學號已有申請記錄：{', '.join(conflicts)}",
+        )
+
+    # Fetch student data from SIS API
+    student_ids = [r.student_id for r in rows]
+    student_data_map, missing_ids = await service.fetch_student_data_bulk(student_ids)
+    if missing_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"學籍系統查無以下學號：{', '.join(missing_ids)}",
+        )
+
+    # Compute max existing rank for offset
+    existing_ranks = [item.rank_position for item in ranking.items]
+    max_existing_rank = max(existing_ranks) if existing_ranks else 0
+
+    # Find or create users
+    user_map = await service.find_or_create_users(student_data_map)
+
+    # Upsert user profiles (bank_account, advisor_name)
+    await service.upsert_user_profiles(user_map, rows)
+
+    # Create applications + ranking items
+    imported_count = await service.create_applications_and_items(
+        rows, user_map, student_data_map, ranking, max_existing_rank
+    )
+    ranking.total_applications = len(ranking.items) + imported_count
+    await db.commit()
+
+    logger.info(
+        "Supplementary import: ranking_id=%s imported=%s by user=%s",
+        ranking_id, imported_count, current_user.id,
+    )
+
+    return ApiResponse(
+        success=True,
+        message=f"補充匯入成功，共新增 {imported_count} 位學生",
+        data={
+            "ranking_id": ranking_id,
+            "imported_count": imported_count,
+            "max_existing_rank": max_existing_rank,
+            "new_rank_range": f"{max_existing_rank + 1}–{max_existing_rank + imported_count}",
         },
     )
