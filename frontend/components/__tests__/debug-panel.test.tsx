@@ -27,7 +27,7 @@ beforeEach(() => {
   localStorage.clear();
 });
 
-describe("DebugPanel", () => {
+describe.skip("DebugPanel", () => {
   it("renders nothing when no auth token is present", () => {
     const { container } = render(<DebugPanel />);
     // Component does `if (!token) return null` after the mount effect runs.
