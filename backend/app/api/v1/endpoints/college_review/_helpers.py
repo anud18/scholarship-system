@@ -190,9 +190,9 @@ async def load_export_aux_data(
     profile_advisor_by_user: dict[int, str] = {}
 
     if user_ids:
-        profile_stmt = select(
-            UserProfile.user_id, UserProfile.account_number, UserProfile.advisor_name
-        ).where(UserProfile.user_id.in_(user_ids))
+        profile_stmt = select(UserProfile.user_id, UserProfile.account_number, UserProfile.advisor_name).where(
+            UserProfile.user_id.in_(user_ids)
+        )
         for uid, acct, adv in (await db.execute(profile_stmt)).all():
             if acct:
                 account_number_by_user[uid] = acct

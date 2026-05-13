@@ -82,9 +82,7 @@ async def export_department_summary_single(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限存取此學年度")
 
     # Resolve department row + auth check
-    dept = (
-        await db.execute(select(Department).where(Department.code == department_code))
-    ).scalar_one_or_none()
+    dept = (await db.execute(select(Department).where(Department.code == department_code))).scalar_one_or_none()
     if dept is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -129,15 +127,14 @@ async def export_department_summary_single(
         stmt = stmt.where(Application.semester == normalised_semester)
 
     raw_apps = list((await db.execute(stmt)).scalars().all())
-    apps = [
-        a for a in raw_apps
-        if ((a.student_data or {}).get("std_depno") or "").strip() == department_code
-    ]
+    apps = [a for a in raw_apps if ((a.student_data or {}).get("std_depno") or "").strip() == department_code]
     apps.sort(key=_sort_key)
 
     # Aux data
     dynamic_fields, sub_type_labels, account_by_user, advisor_by_user = await load_export_aux_data(
-        db, scholarship_type=stype, applications=apps,
+        db,
+        scholarship_type=stype,
+        applications=apps,
     )
 
     # Build rows with rank_position=None — empty cell in column 2
@@ -156,8 +153,7 @@ async def export_department_summary_single(
     title = f"{academic_year}學年度{scholarship_name}學生資料彙整表 - {dept_name}"
     sheet_name = f"{academic_year}學年"
     base_filename = (
-        f"{academic_year}學年度{scholarship_name}學生資料彙整表"
-        f"_{_sanitise_filename_part(dept_name)}.xlsx"
+        f"{academic_year}學年度{scholarship_name}學生資料彙整表" f"_{_sanitise_filename_part(dept_name)}.xlsx"
     )
     encoded = _url_quote(base_filename, safe="")
 
@@ -214,10 +210,8 @@ async def export_department_summary_bulk(
                 detail="未設定學院，無法使用本學院範圍",
             )
         dept_rows = (
-            await db.execute(
-                select(Department).where(Department.academy_code == college_code)
-            )
-        ).scalars().all()
+            (await db.execute(select(Department).where(Department.academy_code == college_code))).scalars().all()
+        )
         target_dept_codes = [d.code for d in dept_rows if d.code]
     else:  # scope == "all"
         target_dept_codes = None  # no dept filter
@@ -258,10 +252,7 @@ async def export_department_summary_bulk(
     raw_apps = list((await db.execute(stmt)).scalars().all())
     if target_dept_codes is not None:
         allowed = set(target_dept_codes)
-        apps = [
-            a for a in raw_apps
-            if ((a.student_data or {}).get("std_depno") or "").strip() in allowed
-        ]
+        apps = [a for a in raw_apps if ((a.student_data or {}).get("std_depno") or "").strip() in allowed]
     else:
         apps = raw_apps
 
@@ -281,14 +272,14 @@ async def export_department_summary_bulk(
 
     # Department name lookup
     dept_codes = list(groups.keys())
-    dept_name_rows = (
-        await db.execute(select(Department).where(Department.code.in_(dept_codes)))
-    ).scalars().all()
+    dept_name_rows = (await db.execute(select(Department).where(Department.code.in_(dept_codes)))).scalars().all()
     name_by_code = {d.code: d.name for d in dept_name_rows}
 
     # Aux data — loaded once over the union of applicants
     dynamic_fields, sub_type_labels, account_by_user, advisor_by_user = await load_export_aux_data(
-        db, scholarship_type=stype, applications=apps,
+        db,
+        scholarship_type=stype,
+        applications=apps,
     )
 
     scholarship_name = stype.name or "獎學金"
