@@ -26,7 +26,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.security import require_scholarship_manager
 from app.db.deps import get_db
-from app.models.application import Application
+from app.models.application import Application, ApplicationStatus
 from app.models.scholarship import ScholarshipType
 from app.models.student import Department
 from app.models.user import User, UserRole
@@ -35,7 +35,12 @@ from app.services.college_ranking_export_service import (
     ExportRow,
 )
 
-from ._helpers import load_export_aux_data, normalize_semester_value
+from ._helpers import (
+    _check_academic_year_permission,
+    _check_scholarship_permission,
+    load_export_aux_data,
+    normalize_semester_value,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +75,11 @@ async def export_department_summary_single(
     """Generate the 申請總表 Excel for one department."""
 
     normalised_semester = normalize_semester_value(semester)
+
+    if not await _check_scholarship_permission(current_user, scholarship_type_id, db):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限存取此獎學金類型")
+    if not await _check_academic_year_permission(current_user, academic_year, db):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限存取此學年度")
 
     # Resolve department row + auth check
     dept = (
@@ -111,7 +121,7 @@ async def export_department_summary_single(
         Application.scholarship_type_id == scholarship_type_id,
         Application.academic_year == academic_year,
         Application.deleted_at.is_(None),
-        Application.status != "deleted",
+        Application.status != ApplicationStatus.deleted.value,
     )
     if normalised_semester is None:
         stmt = stmt.where(Application.semester.is_(None))
@@ -182,6 +192,12 @@ async def export_department_summary_bulk(
     """Generate a ZIP archive containing one 申請總表 xlsx per department."""
 
     normalised_semester = normalize_semester_value(semester)
+
+    if not await _check_scholarship_permission(current_user, scholarship_type_id, db):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限存取此獎學金類型")
+    if not await _check_academic_year_permission(current_user, academic_year, db):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限存取此學年度")
+
     is_admin = current_user.role in (UserRole.admin, UserRole.super_admin)
 
     if scope == "all" and not is_admin:
@@ -232,7 +248,7 @@ async def export_department_summary_bulk(
         Application.scholarship_type_id == scholarship_type_id,
         Application.academic_year == academic_year,
         Application.deleted_at.is_(None),
-        Application.status != "deleted",
+        Application.status != ApplicationStatus.deleted.value,
     )
     if normalised_semester is None:
         stmt = stmt.where(Application.semester.is_(None))

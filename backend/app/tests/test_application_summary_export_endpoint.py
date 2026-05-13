@@ -104,6 +104,39 @@ def _make_college_user(college_code: str = "CE") -> User:
     )
 
 
+def _seed_college_permissions(
+    user_id: int = 9002,
+    scholarship_type_id: int = 1,
+    academic_year: int = 114,
+):
+    """Seed AdminScholarship + ScholarshipConfiguration so _check_*_permission passes
+    for a college user.  SQLite does not enforce FKs by default so the user row
+    itself does not need to exist in the DB."""
+
+    async def _impl():
+        async with _AsyncSession() as session:
+            session.add(
+                AdminScholarship(
+                    admin_id=user_id,
+                    scholarship_id=scholarship_type_id,
+                )
+            )
+            session.add(
+                ScholarshipConfiguration(
+                    id=500,
+                    scholarship_type_id=scholarship_type_id,
+                    academic_year=academic_year,
+                    config_name="Test Config",
+                    config_code=f"test_cfg_{scholarship_type_id}_{academic_year}",
+                    amount=0,
+                    is_active=True,
+                )
+            )
+            await session.commit()
+
+    _run_async(_impl())
+
+
 # ---------------------------------------------------------------------------
 # Test class
 # ---------------------------------------------------------------------------
@@ -264,6 +297,7 @@ class TestDepartmentSummaryExportEndpoint:
     def test_college_user_same_academy_succeeds(self):
         """College user whose college_code matches dept.academy_code gets 200."""
         self._seed_department_and_scholarship(dept_code="CE4460", academy_code="CE")
+        _seed_college_permissions(user_id=9002, scholarship_type_id=1, academic_year=114)
 
         college_user = _make_college_user(college_code="CE")
         client = self._client_with_user(college_user)
@@ -287,6 +321,8 @@ class TestDepartmentSummaryExportEndpoint:
 
 from app.models.application import Application  # noqa: E402
 from app.models.enums import SubTypeSelectionMode  # noqa: E402
+from app.models.scholarship import ScholarshipConfiguration  # noqa: E402
+from app.models.user import AdminScholarship  # noqa: E402
 
 
 class TestDepartmentSummaryExportBulkEndpoint:
@@ -410,6 +446,7 @@ class TestDepartmentSummaryExportBulkEndpoint:
         """College user (CE), scope=college: ZIP contains entries for CE academy depts."""
         self._seed_base()
         self._seed_applications()
+        _seed_college_permissions(user_id=9002, scholarship_type_id=1, academic_year=114)
 
         college_user = _make_college_user(college_code="CE")
         client = self._client_with_user(college_user)
@@ -442,8 +479,15 @@ class TestDepartmentSummaryExportBulkEndpoint:
     # ------------------------------------------------------------------
 
     def test_bulk_college_user_scope_all_forbidden(self):
-        """College user, scope=all → 403 with 學院使用者 in message."""
+        """College user with no scholarship permission, scope=all → 403.
+
+        With the new _check_scholarship_permission gate added in PR #203, the
+        permission check fires before the scope guard for college users that have
+        no AdminScholarship row.  Seed permissions and test the scope guard
+        separately from the scholarship-permission guard.
+        """
         self._seed_base()
+        _seed_college_permissions(user_id=9002, scholarship_type_id=1, academic_year=114)
 
         college_user = _make_college_user(college_code="CE")
         client = self._client_with_user(college_user)
@@ -460,6 +504,8 @@ class TestDepartmentSummaryExportBulkEndpoint:
         assert response.status_code == 403
         body = response.json()
         msg = body.get("message", body.get("detail", ""))
+        # After the permission gates pass, the scope=all guard fires with
+        # this message for non-admin users.
         assert "學院使用者" in msg
 
     # ------------------------------------------------------------------

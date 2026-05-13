@@ -715,9 +715,7 @@ export function ApplicationReviewPanel({
                   {d.name}
                 </SelectItem>
               ))}
-              {(user.role === "admin" ||
-                user.role === "super_admin" ||
-                user.college_code) && (
+              {user.college_code && (
                 <SelectItem value={ALL_DEPTS_OWN}>
                   本學院全部 (ZIP)
                 </SelectItem>

@@ -42,7 +42,12 @@ from app.services.college_review_service import (
 )
 from app.services.review_service import ReviewService
 
-from ._helpers import load_export_aux_data, normalize_semester_value
+from ._helpers import (
+    _check_academic_year_permission,
+    _check_scholarship_permission,
+    load_export_aux_data,
+    normalize_semester_value,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1127,6 +1132,12 @@ async def export_ranking_excel(
         user_college = (current_user.college_code or "").strip()
         if not creator_college or not user_college or creator_college != user_college:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限匯出此學院之資料")
+
+    # 2b. Scholarship + academic-year permission checks (mirrors export_package.py pattern)
+    if not await _check_scholarship_permission(current_user, ranking.scholarship_type_id, db):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限存取此獎學金類型")
+    if not await _check_academic_year_permission(current_user, ranking.academic_year, db):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限存取此學年度")
 
     # 3-5. Bulk-load aux data (dynamic fields, sub-type labels, accounts, advisors)
     items_sorted = sorted(ranking.items or [], key=lambda x: x.rank_position)
