@@ -120,9 +120,12 @@ async def get_rankings(
         rankings_data = []
         for ranking in rankings:
             college_quota: Optional[int] = None
+            # Always load the config so we can surface college_review_end on
+            # each ranking item — this lets the frontend display the deadline
+            # banner before any specific ranking has been selected.
+            config = await get_config_for_ranking(ranking)
 
             if user_college_code:
-                config = await get_config_for_ranking(ranking)
                 if config and config.has_college_quota and config.quotas:
                     if ranking.sub_type_code == "default":
                         # Sum all quotas for this college across sub-types
@@ -174,6 +177,9 @@ async def get_rankings(
                     "distribution_executed": ranking.distribution_executed,
                     "created_at": ranking.created_at.isoformat(),
                     "finalized_at": ranking.finalized_at.isoformat() if ranking.finalized_at else None,
+                    "college_review_end": (
+                        config.college_review_end.isoformat() if config and config.college_review_end else None
+                    ),
                 }
             )
 

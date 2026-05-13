@@ -122,6 +122,9 @@ export function RankingManagementPanel({
   } = useCollegeManagement();
 
   // #91 fix: store the college_review_end fetched for the active ranking's config.
+  // Acts as a fallback / fresh-value source after a user clicks into a ranking;
+  // the primary source for the banner is filteredRankings (see deadlineISO below)
+  // so the deadline is visible immediately on page entry, not only after selection.
   const [activeConfigDeadline, setActiveConfigDeadline] = useState<string | null>(null);
 
   const fetchRankingDetails = useCallback(
@@ -624,7 +627,16 @@ export function RankingManagementPanel({
     const id = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(id);
   }, []);
-  const deadlineISO = activeConfigDeadline;
+  // Prefer the deadline carried on any ranking in the current filter — that lets
+  // the banner appear as soon as the panel loads, without waiting for the user
+  // to click into a specific ranking. Fall back to the ranking-detail-fetched
+  // value (covers manual refresh after admin extends the deadline).
+  const deadlineISO = useMemo(() => {
+    const fromList = filteredRankings.find(
+      (r: any) => r && r.college_review_end
+    )?.college_review_end as string | undefined;
+    return fromList ?? activeConfigDeadline ?? null;
+  }, [filteredRankings, activeConfigDeadline]);
   const deadlineInfo = useMemo(
     () => computeDeadlineInfo(deadlineISO),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `now` triggers re-eval
