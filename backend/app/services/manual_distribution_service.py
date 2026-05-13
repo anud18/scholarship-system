@@ -736,6 +736,10 @@ class ManualDistributionService:
                 app.approved_at = datetime.now(timezone.utc)
                 app.review_stage = ReviewStage.quota_distributed
                 approved_count += 1
+            elif item.is_supplementary and not item.is_allocated:
+                # Supplementary students pending a second distribution pass —
+                # leave status as 'ranked' so they appear in the next allocation.
+                pass
             else:
                 # Non-allocated: keep the user-facing app.status as-is
                 # (e.g. an approved-but-not-funded app stays "approved"). Only
