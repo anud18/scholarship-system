@@ -121,11 +121,16 @@ export function RankingManagementPanel({
     fetchRankings,
   } = useCollegeManagement();
 
-  // #91 fix: store the college_review_end fetched for the active ranking's config.
-  // Acts as a fallback / fresh-value source after a user clicks into a ranking;
-  // the primary source for the banner is filteredRankings (see deadlineISO below)
-  // so the deadline is visible immediately on page entry, not only after selection.
+  // #91 fix: deadline fetched from the ranking-detail endpoint when a user
+  // clicks into a specific ranking. Kept as a freshness fallback.
   const [activeConfigDeadline, setActiveConfigDeadline] = useState<string | null>(null);
+
+  // Page-level deadline fetched directly from the active scholarship
+  // configuration matching (scholarship_type, year, semester). This ensures
+  // the deadline banner appears as soon as the panel renders, even when no
+  // rankings exist for the current selection (i.e. before the user clicks
+  // "建立新排名" for the first time).
+  const [panelDeadline, setPanelDeadline] = useState<string | null>(null);
 
   const fetchRankingDetails = useCallback(
     async (rankingId: number) => {
@@ -627,16 +632,64 @@ export function RankingManagementPanel({
     const id = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(id);
   }, []);
-  // Prefer the deadline carried on any ranking in the current filter — that lets
-  // the banner appear as soon as the panel loads, without waiting for the user
-  // to click into a specific ranking. Fall back to the ranking-detail-fetched
-  // value (covers manual refresh after admin extends the deadline).
+  // Fetch the deadline directly from the active scholarship configuration
+  // matching the current (scholarship_type, year, semester) selection. This
+  // is the authoritative source — runs whenever the selection changes, so
+  // the banner appears immediately on page entry, with zero rankings, or
+  // after switching combinations.
+  useEffect(() => {
+    const activeConfig = scholarshipConfig.find(
+      (c: any) => c.code === scholarshipType.code
+    );
+    if (!activeConfig?.id || typeof selectedAcademicYear !== "number") {
+      setPanelDeadline(null);
+      return;
+    }
+    const semParam =
+      !selectedSemester || selectedSemester === Semester.YEARLY
+        ? "yearly"
+        : selectedSemester;
+    let cancelled = false;
+    apiClient
+      .request<{ college_review_end: string | null }>(
+        "/college-review/active-config",
+        {
+          method: "GET",
+          params: {
+            scholarship_type_id: activeConfig.id,
+            academic_year: selectedAcademicYear,
+            semester: semParam,
+          },
+        }
+      )
+      .then(resp => {
+        if (cancelled) return;
+        setPanelDeadline(
+          resp.success && resp.data ? resp.data.college_review_end ?? null : null
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setPanelDeadline(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    scholarshipConfig,
+    scholarshipType.code,
+    selectedAcademicYear,
+    selectedSemester,
+  ]);
+
+  // Authoritative deadline = the one matched directly to the active config.
+  // Fall back to anything carried on the current rankings, then to a freshly
+  // fetched ranking-detail value, while the active-config call is in flight.
   const deadlineISO = useMemo(() => {
     const fromList = filteredRankings.find(
       (r: any) => r && r.college_review_end
     )?.college_review_end as string | undefined;
-    return fromList ?? activeConfigDeadline ?? null;
-  }, [filteredRankings, activeConfigDeadline]);
+    return panelDeadline ?? fromList ?? activeConfigDeadline ?? null;
+  }, [panelDeadline, filteredRankings, activeConfigDeadline]);
   const deadlineInfo = useMemo(
     () => computeDeadlineInfo(deadlineISO),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `now` triggers re-eval

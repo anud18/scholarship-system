@@ -116,8 +116,21 @@ function CollegeManagementContent({ user }: { user: User }) {
         const firstScholarshipType = availableOptions.scholarship_types[0].code;
         setActiveScholarshipTab(firstScholarshipType);
 
-        // Auto-select current academic year
-        const currentYear = academicConfig.currentYear;
+        // Auto-select an academic year that actually has data. The
+        // client-derived `academicConfig.currentYear` is a calendar guess
+        // (e.g. 民國 115 in 2026) and may not match any active scholarship
+        // configuration — landing on it leaves the user staring at an empty
+        // page with no deadline banner. Prefer the most recent year present
+        // in `availableOptions.academic_years`; fall back to the calendar
+        // guess only if availableOptions is empty.
+        const availableYears = availableOptions.academic_years || [];
+        const calendarYear = academicConfig.currentYear;
+        const currentYear =
+          availableYears.length === 0
+            ? calendarYear
+            : availableYears.includes(calendarYear)
+              ? calendarYear
+              : Math.max(...availableYears);
         setSelectedAcademicYear(currentYear);
 
         // FIXED: Select semester from available options (not blindly from current time)

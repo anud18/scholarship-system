@@ -4771,6 +4771,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/college-review/active-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Active Config
+         * @description Return active scholarship configuration metadata (currently the
+         *     college-review deadline) for a specific (scholarship_type, year, semester).
+         *
+         *     Used by the ranking page to surface the deadline banner before any
+         *     ranking has been selected or created — the deadline is a property of
+         *     the configuration, not of any individual ranking.
+         *
+         *     Returns success=True with `data.college_review_end=None` when no config
+         *     matches; the caller decides whether to display a banner.
+         */
+        get: operations["get_active_config_api_v1_college_review_active_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/college-review/sub-type-translations": {
         parameters: {
             query?: never;
@@ -18394,6 +18422,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_active_config_api_v1_college_review_active_config_get: {
+        parameters: {
+            query: {
+                /** @description Scholarship type ID */
+                scholarship_type_id: number;
+                /** @description Academic year (民國) */
+                academic_year: number;
+                /** @description Semester: first / second / yearly (or omit for yearly) */
+                semester?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
