@@ -57,6 +57,7 @@ _AsyncSession = async_sessionmaker(_async_engine, class_=AsyncSession, expire_on
 
 def _run_async(coro):
     import asyncio
+
     return asyncio.run(coro)
 
 
@@ -64,6 +65,7 @@ def _create_tables():
     async def _impl():
         async with _async_engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+
     _run_async(_impl())
 
 
@@ -71,6 +73,7 @@ def _drop_tables():
     async def _impl():
         async with _async_engine.begin() as conn:
             await conn.run_sync(Base.metadata.drop_all)
+
     _run_async(_impl())
 
 

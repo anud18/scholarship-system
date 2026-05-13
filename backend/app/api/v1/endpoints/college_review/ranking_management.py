@@ -1149,12 +1149,10 @@ async def export_ranking_excel(
     items_sorted = sorted(ranking.items or [], key=lambda x: x.rank_position)
     apps_in_ranking = [item.application for item in items_sorted if item.application is not None]
 
-    dynamic_fields, sub_type_labels, account_number_by_user, advisor_string_by_user = (
-        await load_export_aux_data(
-            db,
-            scholarship_type=ranking.scholarship_type,
-            applications=apps_in_ranking,
-        )
+    dynamic_fields, sub_type_labels, account_number_by_user, advisor_string_by_user = await load_export_aux_data(
+        db,
+        scholarship_type=ranking.scholarship_type,
+        applications=apps_in_ranking,
     )
 
     export_rows = [

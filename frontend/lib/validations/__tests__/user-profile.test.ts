@@ -47,7 +47,11 @@ describe("validateAdvisorEmail", () => {
   it("accepts valid email formats", () => {
     expect(validateAdvisorEmail("prof@nycu.edu.tw").isValid).toBe(true);
     expect(validateAdvisorEmail("user+tag@example.co").isValid).toBe(true);
-    expect(validateAdvisorEmail("a.b.c@d.e").isValid).toBe(true);
+    /* Pin: multi-dot local part with 2-char TLD — the EMAIL_PATTERN
+     * regex requires `[a-zA-Z]{2,}` after the final dot, so the
+     * original `a.b.c@d.e` (1-char TLD) is correctly rejected. Keep
+     * the multi-dot-local-part intent by using a 2-char TLD. */
+    expect(validateAdvisorEmail("a.b.c@d.ee").isValid).toBe(true);
   });
 
   it("rejects malformed emails with localized error message", () => {
