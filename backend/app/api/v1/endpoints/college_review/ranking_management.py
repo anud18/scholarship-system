@@ -30,7 +30,6 @@ from app.schemas.college_review import RankingImportItem, RankingOrderUpdate, Ra
 from app.schemas.response import ApiResponse
 from app.services.college_ranking_export_service import (
     CollegeRankingExportService,
-    DynamicFieldSpec,
     ExportRow,
 )
 from app.services.college_review_service import (
