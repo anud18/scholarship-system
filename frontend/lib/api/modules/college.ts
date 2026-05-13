@@ -480,6 +480,56 @@ export function createCollegeApi() {
     },
 
     /**
+     * Admin: toggle supplementary import open/close for a ranking.
+     * PATCH /api/v1/college-review/rankings/{ranking_id}/supplementary-import
+     */
+    toggleSupplementaryImport: async (
+      rankingId: number,
+      allow: boolean
+    ): Promise<ApiResponse<{ ranking_id: number; allow_supplementary_import: boolean }>> => {
+      const resp = await fetch(
+        `/api/v1/college-review/rankings/${rankingId}/supplementary-import`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ allow }),
+        }
+      );
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => null);
+        throw new Error(err?.detail || "操作失敗");
+      }
+      return resp.json();
+    },
+
+    /**
+     * College: upload supplementary Excel for a ranking.
+     * POST /api/v1/college-review/rankings/{ranking_id}/supplementary-import
+     */
+    uploadSupplementaryImport: async (
+      rankingId: number,
+      file: File
+    ): Promise<
+      ApiResponse<{
+        imported_count: number;
+        max_existing_rank: number;
+        new_rank_range: string;
+      }>
+    > => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const resp = await fetch(
+        `/api/v1/college-review/rankings/${rankingId}/supplementary-import`,
+        { method: "POST", body: formData }
+      );
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => null);
+        throw new Error(err?.detail || "匯入失敗");
+      }
+      return resp.json();
+    },
+
+    /**
      * Download application materials export package as ZIP
      */
     exportPackage: async (params: {
