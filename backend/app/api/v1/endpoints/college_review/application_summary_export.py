@@ -15,7 +15,7 @@ import io
 import logging
 import re
 import zipfile
-from typing import Optional
+from typing import Literal, Optional
 from urllib.parse import quote as _url_quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -175,7 +175,7 @@ async def export_department_summary_bulk(
     scholarship_type_id: int = Query(...),
     academic_year: int = Query(...),
     semester: Optional[str] = Query(None),
-    scope: str = Query(..., pattern="^(college|all)$"),
+    scope: Literal["college", "all"] = Query(...),
     current_user: User = Depends(require_scholarship_manager),
     db: AsyncSession = Depends(get_db),
 ):

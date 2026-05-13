@@ -521,6 +521,50 @@ export function createCollegeApi() {
   };
 }
 
+async function _fetchBinaryExport(
+  path: string,
+  params: URLSearchParams,
+  fallbackFilename: string,
+  errorFallback: string
+): Promise<{ blob: Blob; filename: string }> {
+  const token = typedClient.getToken();
+  const baseURL =
+    typeof window !== "undefined"
+      ? ""
+      : process.env.INTERNAL_API_URL || "http://localhost:8000";
+
+  const query = params.toString();
+  const url = `${baseURL}${path}${query ? `?${query}` : ""}`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  if (!response.ok) {
+    let message = errorFallback;
+    try {
+      const errorData = await response.json();
+      message = errorData?.detail || errorData?.message || errorData?.error || message;
+    } catch {
+      // Non-JSON error body — keep default.
+    }
+    throw new Error(message);
+  }
+
+  const disposition = response.headers.get("content-disposition") || "";
+  const filenameMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  const filename = filenameMatch
+    ? decodeURIComponent(filenameMatch[1].trim())
+    : fallbackFilename;
+
+  const blob = await response.blob();
+  return { blob, filename };
+}
+
 /**
  * Download the 學生資料彙整表 Excel for a college ranking.
  *
@@ -533,43 +577,12 @@ export function createCollegeApi() {
 export async function exportRankingExcel(
   rankingId: number
 ): Promise<{ blob: Blob; filename: string }> {
-  const token = typedClient.getToken();
-  const baseURL =
-    typeof window !== "undefined"
-      ? ""
-      : process.env.INTERNAL_API_URL || "http://localhost:8000";
-
-  const response = await fetch(
-    `${baseURL}/api/v1/college-review/rankings/${rankingId}/export-excel`,
-    {
-      method: "GET",
-      credentials: "include",
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    }
+  return _fetchBinaryExport(
+    `/api/v1/college-review/rankings/${rankingId}/export-excel`,
+    new URLSearchParams(),
+    `學生資料彙整表_${rankingId}.xlsx`,
+    "無法匯出排名資料"
   );
-
-  if (!response.ok) {
-    let message = "無法匯出排名資料";
-    try {
-      const errorData = await response.json();
-      message = errorData?.detail || errorData?.error || message;
-    } catch {
-      // Non-JSON error body — keep default message.
-    }
-    throw new Error(message);
-  }
-
-  // Extract filename from Content-Disposition header (RFC 5987 UTF-8 form).
-  const disposition = response.headers.get("content-disposition") || "";
-  const filenameMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
-  const filename = filenameMatch
-    ? decodeURIComponent(filenameMatch[1].trim())
-    : `學生資料彙整表_${rankingId}.xlsx`;
-
-  const blob = await response.blob();
-  return { blob, filename };
 }
 
 type DepartmentSummaryExportArgs = {
@@ -586,48 +599,18 @@ type DepartmentSummaryExportArgs = {
 export async function exportDepartmentSummary(
   args: DepartmentSummaryExportArgs & { department_code: string }
 ): Promise<{ blob: Blob; filename: string }> {
-  const token = typedClient.getToken();
-  const baseURL =
-    typeof window !== "undefined"
-      ? ""
-      : process.env.INTERNAL_API_URL || "http://localhost:8000";
-
   const params = new URLSearchParams();
   params.set("scholarship_type_id", String(args.scholarship_type_id));
   params.set("academic_year", String(args.academic_year));
   if (args.semester) params.set("semester", args.semester);
   params.set("department_code", args.department_code);
 
-  const response = await fetch(
-    `${baseURL}/api/v1/college-review/applications/department-summary-export?${params.toString()}`,
-    {
-      method: "GET",
-      credentials: "include",
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    }
+  return _fetchBinaryExport(
+    "/api/v1/college-review/applications/department-summary-export",
+    params,
+    "申請總表.xlsx",
+    "無法匯出申請總表"
   );
-
-  if (!response.ok) {
-    let message = "無法匯出申請總表";
-    try {
-      const errorData = await response.json();
-      message = errorData?.detail || errorData?.message || errorData?.error || message;
-    } catch {
-      // Non-JSON error body — keep default message.
-    }
-    throw new Error(message);
-  }
-
-  const disposition = response.headers.get("content-disposition") || "";
-  const filenameMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
-  const filename = filenameMatch
-    ? decodeURIComponent(filenameMatch[1].trim())
-    : "申請總表.xlsx";
-
-  const blob = await response.blob();
-  return { blob, filename };
 }
 
 /**
@@ -638,46 +621,16 @@ export async function exportDepartmentSummary(
 export async function exportDepartmentSummaryBulk(
   args: DepartmentSummaryExportArgs & { scope: "college" | "all" }
 ): Promise<{ blob: Blob; filename: string }> {
-  const token = typedClient.getToken();
-  const baseURL =
-    typeof window !== "undefined"
-      ? ""
-      : process.env.INTERNAL_API_URL || "http://localhost:8000";
-
   const params = new URLSearchParams();
   params.set("scholarship_type_id", String(args.scholarship_type_id));
   params.set("academic_year", String(args.academic_year));
   if (args.semester) params.set("semester", args.semester);
   params.set("scope", args.scope);
 
-  const response = await fetch(
-    `${baseURL}/api/v1/college-review/applications/department-summary-export-bulk?${params.toString()}`,
-    {
-      method: "GET",
-      credentials: "include",
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    }
+  return _fetchBinaryExport(
+    "/api/v1/college-review/applications/department-summary-export-bulk",
+    params,
+    "申請總表.zip",
+    "無法匯出申請總表"
   );
-
-  if (!response.ok) {
-    let message = "無法匯出申請總表";
-    try {
-      const errorData = await response.json();
-      message = errorData?.detail || errorData?.message || errorData?.error || message;
-    } catch {
-      // Non-JSON error body — keep default message.
-    }
-    throw new Error(message);
-  }
-
-  const disposition = response.headers.get("content-disposition") || "";
-  const filenameMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
-  const filename = filenameMatch
-    ? decodeURIComponent(filenameMatch[1].trim())
-    : "申請總表.zip";
-
-  const blob = await response.blob();
-  return { blob, filename };
 }

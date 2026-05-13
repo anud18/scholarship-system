@@ -187,7 +187,7 @@ async def load_export_aux_data(
             user_ids.add(uid)
 
     account_number_by_user: dict[int, str] = {}
-    advisor_name_by_user: dict[int, str] = {}
+    profile_advisor_by_user: dict[int, str] = {}
 
     if user_ids:
         profile_stmt = select(
@@ -197,7 +197,7 @@ async def load_export_aux_data(
             if acct:
                 account_number_by_user[uid] = acct
             if adv:
-                advisor_name_by_user[uid] = adv
+                profile_advisor_by_user[uid] = adv
 
     # 4. Advisor names from relationships
     advisor_names_by_user: dict[int, list[str]] = {uid: [] for uid in user_ids}
@@ -221,7 +221,7 @@ async def load_export_aux_data(
         names = advisor_names_by_user.get(uid) or []
         if names:
             advisor_string_by_user[uid] = "、".join(names)
-        elif uid in advisor_name_by_user:
-            advisor_string_by_user[uid] = advisor_name_by_user[uid]
+        elif uid in profile_advisor_by_user:
+            advisor_string_by_user[uid] = profile_advisor_by_user[uid]
 
     return dynamic_fields, sub_type_labels, account_number_by_user, advisor_string_by_user

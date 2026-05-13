@@ -41,7 +41,7 @@ from app.services.college_review_service import (
 )
 from app.services.review_service import ReviewService
 
-from ._helpers import normalize_semester_value
+from ._helpers import load_export_aux_data, normalize_semester_value
 
 logger = logging.getLogger(__name__)
 
@@ -1121,8 +1121,6 @@ async def export_ranking_excel(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限匯出此學院之資料")
 
     # 3-5. Bulk-load aux data (dynamic fields, sub-type labels, accounts, advisors)
-    from ._helpers import load_export_aux_data  # local import keeps top-of-file imports small
-
     items_sorted = sorted(ranking.items or [], key=lambda x: x.rank_position)
     apps_in_ranking = [item.application for item in items_sorted if item.application is not None]
 
