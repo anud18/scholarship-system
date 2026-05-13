@@ -17905,7 +17905,7 @@ export interface operations {
                 scholarship_type_id: number;
                 academic_year: number;
                 semester?: string | null;
-                scope: string;
+                scope: "college" | "all";
             };
             header?: never;
             path?: never;
