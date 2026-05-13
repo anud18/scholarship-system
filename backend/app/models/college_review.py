@@ -81,6 +81,7 @@ class CollegeRanking(Base):
     # Distribution information
     distribution_executed = Column(Boolean, default=False)
     distribution_date = Column(DateTime(timezone=True))
+    allow_supplementary_import = Column(Boolean, default=False, nullable=False, server_default="false")  # Admin-controlled flag that opens supplementary import after distribution
     github_issue_url = Column(String(500))  # Link to generated GitHub issue
 
     # Time tracking
@@ -149,6 +150,7 @@ class CollegeRankingItem(Base):
     # allocation flow (status stays 'ranked'); admin can still allocate if desired.
     # Distinct from status='rejected' which excludes from alternate-promotion.
     college_rejected = Column(Boolean, default=False, nullable=False, server_default="false")
+    is_supplementary = Column(Boolean, default=False, nullable=False, server_default="false")  # True = added via post-distribution supplementary import
 
     # Matrix distribution fields
     allocated_sub_type = Column(String(50), nullable=True)  # Sub-type code allocated to (e.g., 'nstc', 'moe_1w')
