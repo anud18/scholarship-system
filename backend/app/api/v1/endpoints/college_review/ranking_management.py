@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import AuthorizationError, NotFoundError
-from app.core.security import require_college
+from app.core.security import require_college, require_scholarship_manager
 from app.db.deps import get_db
 from app.models.college_review import CollegeRanking, CollegeRankingItem
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
@@ -1089,7 +1089,7 @@ async def import_ranking_from_excel(
 @router.get("/rankings/{ranking_id}/export-excel")
 async def export_ranking_excel(
     ranking_id: int,
-    current_user: User = Depends(require_college),
+    current_user: User = Depends(require_scholarship_manager),
     db: AsyncSession = Depends(get_db),
 ):
     """Generate the 學生資料彙整表 Excel for a ranking.

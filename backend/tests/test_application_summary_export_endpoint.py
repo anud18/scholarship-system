@@ -22,7 +22,6 @@ import pytest
 os.environ.setdefault("TESTING", "true")
 os.environ.setdefault("PYTEST_CURRENT_TEST", "true")
 
-from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -36,7 +35,7 @@ settings.database_url = _TEST_ASYNC
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app.core.security import require_college  # noqa: E402
+from app.core.security import require_scholarship_manager  # noqa: E402
 from app.db.base_class import Base  # noqa: E402
 from app.db.deps import get_db  # noqa: E402
 from app.main import app  # noqa: E402
@@ -48,11 +47,6 @@ from app.models.user import EmployeeStatus, User, UserRole, UserType  # noqa: E4
 # In-process test DB (one sync engine per test via setup/teardown helpers)
 # ---------------------------------------------------------------------------
 
-_sync_engine = create_engine(
-    _TEST_SYNC,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
 _async_engine = create_async_engine(
     _TEST_ASYNC,
     connect_args={"check_same_thread": False},
@@ -63,8 +57,7 @@ _AsyncSession = async_sessionmaker(_async_engine, class_=AsyncSession, expire_on
 
 def _run_async(coro):
     import asyncio
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 def _create_tables():
@@ -137,7 +130,7 @@ class TestDepartmentSummaryExportEndpoint:
             return user
 
         app.dependency_overrides[get_db] = _fake_db
-        app.dependency_overrides[require_college] = _fake_auth
+        app.dependency_overrides[require_scholarship_manager] = _fake_auth
         return TestClient(app, raise_server_exceptions=True)
 
     def _seed_department_and_scholarship(self, dept_code: str = "CE4460", academy_code: str = "CE"):
@@ -317,7 +310,7 @@ class TestDepartmentSummaryExportBulkEndpoint:
             return user
 
         app.dependency_overrides[get_db] = _fake_db
-        app.dependency_overrides[require_college] = _fake_auth
+        app.dependency_overrides[require_scholarship_manager] = _fake_auth
         return TestClient(app, raise_server_exceptions=True)
 
     def _seed_base(self):

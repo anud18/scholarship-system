@@ -24,7 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.security import require_college
+from app.core.security import require_scholarship_manager
 from app.db.deps import get_db
 from app.models.application import Application
 from app.models.scholarship import ScholarshipType
@@ -52,13 +52,19 @@ def _sanitise_filename_part(value: str) -> str:
     return _UNSAFE_FILENAME_RE.sub("_", value).strip() or "untitled"
 
 
+def _sort_key(a: "Application"):
+    """Sort key that places applications with a missing std_stdcode last."""
+    code = ((a.student_data or {}).get("std_stdcode") or "").strip()
+    return (not code, code, a.id)  # False(=0) for real codes → first; True(=1) for blanks → last
+
+
 @router.get("/applications/department-summary-export")
 async def export_department_summary_single(
     scholarship_type_id: int = Query(..., description="Scholarship type ID"),
     academic_year: int = Query(..., description="Academic year"),
     semester: Optional[str] = Query(None, description="first / second / yearly / null"),
     department_code: str = Query(..., min_length=1, description="Department code (Department.code)"),
-    current_user: User = Depends(require_college),
+    current_user: User = Depends(require_scholarship_manager),
     db: AsyncSession = Depends(get_db),
 ):
     """Generate the 申請總表 Excel for one department."""
@@ -117,7 +123,7 @@ async def export_department_summary_single(
         a for a in raw_apps
         if ((a.student_data or {}).get("std_depno") or "").strip() == department_code
     ]
-    apps.sort(key=lambda a: ((a.student_data or {}).get("std_stdcode") or "", a.id))
+    apps.sort(key=_sort_key)
 
     # Aux data
     dynamic_fields, sub_type_labels, account_by_user, advisor_by_user = await load_export_aux_data(
@@ -170,7 +176,7 @@ async def export_department_summary_bulk(
     academic_year: int = Query(...),
     semester: Optional[str] = Query(None),
     scope: str = Query(..., pattern="^(college|all)$"),
-    current_user: User = Depends(require_college),
+    current_user: User = Depends(require_scholarship_manager),
     db: AsyncSession = Depends(get_db),
 ):
     """Generate a ZIP archive containing one 申請總表 xlsx per department."""
@@ -249,10 +255,10 @@ async def export_department_summary_bulk(
             detail="找不到符合條件的申請資料",
         )
 
-    apps.sort(key=lambda a: ((a.student_data or {}).get("std_stdcode") or "", a.id))
+    apps.sort(key=_sort_key)
 
     # Group by std_depno
-    groups: dict[str, list] = {}
+    groups: dict[str, list[Application]] = {}
     for app in apps:
         dept_code = ((app.student_data or {}).get("std_depno") or "").strip() or "未知"
         groups.setdefault(dept_code, []).append(app)
