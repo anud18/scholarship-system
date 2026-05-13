@@ -219,8 +219,18 @@ jobs:
           STUDENT_API_ACCOUNT: ${{ secrets.STUDENT_API_ACCOUNT }}
           STUDENT_API_HMAC_KEY: ${{ secrets.STUDENT_API_HMAC_KEY }}
           SUPER_ADMIN_NYCU_ID: ${{ secrets.SUPER_ADMIN_NYCU_ID }}
+          PII_ENCRYPTION_KEYS: ${{ secrets.PII_ENCRYPTION_KEYS }}
+          PII_ENCRYPTION_ACTIVE_VERSION: ${{ secrets.PII_ENCRYPTION_ACTIVE_VERSION }}
         run: |
           cd ~/scholarship-staging
+          if [ -z "$PII_ENCRYPTION_KEYS" ]; then
+            echo "::error::secrets.PII_ENCRYPTION_KEYS is not configured. The"
+            echo "::error::20260512_encrypt_std_pid migration will hard-fail because"
+            echo "::error::ENVIRONMENT=production on staging. Generate a key with:"
+            echo "::error::  python -c 'import os,base64;print(base64.urlsafe_b64encode(os.urandom(32)).rstrip(b\"=\").decode())'"
+            echo "::error::then: gh secret set PII_ENCRYPTION_KEYS --body '{\"v1\":\"<KEY>\"}'"
+            exit 1
+          fi
           docker compose up -d
 
       - name: Run database migrations
