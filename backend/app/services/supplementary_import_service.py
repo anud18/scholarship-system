@@ -61,6 +61,11 @@ def parse_scholarship_type_cell(cell_value: str, label_to_code: Dict[str, str]) 
 class SupplementaryImportService:
     """Handles all logic for supplementary student import after distribution."""
 
+    def __init__(self, db, student_service=None):
+        from app.services.student_service import StudentService
+        self.db = db
+        self.student_service = student_service or StudentService()
+
     # -------- Pure helpers (no DB / no HTTP) --------
 
     @staticmethod
@@ -165,3 +170,243 @@ class SupplementaryImportService:
                 )
 
         return rows, errors
+
+    # -------- DB + SIS helpers --------
+
+    async def validate_no_duplicate_applications(
+        self,
+        rows: List["SupplementaryRow"],
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: Optional[str],
+    ) -> List[str]:
+        """Return list of student_ids that already have an application for this scholarship/year/semester."""
+        from sqlalchemy import select, and_, or_
+        from app.models.application import Application
+        from app.models.user import User
+
+        student_ids = [r.student_id for r in rows]
+        if not student_ids:
+            return []
+
+        user_stmt = select(User.id, User.nycu_id).where(User.nycu_id.in_(student_ids))
+        user_result = await self.db.execute(user_stmt)
+        nycu_to_user_id = {nycu_id: uid for uid, nycu_id in user_result.all()}
+
+        if not nycu_to_user_id:
+            return []
+
+        user_ids = list(nycu_to_user_id.values())
+
+        if semester == "yearly":
+            sem_cond = or_(
+                Application.semester.is_(None),
+                Application.semester == "yearly",
+            )
+        else:
+            sem_cond = Application.semester == semester
+
+        app_stmt = select(Application.user_id).where(
+            and_(
+                Application.user_id.in_(user_ids),
+                Application.scholarship_type_id == scholarship_type_id,
+                Application.academic_year == academic_year,
+                sem_cond,
+                Application.deleted_at.is_(None),
+            )
+        )
+        result = await self.db.execute(app_stmt)
+        conflicting_user_ids = {row[0] for row in result.all()}
+
+        user_id_to_nycu = {v: k for k, v in nycu_to_user_id.items()}
+        return [user_id_to_nycu[uid] for uid in conflicting_user_ids if uid in user_id_to_nycu]
+
+    async def fetch_student_data_bulk(
+        self, student_ids: List[str]
+    ) -> Tuple[Dict[str, dict], List[str]]:
+        """Fetch student_data from SIS API for each student_id.
+
+        Returns (data_map, missing_ids).
+        Raises ValueError if SIS API is not enabled.
+        """
+        if not getattr(self.student_service, "api_enabled", False):
+            raise ValueError("學生 API 未啟用，無法驗證學生資料")
+
+        data_map: Dict[str, dict] = {}
+        missing: List[str] = []
+
+        for student_id in student_ids:
+            try:
+                data = await self.student_service.get_student_basic_info(student_id)
+            except Exception as exc:
+                logger.warning("SIS API error for %s: %s", student_id, exc)
+                missing.append(student_id)
+                continue
+
+            if not data:
+                missing.append(student_id)
+            else:
+                data_map[student_id] = data
+
+        return data_map, missing
+
+    async def find_or_create_users(
+        self, student_data_map: Dict[str, dict]
+    ) -> Dict[str, object]:
+        """Return {student_id: User} — creates User if not found."""
+        from sqlalchemy import select
+        from app.models.user import User, UserRole, UserType
+
+        student_ids = list(student_data_map.keys())
+        if not student_ids:
+            return {}
+
+        stmt = select(User).where(User.nycu_id.in_(student_ids))
+        result = await self.db.execute(stmt)
+        user_map: Dict[str, "User"] = {u.nycu_id: u for u in result.scalars().all()}
+
+        for student_id, sis_data in student_data_map.items():
+            if student_id in user_map:
+                continue
+            new_user = User(
+                nycu_id=student_id,
+                name=sis_data.get("std_cname") or student_id,
+                email=sis_data.get("com_email"),
+                user_type=UserType.student,
+                role=UserRole.student,
+                dept_code=sis_data.get("std_depno"),
+            )
+            self.db.add(new_user)
+            await self.db.flush()
+            user_map[student_id] = new_user
+
+        return user_map
+
+    async def upsert_user_profiles(
+        self,
+        user_map: Dict[str, object],
+        rows: List["SupplementaryRow"],
+    ) -> None:
+        """Create or update UserProfile with bank_account and advisor_name from Excel."""
+        from sqlalchemy import select
+        from app.models.user_profile import UserProfile
+
+        user_ids = [u.id for u in user_map.values()]
+        if not user_ids:
+            return
+
+        existing_stmt = select(UserProfile).where(UserProfile.user_id.in_(user_ids))
+        existing_result = await self.db.execute(existing_stmt)
+        profile_map: Dict[int, UserProfile] = {p.user_id: p for p in existing_result.scalars().all()}
+
+        row_map = {r.student_id: r for r in rows}
+
+        for student_id, user in user_map.items():
+            row = row_map.get(student_id)
+            if not row:
+                continue
+            if user.id in profile_map:
+                profile = profile_map[user.id]
+                if row.bank_account:
+                    profile.account_number = row.bank_account
+                if row.advisor_name:
+                    profile.advisor_name = row.advisor_name
+            else:
+                profile = UserProfile(
+                    user_id=user.id,
+                    account_number=row.bank_account,
+                    advisor_name=row.advisor_name,
+                )
+                self.db.add(profile)
+
+        await self.db.flush()
+
+    async def create_applications_and_items(
+        self,
+        rows: List["SupplementaryRow"],
+        user_map: Dict[str, object],
+        student_data_map: Dict[str, dict],
+        ranking,
+        max_existing_rank: int,
+    ) -> int:
+        """Create Application + CollegeRankingItem for each supplementary row.
+
+        Returns count of created items.
+        """
+        from sqlalchemy import select
+        from app.models.application import Application, ApplicationStatus
+        from app.models.application_sequence import ApplicationSequence
+        from app.models.college_review import CollegeRankingItem
+
+        semester_str = ranking.semester if ranking.semester else "yearly"
+
+        created = 0
+        for row in rows:
+            user = user_map.get(row.student_id)
+            if not user:
+                continue
+
+            sis_data = student_data_map.get(row.student_id, {})
+
+            seq_stmt = (
+                select(ApplicationSequence)
+                .where(
+                    ApplicationSequence.academic_year == ranking.academic_year,
+                    ApplicationSequence.semester == semester_str,
+                )
+                .with_for_update()
+            )
+            seq_result = await self.db.execute(seq_stmt)
+            seq_record = seq_result.scalar_one_or_none()
+            if not seq_record:
+                seq_record = ApplicationSequence(
+                    academic_year=ranking.academic_year,
+                    semester=semester_str,
+                    last_sequence=0,
+                )
+                self.db.add(seq_record)
+                await self.db.flush()
+            seq_record.last_sequence += 1
+            app_id = ApplicationSequence.format_app_id(
+                ranking.academic_year, semester_str, seq_record.last_sequence
+            )
+
+            submitted_form_data = {
+                "fields": {
+                    field_name: {
+                        "field_id": field_name,
+                        "field_type": "text",
+                        "value": value,
+                    }
+                    for field_name, value in row.submitted_form_fields.items()
+                }
+            }
+
+            app = Application(
+                app_id=app_id,
+                user_id=user.id,
+                scholarship_type_id=ranking.scholarship_type_id,
+                academic_year=ranking.academic_year,
+                semester=ranking.semester,
+                status=ApplicationStatus.submitted,
+                student_data=sis_data,
+                sub_type_preferences=row.sub_type_preferences,
+                submitted_form_data=submitted_form_data,
+            )
+            self.db.add(app)
+            await self.db.flush()
+
+            rank_item = CollegeRankingItem(
+                ranking_id=ranking.id,
+                application_id=app.id,
+                rank_position=max_existing_rank + row.excel_rank,
+                is_supplementary=True,
+                status="ranked",
+                college_rejected=False,
+                is_allocated=False,
+            )
+            self.db.add(rank_item)
+            created += 1
+
+        await self.db.flush()
+        return created
