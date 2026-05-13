@@ -30,6 +30,7 @@ interface RankingData {
   academicYear: number;
   semester?: string | null;
   isFinalized: boolean;
+  allowSupplementaryImport?: boolean;
 }
 
 interface CollegeManagementContextType {
