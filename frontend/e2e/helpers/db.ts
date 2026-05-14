@@ -79,25 +79,41 @@ export async function dumpRelated(opts: {
 }
 
 export async function deleteApplicationCascade(appId: string): Promise<void> {
-  // Best-effort idempotent cleanup. Order respects FKs:
-  //   application_review_items → application_reviews → audit → application.
-  // The legacy `reviews`/`review_items` table names never existed in this
-  // schema; they came from an early draft of the helper. Each DELETE
-  // tolerates the absence of its table so older branches with partial
-  // schema still drain cleanly.
+  // Best-effort idempotent cleanup covering every FK that points at
+  // `applications` with ON DELETE NO ACTION (the default for most of the
+  // referencing tables in this schema). Order: children first, parent last.
+  //
+  // Tables whose FK to applications was discovered the hard way by previous
+  // E2E flakes (cross-spec dirty state on stuphd001+phd):
+  //   - email_history, scheduled_emails (notification queue)
+  //   - document_requests (deadline tracker)
+  //   - application_files (uploaded supporting docs)
+  //   - college_ranking_items, payment_roster_items (review-stage children)
+  //   - application_review_items → application_reviews (review tree)
+  //   - student_bank_accounts.verification_source_application_id is ON DELETE
+  //     SET NULL, so it cleans itself — left out intentionally.
+  //
+  // Each DELETE tolerates table absence so older/divergent schemas don't
+  // wedge the helper.
   const { rows } = await pool.query("SELECT id FROM applications WHERE app_id = $1", [appId]);
   if (!rows[0]) return;
   const id = rows[0].id as number;
-  await pool.query(
+
+  for (const sql of [
+    "DELETE FROM email_history WHERE application_id = $1",
+    "DELETE FROM scheduled_emails WHERE application_id = $1",
+    "DELETE FROM document_requests WHERE application_id = $1",
+    "DELETE FROM application_files WHERE application_id = $1",
+    "DELETE FROM college_ranking_items WHERE application_id = $1",
+    "DELETE FROM payment_roster_items WHERE application_id = $1",
     `DELETE FROM application_review_items
-     WHERE review_id IN (SELECT id FROM application_reviews WHERE application_id = $1)`,
-    [id],
-  ).catch(() => undefined);
-  await pool.query("DELETE FROM application_reviews WHERE application_id = $1", [id]).catch(() => undefined);
+       WHERE review_id IN (SELECT id FROM application_reviews WHERE application_id = $1)`,
+    "DELETE FROM application_reviews WHERE application_id = $1",
+  ]) {
+    await pool.query(sql, [id]).catch(() => undefined);
+  }
   // The audit table is `audit_logs` (general-purpose), keyed by
-  // (resource_type, resource_id::text). `application_audit_logs` was an
-  // early-draft name that never existed in the schema; the previous query
-  // silently no-op'd via .catch(). Stop pretending to clean it up — the
-  // genuine audit rows are removed by their FK cascade on applications.
+  // (resource_type, resource_id::text). Its rows are removed by the FK
+  // cascade on applications, so no explicit DELETE is needed here.
   await pool.query("DELETE FROM applications WHERE id = $1", [id]);
 }
