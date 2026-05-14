@@ -2128,8 +2128,13 @@ class ApplicationService:
         if application.status not in [ApplicationStatus.submitted, ApplicationStatus.under_review]:
             raise ValidationError("Only submitted or under-review applications can be withdrawn")
 
+        from app.models.enums import ReviewStage
+
         application.status = ApplicationStatus.draft
-        application.review_stage = None
+        # review_stage is NOT NULL on the column (20251028_add_review_stage_to_applications
+        # set nullable=False); set it back to the canonical draft stage to mirror the
+        # status transition rather than leaving the column null and tripping a 500.
+        application.review_stage = ReviewStage.student_draft.value
         application.professor_id = None
         application.updated_at = datetime.now(timezone.utc)
 
