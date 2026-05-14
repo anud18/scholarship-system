@@ -21,7 +21,7 @@ Bugs cause:
 from unittest.mock import AsyncMock
 
 import pytest
-from sqlalchemy.dialects.postgresql.asyncpg import InvalidCachedStatementError
+from asyncpg.exceptions import InvalidCachedStatementError
 
 from app.db.session import handle_cached_statement_error
 
