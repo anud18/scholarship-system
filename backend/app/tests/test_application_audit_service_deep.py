@@ -22,7 +22,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.audit import AuditAction, AuditLog
+from app.models.audit_log import AuditAction, AuditLog
 from app.models.user import User, UserRole, UserType
 from app.services.application_audit_service import ApplicationAuditService
 

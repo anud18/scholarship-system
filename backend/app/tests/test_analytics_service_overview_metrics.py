@@ -22,7 +22,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.models.application import ApplicationStatus
-from app.services.analytics_service import AnalyticsService
+from app.services.analytics_service import ScholarshipAnalyticsService
 
 
 def _app(*, status, submitted_at=None, decision_date=None) -> SimpleNamespace:
@@ -32,7 +32,7 @@ def _app(*, status, submitted_at=None, decision_date=None) -> SimpleNamespace:
 
 @pytest.fixture
 def service():
-    return AnalyticsService(db=None)  # type: ignore[arg-type]
+    return ScholarshipAnalyticsService(db=None)  # type: ignore[arg-type]
 
 
 def test_empty_list_returns_zero_values(service):
