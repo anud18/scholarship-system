@@ -89,6 +89,25 @@ async def update_email_template(
     # Fetch updated template
     updated_template = await EmailTemplateService.get_template(db, template.key)
 
+    logger.info(
+        "email-template updated: key=%s by user_id=%s sending_type=%s",
+        template.key,
+        current_user.id,
+        template.sending_type,
+        extra={
+            "actor_user_id": current_user.id,
+            "actor_role": current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
+            "template_key": template.key,
+            "sending_type": template.sending_type,
+            "subject_template_len": len(template.subject_template) if template.subject_template else 0,
+            "body_template_len": len(template.body_template) if template.body_template else 0,
+            "cc_count": len(template.cc) if template.cc else 0,
+            "bcc_count": len(template.bcc) if template.bcc else 0,
+            "requires_approval": template.requires_approval,
+            "max_recipients": template.max_recipients,
+        },
+    )
+
     return {
         "success": True,
         "message": "Email template updated successfully",
