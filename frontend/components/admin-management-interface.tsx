@@ -10,6 +10,7 @@ import { ScheduledEmailsTable } from "@/components/scheduled-emails-table";
 import { ScholarshipWorkflowMermaid } from "@/components/ScholarshipWorkflowMermaid";
 import SystemConfigurationManagement from "@/components/system-configuration-management";
 import { Badge } from "@/components/ui/badge";
+import { logger } from "@/lib/utils/logger";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -517,7 +518,7 @@ export function AdminManagementInterface({
           });
         }
       } catch (error) {
-        console.error("Failed to load email template:", error);
+        logger.error("Failed to load email template", { error: error });
         // Initialize with empty template on error
         setEmailTemplate({
           key: emailTab,
@@ -632,7 +633,7 @@ export function AdminManagementInterface({
         setEmailTemplate(response.data);
       }
     } catch (error) {
-      console.error("Failed to save email template:", error);
+      logger.error("Failed to save email template", { error: error });
     } finally {
       setSaving(false);
     }
@@ -648,7 +649,7 @@ export function AdminManagementInterface({
         setScholarshipEmailTemplates(response.data.items);
       }
     } catch (error: unknown) {
-      console.error("Failed to load scholarship email templates:", error);
+      logger.error("Failed to load scholarship email templates", { error: error });
       // If it's a permission error, switch back to system mode.
       // Errors from axios-style clients carry `.response.status`; plain
       // Error subclasses carry `.message`. Narrow to a focused shape rather
@@ -680,7 +681,7 @@ export function AdminManagementInterface({
         setCurrentScholarshipTemplate(response.data);
       }
     } catch (error) {
-      console.error("Failed to load scholarship email template:", error);
+      logger.error("Failed to load scholarship email template", { error: error });
       setCurrentScholarshipTemplate(null);
     }
   };
@@ -707,7 +708,7 @@ export function AdminManagementInterface({
         setEmailTab(""); // Reset email tab if no templates found
       }
     } catch (error) {
-      console.error("Error loading email templates:", error);
+      logger.error("Error loading email templates", { error: error });
       setEmailTemplates([]);
       setEmailTab(""); // Reset email tab on error
     }
@@ -755,7 +756,7 @@ export function AdminManagementInterface({
         }));
       }
     } catch (error) {
-      console.error("Failed to load email history:", error);
+      logger.error("Failed to load email history", { error: error });
     } finally {
       setLoadingEmailHistory(false);
     }
@@ -783,7 +784,7 @@ export function AdminManagementInterface({
         }));
       }
     } catch (error) {
-      console.error("Failed to load scheduled emails:", error);
+      logger.error("Failed to load scheduled emails", { error: error });
     } finally {
       setLoadingScheduledEmails(false);
     }
@@ -800,7 +801,7 @@ export function AdminManagementInterface({
         await loadScheduledEmails();
       }
     } catch (error) {
-      console.error("Failed to approve email:", error);
+      logger.error("Failed to approve email", { error: error });
     }
   };
 
@@ -813,7 +814,7 @@ export function AdminManagementInterface({
         await loadScheduledEmails();
       }
     } catch (error) {
-      console.error("Failed to cancel email:", error);
+      logger.error("Failed to cancel email", { error: error });
     }
   };
 
@@ -871,7 +872,7 @@ export function AdminManagementInterface({
         setHistoricalApplicationsError(errorMsg);
       }
     } catch (error: unknown) {
-      console.error("獲取歷史申請資料失敗:", error);
+      logger.error("獲取歷史申請資料失敗", { error: error });
       const errShape = error as { message?: string; response?: { data?: { message?: string } } };
       const errorMsg =
         errShape.message || errShape.response?.data?.message || "網路錯誤或伺服器未回應";
@@ -1054,7 +1055,7 @@ export function AdminManagementInterface({
             setHasQuotaPermission(false);
           }
         } catch (error) {
-          console.error("Failed to fetch user scholarship permissions:", error);
+          logger.error("Failed to fetch user scholarship permissions", { error: error });
           setHasQuotaPermission(false);
         }
       } else {
@@ -1147,7 +1148,7 @@ export function AdminManagementInterface({
         setActiveHistoricalTab("all"); // 保持全部為默認
       }
     } catch (error) {
-      console.error("獲取歷史申請 tab 資料失敗:", error);
+      logger.error("獲取歷史申請 tab 資料失敗", { error: error });
     }
   }, [user, activeHistoricalTab]);
 
@@ -1195,7 +1196,7 @@ export function AdminManagementInterface({
             }
           }
         } catch (error) {
-          console.error("Failed to fetch user scholarships:", error);
+          logger.error("Failed to fetch user scholarships", { error: error });
           setMyScholarships([]);
           setScholarshipEmailTab("system"); // Reset to system on error
         }
@@ -1286,7 +1287,7 @@ export function AdminManagementInterface({
         setUserStats(response.data);
       }
     } catch (error) {
-      console.error("獲取使用者統計失敗:", error);
+      logger.error("獲取使用者統計失敗", { error: error });
     }
   };
 
@@ -1343,10 +1344,7 @@ export function AdminManagementInterface({
                   comment: permission.comment || "",
                 });
               } catch (permError) {
-                console.error(
-                  "Failed to create scholarship permission:",
-                  permError
-                );
+                logger.error("Failed to create scholarship permission:", { permError: permError });
               }
             }
           }
@@ -1416,10 +1414,7 @@ export function AdminManagementInterface({
                   currentPerm.id
                 );
               } catch (permError) {
-                console.error(
-                  "Failed to delete scholarship permission:",
-                  permError
-                );
+                logger.error("Failed to delete scholarship permission:", { permError: permError });
                 alert(
                   `權限刪除失敗: ${permError instanceof Error ? permError.message : "未知錯誤"}`
                 );
@@ -1443,10 +1438,7 @@ export function AdminManagementInterface({
                   comment: permission.comment || "",
                 });
               } catch (permError) {
-                console.error(
-                  "Failed to create scholarship permission:",
-                  permError
-                );
+                logger.error("Failed to create scholarship permission:", { permError: permError });
                 alert(
                   `權限創建失敗: ${permError instanceof Error ? permError.message : "未知錯誤"}`
                 );
@@ -1462,10 +1454,7 @@ export function AdminManagementInterface({
             try {
               await apiClient.admin.deleteScholarshipPermission(permission.id);
             } catch (permError) {
-              console.error(
-                "Failed to delete scholarship permission:",
-                permError
-              );
+              logger.error("Failed to delete scholarship permission:", { permError: permError });
             }
           }
         }
@@ -1614,7 +1603,7 @@ export function AdminManagementInterface({
         }
       }
     } catch (error) {
-      console.error("Failed to load scholarship configurations:", error);
+      logger.error("Failed to load scholarship configurations", { error: error });
     } finally {
       setLoadingConfigurations(false);
     }
@@ -1707,7 +1696,7 @@ export function AdminManagementInterface({
         }
       }
     } catch (error) {
-      console.error("規則操作失敗:", error);
+      logger.error("規則操作失敗", { error: error });
       alert(`操作失敗: ${error instanceof Error ? error.message : "未知錯誤"}`);
     } finally {
       setRuleFormLoading(false);
@@ -1733,7 +1722,7 @@ export function AdminManagementInterface({
         throw new Error(response.message || "刪除規則失敗");
       }
     } catch (error) {
-      console.error("刪除規則失敗:", error);
+      logger.error("刪除規則失敗", { error: error });
       alert(`刪除失敗: ${error instanceof Error ? error.message : "未知錯誤"}`);
     }
   };
@@ -1769,7 +1758,7 @@ export function AdminManagementInterface({
         await fetchScholarshipRules();
       }
     } catch (error) {
-      console.error("更新初領狀態失敗:", error);
+      logger.error("更新初領狀態失敗", { error: error });
     }
   };
 
@@ -1789,7 +1778,7 @@ export function AdminManagementInterface({
         await fetchScholarshipRules();
       }
     } catch (error) {
-      console.error("更新續領狀態失敗:", error);
+      logger.error("更新續領狀態失敗", { error: error });
     }
   };
 
@@ -1806,13 +1795,13 @@ export function AdminManagementInterface({
         await fetchScholarshipRules();
       }
     } catch (error) {
-      console.error("更新規則狀態失敗:", error);
+      logger.error("更新規則狀態失敗", { error: error });
     }
   };
 
   // 獲取獎學金類型列表
   const fetchScholarshipTypes = async () => {
-    console.log(
+    logger.debug(
       "🔍 Fetching scholarship types for user:",
       user?.role,
       user?.nycu_id
@@ -1821,21 +1810,21 @@ export function AdminManagementInterface({
     try {
       // Use the new API that returns only scholarships the user has permission to manage
       const response = await apiClient.admin.getMyScholarships();
-      console.log("📊 Scholarship types response:", response);
+      logger.debug("📊 Scholarship types response:", response);
 
       if (response.success && response.data) {
-        console.log(
+        logger.debug(
           "✅ Found scholarship types:",
           response.data.length,
           "types"
         );
         setScholarshipTypes(response.data);
       } else {
-        console.log("❌ Failed to get scholarship types:", response.message);
+        logger.debug("❌ Failed to get scholarship types:", response.message);
         setScholarshipTypes([]);
       }
     } catch (error) {
-      console.error("❌ Failed to fetch scholarship types:", error);
+      logger.error("❌ Failed to fetch scholarship types", { error: error });
       // Fallback to empty array so UI doesn't break
       setScholarshipTypes([]);
     } finally {
@@ -1940,7 +1929,7 @@ export function AdminManagementInterface({
         setPermissionsError(response.message || "獲取獎學金權限失敗");
       }
     } catch (error) {
-      console.error("Error fetching permissions:", error);
+      logger.error("Error fetching permissions", { error: error });
       if (error instanceof Error) {
         setPermissionsError(error.message);
       } else {
@@ -1961,7 +1950,7 @@ export function AdminManagementInterface({
         setAvailableScholarships(response.data);
       }
     } catch (error) {
-      console.error("獲取獎學金列表失敗:", error);
+      logger.error("獲取獎學金列表失敗", { error: error });
     } finally {
       setLoadingScholarships(false);
     }
