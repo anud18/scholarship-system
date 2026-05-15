@@ -49,6 +49,13 @@ interface PeriodDetailDialogProps {
   onOpenChange: (open: boolean) => void
   period: Period
   configId: number
+  /**
+   * Roster cycle from the parent schedule (monthly | semi_yearly | yearly).
+   * Required — previously hardcoded to "monthly" when generating rosters,
+   * which silently mislabelled rosters generated against semi-yearly /
+   * yearly schedules. See PR #507.
+   */
+  rosterCycle: string
   onRosterGenerated?: () => void
 }
 
@@ -57,6 +64,7 @@ export function PeriodDetailDialog({
   onOpenChange,
   period,
   configId,
+  rosterCycle,
   onRosterGenerated,
 }: PeriodDetailDialogProps) {
   const [downloading, setDownloading] = useState(false)
@@ -127,14 +135,12 @@ export function PeriodDetailDialog({
   const handleGenerateNow = async () => {
     setGenerating(true)
     try {
-      // TODO: Need to get schedule_id from parent component
-      // For now, we'll use the generate API directly
       const response = await apiClient.request("/payment-rosters/generate", {
         method: "POST",
         body: JSON.stringify({
           scholarship_configuration_id: configId,
           period_label: period.label,
-          roster_cycle: "monthly", // TODO: Get from schedule
+          roster_cycle: rosterCycle,
           academic_year: parseInt(period.label.split("-")[0]),
           student_verification_enabled: true,
           auto_export_excel: true,

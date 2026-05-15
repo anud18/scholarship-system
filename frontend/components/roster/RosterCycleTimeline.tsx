@@ -264,12 +264,13 @@ export function RosterCycleTimeline({ configId }: RosterCycleTimelineProps) {
       </Card>
 
       {/* Period Detail Dialog */}
-      {selectedPeriod && (
+      {selectedPeriod && data && (
         <PeriodDetailDialog
           open={dialogOpen}
           onOpenChange={setDialogOpen}
           period={selectedPeriod}
           configId={configId}
+          rosterCycle={data.roster_cycle}
           onRosterGenerated={loadCycleStatus}
         />
       )}
