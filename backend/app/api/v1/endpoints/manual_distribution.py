@@ -113,7 +113,7 @@ async def get_admin_available_combinations(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve available combinations",
-        )
+        ) from e
 
 
 @router.get("/students")
@@ -176,7 +176,7 @@ async def auto_allocate_preview(
         }
     except Exception as e:
         logger.error("Error generating auto-allocation preview: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to generate auto-allocation preview")
+        raise HTTPException(status_code=500, detail="Failed to generate auto-allocation preview") from e
 
 
 @router.post("/allocate")
@@ -271,7 +271,7 @@ async def get_distribution_history(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve distribution history",
-        )
+        ) from e
 
 
 @router.post("/{scholarship_type_id}/restore")
@@ -317,7 +317,7 @@ async def restore_from_history(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to restore from history",
-        )
+        ) from e
 
 
 @router.get("/distribution-summary")
@@ -435,7 +435,7 @@ async def get_distribution_summary(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="取得分發摘要失敗",
-        )
+        ) from e
 
 
 class GenerateRostersRequest(BaseModel):
@@ -502,7 +502,7 @@ async def generate_rosters_from_distribution(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"造冊產生失敗: {str(e)}",
-        )
+        ) from e
 
 
 @router.post("/import-received-months")

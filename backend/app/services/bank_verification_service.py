@@ -236,7 +236,7 @@ class BankVerificationService:
                 file_stream.close()
                 file_stream.release_conn()
             except Exception as e:
-                raise OCRError(f"Failed to read file from storage: {str(e)}")
+                raise OCRError(f"Failed to read file from storage: {str(e)}") from e
 
             # Perform OCR extraction
             ocr_result = await ocr_service.extract_bank_info_from_image(image_data=image_data, db=self.db)

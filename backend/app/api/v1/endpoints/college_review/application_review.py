@@ -105,21 +105,23 @@ async def get_applications_for_review(
         raise
     except ValueError as e:
         logger.warning(f"Invalid request parameters for college applications: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid request parameters: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid request parameters: {str(e)}"
+        ) from e
     except ReviewPermissionError as e:
         logger.warning(f"Permission denied for college applications access: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except DatabaseError as e:
         logger.error(f"Database error retrieving applications: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database service temporarily unavailable"
-        )
+        ) from e
     except Exception as e:
         logger.error(f"Unexpected error retrieving applications: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while retrieving applications",
-        )
+        ) from e
 
 
 # NOTE: Review endpoints moved to /api/v1/reviews/* for multi-role support
@@ -220,4 +222,4 @@ async def get_student_preview(
         logger.error(f"Error retrieving student preview for {student_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve student preview: {str(e)}"
-        )
+        ) from e

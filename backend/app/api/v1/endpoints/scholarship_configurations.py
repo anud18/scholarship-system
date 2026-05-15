@@ -188,7 +188,7 @@ async def get_available_semesters(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve available semesters: {str(e)}",
-        )
+        ) from e
 
 
 @router.get("/matrix-quota-status/{period}")
@@ -375,7 +375,7 @@ async def get_matrix_quota_status(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve matrix quota status: {str(e)}",
-        )
+        ) from e
 
 
 @router.put("/matrix-quota")
@@ -500,7 +500,7 @@ async def update_matrix_quota(
         logger.error(f"Error in update_matrix_quota: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update matrix quota: {str(e)}"
-        )
+        ) from e
 
 
 @router.get("/colleges")
@@ -810,7 +810,7 @@ async def create_scholarship_configuration(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create configuration: {str(e)}"
-        )
+        ) from e
 
 
 @router.get("/configurations/{id}")
@@ -1061,7 +1061,7 @@ async def update_scholarship_configuration(
         logger.error(f"Error in update_scholarship_configuration: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update configuration: {str(e)}"
-        )
+        ) from e
 
 
 @router.delete("/configurations/{id}")
@@ -1111,7 +1111,7 @@ async def deactivate_scholarship_configuration(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to deactivate configuration: {str(e)}"
-        )
+        ) from e
 
 
 @router.post("/configurations/{id}/duplicate")
@@ -1198,7 +1198,7 @@ async def duplicate_scholarship_configuration(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to duplicate configuration: {str(e)}"
-        )
+        ) from e
 
 
 @router.get("/configurations")

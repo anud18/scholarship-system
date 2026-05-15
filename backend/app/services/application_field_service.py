@@ -557,7 +557,7 @@ class ApplicationFieldService:
         except Exception as e:
             self.logger.error(f"Error getting form config for {scholarship_type}: {str(e)}")
             # Re-raise the exception instead of returning empty config
-            raise e
+            raise e from e
 
     async def save_scholarship_form_config(
         self,

@@ -242,7 +242,7 @@ async def get_scholarship_form_config(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Form configuration not found for scholarship type: {scholarship_type}",
-        )
+        ) from e
 
 
 @cached(
@@ -368,7 +368,7 @@ async def upload_document_example(
     except Exception as e:
         logger.error(f"Failed to upload example file: {str(e)}")
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"範例文件上傳失敗: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"範例文件上傳失敗: {str(e)}") from e
 
 
 @router.get("/documents/{document_id}/example")
@@ -427,7 +427,7 @@ async def get_document_example(
 
     except Exception as e:
         logger.error(f"Failed to get example file: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"範例文件讀取失敗: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"範例文件讀取失敗: {str(e)}") from e
 
 
 @router.delete("/documents/{document_id}/example")
@@ -474,4 +474,4 @@ async def delete_document_example(
     except Exception as e:
         logger.error(f"Failed to delete example file: {str(e)}")
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"範例文件刪除失敗: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"範例文件刪除失敗: {str(e)}") from e

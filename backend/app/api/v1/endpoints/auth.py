@@ -312,7 +312,7 @@ async def portal_sso_verify(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Portal SSO verification failed: {str(e)}",
-        )
+        ) from e
 
 
 @router.get("/portal-sso/verify/{username}")

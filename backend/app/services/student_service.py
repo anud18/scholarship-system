@@ -117,10 +117,10 @@ class StudentService:
             raise ServiceUnavailableError("Student API request timed out")
         except httpx.RequestError as e:
             logger.error(f"Student API request error: {str(e)}")
-            raise ServiceUnavailableError(f"Student API request failed: {str(e)}")
+            raise ServiceUnavailableError(f"Student API request failed: {str(e)}") from e
         except Exception as e:
             logger.error(f"Unexpected error fetching student data for {student_code}: {str(e)}")
-            raise ServiceUnavailableError(f"Failed to fetch student data: {str(e)}")
+            raise ServiceUnavailableError(f"Failed to fetch student data: {str(e)}") from e
 
     async def get_student_term_info(self, student_code: str, academic_year: str, term: str) -> Optional[Dict[str, Any]]:
         """
@@ -197,10 +197,10 @@ class StudentService:
             raise ServiceUnavailableError("Student API request timed out")
         except httpx.RequestError as e:
             logger.error(f"Student term API request error: {str(e)}")
-            raise ServiceUnavailableError(f"Student API request failed: {str(e)}")
+            raise ServiceUnavailableError(f"Student API request failed: {str(e)}") from e
         except Exception as e:
             logger.error(f"Unexpected error fetching student term data for {student_code}: {str(e)}")
-            raise ServiceUnavailableError(f"Failed to fetch student term data: {str(e)}")
+            raise ServiceUnavailableError(f"Failed to fetch student term data: {str(e)}") from e
 
     async def get_student_snapshot(
         self, student_code: str, academic_year: Optional[str] = None, semester: Optional[str] = None

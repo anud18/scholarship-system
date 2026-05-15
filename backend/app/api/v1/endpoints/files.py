@@ -123,7 +123,7 @@ async def get_file_proxy(
         raise
     except Exception as e:
         logger.error(f"Error serving file {file_id}: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get("/applications/{application_id}/files/{file_id}/download")
@@ -226,4 +226,4 @@ async def download_file_proxy(
         raise
     except Exception as e:
         logger.error(f"Error downloading file {file_id}: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e

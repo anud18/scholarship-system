@@ -155,7 +155,7 @@ class OCRService:
 
         except Exception as e:
             logger.error(f"Bank OCR extraction failed: {str(e)}")
-            raise OCRError(f"Failed to extract bank information: {str(e)}")
+            raise OCRError(f"Failed to extract bank information: {str(e)}") from e
 
     async def extract_general_text_from_image(
         self, image_data: bytes, db: Optional[AsyncSession] = None
@@ -214,7 +214,7 @@ class OCRService:
 
         except Exception as e:
             logger.error(f"General OCR extraction failed: {str(e)}")
-            raise OCRError(f"Failed to extract text: {str(e)}")
+            raise OCRError(f"Failed to extract text: {str(e)}") from e
 
     def _validate_and_process_image(self, image_data: bytes) -> Image.Image:
         """Validate and process image for OCR"""
@@ -239,7 +239,7 @@ class OCRService:
             return image
 
         except Exception as e:
-            raise OCRError(f"Invalid image format: {str(e)}")
+            raise OCRError(f"Invalid image format: {str(e)}") from e
 
     def _parse_gemini_response(self, response_text: str) -> Dict[str, Any]:
         """Parse Gemini API response and extract JSON"""

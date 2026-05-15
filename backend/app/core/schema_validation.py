@@ -49,7 +49,9 @@ def validate_response_data(data: Any, schema: Type[BaseModel]) -> bool:
             field_path = " -> ".join(str(loc) for loc in error["loc"])
             error_details.append(f"Field '{field_path}': {error['msg']}")
 
-        raise SchemaValidationError(f"Schema validation failed for {schema.__name__}:\n" + "\n".join(error_details))
+        raise SchemaValidationError(
+            f"Schema validation failed for {schema.__name__}:\n" + "\n".join(error_details)
+        ) from e
 
 
 def convert_sqlalchemy_to_response_dict(

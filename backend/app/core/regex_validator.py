@@ -143,8 +143,8 @@ def validate_regex_pattern(pattern: str, test_string: Optional[str] = None, time
                 if hasattr(signal, "SIGALRM"):
                     signal.alarm(0)
 
-        except RegexTimeoutError:
-            raise RegexValidationError("Regex pattern causes excessive backtracking (ReDoS vulnerability)")
+        except RegexTimeoutError as exc:
+            raise RegexValidationError("Regex pattern causes excessive backtracking (ReDoS vulnerability)") from exc
         except Exception:
             # Other exceptions during matching are acceptable
             pass
