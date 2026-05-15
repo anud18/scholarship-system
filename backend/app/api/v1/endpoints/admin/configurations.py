@@ -116,13 +116,13 @@ async def get_all_configurations(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve configurations due to a database error.",
-        )
+        ) from e
     except Exception as e:
         logger.error(f"Unexpected error retrieving configurations: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve configurations due to an unexpected error.",
-        )
+        ) from e
 
 
 @router.post("/configurations")
@@ -187,13 +187,13 @@ async def create_configuration(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create configuration due to a database error.",
-        )
+        ) from e
     except Exception as e:
         logger.error(f"Unexpected error creating configuration: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create configuration due to an unexpected error.",
-        )
+        ) from e
 
 
 @router.put("/configurations/bulk")
@@ -282,13 +282,13 @@ async def bulk_update_configurations(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update configurations due to a database error.",
-        )
+        ) from e
     except Exception as e:
         logger.error(f"Unexpected error in bulk configuration update: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update configurations due to an unexpected error.",
-        )
+        ) from e
 
 
 @router.post("/configurations/validate")
@@ -336,7 +336,7 @@ async def validate_configuration(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to validate configuration due to an unexpected error.",
-        )
+        ) from e
 
 
 @router.delete("/configurations/{key}")
@@ -364,10 +364,10 @@ async def delete_configuration(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete configuration due to a database error.",
-        )
+        ) from e
     except Exception as e:
         logger.error(f"Unexpected error deleting configuration: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete configuration due to an unexpected error.",
-        )
+        ) from e

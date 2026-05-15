@@ -59,13 +59,15 @@ async def get_quota_status(
 
     except ValueError as e:
         logger.warning(f"Invalid quota status parameters: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid parameters: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid parameters: {str(e)}") from e
     except CollegeReviewError as e:
         logger.error(f"College review error retrieving quota status: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Unexpected error retrieving quota status: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve quota status")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve quota status"
+        ) from e
 
 
 @router.get("/rankings/{ranking_id}/roster-status")
@@ -88,7 +90,7 @@ async def get_ranking_roster_status(
         logger.error(f"Error retrieving roster status for ranking {ranking_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve roster status"
-        )
+        ) from e
 
 
 @router.get("/rankings/{ranking_id}/distribution-details")
@@ -390,4 +392,4 @@ async def get_distribution_details(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve distribution details: {str(e)}",
-        )
+        ) from e

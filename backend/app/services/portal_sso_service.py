@@ -106,7 +106,7 @@ class PortalSSOService:
             raise AuthenticationError("Portal verification timeout")
         except httpx.RequestError as e:
             logger.error(f"Portal JWT verification request error: {e}")
-            raise AuthenticationError("Portal verification failed")
+            raise AuthenticationError("Portal verification failed") from e
         except json.JSONDecodeError:
             logger.error("Portal JWT verification returned invalid JSON")
             raise AuthenticationError("Invalid portal response")

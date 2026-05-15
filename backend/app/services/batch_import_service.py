@@ -867,7 +867,7 @@ class BatchImportService:
             raise BatchImportError(
                 message=f"批次匯入失敗於第 {current_row} 行: {str(e)}",
                 batch_id=batch_import.id,
-            )
+            ) from e
 
         return created_ids, errors
 

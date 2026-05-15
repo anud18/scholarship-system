@@ -271,7 +271,7 @@ async def get_available_combinations(current_user: User = Depends(require_colleg
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve available combinations from database",
-        )
+        ) from e
 
 
 @router.get("/active-config")
@@ -337,7 +337,7 @@ async def get_active_config(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve active scholarship configuration",
-        )
+        ) from e
 
 
 @router.get("/sub-type-translations")
@@ -384,7 +384,7 @@ async def get_sub_type_translations(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve sub-type translations: {str(e)}",
-        )
+        ) from e
 
 
 @router.get("/managed-college")
@@ -452,4 +452,4 @@ async def get_managed_college(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve managed college: {str(e)}"
-        )
+        ) from e

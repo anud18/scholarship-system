@@ -356,7 +356,7 @@ async def enable_test_mode(
 
     except Exception as e:
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to enable test mode: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to enable test mode: {str(e)}") from e
 
 
 @router.post("/test-mode/disable")
@@ -407,7 +407,7 @@ async def disable_test_mode(
 
     except Exception as e:
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to disable test mode: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to disable test mode: {str(e)}") from e
 
 
 @router.get("/test-mode/audit")
@@ -507,7 +507,7 @@ async def cleanup_old_audit_logs(
 
     except Exception as e:
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to cleanup audit logs: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to cleanup audit logs: {str(e)}") from e
 
 
 # ========== Manual Test Email Endpoints ==========
@@ -759,7 +759,7 @@ async def get_react_email_templates(*, current_user: User = Depends(require_admi
 
     except Exception as e:
         logger.error(f"Failed to scan React Email templates: {e}")
-        raise HTTPException(status_code=500, detail=f"獲取 React Email 模板失敗: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"獲取 React Email 模板失敗: {str(e)}") from e
 
 
 @router.get("/react-email-templates/{template_name}")
@@ -787,7 +787,7 @@ async def get_react_email_template(*, template_name: str, current_user: User = D
         raise
     except Exception as e:
         logger.error(f"Failed to get React Email template {template_name}: {e}")
-        raise HTTPException(status_code=500, detail=f"獲取模板失敗: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"獲取模板失敗: {str(e)}") from e
 
 
 @router.get("/react-email-templates/{template_name}/source")
@@ -819,4 +819,4 @@ async def get_react_email_template_source(*, template_name: str, current_user: U
         raise
     except Exception as e:
         logger.error(f"Failed to get React Email template source {template_name}: {e}")
-        raise HTTPException(status_code=500, detail=f"獲取模板源碼失敗: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"獲取模板源碼失敗: {str(e)}") from e

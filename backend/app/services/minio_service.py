@@ -87,7 +87,7 @@ class MinIOService:
             logger.error(f"Failed to ensure buckets exist: {e}")
             from fastapi import HTTPException
 
-            raise HTTPException(status_code=500, detail=f"MinIO bucket initialization failed: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"MinIO bucket initialization failed: {str(e)}") from e
 
     def _set_bucket_policy(self, bucket_name: str, private: bool = True):
         """設定bucket政策"""
@@ -179,7 +179,7 @@ class MinIOService:
 
         except Exception as e:
             logger.error(f"Failed to upload roster file {filename}: {e}")
-            raise FileStorageError(f"檔案上傳失敗: {str(e)}")
+            raise FileStorageError(f"檔案上傳失敗: {str(e)}") from e
 
     async def upload_file(self, file, application_id: int, file_type: str) -> Tuple[str, int]:
         """
@@ -242,7 +242,7 @@ class MinIOService:
             logger.error(f"Failed to upload file {file.filename}: {e}")
             from fastapi import HTTPException
 
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
     def get_file_stream(self, object_name: str):
         """
@@ -260,7 +260,7 @@ class MinIOService:
             logger.error(f"Failed to get file stream for {object_name}: {e}")
             from fastapi import HTTPException
 
-            raise HTTPException(status_code=404, detail="File not found")
+            raise HTTPException(status_code=404, detail="File not found") from e
 
     def delete_file(self, object_name: str) -> bool:
         """
@@ -322,7 +322,7 @@ class MinIOService:
             logger.error(f"Failed to clone file {source_object_name}: {e}")
             from fastapi import HTTPException
 
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
     def extract_object_name_from_url(self, url: str) -> Optional[str]:
         """
@@ -381,13 +381,13 @@ class MinIOService:
 
         except S3Error as e:
             if e.code == "NoSuchKey":
-                raise FileStorageError(f"檔案不存在: {object_name}")
+                raise FileStorageError(f"檔案不存在: {object_name}") from e
             else:
                 logger.error(f"Failed to download roster file {object_name}: {e}")
-                raise FileStorageError(f"檔案下載失敗: {str(e)}")
+                raise FileStorageError(f"檔案下載失敗: {str(e)}") from e
         except Exception as e:
             logger.error(f"Failed to download roster file {object_name}: {e}")
-            raise FileStorageError(f"檔案下載失敗: {str(e)}")
+            raise FileStorageError(f"檔案下載失敗: {str(e)}") from e
 
     def delete_roster_file(self, object_name: str) -> bool:
         """
@@ -440,7 +440,7 @@ class MinIOService:
 
         except Exception as e:
             logger.error(f"Failed to generate presigned URL for {object_name}: {e}")
-            raise FileStorageError(f"下載連結產生失敗: {str(e)}")
+            raise FileStorageError(f"下載連結產生失敗: {str(e)}") from e
 
     def health_check(self) -> Dict[str, bool]:
         """

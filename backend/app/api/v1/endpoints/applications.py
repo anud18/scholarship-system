@@ -127,7 +127,7 @@ async def create_application(
                     "error": str(e),
                     "received_form_data": str(application_data.form_data),
                 },
-            )
+            ) from e
 
         # Get scholarship configuration to extract scholarship_type_id, academic_year, semester
         logger.debug(f"Fetching scholarship configuration: {application_data.configuration_id}")
@@ -270,7 +270,7 @@ async def create_application(
                 "errors": e.errors() if hasattr(e, "errors") else str(e),
                 "received_data": application_data.dict(exclude_none=True),
             },
-        )
+        ) from e
     except HTTPException:
         # Re-raise HTTPException directly as they are already properly formatted
         raise
@@ -285,7 +285,7 @@ async def create_application(
                     "error_code": "DUPLICATE_ENTRY",
                     "detail": str(e),
                 },
-            )
+            ) from e
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -293,7 +293,7 @@ async def create_application(
                 "error_code": "DATABASE_INTEGRITY_ERROR",
                 "detail": str(e),
             },
-        )
+        ) from e
     except Exception as e:
         logger.error(f"Unexpected error during application creation: {str(e)}")
         import traceback
@@ -307,7 +307,7 @@ async def create_application(
                 "error_code": "UNEXPECTED_ERROR",
                 "error_type": type(e).__name__,
             },
-        )
+        ) from e
 
 
 @router.get("")
@@ -1073,7 +1073,7 @@ async def get_application_document_file(
             "Failed to fetch application document from MinIO",
             extra={"application_id": application.id, "object_name": object_name},
         )
-        raise HTTPException(status_code=500, detail=f"無法取得文件: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"無法取得文件: {str(e)}") from e
 
     content_type = "application/octet-stream"
     lower = object_name.lower()

@@ -105,7 +105,7 @@ async def get_professor_student_relationships(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while fetching relationships",
-        )
+        ) from e
 
 
 @router.post("")
@@ -196,7 +196,7 @@ async def create_professor_student_relationship(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while creating relationship",
-        )
+        ) from e
 
 
 @router.put("/{id}")
@@ -267,7 +267,7 @@ async def update_professor_student_relationship(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while updating relationship",
-        )
+        ) from e
 
 
 @router.delete("/{id}")
@@ -312,4 +312,4 @@ async def delete_professor_student_relationship(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while deleting relationship",
-        )
+        ) from e

@@ -321,7 +321,7 @@ class ExcelExportService:
 
         except Exception as e:
             logger.error(f"Excel export failed: {e}")
-            raise FileStorageError(f"Failed to export Excel file: {e}", file_name=file_name)
+            raise FileStorageError(f"Failed to export Excel file: {e}", file_name=file_name) from e
 
     def _get_roster_items(self, roster: PaymentRoster, include_excluded: bool) -> List[PaymentRosterItem]:
         """取得造冊明細"""
@@ -643,7 +643,7 @@ class ExcelExportService:
             raise FileStorageError(
                 f"Failed to create Excel file: {e}",
                 file_name=os.path.basename(file_path),
-            )
+            ) from e
 
     def _apply_excel_styling(self, ws, max_row: int, include_header: bool):
         """應用Excel樣式"""
@@ -921,7 +921,7 @@ class ExcelExportService:
 
         except Exception as e:
             logger.error(f"Failed to preview roster export: {e}")
-            raise FileStorageError(f"預覽產生失敗: {str(e)}")
+            raise FileStorageError(f"預覽產生失敗: {str(e)}") from e
 
     def process_async_export(
         self,

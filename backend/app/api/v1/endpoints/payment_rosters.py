@@ -147,19 +147,19 @@ def _generate_payment_roster_inner(
         # Roster already exists for this configuration/period
         logger.warning(f"Roster already exists: {e}")
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
     except RosterLockedError as e:
         # Trying to regenerate a locked roster
         logger.warning(f"Roster is locked: {e}")
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
 
     except RosterNotFoundError as e:
         # Referenced roster not found (for regeneration)
         logger.warning(f"Roster not found: {e}")
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
     except RosterGenerationError as e:
         # General roster generation failure (including data consistency errors)
@@ -192,13 +192,13 @@ def _generate_payment_roster_inner(
             finally:
                 independent_db.close()
 
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
     except ValueError as e:
         # Validation errors (missing data, invalid parameters)
         logger.warning(f"Roster generation validation error: {e}")
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
     except Exception as e:
         # Unexpected errors (including Excel export failures)
@@ -245,7 +245,7 @@ def _generate_payment_roster_inner(
             logger.error(f"Error updating roster status to FAILED: {update_error}")
             db.rollback()
 
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"造冊產生失敗: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"造冊產生失敗: {str(e)}") from e
 
 
 @router.post("/generate")
@@ -364,7 +364,7 @@ def get_available_rankings(
         logger.error(f"Error fetching available rankings: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch available rankings"
-        )
+        ) from e
 
 
 @router.get("")
@@ -446,7 +446,7 @@ async def list_payment_rosters(
 
     except Exception as e:
         logger.error(f"Failed to list rosters: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="取得造冊清單失敗")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="取得造冊清單失敗") from e
 
 
 @router.get("/preview-students")
@@ -753,10 +753,10 @@ async def preview_roster_students(
     except ValueError as e:
         # Handle validation errors with specific messages (e.g., missing ranking)
         logger.error(f"Failed to preview students for config {config_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Failed to preview students for config {config_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="預覽學生名單失敗")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="預覽學生名單失敗") from e
     finally:
         db.close()
 
@@ -1174,7 +1174,7 @@ async def get_roster_cycle_status(
         raise
     except Exception as e:
         logger.error(f"Failed to get cycle status for config {config_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="查詢造冊週期狀態失敗")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="查詢造冊週期狀態失敗") from e
 
 
 @router.get("/{roster_id}")
@@ -1218,7 +1218,7 @@ async def get_payment_roster(
         raise
     except Exception as e:
         logger.error(f"Failed to get roster {roster_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="取得造冊詳情失敗")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="取得造冊詳情失敗") from e
 
 
 @router.get("/{roster_id}/items")
@@ -1282,7 +1282,7 @@ async def get_roster_items(
         raise
     except Exception as e:
         logger.error(f"Failed to get roster items for {roster_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="取得造冊明細失敗")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="取得造冊明細失敗") from e
 
 
 @router.post("/{roster_id}/lock")
@@ -1328,7 +1328,7 @@ async def lock_roster(
     except Exception as e:
         logger.error(f"Failed to lock roster {roster_id}: {e}")
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="鎖定造冊失敗")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="鎖定造冊失敗") from e
 
 
 @router.post("/{roster_id}/unlock")
@@ -1376,7 +1376,7 @@ async def unlock_roster(
     except Exception as e:
         logger.error(f"Failed to unlock roster {roster_id}: {e}")
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="解鎖造冊失敗")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="解鎖造冊失敗") from e
 
 
 @router.get("/{roster_id}/preview")
@@ -1429,7 +1429,7 @@ def preview_roster_export(
         raise
     except Exception as e:
         logger.error(f"Failed to preview roster {roster_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="預覽產生失敗")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="預覽產生失敗") from e
 
 
 @router.post("/{roster_id}/dry-run")
@@ -1480,7 +1480,7 @@ def dry_run_roster_generation(
         raise
     except Exception as e:
         logger.error(f"Failed to dry run roster generation: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="預演失敗")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="預演失敗") from e
 
 
 @router.post("/{roster_id}/export")
@@ -1565,7 +1565,7 @@ def export_roster_to_excel(
         raise
     except Exception as e:
         logger.error(f"Failed to export roster {roster_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Excel匯出失敗")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Excel匯出失敗") from e
 
 
 @router.get("/{roster_id}/download")
@@ -1682,7 +1682,7 @@ async def download_roster_excel(
         raise
     except Exception as e:
         logger.error(f"Failed to download roster {roster_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="下載造冊失敗")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="下載造冊失敗") from e
 
 
 @router.get("/{roster_id}/statistics")
@@ -1756,7 +1756,7 @@ async def get_roster_statistics(
         raise
     except Exception as e:
         logger.error(f"Failed to get roster statistics for {roster_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="取得造冊統計失敗")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="取得造冊統計失敗") from e
 
 
 @router.post("/{roster_id}/items/{item_id}/exclude")
@@ -1904,7 +1904,7 @@ async def exclude_roster_item(
     except Exception as e:
         logger.error(f"Failed to exclude roster item {item_id}: {e}")
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="排除造冊明細失敗")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="排除造冊明細失敗") from e
 
 
 @router.delete("/{roster_id}")
@@ -1950,7 +1950,7 @@ async def delete_roster(
     except Exception as e:
         logger.error(f"Failed to delete roster {roster_id}: {e}")
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="刪除造冊失敗")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="刪除造冊失敗") from e
 
 
 @router.get("/{roster_id}/audit-logs")
@@ -2016,4 +2016,4 @@ async def get_roster_audit_logs(
         raise
     except Exception as e:
         logger.error(f"Failed to get audit logs for roster {roster_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="查詢稽核日誌失敗")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="查詢稽核日誌失敗") from e

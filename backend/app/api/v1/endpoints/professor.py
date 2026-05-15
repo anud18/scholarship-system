@@ -67,7 +67,7 @@ async def get_professor_applications(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while fetching applications",
-        )
+        ) from e
 
 
 @router.get("/applications/{application_id}/review")
@@ -131,7 +131,7 @@ async def get_professor_review(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while fetching review",
-        )
+        ) from e
 
 
 @router.post("/applications/{application_id}/review")
@@ -214,7 +214,7 @@ async def submit_professor_review(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while submitting review",
-        )
+        ) from e
 
 
 @router.put("/applications/{application_id}/review/{review_id}")
@@ -295,7 +295,7 @@ async def update_professor_review(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while updating review",
-        )
+        ) from e
 
 
 @router.get("/applications/{application_id}/sub-types")
@@ -324,7 +324,7 @@ async def get_application_sub_types(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while fetching sub-types",
-        )
+        ) from e
 
 
 @router.get("/stats")
@@ -356,4 +356,4 @@ async def get_professor_review_stats(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while fetching statistics",
-        )
+        ) from e

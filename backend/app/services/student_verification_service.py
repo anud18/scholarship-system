@@ -216,7 +216,7 @@ class StudentVerificationService:
             raise StudentVerificationError(
                 f"API request failed: {str(e)}",
                 student_id=student_id_number,
-            )
+            ) from e
 
     def _parse_api_response(self, data: Dict[str, Any], student_id_number: str) -> Dict[str, Any]:
         """

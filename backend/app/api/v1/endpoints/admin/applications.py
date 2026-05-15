@@ -391,13 +391,13 @@ async def assign_professor_to_application(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to assign professor due to a database error.",
-        )
+        ) from e
     except Exception as e:
         logger.error(f"Unexpected error assigning professor: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to assign professor due to an unexpected error.",
-        )
+        ) from e
 
 
 @router.post("/applications/bulk-approve")
@@ -523,7 +523,7 @@ async def delete_application(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete application due to a database error.",
-        )
+        ) from e
 
     return {
         "success": True,

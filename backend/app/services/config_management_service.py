@@ -141,7 +141,7 @@ class ConfigurationService:
                     if not match:
                         raise ValueError(f"Value does not match validation pattern: {validation_regex}")
                 except RegexValidationError as e:
-                    raise ValueError(f"Invalid validation pattern: {str(e)}")
+                    raise ValueError(f"Invalid validation pattern: {str(e)}") from e
 
         # Encrypt if sensitive (but NOT if empty when allow_empty=True)
         stored_value = string_value
@@ -248,7 +248,7 @@ class ConfigurationService:
             return updated_settings
         except Exception as e:
             await self.db.rollback()
-            raise e
+            raise e from e
 
     async def validate_configuration(self, key: str, value: Any, data_type: ConfigDataType) -> Tuple[bool, str]:
         """Validate a configuration value"""

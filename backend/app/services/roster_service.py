@@ -406,7 +406,7 @@ class RosterService:
             # 不在此處執行 rollback，讓調用者決定如何處理事務
             # 這避免了與 API 端點的 rollback 重複執行
             logger.error(f"Error generating roster: {e}")
-            raise RosterGenerationError(f"Failed to generate roster: {e}")
+            raise RosterGenerationError(f"Failed to generate roster: {e}") from e
 
     def validate_roster_consistency(self, roster: PaymentRoster) -> Dict[str, Any]:
         """
@@ -1389,7 +1389,7 @@ class RosterService:
 
         except Exception as e:
             logger.error(f"Dry run failed: {e}")
-            raise ValueError(f"預演失敗: {str(e)}")
+            raise ValueError(f"預演失敗: {str(e)}") from e
 
     def generate_rosters_from_distribution(
         self,

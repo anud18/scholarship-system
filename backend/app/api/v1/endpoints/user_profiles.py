@@ -269,11 +269,11 @@ async def upload_bank_document_file(
     except ValueError as e:
         # SECURITY: Log exception type only (prevent stack trace exposure)
         logger.error(f"ValueError in upload: {type(e).__name__}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except Exception as e:
         # SECURITY: Log exception type only, sanitized detail (prevent stack trace exposure)
         logger.error(f"Unexpected error in upload: {type(e).__name__}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="上傳失敗")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="上傳失敗") from e
 
 
 @router.delete("/me/bank-document")
@@ -513,7 +513,7 @@ async def extract_bank_info_from_passbook(
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="OCR service is not available. Please contact administrator.",
-            )
+            ) from e
 
         # Extract bank information
         try:
@@ -562,7 +562,7 @@ async def extract_bank_info_from_passbook(
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="無法處理圖片。請確認圖片格式正確且清晰可讀。",
-            )
+            ) from e
 
     except HTTPException:
         raise
@@ -572,7 +572,7 @@ async def extract_bank_info_from_passbook(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred during processing",
-        )
+        ) from e
 
 
 @router.post("/document-ocr")
@@ -622,7 +622,7 @@ async def extract_text_from_document(
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="OCR service is not available. Please contact administrator.",
-            )
+            ) from e
 
         # Extract text
         try:
@@ -653,7 +653,7 @@ async def extract_text_from_document(
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="無法處理圖片。請確認圖片格式正確且清晰可讀。",
-            )
+            ) from e
 
     except HTTPException:
         raise
@@ -663,4 +663,4 @@ async def extract_text_from_document(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred during processing",
-        )
+        ) from e

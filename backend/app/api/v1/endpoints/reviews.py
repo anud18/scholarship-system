@@ -541,24 +541,28 @@ async def submit_application_review(
         raise
     except ValueError as e:
         logger.warning(f"Invalid review data for application {application_id}: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid review data: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid review data: {str(e)}") from e
     except PermissionError as e:
         logger.warning(f"Permission denied for review creation by user {current_user.id}: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to review this application")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to review this application"
+        ) from e
     except IntegrityError as e:
         logger.error(f"Database integrity error creating review for application {application_id}: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Review creation conflicts with existing data")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Review creation conflicts with existing data"
+        ) from e
     except DatabaseError as e:
         logger.error(f"Database error creating review for application {application_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database service temporarily unavailable"
-        )
+        ) from e
     except Exception as e:
         logger.error(f"Unexpected error creating review for application {application_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while creating the review",
-        )
+        ) from e
 
 
 @router.get("/applications/{application_id}/review")
@@ -625,7 +629,7 @@ async def get_user_application_review(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while fetching review",
-        )
+        ) from e
 
 
 @router.get("/applications/{application_id}/sub-types")
@@ -666,4 +670,4 @@ async def get_application_reviewable_sub_types(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while fetching sub-types",
-        )
+        ) from e
