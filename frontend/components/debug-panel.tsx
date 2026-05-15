@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { logger } from "@/lib/utils/logger";
 import type { JSX } from "react";
 import {
   X,
@@ -177,11 +178,11 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
 
     setIsRefreshing(prev => new Set(prev).add("student"));
     try {
-      console.log("🔍 Fetching live student data from API...");
+      logger.debug("🔍 Fetching live student data from API...");
       const response = await apiClient.users.getStudentInfo();
       if (response.success && response.data) {
-        console.log("🔍 Live student data fetched:", response.data);
-        console.log("🔍 Semesters data:", response.data.semesters);
+        logger.debug("🔍 Live student data fetched:", response.data);
+        logger.debug("🔍 Semesters data:", response.data.semesters);
         setStudentData({
           source: "api_live",
           api_endpoint: "/users/student-info",
@@ -189,7 +190,7 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
           ...response.data,
         });
       } else {
-        console.log("🔍 Student API returned no data:", response.message);
+        logger.debug("🔍 Student API returned no data:", response.message);
         setStudentData({
           source: "api_live",
           api_endpoint: "/users/student-info",
@@ -198,7 +199,7 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
         });
       }
     } catch (error) {
-      console.error("🔍 Failed to fetch student data:", error);
+      logger.error("🔍 Failed to fetch student data:", error);
       setStudentData({
         source: "api_live",
         api_endpoint: "/users/student-info",
@@ -220,12 +221,12 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
 
     setIsRefreshing(prev => new Set(prev).add("portal"));
     try {
-      console.log("🔍 Assembling portal data from current user and JWT...");
+      logger.debug("🔍 Assembling portal data from current user and JWT...");
 
       // Get current user profile which contains portal-sourced data
       const response = await apiClient.users.getProfile();
       if (response.success && response.data) {
-        console.log("🔍 Portal-sourced user data:", response.data);
+        logger.debug("🔍 Portal-sourced user data:", response.data);
         setPortalData({
           source: "api_live",
           api_endpoint: "/users/me",
@@ -242,7 +243,7 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
             : null,
         });
       } else {
-        console.log("🔍 Portal API returned no data:", response.message);
+        logger.debug("🔍 Portal API returned no data:", response.message);
         setPortalData({
           source: "api_live",
           api_endpoint: "/users/me",
@@ -251,7 +252,7 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
         });
       }
     } catch (error) {
-      console.error("🔍 Failed to fetch portal data:", error);
+      logger.error("🔍 Failed to fetch portal data:", error);
       setPortalData({
         source: "api_live",
         api_endpoint: "/users/me",
@@ -269,11 +270,11 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
 
   useEffect(() => {
     if (!token) {
-      console.log("🔍 Debug Panel: No token available");
+      logger.debug("🔍 Debug Panel: No token available");
       return;
     }
 
-    console.log(
+    logger.debug(
       "🔍 Debug Panel: Processing token:",
       token.substring(0, 50) + "..."
     );
@@ -281,7 +282,7 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
     // Decode JWT to get portal data
     try {
       const parts = token.split(".");
-      console.log("🔍 JWT Parts count:", parts.length);
+      logger.debug("🔍 JWT Parts count:", parts.length);
 
       if (parts.length === 3) {
         // Add padding if needed for base64 decoding
@@ -290,35 +291,35 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
           payload += "=";
         }
 
-        console.log(
+        logger.debug(
           "🔍 Decoding JWT payload:",
           payload.substring(0, 50) + "..."
         );
         const decodedPayload = JSON.parse(atob(payload));
-        console.log("🔍 Decoded JWT payload:", decodedPayload);
+        logger.debug("🔍 Decoded JWT payload:", decodedPayload);
 
         setJwtData(decodedPayload);
 
         // Extract portal data from JWT
         if (decodedPayload.portal_data) {
-          console.log(
+          logger.debug(
             "🔍 Found portal_data in JWT:",
             decodedPayload.portal_data
           );
           setPortalData(decodedPayload.portal_data);
         } else {
-          console.log("🔍 No portal_data found in JWT");
+          logger.debug("🔍 No portal_data found in JWT");
         }
 
         // Extract student data from JWT
         if (decodedPayload.student_data) {
-          console.log(
+          logger.debug(
             "🔍 Found student_data in JWT:",
             decodedPayload.student_data
           );
           setStudentData(decodedPayload.student_data);
         } else {
-          console.log("🔍 No student_data found in JWT");
+          logger.debug("🔍 No student_data found in JWT");
         }
 
         // Detect data sources based on JWT payload and environment
@@ -327,22 +328,22 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
           studentApiSource: detectStudentApiSource(decodedPayload, studentData),
           environment: detectEnvironment(),
         };
-        console.log("🔍 Detected data sources:", newDataSourceInfo);
+        logger.debug("🔍 Detected data sources:", newDataSourceInfo);
         setDataSourceInfo(newDataSourceInfo);
 
         // Auto-fetch live API data when panel loads
-        console.log("🔍 Auto-fetching live API data...");
+        logger.debug("🔍 Auto-fetching live API data...");
         fetchStudentData();
         fetchPortalData();
       } else {
-        console.error(
+        logger.error(
           "🔍 Invalid JWT format - expected 3 parts, got:",
           parts.length
         );
       }
     } catch (error) {
-      console.error("🔍 Failed to decode JWT:", error);
-      console.error(
+      logger.error("🔍 Failed to decode JWT:", error);
+      logger.error(
         "🔍 Token parts:",
         token
           .split(".")
@@ -369,7 +370,7 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
       setCopiedField(field);
       setTimeout(() => setCopiedField(null), 2000);
     } catch (error) {
-      console.error("Failed to copy:", error);
+      logger.error("Failed to copy:", error);
     }
   };
 
