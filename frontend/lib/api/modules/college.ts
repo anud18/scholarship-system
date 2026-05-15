@@ -133,7 +133,7 @@ export function createCollegeApi() {
     updateRanking: async (
       rankingId: number,
       data: { ranking_name: string }
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.PUT(
         "/api/v1/college-review/rankings/{ranking_id}" as any,
         {
@@ -141,7 +141,7 @@ export function createCollegeApi() {
           body: data,
         }
       );
-      return toApiResponse<any>(response);
+      return toApiResponse<unknown>(response);
     },
 
     /**
@@ -151,7 +151,7 @@ export function createCollegeApi() {
     updateRankingOrder: async (
       rankingId: number,
       newOrder: Array<{ item_id: number; position: number }>
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.PUT(
         "/api/v1/college-review/rankings/{ranking_id}/order",
         {
@@ -159,35 +159,39 @@ export function createCollegeApi() {
           body: newOrder,
         }
       );
-      return toApiResponse<any>(response);
+      return toApiResponse<unknown>(response);
     },
 
     /**
      * Finalize ranking (lock and approve)
      * Type-safe: Path parameter validated against OpenAPI
      */
-    finalizeRanking: async (rankingId: number): Promise<ApiResponse<any>> => {
+    finalizeRanking: async (
+      rankingId: number
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.POST(
         "/api/v1/college-review/rankings/{ranking_id}/finalize",
         {
           params: { path: { ranking_id: rankingId } },
         }
       );
-      return toApiResponse<any>(response);
+      return toApiResponse<unknown>(response);
     },
 
     /**
      * Unfinalize ranking (unlock to allow editing)
      * Type-safe: Path parameter validated against OpenAPI
      */
-    unfinalizeRanking: async (rankingId: number): Promise<ApiResponse<any>> => {
+    unfinalizeRanking: async (
+      rankingId: number
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.POST(
         "/api/v1/college-review/rankings/{ranking_id}/unfinalize" as any,
         {
           params: { path: { ranking_id: rankingId } },
         }
       );
-      return toApiResponse<any>(response);
+      return toApiResponse<unknown>(response);
     },
 
     /**
@@ -201,7 +205,7 @@ export function createCollegeApi() {
         student_name: string;
         rank_position: number;
       }>
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.POST(
         "/api/v1/college-review/rankings/{ranking_id}/import-excel" as any,
         {
@@ -209,7 +213,7 @@ export function createCollegeApi() {
           body: importData,
         }
       );
-      return toApiResponse<any>(response);
+      return toApiResponse<unknown>(response);
     },
 
     /**
@@ -311,14 +315,16 @@ export function createCollegeApi() {
      * Delete a ranking
      * Type-safe: Path parameter validated against OpenAPI
      */
-    deleteRanking: async (rankingId: number): Promise<ApiResponse<any>> => {
+    deleteRanking: async (
+      rankingId: number
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.DELETE(
         "/api/v1/college-review/rankings/{ranking_id}" as any,
         {
           params: { path: { ranking_id: rankingId } },
         }
       );
-      return toApiResponse<any>(response);
+      return toApiResponse<unknown>(response);
     },
 
     /**
