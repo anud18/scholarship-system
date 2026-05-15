@@ -73,6 +73,28 @@ interface DocumentPayload {
   uploaded_at?: string;
 }
 
+// Read-only summary of the professor row injected by
+// ProfessorAssignmentDropdown. Matches the dropdown's local Professor
+// shape (the dropdown does not export the type) but with all fields
+// optional to handle partial payloads gracefully.
+interface ProfessorInfoSnapshot {
+  id?: number;
+  name?: string;
+  nycu_id?: string;
+  email?: string;
+  dept_name?: string;
+  role?: string;
+}
+
+// Minimal professor-review summary surfaced in the detail dialog. Mirrors
+// what ApplicationReview / ProfessorReview rows expose to the read-only
+// status panel.
+interface ProfessorReviewSummary {
+  status?: string;
+  reviewed_at?: string | null;
+  recommendation?: string | null;
+}
+
 interface ApplicationDetailDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -88,7 +110,9 @@ export function ApplicationDetailDialog({
   locale,
   user,
 }: ApplicationDetailDialogProps) {
-  const [applicationFiles, setApplicationFiles] = useState<any[]>([]);
+  const [applicationFiles, setApplicationFiles] = useState<DocumentPayload[]>(
+    []
+  );
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [previewFile, setPreviewFile] = useState<{
     url: string;
@@ -107,8 +131,10 @@ export function ApplicationDetailDialog({
   const [applicationFields, setApplicationFields] = useState<string[]>([]);
   const [isLoadingFields, setIsLoadingFields] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [professorInfo, setProfessorInfo] = useState<any>(null);
-  const [professorReview, setProfessorReview] = useState<any>(null);
+  const [professorInfo, setProfessorInfo] =
+    useState<ProfessorInfoSnapshot | null>(null);
+  const [professorReview, setProfessorReview] =
+    useState<ProfessorReviewSummary | null>(null);
   const [bankVerificationLoading, setBankVerificationLoading] = useState(false);
 
   const t = (k: string) => getTranslation(locale, k);
@@ -144,7 +170,7 @@ export function ApplicationDetailDialog({
     user && ["admin", "super_admin", "college"].includes(user.role);
 
   // Handle professor assignment
-  const handleProfessorAssigned = (professor: any) => {
+  const handleProfessorAssigned = (professor: ProfessorInfoSnapshot) => {
     setProfessorInfo(professor);
     // You might want to refresh the application data here
   };
@@ -997,7 +1023,7 @@ export function ApplicationDetailDialog({
                         <div className="flex items-center gap-2 mt-2">
                           <Badge
                             variant={getReviewStatusVariant(
-                              professorReview.status
+                              professorReview.status ?? ""
                             )}
                           >
                             {professorReview.status}
@@ -1052,7 +1078,7 @@ export function ApplicationDetailDialog({
                   </div>
                 ) : applicationFiles.length > 0 ? (
                   <div className="space-y-2">
-                    {applicationFiles.map((file: any, index: number) => (
+                    {applicationFiles.map((file, index) => (
                       <div
                         key={file.id || index}
                         className="flex items-center justify-between p-2 bg-muted rounded-md"
