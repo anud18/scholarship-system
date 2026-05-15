@@ -15,6 +15,35 @@ import { toApiResponse } from '../compat';
 import type { ApiResponse, PaginatedResponse } from '../types';
 import type { Application } from '../types';
 
+/**
+ * Payload returned by GET /professor/applications/{id}/review and
+ * POST/PUT review submission. The backend attaches a flexible
+ * object (review record fields vary by scholarship type), so we
+ * keep an index signature on top of the known `id` and `items`
+ * properties.
+ */
+export interface ProfessorReviewPayload {
+  id: number;
+  recommendation?: string;
+  items?: Array<{
+    sub_type_code: string;
+    recommendation: 'approve' | 'reject' | 'pending';
+    comments?: string;
+  }>;
+  [key: string]: unknown;
+}
+
+/**
+ * Body shape accepted by submitReview/updateReview.
+ */
+export interface ProfessorReviewBody {
+  items: Array<{
+    sub_type_code: string;
+    recommendation: 'approve' | 'reject';
+    comments?: string;
+  }>;
+}
+
 export function createProfessorApi() {
   return {
     /**
@@ -55,9 +84,10 @@ export function createProfessorApi() {
           data: [],
         };
       } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : null;
         return {
           success: false,
-          message: (error instanceof Error ? error.message : "Failed to load applications"),
+          message: message || "Failed to load applications",
           data: [],
         };
       }
@@ -67,11 +97,11 @@ export function createProfessorApi() {
      * Get existing professor review for an application
      * Type-safe: Path parameter validated against OpenAPI
      */
-    getReview: async (applicationId: number): Promise<ApiResponse<any>> => {
+    getReview: async (applicationId: number): Promise<ApiResponse<ProfessorReviewPayload | null>> => {
       const response = await typedClient.raw.GET('/api/v1/professor/applications/{application_id}/review', {
         params: { path: { application_id: applicationId } },
       });
-      return toApiResponse(response);
+      return toApiResponse<ProfessorReviewPayload | null>(response);
     },
 
     /**
@@ -81,19 +111,13 @@ export function createProfessorApi() {
      */
     submitReview: async (
       applicationId: number,
-      reviewData: {
-        items: Array<{
-          sub_type_code: string;
-          recommendation: 'approve' | 'reject';
-          comments?: string;
-        }>;
-      }
-    ): Promise<ApiResponse<any>> => {
+      reviewData: ProfessorReviewBody
+    ): Promise<ApiResponse<ProfessorReviewPayload | null>> => {
       const response = await typedClient.raw.POST('/api/v1/professor/applications/{application_id}/review', {
         params: { path: { application_id: applicationId } },
         body: reviewData,
       });
-      return toApiResponse(response);
+      return toApiResponse<ProfessorReviewPayload | null>(response);
     },
 
     /**
@@ -104,19 +128,13 @@ export function createProfessorApi() {
     updateReview: async (
       applicationId: number,
       reviewId: number,
-      reviewData: {
-        items: Array<{
-          sub_type_code: string;
-          recommendation: 'approve' | 'reject';
-          comments?: string;
-        }>;
-      }
-    ): Promise<ApiResponse<any>> => {
+      reviewData: ProfessorReviewBody
+    ): Promise<ApiResponse<ProfessorReviewPayload | null>> => {
       const response = await typedClient.raw.PUT('/api/v1/professor/applications/{application_id}/review/{review_id}', {
         params: { path: { application_id: applicationId, review_id: reviewId } },
         body: reviewData,
       });
-      return toApiResponse(response);
+      return toApiResponse<ProfessorReviewPayload | null>(response);
     },
 
     /**
