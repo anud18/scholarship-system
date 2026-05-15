@@ -199,7 +199,10 @@ export function RankingManagementPanel({
           );
 
           // #91: college_review_end is now returned directly by the ranking detail endpoint
-          setActiveConfigDeadline((response.data as any).college_review_end ?? null);
+          setActiveConfigDeadline(
+            (response.data as { college_review_end?: string | null })
+              .college_review_end ?? null
+          );
 
           setRankingData({
             applications: transformedApplications,
@@ -208,8 +211,16 @@ export function RankingManagementPanel({
             collegeQuotaBreakdown: response.data.college_quota_breakdown,
             subTypeMetadata: Array.isArray(response.data.sub_type_metadata)
               ? response.data.sub_type_metadata.reduce(
-                  (acc: any, meta: any) => {
-                    if (meta.code) acc[meta.code] = meta;
+                  (
+                    acc: Record<string, { code: string; [key: string]: unknown }>,
+                    meta: { code?: string; [key: string]: unknown }
+                  ) => {
+                    if (meta.code) {
+                      acc[meta.code] = meta as {
+                        code: string;
+                        [key: string]: unknown;
+                      };
+                    }
                     return acc;
                   },
                   {}
@@ -357,6 +368,12 @@ export function RankingManagementPanel({
   ]);
 
   const handleRankingChange = useCallback(
+    // newOrder is the typed `Application[]` from CollegeRankingTable;
+    // we narrow to the subset we actually read (ranking_item_id) when building
+    // the updateRankingOrder payload below. The application objects are passed
+    // straight through to setRankingData, whose .applications field is itself
+    // `any[]` in the context type for the same reason.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     async (newOrder: any[]) => {
       if (!rankingData || !selectedRanking) return;
 
@@ -546,13 +563,28 @@ export function RankingManagementPanel({
   );
 
   const handleImportExcel = useCallback(
-    async (data: any[]) => {
+    async (
+      data: Array<{
+        student_id: string;
+        student_name: string;
+        rank_position: number | string;
+      }>
+    ) => {
       if (!selectedRanking) throw new Error("No ranking selected");
 
       try {
+        // The Excel parser produces rank_position as `number | string` (the
+        // "N" sentinel for unranked rows). The api.college.importRankingExcel
+        // type declares `number` only, but the backend handler accepts both
+        // shapes — cast here to preserve the runtime behavior. Tracked in
+        // college-ranking-table.tsx parser at lines 627-645.
         const response = await apiClient.college.importRankingExcel(
           selectedRanking,
-          data
+          data as Array<{
+            student_id: string;
+            student_name: string;
+            rank_position: number;
+          }>
         );
         if (response.success) {
           await fetchRankingDetails(selectedRanking);
@@ -601,7 +633,7 @@ export function RankingManagementPanel({
   ]);
 
   const handleEditRankingName = useCallback(
-    (ranking: any) => {
+    (ranking: { id: number; ranking_name: string }) => {
       setEditingRankingId(ranking.id);
       setEditingRankingName(ranking.ranking_name);
     },
@@ -666,7 +698,7 @@ export function RankingManagementPanel({
   // after switching combinations.
   useEffect(() => {
     const activeConfig = scholarshipConfig.find(
-      (c: any) => c.code === scholarshipType.code
+      (c) => c.code === scholarshipType.code
     );
     if (!activeConfig?.id || typeof selectedAcademicYear !== "number") {
       setPanelDeadline(null);
@@ -713,7 +745,8 @@ export function RankingManagementPanel({
   // fetched ranking-detail value, while the active-config call is in flight.
   const deadlineISO = useMemo(() => {
     const fromList = filteredRankings.find(
-      (r: any) => r && r.college_review_end
+      (r: { college_review_end?: string | null } | null | undefined) =>
+        r && r.college_review_end
     )?.college_review_end as string | undefined;
     return panelDeadline ?? fromList ?? activeConfigDeadline ?? null;
   }, [panelDeadline, filteredRankings, activeConfigDeadline]);
