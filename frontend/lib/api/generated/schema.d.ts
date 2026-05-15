@@ -1193,7 +1193,12 @@ export interface paths {
         get: operations["get_system_setting_api_v1_admin_system_setting_get"];
         /**
          * Set System Setting
-         * @description Update system setting (admin only)
+         * @description Update system setting (admin only).
+         *
+         *     SECURITY: System-config mutation. Audit-logged with actor_user_id /
+         *     actor_role / key / value-length so any unexpected change to runtime
+         *     settings (e.g., feature flags, integration toggles) is traceable
+         *     back to an admin actor.
          */
         put: operations["set_system_setting_api_v1_admin_system_setting_put"];
         post?: never;
