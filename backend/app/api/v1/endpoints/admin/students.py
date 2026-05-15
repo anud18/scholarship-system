@@ -2,6 +2,7 @@
 Student management API endpoints for administrators
 """
 
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -12,6 +13,8 @@ from app.core.security import require_admin
 from app.db.deps import get_db
 from app.models.user import EmployeeStatus, User, UserRole
 from app.services.student_service import StudentService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -177,6 +180,10 @@ async def get_student_detail(
     Get detailed information for a specific student
 
     Returns basic user info from database.
+
+    SECURITY: Admin PII lookup. Audit-logged with actor_user_id +
+    target user_id + target nycu_id so directed lookups of specific
+    students are traceable to an admin actor.
     """
     stmt = select(User).where(and_(User.id == user_id, User.role == UserRole.student))
     result = await db.execute(stmt)
@@ -184,6 +191,19 @@ async def get_student_detail(
 
     if not student:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not found")
+
+    logger.info(
+        "admin student-detail lookup: target_user_id=%s nycu_id=%s by user_id=%s",
+        student.id,
+        student.nycu_id,
+        current_user.id,
+        extra={
+            "actor_user_id": current_user.id,
+            "actor_role": (current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)),
+            "target_user_id": student.id,
+            "target_nycu_id": student.nycu_id,
+        },
+    )
 
     return {
         "success": True,
@@ -203,6 +223,12 @@ async def get_student_sis_data(
 
     This endpoint fetches fresh data from the external Student Information System.
     Requires the student's NYCU ID.
+
+    SECURITY: Live SIS PII fetch (basic info + multi-semester term data).
+    Audit-logged with actor + target identifiers + SIS-fetch outcome.
+    Per-semester fetch failures are also counted so the SIS API's
+    availability is visible without spamming the log on legitimate
+    gap-year terms.
     """
     # Get student from database
     stmt = select(User).where(and_(User.id == user_id, User.role == UserRole.student))
@@ -214,6 +240,13 @@ async def get_student_sis_data(
 
     if not student.nycu_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Student does not have a NYCU ID")
+
+    log_extra = {
+        "actor_user_id": current_user.id,
+        "actor_role": (current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)),
+        "target_user_id": student.id,
+        "target_nycu_id": student.nycu_id,
+    }
 
     # Fetch from SIS API
     student_service = StudentService()
@@ -229,6 +262,7 @@ async def get_student_sis_data(
         from app.utils.academic_period import get_academic_year_range
 
         semesters = []
+        term_fetch_failures = 0
         student_code = basic_info.get("std_stdcode", student.nycu_id)
 
         if student_code:
@@ -241,9 +275,32 @@ async def get_student_sis_data(
                         term_data = await student_service.get_student_term_info(student_code, str(year), term)
                         if term_data:
                             semesters.append({"academic_year": str(year), "term": term, **term_data})
-                    except Exception:
-                        # Log but continue - some semesters may not exist
-                        pass
+                    except Exception as term_exc:
+                        # Some semesters legitimately don't exist (gap years, before-enrollment
+                        # terms). Log at debug + count failures so a real SIS outage is visible
+                        # in the audit row without spamming on legitimate gaps.
+                        term_fetch_failures += 1
+                        logger.debug(
+                            "SIS term fetch failed: student=%s year=%s term=%s: %s",
+                            student_code,
+                            year,
+                            term,
+                            term_exc,
+                        )
+
+        logger.info(
+            "admin SIS-data lookup: target_user_id=%s nycu_id=%s semesters=%d term_failures=%d by user_id=%s",
+            student.id,
+            student.nycu_id,
+            len(semesters),
+            term_fetch_failures,
+            current_user.id,
+            extra={
+                **log_extra,
+                "semesters_count": len(semesters),
+                "term_fetch_failures": term_fetch_failures,
+            },
+        )
 
         return {
             "success": True,
@@ -257,6 +314,7 @@ async def get_student_sis_data(
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("admin SIS-data lookup failed", extra=log_extra)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Failed to fetch student data from SIS: {str(e)}"
         ) from e

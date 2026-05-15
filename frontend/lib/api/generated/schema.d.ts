@@ -2318,6 +2318,10 @@ export interface paths {
          * @description Get detailed information for a specific student
          *
          *     Returns basic user info from database.
+         *
+         *     SECURITY: Admin PII lookup. Audit-logged with actor_user_id +
+         *     target user_id + target nycu_id so directed lookups of specific
+         *     students are traceable to an admin actor.
          */
         get: operations["get_student_detail_api_v1_admin_students__user_id__get"];
         put?: never;
@@ -2341,6 +2345,12 @@ export interface paths {
          *
          *     This endpoint fetches fresh data from the external Student Information System.
          *     Requires the student's NYCU ID.
+         *
+         *     SECURITY: Live SIS PII fetch (basic info + multi-semester term data).
+         *     Audit-logged with actor + target identifiers + SIS-fetch outcome.
+         *     Per-semester fetch failures are also counted so the SIS API's
+         *     availability is visible without spamming the log on legitimate
+         *     gap-year terms.
          */
         get: operations["get_student_sis_data_api_v1_admin_students__user_id__sis_data_get"];
         put?: never;
