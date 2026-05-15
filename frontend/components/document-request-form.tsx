@@ -100,10 +100,11 @@ export function DocumentRequestForm({
             (locale === "zh" ? "送出失敗" : "Failed to send request")
         );
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to create document request:", error);
+      const errShape = error as { response?: { data?: { message?: string } } };
       toast.error(
-        error?.response?.data?.message ||
+        errShape.response?.data?.message ||
           (locale === "zh" ? "建立文件要求時發生錯誤" : "Error creating document request")
       );
     } finally {

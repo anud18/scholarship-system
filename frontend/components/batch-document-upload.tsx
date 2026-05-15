@@ -125,12 +125,13 @@ export function BatchDocumentUpload({
             (locale === "zh" ? "上傳失敗" : "Upload failed")
         );
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setError(
-        error.message ||
-          (locale === "zh"
+        error instanceof Error
+          ? error.message
+          : locale === "zh"
             ? "上傳時發生錯誤"
-            : "Error during upload")
+            : "Error during upload"
       );
     } finally {
       setIsUploading(false);

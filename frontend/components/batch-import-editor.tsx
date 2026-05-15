@@ -117,10 +117,10 @@ export function BatchImportEditor({
           text: response.message || (locale === "zh" ? "更新失敗" : "Update failed"),
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setMessage({
         type: "error",
-        text: error.message || (locale === "zh" ? "更新時發生錯誤" : "Error during update"),
+        text: (error instanceof Error ? error.message : (locale === "zh" ? "更新時發生錯誤" : "Error during update")),
       });
     } finally {
       setIsSaving(false);
@@ -169,10 +169,10 @@ export function BatchImportEditor({
           text: response.message || (locale === "zh" ? "刪除失敗" : "Delete failed"),
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setMessage({
         type: "error",
-        text: error.message || (locale === "zh" ? "刪除時發生錯誤" : "Error during deletion"),
+        text: (error instanceof Error ? error.message : (locale === "zh" ? "刪除時發生錯誤" : "Error during deletion")),
       });
     } finally {
       setIsDeleting(null);
@@ -205,10 +205,10 @@ export function BatchImportEditor({
           text: response.message || (locale === "zh" ? "驗證失敗" : "Validation failed"),
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setMessage({
         type: "error",
-        text: error.message || (locale === "zh" ? "驗證時發生錯誤" : "Error during validation"),
+        text: (error instanceof Error ? error.message : (locale === "zh" ? "驗證時發生錯誤" : "Error during validation")),
       });
     } finally {
       setIsRevalidating(false);

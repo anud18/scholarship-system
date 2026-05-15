@@ -143,11 +143,12 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
         const errorMsg = response.message || "獲取歷史申請失敗";
         setHistoricalApplicationsError(errorMsg);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("獲取歷史申請資料失敗:", error);
+      const errShape = error as { message?: string; response?: { data?: { message?: string } } };
       const errorMsg =
-        error?.message ||
-        error?.response?.data?.message ||
+        errShape.message ||
+        errShape.response?.data?.message ||
         "網路錯誤或伺服器未回應";
       setHistoricalApplicationsError(errorMsg);
     } finally {
