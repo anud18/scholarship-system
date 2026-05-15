@@ -117,7 +117,7 @@ async def create_application(
             application_data.form_data.dict()
             logger.debug("Form data validated successfully")
         except Exception as e:
-            logger.error(f"Form data validation failed: {str(e)}")
+            logger.exception("Form data validation failed")
             # Do not log raw form data as it may contain sensitive information
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -259,7 +259,7 @@ async def create_application(
         }
 
     except ValidationError as e:
-        logger.error(f"Validation error: {str(e)}")
+        logger.exception("Validation error")
         if hasattr(e, "errors"):
             logger.debug(f"Validation error details: {[error.get('loc', []) for error in e.errors()]}")
         raise HTTPException(
@@ -275,7 +275,7 @@ async def create_application(
         # Re-raise HTTPException directly as they are already properly formatted
         raise
     except IntegrityError as e:
-        logger.error(f"Database integrity error during application creation: {str(e)}")
+        logger.exception("Database integrity error during application creation")
         # Check for specific constraint violations if needed, e.g., unique constraint
         if "duplicate key value violates unique constraint" in str(e):
             raise HTTPException(
@@ -295,7 +295,7 @@ async def create_application(
             },
         ) from e
     except Exception as e:
-        logger.error(f"Unexpected error during application creation: {str(e)}")
+        logger.exception("Unexpected error during application creation")
         import traceback
 
         error_trace = traceback.format_exc()
@@ -474,7 +474,7 @@ async def delete_application(
             ),
         }
     except Exception as e:
-        logger.error(f"Error deleting application {id}: {str(e)}")
+        logger.exception(f"Error deleting application {id}")
         raise
 
 
