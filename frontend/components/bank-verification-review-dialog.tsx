@@ -253,6 +253,7 @@ export function BankVerificationReviewDialog({
                   {imageLoading && (
                     <Skeleton className="absolute inset-4 rounded" />
                   )}
+                  {/* eslint-disable-next-line @next/next/no-img-element -- user-uploaded passbook scan, unknown aspect ratio; next/image gives no benefit with images.unoptimized */}
                   <img
                     src={previewUrl}
                     alt="存摺封面"
