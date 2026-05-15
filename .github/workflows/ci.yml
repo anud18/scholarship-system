@@ -142,6 +142,19 @@ jobs:
           }
           echo "::endgroup::"
 
+          # flake8-bugbear is installed via requirements-lint.txt. Gate hard
+          # on B904 (exception chain loss) and B014 (redundant exception
+          # types); both reached 0 in PRs #504 / #505 and must stay there.
+          # B008 (function-call default) is intentionally NOT gated because
+          # FastAPI's `Depends(...)` pattern is the project-standard idiom
+          # for argument-default injection.
+          echo "::group::Flake8 Bugbear Gate (B904, B014)"
+          flake8 app --select=B904,B014 --max-line-length=120 || {
+            echo "::error::flake8-bugbear B904/B014 violations found. See PR #504/#505 for the established pattern."
+            exit 1
+          }
+          echo "::endgroup::"
+
           echo "::group::MyPy Type Checking"
           mypy app \
             --ignore-missing-imports \

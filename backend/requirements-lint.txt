@@ -1,5 +1,6 @@
 black==26.3.1  # Security: fixes arbitrary file writes from unsanitized cache filename (<26.3.1)
-flake8
+flake8==7.1.1
+flake8-bugbear==24.12.12  # B-rules: B904 (exception chaining), B014 (redundant excepts)
 mypy
 pylint
 types-requests
