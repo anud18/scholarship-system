@@ -36,7 +36,22 @@ interface CombinationOption {
   label_en: string;
   is_current: boolean;
   application_count?: number;
+  cycle?: "semester" | "yearly";
 }
+
+// Internal state shape — never read externally, only set as a side-effect of
+// the period-loading branches. Tracks either the cycle-aware payload from
+// scholarship-configurations or the raw values from reference-data.
+type CurrentInfoState =
+  | {
+      current_period?: string | null;
+      cycle?: "semester" | "yearly";
+    }
+  | {
+      current_academic_year?: number;
+      current_semester?: string;
+    }
+  | null;
 
 interface SemesterSelectorProps {
   /** 選擇模式：separate（分別選擇學年和學期）、combined（組合選擇）、auto（根據獎學金制度自動選擇） */
@@ -96,7 +111,8 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
   const [academicYears, setAcademicYears] = useState<AcademicYearOption[]>([]);
   const [semesters, setSemesters] = useState<SemesterOption[]>([]);
   const [combinations, setCombinations] = useState<CombinationOption[]>([]);
-  const [currentInfo, setCurrentInfo] = useState<any>(null);
+  const [currentInfo, setCurrentInfo] = useState<CurrentInfoState>(null);
+  void currentInfo;
 
   // 載入根據獎學金制度的適當資料
   const loadScholarshipBasedData = async () => {
@@ -134,7 +150,7 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
           const currentSemester = currentMonth >= 8 ? "first" : "second";
 
           // 轉換 API 回傳的期間格式為組件需要的格式
-          const configuredPeriods = result.data.map((period: string) => {
+          const configuredPeriods: CombinationOption[] = result.data.map((period: string) => {
             if (period.includes("-")) {
               // 學期制：格式如 "114-1", "114-2"
               const [year, sem] = period.split("-");
@@ -150,7 +166,7 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
                 label: `${academicYear}學年${semesterLabel}`,
                 label_en: `Academic Year ${academicYear + 1911}-${academicYear + 1912} ${sem === "1" ? "First" : "Second"} Semester`,
                 is_current: isCurrent,
-                cycle: "semester",
+                cycle: "semester" as const,
               };
             } else {
               // 學年制：格式如 "114"
@@ -164,7 +180,7 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
                 label: `${academicYear}學年`,
                 label_en: `Academic Year ${academicYear + 1911}-${academicYear + 1912}`,
                 is_current: isCurrent,
-                cycle: "yearly",
+                cycle: "yearly" as const,
               };
             }
           });
@@ -173,10 +189,10 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
 
           // 根據配置的期間類型決定顯示模式
           const hasSemesterPeriods = configuredPeriods.some(
-            (p: any) => p.cycle === "semester"
+            (p: CombinationOption) => p.cycle === "semester"
           );
           const hasYearlyPeriods = configuredPeriods.some(
-            (p: any) => p.cycle === "yearly"
+            (p: CombinationOption) => p.cycle === "yearly"
           );
 
           if (hasYearlyPeriods && !hasSemesterPeriods) {
@@ -189,7 +205,7 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
 
           setCurrentInfo({
             current_period:
-              configuredPeriods.find((p: any) => p.is_current)?.value || null,
+              configuredPeriods.find((p: CombinationOption) => p.is_current)?.value || null,
             cycle:
               hasYearlyPeriods && !hasSemesterPeriods ? "yearly" : "semester",
           });
