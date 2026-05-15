@@ -76,8 +76,8 @@ def format_date_for_display(date_obj: Optional[datetime], format_string: str = "
 
     try:
         return date_obj.strftime(format_string)
-    except Exception as e:
-        logger.error(f"Failed to format date {date_obj}: {e}")
+    except Exception:
+        logger.exception(f"Failed to format date {date_obj}")
         return default
 
 

@@ -89,8 +89,8 @@ async def log_college_review_action(
         await db.commit()
         logger.info(f"Audit log created for {action.value} by user {user.id} on {resource_type} {resource_id}")
         return audit_log
-    except Exception as e:
-        logger.error(f"Failed to create audit log: {e}")
+    except Exception:
+        logger.exception("Failed to create audit log")
         await db.rollback()
         # Don't raise - audit logging should not break the operation
         raise
@@ -164,8 +164,8 @@ async def log_college_review_action_with_changes(
         await db.commit()
         logger.info(f"Audit log created for {action.value} by user {user.id} on {resource_type} {resource_id}")
         return audit_log
-    except Exception as e:
-        logger.error(f"Failed to create audit log: {e}")
+    except Exception:
+        logger.exception("Failed to create audit log")
         await db.rollback()
         # Don't raise - audit logging should not break the operation
         raise

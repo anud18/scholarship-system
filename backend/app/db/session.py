@@ -109,12 +109,12 @@ async def handle_cached_statement_error(session: AsyncSession, operation_func, *
         except Exception as retry_error:
             logger.error(f"Operation failed even after connection refresh: {retry_error}")
             raise
-    except Exception as e:
+    except Exception:
         # Handle other database errors
         import logging
 
         logger = logging.getLogger(__name__)
-        logger.error(f"Database operation failed: {e}")
+        logger.exception("Database operation failed")
         raise
 
 
@@ -195,8 +195,8 @@ async def invalidate_connection_pools():
         sync_engine.dispose()
         logger.info("Sync engine connection pool disposed and will be recreated")
 
-    except Exception as e:
-        logger.error(f"Failed to invalidate connection pools: {e}")
+    except Exception:
+        logger.exception("Failed to invalidate connection pools")
 
 
 def invalidate_connection_pools_sync():
@@ -218,8 +218,8 @@ def invalidate_connection_pools_sync():
             "invalidate_connection_pools() in async context"
         )
 
-    except Exception as e:
-        logger.error(f"Failed to invalidate sync connection pool: {e}")
+    except Exception:
+        logger.exception("Failed to invalidate sync connection pool")
 
 
 # Event listeners for connection management (for sync engine only)
@@ -277,9 +277,7 @@ def _install_query_timing_listeners(engine) -> None:
         if start is None:
             return
         elapsed = time.perf_counter() - start
-        db_query_duration_seconds.labels(
-            operation=_classify_operation(statement)
-        ).observe(elapsed)
+        db_query_duration_seconds.labels(operation=_classify_operation(statement)).observe(elapsed)
 
 
 # Async engines expose their sync core via `.sync_engine`; the connect-level

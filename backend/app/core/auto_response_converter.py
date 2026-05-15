@@ -187,8 +187,8 @@ def create_response_instance(data: Dict[str, Any], target_model: Type[BaseModel]
 
     try:
         return target_model(**model_data)
-    except Exception as e:
-        logger.error(f"Failed to create {target_model.__name__} instance: {e}")
+    except Exception:
+        logger.exception(f"Failed to create {target_model.__name__} instance")
         logger.error(f"Data: {model_data}")
         raise
 
@@ -269,8 +269,8 @@ def auto_convert_and_validate(response_model: Type[BaseModel], validate_in_dev: 
 
                         logger.debug(f"✅ Auto-conversion and validation passed for {func.__name__}")
 
-                    except Exception as e:
-                        logger.error(f"❌ Auto-conversion validation failed for {func.__name__}: {e}")
+                    except Exception:
+                        logger.exception(f"❌ Auto-conversion validation failed for {func.__name__}")
                         logger.error(f"Original result type: {type(result)}")
                         logger.error(f"Converted result type: {type(converted_result)}")
                         if settings.environment == "development":
