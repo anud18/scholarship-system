@@ -62,8 +62,24 @@ export function FileUpload({
   };
 
   // 初始化和同步外部文件
+  //
+  // INFINITE-LOOP FIX (PR #509):
+  // The default `initialFiles = []` parameter creates a fresh array
+  // reference on every render. With a naive `setFiles([...initialFiles])`,
+  // this useEffect would fire every render, schedule a state update,
+  // trigger another render, and loop indefinitely. Compare contents
+  // before setting state — if they match, return the previous reference
+  // so React's bailout breaks the cycle.
   useEffect(() => {
-    setFiles([...initialFiles]);
+    setFiles((prev) => {
+      if (
+        prev.length === initialFiles.length &&
+        prev.every((f, i) => f === initialFiles[i])
+      ) {
+        return prev;
+      }
+      return [...initialFiles];
+    });
   }, [initialFiles]);
 
   const handleDrag = useCallback((e: React.DragEvent) => {

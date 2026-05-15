@@ -19,8 +19,12 @@ jest.mock("../file-preview-dialog", () => ({
 global.URL.createObjectURL = jest.fn(() => "mock-object-url");
 global.URL.revokeObjectURL = jest.fn();
 
-// TODO: Fix infinite render loop in FileUpload component (useEffect bug)
-describe.skip("FileUpload Component - Simple Tests", () => {
+// Re-enabled after PR #509 fixed the FileUpload useEffect infinite-render
+// bug. The root cause was the default `initialFiles = []` parameter
+// creating a fresh array reference on every render, which triggered the
+// "sync from prop" useEffect on every render. Fix is in file-upload.tsx
+// — content-comparison + setState bailout before scheduling a re-render.
+describe("FileUpload Component - Simple Tests", () => {
   it("should render without crashing", () => {
     const mockOnFilesChange = jest.fn();
 
