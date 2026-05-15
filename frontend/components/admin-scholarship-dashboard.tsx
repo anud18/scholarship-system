@@ -77,6 +77,20 @@ import { useScholarshipData } from "@/hooks/use-scholarship-data";
 import { Application } from "@/lib/api";
 import { User as UserType } from "@/types/user";
 
+// Shape of entries returned by GET /admin/applications/{id}/audit-logs.
+// Co-located here (not exported) because it's only consumed by the audit
+// modal in this component; the fields named are the ones the table renders.
+interface AuditLogEntry {
+  created_at?: string;
+  timestamp?: string;
+  user_name?: string;
+  user?: { name?: string };
+  app_id?: string;
+  student_name?: string;
+  action?: string;
+  description?: string;
+}
+
 interface AdminScholarshipDashboardProps {
   user: UserType;
 }
@@ -302,7 +316,7 @@ export function AdminScholarshipDashboard({
 
   // 操作紀錄相關狀態
   const [showAuditModal, setShowAuditModal] = useState(false);
-  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
 
   // 檢查用戶是否可以指派教授
@@ -1643,7 +1657,7 @@ export function AdminScholarshipDashboard({
                   {auditLogs.map((log, index) => (
                     <TableRow key={index}>
                       <TableCell className="text-sm">
-                        {new Date(log.created_at || log.timestamp).toLocaleString("zh-TW")}
+                        {new Date(log.created_at || log.timestamp || Date.now()).toLocaleString("zh-TW")}
                       </TableCell>
                       <TableCell className="text-sm">
                         {log.user_name || log.user?.name || "系統"}
@@ -1699,7 +1713,10 @@ export function AdminScholarshipDashboard({
       {activeTab && (
         <div className="mt-8">
           <AdminScholarshipManagementInterface
-            type={activeTab as any}
+            // Cast is at the boundary: activeTab is typed as `string` from
+            // useState; the prop's `ScholarshipType` union is enforced by
+            // AdminScholarshipManagementInterface at the call site.
+            type={activeTab as "undergraduate_freshman" | "direct_phd" | "phd"}
             className="border-t pt-6"
           />
         </div>
