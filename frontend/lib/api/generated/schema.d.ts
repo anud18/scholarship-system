@@ -4022,7 +4022,15 @@ export interface paths {
         };
         /**
          * Get Bank Document
-         * @description Serve bank documents from MinIO
+         * @description Serve bank documents from MinIO.
+         *
+         *     SECURITY: Bank passbook photos are highly sensitive PII (account
+         *     numbers, holder names). Requires:
+         *     1. A valid JWT (passed via ?token=... since browsers can't set
+         *        Authorization headers on <img src> / <iframe src>).
+         *     2. The requesting user must own the document OR be an authorized
+         *        reviewer (professor with student relationship, college, admin,
+         *        super_admin).
          */
         get: operations["get_bank_document_api_v1_user_profiles_files_bank_documents__filename__get"];
         put?: never;
@@ -17014,7 +17022,10 @@ export interface operations {
     };
     get_bank_document_api_v1_user_profiles_files_bank_documents__filename__get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Access token */
+                token?: string | null;
+            };
             header?: never;
             path: {
                 filename: string;
