@@ -68,7 +68,7 @@ def test_issue_labels_no_semester_when_none(service):
     """No 'semester-*' label if the distribution is yearly."""
     d = SimpleNamespace(academic_year=113, semester=None, success_rate=95)
     labels = service._generate_issue_labels(d)
-    assert not any(l.startswith("semester-") for l in labels)
+    assert not any(label.startswith("semester-") for label in labels)
 
 
 def test_issue_labels_high_success_rate_above_90(service):
@@ -102,5 +102,5 @@ def test_issue_labels_exactly_one_success_tier_always(service):
     for rate in (0, 50, 70, 89, 90, 100):
         d = SimpleNamespace(academic_year=113, semester=None, success_rate=rate)
         labels = service._generate_issue_labels(d)
-        tier_labels = [l for l in labels if l.endswith("-success-rate")]
+        tier_labels = [label for label in labels if label.endswith("-success-rate")]
         assert len(tier_labels) == 1, f"rate={rate} → {tier_labels}"
