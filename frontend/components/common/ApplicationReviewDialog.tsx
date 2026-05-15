@@ -93,6 +93,75 @@ interface DocumentPayload {
   document_id?: string;
 }
 
+// Sub-type option returned by GET /reviews/applications/{id}/sub-types and
+// /college/.../sub-types. `value` is the canonical sub-type code (e.g. "nstc",
+// "moe_1w"); `label` is the localized display name.
+interface SubTypeOption {
+  value: string;
+  label: string;
+  // Backend sometimes returns extras (locale strings, descriptions); we never
+  // read them, so allow them passthrough without widening to `any`.
+  [key: string]: unknown;
+}
+
+// One review decision attached to a sub-type. Mirrors ApplicationReview.items[].
+interface SubTypeReviewItem {
+  sub_type_code: string;
+  recommendation: "approve" | "reject" | "pending";
+  comments?: string;
+}
+
+// Existing review payload returned by GET /reviews/applications/{id}/review.
+// Only the fields read by this component are typed; rest are passthrough.
+interface ExistingReview {
+  id: number;
+  items?: SubTypeReviewItem[];
+  reviewed_at?: string;
+  [key: string]: unknown;
+}
+
+// Professor lookup payload — superset of both Application.professor (which
+// requires `id` + `nycu_id`) and the ProfessorAssignmentDropdown callback
+// (which requires `nycu_id` + `name` + `dept_code` + `dept_name`). All
+// fields are optional here because state is set independently of the
+// application reload; dropdown-provided fields are guaranteed by the
+// caller's contract.
+interface ProfessorInfo {
+  id?: number;
+  nycu_id?: string;
+  name?: string;
+  dept_code?: string;
+  dept_name?: string;
+  email?: string;
+}
+
+// Local file row used by the review-dialog UI. Sourced from either
+// submitted_form_data.documents (DocumentPayload-shaped) or the legacy
+// /applications/{id}/files endpoint, then normalized into this view-model.
+interface ReviewDialogFile {
+  id?: string | number;
+  filename?: string;
+  original_filename?: string;
+  file_size?: number;
+  mime_type?: string;
+  file_type?: string;
+  file_path?: string;
+  download_url?: string;
+  is_verified?: boolean;
+  uploaded_at?: string;
+}
+
+// Enrichment fields the backend attaches to /applications/{id} that aren't on
+// the base Application schema (resolved names + professor-review snapshot).
+// Optional so we degrade gracefully when an endpoint omits them.
+interface EnrichedApplicationExtras {
+  currency?: string;
+  academy_name?: string;
+  department_name?: string;
+  degree?: number;
+  professor_review_items?: SubTypeReviewItem[];
+}
+
 interface ApplicationReviewDialogProps {
   application: Application | HistoricalApplication | null;
   role: "college" | "admin" | "super_admin";
@@ -123,7 +192,7 @@ function FieldDisplay({
   locale = "zh",
 }: {
   label: string;
-  value: any;
+  value: unknown;
   locale?: "zh" | "en";
 }) {
   const displayValue = value !== null && value !== undefined ? String(value) : null;
@@ -564,7 +633,7 @@ export function ApplicationReviewDialog({
   onAdminReject,
   onReviewSubmitted,
 }: ApplicationReviewDialogProps) {
-  const [applicationFiles, setApplicationFiles] = useState<any[]>([]);
+  const [applicationFiles, setApplicationFiles] = useState<ReviewDialogFile[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [previewFile, setPreviewFile] = useState<{
     url: string;
@@ -588,13 +657,15 @@ export function ApplicationReviewDialog({
   const [detailedApplication, setDetailedApplication] = useState<Application | null>(null);
 
   // Sub-type review state (for unified review system)
-  const [subTypes, setSubTypes] = useState<any[]>([]);
+  const [subTypes, setSubTypes] = useState<SubTypeOption[]>([]);
   const [reviewItems, setReviewItems] = useState<Array<{
     sub_type_code: string;
     recommendation: 'approve' | 'reject' | 'pending';
     comments?: string;
   }>>([]);
-  const [existingReview, setExistingReview] = useState<any>(null);
+  const [existingReview, setExistingReview] = useState<ExistingReview | null>(
+    null
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingSubTypes, setIsLoadingSubTypes] = useState(false);
 
@@ -610,7 +681,9 @@ export function ApplicationReviewDialog({
   } = useReferenceData();
 
   // Admin management states
-  const [professorInfo, setProfessorInfo] = useState<any>(null);
+  const [professorInfo, setProfessorInfo] = useState<ProfessorInfo | null>(
+    null
+  );
   const [bankVerificationLoading, setBankVerificationLoading] = useState(false);
   const [adminComments, setAdminComments] = useState("");
   const [isSubmittingStatus, setIsSubmittingStatus] = useState(false);
@@ -643,7 +716,7 @@ export function ApplicationReviewDialog({
     user && ["admin", "super_admin", "college"].includes(user.role);
 
   // Handle professor assignment
-  const handleProfessorAssigned = (professor: any) => {
+  const handleProfessorAssigned = (professor: ProfessorInfo) => {
     setProfessorInfo(professor);
   };
 
@@ -844,7 +917,7 @@ export function ApplicationReviewDialog({
         setSubTypes(availableSubTypes);
 
         // Initialize items based on available sub-types
-        const initialItems = availableSubTypes.map((subType: any) => ({
+        const initialItems = availableSubTypes.map((subType: SubTypeOption) => ({
           sub_type_code: subType.value,
           recommendation: 'pending' as const,
           comments: "",
@@ -860,9 +933,9 @@ export function ApplicationReviewDialog({
 
             // Merge existing review items with all available sub-types
             const existingItems = reviewResponse.data.items || [];
-            const mergedItems = availableSubTypes.map((subType: any) => {
+            const mergedItems = availableSubTypes.map((subType: SubTypeOption) => {
               const existingItem = existingItems.find(
-                (item: any) => item.sub_type_code === subType.value
+                (item: SubTypeReviewItem) => item.sub_type_code === subType.value
               );
 
               if (existingItem) {
@@ -1104,7 +1177,11 @@ export function ApplicationReviewDialog({
   };
 
   // Update review item
-  const updateReviewItem = (subTypeCode: string, field: string, value: any) => {
+  const updateReviewItem = (
+    subTypeCode: string,
+    field: keyof SubTypeReviewItem,
+    value: SubTypeReviewItem[keyof SubTypeReviewItem]
+  ) => {
     setReviewItems(prev =>
       prev.map(item => {
         if (item.sub_type_code === subTypeCode) {
@@ -1117,27 +1194,28 @@ export function ApplicationReviewDialog({
 
   // Get sub-type label
   const getSubTypeLabel = (subTypeCode: string) => {
-    const subType = subTypes.find((st: any) => st.value === subTypeCode);
+    const subType = subTypes.find((st: SubTypeOption) => st.value === subTypeCode);
     return subType?.label || subTypeCode;
   };
 
   // Helper function to safely convert error messages to strings
-  const safeErrorMessage = (error: any): string => {
+  const safeErrorMessage = (error: unknown): string => {
     if (typeof error === 'string') {
       return error;
     }
     if (error && typeof error === 'object') {
+      const errObj = error as { message?: unknown; detail?: unknown };
       // Handle Error objects
-      if (error.message && typeof error.message === 'string') {
-        return error.message;
+      if (errObj.message && typeof errObj.message === 'string') {
+        return errObj.message;
       }
       // Handle arrays (e.g., validation errors)
       if (Array.isArray(error)) {
         return error.map(e => safeErrorMessage(e)).join(', ');
       }
       // Handle objects with detail field
-      if (error.detail) {
-        return safeErrorMessage(error.detail);
+      if (errObj.detail) {
+        return safeErrorMessage(errObj.detail);
       }
       // Fallback: stringify the object
       try {
@@ -1352,7 +1430,7 @@ export function ApplicationReviewDialog({
     academic_year: detailedApplication?.academic_year ?? (application as Application).academic_year,
     semester: detailedApplication?.semester ?? (application as Application).semester,
     amount: detailedApplication?.amount ?? (application as Application).amount,
-    currency: (detailedApplication as any)?.currency ?? "TWD",
+    currency: (detailedApplication as Application & EnrichedApplicationExtras)?.currency ?? "TWD",
     is_renewal: detailedApplication?.is_renewal ?? (application as Application).is_renewal ?? false,
     created_at: detailedApplication?.created_at ?? application.created_at,
     submitted_at: detailedApplication?.submitted_at ?? (application as Application).submitted_at ?? (application as HistoricalApplication).submitted_at,
@@ -1362,14 +1440,14 @@ export function ApplicationReviewDialog({
     class_ranking_percent: detailedApplication?.class_ranking_percent ?? (application as Application).class_ranking_percent,
     dept_ranking_percent: detailedApplication?.dept_ranking_percent ?? (application as Application).dept_ranking_percent,
     student_termcount: detailedApplication?.student_data?.std_termcount ?? (application as Application).student_data?.std_termcount,
-    academy_name: (detailedApplication as any)?.academy_name ?? (application as Application).academy_code,
+    academy_name: (detailedApplication as Application & EnrichedApplicationExtras)?.academy_name ?? (application as Application).academy_code,
     academy_code: detailedApplication?.academy_code ?? (application as Application).academy_code,
     department: getDepartmentName(detailedApplication?.student_data?.std_depno, departments) ?? detailedApplication?.student_data?.std_depno,
-    department_name: (detailedApplication as any)?.department_name ?? getDepartmentName(detailedApplication?.student_data?.std_depno, departments) ?? (application as Application).department,
+    department_name: (detailedApplication as Application & EnrichedApplicationExtras)?.department_name ?? getDepartmentName(detailedApplication?.student_data?.std_depno, departments) ?? (application as Application).department,
     department_code: detailedApplication?.department_code ?? (application as Application).department_code,
-    degree: (detailedApplication as any)?.degree,
-    degree_name: (detailedApplication as any)?.degree ? getDegreeName((detailedApplication as any).degree, degrees) : undefined,
-    professor_review_items: (detailedApplication as any)?.professor_review_items ?? [],
+    degree: (detailedApplication as Application & EnrichedApplicationExtras)?.degree,
+    degree_name: (detailedApplication as Application & EnrichedApplicationExtras)?.degree ? getDegreeName((detailedApplication as Application & EnrichedApplicationExtras).degree, degrees) : undefined,
+    professor_review_items: (detailedApplication as Application & EnrichedApplicationExtras)?.professor_review_items ?? [],
   };
 
   return (
@@ -1632,7 +1710,7 @@ export function ApplicationReviewDialog({
                         <CardContent>
                           <div className="space-y-2">
                             {displayData.professor_review_items.map(
-                              (item: any, idx: number) => (
+                              (item: SubTypeReviewItem, idx: number) => (
                                 <div
                                   key={`${item.sub_type_code}-${idx}`}
                                   className={`p-3 rounded border ${
@@ -1772,7 +1850,7 @@ export function ApplicationReviewDialog({
                         </div>
                       ) : applicationFiles.length > 0 ? (
                         <div className="space-y-2">
-                          {applicationFiles.map((file: any, index: number) => (
+                          {applicationFiles.map((file: ReviewDialogFile, index: number) => (
                             <div
                               key={file.id || index}
                               className="flex items-center justify-between p-3 bg-muted/50 rounded-md border"
@@ -1854,7 +1932,7 @@ export function ApplicationReviewDialog({
                         <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                         <AlertDescription className="text-blue-800 dark:text-blue-300">
                           {locale === "zh"
-                            ? `您已於 ${new Date(existingReview.reviewed_at).toLocaleString('zh-TW', {
+                            ? `您已於 ${new Date(existingReview.reviewed_at ?? "").toLocaleString('zh-TW', {
                                 year: 'numeric',
                                 month: '2-digit',
                                 day: '2-digit',
@@ -1862,7 +1940,7 @@ export function ApplicationReviewDialog({
                                 minute: '2-digit',
                                 hour12: false
                               })} 提交過審核意見，以下為之前的審核內容`
-                            : `You submitted a review on ${new Date(existingReview.reviewed_at).toLocaleString('en-US', {
+                            : `You submitted a review on ${new Date(existingReview.reviewed_at ?? "").toLocaleString('en-US', {
                                 year: 'numeric',
                                 month: '2-digit',
                                 day: '2-digit',
