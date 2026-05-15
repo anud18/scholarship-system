@@ -11,13 +11,13 @@ Major changes:
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import get_current_user, require_admin, require_staff, require_student
+from app.core.security import get_current_user, require_admin, require_staff
 from app.db.deps import get_db
 from app.models.application import Application, ApplicationStatus
 from app.models.scholarship import ScholarshipStatus, ScholarshipType
@@ -29,101 +29,16 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Application Management Endpoints
-
-
-@router.post("/applications/create-comprehensive")
-async def create_comprehensive_application(
-    application_data: Dict[str, Any] = Body(...),
-    current_user: User = Depends(require_student),
-    db: AsyncSession = Depends(get_db),
-):
-    """[Not implemented - see issue #649] Create a comprehensive scholarship application.
-
-    Calls ``ScholarshipApplicationService.create_application`` which has been
-    commented out (see ``app/services/scholarship_service.py:385``) with the
-    note that application creation moved to ``ApplicationService`` with
-    external API integration. The new signature is incompatible with this
-    endpoint's renewal-aware contract, so callers must migrate to
-    ``POST /api/v1/applications/`` and the renewal flow on
-    ``ApplicationService`` instead. Returns 501 until a migration plan is
-    decided (tracked in issue #649).
-    """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="The comprehensive create endpoint is not currently implemented (tracked in issue #649). Use POST /api/v1/applications/ instead.",
-    )
-
-
-@router.post("/applications/{application_id}/submit-comprehensive")
-async def submit_comprehensive_application(
-    application_id: int = Path(...),
-    current_user: User = Depends(require_student),
-    db: AsyncSession = Depends(get_db),
-):
-    """[Not implemented - see issue #651] Submit application with comprehensive workflow management.
-
-    Calls ``ScholarshipApplicationService.submit_application`` (async) on a
-    synchronously-constructed session, without ``await``. The service body
-    uses ``await self.db.execute(...)`` / ``await self.db.commit()`` which
-    fails against a sync session, and the missing ``await`` would yield a
-    coroutine that cannot be tuple-unpacked into ``(success, message)``.
-    Returns 501 until the service interface is reconciled with the endpoint
-    (tracked in issue #651). Use ``POST /api/v1/applications/{id}/submit``
-    on ``ApplicationService`` instead.
-    """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="The comprehensive submit endpoint is not currently implemented (tracked in issue #651). Use POST /api/v1/applications/{id}/submit instead.",
-    )
-
-
-@router.get("/applications/by-priority")
-async def get_applications_by_priority(
-    scholarship_type_id: Optional[int] = Query(None),
-    semester: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
-    limit: int = Query(100, le=1000),
-    current_user: User = Depends(require_staff),
-    db: AsyncSession = Depends(get_db),
-):
-    """[Not implemented - see issue #651] Get applications ordered by priority score.
-
-    Calls ``ScholarshipApplicationService.get_applications_by_priority`` (async)
-    on a synchronously-constructed session, without ``await``. The service body
-    uses ``await self.db.execute(...)`` which fails against a sync session, and
-    the missing ``await`` would yield a coroutine that cannot be iterated.
-    Returns 501 until the service interface is reconciled with the endpoint
-    (tracked in issue #651).
-    """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="The applications-by-priority endpoint is not currently implemented (tracked in issue #651).",
-    )
-
-
-# Renewal Processing Endpoints
-
-
-@router.post("/renewals/process-priority")
-async def process_renewal_applications(
-    semester: str = Body(...),
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-):
-    """[Not implemented - see issue #651] Process renewal applications with priority.
-
-    Calls ``ScholarshipApplicationService.process_renewal_applications_first``
-    (async) on a synchronously-constructed session, without ``await``. The
-    service body uses ``await self.db.execute(...)`` which fails against a
-    sync session, and the missing ``await`` would yield a coroutine that is
-    serialized in place of the expected result dict. Returns 501 until the
-    service interface is reconciled with the endpoint (tracked in issue #651).
-    """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="The renewal-priority processing endpoint is not currently implemented (tracked in issue #651).",
-    )
+# Application Management Endpoints (none currently — the four
+# create-comprehensive / submit-comprehensive / by-priority /
+# process-priority endpoints were removed because they each called
+# methods on ScholarshipApplicationService that have been deleted or
+# rewritten against an incompatible signature, the frontend never
+# wired them up, and they had been sitting as 501 stubs from
+# PRs #650 / #652 awaiting product input. If the comprehensive-flow
+# feature is revived, it should land against the current
+# `ApplicationService` API rather than be resurrected from these stubs.
+# Tracked in issues #649 / #651.)
 
 
 # Analytics and Dashboard Endpoints
