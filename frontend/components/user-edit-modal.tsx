@@ -107,17 +107,34 @@ export function UserEditModal({
   }, [isOpen]);
 
   // 初始化已選擇的獎學金 ID
+  //
+  // INFINITE-LOOP FIX (PR #510): same root cause as the FileUpload fix in
+  // PR #509. The default `scholarshipPermissions = []` parameter creates
+  // a fresh array reference on every render, so the useEffect dependency
+  // `[scholarshipPermissions, ...]` always sees a "changed" prop and
+  // re-runs the effect. Without a content-aware bailout, `setSelectedScholarshipIds`
+  // schedules a new array each render and the cycle never stops. Compare
+  // contents before scheduling state updates; rely on React's bailout when
+  // the previous reference is returned.
   React.useEffect(() => {
-    if (scholarshipPermissions.length > 0 && editingUser?.id) {
-      // 只顯示當前編輯用戶的權限
-      const userPermissions = scholarshipPermissions.filter(
-        p => p.user_id === Number(editingUser.id)
-      );
-      const selectedIds = userPermissions.map(p => p.scholarship_id);
-      setSelectedScholarshipIds(selectedIds);
-    } else {
-      setSelectedScholarshipIds([]);
-    }
+    setSelectedScholarshipIds((prev) => {
+      let nextIds: number[];
+      if (scholarshipPermissions.length > 0 && editingUser?.id) {
+        const userPermissions = scholarshipPermissions.filter(
+          p => p.user_id === Number(editingUser.id)
+        );
+        nextIds = userPermissions.map(p => p.scholarship_id);
+      } else {
+        nextIds = [];
+      }
+      if (
+        prev.length === nextIds.length &&
+        prev.every((id, i) => id === nextIds[i])
+      ) {
+        return prev;
+      }
+      return nextIds;
+    });
   }, [scholarshipPermissions, editingUser?.id]);
 
   // 當角色改變時，清除獎學金權限
