@@ -239,7 +239,7 @@ class Settings(BaseSettings):
         try:
             if "alembic" not in sys.argv:
                 os.makedirs(v, exist_ok=True)
-        except (OSError, PermissionError):
+        except OSError:
             # If we can't create the directory, just skip it
             # This happens during Alembic migrations when running as non-root user
             pass
@@ -277,7 +277,7 @@ class Settings(BaseSettings):
         """Ensure roster template directory exists"""
         try:
             os.makedirs(v, exist_ok=True)
-        except (OSError, PermissionError):
+        except OSError:
             pass
         return v
 
@@ -287,7 +287,7 @@ class Settings(BaseSettings):
         """Ensure roster export directory exists"""
         try:
             os.makedirs(v, exist_ok=True)
-        except (OSError, PermissionError):
+        except OSError:
             pass
         return v
 
