@@ -17,6 +17,13 @@ groups:
     folder: Alerts
     interval: 1m
     rules:
+      # Detects an abnormal rate of ERROR-level log lines. Threshold tuned
+      # for the post-2026-05-15 traceback-preservation sweep (PRs #574-#588):
+      # every endpoint + service emits `logger.exception(...)` at ERROR
+      # level on caught-exception paths, so the baseline ERROR rate during
+      # normal traffic + integration tests can easily exceed >5/5min. The
+      # raised threshold + 5m cooldown only fires on genuine spikes that
+      # indicate an upstream dependency outage or a hot-path regression.
       - uid: alert-backend-error-spike
         title: BackendErrorSpike
         condition: C
@@ -61,7 +68,7 @@ groups:
               type: threshold
               conditions:
                 - evaluator:
-                    params: [5]
+                    params: [50]
                     type: gt
                   operator:
                     type: and
@@ -72,14 +79,14 @@ groups:
                   type: query
         noDataState: OK
         execErrState: Error
-        for: 1m
+        for: 5m
         labels:
           severity: warning
           category: application
           environment: staging
         annotations:
-          summary: "Backend error log spike (>5/5min) on {{ $labels.environment }}"
-          description: "scholarship_backend has emitted more than 5 ERROR-level log lines in the last 5 minutes. Investigate via Loki: {environment=\"staging\", container=~\"scholarship_backend.*\"} |~ \"ERROR\""
+          summary: "Backend error log spike (>50/5min) on {{ $labels.environment }}"
+          description: "scholarship_backend has emitted more than 50 ERROR-level log lines in the last 5 minutes — above the post-sweep baseline. Investigate via Loki: {environment=\"staging\", container=~\"scholarship_backend.*\"} |~ \"ERROR\""
         isPaused: false
 
       # Detects a sustained burst of Python tracebacks. Threshold tuned for
