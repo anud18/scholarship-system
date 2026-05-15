@@ -13,6 +13,7 @@
 
 import createClient from 'openapi-fetch';
 import type { paths } from './generated/schema';
+import { logger } from '../utils/logger';
 
 /**
  * Type-safe API client with authentication and environment-aware routing
@@ -29,11 +30,10 @@ class TypedApiClient {
       ? '' // Browser: relative path
       : process.env.INTERNAL_API_URL || 'http://localhost:8000';
 
-    console.log(
-      typeof window !== 'undefined'
-        ? '🌐 Typed API Client (Browser mode - Nginx proxy)'
-        : `🖥️ Typed API Client (Server mode - ${baseUrl})`
-    );
+    logger.debug('Typed API Client initialized', {
+      mode: typeof window !== 'undefined' ? 'browser' : 'server',
+      baseUrl,
+    });
 
     // Create typed client
     this.client = createClient<paths>({ baseUrl });
@@ -60,7 +60,7 @@ class TypedApiClient {
       onResponse: ({ response }) => {
         // Clear token on 401 Unauthorized
         if (response.status === 401) {
-          console.error('Authentication failed - clearing token');
+          logger.error('Authentication failed - clearing token');
           this.clearToken();
         }
         return undefined; // No modification needed
