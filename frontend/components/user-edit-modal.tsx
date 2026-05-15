@@ -12,6 +12,7 @@ import {
   ScholarshipPermission,
   apiClient,
 } from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
 import { Badge } from "./ui/badge";
 
 interface Academy {
@@ -85,7 +86,7 @@ export function UserEditModal({
           setAcademies(response.data);
         }
       } catch (error) {
-        console.error("Failed to fetch academies:", error);
+        logger.error("Failed to fetch academies", { error });
       } finally {
         setLoadingAcademies(false);
       }
@@ -105,7 +106,7 @@ export function UserEditModal({
           setDepartments(response.data);
         }
       } catch (error) {
-        console.error("Failed to fetch departments:", error);
+        logger.error("Failed to fetch departments", { error });
       }
     };
 
