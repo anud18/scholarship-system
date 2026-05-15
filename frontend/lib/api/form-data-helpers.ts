@@ -57,7 +57,7 @@ export function createFileUploadFormData(data: {
 /**
  * Type guard to check if a value is FormData
  */
-export function isFormData(value: any): value is FormData {
+export function isFormData(value: unknown): value is FormData {
   return value instanceof FormData;
 }
 
