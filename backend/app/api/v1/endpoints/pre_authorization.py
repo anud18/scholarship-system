@@ -2,6 +2,8 @@
 Pre-authorization API endpoints for managing user permissions before first login
 """
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +19,8 @@ from app.schemas.pre_authorization import (
     PreAuthorizeUserResponse,
 )
 from app.services.pre_authorization_service import PreAuthorizationService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -42,6 +46,20 @@ async def pre_authorize_user(
             comment=request.comment,
         )
 
+        logger.warning(
+            "User %s pre-authorized as role=%s by actor=%s",
+            request.nycu_id,
+            request.role,
+            current_user.nycu_id,
+            extra={
+                "preauth_nycu_id": request.nycu_id,
+                "preauth_role": request.role,
+                "actor_nycu_id": current_user.nycu_id,
+                "actor_user_id": current_user.id,
+                "comment": request.comment,
+            },
+        )
+
         return PreAuthorizeUserResponse(
             success=True,
             message=f"User {request.nycu_id} pre-authorized as {request.role}",
@@ -52,7 +70,16 @@ async def pre_authorize_user(
             },
         )
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        logger.exception(
+            "Pre-authorize user failed",
+            extra={
+                "preauth_nycu_id": request.nycu_id,
+                "preauth_role": request.role,
+                "actor_nycu_id": current_user.nycu_id,
+                "actor_user_id": current_user.id,
+            },
+        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post("/assign-scholarship")
@@ -78,6 +105,19 @@ async def assign_scholarship_to_admin(
             comment=request.comment,
         )
 
+        logger.info(
+            "Scholarship %d assigned to admin %s by actor=%s",
+            request.scholarship_id,
+            request.admin_nycu_id,
+            current_user.nycu_id,
+            extra={
+                "admin_nycu_id": request.admin_nycu_id,
+                "scholarship_id": request.scholarship_id,
+                "actor_nycu_id": current_user.nycu_id,
+                "actor_user_id": current_user.id,
+            },
+        )
+
         return AssignScholarshipResponse(
             success=True,
             message=f"Scholarship {request.scholarship_id} assigned to admin {request.admin_nycu_id}",
@@ -88,7 +128,16 @@ async def assign_scholarship_to_admin(
             },
         )
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        logger.exception(
+            "Assign-scholarship failed",
+            extra={
+                "admin_nycu_id": request.admin_nycu_id,
+                "scholarship_id": request.scholarship_id,
+                "actor_nycu_id": current_user.nycu_id,
+                "actor_user_id": current_user.id,
+            },
+        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.get("/pre-authorized-users")
@@ -173,12 +222,34 @@ async def remove_admin_from_scholarship(
             admin_nycu_id=admin_nycu_id, scholarship_id=scholarship_id, removed_by=current_user.nycu_id
         )
 
+        logger.warning(
+            "Admin %s removed from scholarship %d by actor=%s",
+            admin_nycu_id,
+            scholarship_id,
+            current_user.nycu_id,
+            extra={
+                "admin_nycu_id": admin_nycu_id,
+                "scholarship_id": scholarship_id,
+                "actor_nycu_id": current_user.nycu_id,
+                "actor_user_id": current_user.id,
+            },
+        )
+
         return {
             "success": True,
             "message": f"Removed admin {admin_nycu_id} from scholarship {scholarship_id}",
         }
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        logger.exception(
+            "Remove-admin-from-scholarship failed",
+            extra={
+                "admin_nycu_id": admin_nycu_id,
+                "scholarship_id": scholarship_id,
+                "actor_nycu_id": current_user.nycu_id,
+                "actor_user_id": current_user.id,
+            },
+        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.get("/user/{nycu_id}")
