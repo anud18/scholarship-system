@@ -454,8 +454,8 @@ export function ScholarshipApplicationStep({
       await refreshProfile();
       setPersonalInfoSaved(true);
       toast.success(text.personalInfoSaved);
-    } catch (err: any) {
-      toast.error(err.message || text.personalInfoSaveFailed);
+    } catch (err: unknown) {
+      toast.error((err instanceof Error ? err.message : text.personalInfoSaveFailed));
     } finally {
       setSavingPersonalInfo(false);
     }
@@ -520,8 +520,8 @@ export function ScholarshipApplicationStep({
       } else {
         throw new Error(response.message || "Delete failed");
       }
-    } catch (err: any) {
-      toast.error(err.message || text.deleteFailed);
+    } catch (err: unknown) {
+      toast.error((err instanceof Error ? err.message : text.deleteFailed));
     }
   };
 
@@ -537,8 +537,8 @@ export function ScholarshipApplicationStep({
       } else {
         throw new Error(response.message || "Delete failed");
       }
-    } catch (err: any) {
-      toast.error(err.message || text.deleteFailed);
+    } catch (err: unknown) {
+      toast.error((err instanceof Error ? err.message : text.deleteFailed));
     }
   };
 
@@ -657,8 +657,8 @@ export function ScholarshipApplicationStep({
       } else {
         setError(response.message || text.loadError);
       }
-    } catch (err: any) {
-      setError(err.message || text.loadError);
+    } catch (err: unknown) {
+      setError((err instanceof Error ? err.message : text.loadError));
     } finally {
       setLoading(false);
     }
@@ -944,8 +944,8 @@ export function ScholarshipApplicationStep({
           toast.success(text.draftSaved);
         }
       }
-    } catch (error: any) {
-      toast.error(text.submitError + ": " + error.message);
+    } catch (error: unknown) {
+      toast.error(text.submitError + ": " + (error instanceof Error ? error.message : String(error)));
     } finally {
       setSubmitting(false);
     }
@@ -1049,8 +1049,8 @@ export function ScholarshipApplicationStep({
 
       toast.success(text.submitSuccess);
       onComplete();
-    } catch (error: any) {
-      toast.error(text.submitError + ": " + error.message);
+    } catch (error: unknown) {
+      toast.error(text.submitError + ": " + (error instanceof Error ? error.message : String(error)));
     } finally {
       setSubmitting(false);
     }
