@@ -6,16 +6,29 @@
  * remaining untested admin-side components beyond the 6 already covered
  * in PR #244.
  *
- * What's pinned:
- * - `!token` short-circuit: panel renders nothing when no auth token is
- *   in storage (the rest of the component never reaches its JSX).
- * - With a token, the floating Bug button appears (entry-point UI).
- * - getDataSource() helper logic is exercised via the panel's data-source
- *   badge rendering on the open panel.
+ * What's pinned (the entry-point UI gate — everything else inside
+ * DebugPanel runs only after this gate):
+ *
+ * - `!token` short-circuit: panel renders nothing when the auth hook
+ *   reports no token. (See `if (!token) return null;` in debug-panel.tsx.)
+ * - With a token, the floating Bug-icon button appears.
+ * - The `isTestMode` prop is forwarded through and the entry button
+ *   still mounts in test-mode.
+ *
+ * The token gate is driven by `useAuth()`, NOT directly by
+ * `localStorage`. The original suite (PR #244-skipped) seeded
+ * localStorage and expected the component to read it back; it never
+ * did. This rewrite mocks `useAuth` instead.
  */
 import React from "react";
-import { render, screen, act } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { DebugPanel } from "../debug-panel";
+
+const mockUseAuth = jest.fn();
+
+jest.mock("@/hooks/use-auth", () => ({
+  useAuth: () => mockUseAuth(),
+}));
 
 jest.mock("@/lib/api", () => ({
   __esModule: true,
@@ -23,23 +36,34 @@ jest.mock("@/lib/api", () => ({
   api: { auth: { mockSSOLogin: jest.fn() } },
 }));
 
+const baseUser = {
+  id: "1",
+  name: "Test Admin",
+  email: "admin@example.com",
+  role: "admin",
+};
+
 beforeEach(() => {
   localStorage.clear();
 });
 
-describe.skip("DebugPanel", () => {
-  it("renders nothing when no auth token is present", () => {
+describe("DebugPanel", () => {
+  it("renders nothing when useAuth() reports no token", () => {
+    mockUseAuth.mockReturnValue({ user: baseUser, token: null, isAuthenticated: false });
+
     const { container } = render(<DebugPanel />);
     // Component does `if (!token) return null` after the mount effect runs.
     // Effect runs synchronously, so the container ends up empty.
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders the floating debug button once a token is in localStorage", () => {
+  it("renders the floating debug button once a token is available", () => {
     // Seed an unstructured token; the component only checks truthiness for
     // the short-circuit. Decoding errors are caught and logged inside.
-    act(() => {
-      localStorage.setItem("token", "test-token-not-a-real-jwt");
+    mockUseAuth.mockReturnValue({
+      user: baseUser,
+      token: "test-token-not-a-real-jwt",
+      isAuthenticated: true,
     });
 
     render(<DebugPanel />);
@@ -47,8 +71,10 @@ describe.skip("DebugPanel", () => {
   });
 
   it("renders the floating debug button when isTestMode=true regardless of UI state", () => {
-    act(() => {
-      localStorage.setItem("token", "test-token-not-a-real-jwt");
+    mockUseAuth.mockReturnValue({
+      user: baseUser,
+      token: "test-token-not-a-real-jwt",
+      isAuthenticated: true,
     });
 
     render(<DebugPanel isTestMode={true} />);
