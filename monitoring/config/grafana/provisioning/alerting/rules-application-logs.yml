@@ -82,6 +82,13 @@ groups:
           description: "scholarship_backend has emitted more than 5 ERROR-level log lines in the last 5 minutes. Investigate via Loki: {environment=\"staging\", container=~\"scholarship_backend.*\"} |~ \"ERROR\""
         isPaused: false
 
+      # Detects a sustained burst of Python tracebacks. Threshold tuned for
+      # the post-2026-05-15 traceback-preservation sweep (PRs #574–#588):
+      # every endpoint + service now emits `logger.exception(...)` on
+      # error paths, so background-noise tracebacks are *expected* and
+      # don't represent a crash. A genuine unhandled-exception storm
+      # still produces tens of stack traces per minute and trips the
+      # raised threshold + 5m cooldown.
       - uid: alert-backend-traceback
         title: BackendUnhandledTraceback
         condition: C
@@ -126,7 +133,7 @@ groups:
               type: threshold
               conditions:
                 - evaluator:
-                    params: [0]
+                    params: [25]
                     type: gt
                   operator:
                     type: and
@@ -137,14 +144,14 @@ groups:
                   type: query
         noDataState: OK
         execErrState: Error
-        for: 1m
+        for: 5m
         labels:
           severity: high
           category: application
           environment: staging
         annotations:
-          summary: "Backend Python traceback detected on {{ $labels.environment }}"
-          description: "An unhandled Python exception traceback appeared in the backend logs. Open Loki and search: {environment=\"staging\", container=~\"scholarship_backend.*\"} |= \"Traceback\""
+          summary: "Backend traceback burst (>25/5min) on {{ $labels.environment }}"
+          description: "More than 25 Python tracebacks appeared in scholarship_backend logs over a 5-minute window — that exceeds the expected background rate from `logger.exception(...)` and suggests an unhandled-exception storm. Investigate via Loki: {environment=\"staging\", container=~\"scholarship_backend.*\"} |= \"Traceback\""
         isPaused: false
 
       - uid: alert-postgres-error-log
