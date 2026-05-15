@@ -9,6 +9,7 @@ Major changes from original:
 """
 
 import io
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -24,6 +25,7 @@ from app.models.user import User
 from app.schemas.response import ApiResponse
 from app.services.quota_service import QuotaService
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -145,6 +147,16 @@ async def get_detailed_quota_status(
     scholarship_type = scholarship_type_result.scalar_one_or_none()
 
     if not scholarship_type:
+        logger.warning(
+            "Quota detail lookup for missing scholarship_type",
+            extra={
+                "user_id": current_user.id,
+                "scholarship_type_id": scholarship_type_id,
+                "sub_type": sub_type,
+                "academic_year": academic_year,
+                "semester": semester,
+            },
+        )
         raise HTTPException(status_code=404, detail="Scholarship type not found")
 
     # Get quota status
@@ -252,6 +264,20 @@ async def get_quota_alerts(
                         }
                     )
 
+    if alerts:
+        critical_count = sum(1 for a in alerts if a.get("severity") == "critical")
+        if critical_count:
+            logger.warning(
+                "Quota dashboard surfaced critical-severity alerts",
+                extra={
+                    "user_id": current_user.id,
+                    "academic_year": academic_year,
+                    "semester": semester,
+                    "critical_count": critical_count,
+                    "total_alerts": len(alerts),
+                },
+            )
+
     return ApiResponse(
         success=True,
         message=f"Found {len(alerts)} quota alerts",
@@ -268,6 +294,17 @@ async def export_quota_data(
     db: AsyncSession = Depends(get_db),
 ):
     """Export quota data in JSON or CSV format"""
+    # Audit trail: quota export is admin-only and can surface PII-adjacent
+    # totals; log who exported what so Grafana/Loki can correlate.
+    logger.info(
+        "Quota export requested",
+        extra={
+            "user_id": current_user.id,
+            "academic_year": academic_year,
+            "semester": semester,
+            "format": format,
+        },
+    )
     quota_service = QuotaService(db)
 
     # Get all active scholarship types
