@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiClient } from "@/lib/api";
 import { ScholarshipPermission } from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
 import { useAuth } from "./use-auth";
 
 interface AllowedScholarship {
@@ -24,14 +25,13 @@ export function useScholarshipPermissions() {
   const [error, setError] = useState<string | null>(null);
 
   const fetchPermissions = useCallback(async () => {
-    console.log(
-      "useScholarshipPermissions: fetchPermissions called for user:",
-      user?.role,
-      user?.id
-    );
+    logger.debug("useScholarshipPermissions: fetchPermissions called", {
+      role: user?.role,
+      userId: user?.id,
+    });
 
     if (!isAuthenticated || !user) {
-      console.log("useScholarshipPermissions: User not authenticated");
+      logger.debug("useScholarshipPermissions: user not authenticated");
       setPermissions([]);
       setAllowedScholarships([]);
       return;
@@ -39,10 +39,9 @@ export function useScholarshipPermissions() {
 
     // Only admin, super_admin, and college roles can have scholarship permissions
     if (!["admin", "super_admin", "college"].includes(user.role)) {
-      console.log(
-        "useScholarshipPermissions: User role not eligible for permissions:",
-        user.role
-      );
+      logger.debug("useScholarshipPermissions: role not eligible", {
+        role: user.role,
+      });
       setPermissions([]);
       setAllowedScholarships([]);
       return;
@@ -52,17 +51,14 @@ export function useScholarshipPermissions() {
       setIsLoading(true);
       setError(null);
 
-      console.log(
-        "useScholarshipPermissions: Fetching allowed scholarships from API..."
-      );
+      logger.debug("useScholarshipPermissions: fetching allowed scholarships");
       const response = await apiClient.admin.getMyScholarships();
-      console.log("useScholarshipPermissions: API response:", response);
+      logger.debug("useScholarshipPermissions: API response received", {
+        success: response.success,
+        count: response.data?.length ?? 0,
+      });
 
       if (response.success && response.data) {
-        console.log(
-          "useScholarshipPermissions: Setting allowed scholarships:",
-          response.data
-        );
         setAllowedScholarships(response.data);
 
         // Convert to permission format for backward compatibility
@@ -78,14 +74,14 @@ export function useScholarshipPermissions() {
         }));
         setPermissions(permissionList);
       } else {
-        console.log(
-          "useScholarshipPermissions: No scholarship data, setting empty array"
+        logger.debug(
+          "useScholarshipPermissions: no scholarship data, clearing state"
         );
         setPermissions([]);
         setAllowedScholarships([]);
       }
     } catch (err) {
-      console.error("Failed to fetch allowed scholarships:", err);
+      logger.error("Failed to fetch allowed scholarships", { err });
       setError("Failed to fetch allowed scholarships");
       setPermissions([]);
       setAllowedScholarships([]);
@@ -135,56 +131,41 @@ export function useScholarshipPermissions() {
   // Filter scholarships based on user permissions
   const filterScholarshipsByPermission = useCallback(
     <T extends { id: number | string }>(scholarships: T[]): T[] => {
-      console.log(
-        "filterScholarshipsByPermission: Called with scholarships:",
-        scholarships.length
-      );
-      console.log("filterScholarshipsByPermission: User role:", user?.role);
+      logger.debug("filterScholarshipsByPermission: invoked", {
+        total: scholarships.length,
+        role: user?.role,
+      });
 
       if (!user) {
-        console.log(
-          "filterScholarshipsByPermission: No user, returning empty array"
-        );
         return [];
       }
 
       // Super admin can see all scholarships
       if (user.role === "super_admin") {
-        console.log(
-          "filterScholarshipsByPermission: Super admin, returning all scholarships"
-        );
         return scholarships;
       }
 
       // Admin and college roles need specific permissions
       if (["admin", "college"].includes(user.role)) {
         const allowedIds = getAllowedScholarshipIds();
-        console.log(
-          "filterScholarshipsByPermission: Allowed scholarship IDs:",
-          allowedIds
-        );
+        logger.debug("filterScholarshipsByPermission: allowed ids resolved", {
+          count: allowedIds.length,
+        });
 
         // If no specific permissions assigned, return empty array
         if (allowedIds.length === 0) {
-          console.log(
-            "filterScholarshipsByPermission: No permissions assigned, returning empty array"
-          );
           return [];
         }
 
         const filtered = scholarships.filter(scholarship =>
           allowedIds.includes(Number(scholarship.id))
         );
-        console.log(
-          "filterScholarshipsByPermission: Filtered scholarships:",
-          filtered.length
-        );
+        logger.debug("filterScholarshipsByPermission: filtered", {
+          kept: filtered.length,
+        });
         return filtered;
       }
 
-      console.log(
-        "filterScholarshipsByPermission: User role not eligible, returning empty array"
-      );
       return [];
     },
     [user, getAllowedScholarshipIds]
