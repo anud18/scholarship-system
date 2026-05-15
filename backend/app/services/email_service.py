@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.dynamic_config import dynamic_config
+from app.core.metrics import email_sent_total
 from app.models.email_management import EmailCategory, EmailHistory, EmailStatus, EmailTestModeAudit, ScheduledEmail
 from app.services.system_setting_service import EmailTemplateService
 
@@ -404,6 +405,22 @@ class EmailService:
             raise
 
         finally:
+            # Business metric: count every send attempt so the Scholarship
+            # System Overview dashboard's email panel reflects real traffic
+            # (issue #159). Category comes from caller-supplied metadata; we
+            # fall back to "uncategorized" so the counter is never skipped.
+            category_value = metadata.get("email_category")
+            if hasattr(category_value, "value"):
+                category_label = category_value.value
+            else:
+                category_label = category_value or "uncategorized"
+            email_sent_total.labels(
+                category=str(category_label),
+                status=(
+                    status.value if isinstance(status, EmailStatus) else str(status)
+                ),
+            ).inc()
+
             # Log email history if database session provided
             if db:
                 try:
