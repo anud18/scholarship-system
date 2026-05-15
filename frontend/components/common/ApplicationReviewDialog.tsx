@@ -73,6 +73,26 @@ import {
 } from "@/lib/utils/application-helpers";
 import { getCurrentSemesterROC, toROCYear } from "@/src/utils/dateUtils";
 
+// Shape of document entries in `submitted_form_data.documents` from
+// the backend. All fields optional because the upstream JSON can come
+// from several sources (form_data, submitted_form_data, SIS upload).
+interface DocumentPayload {
+  file_id?: string | number;
+  id?: string | number;
+  filename?: string;
+  original_filename?: string;
+  file_size?: number;
+  mime_type?: string;
+  document_type?: string;
+  file_type?: string;
+  file_path?: string;
+  download_url?: string;
+  is_verified?: boolean;
+  upload_time?: string;
+  uploaded_at?: string;
+  document_id?: string;
+}
+
 interface ApplicationReviewDialogProps {
   application: Application | HistoricalApplication | null;
   role: "college" | "admin" | "super_admin";
@@ -1006,7 +1026,7 @@ export function ApplicationReviewDialog({
       const appData = detailedApplication;
       // Try to get files from submitted_form_data.documents
       if (appData.submitted_form_data?.documents) {
-        const files = appData.submitted_form_data.documents.map((doc: any) => ({
+        const files = appData.submitted_form_data.documents.map((doc: DocumentPayload) => ({
           id: doc.file_id || doc.id,
           filename: doc.filename,
           original_filename: doc.original_filename,
@@ -1033,8 +1053,12 @@ export function ApplicationReviewDialog({
   };
 
   // Handle file preview
-  const handleFilePreview = (file: any) => {
+  const handleFilePreview = (file: DocumentPayload) => {
     const filename = file.filename || file.original_filename;
+    if (!filename) {
+      console.error("No filename available for preview");
+      return;
+    }
 
     if (!file.file_path) {
       console.error("No file path available for preview");
@@ -1055,7 +1079,7 @@ export function ApplicationReviewDialog({
       return;
     }
 
-    const previewUrl = `/api/v1/preview?fileId=${file.id}&filename=${encodeURIComponent(filename)}&type=${encodeURIComponent(file.file_type)}&applicationId=${detailedApplication?.id}&token=${token}`;
+    const previewUrl = `/api/v1/preview?fileId=${file.id ?? ""}&filename=${encodeURIComponent(filename)}&type=${encodeURIComponent(file.file_type ?? "")}&applicationId=${detailedApplication?.id}&token=${token}`;
 
     let fileType = "other";
     if (filename.toLowerCase().endsWith(".pdf")) {

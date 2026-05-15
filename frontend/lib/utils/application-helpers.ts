@@ -9,6 +9,27 @@ import {
   getReviewStageBadgeVariant,
 } from "@/lib/enums";
 
+// Shape of document entries in `submitted_form_data.documents` from
+// the backend. All fields optional because the upstream JSON can come
+// from several sources (form_data, submitted_form_data, SIS upload).
+interface DocumentPayload {
+  file_id?: string | number;
+  id?: string | number;
+  filename?: string;
+  original_filename?: string;
+  file_size?: number;
+  mime_type?: string;
+  document_type?: string;
+  file_type?: string;
+  file_path?: string;
+  download_url?: string;
+  is_verified?: boolean;
+  upload_time?: string;
+  uploaded_at?: string;
+  document_id?: string;
+}
+
+
 export type BadgeVariant = "secondary" | "default" | "outline" | "destructive";
 
 // 時間軸步驟類型
@@ -409,7 +430,7 @@ export const fetchApplicationFiles = async (applicationId: number) => {
       appResponse.data?.submitted_form_data?.documents
     ) {
       // 將 documents 轉換為 ApplicationFile 格式以保持向後兼容
-      return appResponse.data.submitted_form_data.documents.map((doc: any) => ({
+      return appResponse.data.submitted_form_data.documents.map((doc: DocumentPayload) => ({
         id: doc.file_id,
         filename: doc.filename,
         original_filename: doc.original_filename,

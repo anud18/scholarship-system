@@ -91,6 +91,26 @@ interface AuditLogEntry {
   description?: string;
 }
 
+// Shape of document entries in `submitted_form_data.documents` from
+// the backend. All fields optional because the upstream JSON can come
+// from several sources (form_data, submitted_form_data, SIS upload).
+interface DocumentPayload {
+  file_id?: string | number;
+  id?: string | number;
+  filename?: string;
+  original_filename?: string;
+  file_size?: number;
+  mime_type?: string;
+  document_type?: string;
+  file_type?: string;
+  file_path?: string;
+  download_url?: string;
+  is_verified?: boolean;
+  upload_time?: string;
+  uploaded_at?: string;
+  document_id?: string;
+}
+
 interface AdminScholarshipDashboardProps {
   user: UserType;
 }
@@ -178,7 +198,7 @@ const transformApplicationData = (app: any): DashboardApplication => {
     // Transform documents to include necessary file properties for preview
     submittedFormData = {
       ...submittedFormData,
-      documents: submittedFormData.documents.map((doc: any) => ({
+      documents: submittedFormData.documents.map((doc: DocumentPayload) => ({
         ...doc,
         // Map API response fields to expected format for ApplicationDetailDialog
         id: doc.file_id || doc.id,
