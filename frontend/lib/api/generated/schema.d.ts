@@ -1879,7 +1879,11 @@ export interface paths {
         };
         /**
          * Get Scholarship Email Templates
-         * @description [Not implemented — see issue #647] Get all email templates for a scholarship type.
+         * @description Get all per-scholarship email-template overrides for a scholarship type.
+         *
+         *     Returns only rows where ``scholarship_type_id`` matches — generic
+         *     NULL-scoped templates are excluded because clients asking for
+         *     "this scholarship's templates" shouldn't see the fallback set.
          */
         get: operations["get_scholarship_email_templates_api_v1_admin_scholarship_email_templates__scholarship_type_id__get"];
         put?: never;
@@ -1899,18 +1903,18 @@ export interface paths {
         };
         /**
          * Get Scholarship Email Template
-         * @description [Not implemented — see issue #647] Get a specific email template.
+         * @description Get a specific per-scholarship email template (404 if not configured).
          */
         get: operations["get_scholarship_email_template_api_v1_admin_scholarship_email_templates__scholarship_type_id___template_key__get"];
         /**
          * Update Scholarship Email Template
-         * @description [Not implemented — see issue #647] Update an email template.
+         * @description Update an existing per-scholarship email template (404 if not configured).
          */
         put: operations["update_scholarship_email_template_api_v1_admin_scholarship_email_templates__scholarship_type_id___template_key__put"];
         post?: never;
         /**
          * Delete Scholarship Email Template
-         * @description [Not implemented — see issue #647] Delete an email template.
+         * @description Delete a per-scholarship email template (404 if not configured).
          */
         delete: operations["delete_scholarship_email_template_api_v1_admin_scholarship_email_templates__scholarship_type_id___template_key__delete"];
         options?: never;
@@ -1929,7 +1933,7 @@ export interface paths {
         put?: never;
         /**
          * Create Scholarship Email Template
-         * @description [Not implemented — see issue #647] Create a new email template.
+         * @description Create a new per-scholarship email template (409 if already exists).
          */
         post: operations["create_scholarship_email_template_api_v1_admin_scholarship_email_templates_post"];
         delete?: never;
@@ -1949,7 +1953,7 @@ export interface paths {
         put?: never;
         /**
          * Bulk Create Scholarship Email Templates
-         * @description [Not implemented — see issue #647] Bulk create email templates.
+         * @description Create multiple per-scholarship templates in one call (idempotent on conflict).
          */
         post: operations["bulk_create_scholarship_email_templates_api_v1_admin_scholarship_email_templates__scholarship_type_id__bulk_create_post"];
         delete?: never;
