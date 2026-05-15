@@ -156,7 +156,7 @@ class ScholarshipConfigurationService:
             reason = "Passed all screening rules"
 
             # Apply each screening rule
-            for rule_name, rule_config in screening_rules.items():
+            for rule_config in screening_rules.values():
                 rule_type = rule_config.get("type")
                 threshold = rule_config.get("threshold")
                 field = rule_config.get("field")

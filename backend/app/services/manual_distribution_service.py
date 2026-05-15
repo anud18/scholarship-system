@@ -1067,7 +1067,7 @@ class ManualDistributionService:
 
         # Determine all years to load configs for
         all_prior_years: set[int] = set()
-        for sub_type, years_list in prior_years_map.items():
+        for years_list in prior_years_map.values():
             if isinstance(years_list, list):
                 all_prior_years.update(years_list)
         years_to_check = sorted([academic_year] + list(all_prior_years), reverse=True)

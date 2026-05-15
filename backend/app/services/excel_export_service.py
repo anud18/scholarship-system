@@ -503,7 +503,7 @@ class ExcelExportService:
         # STD_UP_MIXLISTA必填欄位檢查
         required_fields = ["身分證字號", "姓名"]  # 第1、2欄必填
 
-        for idx, row in enumerate(excel_data, start=1):
+        for _idx, row in enumerate(excel_data, start=1):
             # 檢查必填欄位
             missing_required = False
             for field in required_fields:

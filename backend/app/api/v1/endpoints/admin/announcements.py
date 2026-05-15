@@ -243,7 +243,7 @@ async def update_announcement(
         for field, value in update_data.items():
             if field in allowed_fields:
                 if field == "metadata":
-                    setattr(announcement, "meta_data", value)
+                    announcement.meta_data = value
                 elif hasattr(announcement, field):
                     setattr(announcement, field, value)
 

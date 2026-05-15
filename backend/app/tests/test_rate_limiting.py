@@ -217,7 +217,7 @@ class TestRateLimitIntegration:
         limiter = RateLimiter("redis://localhost:6379")
 
         # Test multiple requests within limit
-        for i in range(5):
+        for _ in range(5):
             is_limited, remaining = await limiter.is_rate_limited("test_integration", 10, 60)
             assert is_limited is False
             assert remaining >= 0
