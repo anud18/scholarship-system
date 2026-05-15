@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFoundError
+from app.core.metrics import scholarship_reviews_total
 from app.models.application import Application, ApplicationStatus
 from app.models.college_review import CollegeRanking, CollegeRankingItem, QuotaDistribution
 from app.models.enums import Semester
@@ -796,6 +797,14 @@ class CollegeReviewService:
             ranking.ranking_status = "finalized"
 
             await self.db.flush()  # Flush within transaction context
+
+            # Business metric: count college finalize actions to complete
+            # the reviewer_type dimension of scholarship_reviews_total
+            # (professor counterpart wired in PR #564, follow-up from #159).
+            scholarship_reviews_total.labels(
+                reviewer_type="college",
+                action="finalize",
+            ).inc()
 
             return ranking
 
