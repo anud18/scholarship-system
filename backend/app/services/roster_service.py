@@ -437,9 +437,14 @@ class RosterService:
             )
 
         # 2. 檢查金額總計是否正確
+        # Skip None amounts in the sum — the per-item check below catches them
+        # as an error. Without this guard, sum() raises TypeError on None and
+        # the validator crashes instead of returning a clean error dict.
         if roster.items:
             actual_total = sum(
-                item.scholarship_amount for item in roster.items if item.is_included and item.is_qualified
+                item.scholarship_amount
+                for item in roster.items
+                if item.is_included and item.is_qualified and item.scholarship_amount is not None
             )
             if abs(float(actual_total) - float(roster.total_amount)) > 0.01:
                 errors.append(f"總金額不一致: 計算值={actual_total}, 儲存值={roster.total_amount}")
