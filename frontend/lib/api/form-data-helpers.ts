@@ -77,7 +77,7 @@ export class TypedFormData<T extends Record<string, any> = Record<string, any>> 
     }
   }
 
-  append(key: keyof T, value: any): this {
+  append(key: keyof T, value: unknown): this {
     if (value instanceof File || value instanceof Blob) {
       this.formData.append(String(key), value);
     } else if (value !== undefined && value !== null) {
