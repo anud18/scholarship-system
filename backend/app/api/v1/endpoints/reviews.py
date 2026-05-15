@@ -548,17 +548,17 @@ async def submit_application_review(
             status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to review this application"
         ) from e
     except IntegrityError as e:
-        logger.error(f"Database integrity error creating review for application {application_id}: {str(e)}")
+        logger.exception("Database integrity error creating review for application %s", application_id)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Review creation conflicts with existing data"
         ) from e
     except DatabaseError as e:
-        logger.error(f"Database error creating review for application {application_id}: {str(e)}")
+        logger.exception("Database error creating review for application %s", application_id)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database service temporarily unavailable"
         ) from e
     except Exception as e:
-        logger.error(f"Unexpected error creating review for application {application_id}: {str(e)}")
+        logger.exception("Unexpected error creating review for application %s", application_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while creating the review",
@@ -622,7 +622,7 @@ async def get_user_application_review(
         }
 
     except Exception as e:
-        logger.error(f"Error fetching user review: {str(e)}")
+        logger.exception("Error fetching user review")
         import traceback
 
         logger.error(f"Full traceback: {traceback.format_exc()}")
@@ -666,7 +666,7 @@ async def get_application_reviewable_sub_types(
         }
 
     except Exception as e:
-        logger.error(f"Error fetching application sub-types: {str(e)}")
+        logger.exception("Error fetching application sub-types")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while fetching sub-types",
