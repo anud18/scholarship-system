@@ -1,10 +1,16 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // SECURITY / PRODUCTION-READINESS: Surface ESLint warnings and TypeScript
+  // errors at build time so they fail the deploy pipeline instead of
+  // silently shipping. The repo's CI also runs `tsc --noEmit` in the
+  // "Verify OpenAPI Types are Up-to-Date" workflow as a backstop, but
+  // these flags add a second guardrail directly to the `next build` path
+  // (used by the "Build Frontend with Generated Types" CI job).
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: false,
   },
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   images: {
     unoptimized: true,
