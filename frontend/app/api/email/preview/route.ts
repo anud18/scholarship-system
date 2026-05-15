@@ -11,7 +11,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const id = storePreview(html);
     return NextResponse.json({ id });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (e: unknown) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "Unknown error" }, { status: 500 });
   }
 }

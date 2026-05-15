@@ -1203,25 +1203,31 @@ export function ApplicationReviewDialog({
       } else {
         throw new Error(safeErrorMessage(response.message) || "Failed to submit review");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Failed to submit review:", err);
 
-      // Extract detailed error message from various possible locations
+      // Extract detailed error message from various possible locations.
+      // Use a focused axios+Error shape cast rather than `any` so each
+      // property access is documented and tsc can validate the chain.
+      const errShape = err as {
+        message?: string;
+        response?: { data?: { detail?: string | object; message?: string } };
+      };
       let errorMessage = "Failed to submit review";
 
       // Check for API response error details (FastAPI HTTPException)
-      if (err?.response?.data?.detail) {
-        errorMessage = typeof err.response.data.detail === 'string'
-          ? err.response.data.detail
-          : JSON.stringify(err.response.data.detail);
+      if (errShape.response?.data?.detail) {
+        errorMessage = typeof errShape.response.data.detail === 'string'
+          ? errShape.response.data.detail
+          : JSON.stringify(errShape.response.data.detail);
       }
       // Check for API response message (our ApiResponse format)
-      else if (err?.response?.data?.message) {
-        errorMessage = safeErrorMessage(err.response.data.message);
+      else if (errShape.response?.data?.message) {
+        errorMessage = safeErrorMessage(errShape.response.data.message);
       }
       // Check for standard Error message
-      else if (err?.message) {
-        errorMessage = safeErrorMessage(err.message);
+      else if (errShape.message) {
+        errorMessage = safeErrorMessage(errShape.message);
       }
       // Fallback to generic error extraction
       else {

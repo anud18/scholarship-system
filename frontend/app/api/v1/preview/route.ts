@@ -185,7 +185,7 @@ export async function GET(request: NextRequest) {
     let backendUrl: URL;
     try {
       backendUrl = getSafeBackendUrl();
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error("Backend URL validation error", {});
       return NextResponse.json(
         { error: "Invalid backend configuration" },
@@ -320,7 +320,7 @@ async function handleRosterPreview(
     let backendUrl: URL;
     try {
       backendUrl = getSafeBackendUrl();
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error("Roster Preview: Backend URL validation error", {});
       return NextResponse.json(
         {
