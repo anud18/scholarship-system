@@ -4898,6 +4898,11 @@ export interface paths {
         /**
          * Export Application Package
          * @description Download a ZIP package of all application materials for a scholarship period.
+         *
+         *     SECURITY: Bulk PII export. Every call is audit-logged with the actor's
+         *     user_id and role, scholarship/period filters, and the resulting file
+         *     size. 403 (permission-denied) paths are also logged at warning level
+         *     so repeated denials can be flagged as potential bypass attempts.
          */
         get: operations["export_application_package_api_v1_college_review_export_package_get"];
         put?: never;
