@@ -17,7 +17,7 @@ import type { ApiResponse } from '../types';
 // System configuration types
 type SystemConfiguration = {
   key: string;
-  value: any;
+  value: unknown;
   data_type: string;
   category: string;
   description?: string;
@@ -28,7 +28,7 @@ type SystemConfiguration = {
 
 type SystemConfigurationCreate = {
   key: string;
-  value: any;
+  value: unknown;
   data_type: string;
   category: string;
   description?: string;
@@ -36,7 +36,7 @@ type SystemConfigurationCreate = {
 };
 
 type SystemConfigurationUpdate = {
-  value?: any;
+  value?: unknown;
   data_type?: string;
   category?: string;
   description?: string;
@@ -45,7 +45,7 @@ type SystemConfigurationUpdate = {
 
 type SystemConfigurationValidation = {
   key: string;
-  value: any;
+  value: unknown;
   data_type: string;
 };
 
@@ -174,14 +174,14 @@ export function createSystemSettingsApi() {
     getAuditLogs: async (
       configKey: string,
       limit: number = 50
-    ): Promise<ApiResponse<any[]>> => {
+    ): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET('/api/v1/system-settings/audit-logs/{config_key}', {
         params: {
           path: { config_key: configKey },
           query: { limit },
         },
       });
-      return toApiResponse<any[]>(response);
+      return toApiResponse<unknown[]>(response);
     },
 
     /**
