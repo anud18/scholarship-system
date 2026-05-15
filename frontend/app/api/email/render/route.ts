@@ -78,13 +78,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<RenderEma
       html,
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[Email Render API] Error rendering email:', error);
 
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'Failed to render email template'
+        error: error instanceof Error ? error.message : 'Failed to render email template'
       },
       { status: 500 }
     );
