@@ -53,6 +53,26 @@ import {
   getTermCount,
 } from "@/lib/utils/student-data-helpers";
 
+// Shape of document entries in `application.submitted_form_data.documents`
+// and on the local `applicationFiles` state. All fields optional because the
+// upstream JSON can come from several sources (legacy form_data, current
+// submitted_form_data, the SIS file-upload endpoint).
+interface DocumentPayload {
+  file_id?: string | number;
+  id?: string | number;
+  filename?: string;
+  original_filename?: string;
+  file_size?: number;
+  mime_type?: string;
+  document_type?: string;
+  file_type?: string;
+  file_path?: string;
+  download_url?: string;
+  is_verified?: boolean;
+  upload_time?: string;
+  uploaded_at?: string;
+}
+
 interface ApplicationDetailDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -348,7 +368,7 @@ export function ApplicationDetailDialog({
       if (application.submitted_form_data?.documents) {
         // 將 documents 轉換為 ApplicationFile 格式以保持向後兼容
         const files = application.submitted_form_data.documents.map(
-          (doc: any) => ({
+          (doc: DocumentPayload) => ({
             id: doc.file_id || doc.id,
             filename: doc.filename,
             original_filename: doc.original_filename,
@@ -375,8 +395,15 @@ export function ApplicationDetailDialog({
     }
   };
 
-  const handleFilePreview = (file: any) => {
+  const handleFilePreview = (file: DocumentPayload) => {
+    // Stricter narrowing — these fields are documented as required for
+    // preview but are typed optional on the upstream JSON. Bail early
+    // with a console error rather than producing an invalid preview URL.
     const filename = file.filename || file.original_filename;
+    if (!filename) {
+      console.error("No filename available for preview");
+      return;
+    }
 
     // 檢查是否有文件路徑
     if (!file.file_path) {
@@ -400,7 +427,7 @@ export function ApplicationDetailDialog({
     }
 
     // 構建前端預覽URL，包含token參數
-    const previewUrl = `/api/v1/preview?fileId=${file.id}&filename=${encodeURIComponent(filename)}&type=${encodeURIComponent(file.file_type)}&applicationId=${application?.id}&token=${token}`;
+    const previewUrl = `/api/v1/preview?fileId=${file.id ?? ""}&filename=${encodeURIComponent(filename)}&type=${encodeURIComponent(file.file_type ?? "")}&applicationId=${application?.id}&token=${token}`;
 
     // 判斷文件類型
     let fileType = "other";
