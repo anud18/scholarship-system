@@ -383,10 +383,10 @@ describe("createAdminApi", () => {
     mockedRaw.DELETE.mockResolvedValue({});
 
     const api = createAdminApi();
-    await api.getScholarshipEmailTemplates("nstc");
-    await api.createScholarshipEmailTemplate({ key: "x" });
-    await api.updateScholarshipEmailTemplate(42, { body: "y" });
-    await api.deleteScholarshipEmailTemplate(42);
+    await api.getScholarshipEmailTemplates(1);
+    await api.createScholarshipEmailTemplate(1, { key: "x" });
+    await api.updateScholarshipEmailTemplate(1, "x", { body: "y" });
+    await api.deleteScholarshipEmailTemplate(1, "x");
 
     expect(mockedRaw.GET.mock.calls[0][0]).toContain(
       "scholarship-email-templates"
