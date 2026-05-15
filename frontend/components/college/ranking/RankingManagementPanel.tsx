@@ -18,6 +18,7 @@ import { RankingCardList } from "../shared/RankingCardList";
 import { Plus, Loader2, Clock, AlertTriangle, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
 
 // #63: surface the college-review deadline visibly on the ranking page
 // and warn / lock once the deadline approaches or passes.
@@ -233,7 +234,7 @@ export function RankingManagementPanel({
           });
         }
       } catch (error) {
-        console.error("Failed to fetch ranking details:", error);
+        logger.error("Failed to fetch ranking details", { error: error });
       } finally {
         setIsRankingLoading(false);
       }
@@ -247,7 +248,7 @@ export function RankingManagementPanel({
     // 1. Current tab is "ranking"
     // 2. Not currently loading
     if (activeTab === "ranking") {
-      console.log(
+      logger.debug(
         `[RankingManagementPanel] Auto-refreshing (dataVersion: ${dataVersion})`
       );
 
@@ -326,7 +327,7 @@ export function RankingManagementPanel({
               : `Ranking "${response.data.ranking_name || "New Ranking"}" has been created successfully`
           );
         } catch (fetchError) {
-          console.error("Failed to load ranking after creation:", fetchError);
+          logger.error("Failed to load ranking after creation", { fetchError: fetchError });
           toast.error(
             locale === "zh"
               ? "排名已建立，但無法自動載入。請手動重新整理頁面。"
@@ -341,7 +342,7 @@ export function RankingManagementPanel({
         );
       }
     } catch (error) {
-      console.error("Failed to create ranking:", error);
+      logger.error("Failed to create ranking", { error: error });
       toast.error(
         error instanceof Error
           ? error.message
@@ -410,7 +411,7 @@ export function RankingManagementPanel({
             setSaveStatus("error");
           }
         } catch (error) {
-          console.error("Failed to save ranking:", error);
+          logger.error("Failed to save ranking", { error: error });
           setSaveStatus("error");
         }
       }, 500);
@@ -476,11 +477,11 @@ export function RankingManagementPanel({
 
         // Increment data version to notify other panels to refresh
         incrementDataVersion();
-        console.log(
+        logger.debug(
           "[RankingManagementPanel] Data version incremented after review"
         );
       } catch (error) {
-        console.error("Failed to review application:", error);
+        logger.error("Failed to review application", { error: error });
         toast.error("審核提交失敗");
       }
     },
@@ -516,7 +517,7 @@ export function RankingManagementPanel({
           );
         }
       } catch (error) {
-        console.error("Failed to finalize ranking:", error);
+        logger.error("Failed to finalize ranking", { error: error });
       }
     },
     [
@@ -548,7 +549,7 @@ export function RankingManagementPanel({
           );
         }
       } catch (error) {
-        console.error("Failed to unfinalize ranking:", error);
+        logger.error("Failed to unfinalize ranking", { error: error });
       }
     },
     [
@@ -593,7 +594,7 @@ export function RankingManagementPanel({
           throw new Error(response.message || "Failed to import");
         }
       } catch (error) {
-        console.error("Failed to import Excel:", error);
+        logger.error("Failed to import Excel", { error: error });
         throw error;
       }
     },
@@ -619,7 +620,7 @@ export function RankingManagementPanel({
         setRankingToDelete(null);
       }
     } catch (error) {
-      console.error("Failed to delete ranking:", error);
+      logger.error("Failed to delete ranking", { error: error });
     }
   }, [
     rankingToDelete,
@@ -662,7 +663,7 @@ export function RankingManagementPanel({
           );
         }
       } catch (error) {
-        console.error("Failed to update ranking name:", error);
+        logger.error("Failed to update ranking name", { error: error });
         toast.error(
           locale === "zh" ? "無法更新排名名稱" : "Failed to update ranking name"
         );

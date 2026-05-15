@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiClient, UserListResponse, UserStats, UserCreate } from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
 
 export default function TestUsersPage() {
   const [users, setUsers] = useState<UserListResponse[]>([]);
@@ -16,13 +17,13 @@ export default function TestUsersPage() {
     setError(null);
 
     try {
-      console.log("🧪 測試獲取用戶列表...");
+      logger.debug("🧪 測試獲取用戶列表...");
       const response = await apiClient.users.getAll({ page: 1, size: 10 });
-      console.log("📥 用戶列表響應:", response);
+      logger.debug("📥 用戶列表響應:", response);
 
       if (response.success && response.data) {
         setUsers(response.data.items || []);
-        console.log(
+        logger.debug(
           "✅ 用戶列表獲取成功，數量:",
           response.data.items?.length || 0
         );
@@ -30,7 +31,7 @@ export default function TestUsersPage() {
         setError("獲取用戶失敗: " + (response.message || "未知錯誤"));
       }
     } catch (err) {
-      console.error("❌ 獲取用戶異常:", err);
+      logger.error("❌ 獲取用戶異常", { err: err });
       setError(
         "網絡錯誤: " + (err instanceof Error ? err.message : "未知錯誤")
       );
@@ -41,18 +42,18 @@ export default function TestUsersPage() {
 
   const testGetStats = async () => {
     try {
-      console.log("🧪 測試獲取用戶統計...");
+      logger.debug("🧪 測試獲取用戶統計...");
       const response = await apiClient.users.getStats();
-      console.log("📥 用戶統計響應:", response);
+      logger.debug("📥 用戶統計響應:", response);
 
       if (response.success && response.data) {
         setUserStats(response.data);
-        console.log("✅ 用戶統計獲取成功");
+        logger.debug("✅ 用戶統計獲取成功");
       } else {
         setError("獲取統計失敗: " + (response.message || "未知錯誤"));
       }
     } catch (err) {
-      console.error("❌ 獲取統計異常:", err);
+      logger.error("❌ 獲取統計異常", { err: err });
       setError(
         "網絡錯誤: " + (err instanceof Error ? err.message : "未知錯誤")
       );
@@ -61,7 +62,7 @@ export default function TestUsersPage() {
 
   const testCreateUser = async () => {
     try {
-      console.log("🧪 測試創建用戶...");
+      logger.debug("🧪 測試創建用戶...");
       const newUser: UserCreate = {
         nycu_id: `test-${Date.now()}`,
         name: "測試用戶",
@@ -79,16 +80,16 @@ export default function TestUsersPage() {
       };
 
       const response = await apiClient.users.create(newUser);
-      console.log("📥 創建用戶響應:", response);
+      logger.debug("📥 創建用戶響應:", response);
 
       if (response.success) {
-        console.log("✅ 用戶創建成功");
+        logger.debug("✅ 用戶創建成功");
         testGetUsers(); // 重新獲取用戶列表
       } else {
         setError("創建用戶失敗: " + (response.message || "未知錯誤"));
       }
     } catch (err) {
-      console.error("❌ 創建用戶異常:", err);
+      logger.error("❌ 創建用戶異常", { err: err });
       setError(
         "網絡錯誤: " + (err instanceof Error ? err.message : "未知錯誤")
       );

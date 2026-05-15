@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Label } from "@/components/ui/label";
 import { Locale } from "@/lib/validators";
+import { logger } from "@/lib/utils/logger";
 import {
   formatDisplayValue,
   formatFieldName,
@@ -19,7 +20,7 @@ const getFieldLabel = (
     const label = locale === "zh"
       ? fieldLabels[fieldName].zh
       : fieldLabels[fieldName].en || fieldLabels[fieldName].zh || fieldName;
-    console.log(
+    logger.debug(
       `🏷️ Found label for "${fieldName}":`,
       label,
       "from:",
@@ -28,7 +29,7 @@ const getFieldLabel = (
     return label;
   }
   const fallbackLabel = formatFieldName(fieldName, locale);
-  console.log(
+  logger.debug(
     `🏷️ No label found for "${fieldName}", using fallback:`,
     fallbackLabel
   );
@@ -57,22 +58,22 @@ export function ApplicationFormDataDisplay({
 
   // Debug logging
 
-    console.log(
+    logger.debug(
     "📋 fields 是物件:",
     typeof formData?.submitted_form_data?.fields === "object"
   );
-  console.log(
+  logger.debug(
     "📋 fields 鍵值:",
     formData?.submitted_form_data?.fields
       ? Object.keys(formData.submitted_form_data.fields)
       : "N/A"
   );
-  console.log(
+  logger.debug(
     "📋 原始 fields 物件:",
     formData?.submitted_form_data?.fields
   );
-  console.log("🏷️ 接收到的 fieldLabels:", fieldLabels);
-  console.log(
+  logger.debug("🏷️ 接收到的 fieldLabels:", fieldLabels);
+  logger.debug(
     "🏷️ fieldLabels 鍵值:",
     fieldLabels ? Object.keys(fieldLabels) : "沒有標籤"
   );
@@ -91,9 +92,9 @@ export function ApplicationFormDataDisplay({
       const fields = formData?.submitted_form_data?.fields || {};
 
 
-      console.log("🔄 Processing fields:", fields);
-      console.log("🔄 Fields entries count:", Object.entries(fields).length);
-      console.log("🔄 All field keys:", Object.keys(fields));
+      logger.debug("🔄 Processing fields:", fields);
+      logger.debug("🔄 Fields entries count:", Object.entries(fields).length);
+      logger.debug("🔄 All field keys:", Object.keys(fields));
 
       for (const [fieldId, fieldData] of Object.entries(fields)) {
         if (
@@ -119,7 +120,7 @@ export function ApplicationFormDataDisplay({
                   locale
                 );
               } catch (error) {
-                console.warn(
+                logger.warn(
                   `Failed to format scholarship type: ${value}`,
                   error
                 );
@@ -132,7 +133,7 @@ export function ApplicationFormDataDisplay({
         }
       }
 
-      console.log("✅ Formatted data:", formatted);
+      logger.debug("✅ Formatted data:", formatted);
       setFormattedData(formatted);
       setIsLoading(false);
     };

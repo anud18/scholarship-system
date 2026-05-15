@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import {
   Dialog,
   DialogContent,
@@ -194,7 +195,7 @@ export function ApplicationDetailDialog({
         );
       }
     } catch (error) {
-      console.error("Bank verification error:", error);
+      logger.error("Bank verification error", { error: error });
       toast.error(t("dialogs.application_detail.bank_verification_error"));
     } finally {
       setBankVerificationLoading(false);
@@ -295,7 +296,7 @@ export function ApplicationDetailDialog({
             scholarshipType = scholarshipResponse.data.code;
           } else {
             const errorMsg = `${t("dialogs.application_detail.scholarship_type_fetch_failed")}: ${scholarshipResponse.message}`;
-            console.error(errorMsg);
+            logger.error(errorMsg);
             setError(errorMsg);
             setDocumentLabels({});
             setFieldLabels({});
@@ -306,7 +307,7 @@ export function ApplicationDetailDialog({
           }
         } catch (error) {
           const errorMsg = `${t("dialogs.application_detail.scholarship_type_fetch_error")}: ${error instanceof Error ? error.message : "未知錯誤"}`;
-          console.error(errorMsg);
+          logger.error(errorMsg);
           setError(errorMsg);
           setDocumentLabels({});
           setFieldLabels({});
@@ -321,7 +322,7 @@ export function ApplicationDetailDialog({
         const errorMsg = t(
           "dialogs.application_detail.scholarship_type_undetermined"
         );
-        console.error(errorMsg);
+        logger.error(errorMsg);
         setError(errorMsg);
         setDocumentLabels({});
         setFieldLabels({});
@@ -365,7 +366,7 @@ export function ApplicationDetailDialog({
         }
       } else {
         const errorMsg = `${t("dialogs.application_detail.form_config_load_failed")}: ${response.message}`;
-        console.error(errorMsg);
+        logger.error(errorMsg);
         setError(errorMsg);
         setDocumentLabels({});
         setFieldLabels({});
@@ -373,7 +374,7 @@ export function ApplicationDetailDialog({
       }
     } catch (error) {
       const errorMsg = `${t("dialogs.application_detail.form_config_load_error")}: ${error instanceof Error ? error.message : "未知錯誤"}`;
-      console.error(errorMsg);
+      logger.error(errorMsg);
       setError(errorMsg);
       setDocumentLabels({});
       setFieldLabels({});
@@ -414,7 +415,7 @@ export function ApplicationDetailDialog({
         setApplicationFiles(files);
       }
     } catch (error) {
-      console.error("Failed to load application files:", error);
+      logger.error("Failed to load application files", { error: error });
       setApplicationFiles([]);
     } finally {
       setIsLoadingFiles(false);
@@ -427,20 +428,20 @@ export function ApplicationDetailDialog({
     // with a console error rather than producing an invalid preview URL.
     const filename = file.filename || file.original_filename;
     if (!filename) {
-      console.error("No filename available for preview");
+      logger.error("No filename available for preview");
       return;
     }
 
     // 檢查是否有文件路徑
     if (!file.file_path) {
-      console.error("No file path available for preview");
+      logger.error("No file path available for preview");
       return;
     }
 
     // 從後端URL中提取token
     const urlParts = file.file_path.split("?");
     if (urlParts.length < 2) {
-      console.error("Invalid file URL format");
+      logger.error("Invalid file URL format");
       return;
     }
 
@@ -448,7 +449,7 @@ export function ApplicationDetailDialog({
     const token = urlParams.get("token");
 
     if (!token) {
-      console.error("No token found in file URL");
+      logger.error("No token found in file URL");
       return;
     }
 
@@ -467,7 +468,7 @@ export function ApplicationDetailDialog({
       fileType = "image";
     }
 
-    console.log("Opening file preview:", {
+    logger.debug("Opening file preview:", {
       filename,
       fileType,
       previewUrl,

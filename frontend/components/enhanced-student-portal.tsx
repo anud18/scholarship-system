@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { logger } from "@/lib/utils/logger";
 import {
   Card,
   CardContent,
@@ -222,11 +223,11 @@ export function EnhancedStudentPortal({
 
   // Debug authentication status
   useEffect(() => {
-    console.log("EnhancedStudentPortal mounted with user:", user);
+    logger.debug("EnhancedStudentPortal mounted with user:", user);
     const token =
       typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
-    console.log("Current auth token exists:", !!token);
-    console.log(
+    logger.debug("Current auth token exists:", !!token);
+    logger.debug(
       "Token preview:",
       token ? token.substring(0, 20) + "..." : "No token"
     );
@@ -267,9 +268,9 @@ export function EnhancedStudentPortal({
         const response = await api.scholarships.getEligible();
 
         // Debug: Check the raw API response
-        console.log("Debug: Raw API response:", response);
-        console.log("Debug: API response success:", response.success);
-        console.log("Debug: API response data:", response.data);
+        logger.debug("Debug: Raw API response:", response);
+        logger.debug("Debug: API response success:", response.success);
+        logger.debug("Debug: API response data:", response.data);
 
         let scholarshipData: ScholarshipType[] = [];
         if (response.success && response.data) {
@@ -286,11 +287,11 @@ export function EnhancedStudentPortal({
           setScholarshipsError(t("messages.no_eligible_scholarships"));
         } else {
           // Debug: Check the structure of scholarship data
-          console.log(
+          logger.debug(
             "Debug: First scholarship data structure:",
             scholarshipData[0]
           );
-          console.log(
+          logger.debug(
             "Debug: All scholarship configuration_ids:",
             scholarshipData.map(s => ({
               code: s.code,
@@ -307,7 +308,7 @@ export function EnhancedStudentPortal({
           });
         }
       } catch (error) {
-        console.error("Error fetching scholarships:", error); // Debug log
+        logger.error("Error fetching scholarships", { error: error }); // Debug log
         setScholarshipsError(
           error instanceof Error ? error.message : t("messages.unknown_error")
         );
@@ -331,11 +332,11 @@ export function EnhancedStudentPortal({
         if (response.success && response.data) {
           setDocumentRequests(response.data);
         } else {
-          console.error("Failed to fetch document requests:", response.message);
+          logger.error("Failed to fetch document requests:", response.message);
           setDocumentRequests([]);
         }
       } catch (error) {
-        console.error("Error fetching document requests:", error);
+        logger.error("Error fetching document requests", { error: error });
         setDocumentRequests([]);
       } finally {
         setIsLoadingDocumentRequests(false);
@@ -361,7 +362,7 @@ export function EnhancedStudentPortal({
         );
       }
     } catch (error: unknown) {
-      console.error("Failed to fulfill document request:", error);
+      logger.error("Failed to fulfill document request", { error: error });
       const errShape = error as { response?: { data?: { message?: string } } };
       alert(
         errShape.response?.data?.message ||
@@ -417,7 +418,7 @@ export function EnhancedStudentPortal({
         }));
       }
     } catch (error) {
-      console.error(
+      logger.error(
         `Failed to fetch application info for ${scholarshipType}:`,
         error
       );
@@ -586,7 +587,7 @@ export function EnhancedStudentPortal({
         const progress = Math.round((completedItems / totalRequired) * 100);
         setFormProgress(progress);
       } catch (error) {
-        console.error("Error calculating progress:", error);
+        logger.error("Error calculating progress", { error: error });
         setFormProgress(0);
       }
     };
@@ -621,16 +622,16 @@ export function EnhancedStudentPortal({
       setIsSubmitting(true);
 
       // Debug: Log current state before submission
-      console.log("Debug: handleSubmitApplication called");
-      console.log(
+      logger.debug("Debug: handleSubmitApplication called");
+      logger.debug(
         "Debug: newApplicationData at submission:",
         newApplicationData
       );
-      console.log(
+      logger.debug(
         "Debug: selectedScholarship at submission:",
         selectedScholarship
       );
-      console.log(
+      logger.debug(
         "Debug: configuration_id at submission:",
         newApplicationData.configuration_id
       );
@@ -686,15 +687,15 @@ export function EnhancedStudentPortal({
         },
       };
 
-      console.log("Debug: Final applicationData being sent:", applicationData);
-      console.log(
+      logger.debug("Debug: Final applicationData being sent:", applicationData);
+      logger.debug(
         "Debug: Final configuration_id being sent:",
         applicationData.configuration_id
       );
 
       if (editingApplication) {
         // 編輯模式 - 更新草稿然後提交
-        console.log("Updating application with data:", applicationData);
+        logger.debug("Updating application with data:", applicationData);
         await updateApplication(editingApplication.id, applicationData);
 
         // 上傳新文件
@@ -710,7 +711,7 @@ export function EnhancedStudentPortal({
         await submitApplicationApi(editingApplication.id);
       } else {
         // 新建模式 - 先創建草稿，然後提交
-        console.log(
+        logger.debug(
           "Creating application as draft with data:",
           applicationData
         );
@@ -760,7 +761,7 @@ export function EnhancedStudentPortal({
 
       alert(t("messages.application_success"));
     } catch (error) {
-      console.error("Failed to submit application:", error);
+      logger.error("Failed to submit application", { error: error });
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
       alert(`${t("applications.submit_failed")}: ${errorMessage}`);
@@ -831,7 +832,7 @@ export function EnhancedStudentPortal({
 
       if (editingApplication) {
         // 編輯模式 - 更新現有申請
-        console.log("Updating draft application with data:", applicationData);
+        logger.debug("Updating draft application with data:", applicationData);
         await updateApplication(editingApplication.id, applicationData);
 
         // 上傳新文件
@@ -846,7 +847,7 @@ export function EnhancedStudentPortal({
         alert(t("messages.draft_updated"));
       } else {
         // 新建模式 - 創建新草稿
-        console.log("Saving new draft with data:", applicationData);
+        logger.debug("Saving new draft with data:", applicationData);
         const application = await saveApplicationDraft(applicationData);
 
         if (application && application.id) {
@@ -886,7 +887,7 @@ export function EnhancedStudentPortal({
         setSelectedSubTypes({});
       }
     } catch (error) {
-      console.error("Failed to save draft:", error);
+      logger.error("Failed to save draft", { error: error });
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
       alert(`${t("messages.save_failed")}: ${errorMessage}`);
@@ -899,7 +900,7 @@ export function EnhancedStudentPortal({
     try {
       await withdrawApplication(applicationId);
     } catch (error) {
-      console.error("Failed to withdraw application:", error);
+      logger.error("Failed to withdraw application", { error: error });
     }
   };
 
@@ -918,7 +919,7 @@ export function EnhancedStudentPortal({
 
       alert(t("messages.draft_deleted"));
     } catch (error) {
-      console.error("Failed to delete application:", error);
+      logger.error("Failed to delete application", { error: error });
       alert(t("messages.delete_error"));
     }
   };
@@ -937,7 +938,7 @@ export function EnhancedStudentPortal({
         setSelectedApplicationForDetails(application);
       }
     } catch (error) {
-      console.error("Failed to fetch application details:", error);
+      logger.error("Failed to fetch application details", { error: error });
       // 如果獲取失敗，使用原始的申請資料
       setSelectedApplicationForDetails(application);
     }
