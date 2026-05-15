@@ -17,19 +17,22 @@
 
 import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
-import type { ApiResponse, HistoricalApplicationFilters } from '../types';
+import type { ApiResponse, DashboardStats, HistoricalApplicationFilters } from '../types';
 
 export function createAdminApi() {
   return {
     // ========== Dashboard and Statistics ==========
 
     /**
-     * Get dashboard statistics
-     * Type-safe: Response type inferred from OpenAPI
+     * Get dashboard statistics.
+     *
+     * Returns the unified DashboardStats shape (snake_case canonical fields
+     * + legacy camelCase aliases for the admin-management-interface UI).
+     * See issue #642 for the reconciliation.
      */
-    getDashboardStats: async (): Promise<ApiResponse<any>> => {
+    getDashboardStats: async (): Promise<ApiResponse<DashboardStats>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/dashboard/stats');
-      return toApiResponse(response) as ApiResponse<any>;
+      return toApiResponse(response) as ApiResponse<DashboardStats>;
     },
 
     /**
@@ -55,12 +58,14 @@ export function createAdminApi() {
     },
 
     /**
-     * Get system stats (alias for getDashboardStats)
-     * Type-safe: Response type inferred from OpenAPI
+     * Get system stats — alias for getDashboardStats.
+     *
+     * Returns the same DashboardStats shape (legacy SystemStats is a type
+     * alias for DashboardStats). See issue #642.
      */
-    getSystemStats: async (): Promise<ApiResponse<any>> => {
+    getSystemStats: async (): Promise<ApiResponse<DashboardStats>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/dashboard/stats');
-      return toApiResponse(response) as ApiResponse<any>;
+      return toApiResponse(response) as ApiResponse<DashboardStats>;
     },
 
     // ========== Application Management ==========
