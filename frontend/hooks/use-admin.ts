@@ -7,6 +7,7 @@ import {
   ScholarshipStats,
   SubTypeStats,
 } from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
 import { useAuth } from "@/hooks/use-auth";
 import { useScholarshipPermissions } from "./use-scholarship-permissions";
 
@@ -68,11 +69,12 @@ export function useAdminDashboard() {
       !user ||
       (user.role !== "admin" && user.role !== "super_admin")
     ) {
-      console.warn(
-        "fetchRecentApplications: User not authenticated or insufficient privileges",
+      logger.warn(
+        "fetchRecentApplications: user not authenticated or insufficient privileges",
         {
           isAuthenticated,
-          user: user ? { id: user.id, role: user.role } : null,
+          userId: user?.id,
+          role: user?.role,
         }
       );
       return;
@@ -82,17 +84,22 @@ export function useAdminDashboard() {
       setIsRecentLoading(true);
       setError(null);
 
-      console.log("Fetching recent applications...");
+      logger.debug("Fetching recent applications");
       const response = await apiClient.admin.getRecentApplications(5);
-      console.log("Recent applications response:", response);
+      logger.debug("Recent applications response received", {
+        success: response.success,
+        count: response.data?.length ?? 0,
+      });
 
       if (response.success && response.data) {
-        console.log("Setting recent applications:", response.data);
         setRecentApplications(response.data);
       } else {
         const errorMsg =
           response.message || "Failed to fetch recent applications";
-        console.error("Recent applications fetch failed:", errorMsg, response);
+        logger.error("Recent applications fetch failed", {
+          errorMsg,
+          success: response.success,
+        });
         throw new Error(errorMsg);
       }
     } catch (err) {
@@ -100,7 +107,7 @@ export function useAdminDashboard() {
         err instanceof Error
           ? err.message
           : "Failed to fetch recent applications";
-      console.error("Error fetching recent applications:", err);
+      logger.error("Error fetching recent applications", { err });
       setError(errorMsg);
     } finally {
       setIsRecentLoading(false);
@@ -462,7 +469,7 @@ export function useScholarshipSpecificApplications() {
       }
       return [];
     } catch (err) {
-      console.error("Failed to fetch scholarship types:", err);
+      logger.error("Failed to fetch scholarship types", { err });
       return [];
     }
   }, [isAuthenticated, user, filterScholarshipsByPermission]);
@@ -474,8 +481,8 @@ export function useScholarshipSpecificApplications() {
       !user ||
       !["admin", "super_admin", "college", "professor"].includes(user.role)
     ) {
-      console.log(
-        "User not authenticated or insufficient privileges for scholarship-specific applications"
+      logger.debug(
+        "fetchApplicationsByType: user not authenticated or insufficient privileges"
       );
       return;
     }
@@ -484,13 +491,13 @@ export function useScholarshipSpecificApplications() {
       setIsLoading(true);
       setError(null);
 
-      console.log("Fetching scholarship types...");
+      logger.debug("Fetching scholarship types");
       // First get scholarship types from backend (already filtered by permissions)
       const types = await fetchScholarshipTypes();
-      console.log("Scholarship types received:", types);
+      logger.debug("Scholarship types received", { count: types?.length ?? 0 });
 
       if (!types || types.length === 0) {
-        console.log("No scholarship types found, setting empty applications");
+        logger.debug("No scholarship types found, clearing applications");
         setApplicationsByType({});
         return;
       }
@@ -500,31 +507,36 @@ export function useScholarshipSpecificApplications() {
       // Fetch applications for each scholarship type
       for (const type of types) {
         try {
-          console.log(`Fetching applications for scholarship type: ${type}`);
+          logger.debug("Fetching applications for scholarship type", { type });
           const response =
             await apiClient.admin.getApplicationsByScholarship(type);
-          console.log(`Response for ${type}:`, response);
 
           if (response.success && response.data) {
             applications[type] = response.data;
-            console.log(
-              `Found ${response.data.length} applications for ${type}`
-            );
+            logger.debug("Applications fetched for type", {
+              type,
+              count: response.data.length,
+            });
           } else {
             applications[type] = [];
-            console.log(`No applications found for ${type}`);
+            logger.debug("No applications found for type", { type });
           }
         } catch (typeError) {
-          console.error(`Failed to fetch applications for ${type}:`, typeError);
+          logger.error("Failed to fetch applications for type", {
+            type,
+            typeError,
+          });
           applications[type] = [];
         }
       }
 
-      console.log("Final applications by type:", applications);
+      logger.debug("Final applications-by-type tally", {
+        typeCount: Object.keys(applications).length,
+      });
       setApplicationsByType(applications);
     } catch (err) {
       setError("Failed to fetch scholarship-specific applications");
-      console.error("Error fetching scholarship-specific applications:", err);
+      logger.error("Error fetching scholarship-specific applications", { err });
     } finally {
       setIsLoading(false);
     }
@@ -553,7 +565,7 @@ export function useScholarshipSpecificApplications() {
           );
         }
       } catch (error) {
-        console.error("Failed to update application status:", error);
+        logger.error("Failed to update application status", { error });
         throw error;
       }
     },
@@ -712,7 +724,7 @@ export function useScholarshipReview() {
           );
         }
       } catch (error) {
-        console.error("Failed to update application status:", error);
+        logger.error("Failed to update application status", { error });
         throw error;
       }
     },
