@@ -4,7 +4,7 @@ Handles CRUD operations for scholarship eligibility rules
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, asc, desc, or_, select
@@ -290,47 +290,74 @@ async def bulk_rule_operation(
 ):
     """Perform bulk operations on scholarship rules"""
 
-    # Get rules by IDs
-    stmt = select(ScholarshipRule).filter(ScholarshipRule.id.in_(operation.rule_ids))
-    result = await db.execute(stmt)
-    rules = result.scalars().all()
+    try:
+        # Get rules by IDs
+        stmt = select(ScholarshipRule).filter(ScholarshipRule.id.in_(operation.rule_ids))
+        result = await db.execute(stmt)
+        rules = result.scalars().all()
 
-    if len(rules) != len(operation.rule_ids):
-        raise HTTPException(status_code=404, detail="Some rules not found")
+        if len(rules) != len(operation.rule_ids):
+            raise HTTPException(status_code=404, detail="Some rules not found")
 
-    processed_count = 0
+        processed_count = 0
 
-    if operation.operation == "activate":
-        for rule in rules:
-            rule.is_active = True
-            rule.updated_by = current_user.id
-            processed_count += 1
+        if operation.operation == "activate":
+            for rule in rules:
+                rule.is_active = True
+                rule.updated_by = current_user.id
+                processed_count += 1
 
-    elif operation.operation == "deactivate":
-        for rule in rules:
-            rule.is_active = False
-            rule.updated_by = current_user.id
-            processed_count += 1
+        elif operation.operation == "deactivate":
+            for rule in rules:
+                rule.is_active = False
+                rule.updated_by = current_user.id
+                processed_count += 1
 
-    elif operation.operation == "delete":
-        for rule in rules:
-            await db.delete(rule)
-            processed_count += 1
+        elif operation.operation == "delete":
+            for rule in rules:
+                await db.delete(rule)
+                processed_count += 1
 
-    else:
-        raise HTTPException(status_code=400, detail=f"Unknown operation: {operation.operation}")
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown operation: {operation.operation}")
 
-    await db.commit()
+        await db.commit()
 
-    return ApiResponse(
-        success=True,
-        message=f"Bulk {operation.operation} completed for {processed_count} rules",
-        data={
-            "operation": operation.operation,
-            "processed_count": processed_count,
-            "rule_ids": operation.rule_ids,
-        },
-    )
+        logger.info(
+            "Bulk scholarship rule %s by user_id=%s processed %d rule(s)",
+            operation.operation,
+            current_user.id,
+            processed_count,
+            extra={
+                "operation": operation.operation,
+                "rule_ids": operation.rule_ids,
+                "processed_count": processed_count,
+                "actor_user_id": current_user.id,
+            },
+        )
+
+        return ApiResponse(
+            success=True,
+            message=f"Bulk {operation.operation} completed for {processed_count} rules",
+            data={
+                "operation": operation.operation,
+                "processed_count": processed_count,
+                "rule_ids": operation.rule_ids,
+            },
+        )
+
+    except HTTPException:
+        raise  # Re-raise client/server errors with their intended status code
+    except Exception:
+        logger.exception(
+            "Bulk scholarship rule operation failed",
+            extra={
+                "operation": operation.operation,
+                "rule_ids": operation.rule_ids,
+                "actor_user_id": current_user.id,
+            },
+        )
+        raise
 
 
 @router.post("/copy")
@@ -438,6 +465,28 @@ async def copy_rules(
             copied_count += 1
 
     await db.commit()
+
+    logger.info(
+        "Scholarship rules copied by user_id=%s: copied=%d skipped=%d (AY%s sem=%s → AY%s sem=%s)",
+        current_user.id,
+        copied_count,
+        skipped_count,
+        copy_request.source_academic_year,
+        copy_request.source_semester.value if copy_request.source_semester else "All",
+        copy_request.target_academic_year,
+        copy_request.target_semester.value if copy_request.target_semester else "All",
+        extra={
+            "copied_count": copied_count,
+            "skipped_count": skipped_count,
+            "source_academic_year": copy_request.source_academic_year,
+            "source_semester": copy_request.source_semester.value if copy_request.source_semester else None,
+            "target_academic_year": copy_request.target_academic_year,
+            "target_semester": copy_request.target_semester.value if copy_request.target_semester else None,
+            "scholarship_type_ids": copy_request.scholarship_type_ids,
+            "overwrite_existing": copy_request.overwrite_existing,
+            "actor_user_id": current_user.id,
+        },
+    )
 
     return ApiResponse(
         success=True,
