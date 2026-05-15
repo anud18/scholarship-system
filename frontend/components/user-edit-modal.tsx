@@ -6,7 +6,12 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Modal } from "./ui/modal";
-import { UserListResponse, UserCreate, apiClient } from "@/lib/api";
+import {
+  UserListResponse,
+  UserCreate,
+  ScholarshipPermission,
+  apiClient,
+} from "@/lib/api";
 import { Badge } from "./ui/badge";
 
 interface Academy {
@@ -24,14 +29,14 @@ interface UserEditModalProps {
   onSubmit: () => void;
   isLoading?: boolean;
   // 獎學金權限相關
-  scholarshipPermissions?: any[];
+  scholarshipPermissions?: ScholarshipPermission[];
   availableScholarships?: Array<{
     id: number;
     name: string;
     name_en?: string;
     code: string;
   }>;
-  onPermissionChange?: (permissions: any[]) => void;
+  onPermissionChange?: (permissions: ScholarshipPermission[]) => void;
 }
 
 export function UserEditModal({

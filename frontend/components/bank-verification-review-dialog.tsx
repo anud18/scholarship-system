@@ -41,7 +41,7 @@ interface BankVerificationData {
     account_holder?: VerificationFieldData
   }
   form_data?: { [key: string]: string }
-  ocr_data?: { [key: string]: any }
+  ocr_data?: { [key: string]: unknown }
   passbook_document?: {
     file_path: string
     original_filename: string
