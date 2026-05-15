@@ -118,7 +118,7 @@ async def grafana(request: Request):
     try:
         envelope = await request.json()
     except Exception as exc:  # noqa: BLE001
-        log.warning("invalid JSON from grafana: %s", exc)
+        log.exception("invalid JSON from grafana")
         raise HTTPException(400, f"invalid json: {exc}") from exc
 
     alerts = envelope.get("alerts") or []
@@ -129,7 +129,7 @@ async def grafana(request: Request):
     try:
         pat = read_pat()
     except OSError as exc:
-        log.error("failed to read PAT file: %s", exc)
+        log.exception("failed to read PAT file at %s", GH_PAT_FILE)
         raise HTTPException(500, f"failed to read PAT file: {exc}") from exc
 
     payload = transform_envelope(envelope)
@@ -154,7 +154,7 @@ async def grafana(request: Request):
                 headers=headers,
             )
         except httpx.HTTPError as exc:
-            log.error("upstream connection failed: %s", exc)
+            log.exception("upstream connection failed to GitHub /dispatches")
             raise HTTPException(502, f"upstream connection failed: {exc}") from exc
 
     if 200 <= r.status_code < 300:
