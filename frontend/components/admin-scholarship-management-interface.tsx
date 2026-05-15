@@ -57,11 +57,21 @@ import type {
   ApplicationFieldUpdate,
   ApplicationDocumentCreate,
   ApplicationDocumentUpdate,
+  ScholarshipType as ScholarshipTypeRecord,
   WhitelistResponse,
 } from "@/lib/api";
 import { toast } from "sonner";
 
 type ScholarshipType = "undergraduate_freshman" | "direct_phd" | "phd";
+
+// The /scholarships endpoint returns rows that include semester +
+// academic_year alongside the documented ScholarshipType fields (those two
+// flow from the scholarship_configuration join). We narrow with an
+// intersection rather than widening the canonical ScholarshipType.
+type ScholarshipTypeRow = ScholarshipTypeRecord & {
+  semester?: string;
+  academic_year?: number;
+};
 
 interface AdminScholarshipManagementInterfaceProps {
   type: ScholarshipType;
@@ -120,7 +130,8 @@ export function AdminScholarshipManagementInterface({
     useState<ApplicationDocument | null>(null);
 
   // Scholarship type data for whitelist
-  const [scholarshipTypeData, setScholarshipTypeData] = useState<any | null>(null);
+  const [scholarshipTypeData, setScholarshipTypeData] =
+    useState<ScholarshipTypeRow | null>(null);
   const [activeConfigId, setActiveConfigId] = useState<number | null>(null);
 
   // Whitelist management states
@@ -186,16 +197,20 @@ export function AdminScholarshipManagementInterface({
       const response = await api.scholarships.getAll();
       if (response.success && response.data) {
         // Find scholarship matching the type prop by code
-        const scholarships = response.data as any[];
+        const scholarships = response.data as ScholarshipTypeRow[];
         const scholarship = scholarships.find(s => s.code === type);
         if (scholarship) {
           setScholarshipTypeData(scholarship);
-          const configId = scholarship.configuration_id;
+          const configId = scholarship.configuration_id ?? null;
           setActiveConfigId(configId);
 
           // Initialize sub_type for new student form
-          if (scholarship.eligible_sub_types && scholarship.eligible_sub_types.length > 0) {
-            setNewStudentSubType(scholarship.eligible_sub_types[0].value || scholarship.eligible_sub_types[0]);
+          if (
+            scholarship.eligible_sub_types &&
+            scholarship.eligible_sub_types.length > 0
+          ) {
+            const first = scholarship.eligible_sub_types[0];
+            setNewStudentSubType(first.value ?? first.label);
           }
 
           // Load whitelist if configuration exists
@@ -376,7 +391,12 @@ export function AdminScholarshipManagementInterface({
   // Field management handlers
   const handleCreateField = async (fieldData: ApplicationFieldCreate) => {
     try {
-      const response = await api.applicationFields.createField(fieldData as any);
+      const response = await api.applicationFields.createField(
+        // The typed client's ApplicationFieldCreate requires `required` field;
+        // we pass the looser @/lib/api shape (UI-friendly), which the backend
+        // accepts because the field is server-defaulted.
+        fieldData as Parameters<typeof api.applicationFields.createField>[0]
+      );
       if (response.success && response.data) {
         const newField = response.data as unknown as ApplicationField;
         setApplicationFields(prev => [...prev, newField]);
@@ -440,7 +460,12 @@ export function AdminScholarshipManagementInterface({
     documentData: ApplicationDocumentCreate
   ) => {
     try {
-      const response = await api.applicationFields.createDocument(documentData as any);
+      const response = await api.applicationFields.createDocument(
+        // Same as createField above — typed client has stricter required field.
+        documentData as Parameters<
+          typeof api.applicationFields.createDocument
+        >[0]
+      );
       if (response.success && response.data) {
         const newDocument = response.data as unknown as ApplicationDocument;
         setDocumentRequirements(prev => [...prev, newDocument]);
@@ -1561,9 +1586,12 @@ export function AdminScholarshipManagementInterface({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {subTypes.map((type: any) => (
-                            <SelectItem key={type.value || type} value={type.value || type}>
-                              {type.label || type}
+                          {subTypes.map((type) => (
+                            <SelectItem
+                              key={type.value ?? type.label}
+                              value={type.value ?? type.label}
+                            >
+                              {type.label}
                             </SelectItem>
                           ))}
                         </SelectContent>
