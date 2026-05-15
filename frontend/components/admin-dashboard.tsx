@@ -18,22 +18,28 @@ import {
   Award,
   Loader2,
 } from "lucide-react";
-import { api } from "@/lib/api";
+import {
+  api,
+  Application,
+  DashboardStats,
+  NotificationResponse,
+  User,
+} from "@/lib/api";
 import { ScholarshipTimeline } from "@/components/scholarship-timeline";
 import { useScholarshipPermissions } from "@/hooks/use-scholarship-permissions";
 import { getDisplayStatusInfo } from "@/lib/utils/application-helpers";
 
 interface AdminDashboardProps {
-  stats: any;
-  recentApplications: any[];
-  systemAnnouncements: any[];
+  stats: DashboardStats | null;
+  recentApplications: Application[];
+  systemAnnouncements: NotificationResponse[];
   isStatsLoading: boolean;
   isRecentLoading: boolean;
   isAnnouncementsLoading: boolean;
   error: string | null;
   isAuthenticated: boolean;
-  user: any;
-  login: (token: string, userData: any) => void;
+  user: User | null;
+  login: (token: string, userData: User) => void;
   logout: () => void;
   fetchRecentApplications: () => void;
   fetchDashboardStats: () => void;
@@ -226,7 +232,7 @@ export function AdminDashboard({
       </div>
 
       {/* 獎學金時間軸 - 根據用戶權限顯示 */}
-      <ScholarshipTimeline user={user} />
+      {user && <ScholarshipTimeline user={user} />}
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="academic-card border-nycu-blue-200">
