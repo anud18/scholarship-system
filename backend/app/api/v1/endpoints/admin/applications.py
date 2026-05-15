@@ -387,13 +387,13 @@ async def assign_professor_to_application(
             detail=str(e),
         ) from e
     except SQLAlchemyError as e:
-        logger.error(f"Database error assigning professor: {str(e)}")
+        logger.exception("Database error assigning professor")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to assign professor due to a database error.",
         ) from e
     except Exception as e:
-        logger.error(f"Unexpected error assigning professor: {str(e)}")
+        logger.exception("Unexpected error assigning professor")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to assign professor due to an unexpected error.",
@@ -519,7 +519,7 @@ async def delete_application(
         await db.commit()
     except SQLAlchemyError as e:
         await db.rollback()
-        logger.error(f"Database error deleting application {id}: {str(e)}")
+        logger.exception(f"Database error deleting application {id}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete application due to a database error.",
