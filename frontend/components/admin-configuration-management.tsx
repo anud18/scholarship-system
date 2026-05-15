@@ -256,10 +256,11 @@ export function AdminConfigurationManagement({
         await loadConfigurations(selectedScholarshipType!);
         toast.success("配置建立成功");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errShape = error as { response?: { data?: { message?: string; detail?: string } }; message?: string };
       const errorMessage =
-        error.response?.data?.message ||
-        error.response?.data?.detail ||
+        errShape.response?.data?.message ||
+        errShape.response?.data?.detail ||
         "建立配置失敗";
       toast.error("建立配置失敗: " + errorMessage);
     } finally {
@@ -293,10 +294,11 @@ export function AdminConfigurationManagement({
         await loadConfigurations(selectedScholarshipType!);
         toast.success("配置更新成功");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errShape = error as { response?: { data?: { message?: string; detail?: string } }; message?: string };
       const errorMessage =
-        error.response?.data?.message ||
-        error.response?.data?.detail ||
+        errShape.response?.data?.message ||
+        errShape.response?.data?.detail ||
         "更新配置失敗";
       toast.error("更新配置失敗: " + errorMessage);
     } finally {
@@ -318,10 +320,11 @@ export function AdminConfigurationManagement({
         await loadConfigurations(selectedScholarshipType!);
         toast.success("配置刪除成功");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errShape = error as { response?: { data?: { message?: string; detail?: string } }; message?: string };
       const errorMessage =
-        error.response?.data?.message ||
-        error.response?.data?.detail ||
+        errShape.response?.data?.message ||
+        errShape.response?.data?.detail ||
         "刪除配置失敗";
       toast.error("刪除配置失敗: " + errorMessage);
     } finally {
@@ -351,10 +354,11 @@ export function AdminConfigurationManagement({
         await loadConfigurations(selectedScholarshipType!);
         toast.success("配置複製成功");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errShape = error as { response?: { data?: { message?: string; detail?: string } }; message?: string };
       const errorMessage =
-        error.response?.data?.message ||
-        error.response?.data?.detail ||
+        errShape.response?.data?.message ||
+        errShape.response?.data?.detail ||
         "複製配置失敗";
       toast.error("複製配置失敗: " + errorMessage);
     } finally {
@@ -381,8 +385,9 @@ export function AdminConfigurationManagement({
         });
         toast.success(`申請白名單已${enabled ? "啟用" : "停用"}`);
       }
-    } catch (error: any) {
-      const errorMessage = error.message || "切換申請白名單狀態失敗";
+    } catch (error: unknown) {
+      const errShape = error as { response?: { data?: { message?: string; detail?: string } }; message?: string };
+      const errorMessage = errShape.message || "切換申請白名單狀態失敗";
       toast.error("操作失敗: " + errorMessage);
     }
   };
@@ -416,10 +421,11 @@ export function AdminConfigurationManagement({
       } else {
         toast.error("無法載入配置詳情");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errShape = error as { response?: { data?: { message?: string; detail?: string } }; message?: string };
       const errorMessage =
-        error.response?.data?.message ||
-        error.response?.data?.detail ||
+        errShape.response?.data?.message ||
+        errShape.response?.data?.detail ||
         "載入配置詳情失敗";
       toast.error(errorMessage);
     }
