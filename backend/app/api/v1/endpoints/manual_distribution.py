@@ -109,7 +109,7 @@ async def get_admin_available_combinations(
             },
         }
     except Exception as e:
-        logger.error(f"Error retrieving admin available combinations: {str(e)}")
+        logger.exception("Error retrieving admin available combinations")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve available combinations",
@@ -267,7 +267,7 @@ async def get_distribution_history(
             "data": history_data,
         }
     except Exception as e:
-        logger.error(f"Error retrieving distribution history: {str(e)}")
+        logger.exception("Error retrieving distribution history")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve distribution history",
@@ -313,7 +313,7 @@ async def restore_from_history(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"Error restoring from history: {str(e)}")
+        logger.exception("Error restoring from history")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to restore from history",
