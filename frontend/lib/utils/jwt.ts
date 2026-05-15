@@ -9,7 +9,7 @@ export interface JWTPayload {
   role: string;
   exp?: number;
   iat?: number;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 /**
