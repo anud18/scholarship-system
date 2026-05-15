@@ -14,7 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_admin_user, get_db
 from app.db.deps import get_sync_db
-from app.models.college_review import CollegeRanking, ManualDistributionHistory
+from app.models.application import Application
+from app.models.college_review import CollegeRanking, CollegeRankingItem, ManualDistributionHistory
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.services.manual_distribution_service import ManualDistributionService
 
@@ -334,8 +335,6 @@ async def get_distribution_summary(
     """
     from sqlalchemy import and_, or_
     from sqlalchemy.orm import selectinload
-    from app.models.college_review import CollegeRanking, CollegeRankingItem
-    from app.models.application import Application
 
     try:
         # 取得已完成分發的排名
@@ -517,9 +516,6 @@ async def import_received_months(
     """Import received months from Excel for students in a distribution."""
     import openpyxl
     from io import BytesIO
-
-    from app.models.college_review import CollegeRanking, CollegeRankingItem
-    from app.models.application import Application
 
     # Validate file type
     if not file.filename or not file.filename.endswith(".xlsx"):
