@@ -70,6 +70,7 @@ export function VerifiedAccountAlert({
         {showDetails && account.passbook_cover_url && (
           <div className="mt-3 p-3 bg-white rounded border border-green-200">
             <p className="text-sm font-medium mb-2">帳本封面照片</p>
+            {/* eslint-disable-next-line @next/next/no-img-element -- user-uploaded passbook scan, unknown aspect ratio; next/image gives no benefit with images.unoptimized */}
             <img
               src={account.passbook_cover_url}
               alt="已驗證的帳本封面"
