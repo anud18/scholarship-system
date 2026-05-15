@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useCallback, useRef, useMem
 import { apiClient } from "@/lib/api";
 import { useCollegeApplications } from "@/hooks/use-admin";
 import { Semester } from "@/lib/enums";
+import { logger } from "@/lib/utils/logger";
 
 interface ScholarshipConfig {
   id: number;
@@ -324,22 +325,26 @@ export function CollegeManagementProvider({
     try {
       let currentAvailableOptions = availableOptions;
       if (!currentAvailableOptions) {
-        console.log("Available options not loaded yet, fetching now...");
+        logger.debug("Available options not loaded yet, fetching now");
         const isAdmin = userRole === "admin" || userRole === "super_admin";
         const response = isAdmin
           ? await apiClient.manualDistribution.getAvailableCombinations()
           : await apiClient.college.getAvailableCombinations();
-        console.log("Available combinations API response:", response);
+        logger.debug("Available combinations API response received", {
+          success: response.success,
+        });
 
         if (response.success && response.data) {
           currentAvailableOptions = response.data;
         } else {
-          console.error("API returned unsuccessful response:", response);
+          logger.error("API returned unsuccessful response", {
+            success: response.success,
+          });
         }
       }
 
       if (!currentAvailableOptions?.scholarship_types) {
-        console.error("No scholarship types available:", currentAvailableOptions);
+        logger.error("No scholarship types available");
         setScholarshipConfigError(
           locale === "zh"
             ? "無法從學院 API 載入可用的獎學金選項。"
@@ -349,7 +354,7 @@ export function CollegeManagementProvider({
       }
 
       if (currentAvailableOptions.scholarship_types.length === 0) {
-        console.error("Scholarship types array is empty");
+        logger.error("Scholarship types array is empty");
         setScholarshipConfigError(
           locale === "zh"
             ? "沒有可用的獎學金。請聯絡管理員。"
@@ -358,15 +363,14 @@ export function CollegeManagementProvider({
         return []; // Return empty array to prevent further processing
       }
 
-      console.log("Fetching all scholarships to get IDs...");
+      logger.debug("Fetching all scholarships to get IDs");
       const allScholarshipsResponse = await apiClient.scholarships.getAll();
 
       if (allScholarshipsResponse.success && allScholarshipsResponse.data) {
-        console.log("All scholarships:", allScholarshipsResponse.data);
-        console.log(
-          "Available scholarship types from college:",
-          currentAvailableOptions.scholarship_types
-        );
+        logger.debug("Scholarships loaded", {
+          allCount: allScholarshipsResponse.data.length,
+          collegeTypesCount: currentAvailableOptions.scholarship_types.length,
+        });
 
         const configs: ScholarshipConfig[] = [];
 
@@ -391,13 +395,14 @@ export function CollegeManagementProvider({
               subTypes: [{ code: "default", name: "Default" }],
             });
           } else {
-            console.warn(
-              `Could not find full scholarship data for college type: ${collegeType.code} - ${collegeType.name}`
+            logger.warn(
+              "Could not find full scholarship data for college type",
+              { code: collegeType.code, name: collegeType.name }
             );
           }
         }
 
-        console.log("Mapped scholarship configs:", configs);
+        logger.debug("Mapped scholarship configs", { count: configs.length });
         setScholarshipConfig(configs);
         return configs;
       }
@@ -409,7 +414,7 @@ export function CollegeManagementProvider({
       );
       return [];
     } catch (error) {
-      console.error("Failed to fetch scholarship configuration:", error);
+      logger.error("Failed to fetch scholarship configuration", { error });
       setScholarshipConfigError(
         locale === "zh"
           ? `無法取得獎學金配置: ${error instanceof Error ? error.message : "未知錯誤"}`
@@ -421,20 +426,23 @@ export function CollegeManagementProvider({
 
   const fetchAvailableOptions = useCallback(async () => {
     try {
-      console.log("Fetching available combinations...");
+      logger.debug("Fetching available combinations");
       const isAdmin = userRole === "admin" || userRole === "super_admin";
       const response = isAdmin
         ? await apiClient.manualDistribution.getAvailableCombinations()
         : await apiClient.college.getAvailableCombinations();
-      console.log("fetchAvailableOptions response:", response);
+      logger.debug("fetchAvailableOptions response received", {
+        success: response.success,
+      });
 
       if (response.success && response.data) {
         if (response.data.scholarship_types && response.data.scholarship_types.length > 0) {
-          console.log("Setting availableOptions:", response.data);
           setAvailableOptions(response.data);
           setScholarshipConfigError(null); // Clear any previous error
         } else {
-          console.warn("API returned no scholarship types in available combinations.");
+          logger.warn(
+            "API returned no scholarship types in available combinations"
+          );
           setScholarshipConfigError(
             locale === "zh"
               ? "沒有可用的獎學金。請聯絡管理員。"
@@ -443,7 +451,9 @@ export function CollegeManagementProvider({
           setAvailableOptions(null); // Ensure availableOptions is null if no types
         }
       } else {
-        console.error("API returned unsuccessful response or no data:", response);
+        logger.error("API returned unsuccessful response or no data", {
+          success: response.success,
+        });
         setScholarshipConfigError(
           locale === "zh"
             ? "無法取得可用的獎學金組合。請聯絡管理員。"
@@ -452,7 +462,7 @@ export function CollegeManagementProvider({
         setAvailableOptions(null); // Ensure availableOptions is null on API failure
       }
     } catch (error) {
-      console.error("Failed to fetch available options:", error);
+      logger.error("Failed to fetch available options", { error });
       setScholarshipConfigError(
         locale === "zh"
           ? `無法取得可用的獎學金選項: ${error instanceof Error ? error.message : "未知錯誤"}`
@@ -464,11 +474,11 @@ export function CollegeManagementProvider({
 
   const fetchRankings = useCallback(async () => {
     try {
-      console.log("[Context] Fetching rankings...");
+      logger.debug("Fetching rankings");
       const response = await apiClient.college.getRankings();
 
       if (response.success && response.data) {
-        console.log(`[Context] Fetched ${response.data.length} rankings`);
+        logger.debug("Rankings fetched", { count: response.data.length });
 
         // Normalize semester values (consistent with RankingManagementPanel logic)
         const normalizedRankings = response.data.map(
@@ -488,13 +498,13 @@ export function CollegeManagementProvider({
         setRankings(normalizedRankings);
       }
     } catch (error) {
-      console.error("[Context] Failed to fetch rankings:", error);
+      logger.error("Failed to fetch rankings", { error });
     }
   }, []);
 
   const refreshPermissions = useCallback(async () => {
     try {
-      console.log("Refreshing permissions and scholarship configuration...");
+      logger.debug("Refreshing permissions and scholarship configuration");
 
       // Reset error state
       setScholarshipConfigError(null);
@@ -504,9 +514,9 @@ export function CollegeManagementProvider({
       await fetchAvailableOptions();
       await getScholarshipConfig();
 
-      console.log("Permissions refreshed successfully");
+      logger.debug("Permissions refreshed successfully");
     } catch (error) {
-      console.error("Failed to refresh permissions:", error);
+      logger.error("Failed to refresh permissions", { error });
       setScholarshipConfigError(
         locale === "zh"
           ? "無法重新整理權限設置。請稍後再試。"
