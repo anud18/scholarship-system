@@ -40,31 +40,30 @@ def _stub_user(user_id):
 
 
 class TestNotifyRosterGeneratedDefaults:
-    """Pin: notify_roster_generated with default args is CURRENTLY
-    BROKEN due to UserRole.processor typo (no such enum value;
-    UserRole has admin/student/professor/college/super_admin).
+    """Pin: notify_roster_generated defaults to [admin, super_admin].
 
-    The top-level try/except catches the AttributeError and
-    returns []. Pin actual behavior here — see issue tracking
-    the underlying bug for the fix path."""
+    Issue #462 fix — previously referenced nonexistent
+    UserRole.processor enum value which crashed AttributeError.
+    Now defaults to admin + super_admin (escalation pairing,
+    matching the elevated-privilege intent of roster events)."""
 
     @pytest.mark.asyncio
-    async def test_default_args_raises_attribute_error_due_to_typo(self):
-        # Pin BUG: default `notify_roles=None` branch references
-        # UserRole.processor (does NOT exist; only admin / student /
-        # professor / college / super_admin exist per CLAUDE.md §4).
-        # The default-assignment line (47) is OUTSIDE the try/except
-        # so the AttributeError PROPAGATES out of the method —
-        # crashing whichever roster orchestrator called it.
-        # Pin so refactor fixing the typo can confidently change
-        # the contract from "raises" to "returns []".
+    async def test_default_args_targets_admin_and_super_admin(self):
+        # Pin Issue #462 FIX: default `notify_roles=None` now
+        # resolves to [UserRole.admin, UserRole.super_admin].
+        # Pin so refactor doesn't regress to the broken
+        # UserRole.processor reference.
         service = RosterNotificationService(db=MagicMock())
         service._get_users_by_roles = MagicMock(return_value=[_stub_user(1)])
         service.notification_service = MagicMock()
         service.notification_service.createUserNotification = AsyncMock()
 
-        with pytest.raises(AttributeError, match="processor"):
-            await service.notify_roster_generated(_stub_roster())
+        result = await service.notify_roster_generated(_stub_roster())
+        assert result == [1]
+
+        called_roles = service._get_users_by_roles.call_args.args[0]
+        assert UserRole.admin in called_roles
+        assert UserRole.super_admin in called_roles
 
     @pytest.mark.asyncio
     async def test_explicit_roles_override_defaults(self):
@@ -165,24 +164,29 @@ class TestNotifyRosterErrorDefaults:
 
 
 class TestNotifyRosterCompletedDefaults:
-    """Pin: notify_roster_completed default args ALSO broken
-    (same UserRole.processor typo). See issue."""
+    """Pin: notify_roster_completed defaults to [admin, super_admin]
+    (same fix path as notify_roster_generated — see Issue #462)."""
 
     @pytest.mark.asyncio
-    async def test_completed_default_args_raises_due_to_typo(self):
-        # Pin BUG: same UserRole.processor typo in
-        # notify_roster_completed default branch. AttributeError
-        # propagates (default-assignment is OUTSIDE try/except).
+    async def test_completed_default_args_targets_admin_and_super_admin(self):
+        # Pin Issue #462 FIX: previously crashed with AttributeError
+        # because UserRole.processor doesn't exist. Now uses
+        # UserRole.super_admin instead. Pin so refactor doesn't
+        # regress.
         service = RosterNotificationService(db=MagicMock())
         service._get_users_by_roles = MagicMock(return_value=[_stub_user(1)])
         service.notification_service = MagicMock()
         service.notification_service.createUserNotification = AsyncMock()
 
-        with pytest.raises(AttributeError, match="processor"):
-            await service.notify_roster_completed(
-                roster=_stub_roster(),
-                statistics={"qualified_count": 25, "total_amount": 250000},
-            )
+        result = await service.notify_roster_completed(
+            roster=_stub_roster(),
+            statistics={"qualified_count": 25, "total_amount": 250000},
+        )
+        assert result == [1]
+
+        called_roles = service._get_users_by_roles.call_args.args[0]
+        assert UserRole.admin in called_roles
+        assert UserRole.super_admin in called_roles
 
     @pytest.mark.asyncio
     async def test_completed_with_explicit_admin_role_works(self):
