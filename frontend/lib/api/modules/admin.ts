@@ -460,7 +460,16 @@ export function createAdminApi() {
      * Get scholarship rules with filters
      * Type-safe: Query parameters validated against OpenAPI
      */
-    getScholarshipRules: async (filters?: any): Promise<ApiResponse<any[]>> => {
+    getScholarshipRules: async (
+      filters?: {
+        scholarship_type_id?: number;
+        sub_type?: string;
+        academic_year?: number;
+        semester?: string | null;
+        is_template?: boolean;
+        is_active?: boolean;
+      }
+    ): Promise<ApiResponse<any[]>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarship-rules', {
         params: { query: filters },
       });
@@ -704,7 +713,14 @@ export function createAdminApi() {
      * Get scholarship configurations with filters
      * Type-safe: Query parameters validated against OpenAPI
      */
-    getScholarshipConfigurations: async (params?: any): Promise<ApiResponse<any[]>> => {
+    getScholarshipConfigurations: async (
+      params?: {
+        scholarship_type_id?: number;
+        academic_year?: number;
+        semester?: string | null;
+        is_active?: boolean;
+      }
+    ): Promise<ApiResponse<any[]>> => {
       const response = await typedClient.raw.GET('/api/v1/scholarship-configurations/configurations', {
         params: {
           query: {
@@ -905,7 +921,9 @@ export function createAdminApi() {
      * Get professor-student relationships with filters
      * Type-safe: Query parameters validated against OpenAPI
      */
-    getProfessorStudentRelationships: async (params?: any): Promise<ApiResponse<any[]>> => {
+    getProfessorStudentRelationships: async (
+      params?: { page?: number; size?: number }
+    ): Promise<ApiResponse<any[]>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/professor-student-relationships', {
         params: {
           query: {
