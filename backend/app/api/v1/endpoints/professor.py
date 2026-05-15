@@ -63,7 +63,7 @@ async def get_professor_applications(
         }
 
     except Exception as e:
-        logger.error(f"Error fetching professor applications: {str(e)}")
+        logger.exception("Error fetching professor applications")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while fetching applications",
@@ -124,7 +124,7 @@ async def get_professor_review(
     except NotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Professor review not found") from exc
     except Exception as e:
-        logger.error(f"Error fetching professor review: {str(e)}")
+        logger.exception("Error fetching professor review")
         import traceback
 
         logger.error(f"Full traceback: {traceback.format_exc()}")
@@ -207,7 +207,7 @@ async def submit_professor_review(
     except AuthorizationError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"Error submitting professor review: {str(e)}")
+        logger.exception("Error submitting professor review")
         import traceback
 
         logger.error(f"Full traceback: {traceback.format_exc()}")
@@ -288,7 +288,7 @@ async def update_professor_review(
     except NotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review not found") from exc
     except Exception as e:
-        logger.error(f"Error updating professor review: {str(e)}")
+        logger.exception("Error updating professor review")
         import traceback
 
         logger.error(f"Full traceback: {traceback.format_exc()}")
@@ -320,7 +320,7 @@ async def get_application_sub_types(
         }
 
     except Exception as e:
-        logger.error(f"Error fetching application sub-types: {str(e)}")
+        logger.exception("Error fetching application sub-types")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while fetching sub-types",
@@ -352,7 +352,7 @@ async def get_professor_review_stats(
         }
 
     except Exception as e:
-        logger.error(f"Error fetching professor stats: {str(e)}")
+        logger.exception("Error fetching professor stats")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while fetching statistics",

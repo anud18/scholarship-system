@@ -267,7 +267,7 @@ async def get_available_combinations(current_user: User = Depends(require_colleg
         return ApiResponse(success=True, message="Available combinations retrieved successfully", data=response_data)
 
     except Exception as e:
-        logger.error(f"Error retrieving available combinations: {str(e)}")
+        logger.exception("Error retrieving available combinations")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve available combinations from database",
@@ -333,7 +333,7 @@ async def get_active_config(
             },
         )
     except Exception as e:
-        logger.error(f"Error retrieving active config: {str(e)}")
+        logger.exception("Error retrieving active config")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve active scholarship configuration",
@@ -380,7 +380,7 @@ async def get_sub_type_translations(
         )
 
     except Exception as e:
-        logger.error(f"Error retrieving sub-type translations: {str(e)}")
+        logger.exception("Error retrieving sub-type translations")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve sub-type translations: {str(e)}",

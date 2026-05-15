@@ -374,7 +374,7 @@ async def portal_sso_verify(
             status_code=302,
         )
     except Exception as e:
-        logger.error(f"Portal SSO error: {str(e)}")
+        logger.exception("Portal SSO error")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Portal SSO verification failed: {str(e)}",
