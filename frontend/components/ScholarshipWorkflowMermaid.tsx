@@ -58,6 +58,34 @@ interface WorkflowStats {
   nextDeadline?: Date;
 }
 
+interface WorkflowStage {
+  name: string;
+  type: string;
+  status: "completed" | "active" | "pending" | "expired";
+  period?: string;
+}
+
+// Application list-row shape returned by GET /admin/applications when the
+// component requests applications for a specific workflow stage. Only the
+// fields rendered by the stage-details table are typed; backend returns more.
+interface StageApplicationRow {
+  id?: number;
+  app_id?: string;
+  student?: {
+    name?: string;
+    nycu_id?: string;
+  };
+  student_name?: string;
+  student_id?: string;
+  status?: string;
+  status_zh?: string;
+  scholarship_type_zh?: string;
+  scholarship_name?: string;
+  created_at?: string;
+  submitted_at?: string;
+  [key: string]: unknown;
+}
+
 export function ScholarshipWorkflowMermaid({
   configurations,
   selectedConfigId,
@@ -68,7 +96,9 @@ export function ScholarshipWorkflowMermaid({
   const [stats, setStats] = useState<WorkflowStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedStage, setSelectedStage] = useState<string | null>(null);
-  const [stageApplications, setStageApplications] = useState<any[]>([]);
+  const [stageApplications, setStageApplications] = useState<
+    StageApplicationRow[]
+  >([]);
   const [showStageDetails, setShowStageDetails] = useState(false);
 
   // Tab 功能相關狀態
@@ -301,14 +331,7 @@ export function ScholarshipWorkflowMermaid({
   };
 
   // 準備工作流程階段數據
-  const getWorkflowStages = (config: ScholarshipConfiguration) => {
-    interface WorkflowStage {
-      name: string;
-      type: string;
-      status: "completed" | "active" | "pending" | "expired";
-      period?: string;
-    }
-
+  const getWorkflowStages = (config: ScholarshipConfiguration): WorkflowStage[] => {
     const stages: WorkflowStage[] = [
       {
         name: "開始",
@@ -683,7 +706,11 @@ export function ScholarshipWorkflowMermaid({
 
                             <div className="space-y-4">
                               {getWorkflowStages(selectedConfig).map(
-                                (stage: any, index: number, array: any[]) => (
+                                (
+                                  stage: WorkflowStage,
+                                  index: number,
+                                  array: WorkflowStage[]
+                                ) => (
                                   <div
                                     key={index}
                                     className="flex items-center"
@@ -819,7 +846,7 @@ export function ScholarshipWorkflowMermaid({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {stageApplications.map((app: any) => (
+                  {stageApplications.map((app: StageApplicationRow) => (
                     <TableRow key={app.id}>
                       <TableCell className="font-medium">#{app.id}</TableCell>
                       <TableCell>{app.student?.name || "N/A"}</TableCell>
@@ -851,7 +878,7 @@ export function ScholarshipWorkflowMermaid({
                             "college_review_pending",
                             "approved",
                             "rejected",
-                          ].includes(app.status) && app.status}
+                          ].includes(app.status ?? "") && app.status}
                         </Badge>
                       </TableCell>
                       <TableCell>
