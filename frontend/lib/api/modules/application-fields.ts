@@ -77,7 +77,11 @@ export function createApplicationFieldsApi() {
     ): Promise<ApiResponse<ScholarshipFormConfig>> => {
       const response = await typedClient.raw.POST('/api/v1/application-fields/form-config/{scholarship_type}', {
         params: { path: { scholarship_type: scholarshipType } },
-        body: config,
+        // openapi-fetch generates `Record<string, never>[]` for nested body
+        // schemas the backend doesn't emit fully (Pydantic models are
+        // surfaced as opaque dicts). The canonical FormConfigSaveRequest is
+        // the real shape; cast through `never` per ledger pattern.
+        body: config as never,
       });
       return toApiResponse<ScholarshipFormConfig>(response);
     },
