@@ -45,8 +45,11 @@ interface AuditLog {
   event_type: string;
   timestamp: string;
   user_id: number | null;
-  config_before: any;
-  config_after: any;
+  // Free-form JSON snapshots of test-mode config before/after the audit event.
+  // The UI never inspects these (only renders presence indicators), so we keep
+  // them as opaque records.
+  config_before: Record<string, unknown> | null;
+  config_after: Record<string, unknown> | null;
   original_recipient: string | null;
   actual_recipient: string | null;
   email_subject: string | null;

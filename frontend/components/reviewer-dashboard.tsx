@@ -66,7 +66,28 @@ export function ReviewerDashboard({
   const t = (key: string) => getTranslation(locale, key);
 
   const [viewMode, setViewMode] = useState<"card" | "table">("card");
-  const [selectedApplication, setSelectedApplication] = useState<any>(null);
+
+  // Mock-data row shape consumed by this demo dashboard. Real production
+  // version pulls from the Application type via the API; this component is
+  // wired to a hard-coded fixture below.
+  interface MockApplicationRow {
+    id: string;
+    studentName: string;
+    studentNameEn: string;
+    studentId: string;
+    nationality: string;
+    type: string;
+    typeName: string;
+    status: string;
+    statusName: string;
+    submittedAt: string;
+    gpa: number;
+    amount: number;
+    priority: string;
+    daysWaiting: number;
+  }
+  const [selectedApplication, setSelectedApplication] =
+    useState<MockApplicationRow | null>(null);
 
   const [applications] = useState([
     {
@@ -119,24 +140,26 @@ export function ReviewerDashboard({
     },
   ]);
 
-  const getStatusColor = (status: string) => {
-    const statusMap = {
+  type BadgeVariant = "default" | "secondary" | "destructive" | "outline";
+
+  const getStatusColor = (status: string): BadgeVariant => {
+    const statusMap: Record<string, BadgeVariant> = {
       pending_review: "destructive",
       under_review: "outline",
       approved: "default",
       partial_approved: "outline",
       rejected: "secondary",
     };
-    return statusMap[status as keyof typeof statusMap] || "secondary";
+    return statusMap[status] || "secondary";
   };
 
-  const getPriorityColor = (priority: string) => {
-    const priorityMap = {
+  const getPriorityColor = (priority: string): BadgeVariant => {
+    const priorityMap: Record<string, BadgeVariant> = {
       high: "destructive",
       medium: "outline",
       low: "secondary",
     };
-    return priorityMap[priority as keyof typeof priorityMap] || "secondary";
+    return priorityMap[priority] || "secondary";
   };
 
   const handleApprove = (appId: string) => {
@@ -163,7 +186,7 @@ export function ReviewerDashboard({
                   showLabel={false}
                 />
               </div>
-              <Badge variant={getPriorityColor(app.priority) as any}>
+              <Badge variant={getPriorityColor(app.priority)}>
                 {app.priority === "high"
                   ? locale === "zh"
                     ? "高"
