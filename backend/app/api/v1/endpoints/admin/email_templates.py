@@ -120,20 +120,45 @@ async def get_email_templates(
     return [EmailTemplateSchema.model_validate(template) for template in templates]
 
 
+# NOTE (issue #647): the scholarship-email-templates endpoint family was
+# wired up against a service API that does not exist. Each handler below
+# calls a method (get_scholarship_templates, get_template/2-arg,
+# create_template, update_template, delete_template) that is NOT defined
+# on EmailTemplateService — only get_template/1-arg, set_template, and
+# get_or_create_template exist. Worse, EmailTemplate has no
+# scholarship_type_id column, so a per-scholarship template row cannot
+# even be persisted under the current schema.
+#
+# Until a follow-up PR adds (a) the scholarship_type_id column via Alembic
+# migration and (b) the missing service methods, return a clean
+# 501 Not Implemented instead of a confusing 500 AttributeError. This:
+#   - stops the false 5xx spike on the BackendErrorSpike alert
+#   - gives clients an actionable response code instead of a stack trace
+#   - leaves the API surface visible in the OpenAPI schema so the
+#     frontend can flag callsites at design time
+
+
+_SCHOLARSHIP_TEMPLATES_NOT_IMPLEMENTED_DETAIL = (
+    "Per-scholarship email templates are not currently implemented " "(tracked in issue #647)."
+)
+
+
+def _raise_scholarship_email_templates_not_implemented() -> None:
+    """Single source for the 501 raise so all six endpoints agree."""
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail=_SCHOLARSHIP_TEMPLATES_NOT_IMPLEMENTED_DETAIL,
+    )
+
+
 @router.get("/scholarship-email-templates/{scholarship_type_id}")
 async def get_scholarship_email_templates(
     scholarship_type_id: int,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get all email templates for a scholarship type"""
-    service = EmailTemplateService(db)
-    templates = await service.get_scholarship_templates(scholarship_type_id)
-    return {
-        "success": True,
-        "message": "Email templates retrieved successfully",
-        "data": templates,
-    }
+    """[Not implemented — see issue #647] Get all email templates for a scholarship type."""
+    _raise_scholarship_email_templates_not_implemented()
 
 
 @router.get("/scholarship-email-templates/{scholarship_type_id}/{template_key}")
@@ -143,14 +168,8 @@ async def get_scholarship_email_template(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get a specific email template"""
-    service = EmailTemplateService(db)
-    template = await service.get_template(scholarship_type_id, template_key)
-    return {
-        "success": True,
-        "message": "Email template retrieved successfully",
-        "data": template,
-    }
+    """[Not implemented — see issue #647] Get a specific email template."""
+    _raise_scholarship_email_templates_not_implemented()
 
 
 @router.post("/scholarship-email-templates")
@@ -159,14 +178,8 @@ async def create_scholarship_email_template(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a new email template"""
-    service = EmailTemplateService(db)
-    template = await service.create_template(template_data)
-    return {
-        "success": True,
-        "message": "Email template created successfully",
-        "data": template,
-    }
+    """[Not implemented — see issue #647] Create a new email template."""
+    _raise_scholarship_email_templates_not_implemented()
 
 
 @router.put("/scholarship-email-templates/{scholarship_type_id}/{template_key}")
@@ -177,14 +190,8 @@ async def update_scholarship_email_template(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Update an email template"""
-    service = EmailTemplateService(db)
-    template = await service.update_template(scholarship_type_id, template_key, template_data)
-    return {
-        "success": True,
-        "message": "Email template updated successfully",
-        "data": template,
-    }
+    """[Not implemented — see issue #647] Update an email template."""
+    _raise_scholarship_email_templates_not_implemented()
 
 
 @router.delete("/scholarship-email-templates/{scholarship_type_id}/{template_key}")
@@ -194,13 +201,8 @@ async def delete_scholarship_email_template(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Delete an email template"""
-    service = EmailTemplateService(db)
-    await service.delete_template(scholarship_type_id, template_key)
-    return {
-        "success": True,
-        "message": "Email template deleted successfully",
-    }
+    """[Not implemented — see issue #647] Delete an email template."""
+    _raise_scholarship_email_templates_not_implemented()
 
 
 @router.post("/scholarship-email-templates/{scholarship_type_id}/bulk-create")
@@ -210,17 +212,8 @@ async def bulk_create_scholarship_email_templates(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Bulk create email templates"""
-    service = EmailTemplateService(db)
-    created_templates = []
-    for template_data in templates:
-        template = await service.create_template(template_data)
-        created_templates.append(template)
-    return {
-        "success": True,
-        "message": f"{len(created_templates)} email templates created successfully",
-        "data": created_templates,
-    }
+    """[Not implemented — see issue #647] Bulk create email templates."""
+    _raise_scholarship_email_templates_not_implemented()
 
 
 @router.get("/scholarship-email-templates/{scholarship_type_id}/available")

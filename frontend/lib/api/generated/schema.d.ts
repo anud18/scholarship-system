@@ -1874,7 +1874,7 @@ export interface paths {
         };
         /**
          * Get Scholarship Email Templates
-         * @description Get all email templates for a scholarship type
+         * @description [Not implemented — see issue #647] Get all email templates for a scholarship type.
          */
         get: operations["get_scholarship_email_templates_api_v1_admin_scholarship_email_templates__scholarship_type_id__get"];
         put?: never;
@@ -1894,18 +1894,18 @@ export interface paths {
         };
         /**
          * Get Scholarship Email Template
-         * @description Get a specific email template
+         * @description [Not implemented — see issue #647] Get a specific email template.
          */
         get: operations["get_scholarship_email_template_api_v1_admin_scholarship_email_templates__scholarship_type_id___template_key__get"];
         /**
          * Update Scholarship Email Template
-         * @description Update an email template
+         * @description [Not implemented — see issue #647] Update an email template.
          */
         put: operations["update_scholarship_email_template_api_v1_admin_scholarship_email_templates__scholarship_type_id___template_key__put"];
         post?: never;
         /**
          * Delete Scholarship Email Template
-         * @description Delete an email template
+         * @description [Not implemented — see issue #647] Delete an email template.
          */
         delete: operations["delete_scholarship_email_template_api_v1_admin_scholarship_email_templates__scholarship_type_id___template_key__delete"];
         options?: never;
@@ -1924,7 +1924,7 @@ export interface paths {
         put?: never;
         /**
          * Create Scholarship Email Template
-         * @description Create a new email template
+         * @description [Not implemented — see issue #647] Create a new email template.
          */
         post: operations["create_scholarship_email_template_api_v1_admin_scholarship_email_templates_post"];
         delete?: never;
@@ -1944,7 +1944,7 @@ export interface paths {
         put?: never;
         /**
          * Bulk Create Scholarship Email Templates
-         * @description Bulk create email templates
+         * @description [Not implemented — see issue #647] Bulk create email templates.
          */
         post: operations["bulk_create_scholarship_email_templates_api_v1_admin_scholarship_email_templates__scholarship_type_id__bulk_create_post"];
         delete?: never;
