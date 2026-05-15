@@ -11,6 +11,7 @@ Revises: 24becd31ed61
 Create Date: 2025-10-04 12:05:00.000000
 
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -57,7 +58,12 @@ def upgrade() -> None:
             sa.Column("name", sa.String(200), nullable=False),
             sa.Column("description", sa.Text(), nullable=True),
             sa.Column("trigger_event", trigger_event_enum, nullable=False),
-            sa.Column("template_key", sa.String(100), sa.ForeignKey("email_templates.key"), nullable=False),
+            # NOTE: template_key historically had a FK → email_templates.key, but the
+            # per-scholarship template feature (migration email_tpl_scholarship_type_id_001)
+            # replaces the single-column unique on email_templates.key with a compound
+            # (key, scholarship_type_id). A plain FK on key alone is incompatible with
+            # that — the application layer resolves overrides vs generic at lookup time.
+            sa.Column("template_key", sa.String(100), nullable=False),
             sa.Column("delay_hours", sa.Integer(), nullable=False, server_default="0"),
             sa.Column("condition_query", sa.Text(), nullable=True),
             sa.Column("is_active", sa.Boolean(), nullable=False, server_default="true"),

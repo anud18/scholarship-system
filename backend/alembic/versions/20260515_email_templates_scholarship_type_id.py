@@ -56,13 +56,38 @@ def _existing_key_unique_constraint_name(inspector) -> Union[str, None]:
     return None
 
 
+def _fk_on_email_automation_rules_template_key(inspector) -> Union[str, None]:
+    """Return the auto-generated FK name on ``email_automation_rules.template_key``
+    pointing at ``email_templates.key``.
+
+    This FK was added in migration ``c5d8f9a2b3e1`` and now blocks dropping the
+    single-column unique on ``email_templates.key`` (PostgreSQL requires the
+    referenced columns to have a unique constraint). The application layer
+    handles override-vs-generic template lookup, so dropping this DB-level FK
+    is safe.
+    """
+    if "email_automation_rules" not in inspector.get_table_names():
+        return None
+    for fk in inspector.get_foreign_keys("email_automation_rules"):
+        if fk.get("referred_table") == "email_templates" and fk.get("referred_columns") == ["key"]:
+            return fk.get("name")
+    return None
+
+
 def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
 
     existing_columns = {c["name"] for c in inspector.get_columns("email_templates")}
 
-    # 1. Add scholarship_type_id column + FK + supporting index.
+    # 1. Drop the FK from email_automation_rules.template_key → email_templates.key.
+    #    Otherwise step 3's drop of the single-column unique fails with
+    #    "no unique constraint matching given keys for referenced table".
+    fk_name = _fk_on_email_automation_rules_template_key(inspector)
+    if fk_name:
+        op.drop_constraint(fk_name, "email_automation_rules", type_="foreignkey")
+
+    # 2. Add scholarship_type_id column + FK + supporting index.
     if "scholarship_type_id" not in existing_columns:
         op.add_column(
             "email_templates",
@@ -81,7 +106,7 @@ def upgrade() -> None:
             ["scholarship_type_id"],
         )
 
-    # 2. Drop the auto-generated single-column unique on ``key``.
+    # 3. Drop the auto-generated single-column unique on ``key``.
     existing_unique_name = _existing_key_unique_constraint_name(inspector)
     if existing_unique_name:
         # Try dropping as a unique constraint first; fall back to index drop.
@@ -90,7 +115,7 @@ def upgrade() -> None:
         except Exception:
             op.drop_index(existing_unique_name, table_name="email_templates")
 
-    # 3. Add the compound unique constraint.
+    # 4. Add the compound unique constraint.
     existing_constraint_names = {c["name"] for c in inspector.get_unique_constraints("email_templates")}
     if "uq_email_templates_key_scholarship" not in existing_constraint_names:
         op.create_unique_constraint(
@@ -125,3 +150,14 @@ def downgrade() -> None:
     existing_columns = {c["name"] for c in inspector.get_columns("email_templates")}
     if "scholarship_type_id" in existing_columns:
         op.drop_column("email_templates", "scholarship_type_id")
+
+    # Restore the FK on email_automation_rules.template_key → email_templates.key
+    # so post-downgrade schema matches the pre-upgrade state.
+    if "email_automation_rules" in inspector.get_table_names():
+        op.create_foreign_key(
+            "fk_email_automation_rules_template_key",
+            "email_automation_rules",
+            "email_templates",
+            ["template_key"],
+            ["key"],
+        )

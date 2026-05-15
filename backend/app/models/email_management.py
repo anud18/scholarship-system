@@ -320,8 +320,13 @@ class EmailAutomationRule(Base):
         Enum(TriggerEvent, values_callable=lambda obj: [e.value for e in obj]), nullable=False, index=True
     )
 
-    # Email template reference
-    template_key = Column(String(100), ForeignKey("email_templates.key"), nullable=False)
+    # Email template reference.
+    # NOTE: this is intentionally NOT a database-level FK. The per-scholarship
+    # template feature (compound unique on email_templates(key, scholarship_type_id))
+    # makes ``key`` non-unique on its own, so a `key`-targeting FK can no longer
+    # be enforced. The application layer (EmailTemplateService) handles
+    # override-vs-generic resolution at lookup time.
+    template_key = Column(String(100), nullable=False)
 
     # Timing configuration
     delay_hours = Column(Integer, default=0, nullable=False)  # 延遲發送時數（0 = 立即發送）
@@ -338,7 +343,22 @@ class EmailAutomationRule(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     # Relationships
-    template = relationship("EmailTemplate", backref="automation_rules")
+    # template_key is no longer a DB FK (see column comment above) and ``key`` is
+    # no longer unique on its own. Automation rules always point at the GENERIC
+    # template (per-scholarship overrides are resolved at send time by the
+    # email service), so the join is scoped to ``scholarship_type_id IS NULL``.
+    template = relationship(
+        "EmailTemplate",
+        primaryjoin=(
+            "and_("
+            "foreign(EmailAutomationRule.template_key) == EmailTemplate.key, "
+            "EmailTemplate.scholarship_type_id.is_(None)"
+            ")"
+        ),
+        backref="automation_rules",
+        viewonly=True,
+        uselist=False,
+    )
     created_by = relationship("User", foreign_keys=[created_by_user_id], backref="created_automation_rules")
 
     # Indexes
