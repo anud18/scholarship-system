@@ -46,7 +46,7 @@ interface NotificationData {
   expires_at?: string;
   read_at?: string;
   created_at: string;
-  metadata?: any;
+  metadata?: Record<string, unknown> | null;
 }
 
 interface NotificationPanelProps {
