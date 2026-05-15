@@ -379,6 +379,25 @@ async def create_configuration(
             "updated_at": new_configuration.updated_at,
         }
 
+        logger.info(
+            "system-configuration created: key=%s category=%s data_type=%s by user_id=%s",
+            new_configuration.key,
+            new_configuration.category,
+            new_configuration.data_type,
+            current_user.id,
+            extra={
+                "actor_user_id": current_user.id,
+                "actor_role": (
+                    current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+                ),
+                "config_key": new_configuration.key,
+                "config_category": str(new_configuration.category),
+                "config_data_type": str(new_configuration.data_type),
+                "is_sensitive": new_configuration.is_sensitive,
+                "value_len": len(new_configuration.value) if new_configuration.value else 0,
+            },
+        )
+
         return {
             "success": True,
             "message": "Configuration created successfully",
@@ -387,6 +406,11 @@ async def create_configuration(
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception(
+            "system-configuration create failed: key=%s",
+            configuration.key,
+            extra={"actor_user_id": current_user.id, "config_key": configuration.key},
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create configuration: {str(e)}"
         ) from e
@@ -447,6 +471,22 @@ async def update_configuration(
             "updated_at": updated_configuration.updated_at,
         }
 
+        logger.info(
+            "system-configuration updated: key=%s by user_id=%s",
+            updated_configuration.key,
+            current_user.id,
+            extra={
+                "actor_user_id": current_user.id,
+                "actor_role": (
+                    current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+                ),
+                "config_key": updated_configuration.key,
+                "is_sensitive": updated_configuration.is_sensitive,
+                "previous_value_len": len(existing.value) if existing.value else 0,
+                "new_value_len": (len(updated_configuration.value) if updated_configuration.value else 0),
+            },
+        )
+
         return {
             "success": True,
             "message": "Configuration updated successfully",
@@ -455,6 +495,11 @@ async def update_configuration(
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception(
+            "system-configuration update failed: key=%s",
+            id,
+            extra={"actor_user_id": current_user.id, "config_key": id},
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update configuration: {str(e)}"
         ) from e
@@ -477,16 +522,40 @@ async def delete_configuration(
                 status_code=status.HTTP_404_NOT_FOUND, detail=f"Configuration with key '{id}' not found"
             )
 
+        # Capture pre-delete attrs so the audit row survives the row removal.
+        deleted_key = existing.key
+        deleted_category = str(existing.category)
+
         success = await config_service.delete_configuration(id, current_user.id)
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete configuration"
             )
 
+        logger.info(
+            "system-configuration deleted: key=%s category=%s by user_id=%s",
+            deleted_key,
+            deleted_category,
+            current_user.id,
+            extra={
+                "actor_user_id": current_user.id,
+                "actor_role": (
+                    current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+                ),
+                "config_key": deleted_key,
+                "config_category": deleted_category,
+            },
+        )
+
         return {"message": "Configuration deleted successfully"}
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception(
+            "system-configuration delete failed: key=%s",
+            id,
+            extra={"actor_user_id": current_user.id, "config_key": id},
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete configuration: {str(e)}"
         ) from e
