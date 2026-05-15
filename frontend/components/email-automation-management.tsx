@@ -146,11 +146,13 @@ export function EmailAutomationManagement() {  const [rules, setRules] = useStat
       const response = await apiClient.admin.getEmailTemplatesBySendingType();
       if (response.success && response.data) {
         // Use subject_template from database as label
-        const templates = response.data.map((t: any) => ({
-          key: t.key,
-          label: t.subject_template || t.key, // Use subject as label, fallback to key
-          subject_template: t.subject_template,
-        }));
+        const templates = response.data.map(
+          (t: { key: string; subject_template?: string }) => ({
+            key: t.key,
+            label: t.subject_template || t.key, // Use subject as label, fallback to key
+            subject_template: t.subject_template,
+          })
+        );
         setEmailTemplates(templates);
       }
     } catch (error: unknown) {

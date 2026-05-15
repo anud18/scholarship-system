@@ -62,7 +62,12 @@ export function RosterScheduleList({ onScheduleChange, onRosterGenerated }: Rost
   const fetchSchedules = async () => {
     try {
       setLoading(true)
-      const params: any = {
+      const params: {
+        skip: number
+        limit: number
+        search?: string
+        status?: string
+      } = {
         skip: pagination.skip,
         limit: pagination.limit,
       }

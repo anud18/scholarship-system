@@ -25,7 +25,10 @@ interface UserEditModalProps {
   onClose: () => void;
   editingUser: UserListResponse | null;
   userForm: UserCreate;
-  onUserFormChange: (field: keyof UserCreate, value: any) => void;
+  onUserFormChange: <K extends keyof UserCreate>(
+    field: K,
+    value: UserCreate[K]
+  ) => void;
   onSubmit: () => void;
   isLoading?: boolean;
   // 獎學金權限相關
@@ -230,7 +233,7 @@ export function UserEditModal({
               <select
                 value={userForm.role}
                 onChange={(e) => {
-                  const newRole = e.target.value;
+                  const newRole = e.target.value as UserCreate["role"];
                   const oldRole = userForm.role;
 
                   onUserFormChange("role", newRole);

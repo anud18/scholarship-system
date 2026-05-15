@@ -128,7 +128,9 @@ export function MockSSOLogin() {
           if (profilesResponse.ok) {
             const profilesData = await profilesResponse.json();
             if (profilesData.success) {
-              const profiles = profilesData.data.map((profile: any) => ({
+              const profiles = (
+                profilesData.data as Omit<DeveloperProfile, "developer_id">[]
+              ).map(profile => ({
                 ...profile,
                 developer_id: developerId,
               }));
