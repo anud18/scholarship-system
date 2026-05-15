@@ -61,8 +61,11 @@ class EmailHistory(Base):
     subject = Column(String(500), nullable=False)
     body = Column(Text, nullable=False)
 
-    # Template and categorization
-    template_key = Column(String(100), ForeignKey("email_templates.key"), nullable=True)
+    # Template and categorization.
+    # template_key is NOT a DB-level FK — the per-scholarship template feature
+    # makes email_templates.key non-unique on its own, so the application
+    # layer (EmailTemplateService) handles existence checks at send time.
+    template_key = Column(String(100), nullable=True)
     email_category = Column(String(100), nullable=True, index=True)
 
     # Related entities (for permission filtering)
@@ -88,7 +91,22 @@ class EmailHistory(Base):
     email_size_bytes = Column(Integer)  # For monitoring
 
     # Relationships
-    template = relationship("EmailTemplate", backref="email_history")
+    # template_key is no longer a DB FK and email_templates.key is no longer
+    # unique alone (per-scholarship overrides). Joins are scoped to generic
+    # templates (scholarship_type_id IS NULL) and marked viewonly because
+    # the ORM cannot enforce a unique join target.
+    template = relationship(
+        "EmailTemplate",
+        primaryjoin=(
+            "and_("
+            "foreign(EmailHistory.template_key) == EmailTemplate.key, "
+            "EmailTemplate.scholarship_type_id.is_(None)"
+            ")"
+        ),
+        backref="email_history",
+        viewonly=True,
+        uselist=False,
+    )
     application = relationship("Application", backref="email_history")
     scholarship_type = relationship("ScholarshipType", backref="email_history")
     sent_by = relationship("User", foreign_keys=[sent_by_user_id], backref="sent_emails")
@@ -120,8 +138,9 @@ class ScheduledEmail(Base):
     body = Column(Text, nullable=False)
     html_body = Column(Text, nullable=True)  # Pre-rendered HTML from frontend (preferred)
 
-    # Template and categorization
-    template_key = Column(String(100), ForeignKey("email_templates.key"), nullable=True)
+    # Template and categorization.
+    # template_key is NOT a DB-level FK (same reasoning as EmailHistory above).
+    template_key = Column(String(100), nullable=True)
     email_category = Column(Enum(EmailCategory, values_callable=lambda obj: [e.value for e in obj]), nullable=True)
 
     # Scheduling information
@@ -156,7 +175,19 @@ class ScheduledEmail(Base):
     priority = Column(Integer, default=5)  # 1-10, 1 being highest priority
 
     # Relationships
-    template = relationship("EmailTemplate", backref="scheduled_emails")
+    # template_key is no longer a DB FK (same reasoning as EmailHistory).
+    template = relationship(
+        "EmailTemplate",
+        primaryjoin=(
+            "and_("
+            "foreign(ScheduledEmail.template_key) == EmailTemplate.key, "
+            "EmailTemplate.scholarship_type_id.is_(None)"
+            ")"
+        ),
+        backref="scheduled_emails",
+        viewonly=True,
+        uselist=False,
+    )
     application = relationship("Application", backref="scheduled_emails")
     scholarship_type = relationship("ScholarshipType", backref="scheduled_emails")
     created_by = relationship("User", foreign_keys=[created_by_user_id], backref="created_scheduled_emails")

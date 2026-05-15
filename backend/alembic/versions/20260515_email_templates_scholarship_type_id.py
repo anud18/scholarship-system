@@ -56,22 +56,22 @@ def _existing_key_unique_constraint_name(inspector) -> Union[str, None]:
     return None
 
 
-def _fk_on_email_automation_rules_template_key(inspector) -> Union[str, None]:
-    """Return the auto-generated FK name on ``email_automation_rules.template_key``
-    pointing at ``email_templates.key``.
+def _fks_targeting_email_templates_key(inspector, table_name: str) -> list:
+    """Return all FK names on ``table_name`` that reference ``email_templates.key``.
 
-    This FK was added in migration ``c5d8f9a2b3e1`` and now blocks dropping the
-    single-column unique on ``email_templates.key`` (PostgreSQL requires the
-    referenced columns to have a unique constraint). The application layer
-    handles override-vs-generic template lookup, so dropping this DB-level FK
-    is safe.
+    Multiple tables had FKs to ``email_templates.key`` (added by the SQLAlchemy
+    metadata ``create_all`` in migration ``59b65a4de996`` and by
+    ``c5d8f9a2b3e1``). All of them block dropping the single-column unique on
+    ``email_templates.key``. The application layer handles override-vs-generic
+    template lookup, so dropping these DB-level FKs is safe.
     """
-    if "email_automation_rules" not in inspector.get_table_names():
-        return None
-    for fk in inspector.get_foreign_keys("email_automation_rules"):
-        if fk.get("referred_table") == "email_templates" and fk.get("referred_columns") == ["key"]:
-            return fk.get("name")
-    return None
+    if table_name not in inspector.get_table_names():
+        return []
+    return [
+        fk.get("name")
+        for fk in inspector.get_foreign_keys(table_name)
+        if fk.get("referred_table") == "email_templates" and fk.get("referred_columns") == ["key"] and fk.get("name")
+    ]
 
 
 def upgrade() -> None:
@@ -80,12 +80,16 @@ def upgrade() -> None:
 
     existing_columns = {c["name"] for c in inspector.get_columns("email_templates")}
 
-    # 1. Drop the FK from email_automation_rules.template_key → email_templates.key.
-    #    Otherwise step 3's drop of the single-column unique fails with
-    #    "no unique constraint matching given keys for referenced table".
-    fk_name = _fk_on_email_automation_rules_template_key(inspector)
-    if fk_name:
-        op.drop_constraint(fk_name, "email_automation_rules", type_="foreignkey")
+    # 1. Drop every FK that targets ``email_templates.key``. PostgreSQL won't
+    #    let us replace the single-column unique on ``key`` with a compound
+    #    unique while any FK references it. The known sources are
+    #    ``email_automation_rules.template_key`` (migration c5d8f9a2b3e1),
+    #    ``email_history.template_key`` and ``scheduled_emails.template_key``
+    #    (created by the SQLAlchemy ``create_all`` in 59b65a4de996). Look them
+    #    up dynamically so the auto-generated FK names don't have to be known.
+    for table_name in ("email_automation_rules", "email_history", "scheduled_emails"):
+        for fk_name in _fks_targeting_email_templates_key(inspector, table_name):
+            op.drop_constraint(fk_name, table_name, type_="foreignkey")
 
     # 2. Add scholarship_type_id column + FK + supporting index.
     if "scholarship_type_id" not in existing_columns:
@@ -151,13 +155,15 @@ def downgrade() -> None:
     if "scholarship_type_id" in existing_columns:
         op.drop_column("email_templates", "scholarship_type_id")
 
-    # Restore the FK on email_automation_rules.template_key → email_templates.key
+    # Restore FKs on the three template_key columns → email_templates.key
     # so post-downgrade schema matches the pre-upgrade state.
-    if "email_automation_rules" in inspector.get_table_names():
-        op.create_foreign_key(
-            "fk_email_automation_rules_template_key",
-            "email_automation_rules",
-            "email_templates",
-            ["template_key"],
-            ["key"],
-        )
+    existing_tables = inspector.get_table_names()
+    for table_name in ("email_automation_rules", "email_history", "scheduled_emails"):
+        if table_name in existing_tables:
+            op.create_foreign_key(
+                f"fk_{table_name}_template_key",
+                table_name,
+                "email_templates",
+                ["template_key"],
+                ["key"],
+            )
