@@ -30,7 +30,7 @@ interface VerificationFieldData {
   needs_manual_review?: boolean
 }
 
-interface BankVerificationData {
+export interface BankVerificationData {
   application_id: number
   verification_status: string
   account_number_status?: string

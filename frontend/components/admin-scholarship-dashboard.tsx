@@ -3,7 +3,10 @@
 import { AdminScholarshipManagementInterface } from "@/components/admin-scholarship-management-interface";
 import { ApplicationReviewDialog } from "@/components/common/ApplicationReviewDialog";
 import { ApplicationAuditTrail } from "@/components/application-audit-trail";
-import { BankVerificationReviewDialog } from "@/components/bank-verification-review-dialog";
+import {
+  BankVerificationReviewDialog,
+  type BankVerificationData,
+} from "@/components/bank-verification-review-dialog";
 import { DeleteApplicationDialog } from "@/components/delete-application-dialog";
 import { ProfessorAssignmentDropdown } from "@/components/professor-assignment-dropdown";
 import { SemesterSelector } from "@/components/semester-selector";
@@ -175,7 +178,7 @@ interface DashboardApplication {
   approved_at?: string;
   academic_year?: string;
   semester?: string;
-  meta_data?: any;
+  meta_data?: Record<string, unknown>;
   // Scholarship configuration for professor review requirements
   scholarship_configuration?: {
     requires_professor_recommendation: boolean;
@@ -184,10 +187,17 @@ interface DashboardApplication {
   };
   // Student data snapshot from SIS API (see backend/app/schemas/student_snapshot.py)
   // Fields follow pattern: std_* (basic), trm_* (term), com_* (contact)
-  student_data?: Record<string, any>;
+  student_data?: Record<string, unknown>;
 }
 
-// Data transformation function to map API response to expected format
+// Data transformation function to map API response to expected format.
+// Accepts the loose Application shape from useScholarshipSpecificApplications
+// (which mirrors the admin /applications endpoint) and normalises it into a
+// DashboardApplication. The upstream Application type has fields that diverge
+// from DashboardApplication (e.g. professor_id is string | number, while
+// DashboardApplication narrows it to number), so we keep this parameter
+// loose rather than re-declare the entire transform.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const transformApplicationData = (app: any): DashboardApplication => {
   console.log("🔍 Transforming application data:", app.app_id);
   console.log("📊 Professor data in raw API response:", app.professor);
@@ -323,7 +333,8 @@ export function AdminScholarshipDashboard({
   const [selectedApplicationsForBatch, setSelectedApplicationsForBatch] =
     useState<number[]>([]);
   const [bankReviewDialogOpen, setBankReviewDialogOpen] = useState(false);
-  const [currentBankVerification, setCurrentBankVerification] = useState<any | null>(null);
+  const [currentBankVerification, setCurrentBankVerification] =
+    useState<BankVerificationData | null>(null);
   // 學期選擇相關狀態
   const [selectedAcademicYear, setSelectedAcademicYear] = useState<number>();
   const [selectedSemester, setSelectedSemester] = useState<string>();
@@ -344,7 +355,10 @@ export function AdminScholarshipDashboard({
     user && ["admin", "super_admin", "college"].includes(user.role);
 
   // 處理教授指派回調
-  const handleProfessorAssigned = (applicationId: number, professor: any) => {
+  const handleProfessorAssigned = (
+    _applicationId: number,
+    _professor: unknown
+  ) => {
     // 刷新相應的申請資料
     refetch();
   };
@@ -638,7 +652,9 @@ export function AdminScholarshipDashboard({
   // 獲取郵局驗證狀態的顯示組件（簡化版：僅顯示 icon）
   const getBankVerificationStatus = (app: DashboardApplication) => {
     // 新版：檢查 bank_verification 物件中的分開狀態
-    const bankVerification = app.meta_data?.bank_verification;
+    const bankVerification = app.meta_data?.bank_verification as
+      | { account_number_status?: string; account_holder_status?: string }
+      | undefined;
     const accountNumberStatus = bankVerification?.account_number_status;
     const accountHolderStatus = bankVerification?.account_holder_status;
 
