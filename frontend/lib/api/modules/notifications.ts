@@ -32,7 +32,7 @@ type NotificationResponse = {
   expires_at?: string;
   read_at?: string;
   created_at: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 };
 
 type AnnouncementCreate = {
@@ -40,7 +40,7 @@ type AnnouncementCreate = {
   message: string;
   notification_type?: string;
   target_roles?: string[];
-  metadata?: any;
+  metadata?: Record<string, unknown>;
 };
 
 export function createNotificationsApi() {
