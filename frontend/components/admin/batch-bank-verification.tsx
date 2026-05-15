@@ -86,7 +86,7 @@ export function BatchBankVerification({
       }
     } catch (err) {
       setError('啟動批次驗證時發生錯誤');
-      logger.error(err);
+      logger.error('Failed to start batch verification', { err });
     } finally {
       setIsStarting(false);
     }

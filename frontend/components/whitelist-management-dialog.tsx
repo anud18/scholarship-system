@@ -154,7 +154,7 @@ export function WhitelistManagementDialog({
         }
 
         if (result.failed_items.length > 0) {
-          logger.error("Import errors:", result.failed_items);
+          logger.error("Import errors", { failed_items: result.failed_items });
         }
 
         await loadWhitelist();

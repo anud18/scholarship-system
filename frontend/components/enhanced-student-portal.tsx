@@ -332,7 +332,7 @@ export function EnhancedStudentPortal({
         if (response.success && response.data) {
           setDocumentRequests(response.data);
         } else {
-          logger.error("Failed to fetch document requests:", response.message);
+          logger.error("Failed to fetch document requests", { responseMessage: response.message });
           setDocumentRequests([]);
         }
       } catch (error) {

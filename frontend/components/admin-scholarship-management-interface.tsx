@@ -697,7 +697,7 @@ export function AdminScholarshipManagementInterface({
         const message = `成功: ${result.success_count} 筆，失敗: ${result.failed_items.length} 筆`;
         if (result.failed_items.length > 0) {
           toast.error(message);
-          logger.error("Import errors:", result.failed_items);
+          logger.error("Import errors", { failed_items: result.failed_items });
         } else {
           toast.success(message);
         }

@@ -355,7 +355,7 @@ export function AdminRuleManagement({
           );
         }
       } else {
-        logger.error("[COPY RULES] Copy failed:", response.message);
+        logger.error("[COPY RULES] Copy failed", { responseMessage: response.message });
         throw new Error(response.message || "複製失敗");
       }
     } catch (error) {

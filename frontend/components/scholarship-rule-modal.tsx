@@ -217,7 +217,7 @@ export function ScholarshipRuleModal({
         if (response.success && response.data && Array.isArray(response.data)) {
           setSubTypeOptions(response.data);
         } else {
-          logger.error("Failed to load sub-types:", response.message);
+          logger.error("Failed to load sub-types", { responseMessage: response.message });
           // Keep default options on error
           setSubTypeOptions([
             {
