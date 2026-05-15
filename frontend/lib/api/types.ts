@@ -50,7 +50,7 @@ export interface User {
   raw_data?: {
     chinese_name?: string;
     english_name?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   // Backward compatibility fields
   username?: string; // Maps to nycu_id
@@ -404,7 +404,7 @@ export interface ApplicationCreate {
   agree_terms?: boolean;
   is_renewal?: boolean; // 是否為續領申請
   sub_type_preferences?: string[];
-  [key: string]: any; // 允許動態欄位
+  [key: string]: unknown; // 允許動態欄位
 }
 
 export interface DashboardStats {
@@ -767,7 +767,7 @@ export interface UserListResponse {
   raw_data?: {
     chinese_name?: string;
     english_name?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   // 向後相容性欄位
   username?: string;
@@ -797,7 +797,7 @@ export interface UserListResponse {
   raw_data?: {
     chinese_name?: string;
     english_name?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   // 向後相容性欄位
   username?: string;
@@ -826,7 +826,7 @@ export interface UserResponse {
   raw_data?: {
     chinese_name?: string;
     english_name?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   // 向後相容性欄位
   username?: string;
@@ -857,7 +857,7 @@ export interface UserCreate {
   raw_data?: {
     chinese_name?: string;
     english_name?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   // 向後相容性欄位
   username?: string;
@@ -881,7 +881,7 @@ export interface UserUpdate {
   raw_data?: {
     chinese_name?: string;
     english_name?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   // 向後相容性欄位
   username?: string;
