@@ -96,6 +96,18 @@ interface ReviewData {
   items: ReviewItem[];
 }
 
+// Existing-review payload returned by GET /professor/.../review.
+// Only fields the component reads are typed; backend may attach more.
+interface ExistingReviewPayload {
+  id: number;
+  items?: ReviewItem[];
+  [key: string]: unknown;
+}
+
+// Response shape from professor.submitReview / .updateReview — opaque
+// success/message envelope; we never inspect `data` content here.
+type ProfessorReviewResponse = ApiResponse<{ [key: string]: unknown } | null>;
+
 function ProfessorReviewComponentInner({
   user,
 }: ProfessorReviewComponentProps) {
@@ -130,7 +142,8 @@ function ProfessorReviewComponentInner({
     recommendation: "",
     items: [],
   });
-  const [existingReview, setExistingReview] = useState<any>(null);
+  const [existingReview, setExistingReview] =
+    useState<ExistingReviewPayload | null>(null);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
 
   // Regulations state
@@ -369,7 +382,7 @@ function ProfessorReviewComponentInner({
     setSuccess(null);
 
     try {
-      let response: ApiResponse<any>;
+      let response: ProfessorReviewResponse;
 
       // Filter out pending items - only send approve/reject items to API
       const filteredItems = reviewData.items
@@ -438,7 +451,11 @@ function ProfessorReviewComponentInner({
   };
 
   // Update review item
-  const updateReviewItem = (subTypeCode: string, field: string, value: any) => {
+  const updateReviewItem = (
+    subTypeCode: string,
+    field: keyof ReviewItem,
+    value: ReviewItem[keyof ReviewItem]
+  ) => {
     setReviewData(prev => {
       const newData = {
         ...prev,
