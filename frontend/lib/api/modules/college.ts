@@ -418,14 +418,14 @@ export function createCollegeApi() {
      * Uses multi-role review API endpoint
      * Type-safe: Path parameter validated against OpenAPI
      */
-    getSubTypes: async (applicationId: number): Promise<ApiResponse<any[]>> => {
+    getSubTypes: async (applicationId: number): Promise<ApiResponse<string[]>> => {
       const response = await typedClient.raw.GET(
         "/api/v1/reviews/applications/{application_id}/sub-types" as any,
         {
           params: { path: { application_id: applicationId } },
         }
       );
-      return toApiResponse<any[]>(response);
+      return toApiResponse<string[]>(response);
     },
 
     /**
