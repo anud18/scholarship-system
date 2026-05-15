@@ -225,6 +225,14 @@ async def createSystemAnnouncement(
     """
     # 檢查管理員權限
     if not current_user.is_admin() and not current_user.is_super_admin():
+        logger.warning(
+            "SECURITY: non-admin attempted access to notifications admin endpoint",
+            extra={
+                "user_id": current_user.id,
+                "nycu_id": current_user.nycu_id,
+                "role": current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
+            },
+        )
         raise HTTPException(status_code=403, detail="需要管理員權限")
 
     try:
@@ -283,6 +291,14 @@ async def createTestNotifications(current_user: User = Depends(get_current_user)
     """
     # 檢查管理員權限
     if not current_user.is_admin() and not current_user.is_super_admin():
+        logger.warning(
+            "SECURITY: non-admin attempted access to notifications admin endpoint",
+            extra={
+                "user_id": current_user.id,
+                "nycu_id": current_user.nycu_id,
+                "role": current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
+            },
+        )
         raise HTTPException(status_code=403, detail="需要管理員權限")
 
     try:
@@ -357,6 +373,14 @@ async def getAllAnnouncements(
     """
     # 檢查管理員權限
     if not current_user.is_admin() and not current_user.is_super_admin():
+        logger.warning(
+            "SECURITY: non-admin attempted access to notifications admin endpoint",
+            extra={
+                "user_id": current_user.id,
+                "nycu_id": current_user.nycu_id,
+                "role": current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
+            },
+        )
         raise HTTPException(status_code=403, detail="需要管理員權限")
 
     try:
@@ -438,6 +462,14 @@ async def getAnnouncement(
     """
     # 檢查管理員權限
     if not current_user.is_admin() and not current_user.is_super_admin():
+        logger.warning(
+            "SECURITY: non-admin attempted access to notifications admin endpoint",
+            extra={
+                "user_id": current_user.id,
+                "nycu_id": current_user.nycu_id,
+                "role": current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
+            },
+        )
         raise HTTPException(status_code=403, detail="需要管理員權限")
 
     try:
@@ -500,6 +532,14 @@ async def createAnnouncement(
     """
     # 檢查管理員權限
     if not current_user.is_admin() and not current_user.is_super_admin():
+        logger.warning(
+            "SECURITY: non-admin attempted access to notifications admin endpoint",
+            extra={
+                "user_id": current_user.id,
+                "nycu_id": current_user.nycu_id,
+                "role": current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
+            },
+        )
         raise HTTPException(status_code=403, detail="需要管理員權限")
 
     try:
@@ -563,6 +603,14 @@ async def updateAnnouncement(
     """
     # 檢查管理員權限
     if not current_user.is_admin() and not current_user.is_super_admin():
+        logger.warning(
+            "SECURITY: non-admin attempted access to notifications admin endpoint",
+            extra={
+                "user_id": current_user.id,
+                "nycu_id": current_user.nycu_id,
+                "role": current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
+            },
+        )
         raise HTTPException(status_code=403, detail="需要管理員權限")
 
     try:
@@ -649,6 +697,14 @@ async def deleteAnnouncement(
     """
     # 檢查管理員權限
     if not current_user.is_admin() and not current_user.is_super_admin():
+        logger.warning(
+            "SECURITY: non-admin attempted access to notifications admin endpoint",
+            extra={
+                "user_id": current_user.id,
+                "nycu_id": current_user.nycu_id,
+                "role": current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
+            },
+        )
         raise HTTPException(status_code=403, detail="需要管理員權限")
 
     try:
