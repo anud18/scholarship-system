@@ -157,9 +157,9 @@ export function PeriodDetailDialog({
       } else {
         throw new Error(response.message || "產生造冊失敗")
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to generate roster:", error)
-      toast.error(`產生造冊失敗: ${error.message || "無法產生造冊"}`)
+      toast.error(`產生造冊失敗: ${(error instanceof Error ? error.message : "無法產生造冊")}`)
     } finally {
       setGenerating(false)
     }

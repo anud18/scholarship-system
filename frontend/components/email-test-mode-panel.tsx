@@ -163,8 +163,8 @@ export function EmailTestModePanel() {  const [status, setStatus] = useState<Tes
       } else {
         throw new Error(response.data?.error || "無法發送測試郵件");
       }
-    } catch (error: any) {
-      toast.error(error.message || "無法發送測試郵件",
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "無法發送測試郵件"),
       );
     } finally {
       setSendingTestEmail(false);
@@ -192,8 +192,8 @@ export function EmailTestModePanel() {  const [status, setStatus] = useState<Tes
         setRedirectEmails([]);
         toast.success(`所有郵件將重定向到 ${redirectEmails.length} 個測試信箱，將於 ${durationHours} 小時後自動關閉`);
       }
-    } catch (error: any) {
-      toast.error(error.message || "無法啟用測試模式",
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "無法啟用測試模式"),
       );
     } finally {
       setLoading(false);
@@ -210,8 +210,8 @@ export function EmailTestModePanel() {  const [status, setStatus] = useState<Tes
         setShowDisableDialog(false);
         toast.success("郵件將正常發送至實際收件人");
       }
-    } catch (error: any) {
-      toast.error(error.message || "無法停用測試模式",
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "無法停用測試模式"),
       );
     } finally {
       setLoading(false);

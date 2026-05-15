@@ -185,8 +185,8 @@ function ProfessorReviewComponentInner({
         setApplications([]);
         setFilteredApplications([]);
       }
-    } catch (e: any) {
-      setError(e.message || "Failed to load applications");
+    } catch (e: unknown) {
+      setError((e instanceof Error ? e.message : "Failed to load applications"));
       setApplications([]);
       setFilteredApplications([]);
     } finally {
@@ -352,9 +352,9 @@ function ProfessorReviewComponentInner({
       }
 
       setReviewModalOpen(true);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("Error opening review modal:", e);
-      setError(e.message || "Failed to load review data");
+      setError((e instanceof Error ? e.message : "Failed to load review data"));
     } finally {
       setLoading(false);
     }
@@ -430,8 +430,8 @@ function ProfessorReviewComponentInner({
       } else {
         setError(response.message || "Failed to submit review");
       }
-    } catch (e: any) {
-      setError(e.message || "Failed to submit review");
+    } catch (e: unknown) {
+      setError((e instanceof Error ? e.message : "Failed to submit review"));
     } finally {
       setLoading(false);
     }

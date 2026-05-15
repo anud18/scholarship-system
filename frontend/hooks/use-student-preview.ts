@@ -124,14 +124,14 @@ export function useStudentPreview(): UseStudentPreviewReturn {
       } else {
         throw new Error(result.message || 'Failed to load student preview');
       }
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
         // Request was cancelled, ignore
         return;
       }
 
       console.error('Error fetching student preview:', err);
-      setError(err.message || 'Failed to load student preview');
+      setError((err instanceof Error ? err.message : 'Failed to load student preview'));
       setPreviewData(null);
     } finally {
       setIsLoading(false);

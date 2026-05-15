@@ -54,10 +54,10 @@ export function createProfessorApi() {
             "Failed to load applications - unexpected response format",
           data: [],
         };
-      } catch (error: any) {
+      } catch (error: unknown) {
         return {
           success: false,
-          message: error.message || "Failed to load applications",
+          message: (error instanceof Error ? error.message : "Failed to load applications"),
           data: [],
         };
       }
