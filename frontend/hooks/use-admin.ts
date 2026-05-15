@@ -297,16 +297,27 @@ export function useCollegeApplications() {
 
         if (response.success && response.data) {
           // Transform data to ensure consistent field mapping
-          const transformedApplications = response.data.map((app: any) => ({
-            ...app,
-            // Ensure student fields are correctly mapped
-            student_name:
-              app.student_name ||
-              app.student_info?.display_name ||
-              "未提供姓名",
-            student_id:
-              app.student_id || app.student_info?.student_id_masked || "N/A",
-          }));
+          const transformedApplications = response.data.map(app => {
+            // Loose typing for fields not on the canonical Application
+            // type (the college-review endpoint includes a denormalized
+            // `student_info` block plus already-flattened student_name /
+            // student_id strings). We narrow only the read fields.
+            const a = app as Application & {
+              student_info?: {
+                display_name?: string;
+                student_id_masked?: string;
+              };
+            };
+            return {
+              ...a,
+              student_name:
+                a.student_name ||
+                a.student_info?.display_name ||
+                "未提供姓名",
+              student_id:
+                a.student_id || a.student_info?.student_id_masked || "N/A",
+            };
+          });
           setApplications(transformedApplications);
         } else {
           throw new Error(
