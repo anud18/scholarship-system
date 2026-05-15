@@ -50,8 +50,8 @@ class RateLimiter:
 
             return is_limited, remaining
 
-        except Exception as e:
-            logger.error(f"Rate limiting check failed: {e}")
+        except Exception:
+            logger.exception("Rate limiting check failed")
             # Fail open - don't block requests if Redis is down
             return False, limit
 

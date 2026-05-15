@@ -72,14 +72,14 @@ def handle_college_review_errors(func: Callable) -> Callable:
             ) from e
 
         except IntegrityError as e:
-            logger.error(f"Database integrity error: {str(e)}")
+            logger.exception("Database integrity error")
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="The request conflicts with existing data",
             ) from e
 
         except DatabaseError as e:
-            logger.error(f"Database error: {str(e)}")
+            logger.exception("Database error")
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Database service temporarily unavailable",

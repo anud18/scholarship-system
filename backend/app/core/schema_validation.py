@@ -204,9 +204,9 @@ def debug_response_schema_mismatch(
     try:
         validate_response_data(response_data, expected_schema)
         debug_logger.info(f"✅ Schema validation passed for {expected_schema.__name__}")
-    except SchemaValidationError as e:
+    except SchemaValidationError:
         debug_logger.error(f"❌ Schema validation failed for {expected_schema.__name__}")
-        debug_logger.error(f"Error details: {e}")
+        debug_logger.exception("Error details")
 
         if isinstance(response_data, dict):
             actual_fields = set(response_data.keys())
@@ -251,8 +251,8 @@ def validate_response_schema(schema: Type[BaseModel]):
                 try:
                     validate_response_data(result, schema)
                     logger.debug(f"✅ Response schema validation passed for {func.__name__}")
-                except SchemaValidationError as e:
-                    logger.error(f"❌ Response schema validation failed for {func.__name__}: {e}")
+                except SchemaValidationError:
+                    logger.exception(f"❌ Response schema validation failed for {func.__name__}")
                     # In development, we might want to raise the error
                     # In production, we might want to log and continue
                     raise
@@ -276,7 +276,7 @@ try:
     validate_response_data(response_data, EligibleScholarshipResponse)
     return response_data
 except SchemaValidationError as e:
-    logger.error(f"Schema validation failed: {e}")
+    logger.exception("Schema validation failed")
     # Handle the error appropriately
 
 # Example 2: Using converter
