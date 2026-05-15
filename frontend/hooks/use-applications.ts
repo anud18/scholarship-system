@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiClient, Application, ApplicationCreate } from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
 import { useAuth } from "./use-auth";
 
 export function useApplications() {
@@ -11,7 +12,7 @@ export function useApplications() {
   const fetchApplications = useCallback(
     async (status?: string) => {
       if (!isAuthenticated) {
-        console.log("User not authenticated, skipping application fetch");
+        logger.debug("User not authenticated, skipping application fetch");
         return;
       }
 
@@ -29,7 +30,7 @@ export function useApplications() {
           throw new Error(response.message || "Failed to fetch applications");
         }
       } catch (err) {
-        console.error("Error fetching applications:", err);
+        logger.error("Error fetching applications", { err });
         setError(
           err instanceof Error ? err.message : "Failed to fetch applications"
         );

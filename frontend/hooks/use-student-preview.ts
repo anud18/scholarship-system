@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { createCollegeApi } from '@/lib/api/modules/college';
+import { logger } from '@/lib/utils/logger';
 
 interface StudentPreviewBasic {
   // === 學籍資料 ===
@@ -130,7 +131,7 @@ export function useStudentPreview(): UseStudentPreviewReturn {
         return;
       }
 
-      console.error('Error fetching student preview:', err);
+      logger.error('Error fetching student preview', { err });
       setError((err instanceof Error ? err.message : 'Failed to load student preview'));
       setPreviewData(null);
     } finally {
