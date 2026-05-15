@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -15,6 +16,8 @@ from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User
 from app.schemas.response import ApiResponse
 from app.schemas.scholarship import EligibleScholarshipResponse, ScholarshipTypeResponse, WhitelistToggleRequest
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -349,6 +352,21 @@ async def reset_application_periods(current_user: User = Depends(require_admin),
         scholarship.application_start_date = start_date
         scholarship.application_end_date = end_date
     await db.commit()
+
+    logger.warning(
+        "Application periods reset for %d scholarship(s) by admin user_id=%s (start=%s end=%s)",
+        len(scholarships),
+        current_user.id,
+        start_date.isoformat(),
+        end_date.isoformat(),
+        extra={
+            "scholarships_updated": len(scholarships),
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+            "actor_user_id": current_user.id,
+        },
+    )
+
     return ApiResponse(
         success=True,
         message=f"Reset {len(scholarships)} scholarship application periods",
@@ -541,7 +559,11 @@ async def upload_terms_document(
 
     except Exception as e:
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to upload terms document: {str(e)}")
+        logger.exception(
+            "Failed to upload terms document",
+            extra={"scholarship_type": scholarship_type, "actor_user_id": current_user.id},
+        )
+        raise HTTPException(status_code=500, detail=f"Failed to upload terms document: {str(e)}") from e
 
 
 @router.get("/{scholarship_type}/terms")
@@ -600,7 +622,11 @@ async def get_terms_document(
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve terms document: {str(e)}")
+        logger.exception(
+            "Failed to retrieve terms document",
+            extra={"scholarship_type": scholarship_type},
+        )
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve terms document: {str(e)}") from e
 
 
 @router.patch("/{id}/whitelist")
@@ -631,11 +657,28 @@ async def toggle_scholarship_whitelist(
         raise HTTPException(status_code=404, detail=f"找不到ID為 {id} 的獎學金類型")
 
     # Update whitelist_enabled
+    previous_state = scholarship.whitelist_enabled
     scholarship.whitelist_enabled = request.enabled
     scholarship.updated_by = current_user.id
 
     await db.commit()
     await db.refresh(scholarship)
+
+    logger.warning(
+        "Scholarship whitelist %s → %s for scholarship_id=%d (%s) by admin user_id=%s",
+        previous_state,
+        scholarship.whitelist_enabled,
+        id,
+        scholarship.code,
+        current_user.id,
+        extra={
+            "scholarship_id": id,
+            "scholarship_code": scholarship.code,
+            "previous_whitelist_enabled": previous_state,
+            "new_whitelist_enabled": scholarship.whitelist_enabled,
+            "actor_user_id": current_user.id,
+        },
+    )
 
     # Get active configuration for amount and other details
     config_stmt = (
