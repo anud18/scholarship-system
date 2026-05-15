@@ -566,11 +566,18 @@ export function AdminScholarshipManagementInterface({
       );
 
       if (response.success) {
-        // Update the document in state with new example_file_url
+        // Update the document in state with new example_file_url.
+        // ApiResponse.data is typed as `T | undefined`; the `response.success`
+        // check above doesn't narrow it (no discriminated union), so use `?.`
+        // and fall back to the existing url if the backend omitted it.
         setDocumentRequirements(prev =>
           prev.map(doc =>
             doc.id === documentId
-              ? { ...doc, example_file_url: response.data.example_file_url }
+              ? {
+                  ...doc,
+                  example_file_url:
+                    response.data?.example_file_url ?? doc.example_file_url,
+                }
               : doc
           )
         );
