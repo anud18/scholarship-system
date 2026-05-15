@@ -15,6 +15,23 @@ import { toApiResponse } from '../compat';
 import type { ApiResponse } from '../types';
 import type { User } from '../types';
 
+/**
+ * Shape of an entry in the mock-SSO user catalogue (development only).
+ * Mirrors the response of GET /api/v1/auth/mock-sso/users.
+ */
+export interface AuthMockUser {
+  id: string;
+  nycu_id: string;
+  name: string;
+  email: string;
+  role: "student" | "professor" | "college" | "admin" | "super_admin";
+  description: string;
+  raw_data?: {
+    chinese_name?: string;
+    english_name?: string;
+  };
+}
+
 export function createAuthApi() {
   return {
     /**
@@ -122,9 +139,9 @@ export function createAuthApi() {
      *
      * Type-safe: Response array type inferred from OpenAPI
      */
-    getMockUsers: async (): Promise<ApiResponse<any[]>> => {
+    getMockUsers: async (): Promise<ApiResponse<AuthMockUser[]>> => {
       const response = await typedClient.raw.GET('/api/v1/auth/mock-sso/users');
-      return toApiResponse<any[]>(response);
+      return toApiResponse<AuthMockUser[]>(response);
     },
 
     /**
