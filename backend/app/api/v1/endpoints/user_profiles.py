@@ -8,14 +8,14 @@ import logging
 import os
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.path_security import validate_filename_strict
-from app.core.security import get_current_user, require_admin
+from app.core.security import get_current_user, require_admin, verify_token
 from app.db.deps import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.user_profile import (
     AdvisorInfoUpdate,
     BankDocumentPhotoUpload,
@@ -25,6 +25,7 @@ from app.schemas.user_profile import (
     UserProfileResponse,
     UserProfileUpdate,
 )
+from app.services.auth_service import AuthService
 from app.services.ocr_service import get_ocr_service
 from app.services.user_profile_service import UserProfileService
 
@@ -319,10 +320,40 @@ async def delete_my_profile(current_user: User = Depends(get_current_user), db: 
 
 
 @router.get("/files/bank_documents/{filename}")
-async def get_bank_document(filename: str, db: AsyncSession = Depends(get_db)):
-    """Serve bank documents from MinIO"""
+async def get_bank_document(
+    filename: str,
+    # JWTs from this system are dot-separated base64url segments. Constrain
+    # length + charset at the FastAPI layer so malformed / oversized strings
+    # 422 before they reach verify_token().
+    token: Optional[str] = Query(None, description="Access token", max_length=2048, pattern=r"^[A-Za-z0-9._-]+$"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Serve bank documents from MinIO.
+
+    SECURITY: Bank passbook photos are highly sensitive PII (account
+    numbers, holder names). Requires:
+    1. A valid JWT (passed via ?token=... since browsers can't set
+       Authorization headers on <img src> / <iframe src>).
+    2. The requesting user must own the document OR be an authorized
+       reviewer (professor with student relationship, college, admin,
+       super_admin).
+    """
     # SECURITY: Comprehensive filename validation (CLAUDE.md triple validation)
     validate_filename_strict(filename, allow_unicode=True)
+
+    # SECURITY: Verify JWT before any database lookups or filesystem access.
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Access token required")
+    try:
+        payload = verify_token(token)
+        user_id = int(payload.get("sub"))
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
+
+    auth_service = AuthService(db)
+    current_user = await auth_service.get_user_by_id(user_id)
+    if not current_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user")
 
     try:
         # Try to serve from MinIO first (new approach)
@@ -339,6 +370,24 @@ async def get_bank_document(filename: str, db: AsyncSession = Depends(get_db)):
         profile = result.scalar_one_or_none()
 
         if profile:
+            # SECURITY: Ownership / role gate. Owners pass; reviewers and admins pass.
+            is_owner = profile.user_id == current_user.id
+            is_admin = current_user.role in (UserRole.admin, UserRole.super_admin, UserRole.college)
+            is_authorized_professor = current_user.role == UserRole.professor and current_user.can_access_student_data(
+                profile.user_id, "view_applications"
+            )
+            if not (is_owner or is_admin or is_authorized_professor):
+                logger.warning(
+                    "SECURITY: unauthorized bank document access attempt",
+                    extra={
+                        "requester_user_id": current_user.id,
+                        "requester_role": str(current_user.role),
+                        "owner_user_id": profile.user_id,
+                        "filename": filename,
+                    },
+                )
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
             # Try to construct the MinIO object path
             # Format: user-profiles/{user_id}/bank-documents/{filename}
             object_name = f"user-profiles/{profile.user_id}/bank-documents/{filename}"
@@ -371,7 +420,22 @@ async def get_bank_document(filename: str, db: AsyncSession = Depends(get_db)):
                 # If MinIO fails, try fallback to local storage
                 pass
 
-        # Fallback to local storage (backward compatibility)
+        # Fallback to local storage (backward compatibility for legacy files
+        # uploaded before MinIO migration). The MinIO path above performed
+        # explicit ownership / role checks via the matching UserProfile row;
+        # the legacy local-storage path has no per-file ownership metadata,
+        # so SECURITY: only admin/college/super_admin reviewers may reach it.
+        if current_user.role not in (UserRole.admin, UserRole.super_admin, UserRole.college):
+            logger.warning(
+                "SECURITY: non-admin role attempted legacy bank document access",
+                extra={
+                    "requester_user_id": current_user.id,
+                    "requester_role": str(current_user.role),
+                    "filename": filename,
+                },
+            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="證明文件不存在")
+
         upload_base = os.environ.get("UPLOAD_BASE_DIR", "uploads")
         bank_docs_dir = os.environ.get("BANK_DOCUMENTS_DIR", "bank_documents")
         storage_directory = os.path.join(upload_base, bank_docs_dir)
