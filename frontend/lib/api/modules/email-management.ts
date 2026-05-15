@@ -38,11 +38,13 @@ type ScheduledEmailParams = {
 };
 
 type PaginatedEmailResponse = {
-  // Consumed by admin-management-interface as Record<string, unknown>[].
-  // The on-wire row shape diverges from any single canonical interface
-  // (history vs scheduled vs auto-response), so the narrow stops at structural
-  // dictionary access.
-  items: Record<string, unknown>[];
+  // intentionally `any[]` — same paginated response wraps several distinct
+  // row shapes (EmailHistoryItem, ScheduledEmailItem, audit-log row, …) that
+  // are declared per-consumer. Narrowing here breaks `setEmailHistory(items)`
+  // / `setScheduledEmails(items)` / `setAuditLogs(items)` at every caller.
+  // See PR #674 commit-history for the reverted attempt.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  items: any[];
   total: number;
   skip: number;
   limit: number;
