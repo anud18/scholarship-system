@@ -154,7 +154,12 @@ export function AdminRuleManagement({
       setLoading(true);
       try {
         // 根據獎學金類型決定是否包含學期參數
-        const params: any = {
+        const params: {
+          scholarship_type_id: number;
+          academic_year: number;
+          is_active: boolean;
+          semester?: string | null;
+        } = {
           scholarship_type_id: scholarshipType.id,
           academic_year: year,
           is_active: true, // Explicitly filter for active rules
