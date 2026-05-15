@@ -280,8 +280,34 @@ async def delete_scholarship_rule(
     # Check permission to manage this scholarship
     check_scholarship_permission(current_user, rule.scholarship_type_id)
 
+    # Capture audit fields before the row is gone — once the rule row is
+    # deleted, the audit context (which scholarship, which rule, which
+    # academic period) is unrecoverable.
+    target_scholarship_type_id = rule.scholarship_type_id
+    target_rule_code = getattr(rule, "rule_code", None) or getattr(rule, "code", None)
+    target_academic_year = getattr(rule, "academic_year", None)
+    target_semester = getattr(rule, "semester", None)
+    if hasattr(target_semester, "value"):
+        target_semester = target_semester.value
+
     await db.delete(rule)
     await db.commit()
+
+    # Scholarship rules govern eligibility decisions — deletion changes
+    # which students qualify for which awards. Audit trail is required
+    # to investigate disputes after the fact.
+    logger.info(
+        "scholarship rule deleted",
+        extra={
+            "actor_user_id": current_user.id,
+            "actor_role": str(current_user.role),
+            "rule_id": id,
+            "scholarship_type_id": target_scholarship_type_id,
+            "rule_code": target_rule_code,
+            "academic_year": target_academic_year,
+            "semester": target_semester,
+        },
+    )
 
     return {
         "success": True,
