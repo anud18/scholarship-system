@@ -70,11 +70,17 @@ function safeStringify(value: unknown): string {
  * - HTTP status codes
  * - Error message extraction
  *
- * @param response - openapi-fetch response object (uses any to accept full OpenAPI types)
+ * @param response - openapi-fetch response object. Typed as
+ *   ``FetchResponse<unknown>`` so callers can pass any openapi-fetch
+ *   response without forcing the caller's `T` to flow through the
+ *   typed-client's generated union (which is often
+ *   `Record<string, never>` for nested body schemas the backend doesn't
+ *   fully emit). The wrapper inspects ``response.data`` and re-narrows
+ *   to ``T`` at the return boundary.
  * @returns ApiResponse<T> in standard format
  */
 export function toApiResponse<T>(
-  response: any
+  response: FetchResponse<unknown>
 ): ApiResponse<T> {
   // Handle error responses
   if (response.error) {
@@ -111,7 +117,9 @@ export function toApiResponse<T>(
   // Handle success responses
   // Backend already returns ApiResponse format {success, message, data}
   if (response.data && typeof response.data === 'object') {
-    const data = response.data as any;
+    // Narrow to dict for the field-presence check below; payload shape is
+    // generic across endpoints so structural access is the safe minimum.
+    const data = response.data as Record<string, unknown>;
 
     // If backend returns ApiResponse format, use it directly
     if ('success' in data && 'data' in data) {
@@ -121,7 +129,11 @@ export function toApiResponse<T>(
         : safeStringify(data.message) || 'Request completed successfully';
 
       return {
-        success: data.success,
+        // `data` is `Record<string, unknown>` from the structural narrow above;
+        // backend ApiResponse format guarantees `success: boolean`. Coerce
+        // explicitly so the strict prod build (Next.js TS) accepts the
+        // assignment.
+        success: Boolean(data.success),
         message: message,
         data: data.data as T,
       };
