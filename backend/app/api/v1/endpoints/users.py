@@ -211,7 +211,7 @@ async def get_all_users(
             user_roles = [UserRole(r) for r in role_list]
             stmt = stmt.where(User.role.in_(user_roles))
         except ValueError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid role in roles parameter: {e}")
+            raise HTTPException(status_code=400, detail=f"Invalid role in roles parameter: {e}") from e
     elif role:
         # Handle single role (backward compatibility)
         try:

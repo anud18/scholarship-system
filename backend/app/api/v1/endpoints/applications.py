@@ -553,7 +553,7 @@ async def restore_application(
                 else status.HTTP_404_NOT_FOUND if isinstance(e, NotFoundError) else status.HTTP_403_FORBIDDEN
             ),
             detail=str(e),
-        )
+        ) from e
 
 
 @router.get("/{id}/files")
@@ -837,7 +837,7 @@ async def update_student_data(
                 else status.HTTP_404_NOT_FOUND if isinstance(e, NotFoundError) else status.HTTP_403_FORBIDDEN
             ),
             detail=str(e),
-        )
+        ) from e
 
 
 @router.get("/{id}/student-data")

@@ -56,7 +56,7 @@ async def export_application_package(
             college_code=college_code,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     encoded_filename = quote(zip_filename)
 

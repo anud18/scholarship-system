@@ -82,7 +82,7 @@ async def create_facebook_style_notification(
             "message": "Facebook-style notification created successfully",
         }
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post("/notifications/batch")
@@ -110,7 +110,7 @@ async def create_batch_notifications(
             "message": "Batch notifications queued successfully",
         }
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.get("/notifications/aggregated/{group_key}")
@@ -171,7 +171,7 @@ async def update_notification_preferences(
             "message": "Preferences updated successfully",
         }
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.get("/notifications/analytics")

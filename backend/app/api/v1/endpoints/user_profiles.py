@@ -82,7 +82,7 @@ async def create_my_profile(
             "data": UserProfileResponse.model_validate(profile),
         }
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
 
 @router.put("/me")
@@ -206,7 +206,7 @@ async def upload_bank_document(
             "data": {"document_url": document_url},
         }
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post("/me/bank-document/file")

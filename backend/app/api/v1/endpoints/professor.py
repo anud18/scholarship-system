@@ -205,7 +205,7 @@ async def submit_professor_review(
     except NotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
     except AuthorizationError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Error submitting professor review: {str(e)}")
         import traceback
@@ -284,7 +284,7 @@ async def update_professor_review(
         }
 
     except AuthorizationError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except NotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review not found")
     except Exception as e:

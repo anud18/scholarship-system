@@ -186,7 +186,7 @@ async def mock_sso_login(request: Request, request_data: PortalSSORequest, db: A
             },
         }
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 async def get_portal_sso_data(
@@ -274,7 +274,7 @@ async def portal_sso_verify(
             # Return in exact portal format for testing
             return {"status": "success", "message": "jwt pass", "data": portal_data}
         except ValueError as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
     # Real Portal SSO flow
     if not final_token:
@@ -328,7 +328,7 @@ async def portal_sso_verify_get(username: str, db: AsyncSession = Depends(get_db
         # Return in exact portal format
         return {"status": "success", "message": "jwt pass", "data": portal_data}
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 # Developer Profile endpoints for personalized testing
@@ -455,7 +455,7 @@ async def create_custom_profile(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid profile data: {str(e)}",
-        )
+        ) from e
 
 
 @router.post("/dev-profiles/{developer_id}/student-suite")

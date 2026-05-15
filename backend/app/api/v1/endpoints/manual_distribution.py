@@ -201,7 +201,7 @@ async def allocate(
             "data": result,
         }
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post("/finalize")
@@ -225,7 +225,7 @@ async def finalize(
             "data": result,
         }
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.get("/{scholarship_type_id}/history")
@@ -311,7 +311,7 @@ async def restore_from_history(
             "data": restore_result,
         }
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Error restoring from history: {str(e)}")
         raise HTTPException(
@@ -496,7 +496,7 @@ async def generate_rosters_from_distribution(
             },
         }
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Error generating rosters from distribution: {str(e)}", exc_info=True)
         raise HTTPException(
@@ -542,7 +542,7 @@ async def import_received_months(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"無法解析 Excel 檔案，請確認格式正確: {type(e).__name__}",
-        )
+        ) from e
 
     if not rows:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Excel 檔案沒有資料列")
