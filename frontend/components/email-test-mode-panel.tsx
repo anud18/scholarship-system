@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { AlertCircle, CheckCircle, Clock, Mail, RefreshCw, Shield, ChevronDown, ChevronUp, Send } from "lucide-react";
 import { api } from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -103,7 +104,7 @@ export function EmailTestModePanel() {  const [status, setStatus] = useState<Tes
         setStatus(response.data);
       }
     } catch (error) {
-      console.error("Failed to load test mode status:", error);
+      logger.error("Failed to load test mode status", { error });
       toast.error("無法載入測試模式狀態",
       );
     } finally {
@@ -118,7 +119,7 @@ export function EmailTestModePanel() {  const [status, setStatus] = useState<Tes
         setAuditLogs(response.data.items);
       }
     } catch (error) {
-      console.error("Failed to load audit logs:", error);
+      logger.error("Failed to load audit logs", { error });
     }
   };
 
@@ -130,7 +131,7 @@ export function EmailTestModePanel() {  const [status, setStatus] = useState<Tes
         setEmailHistory(response.data.items);
       }
     } catch (error) {
-      console.error("Failed to load email history:", error);
+      logger.error("Failed to load email history", { error });
       toast.error("無法載入郵件歷史紀錄",
       );
     } finally {

@@ -37,6 +37,7 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
 import { getTranslation } from "@/lib/i18n";
 import type {
   ApplicationField,
@@ -148,7 +149,7 @@ export function DynamicApplicationForm({
         setError(t("form_upload.load_form_config_failed"));
       }
     } catch (err) {
-      console.error("Failed to load form configuration:", err);
+      logger.error("Failed to load form configuration", { err });
       setError(t("form_upload.load_form_config_error"));
     } finally {
       setIsLoading(false);
@@ -193,7 +194,7 @@ export function DynamicApplicationForm({
         "";
 
       if (!token) {
-        console.error("No authentication token available");
+        logger.error("No authentication token available");
         return null;
       }
     }
@@ -650,7 +651,7 @@ export function DynamicApplicationForm({
                   link.rel = "noopener noreferrer";
                   link.click();
                 } catch (error) {
-                  console.error("Failed to build preview URL:", error);
+                  logger.error("Failed to build preview URL", { error });
                   alert(t("form_upload.preview_open_failed"));
                 }
               }}
