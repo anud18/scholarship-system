@@ -165,7 +165,7 @@ async def test_stats_reviewed_app_moves_from_pending_to_completed(db: AsyncSessi
         status=ApplicationStatus.submitted.value,
         suffix="s1",
     )
-    app2 = await _seed_app(
+    await _seed_app(
         db,
         student=student,
         professor=professor,

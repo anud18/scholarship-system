@@ -73,7 +73,7 @@ class TestCreateTask:
 
         with patch("app.services.bank_verification_task_service.BankVerificationTask") as task_cls:
             task_cls.side_effect = lambda **kw: SimpleNamespace(**kw)
-            result = await service.create_task(application_ids=[1, 2, 3], created_by_user_id=42)
+            await service.create_task(application_ids=[1, 2, 3], created_by_user_id=42)
             # task_id passed to BankVerificationTask ctor must be a UUID string
             kwargs = task_cls.call_args.kwargs
             assert len(kwargs["task_id"]) == 36  # uuid4 string format

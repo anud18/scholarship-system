@@ -52,7 +52,7 @@ def test_system_setting_is_public_defaults_to_false():
 def test_system_setting_create_inherits_base_fields():
     # Pin: Create is a thin alias of Base (no extra fields). Don't
     # widen silently.
-    fields = set(SystemSettingCreate_fields := SystemSettingBase.model_fields.keys())
+    fields = set(SystemSettingBase.model_fields.keys())
     assert fields == {"key", "value", "description", "is_public", "category"}
 
 
