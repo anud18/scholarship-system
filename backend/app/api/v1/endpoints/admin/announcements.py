@@ -128,6 +128,19 @@ async def create_announcement(
     await db.commit()
     await db.refresh(announcement)
 
+    logger.info(
+        "system-announcement created: id=%s title=%r by user_id=%s",
+        announcement.id,
+        announcement.title,
+        current_user.id,
+        extra={
+            "actor_user_id": current_user.id,
+            "actor_role": current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
+            "announcement_id": announcement.id,
+            "announcement_title": announcement.title,
+        },
+    )
+
     # 修正 meta_data 字段以確保序列化正常
     announcement_dict = {
         "id": announcement.id,
@@ -250,6 +263,21 @@ async def update_announcement(
     await db.commit()
     await db.refresh(announcement)
 
+    logger.info(
+        "system-announcement updated: id=%s title=%r by user_id=%s fields=%s",
+        announcement.id,
+        announcement.title,
+        current_user.id,
+        sorted(update_data.keys()) if update_data else [],
+        extra={
+            "actor_user_id": current_user.id,
+            "actor_role": current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
+            "announcement_id": announcement.id,
+            "announcement_title": announcement.title,
+            "updated_fields": sorted(update_data.keys()) if update_data else [],
+        },
+    )
+
     # 修正 meta_data 字段以確保序列化正常
     announcement_dict = {
         "id": announcement.id,
@@ -301,8 +329,25 @@ async def delete_announcement(id: int, current_user: User = Depends(require_admi
     if not announcement:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="System announcement not found")
 
+    # Capture pre-delete fields so the audit row remains meaningful after commit.
+    deleted_id = announcement.id
+    deleted_title = announcement.title
+
     # Delete announcement
     await db.delete(announcement)
     await db.commit()
+
+    logger.info(
+        "system-announcement deleted: id=%s title=%r by user_id=%s",
+        deleted_id,
+        deleted_title,
+        current_user.id,
+        extra={
+            "actor_user_id": current_user.id,
+            "actor_role": current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
+            "announcement_id": deleted_id,
+            "announcement_title": deleted_title,
+        },
+    )
 
     return {"success": True, "message": "系統公告已成功刪除", "data": None}
