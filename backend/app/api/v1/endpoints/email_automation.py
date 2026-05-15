@@ -142,7 +142,7 @@ def validate_condition_query(query: Optional[str]) -> None:
 
     except RegexValidationError as e:
         # Regex pattern itself is malicious or causes ReDoS
-        logger.error(f"Regex validation error in condition_query: {e}")
+        logger.exception("Regex validation error in condition_query")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"condition_query contains invalid pattern that cannot be safely validated: {str(e)}",
@@ -231,7 +231,7 @@ async def get_automation_rules(
         return ApiResponse(success=True, message=f"成功獲取 {len(rules_data)} 條自動化規則", data=rules_data)
 
     except Exception as e:
-        logger.error(f"獲取自動化規則失敗: {e}")
+        logger.exception("獲取自動化規則失敗")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"獲取自動化規則失敗: {str(e)}"
         ) from e

@@ -112,12 +112,12 @@ async def get_applications_for_review(
         logger.warning(f"Permission denied for college applications access: {str(e)}")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except DatabaseError as e:
-        logger.error(f"Database error retrieving applications: {str(e)}")
+        logger.exception("Database error retrieving applications")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database service temporarily unavailable"
         ) from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving applications: {str(e)}")
+        logger.exception("Unexpected error retrieving applications")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while retrieving applications",
@@ -219,7 +219,7 @@ async def get_student_preview(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error retrieving student preview for {student_id}: {str(e)}")
+        logger.exception(f"Error retrieving student preview for {student_id}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve student preview: {str(e)}"
         ) from e

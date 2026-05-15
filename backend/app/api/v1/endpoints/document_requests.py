@@ -115,9 +115,9 @@ async def create_document_request(
                 },
             )
             logger.info(f"Document request automation triggered for {student_email}")
-    except Exception as e:
+    except Exception:
         # Log error but don't fail the request creation
-        logger.error(f"Failed to trigger supplement request automation: {e}")
+        logger.exception("Failed to trigger supplement request automation")
 
     # Build response
     response_data = DocumentRequestResponse.model_validate(document_request)
