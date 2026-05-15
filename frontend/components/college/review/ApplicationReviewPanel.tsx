@@ -403,7 +403,7 @@ export function ApplicationReviewPanel({
             : "-";
 
         const professorRecommendation = (app.professor_review_items || [])
-          .map((item: any) => {
+          .map((item: { sub_type_code?: string; recommendation?: string; comments?: string }) => {
             const label = getSubTypeName(item.sub_type_code, locale);
             const rec = item.recommendation === "approve"
               ? (locale === "zh" ? "推薦" : "Approve")

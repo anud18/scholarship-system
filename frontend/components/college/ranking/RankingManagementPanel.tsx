@@ -139,8 +139,35 @@ export function RankingManagementPanel({
         const response = await apiClient.college.getRanking(rankingId);
         if (response.success && response.data) {
           // Transform the API response
+          // Shape from GET /college-review/rankings/{id} — backend's
+          // CollegeRankingItemResponse. Inline because the API client doesn't
+          // export a named type for this nested payload.
+          interface RankingItemPayload {
+            id: number;
+            sub_type?: string;
+            rank_position?: number;
+            is_allocated?: boolean;
+            college_rejected?: boolean;
+            student_name?: string;
+            student_id?: string;
+            application?: {
+              id?: number;
+              app_id?: string;
+              academy_name?: string;
+              academy_code?: string;
+              department_name?: string;
+              department_code?: string;
+              scholarship_type?: string;
+              eligible_subtypes?: string[];
+              is_renewal?: boolean;
+              renewal_year?: number | null;
+              status?: string;
+              review_status?: string;
+              student_info?: { display_name?: string; student_id?: string };
+            };
+          }
           const transformedApplications = (response.data.items || []).map(
-            (item: any) => ({
+            (item: RankingItemPayload) => ({
               id: item.application?.id || item.id,
               ranking_item_id: item.id,
               app_id:
