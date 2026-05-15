@@ -80,9 +80,26 @@ const hasReachedStage = (currentStage: string | undefined, targetStage: string):
   return currentOrder >= targetOrder;
 };
 
+// Structural shape consumed by the helpers below. Matches the canonical
+// Application interface plus the review-stage extensions surfaced by the
+// /applications/{id} backend response.
+type ApplicationTimelineInput = {
+  status: string;
+  review_stage?: string;
+  professor_reviews?: Array<{ reviewed_at?: string }>;
+  application_reviews?: Array<{ review_stage?: string; reviewed_at?: string }>;
+  professor?: { name?: string; nycu_id?: string };
+  requires_professor_recommendation?: boolean;
+  requires_college_review?: boolean;
+  submitted_at?: string;
+  created_at?: string;
+  approved_at?: string;
+  reviewed_at?: string;
+};
+
 // 獲取申請時間軸
 export const getApplicationTimeline = (
-  application: any,
+  application: ApplicationTimelineInput,
   locale: Locale
 ): TimelineStep[] => {
   const status = application.status as ApplicationStatus;
@@ -172,7 +189,7 @@ export const getApplicationTimeline = (
         id: "professor_submitted",
         title: locale === "zh" ? "教授已送出審核" : "Professor Review Submitted",
         status: getStepStatus("professor_reviewed", afterProfessorStage, hasProfessorReview),
-        date: hasProfessorReview ? formatDate(professorReview.reviewed_at, locale) : "",
+        date: hasProfessorReview ? formatDate(professorReview?.reviewed_at, locale) : "",
       },
     );
   }
@@ -196,7 +213,7 @@ export const getApplicationTimeline = (
         id: "college_submitted",
         title: locale === "zh" ? "學院已送出審核" : "College Review Submitted",
         status: getStepStatus("college_reviewed", "admin_review", hasCollegeReview),
-        date: hasCollegeReview ? formatDate(collegeReview.reviewed_at, locale) : "",
+        date: hasCollegeReview ? formatDate(collegeReview?.reviewed_at, locale) : "",
       },
     );
   }
@@ -246,7 +263,7 @@ export const shouldShowReviewStage = (
 
 // 獲取顯示狀態 - 返回狀態和階段的組合資訊
 export const getDisplayStatusInfo = (
-  application: any,
+  application: { status: string; review_stage?: string },
   locale: Locale
 ): {
   showStatus: boolean;
@@ -351,7 +368,7 @@ export const formatDisplayValue = (value: unknown): string => {
 
 export const formatFieldValue = async (
   fieldName: string,
-  value: any,
+  value: unknown,
   locale: Locale
 ) => {
   if (fieldName === "scholarship_type") {
