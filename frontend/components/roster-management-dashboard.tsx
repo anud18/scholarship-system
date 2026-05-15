@@ -64,9 +64,9 @@ export function RosterManagementDashboard() {
 
       setStats({
         totalSchedules: scheduleData.total || 0,
-        activeSchedules: scheduleData.items?.filter((s: any) => s.status === "active").length || 0,
+        activeSchedules: scheduleData.items?.filter((s: { status: string }) => s.status === "active").length || 0,
         totalRosters: rosterData.total || 0,
-        pendingRosters: rosterData.items?.filter((r: any) => r.status === "pending").length || 0,
+        pendingRosters: rosterData.items?.filter((r: { status: string }) => r.status === "pending").length || 0,
         schedulerRunning: schedulerData.scheduler_running || false
       })
     } catch (error) {
