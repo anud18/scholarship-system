@@ -129,7 +129,11 @@ export function toApiResponse<T>(
         : safeStringify(data.message) || 'Request completed successfully';
 
       return {
-        success: data.success,
+        // `data` is `Record<string, unknown>` from the structural narrow above;
+        // backend ApiResponse format guarantees `success: boolean`. Coerce
+        // explicitly so the strict prod build (Next.js TS) accepts the
+        // assignment.
+        success: Boolean(data.success),
         message: message,
         data: data.data as T,
       };
