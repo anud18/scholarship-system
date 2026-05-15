@@ -70,10 +70,11 @@ export function DeleteApplicationDialog({
           response.message || t("dialogs.delete_application.delete_failed")
         );
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to delete application:", error);
+      const errShape = error as { response?: { data?: { message?: string } } };
       toast.error(
-        error?.response?.data?.message ||
+        errShape.response?.data?.message ||
           t("dialogs.delete_application.delete_error")
       );
     } finally {

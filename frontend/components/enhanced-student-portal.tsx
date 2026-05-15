@@ -360,10 +360,11 @@ export function EnhancedStudentPortal({
           response.message || t("portal.document_request.operation_failed")
         );
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to fulfill document request:", error);
+      const errShape = error as { response?: { data?: { message?: string } } };
       alert(
-        error?.response?.data?.message ||
+        errShape.response?.data?.message ||
           t("portal.document_request.mark_complete_error")
       );
     }
