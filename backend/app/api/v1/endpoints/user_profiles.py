@@ -384,8 +384,8 @@ async def get_bank_document(filename: str, db: AsyncSession = Depends(get_db)):
         # 2. List all available files (untainted source from filesystem)
         try:
             available_files = os.listdir(storage_directory)
-        except OSError:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="無法讀取儲存目錄")
+        except OSError as exc:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="無法讀取儲存目錄") from exc
 
         # 3. Find matching file from filesystem listing (breaks taint flow)
         # Search for the requested filename in the filesystem-provided list
@@ -407,8 +407,8 @@ async def get_bank_document(filename: str, db: AsyncSession = Depends(get_db)):
 
     except HTTPException:
         raise
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="檔案服務發生錯誤")
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="檔案服務發生錯誤") from exc
 
 
 # ==================== Admin endpoints ====================

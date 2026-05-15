@@ -44,8 +44,8 @@ async def get_file_proxy(
         try:
             payload = verify_token(token)
             user_id = int(payload.get("sub"))
-        except Exception:
-            raise HTTPException(status_code=401, detail="Invalid token")
+        except Exception as exc:
+            raise HTTPException(status_code=401, detail="Invalid token") from exc
 
         # Get user from token
         auth_service = AuthService(db)
@@ -147,8 +147,8 @@ async def download_file_proxy(
         try:
             payload = verify_token(token)
             user_id = int(payload.get("sub"))
-        except Exception:
-            raise HTTPException(status_code=401, detail="Invalid token")
+        except Exception as exc:
+            raise HTTPException(status_code=401, detail="Invalid token") from exc
 
         # Get user from token
         auth_service = AuthService(db)

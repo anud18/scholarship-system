@@ -562,5 +562,5 @@ async def delete_specific_profile(developer_id: str, role: str, db: AsyncSession
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Profile not found: {developer_id}/{role}",
             )
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid role: {role}")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid role: {role}") from exc

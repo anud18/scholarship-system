@@ -112,9 +112,9 @@ class StudentService:
                     logger.error(f"Student API request failed: {response.status_code}")
                     raise ServiceUnavailableError("Student API is unavailable")
 
-        except httpx.TimeoutException:
+        except httpx.TimeoutException as exc:
             logger.error(f"Student API request timed out for {student_code}")
-            raise ServiceUnavailableError("Student API request timed out")
+            raise ServiceUnavailableError("Student API request timed out") from exc
         except httpx.RequestError as e:
             logger.error(f"Student API request error: {str(e)}")
             raise ServiceUnavailableError(f"Student API request failed: {str(e)}") from e
@@ -192,9 +192,9 @@ class StudentService:
                     logger.error(f"Student term API request failed: {response.status_code}")
                     raise ServiceUnavailableError("Student API is unavailable")
 
-        except httpx.TimeoutException:
+        except httpx.TimeoutException as exc:
             logger.error(f"Student term API request timed out for {student_code}")
-            raise ServiceUnavailableError("Student API request timed out")
+            raise ServiceUnavailableError("Student API request timed out") from exc
         except httpx.RequestError as e:
             logger.error(f"Student term API request error: {str(e)}")
             raise ServiceUnavailableError(f"Student API request failed: {str(e)}") from e

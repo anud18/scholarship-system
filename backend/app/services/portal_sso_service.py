@@ -101,15 +101,15 @@ class PortalSSOService:
                     logger.error(f"Invalid portal response format: {portal_data}")
                     raise AuthenticationError("Invalid portal response format")
 
-        except httpx.TimeoutException:
+        except httpx.TimeoutException as exc:
             logger.error("Portal JWT verification timeout")
-            raise AuthenticationError("Portal verification timeout")
+            raise AuthenticationError("Portal verification timeout") from exc
         except httpx.RequestError as e:
             logger.error(f"Portal JWT verification request error: {e}")
             raise AuthenticationError("Portal verification failed") from e
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as exc:
             logger.error("Portal JWT verification returned invalid JSON")
-            raise AuthenticationError("Invalid portal response")
+            raise AuthenticationError("Invalid portal response") from exc
 
     def _validate_portal_response(self, data: Dict) -> bool:
         """Validate portal response contains required fields"""

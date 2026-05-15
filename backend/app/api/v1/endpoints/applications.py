@@ -895,8 +895,8 @@ async def get_application_audit_trail(
     service = ApplicationService(db)
     try:
         await service.get_application_by_id(id, current_user)
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found") from exc
 
     # Get audit trail
     audit_service = ApplicationAuditService(db)

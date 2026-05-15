@@ -271,14 +271,14 @@ def generate_payment_roster(
     try:
         with with_lock_sync(lock_key, ttl_seconds=300):
             return _generate_payment_roster_inner(request, db, current_user)
-    except LockBusy:
+    except LockBusy as exc:
         # Concurrent generation in flight — fail fast rather than queue.
         # UI already handles 409 from RosterAlreadyExistsError, so the
         # path is well-trodden.
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="造冊產生中，請稍候再試",
-        )
+        ) from exc
 
 
 @router.get("/available-rankings")
@@ -1596,11 +1596,11 @@ async def download_roster_excel(
             # SECURITY: Validate MinIO object name (CLAUDE.md requirement)
             try:
                 validate_object_name_minio(roster.minio_object_name)
-            except HTTPException:
+            except HTTPException as exc:
                 logger.error(f"Invalid minio_object_name from database: {roster.minio_object_name}")
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="MinIO object name驗證失敗"
-                )
+                ) from exc
 
             # 使用MinIO下載
             try:

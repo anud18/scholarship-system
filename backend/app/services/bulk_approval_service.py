@@ -369,8 +369,8 @@ class BulkApprovalService:
             # Validate status
             try:
                 _ = ApplicationStatus(new_status)
-            except ValueError:
-                raise ValueError(f"Invalid status: {new_status}")
+            except ValueError as exc:
+                raise ValueError(f"Invalid status: {new_status}") from exc
 
             stmt = select(Application).where(Application.id.in_(application_ids))
             result = await self.db.execute(stmt)

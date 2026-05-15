@@ -365,8 +365,8 @@ async def get_matrix_quota_status(
 
         return ApiResponse(success=True, message="Matrix quota status retrieved successfully", data=response_data)
 
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid period format: {period}")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid period format: {period}") from exc
     except Exception as e:
         import logging
 
@@ -713,8 +713,8 @@ async def get_quota_overview(
 
         return ApiResponse(success=True, message="Quota overview retrieved successfully", data=overview_data)
 
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid period format: {period}")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid period format: {period}") from exc
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve quota overview: {str(e)}"
