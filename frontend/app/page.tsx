@@ -188,7 +188,7 @@ export default function ScholarshipManagementSystem() {
       console.log("LocalStorage token exists:", !!token);
       console.log("LocalStorage user exists:", !!userJson);
       try {
-        console.log("API client has token:", !!(apiClient as any).token);
+        console.log("API client has token:", !!(apiClient as unknown as { token?: string }).token);
       } catch (e) {
         console.log("Could not access apiClient token");
       }
