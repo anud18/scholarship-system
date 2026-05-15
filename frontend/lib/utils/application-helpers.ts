@@ -1,5 +1,6 @@
 import { Locale } from "@/lib/validators";
 import { api } from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
 import {
   ApplicationStatus,
   ReviewStage,
@@ -366,10 +367,10 @@ export const formatFieldValue = async (
         }
       }
     } catch (error) {
-      console.warn(
-        `Failed to fetch scholarship type for code: ${value}`,
-        error
-      );
+      logger.warn("Failed to fetch scholarship type for code", {
+        code: value,
+        error,
+      });
     }
     // API 失敗時直接顯示 code
     return value;
@@ -454,7 +455,7 @@ export const fetchApplicationFiles = async (applicationId: number) => {
 
     return [];
   } catch (error) {
-    console.error("Failed to fetch application files:", error);
+    logger.error("Failed to fetch application files", { error });
     return [];
   }
 };

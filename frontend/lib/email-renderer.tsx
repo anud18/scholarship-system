@@ -16,6 +16,7 @@
  */
 
 import { render } from '@react-email/render';
+import { logger } from '@/lib/utils/logger';
 import ApplicationSubmitted from '@/emails/application-submitted';
 import ProfessorReviewRequest from '@/emails/professor-review-request';
 import CollegeReviewRequest from '@/emails/college-review-request';
@@ -114,7 +115,7 @@ export function emailToPlainText(html: string): string {
       return text.split(' ').filter(Boolean).join(' ').trim();
     } catch (error) {
       // If DOMParser fails, return empty rather than use unsafe fallback
-      console.error('DOMParser failed to parse HTML:', error);
+      logger.error('DOMParser failed to parse HTML', { error });
       return '';
     }
   }

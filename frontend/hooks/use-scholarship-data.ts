@@ -15,6 +15,7 @@
 
 import useSWR from 'swr';
 import { apiClient } from '@/lib/api';
+import { logger } from '@/lib/utils/logger';
 import type { ApiResponse } from '@/lib/api/types';
 
 type ScholarshipData = Array<{
@@ -91,7 +92,7 @@ const fetchAllScholarshipData = async (userRole?: string): Promise<ScholarshipDa
         }
       }
     } catch (translationError) {
-      console.warn('Failed to fetch sub-type translations, using empty translations', translationError);
+      logger.warn('Failed to fetch sub-type translations, using empty translations', { translationError });
       // Continue with empty translations rather than failing the whole request
     }
 
@@ -100,7 +101,7 @@ const fetchAllScholarshipData = async (userRole?: string): Promise<ScholarshipDa
       subTypeTranslations,
     };
   } catch (error) {
-    console.error('Failed to fetch scholarship data:', error);
+    logger.error('Failed to fetch scholarship data', { error });
     // Return empty data instead of throwing
     return {
       scholarships: [],
@@ -154,7 +155,7 @@ export function useScholarshipData(autoDetectRole: boolean = true, explicitRole?
       userRole = explicitRole || 'admin';
     }
   } catch (error) {
-    console.warn('Failed to detect user role, using default API', error);
+    logger.warn('Failed to detect user role, using default API', { error });
     userRole = explicitRole || 'admin';
   }
 
