@@ -34,7 +34,7 @@ type ApplicationField = {
   required: boolean;
   display_order: number;
   is_active: boolean;
-  options?: any;
+  options?: unknown;
 };
 
 type ApplicationFieldCreate = Omit<ApplicationField, 'id'>;

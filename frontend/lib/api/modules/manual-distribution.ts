@@ -389,7 +389,7 @@ export function createManualDistributionApi() {
         }
       );
 
-      let body: any = null;
+      let body: unknown = null;
       try {
         body = await response.json();
       } catch {
@@ -397,11 +397,17 @@ export function createManualDistributionApi() {
       }
 
       if (!response.ok) {
+        const bodyObj =
+          body && typeof body === "object"
+            ? (body as { message?: unknown; detail?: unknown })
+            : null;
+        const message =
+          (typeof bodyObj?.message === "string" && bodyObj.message) ||
+          (typeof bodyObj?.detail === "string" && bodyObj.detail) ||
+          `Upload failed (HTTP ${response.status})`;
         return {
           success: false,
-          message:
-            (body && (body.message || body.detail)) ||
-            `Upload failed (HTTP ${response.status})`,
+          message,
           data: undefined,
         } as ApiResponse<{
           matched: number;
