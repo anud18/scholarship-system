@@ -209,8 +209,8 @@ export function BankVerificationReviewDialog({
       } else {
         setError(response.message || "提交審核失敗")
       }
-    } catch (err: any) {
-      setError(err.message || "提交審核時發生錯誤")
+    } catch (err: unknown) {
+      setError((err instanceof Error ? err.message : "提交審核時發生錯誤"))
     } finally {
       setSubmitting(false)
     }
