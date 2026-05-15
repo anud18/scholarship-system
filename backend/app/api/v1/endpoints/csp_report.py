@@ -19,6 +19,13 @@ csp_logger = logging.getLogger("csp_violations")
 csp_logger.setLevel(logging.WARNING)
 
 
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 @router.post("/csp-report", status_code=status.HTTP_204_NO_CONTENT)
 async def report_csp_violation(request: Request):
     """
@@ -29,6 +36,8 @@ async def report_csp_violation(request: Request):
 
     Returns 204 No Content as per CSP specification.
     """
+    client_ip = _client_ip(request)
+    user_agent = request.headers.get("User-Agent", "unknown")
     try:
         # Parse CSP violation report
         body = await request.json()
@@ -49,6 +58,8 @@ async def report_csp_violation(request: Request):
             "source_file": csp_report.get("source-file", ""),
             "line_number": csp_report.get("line-number", 0),
             "column_number": csp_report.get("column-number", 0),
+            "ip": client_ip,
+            "user_agent": user_agent,
         }
 
         # Log as warning for monitoring
@@ -60,13 +71,21 @@ async def report_csp_violation(request: Request):
         )
 
         # Also log to main logger for centralized logging
-        logger.info(f"CSP violation reported: {violation_data}")
+        logger.info(
+            "CSP violation reported",
+            extra={"violation_data": violation_data},
+        )
 
         # Return 204 No Content (standard for CSP reports)
         return JSONResponse(content="", status_code=status.HTTP_204_NO_CONTENT)
 
-    except Exception as e:
-        logger.error(f"Failed to process CSP violation report: {str(e)}")
+    except Exception:
+        # logger.exception preserves the traceback so 5xx-style failures from
+        # malformed bodies / parser bugs are debuggable in Loki + Sentry.
+        logger.exception(
+            "Failed to process CSP violation report",
+            extra={"ip": client_ip, "user_agent": user_agent},
+        )
         # Still return 204 to prevent browser errors
         return JSONResponse(content="", status_code=status.HTTP_204_NO_CONTENT)
 
