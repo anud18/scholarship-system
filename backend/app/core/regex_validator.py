@@ -124,11 +124,11 @@ def validate_regex_pattern(pattern: str, test_string: Optional[str] = None, time
                 signal.alarm(0)
 
     except re.error as e:
-        raise RegexValidationError(f"Invalid regex pattern: {str(e)}")
+        raise RegexValidationError(f"Invalid regex pattern: {str(e)}") from e
     except RegexTimeoutError:
         raise
     except Exception as e:
-        raise RegexValidationError(f"Failed to validate regex pattern: {str(e)}")
+        raise RegexValidationError(f"Failed to validate regex pattern: {str(e)}") from e
 
     # Test the compiled pattern with timeout if test_string provided
     if test_string is not None:
@@ -192,10 +192,10 @@ def safe_regex_match(pattern: str, string: str, flags: int = 0, timeout_seconds:
             if hasattr(signal, "SIGALRM"):
                 signal.alarm(0)
 
-    except RegexTimeoutError:
-        raise RegexValidationError("Regex matching timed out (potential ReDoS)")
+    except RegexTimeoutError as exc:
+        raise RegexValidationError("Regex matching timed out (potential ReDoS)") from exc
     except re.error as e:
-        raise RegexValidationError(f"Regex error: {str(e)}")
+        raise RegexValidationError(f"Regex error: {str(e)}") from e
 
 
 def safe_regex_search(pattern: str, string: str, flags: int = 0, timeout_seconds: int = 1) -> Optional[re.Match]:
@@ -235,7 +235,7 @@ def safe_regex_search(pattern: str, string: str, flags: int = 0, timeout_seconds
             if hasattr(signal, "SIGALRM"):
                 signal.alarm(0)
 
-    except RegexTimeoutError:
-        raise RegexValidationError("Regex search timed out (potential ReDoS)")
+    except RegexTimeoutError as exc:
+        raise RegexValidationError("Regex search timed out (potential ReDoS)") from exc
     except re.error as e:
-        raise RegexValidationError(f"Regex error: {str(e)}")
+        raise RegexValidationError(f"Regex error: {str(e)}") from e
