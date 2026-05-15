@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import { ErrorBoundary, useErrorHandler } from "@/components/error-boundary";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -366,7 +367,7 @@ function ProfessorReviewComponentInner({
 
       setReviewModalOpen(true);
     } catch (e: unknown) {
-      console.error("Error opening review modal:", e);
+      logger.error("Error opening review modal", { e: e });
       setError((e instanceof Error ? e.message : "Failed to load review data"));
     } finally {
       setLoading(false);
@@ -1026,7 +1027,7 @@ export function ProfessorReviewComponent({
   return (
     <ErrorBoundary
       onError={(error, errorInfo) => {
-        console.error("Professor Review Component Error:", error, errorInfo);
+        logger.error("Professor Review Component Error:", error, errorInfo);
         // In production, send to error reporting service
       }}
     >

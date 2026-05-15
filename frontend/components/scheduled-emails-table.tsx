@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -145,7 +146,7 @@ export function ScheduledEmailsTable({
         }));
       }
     } catch (error) {
-      console.error("Failed to load scheduled emails:", error);
+      logger.error("Failed to load scheduled emails", { error: error });
     } finally {
       setLoading(false);
     }
@@ -162,7 +163,7 @@ export function ScheduledEmailsTable({
         await loadScheduledEmails();
       }
     } catch (error) {
-      console.error("Failed to approve email:", error);
+      logger.error("Failed to approve email", { error: error });
     }
   };
 
@@ -175,7 +176,7 @@ export function ScheduledEmailsTable({
         await loadScheduledEmails();
       }
     } catch (error) {
-      console.error("Failed to cancel email:", error);
+      logger.error("Failed to cancel email", { error: error });
     }
   };
 
@@ -287,7 +288,7 @@ export function ScheduledEmailsTable({
       );
       setIsEditMode(false);
     } catch (error) {
-      console.error("Failed to update scheduled email:", error);
+      logger.error("Failed to update scheduled email", { error: error });
     }
   };
 

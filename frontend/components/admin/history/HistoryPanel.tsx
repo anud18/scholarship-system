@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
+import { logger } from "@/lib/utils/logger";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -144,7 +145,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
         setHistoricalApplicationsError(errorMsg);
       }
     } catch (error: unknown) {
-      console.error("獲取歷史申請資料失敗:", error);
+      logger.error("獲取歷史申請資料失敗", { error: error });
       const errShape = error as { message?: string; response?: { data?: { message?: string } } };
       const errorMsg =
         errShape.message ||
@@ -210,7 +211,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
         setActiveHistoricalTab("all"); // 保持全部為默認
       }
     } catch (error) {
-      console.error("獲取歷史申請 tab 資料失敗:", error);
+      logger.error("獲取歷史申請 tab 資料失敗", { error: error });
     }
   }, [user, activeHistoricalTab]);
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import { apiClient } from "@/lib/api";
 import type { Student, StudentStats } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -91,7 +92,7 @@ export function StudentListManagement() {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "網絡錯誤";
       setError(errorMsg);
-      console.error("Error fetching students:", err);
+      logger.error("Error fetching students", { err: err });
     } finally {
       setLoading(false);
     }
@@ -107,7 +108,7 @@ export function StudentListManagement() {
         setStats(response.data);
       }
     } catch (error) {
-      console.error("獲取學生統計失敗:", error);
+      logger.error("獲取學生統計失敗", { error: error });
     }
   };
 

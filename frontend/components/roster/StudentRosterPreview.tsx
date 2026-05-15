@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -137,7 +138,7 @@ export function StudentRosterPreview({
         setError("無法載入學生資料");
       }
     } catch (err) {
-      console.error("Failed to load student data:", err);
+      logger.error("Failed to load student data", { err: err });
       // Try to extract error message from different error sources
       let errorMessage = "載入學生資料時發生錯誤";
 

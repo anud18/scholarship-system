@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { toast } from "sonner";
+import { logger } from "@/lib/utils/logger";
 import { Search, MoreHorizontal, Download, Eye, RefreshCw, Trash2, FileSpreadsheet } from "lucide-react"
 import { formatDateTime, getStatusBadgeVariant } from "@/lib/utils"
 import { buildSecurePreviewUrl, getAuthToken } from "@/lib/utils/url-validation"
@@ -72,7 +73,7 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
         setPagination(prev => ({ ...prev, total: data.total }))
       }
     } catch (error) {
-      console.error("獲取造冊列表失敗:", error)
+      logger.error("獲取造冊列表失敗", { error: error })
       toast.error("無法載入造冊列表")
     } finally {
       setLoading(false)
@@ -95,7 +96,7 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
 
       toast.success("造冊檔案已下載")
     } catch (error) {
-      console.error("下載造冊失敗:", error)
+      logger.error("下載造冊失敗", { error: error })
       toast.error("無法下載造冊檔案")
     } finally {
       setActionLoading(prev => ({ ...prev, [rosterId]: false }))
@@ -115,7 +116,7 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
       fetchRosters()
       onRosterChange()
     } catch (error) {
-      console.error("重新產生造冊失敗:", error)
+      logger.error("重新產生造冊失敗", { error: error })
       toast.error("無法重新產生造冊")
     } finally {
       setActionLoading(prev => ({ ...prev, [rosterId]: false }))
@@ -137,7 +138,7 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
       setDeleteDialogOpen(false)
       setSelectedRoster(null)
     } catch (error) {
-      console.error("刪除造冊失敗:", error)
+      logger.error("刪除造冊失敗", { error: error })
       toast.error("無法刪除造冊")
     }
   }
@@ -327,7 +328,7 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
                                 });
                                 window.open(safeUrl, '_blank');
                               } catch (error) {
-                                console.error('Failed to build preview URL:', error);
+                                logger.error('Failed to build preview URL:', error);
                                 toast.error('無法開啟預覽，請稍後再試');
                               }
                             }}

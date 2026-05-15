@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { toast } from "sonner";
+import { logger } from "@/lib/utils/logger";
 import { Search, MoreHorizontal, Play, Pause, Square, Trash2, Edit, Calendar, FileText } from "lucide-react"
 import { EditScheduleDialog } from "./edit-schedule-dialog"
 import { formatDateTime, getStatusBadgeVariant } from "@/lib/utils"
@@ -83,7 +84,7 @@ export function RosterScheduleList({ onScheduleChange, onRosterGenerated }: Rost
         setPagination(prev => ({ ...prev, total: data.total }))
       }
     } catch (error) {
-      console.error("獲取排程列表失敗:", error)
+      logger.error("獲取排程列表失敗", { error: error })
       toast.error("無法載入排程列表")
     } finally {
       setLoading(false)
@@ -104,7 +105,7 @@ export function RosterScheduleList({ onScheduleChange, onRosterGenerated }: Rost
       fetchSchedules()
       onScheduleChange()
     } catch (error) {
-      console.error("狀態更新失敗:", error)
+      logger.error("狀態更新失敗", { error: error })
       toast.error("無法更新排程狀態")
     } finally {
       setActionLoading(prev => ({ ...prev, [scheduleId]: false }))
@@ -125,7 +126,7 @@ export function RosterScheduleList({ onScheduleChange, onRosterGenerated }: Rost
       onScheduleChange()
       onRosterGenerated?.()
     } catch (error) {
-      console.error("執行排程失敗:", error)
+      logger.error("執行排程失敗", { error: error })
       toast.error("無法執行排程")
     } finally {
       setActionLoading(prev => ({ ...prev, [scheduleId]: false }))
@@ -147,7 +148,7 @@ export function RosterScheduleList({ onScheduleChange, onRosterGenerated }: Rost
       setDeleteDialogOpen(false)
       setSelectedSchedule(null)
     } catch (error) {
-      console.error("刪除排程失敗:", error)
+      logger.error("刪除排程失敗", { error: error })
       toast.error("無法刪除排程")
     }
   }

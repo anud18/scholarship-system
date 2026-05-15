@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { logger } from "@/lib/utils/logger";
 import { format } from "date-fns";
 import {
   Card,
@@ -203,7 +204,7 @@ export function ScholarshipWorkflowMermaid({
     try {
       const config = configurations.find(c => c.id === configId);
       if (!config) {
-        console.warn("Configuration not found for id:", configId);
+        logger.warn("Configuration not found for id:", configId);
         setStats(null);
         return;
       }
@@ -288,7 +289,7 @@ export function ScholarshipWorkflowMermaid({
           nextDeadline,
         });
       } else {
-        console.warn("Failed to load applications:", response.message);
+        logger.warn("Failed to load applications:", response.message);
         setStats({
           totalApplications: 0,
           pendingReviews: 0,
@@ -297,7 +298,7 @@ export function ScholarshipWorkflowMermaid({
         });
       }
     } catch (error) {
-      console.error("Failed to load workflow stats:", error);
+      logger.error("Failed to load workflow stats", { error: error });
       setStats({
         totalApplications: 0,
         pendingReviews: 0,
@@ -460,7 +461,7 @@ export function ScholarshipWorkflowMermaid({
         setShowStageDetails(true);
       }
     } catch (error) {
-      console.error("Failed to load stage details:", error);
+      logger.error("Failed to load stage details", { error: error });
     } finally {
       setLoading(false);
     }

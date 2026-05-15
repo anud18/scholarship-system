@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { logger } from "@/lib/utils/logger";
 import { useAuth } from "@/hooks/use-auth";
 import { apiClient } from "@/lib/api";
 import type { UserStats, UserCreate as UserCreateType } from "@/lib/api";
@@ -189,7 +190,7 @@ export function UserPermissionManagement() {
         setUserStats(response.data);
       }
     } catch (error) {
-      console.error("獲取使用者統計失敗:", error);
+      logger.error("獲取使用者統計失敗", { error: error });
     }
   };
 
@@ -202,7 +203,7 @@ export function UserPermissionManagement() {
         setScholarshipPermissions(response.data);
       }
     } catch (error) {
-      console.error("Error fetching permissions:", error);
+      logger.error("Error fetching permissions", { error: error });
     } finally {
       setLoadingPermissions(false);
     }
@@ -215,7 +216,7 @@ export function UserPermissionManagement() {
         setAvailableScholarships(response.data);
       }
     } catch (error) {
-      console.error("獲取獎學金列表失敗:", error);
+      logger.error("獲取獎學金列表失敗", { error: error });
     }
   };
 
@@ -226,7 +227,7 @@ export function UserPermissionManagement() {
         setAcademies(response.data);
       }
     } catch (error) {
-      console.error("獲取學院列表失敗:", error);
+      logger.error("獲取學院列表失敗", { error: error });
     }
   };
 

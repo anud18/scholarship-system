@@ -1,5 +1,6 @@
 "use client"
 
+import { logger } from "@/lib/utils/logger";
 import React, { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -70,7 +71,7 @@ export function RosterManagementDashboard() {
         schedulerRunning: schedulerData.scheduler_running || false
       })
     } catch (error) {
-      console.error("獲取儀表板統計失敗:", error)
+      logger.error("獲取儀表板統計失敗", { error: error })
     } finally {
       setLoading(false)
     }
@@ -91,7 +92,7 @@ export function RosterManagementDashboard() {
         setSelectedSchedule(null)
       }
     } catch (error) {
-      console.error("Failed to load schedule:", error)
+      logger.error("Failed to load schedule", { error: error })
       setSelectedSchedule(null)
     } finally {
       setLoadingSchedule(false)
@@ -110,7 +111,7 @@ export function RosterManagementDashboard() {
         setCycleData(null)
       }
     } catch (error) {
-      console.error("Failed to load cycle status:", error)
+      logger.error("Failed to load cycle status", { error: error })
       setCycleData(null)
     } finally {
       setLoadingCycle(false)
@@ -133,7 +134,7 @@ export function RosterManagementDashboard() {
         setCycleData(null)
       }
     } catch (error) {
-      console.error("Failed to refetch cycle status:", error)
+      logger.error("Failed to refetch cycle status", { error: error })
       setCycleData(null)
     } finally {
       setLoadingCycle(false)

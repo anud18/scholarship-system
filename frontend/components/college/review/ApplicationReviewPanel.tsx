@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { logger } from "@/lib/utils/logger";
 import { User } from "@/types/user";
 import { useCollegeManagement } from "@/contexts/college-management-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -149,7 +150,7 @@ export function ApplicationReviewPanel({
       );
 
       if (!scholarshipType || !scholarshipType.id) {
-        console.warn(
+        logger.warn(
           "Scholarship type ID not found for:",
           activeScholarshipTab
         );
@@ -157,7 +158,7 @@ export function ApplicationReviewPanel({
         return;
       }
 
-      console.log("Fetching college quota for:", {
+      logger.debug("Fetching college quota for:", {
         scholarshipTypeId: scholarshipType.id,
         academicYear: selectedAcademicYear,
         semester: selectedSemester,
@@ -174,12 +175,12 @@ export function ApplicationReviewPanel({
           collegeQuota: response.data.college_quota ?? null,
           breakdown: response.data.college_quota_breakdown ?? {},
         });
-        console.log("College quota fetched:", response.data.college_quota);
+        logger.debug("College quota fetched:", response.data.college_quota);
       } else {
         setCollegeQuotaInfo(null);
       }
     } catch (error) {
-      console.error("Failed to fetch college quota:", error);
+      logger.error("Failed to fetch college quota", { error: error });
       setCollegeQuotaInfo(null);
     }
   }, [
@@ -201,7 +202,7 @@ export function ApplicationReviewPanel({
     // 1. Current tab is "review"
     // 2. Data version has changed (indicating updates from other tabs)
     if (activeTab === "review") {
-      console.log(
+      logger.debug(
         `[ApplicationReviewPanel] Auto-refreshing applications (dataVersion: ${dataVersion})`
       );
       fetchCollegeApplications(
@@ -253,7 +254,7 @@ export function ApplicationReviewPanel({
         "approved",
         comments || "學院核准通過"
       );
-      console.log(`College approved application ${appId}`, result);
+      logger.debug(`College approved application ${appId}`, result);
 
       // 檢查是否自動重新執行了分發
       const redistribution = result?.redistribution_info;
@@ -287,7 +288,7 @@ export function ApplicationReviewPanel({
       // 觸發 dataVersion 更新，通知其他 tab 重新載入數據
       incrementDataVersion();
     } catch (error) {
-      console.error("Failed to approve application:", error);
+      logger.error("Failed to approve application", { error: error });
       toast.error(locale === "zh" ? "核准失敗" : "Approval Failed", {
         description:
           error instanceof Error
@@ -306,7 +307,7 @@ export function ApplicationReviewPanel({
         "rejected",
         comments || "學院駁回申請"
       );
-      console.log(`College rejected application ${appId}`, result);
+      logger.debug(`College rejected application ${appId}`, result);
 
       // 檢查是否自動重新執行了分發
       const redistribution = result?.redistribution_info;
@@ -340,7 +341,7 @@ export function ApplicationReviewPanel({
       // 觸發 dataVersion 更新，通知其他 tab 重新載入數據
       incrementDataVersion();
     } catch (error) {
-      console.error("Failed to reject application:", error);
+      logger.error("Failed to reject application", { error: error });
       toast.error(locale === "zh" ? "駁回失敗" : "Rejection Failed", {
         description:
           error instanceof Error
@@ -470,7 +471,7 @@ export function ApplicationReviewPanel({
             : `Exported ${exportData.length} applications`,
       });
     } catch (error) {
-      console.error("Export error:", error);
+      logger.error("Export error", { error: error });
       toast.error(locale === "zh" ? "匯出失敗" : "Export failed", {
         description:
           error instanceof Error

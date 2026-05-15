@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
     // Construct URL with validated components only
     const backendUrl = new URL(`/api/v1/application-fields/documents/${documentId}/example`, baseUrl).toString();
 
-    console.log("Document example preview API called:", {
+    logger.debug("Document example preview API called:", {
       documentId,
       backendUrl,
     });

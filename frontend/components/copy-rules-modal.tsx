@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { logger } from "@/lib/utils/logger";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -85,7 +86,7 @@ export function CopyRulesModal({
       }
 
       setError(errorMessage);
-      console.error("複製失敗:", error);
+      logger.error("複製失敗", { error: error });
     } finally {
       setIsLoading(false);
     }

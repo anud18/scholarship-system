@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import {
   Dialog,
   DialogContent,
@@ -173,7 +174,7 @@ export function RosterDetailDialog({
         }
       }
     } catch (error) {
-      console.error("Failed to load roster items:", error);
+      logger.error("Failed to load roster items", { error: error });
     } finally {
       setLoading(false);
     }

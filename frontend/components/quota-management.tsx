@@ -1,3 +1,4 @@
+import { logger } from "@/lib/utils/logger";
 /**
  * Main quota management component for admin interface
  */
@@ -100,12 +101,12 @@ export function QuotaManagement() {  const { user } = useAuth();
 
   const checkUserPermission = async () => {
     setCheckingPermission(true);
-    console.log("🔍 Checking quota management permissions for user:", user);
+    logger.debug("🔍 Checking quota management permissions for user:", user);
 
     try {
       // First check if user is super_admin - they always have access
       if (user?.role === "super_admin") {
-        console.log("✅ User is super_admin, granting access");
+        logger.debug("✅ User is super_admin, granting access");
         setHasPermission(true);
         setCheckingPermission(false);
         return;
@@ -113,40 +114,40 @@ export function QuotaManagement() {  const { user } = useAuth();
 
       // For admin users, check their scholarship permissions
       if (user?.role === "admin") {
-        console.log(
+        logger.debug(
           "🔍 Checking admin permissions via scholarship permissions API"
         );
         try {
           const response =
             await apiClient.admin.getCurrentUserScholarshipPermissions();
-          console.log("📊 Scholarship permissions response:", response);
+          logger.debug("📊 Scholarship permissions response:", response);
 
           if (response.success && response.data) {
             const hasPerms = response.data.length > 0;
-            console.log(
+            logger.debug(
               hasPerms
                 ? "✅ Admin has scholarship permissions"
                 : "❌ Admin has no scholarship permissions"
             );
             setHasPermission(hasPerms);
           } else {
-            console.log("❌ Admin permission check failed:", response.message);
+            logger.debug("❌ Admin permission check failed:", response.message);
             setHasPermission(false);
           }
         } catch (permError) {
-          console.error("❌ Admin permission check error:", permError);
+          logger.error("❌ Admin permission check error", { permError: permError });
           setHasPermission(false);
         }
       } else {
         // Other roles don't have access
-        console.log(
+        logger.debug(
           "❌ User role not authorized for quota management:",
           user?.role
         );
         setHasPermission(false);
       }
     } catch (error) {
-      console.error("❌ Overall permission check failed:", error);
+      logger.error("❌ Overall permission check failed", { error: error });
       setHasPermission(false);
     } finally {
       setCheckingPermission(false);
@@ -166,7 +167,7 @@ export function QuotaManagement() {  const { user } = useAuth();
         throw new Error(response.message || "無法載入可用學期");
       }
     } catch (error) {
-      console.error("Error fetching available periods:", error);
+      logger.error("Error fetching available periods", { error: error });
       setError("無法載入可用學期資料");
       toast.error("無法載入可用學期資料");
     }

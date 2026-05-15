@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import dynamic from "next/dynamic";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CollegeManagementProvider, useCollegeManagement } from "@/contexts/college-management-context";
@@ -91,7 +92,7 @@ function CollegeManagementContent({ user }: { user: User }) {
           setManagedCollege(response.data);
         }
       } catch (error) {
-        console.error("Failed to fetch managed college:", error);
+        logger.error("Failed to fetch managed college", { error: error });
       }
     };
     fetchManagedCollege();

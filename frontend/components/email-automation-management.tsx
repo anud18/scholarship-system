@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { logger } from "@/lib/utils/logger";
 import {
   Card,
   CardContent,
@@ -137,7 +138,7 @@ export function EmailAutomationManagement() {  const [rules, setRules] = useStat
         setTriggerEvents(response.data);
       }
     } catch (error: unknown) {
-      console.error("Failed to fetch trigger events:", error);
+      logger.error("Failed to fetch trigger events", { error: error });
     }
   };
 
@@ -156,7 +157,7 @@ export function EmailAutomationManagement() {  const [rules, setRules] = useStat
         setEmailTemplates(templates);
       }
     } catch (error: unknown) {
-      console.error("Failed to fetch email templates:", error);
+      logger.error("Failed to fetch email templates", { error: error });
     }
   };
 

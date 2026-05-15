@@ -5,6 +5,7 @@
 
 "use client";
 
+import { logger } from "@/lib/utils/logger";
 import React, { useState, useEffect } from "react";
 import {
   Card,
@@ -130,7 +131,7 @@ export function EnhancedAdminDashboard({
         setFilteredApplications(applicationsResponse.data);
       }
     } catch (error) {
-      console.error("Error fetching filtered data:", error);
+      logger.error("Error fetching filtered data", { error: error });
       // 如果API不支援篩選，使用原始資料
       setFilteredStats(stats);
       setFilteredApplications(recentApplications);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { logger } from "@/lib/utils/logger";
 import {
   Dialog,
   DialogContent,
@@ -101,7 +102,7 @@ export function DocumentRequestForm({
         );
       }
     } catch (error: unknown) {
-      console.error("Failed to create document request:", error);
+      logger.error("Failed to create document request", { error: error });
       const errShape = error as { response?: { data?: { message?: string } } };
       toast.error(
         errShape.response?.data?.message ||
