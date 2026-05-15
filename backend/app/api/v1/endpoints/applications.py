@@ -473,7 +473,7 @@ async def delete_application(
                 else deleted_app.model_dump() if hasattr(deleted_app, "model_dump") else {"id": id}
             ),
         }
-    except Exception as e:
+    except Exception:
         logger.exception(f"Error deleting application {id}")
         raise
 
