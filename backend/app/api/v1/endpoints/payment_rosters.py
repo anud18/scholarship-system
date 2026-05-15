@@ -320,7 +320,7 @@ def get_available_rankings(
             and_(
                 CollegeRanking.scholarship_type_id == config.scholarship_type_id,
                 CollegeRanking.academic_year == academic_year,
-                CollegeRanking.distribution_executed == True,  # 必須已執行分配
+                CollegeRanking.distribution_executed.is_(True),  # 必須已執行分配
             )
         )
 
@@ -531,7 +531,7 @@ async def preview_roster_students(
                 .filter(
                     and_(
                         CollegeRanking.scholarship_type_id == config.scholarship_type_id,
-                        CollegeRanking.distribution_executed == True,
+                        CollegeRanking.distribution_executed.is_(True),
                     )
                 )
                 .order_by(CollegeRanking.created_at.desc())
@@ -566,7 +566,7 @@ async def preview_roster_students(
                 .filter(
                     and_(
                         CollegeRankingItem.application_id.in_(app_ids),
-                        CollegeRankingItem.is_allocated == True,
+                        CollegeRankingItem.is_allocated.is_(True),
                         CollegeRanking.academic_year == academic_year,
                     )
                 )

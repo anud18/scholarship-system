@@ -193,7 +193,7 @@ async def _get_all_reference_data_cached(session: AsyncSession) -> dict:
         .join(ScholarshipType)
         .where(
             ScholarshipType.status == ScholarshipStatus.active.value,
-            ScholarshipSubTypeConfig.is_active == True,
+            ScholarshipSubTypeConfig.is_active.is_(True),
         )
         .order_by(ScholarshipSubTypeConfig.display_order)
     )

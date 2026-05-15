@@ -39,7 +39,7 @@ async def get_my_verified_account(
             select(StudentBankAccount)
             .where(
                 StudentBankAccount.user_id == current_user.id,
-                StudentBankAccount.is_active == True,
+                StudentBankAccount.is_active.is_(True),
                 StudentBankAccount.verification_status == "verified",
             )
             .order_by(StudentBankAccount.verified_at.desc())

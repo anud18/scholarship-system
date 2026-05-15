@@ -27,9 +27,7 @@ class TestScholarshipReviewsCounter:
             reviewer_type="professor",
             action="approve",
         )
-        scholarship_reviews_total.labels(
-            reviewer_type="professor", action="approve"
-        ).inc()
+        scholarship_reviews_total.labels(reviewer_type="professor", action="approve").inc()
         after = _sample(
             "scholarship_reviews_total_total",
             reviewer_type="professor",
@@ -48,9 +46,7 @@ class TestScholarshipReviewsCounter:
             reviewer_type="professor",
             action="reject",
         )
-        scholarship_reviews_total.labels(
-            reviewer_type="professor", action="reject"
-        ).inc()
+        scholarship_reviews_total.labels(reviewer_type="professor", action="reject").inc()
         assert (
             _sample(
                 "scholarship_reviews_total_total",
@@ -76,9 +72,7 @@ class TestScholarshipReviewsCounter:
             reviewer_type="college",
             action="approve",
         )
-        scholarship_reviews_total.labels(
-            reviewer_type="college", action="approve"
-        ).inc()
+        scholarship_reviews_total.labels(reviewer_type="college", action="approve").inc()
         after = _sample(
             "scholarship_reviews_total_total",
             reviewer_type="college",
