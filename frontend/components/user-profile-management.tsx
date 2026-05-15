@@ -149,14 +149,14 @@ export default function UserProfileManagement() {
           preferred_language: "zh-TW",
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Load profile error:", error);
 
       // 網絡錯誤或其他嚴重錯誤
-      if (error.name === "TypeError" && error.message.includes("fetch")) {
+      if (error instanceof Error && error.name === "TypeError" && error.message.includes("fetch")) {
         toast.error(t("profile_management.connection_error_desc"));
       } else {
-        toast.error(error.message || t("profile_management.load_profile_error"));
+        toast.error(error instanceof Error ? error.message : t("profile_management.load_profile_error"));
       }
 
       // 即使發生錯誤也設置基本結構
@@ -297,8 +297,9 @@ export default function UserProfileManagement() {
       toast.success(t("profile_management.profile_updated"));
 
       await loadProfile();
-    } catch (error: any) {
-      toast.error(error.response?.data?.detail ||
+    } catch (error: unknown) {
+      const errShape = error as { response?: { data?: { detail?: string } } };
+      toast.error(errShape.response?.data?.detail ||
           t("profile_management.update_profile_error"));
     } finally {
       setSaving(false);
@@ -335,8 +336,9 @@ export default function UserProfileManagement() {
       // 清空已選擇的文件
       setBankDocumentFiles([]);
       await loadProfile();
-    } catch (error: any) {
-      toast.error(error.response?.data?.detail || t("profile_management.upload_error"));
+    } catch (error: unknown) {
+      const errShape = error as { response?: { data?: { detail?: string } } };
+      toast.error(errShape.response?.data?.detail || t("profile_management.upload_error"));
     } finally {
       setUploadingBankDoc(false);
     }
@@ -352,8 +354,8 @@ export default function UserProfileManagement() {
       } else {
         throw new Error(response.message || "Delete failed");
       }
-    } catch (error: any) {
-      toast.error(error.message || t("profile_management.delete_error"));
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : t("profile_management.delete_error"));
     }
   };
 
@@ -432,8 +434,8 @@ export default function UserProfileManagement() {
       } else {
         throw new Error(response.message || "Failed to load history");
       }
-    } catch (error: any) {
-      toast.error(error.message || t("profile_management.load_history_error"));
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : t("profile_management.load_history_error"));
     }
   };
 
