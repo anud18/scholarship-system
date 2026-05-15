@@ -1238,8 +1238,10 @@ export interface ScholarshipPermission {
   scholarship_name: string;
   scholarship_name_en?: string;
   comment?: string;
-  created_at: string;
-  updated_at: string;
+  // Optional because callers (e.g., admin user-edit modal) construct temporary
+  // permission objects in-memory before the server assigns timestamps.
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface ScholarshipPermissionCreate {
