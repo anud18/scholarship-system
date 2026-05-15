@@ -13556,7 +13556,10 @@ export interface operations {
     };
     create_scholarship_email_template_api_v1_admin_scholarship_email_templates_post: {
         parameters: {
-            query?: never;
+            query: {
+                /** @description Scholarship type to attach the template to */
+                scholarship_type_id: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -13568,7 +13571,7 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -13603,7 +13606,7 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
