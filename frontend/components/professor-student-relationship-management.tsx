@@ -353,10 +353,10 @@ export default function ProfessorStudentRelationshipManagement() {
                   <Label htmlFor="relationship_type">關係類型</Label>
                   <Select
                     value={newRelationship.relationship_type}
-                    onValueChange={(value: any) =>
+                    onValueChange={(value: string) =>
                       setNewRelationship(prev => ({
                         ...prev,
-                        relationship_type: value,
+                        relationship_type: value as RelationshipType,
                       }))
                     }
                   >
@@ -381,10 +381,10 @@ export default function ProfessorStudentRelationshipManagement() {
                   <Label htmlFor="status">狀態</Label>
                   <Select
                     value={newRelationship.status}
-                    onValueChange={(value: any) =>
+                    onValueChange={(value: string) =>
                       setNewRelationship(prev => ({
                         ...prev,
-                        status: value,
+                        status: value as RelationshipStatus,
                       }))
                     }
                   >
@@ -764,12 +764,12 @@ export default function ProfessorStudentRelationshipManagement() {
                   <Label htmlFor="edit-relationship_type">關係類型</Label>
                   <Select
                     value={editingRelationship.relationship_type}
-                    onValueChange={(value: any) =>
+                    onValueChange={(value: string) =>
                       setEditingRelationship(prev =>
                         prev
                           ? {
                               ...prev,
-                              relationship_type: value,
+                              relationship_type: value as RelationshipType,
                             }
                           : null
                       )
@@ -791,12 +791,12 @@ export default function ProfessorStudentRelationshipManagement() {
                   <Label htmlFor="edit-status">狀態</Label>
                   <Select
                     value={editingRelationship.status}
-                    onValueChange={(value: any) =>
+                    onValueChange={(value: string) =>
                       setEditingRelationship(prev =>
                         prev
                           ? {
                               ...prev,
-                              status: value,
+                              status: value as RelationshipStatus,
                             }
                           : null
                       )
