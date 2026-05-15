@@ -372,7 +372,12 @@ export function CollegeManagementProvider({
 
         for (const collegeType of currentAvailableOptions.scholarship_types) {
           const fullScholarship = allScholarshipsResponse.data.find(
-            (scholarship: any) =>
+            (scholarship: {
+              id: number;
+              code?: string;
+              name?: string;
+              name_en?: string;
+            }) =>
               scholarship.code === collegeType.code ||
               scholarship.name === collegeType.name ||
               scholarship.name_en === collegeType.name
@@ -466,17 +471,19 @@ export function CollegeManagementProvider({
         console.log(`[Context] Fetched ${response.data.length} rankings`);
 
         // Normalize semester values (consistent with RankingManagementPanel logic)
-        const normalizedRankings = response.data.map((ranking: any) => {
-          const rawSemester =
-            typeof ranking.semester === "string" && ranking.semester.length > 0
-              ? ranking.semester.toLowerCase()
-              : null;
-          const safeSemester =
-            rawSemester && rawSemester !== "yearly"
-              ? rawSemester
-              : null;
-          return { ...ranking, semester: safeSemester };
-        });
+        const normalizedRankings = response.data.map(
+          (ranking: { semester?: string | null; [key: string]: unknown }) => {
+            const rawSemester =
+              typeof ranking.semester === "string" && ranking.semester.length > 0
+                ? ranking.semester.toLowerCase()
+                : null;
+            const safeSemester =
+              rawSemester && rawSemester !== "yearly"
+                ? rawSemester
+                : null;
+            return { ...ranking, semester: safeSemester };
+          }
+        );
 
         setRankings(normalizedRankings);
       }
