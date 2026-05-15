@@ -9,7 +9,7 @@ Tests critical API functionality including:
 - Data filtering and security
 """
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -90,10 +90,13 @@ class TestCollegeReviewEndpoints:
         mock_session = AsyncMock()
         mock_db.return_value = mock_session
 
-        # Mock service
+        # Mock service. CollegeReview model was removed in schema cleanup;
+        # since the test body ends with `pass` (placeholder), the mock
+        # return value is never inspected — a generic MagicMock is enough.
         with patch.object(CollegeReviewService, "create_or_update_review") as mock_create:
-            mock_review = CollegeReview(id=1, application_id=1, reviewer_id=college_user.id, **sample_review_data)
-            mock_create.return_value = mock_review
+            mock_create.return_value = MagicMock(
+                id=1, application_id=1, reviewer_id=college_user.id, **sample_review_data
+            )
 
             # Mock permission check
             with patch(
