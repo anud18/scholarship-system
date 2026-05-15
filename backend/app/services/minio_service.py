@@ -15,6 +15,7 @@ from minio.error import S3Error
 
 from app.core.config import settings
 from app.core.exceptions import FileStorageError
+from app.core.metrics import file_uploads_total
 
 logger = logging.getLogger(__name__)
 
@@ -236,10 +237,22 @@ class MinIOService:
             )
 
             logger.info(f"Uploaded file {file.filename} as {object_name}")
+
+            # Business metric: count successful application-file uploads.
+            # file_type already discriminates document categories (doc,
+            # transcript, etc.); status "success" pairs with the failure
+            # increment in the except block (issue #159).
+            file_uploads_total.labels(file_type=str(file_type), status="success").inc()
+
             return object_name, file_size
 
         except Exception as e:
             logger.error(f"Failed to upload file {file.filename}: {e}")
+
+            # Business metric: count failures so the dashboard can show
+            # the success-rate ratio without needing log-scraping.
+            file_uploads_total.labels(file_type=str(file_type), status="failed").inc()
+
             from fastapi import HTTPException
 
             raise HTTPException(status_code=500, detail=str(e)) from e
