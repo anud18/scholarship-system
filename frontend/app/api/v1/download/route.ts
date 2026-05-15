@@ -141,7 +141,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log("Download API called:", {
+    logger.debug("Download API called:", {
       fileId,
       applicationId,
       userId,

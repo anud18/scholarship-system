@@ -1,6 +1,7 @@
 "use client";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { logger } from "@/lib/utils/logger";
 import { AdminManagementProvider, useAdminManagement } from "@/contexts/admin-management-context";
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
@@ -78,7 +79,7 @@ function AdminManagementContent({ user }: AdminManagementShellProps) {
           setHasQuotaPermission(hasQuota);
         }
       } catch (error) {
-        console.error("Failed to check quota permissions:", error);
+        logger.error("Failed to check quota permissions", { error: error });
       }
     };
 

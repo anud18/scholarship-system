@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import {
   Card,
   CardContent,
@@ -120,7 +121,7 @@ export default function SystemConfigurationManagement() {
       }
     } catch (err) {
       setError("載入配置時發生錯誤");
-      console.error("Error loading configurations:", err);
+      logger.error("Error loading configurations", { err: err });
     } finally {
       setLoading(false);
     }
@@ -133,7 +134,7 @@ export default function SystemConfigurationManagement() {
         setAuditLogs(response.data);
       }
     } catch (err) {
-      console.error("Error loading audit logs:", err);
+      logger.error("Error loading audit logs", { err: err });
     }
   };
 
@@ -170,7 +171,7 @@ export default function SystemConfigurationManagement() {
       }
     } catch (err) {
       setError("更新配置時發生錯誤");
-      console.error("Error updating configuration:", err);
+      logger.error("Error updating configuration", { err: err });
     }
   };
 

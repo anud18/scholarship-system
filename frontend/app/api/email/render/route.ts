@@ -1,3 +1,4 @@
+import { logger } from "@/lib/utils/logger";
 /**
  * Email Rendering API Endpoint
  *
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<RenderEma
     });
 
   } catch (error: unknown) {
-    console.error('[Email Render API] Error rendering email:', error);
+    logger.error('[Email Render API] Error rendering email:', error);
 
     return NextResponse.json(
       {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import {
   Card,
   CardContent,
@@ -160,7 +161,7 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
       setIsLoading(true);
       setError(null);
 
-      console.log(
+      logger.debug(
         "ScholarshipTimeline: Starting fetch for user:",
         user.role,
         user.id
@@ -177,7 +178,7 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
       let response;
       if (user.role === "super_admin") {
         // Super admin 可以看到所有獎學金
-        console.log(
+        logger.debug(
           "ScholarshipTimeline: Fetching all scholarships for super_admin",
           { academicYear, semester }
         );
@@ -189,7 +190,7 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
         response = await apiClient.request(url);
       } else if (user.role === "admin" || user.role === "college") {
         // Admin 和 College 可以看到他們有權限的獎學金
-        console.log(
+        logger.debug(
           "ScholarshipTimeline: Fetching scholarships for admin/college user",
           { academicYear, semester }
         );
@@ -201,7 +202,7 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
         response = await apiClient.request(url);
       } else {
         // 其他角色不顯示此功能
-        console.log(
+        logger.debug(
           "ScholarshipTimeline: User role not eligible for timeline:",
           user.role
         );
@@ -211,7 +212,7 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
       }
 
       if (response.success && response.data) {
-        console.log(
+        logger.debug(
           "ScholarshipTimeline: Raw scholarships data:",
           response.data
         );
@@ -220,14 +221,14 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
         const filteredScholarships = filterScholarshipsByPermission(
           response.data as ScholarshipApiPayload[]
         );
-        console.log(
+        logger.debug(
           "ScholarshipTimeline: Filtered scholarships based on permissions:",
           filteredScholarships
         );
 
         const timelineData: ScholarshipTimelineData[] =
           filteredScholarships.map((scholarship: ScholarshipApiPayload) => {
-            console.log(
+            logger.debug(
               `ScholarshipTimeline: Processing ${scholarship.name}, application_cycle:`,
               scholarship.application_cycle
             );
@@ -269,7 +270,7 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
         }
       }
     } catch (err) {
-      console.error("Failed to fetch scholarship timelines:", err);
+      logger.error("Failed to fetch scholarship timelines", { err: err });
       setError("載入獎學金時間軸失敗");
     } finally {
       setIsLoading(false);

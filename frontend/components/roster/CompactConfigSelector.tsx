@@ -1,5 +1,6 @@
 "use client"
 
+import { logger } from "@/lib/utils/logger";
 import { useState, useEffect } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { api } from "@/lib/api"
@@ -118,11 +119,11 @@ export function CompactConfigSelector({ onConfigSelect, disabled = false }: Comp
 
         setScholarshipTypes(types)
       } else {
-        console.error("Failed to load scholarship types")
+        logger.error("Failed to load scholarship types")
         setScholarshipTypes([])
       }
     } catch (error) {
-      console.error("Failed to load scholarship types:", error)
+      logger.error("Failed to load scholarship types", { error: error })
       setScholarshipTypes([])
     } finally {
       setIsLoadingTypes(false)
@@ -184,7 +185,7 @@ export function CompactConfigSelector({ onConfigSelect, disabled = false }: Comp
         setPeriodOptions([])
       }
     } catch (error) {
-      console.error("Failed to load configurations:", error)
+      logger.error("Failed to load configurations", { error: error })
       setConfigurations([])
       setPeriodOptions([])
     } finally {

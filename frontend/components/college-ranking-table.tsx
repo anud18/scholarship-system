@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import {
   DndContext,
   closestCenter,
@@ -713,7 +714,7 @@ export function CollegeRankingTable({
         setIsImportDialogOpen(false);
       }
     } catch (error) {
-      console.error("Excel import error:", error);
+      logger.error("Excel import error", { error: error });
       toast.error(
         error instanceof Error ? error.message : "無法讀取 Excel 檔案"
       );
@@ -764,7 +765,7 @@ export function CollegeRankingTable({
 
       toast.success(`已下載範本檔案：${filename}`);
     } catch (error) {
-      console.error("Template download error:", error);
+      logger.error("Template download error", { error: error });
       toast.error(error instanceof Error ? error.message : "無法產生範本檔案");
     }
   };
@@ -786,7 +787,7 @@ export function CollegeRankingTable({
       URL.revokeObjectURL(url);
       toast.success(`已下載 ${filename}`);
     } catch (error) {
-      console.error("Export error:", error);
+      logger.error("Export error", { error: error });
       toast.error(error instanceof Error ? error.message : "無法匯出排名資料");
     }
   };

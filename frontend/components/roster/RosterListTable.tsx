@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { logger } from "@/lib/utils/logger";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -147,7 +148,7 @@ export function RosterListTable({
 
       toast.success("造冊檔案已下載");
     } catch (error) {
-      console.error("Failed to download roster:", error);
+      logger.error("Failed to download roster", { error: error });
       toast.error("下載失敗: 無法下載造冊檔案");
     } finally {
       setDownloading(null);
@@ -183,7 +184,7 @@ export function RosterListTable({
         throw new Error(response.message || "產生造冊失敗");
       }
     } catch (error: unknown) {
-      console.error("Failed to generate roster:", error);
+      logger.error("Failed to generate roster", { error: error });
       toast.error(`產生造冊失敗: ${(error instanceof Error ? error.message : "無法產生造冊")}`);
     } finally {
       setGenerating(null);

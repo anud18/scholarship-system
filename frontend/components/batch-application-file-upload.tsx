@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import { logger } from "@/lib/utils/logger";
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -95,7 +96,7 @@ export function BatchApplicationFileUpload({
             });
           }
         } catch (err) {
-          console.error(`Failed to fetch application ${appId}:`, err);
+          logger.error(`Failed to fetch application ${appId}:`, err);
           setApplicationStates((prev) => {
             const updated = new Map(prev);
             const state = updated.get(appId);
@@ -151,7 +152,7 @@ export function BatchApplicationFileUpload({
           setScholarshipDocuments([]);
         }
       } catch (err) {
-        console.error("Failed to fetch scholarship documents:", err);
+        logger.error("Failed to fetch scholarship documents", { err: err });
         setScholarshipDocuments([]);
       } finally {
         setDocumentsLoading(false);
@@ -227,7 +228,7 @@ export function BatchApplicationFileUpload({
           });
         }
       } catch (err) {
-        console.error(`Failed to refresh application ${applicationToDelete.id}:`, err);
+        logger.error(`Failed to refresh application ${applicationToDelete.id}:`, err);
       }
 
       // Notify completion (optional - refresh parent data)
@@ -273,7 +274,7 @@ export function BatchApplicationFileUpload({
         );
       }
     } catch (err) {
-      console.error(`Failed to restore application ${appId}:`, err);
+      logger.error(`Failed to restore application ${appId}:`, err);
       setError(
         locale === "zh"
           ? "恢復申請失敗，請稍後再試"

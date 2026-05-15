@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -73,7 +74,7 @@ function PreviewDialog({ template, open, onClose }: PreviewDialogProps) {
         setError(result.error || "渲染模板失敗");
       }
     } catch (err) {
-      console.error("Failed to render template:", err);
+      logger.error("Failed to render template", { err: err });
       setError(err instanceof Error ? err.message : "渲染模板失敗");
     } finally {
       setIsLoadingPreview(false);
@@ -112,7 +113,7 @@ function PreviewDialog({ template, open, onClose }: PreviewDialogProps) {
       setSuccess(`測試郵件已發送至 ${testEmail}`);
       setTimeout(() => setSuccess(null), 5000);
     } catch (err) {
-      console.error("Failed to send test email:", err);
+      logger.error("Failed to send test email", { err: err });
       setError(err instanceof Error ? err.message : "發送測試郵件失敗");
     } finally {
       setIsSendingTest(false);
@@ -267,22 +268,22 @@ export function ReactEmailTemplateViewer() {
 
     try {
       const response = await api.emailManagement.getReactEmailTemplates();
-      console.log("📧 React Email Templates API response:", response);
+      logger.debug("📧 React Email Templates API response:", response);
 
       // Check if data is an array
       if (Array.isArray(response.data)) {
-        console.log(`✅ Found ${response.data.length} React Email templates`);
+        logger.debug(`✅ Found ${response.data.length} React Email templates`);
         setTemplates(response.data);
       } else if (response.success && response.data) {
-        console.warn("⚠️ Unexpected response data format:", response.data);
+        logger.warn("⚠️ Unexpected response data format:", response.data);
         setTemplates([]);
         setError("回應格式錯誤：無法解析模板列表");
       } else {
-        console.warn("⚠️ No templates data in response:", response);
+        logger.warn("⚠️ No templates data in response:", response);
         setTemplates([]);
       }
     } catch (err) {
-      console.error("❌ Failed to fetch React Email templates:", err);
+      logger.error("❌ Failed to fetch React Email templates", { err: err });
       setError(err instanceof Error ? err.message : "載入模板失敗");
     } finally {
       setIsLoading(false);
@@ -318,7 +319,7 @@ export function ReactEmailTemplateViewer() {
         sourceWindow.document.close();
       }
     } catch (err) {
-      console.error("Failed to fetch source:", err);
+      logger.error("Failed to fetch source", { err: err });
       setError(err instanceof Error ? err.message : "載入源碼失敗");
     }
   };

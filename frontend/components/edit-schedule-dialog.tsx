@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { toast } from "sonner";
+import { logger } from "@/lib/utils/logger";
 import { Calendar } from "lucide-react"
 
 interface RosterSchedule {
@@ -68,7 +69,7 @@ export function EditScheduleDialog({
       const data = await response.json()
       setScholarshipConfigs(data.configurations || [])
     } catch (error) {
-      console.error("獲取獎學金設定失敗:", error)
+      logger.error("獲取獎學金設定失敗", { error: error })
       toast.error("無法載入獎學金設定")
     }
   }
@@ -116,7 +117,7 @@ export function EditScheduleDialog({
 
       onScheduleUpdated()
     } catch (error) {
-      console.error("更新排程失敗:", error)
+      logger.error("更新排程失敗", { error: error })
       toast.error(error instanceof Error ? error.message : "無法更新排程")
     } finally {
       setLoading(false)

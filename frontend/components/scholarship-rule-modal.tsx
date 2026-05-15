@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -216,7 +217,7 @@ export function ScholarshipRuleModal({
         if (response.success && response.data && Array.isArray(response.data)) {
           setSubTypeOptions(response.data);
         } else {
-          console.error("Failed to load sub-types:", response.message);
+          logger.error("Failed to load sub-types:", response.message);
           // Keep default options on error
           setSubTypeOptions([
             {
@@ -228,7 +229,7 @@ export function ScholarshipRuleModal({
           ]);
         }
       } catch (error) {
-        console.error("Error loading sub-types:", error);
+        logger.error("Error loading sub-types", { error: error });
         // Keep default options on error
         setSubTypeOptions([
           { value: null, label: "通用", label_en: "General", is_default: true },
@@ -294,7 +295,7 @@ export function ScholarshipRuleModal({
       await onSubmit(submitData);
       onClose();
     } catch (error) {
-      console.error("提交規則失敗:", error);
+      logger.error("提交規則失敗", { error: error });
     }
   };
 

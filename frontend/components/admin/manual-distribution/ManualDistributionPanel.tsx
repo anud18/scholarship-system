@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { logger } from "@/lib/utils/logger";
 import { useCollegeManagement } from "@/contexts/college-management-context";
 import { useReferenceData } from "@/hooks/use-reference-data";
 import { apiClient } from "@/lib/api";
@@ -423,7 +424,7 @@ export function ManualDistributionPanel({
         setSaveMessage({ type: "error", text: resp.message || "確認分發失敗" });
       }
     } catch (error) {
-      console.error("Finalize error:", error);
+      logger.error("Finalize error", { error: error });
       setSaveMessage({ type: "error", text: "確認分發時發生錯誤" });
     } finally {
       setIsFinalizing(false);
@@ -454,7 +455,7 @@ export function ManualDistributionPanel({
         setSaveMessage({ type: "error", text: resp.message || "造冊產生失敗" });
       }
     } catch (error) {
-      console.error("Generate rosters error:", error);
+      logger.error("Generate rosters error", { error: error });
       setSaveMessage({ type: "error", text: "造冊產生時發生錯誤" });
     } finally {
       setIsGeneratingRosters(false);
@@ -482,7 +483,7 @@ export function ManualDistributionPanel({
         });
       }
     } catch (error) {
-      console.error("Load distribution summary error:", error);
+      logger.error("Load distribution summary error", { error: error });
       setSaveMessage({ type: "error", text: "載入分發名單時發生錯誤" });
     } finally {
       setIsLoadingSummary(false);
@@ -509,7 +510,7 @@ export function ManualDistributionPanel({
         });
       }
     } catch (error) {
-      console.error("Load history error:", error);
+      logger.error("Load history error", { error: error });
       setSaveMessage({ type: "error", text: "載入歷史記錄失敗" });
     } finally {
       setIsLoadingHistory(false);
@@ -565,7 +566,7 @@ export function ManualDistributionPanel({
         setSaveMessage({ type: "error", text: resp.message || "還原失敗" });
       }
     } catch (error) {
-      console.error("Restore error:", error);
+      logger.error("Restore error", { error: error });
       setSaveMessage({ type: "error", text: "還原時發生錯誤" });
     } finally {
       setIsRestoring(false);

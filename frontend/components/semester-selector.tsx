@@ -1,3 +1,4 @@
+import { logger } from "@/lib/utils/logger";
 /**
  * 學期選擇器組件 - 提供學年學期的 dropdown 選擇功能
  */
@@ -217,7 +218,7 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
         }
       }
     } catch (error) {
-      console.error("Error loading scholarship period data:", error);
+      logger.error("Error loading scholarship period data", { error: error });
       // 發生錯誤時顯示空列表
       setCombinations([]);
       setDetectedCycle("semester");
@@ -245,7 +246,7 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
       });
       setActualMode("separate");
     } catch (error) {
-      console.error("Error loading semester data:", error);
+      logger.error("Error loading semester data", { error: error });
     } finally {
       setLoading(false);
     }
@@ -310,14 +311,14 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
 
         setCombinations(combinationOptions);
       } else {
-        console.error(
+        logger.error(
           "Failed to fetch available combinations:",
           response.message
         );
         setCombinations([]);
       }
     } catch (error) {
-      console.error("Error loading combination data:", error);
+      logger.error("Error loading combination data", { error: error });
       setCombinations([]);
     } finally {
       setLoading(false);

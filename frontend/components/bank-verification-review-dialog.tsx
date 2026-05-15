@@ -1,5 +1,6 @@
 "use client"
 
+import { logger } from "@/lib/utils/logger";
 import React, { useState, useEffect } from "react"
 import {
   Dialog,
@@ -85,7 +86,7 @@ export function BankVerificationReviewDialog({
       // 從 file_path URL 參數中提取 token（參考 ApplicationReviewDialog 的做法）
       const urlParts = doc.file_path.split("?")
       if (urlParts.length < 2) {
-        console.error("Invalid file URL format")
+        logger.error("Invalid file URL format")
         return
       }
 
@@ -93,7 +94,7 @@ export function BankVerificationReviewDialog({
       const token = urlParams.get("token")
 
       if (!token) {
-        console.error("No token found in file URL")
+        logger.error("No token found in file URL")
         return
       }
 

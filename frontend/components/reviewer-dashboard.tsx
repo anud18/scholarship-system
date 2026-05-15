@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { logger } from "@/lib/utils/logger";
 import {
   Card,
   CardContent,
@@ -163,11 +164,11 @@ export function ReviewerDashboard({
   };
 
   const handleApprove = (appId: string) => {
-    console.log(`Approving application ${appId}`);
+    logger.debug(`Approving application ${appId}`);
   };
 
   const handleReject = (appId: string) => {
-    console.log(`Rejecting application ${appId}`);
+    logger.debug(`Rejecting application ${appId}`);
   };
 
   const renderCardView = () => (

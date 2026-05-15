@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -90,7 +91,7 @@ export function NotificationPanel({
         throw new Error(response.message || "獲取通知失敗");
       }
     } catch (err) {
-      console.error("獲取通知錯誤:", err);
+      logger.error("獲取通知錯誤", { err: err });
       setError(err instanceof Error ? err.message : "獲取通知失敗");
     } finally {
       setIsLoading(false);
@@ -112,7 +113,7 @@ export function NotificationPanel({
       // 透過 context 標記已讀 (會自動更新 unreadCount)
       await markAsRead(notificationId);
     } catch (err) {
-      console.error("標記已讀失敗:", err);
+      logger.error("標記已讀失敗", { err: err });
     }
   };
 
@@ -131,7 +132,7 @@ export function NotificationPanel({
       // 透過 context 標記全部已讀
       await markAllAsRead();
     } catch (err) {
-      console.error("標記全部已讀失敗:", err);
+      logger.error("標記全部已讀失敗", { err: err });
     }
   };
 

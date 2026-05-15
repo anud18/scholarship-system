@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import {
   Card,
   CardContent,
@@ -138,7 +139,7 @@ export function MockSSOLogin() {
             }
           }
         } catch (err) {
-          console.warn(
+          logger.warn(
             `Failed to fetch profiles for developer ${developerId}:`,
             err
           );
@@ -147,7 +148,7 @@ export function MockSSOLogin() {
 
       setDeveloperProfiles(allProfiles);
     } catch (err) {
-      console.warn("Failed to fetch developer profiles:", err);
+      logger.warn("Failed to fetch developer profiles:", err);
     }
   };
 

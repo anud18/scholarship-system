@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { toast } from "sonner";
+import { logger } from "@/lib/utils/logger";
 import { Play, Pause, Square, Clock, Activity, AlertTriangle, CheckCircle, XCircle, RefreshCw } from "lucide-react"
 import { formatDateTime } from "@/lib/utils"
 
@@ -68,7 +69,7 @@ export function SchedulerStatus() {
       setSchedulerInfo(statusData)
       setJobs(statusData.jobs || [])
     } catch (error) {
-      console.error("獲取排程器狀態失敗:", error)
+      logger.error("獲取排程器狀態失敗", { error: error })
       toast.error("無法載入排程器狀態")
     } finally {
       setLoading(false)
@@ -95,7 +96,7 @@ export function SchedulerStatus() {
       // 稍等一下再刷新狀態
       setTimeout(fetchSchedulerStatus, 1000)
     } catch (error) {
-      console.error(`排程器${action}操作失敗:`, error)
+      logger.error(`排程器${action}操作失敗:`, error)
       toast.error(`無法${action}排程器`)
     } finally {
       setActionLoading(false)

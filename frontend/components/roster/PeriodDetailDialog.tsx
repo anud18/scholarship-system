@@ -1,5 +1,6 @@
 "use client"
 
+import { logger } from "@/lib/utils/logger";
 import { useState } from "react"
 import {
   Dialog,
@@ -125,7 +126,7 @@ export function PeriodDetailDialog({
 
       toast.success("造冊檔案已下載")
     } catch (error) {
-      console.error("Failed to download roster:", error)
+      logger.error("Failed to download roster", { error: error })
       toast.error("下載失敗: 無法下載造冊檔案")
     } finally {
       setDownloading(false)
@@ -158,7 +159,7 @@ export function PeriodDetailDialog({
         throw new Error(response.message || "產生造冊失敗")
       }
     } catch (error: unknown) {
-      console.error("Failed to generate roster:", error)
+      logger.error("Failed to generate roster", { error: error })
       toast.error(`產生造冊失敗: ${(error instanceof Error ? error.message : "無法產生造冊")}`)
     } finally {
       setGenerating(false)

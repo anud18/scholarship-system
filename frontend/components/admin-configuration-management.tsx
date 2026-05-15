@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { logger } from "@/lib/utils/logger";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -126,7 +127,7 @@ export function AdminConfigurationManagement({
           setAcademyCodes(codesMap);
         }
       } catch (error) {
-        console.error("載入學院代碼失敗:", error);
+        logger.error("載入學院代碼失敗", { error: error });
         toast.error("載入學院代碼失敗: " + (error as Error).message);
       }
     };
@@ -223,7 +224,7 @@ export function AdminConfigurationManagement({
 
         setConfigurations(allConfigurations);
       } catch (error) {
-        console.error("載入配置失敗:", error);
+        logger.error("載入配置失敗", { error: error });
         toast.error("載入配置失敗: " + (error as Error).message);
         setConfigurations([]);
         setFilteredConfigurations([]);
@@ -527,7 +528,7 @@ export function AdminConfigurationManagement({
       const date = new Date(dateString);
       // 檢查日期是否有效
       if (isNaN(date.getTime())) {
-        console.warn("Invalid date string:", dateString);
+        logger.warn("Invalid date string:", dateString);
         return "";
       }
 

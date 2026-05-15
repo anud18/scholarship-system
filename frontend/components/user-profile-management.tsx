@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -118,7 +119,7 @@ export default function UserProfileManagement() {
   const loadProfile = async () => {
     try {
       const response = await api.userProfiles.getMyProfile();
-      console.log("Profile response:", response); // 調試用
+      logger.debug("Profile response:", response); // 調試用
 
       if (response.success && response.data) {
         setProfile(response.data as unknown as CompleteUserProfile);
@@ -132,7 +133,7 @@ export default function UserProfileManagement() {
         }
       } else {
         // 如果 API 返回失敗，顯示錯誤但不阻止頁面渲染
-        console.warn("Profile API returned error:", response.message);
+        logger.warn("Profile API returned error:", response.message);
         toast(response.message || t("profile_management.profile_may_not_exist"));
 
         // 設置基本的用戶資料結構，即使沒有完整的個人資料
@@ -158,7 +159,7 @@ export default function UserProfileManagement() {
         });
       }
     } catch (error: unknown) {
-      console.error("Load profile error:", error);
+      logger.error("Load profile error", { error: error });
 
       // 網絡錯誤或其他嚴重錯誤
       if (error instanceof Error && error.name === "TypeError" && error.message.includes("fetch")) {
@@ -406,7 +407,7 @@ export default function UserProfileManagement() {
     // 建立預覽 URL，使用前端路由而不是完整的外部 URL
     const previewUrl = `/api/v1/preview?fileId=${fileId}&filename=${encodeURIComponent(filename)}&type=${fileType}&userId=${userId}&token=${token}`;
 
-    console.log("Preview URL:", previewUrl); // 用於調試
+    logger.debug("Preview URL:", previewUrl); // 用於調試
 
     // 判斷文件類型
     let fileType_display = "other";

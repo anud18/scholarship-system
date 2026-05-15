@@ -1,5 +1,6 @@
 "use client"
 
+import { logger } from "@/lib/utils/logger";
 import { useState, useEffect } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
@@ -85,7 +86,7 @@ export function ConfigSelector({ onConfigSelect, disabled = false }: ConfigSelec
         setConfigurations([])
       }
     } catch (error) {
-      console.error("Failed to load configurations:", error)
+      logger.error("Failed to load configurations", { error: error })
       setConfigurations([])
     } finally {
       setIsLoadingConfigs(false)

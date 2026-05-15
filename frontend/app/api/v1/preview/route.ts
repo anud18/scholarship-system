@@ -210,7 +210,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log("Preview API called:", {
+    logger.debug("Preview API called:", {
       fileId,
       applicationId,
       userId,
@@ -339,7 +339,7 @@ async function handleRosterPreview(
     backendUrl.searchParams.set("max_preview_rows", String(max_preview_rows));
     backendUrl.searchParams.set("include_excluded", String(include_excluded));
 
-    console.log(`[Roster Preview] Fetching: ${backendUrl.toString()}`);
+    logger.debug(`[Roster Preview] Fetching: ${backendUrl.toString()}`);
 
     // 調用後端 API
     const response = await fetch(backendUrl, {

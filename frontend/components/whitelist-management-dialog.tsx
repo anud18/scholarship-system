@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { logger } from "@/lib/utils/logger";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -153,7 +154,7 @@ export function WhitelistManagementDialog({
         }
 
         if (result.failed_items.length > 0) {
-          console.error("Import errors:", result.failed_items);
+          logger.error("Import errors:", result.failed_items);
         }
 
         await loadWhitelist();

@@ -1,5 +1,6 @@
 "use client";
 
+import { logger } from "@/lib/utils/logger";
 import {
   Card,
   CardContent,
@@ -120,7 +121,7 @@ export function AdminDashboard({
             <div className="flex gap-2">
               <button
                 onClick={async () => {
-                  console.log("Manual retry triggered");
+                  logger.debug("Manual retry triggered");
                   fetchRecentApplications();
                 }}
                 className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
@@ -131,17 +132,17 @@ export function AdminDashboard({
               <button
                 onClick={async () => {
                   try {
-                    console.log("Testing super_admin login...");
+                    logger.debug("Testing super_admin login...");
                     const response = await api.auth.mockSSOLogin("super_admin");
-                    console.log("Mock login response:", response);
+                    logger.debug("Mock login response:", response);
 
                     if (response.success && response.data) {
                       const { access_token, user: userData } = response.data;
                       login(access_token, userData);
-                      console.log("Super admin login successful");
+                      logger.debug("Super admin login successful");
                     }
                   } catch (e) {
-                    console.error("Test login failed:", e);
+                    logger.error("Test login failed", { e: e });
                   }
                 }}
                 className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
