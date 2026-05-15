@@ -103,9 +103,9 @@ export function createQuotaApi() {
      * Get scholarship type configurations
      * Type-safe: Response type inferred from OpenAPI
      */
-    getScholarshipTypeConfigs: async (): Promise<ApiResponse<any[]>> => {
+    getScholarshipTypeConfigs: async (): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET('/api/v1/scholarship-configurations/scholarship-types');
-      return toApiResponse<any[]>(response);
+      return toApiResponse<unknown[]>(response);
     },
 
     /**
@@ -187,7 +187,7 @@ export function createQuotaApi() {
     getQuotaHistory: async (
       academicYear: string,
       limit: number = 50
-    ): Promise<ApiResponse<any[]>> => {
+    ): Promise<ApiResponse<unknown[]>> => {
       const response = await (typedClient.raw.GET as any)('/api/v1/scholarship-configurations/quota-history', {
         params: {
           query: {
@@ -196,7 +196,7 @@ export function createQuotaApi() {
           },
         },
       });
-      return toApiResponse<any[]>(response);
+      return toApiResponse<unknown[]>(response);
     },
 
     /**
