@@ -163,7 +163,7 @@ export function createEmailManagementApi() {
      */
     getDueScheduledEmails: async (
       limit?: number
-    ): Promise<ApiResponse<any[]>> => {
+    ): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET('/api/v1/email-management/scheduled/due', {
         params: { query: { limit } },
       });
@@ -177,7 +177,7 @@ export function createEmailManagementApi() {
     approveScheduledEmail: async (
       emailId: number,
       approvalNotes?: string
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.PATCH('/api/v1/email-management/scheduled/{email_id}/approve', {
         params: { path: { email_id: emailId } },
         body: {
@@ -193,7 +193,7 @@ export function createEmailManagementApi() {
      */
     cancelScheduledEmail: async (
       emailId: number
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.PATCH('/api/v1/email-management/scheduled/{email_id}/cancel', {
         params: { path: { email_id: emailId } },
       });
@@ -207,7 +207,7 @@ export function createEmailManagementApi() {
     updateScheduledEmail: async (
       emailId: number,
       data: { subject: string; body: string }
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.PATCH('/api/v1/email-management/scheduled/{email_id}', {
         params: { path: { email_id: emailId } },
         body: data,
