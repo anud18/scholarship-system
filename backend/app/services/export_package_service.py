@@ -207,7 +207,7 @@ class ExportPackageService:
             pdf_bytes = self._generate_summary_pdf(app, scholarship_name, academic_year, semester)
             zf.writestr(f"{base_path}/學生資料彙整.pdf", pdf_bytes)
         except Exception as e:
-            logger.error(f"Failed to generate summary PDF for app {app.id}: {e}")
+            logger.exception(f"Failed to generate summary PDF for app {app.id}")
             zf.writestr(
                 f"{base_path}/_錯誤_彙整PDF生成失敗.txt",
                 f"PDF 生成失敗：{str(e)}",
@@ -245,7 +245,7 @@ class ExportPackageService:
                     response.release_conn()
                 zf.writestr(f"{base_path}/{_sanitize_filename(filename)}", file_bytes)
             except Exception as e:
-                logger.error(f"Failed to fetch file {af.object_name} for app {app.id}: {e}")
+                logger.exception(f"Failed to fetch file {af.object_name} for app {app.id}")
                 zf.writestr(
                     f"{base_path}/_錯誤_找不到檔案_{_sanitize_filename(label)}.txt",
                     f"檔案下載失敗：{af.original_filename or af.object_name}\n錯誤：{str(e)}",

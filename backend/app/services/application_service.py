@@ -1257,9 +1257,7 @@ class ApplicationService:
         # Business metric: increment submitted counter so the Scholarship
         # System Overview dashboard panel for new submissions starts
         # reflecting real KPIs (issue #159).
-        scholarship_applications_total.labels(
-            status=ApplicationStatus.submitted.value
-        ).inc()
+        scholarship_applications_total.labels(status=ApplicationStatus.submitted.value).inc()
 
         # Load user profile once (reused for auto-assign professor and email notification)
         user_profile_stmt = select(UserProfile).where(UserProfile.user_id == application.user_id)
@@ -1765,8 +1763,8 @@ class ApplicationService:
                     "review_deadline": "",
                 },
             )
-        except Exception as e:
-            logger.error(f"Failed to trigger professor review automation: {e}")
+        except Exception:
+            logger.exception("Failed to trigger professor review automation")
 
         # Return fresh copy with all relationships loaded
         return await self.get_application_by_id(application_id, user)
@@ -2046,8 +2044,8 @@ class ApplicationService:
                             minio_service.delete_file(app_file.object_name)
                             deleted_files_count += 1
                             logger.info(f"Deleted file from MinIO: {app_file.object_name}")
-                        except Exception as e:
-                            logger.error(f"Failed to delete file {app_file.object_name} from MinIO: {e}")
+                        except Exception:
+                            logger.exception(f"Failed to delete file {app_file.object_name} from MinIO")
 
             logger.info(f"Deleted {deleted_files_count} files from MinIO for application {application.app_id}")
 
@@ -2330,8 +2328,8 @@ class ApplicationService:
                     f"{len(cloned_documents)} documents successfully cloned and linked to application {application.app_id}"
                 )
 
-        except Exception as e:
-            logger.error(f"Failed to clone user profile documents for application {application.app_id}: {e}")
+        except Exception:
+            logger.exception(f"Failed to clone user profile documents for application {application.app_id}")
             # 不拋出異常，避免影響申請提交流程
             import traceback
 
@@ -2505,8 +2503,8 @@ class ApplicationService:
 
             return responses, total_count
 
-        except Exception as e:
-            logger.error(f"Error fetching paginated professor applications: {e}")
+        except Exception:
+            logger.exception("Error fetching paginated professor applications")
             raise
 
     async def can_professor_review_application(self, application_id: int, professor_id: int) -> bool:
@@ -2544,8 +2542,8 @@ class ApplicationService:
 
             return True
 
-        except Exception as e:
-            logger.error(f"Error checking professor review authorization: {e}")
+        except Exception:
+            logger.exception("Error checking professor review authorization")
             return False
 
     async def can_professor_submit_review(self, application_id: int, professor_id: int) -> bool:
@@ -2622,8 +2620,8 @@ class ApplicationService:
 
             return True
 
-        except Exception as e:
-            logger.error(f"Error checking professor review submission authorization: {e}")
+        except Exception:
+            logger.exception("Error checking professor review submission authorization")
             return False
 
     async def get_professor_review_stats(self, professor_id: int) -> dict:
@@ -2709,8 +2707,8 @@ class ApplicationService:
                 for prof in professors
             ]
 
-        except Exception as e:
-            logger.error(f"Error fetching available professors: {e}")
+        except Exception:
+            logger.exception("Error fetching available professors")
             raise
 
     async def assign_professor(self, application_id: int, professor_nycu_id: str, assigned_by: User) -> Application:
@@ -2807,8 +2805,8 @@ class ApplicationService:
                         created_by_user_id=assigned_by.id,
                     )
                     logger.info(f"Scheduled HTML email to professor {professor.nycu_id}")
-                except Exception as e:
-                    logger.error(f"Failed to send email to professor {professor.nycu_id}: {e}")
+                except Exception:
+                    logger.exception(f"Failed to send email to professor {professor.nycu_id}")
 
             # Create in-app notification (use info type which exists in DB enum)
             try:
@@ -2832,8 +2830,8 @@ class ApplicationService:
                     channels=[NotificationChannel.in_app, NotificationChannel.email],
                 )
                 logger.info(f"In-app notification created for professor {professor.nycu_id}")
-            except Exception as e:
-                logger.error(f"Failed to create notification for professor {professor.nycu_id}: {e}")
+            except Exception:
+                logger.exception(f"Failed to create notification for professor {professor.nycu_id}")
 
             # Log the assignment change
             if old_professor_id != professor.id:
@@ -2845,7 +2843,7 @@ class ApplicationService:
 
             return application
 
-        except Exception as e:
-            logger.error(f"Error assigning professor: {e}")
+        except Exception:
+            logger.exception("Error assigning professor")
             await self.db.rollback()
             raise

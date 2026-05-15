@@ -85,7 +85,7 @@ class MinIOService:
                         self._set_bucket_policy(bucket_name, private=True)
 
         except Exception as e:
-            logger.error(f"Failed to ensure buckets exist: {e}")
+            logger.exception("Failed to ensure buckets exist")
             from fastapi import HTTPException
 
             raise HTTPException(status_code=500, detail=f"MinIO bucket initialization failed: {str(e)}") from e
@@ -179,7 +179,7 @@ class MinIOService:
             }
 
         except Exception as e:
-            logger.error(f"Failed to upload roster file {filename}: {e}")
+            logger.exception(f"Failed to upload roster file {filename}")
             raise FileStorageError(f"檔案上傳失敗: {str(e)}") from e
 
     async def upload_file(self, file, application_id: int, file_type: str) -> Tuple[str, int]:
@@ -247,7 +247,7 @@ class MinIOService:
             return object_name, file_size
 
         except Exception as e:
-            logger.error(f"Failed to upload file {file.filename}: {e}")
+            logger.exception(f"Failed to upload file {file.filename}")
 
             # Business metric: count failures so the dashboard can show
             # the success-rate ratio without needing log-scraping.
@@ -270,7 +270,7 @@ class MinIOService:
         try:
             return self.client.get_object(self.default_bucket, object_name)
         except Exception as e:
-            logger.error(f"Failed to get file stream for {object_name}: {e}")
+            logger.exception(f"Failed to get file stream for {object_name}")
             from fastapi import HTTPException
 
             raise HTTPException(status_code=404, detail="File not found") from e
@@ -289,8 +289,8 @@ class MinIOService:
             self.client.remove_object(self.default_bucket, object_name)
             logger.info(f"Deleted file {object_name}")
             return True
-        except Exception as e:
-            logger.error(f"Failed to delete file {object_name}: {e}")
+        except Exception:
+            logger.exception(f"Failed to delete file {object_name}")
             return False
 
     def clone_file_to_application(self, source_object_name: str, application_id: str) -> str:
@@ -332,7 +332,7 @@ class MinIOService:
                 return new_object_name
 
         except Exception as e:
-            logger.error(f"Failed to clone file {source_object_name}: {e}")
+            logger.exception(f"Failed to clone file {source_object_name}")
             from fastapi import HTTPException
 
             raise HTTPException(status_code=500, detail=str(e)) from e
@@ -396,10 +396,10 @@ class MinIOService:
             if e.code == "NoSuchKey":
                 raise FileStorageError(f"檔案不存在: {object_name}") from e
             else:
-                logger.error(f"Failed to download roster file {object_name}: {e}")
+                logger.exception(f"Failed to download roster file {object_name}")
                 raise FileStorageError(f"檔案下載失敗: {str(e)}") from e
         except Exception as e:
-            logger.error(f"Failed to download roster file {object_name}: {e}")
+            logger.exception(f"Failed to download roster file {object_name}")
             raise FileStorageError(f"檔案下載失敗: {str(e)}") from e
 
     def delete_roster_file(self, object_name: str) -> bool:
@@ -422,10 +422,10 @@ class MinIOService:
                 logger.warning(f"File already deleted or does not exist: {object_name}")
                 return True  # 檔案不存在也算成功
             else:
-                logger.error(f"Failed to delete roster file {object_name}: {e}")
+                logger.exception(f"Failed to delete roster file {object_name}")
                 return False
-        except Exception as e:
-            logger.error(f"Failed to delete roster file {object_name}: {e}")
+        except Exception:
+            logger.exception(f"Failed to delete roster file {object_name}")
             return False
 
     def get_presigned_url(self, object_name: str, expires: timedelta = timedelta(hours=1), method: str = "GET") -> str:
@@ -452,7 +452,7 @@ class MinIOService:
             return url
 
         except Exception as e:
-            logger.error(f"Failed to generate presigned URL for {object_name}: {e}")
+            logger.exception(f"Failed to generate presigned URL for {object_name}")
             raise FileStorageError(f"下載連結產生失敗: {str(e)}") from e
 
     def health_check(self) -> Dict[str, bool]:
@@ -497,7 +497,7 @@ class MinIOService:
             }
 
         except Exception as e:
-            logger.error(f"MinIO health check failed: {e}")
+            logger.exception("MinIO health check failed")
             return {
                 "connection": False,
                 "bucket_exists": False,

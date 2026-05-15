@@ -86,16 +86,16 @@ class RosterNotificationService:
                         metadata=notification_data,
                     )
                     notified_users.append(user.id)
-                except Exception as e:
-                    logger.error(f"Failed to send roster generation notification to user {user.id}: {e}")
+                except Exception:
+                    logger.exception(f"Failed to send roster generation notification to user {user.id}")
 
             logger.info(
                 f"Roster generation notification sent to {len(notified_users)} users for roster {roster.roster_code}"
             )
             return notified_users
 
-        except Exception as e:
-            logger.error(f"Failed to send roster generation notifications for roster {roster.id}: {e}")
+        except Exception:
+            logger.exception(f"Failed to send roster generation notifications for roster {roster.id}")
             return []
 
     async def notify_roster_completed(
@@ -150,16 +150,16 @@ class RosterNotificationService:
                         metadata=notification_data,
                     )
                     notified_users.append(user.id)
-                except Exception as e:
-                    logger.error(f"Failed to send roster completion notification to user {user.id}: {e}")
+                except Exception:
+                    logger.exception(f"Failed to send roster completion notification to user {user.id}")
 
             logger.info(
                 f"Roster completion notification sent to {len(notified_users)} users for roster {roster.roster_code}"
             )
             return notified_users
 
-        except Exception as e:
-            logger.error(f"Failed to send roster completion notifications for roster {roster.id}: {e}")
+        except Exception:
+            logger.exception(f"Failed to send roster completion notifications for roster {roster.id}")
             return []
 
     async def notify_roster_error(self, error_data: Dict[str, Any], notify_roles: List[UserRole] = None) -> List[int]:
@@ -209,14 +209,14 @@ class RosterNotificationService:
                         metadata=notification_data,
                     )
                     notified_users.append(user.id)
-                except Exception as e:
-                    logger.error(f"Failed to send roster error notification to user {user.id}: {e}")
+                except Exception:
+                    logger.exception(f"Failed to send roster error notification to user {user.id}")
 
             logger.info(f"Roster error notification sent to {len(notified_users)} users")
             return notified_users
 
-        except Exception as e:
-            logger.error(f"Failed to send roster error notifications: {e}")
+        except Exception:
+            logger.exception("Failed to send roster error notifications")
             return []
 
     async def notify_roster_status_changed(
@@ -310,16 +310,16 @@ class RosterNotificationService:
                         metadata=notification_data,
                     )
                     notified_users.append(user.id)
-                except Exception as e:
-                    logger.error(f"Failed to send roster status change notification to user {user.id}: {e}")
+                except Exception:
+                    logger.exception(f"Failed to send roster status change notification to user {user.id}")
 
             logger.info(
                 f"Roster status change notification sent to {len(notified_users)} users for roster {roster.roster_code}"
             )
             return notified_users
 
-        except Exception as e:
-            logger.error(f"Failed to send roster status change notifications for roster {roster.id}: {e}")
+        except Exception:
+            logger.exception(f"Failed to send roster status change notifications for roster {roster.id}")
             return []
 
     async def notify_scheduled_roster_summary(
@@ -378,14 +378,14 @@ class RosterNotificationService:
                         metadata=notification_data,
                     )
                     notified_users.append(user.id)
-                except Exception as e:
-                    logger.error(f"Failed to send roster summary notification to user {user.id}: {e}")
+                except Exception:
+                    logger.exception(f"Failed to send roster summary notification to user {user.id}")
 
             logger.info(f"Daily roster summary notification sent to {len(notified_users)} users")
             return notified_users
 
-        except Exception as e:
-            logger.error(f"Failed to send roster summary notifications: {e}")
+        except Exception:
+            logger.exception("Failed to send roster summary notifications")
             return []
 
     def _get_users_by_roles(self, roles: List[UserRole]) -> List[User]:
@@ -400,8 +400,8 @@ class RosterNotificationService:
         """
         try:
             return self.db.query(User).filter(User.role.in_(roles), User.status == "active").all()  # 只取得啟用的使用者
-        except Exception as e:
-            logger.error(f"Failed to get users by roles {roles}: {e}")
+        except Exception:
+            logger.exception(f"Failed to get users by roles {roles}")
             return []
 
     async def send_test_notification(self, user_id: int) -> bool:
@@ -428,6 +428,6 @@ class RosterNotificationService:
             )
             logger.info(f"Test notification sent to user {user_id}")
             return True
-        except Exception as e:
-            logger.error(f"Failed to send test notification to user {user_id}: {e}")
+        except Exception:
+            logger.exception(f"Failed to send test notification to user {user_id}")
             return False

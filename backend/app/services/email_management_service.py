@@ -468,7 +468,7 @@ class EmailManagementService:
                 scheduled_email.mark_as_failed(str(e))
                 stats["failed"] += 1
 
-                logger.error(f"Failed to send scheduled email {scheduled_email.id}: {e}")
+                logger.exception(f"Failed to send scheduled email {scheduled_email.id}")
 
             # Commit changes for this email
             await db.commit()

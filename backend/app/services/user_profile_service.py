@@ -519,7 +519,7 @@ class UserProfileService:
             import logging
 
             logger = logging.getLogger(__name__)
-            logger.error(f"Virus scanning failed: {str(e)}")
+            logger.exception("Virus scanning failed")
             return {"is_safe": True, "warning": f"Scanner exception: {str(e)}"}
 
     async def get_profile_history(self, user_id: int, limit: int = 50) -> List[UserProfileHistory]:

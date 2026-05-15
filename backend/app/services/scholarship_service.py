@@ -39,8 +39,8 @@ class ScholarshipService:
             else:
                 logger.warning(f"Unexpected GPA type: {type(gpa)}, value: {gpa}")
                 return Decimal("0.0")
-        except Exception as e:
-            logger.error(f"Error converting GPA '{gpa}' to Decimal: {e}")
+        except Exception:
+            logger.exception(f"Error converting GPA '{gpa}' to Decimal")
             return Decimal("0.0")
 
     def _is_dev_mode(self) -> bool:

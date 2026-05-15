@@ -413,8 +413,8 @@ class NotificationService:
 
             logger.info(f"Email notification sent to {notification.user.email} for notification {notification.id}")
 
-        except Exception as e:
-            logger.error(f"Failed to send email notification {notification.id}: {str(e)}")
+        except Exception:
+            logger.exception(f"Failed to send email notification {notification.id}")
             # Don't raise exception to avoid breaking the notification flow
 
     async def _send_sms_notification(self, notification: Notification):

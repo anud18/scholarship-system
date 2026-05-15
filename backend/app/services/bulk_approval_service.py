@@ -112,14 +112,14 @@ class BulkApprovalService:
                                 results["notifications_sent"] += 1
                             else:
                                 results["notifications_failed"] += 1
-                        except Exception as e:
-                            logger.error(f"Failed to send notification for application {application.id}: {str(e)}")
+                        except Exception:
+                            logger.exception(f"Failed to send notification for application {application.id}")
                             results["notifications_failed"] += 1
 
                     logger.info(f"Bulk approved application {application.app_id}")
 
                 except Exception as e:
-                    logger.error(f"Failed to approve application {application.id}: {str(e)}")
+                    logger.exception(f"Failed to approve application {application.id}")
                     await self.db.rollback()
                     results["failed_approvals"].append(
                         {
@@ -132,8 +132,8 @@ class BulkApprovalService:
 
             return results
 
-        except Exception as e:
-            logger.error(f"Bulk approval operation failed: {str(e)}")
+        except Exception:
+            logger.exception("Bulk approval operation failed")
             await self.db.rollback()
             raise
 
@@ -221,14 +221,14 @@ class BulkApprovalService:
                                 results["notifications_sent"] += 1
                             else:
                                 results["notifications_failed"] += 1
-                        except Exception as e:
-                            logger.error(f"Failed to send notification for application {application.id}: {str(e)}")
+                        except Exception:
+                            logger.exception(f"Failed to send notification for application {application.id}")
                             results["notifications_failed"] += 1
 
                     logger.info(f"Bulk rejected application {application.app_id}")
 
                 except Exception as e:
-                    logger.error(f"Failed to reject application {application.id}: {str(e)}")
+                    logger.exception(f"Failed to reject application {application.id}")
                     await self.db.rollback()
                     results["failed_rejections"].append(
                         {
@@ -240,8 +240,8 @@ class BulkApprovalService:
 
             return results
 
-        except Exception as e:
-            logger.error(f"Bulk rejection operation failed: {str(e)}")
+        except Exception:
+            logger.exception("Bulk rejection operation failed")
             await self.db.rollback()
             raise
 
@@ -332,7 +332,7 @@ class BulkApprovalService:
                     logger.info(f"Auto-approved application {application.app_id}")
 
                 except Exception as e:
-                    logger.error(f"Failed to auto-approve application {application.id}: {str(e)}")
+                    logger.exception(f"Failed to auto-approve application {application.id}")
                     await self.db.rollback()
                     auto_approval_failures.append({"application_id": application.id, "error": str(e)})
 
@@ -352,8 +352,8 @@ class BulkApprovalService:
                 "failure_count": len(auto_approval_failures),
             }
 
-        except Exception as e:
-            logger.error(f"Auto-approval by criteria failed: {str(e)}")
+        except Exception:
+            logger.exception("Auto-approval by criteria failed")
             raise
 
     async def bulk_status_update(
@@ -410,7 +410,7 @@ class BulkApprovalService:
                     )
 
                 except Exception as e:
-                    logger.error(f"Failed to update application {application.id}: {str(e)}")
+                    logger.exception(f"Failed to update application {application.id}")
                     await self.db.rollback()
                     update_failures.append({"application_id": application.id, "error": str(e)})
 
@@ -424,8 +424,8 @@ class BulkApprovalService:
                 "updated_by": updater_user_id,
             }
 
-        except Exception as e:
-            logger.error(f"Bulk status update failed: {str(e)}")
+        except Exception:
+            logger.exception("Bulk status update failed")
             raise
 
     def _meets_approval_criteria(self, application: Application, criteria: Dict[str, Any]) -> bool:
@@ -459,8 +459,8 @@ class BulkApprovalService:
 
             return True
 
-        except Exception as e:
-            logger.error(f"Error checking approval criteria for application {application.id}: {str(e)}")
+        except Exception:
+            logger.exception(f"Error checking approval criteria for application {application.id}")
             return False
 
     async def batch_process_with_notifications(
@@ -513,8 +513,8 @@ class BulkApprovalService:
                     }
 
                     await self.notification_service.send_batch_processing_notification(admin_email, notification_data)
-                except Exception as e:
-                    logger.error(f"Failed to send admin notification: {str(e)}")
+                except Exception:
+                    logger.exception("Failed to send admin notification")
 
             # Add operation metadata
             results["operation_metadata"] = {
@@ -526,6 +526,6 @@ class BulkApprovalService:
 
             return results
 
-        except Exception as e:
-            logger.error(f"Batch processing with notifications failed: {str(e)}")
+        except Exception:
+            logger.exception("Batch processing with notifications failed")
             raise

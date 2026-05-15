@@ -154,7 +154,7 @@ class OCRService:
             return result
 
         except Exception as e:
-            logger.error(f"Bank OCR extraction failed: {str(e)}")
+            logger.exception("Bank OCR extraction failed")
             raise OCRError(f"Failed to extract bank information: {str(e)}") from e
 
     async def extract_general_text_from_image(
@@ -213,7 +213,7 @@ class OCRService:
             return result
 
         except Exception as e:
-            logger.error(f"General OCR extraction failed: {str(e)}")
+            logger.exception("General OCR extraction failed")
             raise OCRError(f"Failed to extract text: {str(e)}") from e
 
     def _validate_and_process_image(self, image_data: bytes) -> Image.Image:
@@ -266,7 +266,7 @@ class OCRService:
 
             return result
 
-        except json.JSONDecodeError as e:
+        except json.JSONDecodeError:
             logger.error(f"Failed to parse Gemini response as JSON: {response_text}")
             # SECURITY: Do not expose internal or parsing details to client
             return {
@@ -275,8 +275,8 @@ class OCRService:
                 "confidence": 0.0,
                 # "raw_response": response_text,  # Do not pass raw response to client
             }
-        except Exception as e:
-            logger.error(f"Error processing Gemini response: {str(e)}")
+        except Exception:
+            logger.exception("Error processing Gemini response")
             # SECURITY: Do not expose internal or exception details to client
             return {"success": False, "error": "Response processing error.", "confidence": 0.0}
 
