@@ -24,7 +24,10 @@ const api = createBankVerificationApi();
 
 interface BatchBankVerificationProps {
   applicationIds: number[];
-  onComplete?: (taskId: string, results: any) => void;
+  onComplete?: (
+    taskId: string,
+    results: BankVerificationTask["results"]
+  ) => void;
   onNeedsReview?: (applicationIds: number[]) => void;
 }
 

@@ -1238,6 +1238,10 @@ export interface ScholarshipPermission {
   scholarship_name: string;
   scholarship_name_en?: string;
   comment?: string;
+  // Optional quota-management gate emitted by
+  // /admin/scholarship-permissions/me; admin shell uses it to decide
+  // whether to surface the quota tab.
+  can_manage_quota?: boolean;
   // Optional because callers (e.g., admin user-edit modal) construct temporary
   // permission objects in-memory before the server assigns timestamps.
   created_at?: string;

@@ -59,7 +59,13 @@ export function StudentListManagement() {
     setError(null);
 
     try {
-      const params: any = {
+      const params: {
+        page: number;
+        size: number;
+        search?: string;
+        dept_code?: string;
+        status?: string;
+      } = {
         page: pagination.page,
         size: pagination.size,
       };

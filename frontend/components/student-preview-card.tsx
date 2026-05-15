@@ -89,7 +89,9 @@ export function StudentPreviewCard({
     label,
     value,
   }: {
-    icon?: any;
+    // lucide-react icons are React components — use a typed alias rather
+    // than `any`.
+    icon?: React.ComponentType<{ className?: string }>;
     label: string;
     value?: string;
   }) => {
