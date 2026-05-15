@@ -97,7 +97,7 @@ def test_supported_languages_returns_two_entries():
     coverage in the TRANSLATIONS dict, so pin this so it's reviewed."""
     langs = ScholarshipI18n.get_supported_languages()
     assert len(langs) == 2
-    codes = [l["code"] for l in langs]
+    codes = [lang["code"] for lang in langs]
     assert codes == ["zh-TW", "en"]
 
 
