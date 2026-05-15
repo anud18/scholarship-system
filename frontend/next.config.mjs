@@ -21,12 +21,6 @@ const nextConfig = {
     removeConsole: process.env.NODE_ENV === 'production' ? true : false,
   },
 
-  // Experimental features for better performance
-  experimental: {
-    // Enable optimizePackageImports for faster dev builds
-    optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
-  },
-
   // Webpack optimization for development performance
   webpack: (config, { dev, isServer }) => {
     if (dev) {
@@ -60,10 +54,12 @@ const nextConfig = {
     return config;
   },
 
-  // Enable experimental features for better performance
+  // Experimental features for better performance
   experimental: {
     // Use worker threads for webpack builds (faster compilation)
     webpackBuildWorker: true,
+    // Faster dev builds via package-level import optimization
+    optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
   },
 
   // API Proxy for development environment
