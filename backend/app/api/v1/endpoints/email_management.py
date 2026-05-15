@@ -758,7 +758,7 @@ async def get_react_email_templates(*, current_user: User = Depends(require_admi
         return ApiResponse(success=True, message=f"成功獲取 {len(templates)} 個 React Email 模板", data=templates)
 
     except Exception as e:
-        logger.error(f"Failed to scan React Email templates: {e}")
+        logger.exception("Failed to scan React Email templates")
         raise HTTPException(status_code=500, detail=f"獲取 React Email 模板失敗: {str(e)}") from e
 
 
@@ -786,7 +786,7 @@ async def get_react_email_template(*, template_name: str, current_user: User = D
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get React Email template {template_name}: {e}")
+        logger.exception(f"Failed to get React Email template {template_name}")
         raise HTTPException(status_code=500, detail=f"獲取模板失敗: {str(e)}") from e
 
 
@@ -818,5 +818,5 @@ async def get_react_email_template_source(*, template_name: str, current_user: U
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get React Email template source {template_name}: {e}")
+        logger.exception(f"Failed to get React Email template source {template_name}")
         raise HTTPException(status_code=500, detail=f"獲取模板源碼失敗: {str(e)}") from e
