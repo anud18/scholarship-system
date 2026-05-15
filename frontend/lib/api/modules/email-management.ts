@@ -38,7 +38,13 @@ type ScheduledEmailParams = {
 };
 
 type PaginatedEmailResponse = {
-  items: any[];  // eslint-disable-line @typescript-eslint/no-explicit-any  -- consumed by admin-management-interface as Record<string,unknown>[]
+  // intentionally `any[]` — same paginated response wraps several distinct
+  // row shapes (EmailHistoryItem, ScheduledEmailItem, audit-log row, …) that
+  // are declared per-consumer. Narrowing here breaks `setEmailHistory(items)`
+  // / `setScheduledEmails(items)` / `setAuditLogs(items)` at every caller.
+  // See PR #674 commit-history for the reverted attempt.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  items: any[];
   total: number;
   skip: number;
   limit: number;
@@ -69,8 +75,13 @@ type TestModeAuditLog = {
   event_type: string;
   timestamp: string;
   user_id: number | null;
-  config_before: any;  // eslint-disable-line @typescript-eslint/no-explicit-any  -- consumed by email-test-mode-panel as Record<string,unknown>|null
-  config_after: any;  // eslint-disable-line @typescript-eslint/no-explicit-any  -- consumed by email-test-mode-panel as Record<string,unknown>|null
+  // Test-mode audit captures the test-mode config snapshot before and after
+  // a toggle / mutation. The shape is the live TestModeStatus dict plus
+  // historical fields (redirect_count, etc.), which is what
+  // email-test-mode-panel renders. Narrow to dictionary access; consumers
+  // already type the field as `Record<string, unknown> | null`.
+  config_before: Record<string, unknown> | null;
+  config_after: Record<string, unknown> | null;
   original_recipient: string | null;
   actual_recipient: string | null;
   email_subject: string | null;
