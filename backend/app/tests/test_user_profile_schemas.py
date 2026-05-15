@@ -1,4 +1,4 @@
-"""
+r"""
 Tests for `app/schemas/user_profile.py`.
 
 The advisor + bank + privacy schemas are what every student fills out
@@ -12,7 +12,7 @@ non-obvious behaviour:
     surface as students unable to clear advisor email once set.
 
   - **Email regex validation**: the duplicated raw-string pattern
-    `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$`
+    `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
     is duplicated across BankInfoBase/AdvisorInfoBase/Create/Update.
     All four duplicates must agree — a drift would let one entry
     point accept invalid emails another rejects.
@@ -21,6 +21,10 @@ non-obvious behaviour:
     account_number (50), preferred_language (10).
 
 19 cases pinning the 8 schemas in the module.
+
+Note: this docstring is a raw string (r-prefix) because the regex
+pattern above quotes a literal `\.` — without the r-prefix Python
+emits a SyntaxWarning that blocks any `-W error::SyntaxWarning` CI gate.
 """
 
 import pytest
