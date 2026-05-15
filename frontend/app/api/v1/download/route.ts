@@ -97,12 +97,13 @@ export async function GET(request: NextRequest) {
           { status: 400 }
         );
       }
-    } catch (validationError: any) {
+    } catch (validationError: unknown) {
       logger.error("Input validation error", {});
-      return NextResponse.json(
-        { error: validationError.message },
-        { status: 400 }
-      );
+      const message =
+        validationError instanceof Error
+          ? validationError.message
+          : "Invalid input";
+      return NextResponse.json({ error: message }, { status: 400 });
     }
 
     if (!token) {
