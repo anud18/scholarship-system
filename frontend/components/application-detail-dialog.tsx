@@ -43,6 +43,7 @@ import {
   getDocumentLabel,
   fetchApplicationFiles,
   formatFieldName,
+  formatDisplayValue,
 } from "@/lib/utils/application-helpers";
 import { useReferenceData, getDegreeName } from "@/hooks/use-reference-data";
 import {
@@ -730,9 +731,12 @@ export function ApplicationDetailDialog({
                             {getFieldLabel(key, locale, fieldLabels)}
                           </Label>
                           <p className="text-sm text-gray-800">
-                            {typeof value === "string" && value.length > 50
-                              ? `${value.substring(0, 50)}...`
-                              : String(value)}
+                            {(() => {
+                              const rendered = formatDisplayValue(value);
+                              return rendered.length > 50
+                                ? `${rendered.substring(0, 50)}...`
+                                : rendered;
+                            })()}
                           </p>
                         </div>
                       );
