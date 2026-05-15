@@ -189,11 +189,15 @@ export function createAdminApi() {
     },
 
     /**
-     * Create scholarship email template
-     * Type-safe: Request body validated against OpenAPI
+     * Create scholarship email template (per-scholarship override).
+     * scholarship_type_id is passed via query, body is the template payload.
      */
-    createScholarshipEmailTemplate: async (templateData: any): Promise<ApiResponse<any>> => {
+    createScholarshipEmailTemplate: async (
+      scholarshipTypeId: number,
+      templateData: any
+    ): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/scholarship-email-templates', {
+        params: { query: { scholarship_type_id: scholarshipTypeId } },
         body: templateData,
       });
       return toApiResponse(response) as ApiResponse<any>;
