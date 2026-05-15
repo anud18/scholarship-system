@@ -407,12 +407,33 @@ export interface ApplicationCreate {
   [key: string]: unknown; // 允許動態欄位
 }
 
+// Backend `GET /api/v1/admin/dashboard/stats` returns both the canonical
+// snake_case fields and a set of camelCase aliases for the legacy
+// admin-management-interface UI. Until that UI is migrated off the alias
+// shape, the canonical type exposes both. `storageUsed` is optional because
+// the backend does not currently compute it.
+//
+// Both `apiClient.admin.getDashboardStats()` and the legacy alias
+// `apiClient.admin.getSystemStats()` resolve to this same shape.
+//
+// Closes #642 (DashboardStats / SystemStats type drift).
 export interface DashboardStats {
+  // Canonical snake_case fields
   total_applications: number;
   pending_review: number;
   approved: number;
   rejected: number;
   avg_processing_time: string;
+  // Legacy camelCase aliases also returned by the same endpoint
+  totalUsers: number;
+  activeApplications: number;
+  completedReviews: number;
+  systemUptime: string;
+  avgResponseTime: string;
+  pendingReviews: number;
+  totalScholarships: number;
+  // Optional — not currently populated by backend; UI renders empty if absent.
+  storageUsed?: string;
 }
 
 export interface RecipientOption {
@@ -1220,16 +1241,10 @@ export interface Workflow {
   updated_at: string;
 }
 
-export interface SystemStats {
-  totalUsers: number;
-  activeApplications: number;
-  completedReviews: number;
-  systemUptime: string;
-  avgResponseTime: string;
-  storageUsed: string;
-  pendingReviews: number;
-  totalScholarships: number;
-}
+// Legacy alias. Both DashboardStats and SystemStats describe the same
+// `GET /api/v1/admin/dashboard/stats` response (see issue #642). New code
+// should use DashboardStats directly.
+export type SystemStats = DashboardStats;
 
 export interface ScholarshipPermission {
   id: number;

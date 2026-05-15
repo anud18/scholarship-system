@@ -243,8 +243,16 @@ export function AdminManagementInterface({
     number | undefined
   >();
 
-  // 系統統計狀態
+  // 系統統計狀態 — initialized with placeholder values for all DashboardStats
+  // fields (canonical snake_case + legacy camelCase aliases). See issue #642.
   const [systemStats, setSystemStats] = useState<SystemStats>({
+    // Canonical snake_case fields
+    total_applications: 0,
+    pending_review: 0,
+    approved: 0,
+    rejected: 0,
+    avg_processing_time: "0ms",
+    // Legacy camelCase aliases
     totalUsers: 0,
     activeApplications: 0,
     completedReviews: 0,
