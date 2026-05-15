@@ -38,7 +38,11 @@ type ScheduledEmailParams = {
 };
 
 type PaginatedEmailResponse = {
-  items: any[];  // eslint-disable-line @typescript-eslint/no-explicit-any  -- consumed by admin-management-interface as Record<string,unknown>[]
+  // Consumed by admin-management-interface as Record<string, unknown>[].
+  // The on-wire row shape diverges from any single canonical interface
+  // (history vs scheduled vs auto-response), so the narrow stops at structural
+  // dictionary access.
+  items: Record<string, unknown>[];
   total: number;
   skip: number;
   limit: number;
@@ -69,8 +73,13 @@ type TestModeAuditLog = {
   event_type: string;
   timestamp: string;
   user_id: number | null;
-  config_before: any;  // eslint-disable-line @typescript-eslint/no-explicit-any  -- consumed by email-test-mode-panel as Record<string,unknown>|null
-  config_after: any;  // eslint-disable-line @typescript-eslint/no-explicit-any  -- consumed by email-test-mode-panel as Record<string,unknown>|null
+  // Test-mode audit captures the test-mode config snapshot before and after
+  // a toggle / mutation. The shape is the live TestModeStatus dict plus
+  // historical fields (redirect_count, etc.), which is what
+  // email-test-mode-panel renders. Narrow to dictionary access; consumers
+  // already type the field as `Record<string, unknown> | null`.
+  config_before: Record<string, unknown> | null;
+  config_after: Record<string, unknown> | null;
   original_recipient: string | null;
   actual_recipient: string | null;
   email_subject: string | null;
