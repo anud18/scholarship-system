@@ -3,6 +3,7 @@ import {
   getApplicationTimeline,
   formatFieldName,
   formatFieldValue,
+  formatDisplayValue,
   getDocumentLabel,
   fetchApplicationFiles,
   BadgeVariant,
@@ -408,6 +409,69 @@ describe("Application Helpers", () => {
 
       const result = await fetchApplicationFiles(1);
       expect(result).toEqual([]);
+    });
+  });
+
+  describe("formatDisplayValue", () => {
+    // The display formatter is the contract that
+    // application-form-data-display.tsx leans on to avoid rendering
+    // "[object Object]" for nested form-field values.
+    it("returns empty string for null/undefined", () => {
+      expect(formatDisplayValue(null)).toBe("");
+      expect(formatDisplayValue(undefined)).toBe("");
+    });
+
+    it("returns the input unchanged for strings (including empty)", () => {
+      expect(formatDisplayValue("")).toBe("");
+      expect(formatDisplayValue("hello")).toBe("hello");
+      expect(formatDisplayValue("0")).toBe("0");
+    });
+
+    it("stringifies numeric values, preserving 0 and negatives", () => {
+      expect(formatDisplayValue(0)).toBe("0");
+      expect(formatDisplayValue(42)).toBe("42");
+      expect(formatDisplayValue(-1.5)).toBe("-1.5");
+    });
+
+    it("stringifies booleans", () => {
+      expect(formatDisplayValue(true)).toBe("true");
+      expect(formatDisplayValue(false)).toBe("false");
+    });
+
+    it("renders arrays as comma-separated values", () => {
+      // The existing array-rendering test in
+      // application-form-data-display.test.tsx pins this exact shape.
+      expect(formatDisplayValue(["reading", "coding", "music"])).toBe(
+        "reading, coding, music"
+      );
+    });
+
+    it("renders plain objects as JSON instead of [object Object]", () => {
+      // The original bug: String({...}) → "[object Object]".
+      expect(
+        formatDisplayValue({ street: "123 Main St", city: "Hsinchu" })
+      ).toBe('{"street":"123 Main St","city":"Hsinchu"}');
+    });
+
+    it("renders nested objects recursively via JSON.stringify", () => {
+      expect(
+        formatDisplayValue({ address: { city: "Hsinchu" } })
+      ).toBe('{"address":{"city":"Hsinchu"}}');
+    });
+
+    it("recursively formats arrays of objects", () => {
+      expect(
+        formatDisplayValue([{ a: 1 }, { b: 2 }])
+      ).toBe('{"a":1}, {"b":2}');
+    });
+
+    it("falls back to String(value) when JSON.stringify throws (e.g. cycles)", () => {
+      const cyclic: any = { a: 1 };
+      cyclic.self = cyclic;
+      // Should not throw, and should return a defined string.
+      const result = formatDisplayValue(cyclic);
+      expect(typeof result).toBe("string");
+      expect(result.length).toBeGreaterThan(0);
     });
   });
 });

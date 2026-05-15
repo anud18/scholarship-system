@@ -290,6 +290,42 @@ export const formatFieldName = (fieldName: string, locale: Locale) => {
 };
 
 // 格式化欄位值（從資料庫獲取獎學金類型名稱）
+/**
+ * Render a form-field value as a human-readable string. Used by the
+ * application-form-data-display component to show dynamic-form data
+ * collected from students.
+ *
+ * Why:
+ * - String/number/boolean: use `String(value)` (handles 0, false, etc.).
+ * - null/undefined: return empty string (caller decides placeholder).
+ * - Array: comma-separated stringified items (matches the array-test
+ *   contract from PR #244 and the eye-test of "hobbies: reading, coding").
+ * - Plain object: JSON.stringify so nested data renders as readable JSON
+ *   instead of the default `[object Object]`. (Replaces TODO at
+ *   `application-form-data-display.test.tsx:215`.)
+ *
+ * Truncation is the caller's responsibility — different render paths
+ * use different cap lengths.
+ */
+export const formatDisplayValue = (value: unknown): string => {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => formatDisplayValue(item)).join(", ");
+  }
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+};
+
 export const formatFieldValue = async (
   fieldName: string,
   value: any,

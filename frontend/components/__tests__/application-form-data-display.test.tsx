@@ -25,6 +25,26 @@ jest.mock("@/lib/utils/application-helpers", () => ({
   formatFieldValue: jest.fn((fieldName: string, value: any, locale: Locale) =>
     Promise.resolve(value)
   ),
+  // Re-implement the production formatter so the component still
+  // renders objects as JSON (PR #497) under the mock.
+  formatDisplayValue: jest.fn((value: unknown) => {
+    if (value === null || value === undefined) return "";
+    if (typeof value === "string") return value;
+    if (typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+    if (Array.isArray(value)) {
+      return value.map(String).join(", ");
+    }
+    if (typeof value === "object") {
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return String(value);
+      }
+    }
+    return String(value);
+  }),
 }));
 
 // Mock UI components
@@ -211,8 +231,7 @@ describe("ApplicationFormDataDisplay", () => {
     });
   });
 
-  // TODO: Fix object rendering - component doesn't render nested objects
-  it.skip("should handle nested object values", async () => {
+  it("should handle nested object values by rendering them as JSON", async () => {
     const formData = {
       submitted_form_data: {
         fields: {
@@ -230,8 +249,14 @@ describe("ApplicationFormDataDisplay", () => {
     render(<ApplicationFormDataDisplay formData={formData} locale="zh" />);
 
     await waitFor(() => {
-      // Should display JSON stringified value for complex objects
-      expect(screen.getByText(/123 Main St/)).toBeInTheDocument();
+      // Plain objects render via JSON.stringify (formatDisplayValue) so the
+      // user sees the nested data instead of "[object Object]". The render
+      // happens inside <p>...</p> as a single text node, so the substring
+      // assertion is enough — no need for individual sub-elements.
+      const node = screen.getByText(/123 Main St/);
+      expect(node).toBeInTheDocument();
+      expect(node.textContent).toMatch(/Hsinchu/);
+      expect(node.textContent).toMatch(/Taiwan/);
     });
   });
 
