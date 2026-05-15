@@ -252,10 +252,10 @@ async def create_automation_rule(
         # Validate trigger event
         try:
             trigger_enum = TriggerEvent(rule_data.trigger_event)
-        except ValueError:
+        except ValueError as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail=f"無效的觸發事件: {rule_data.trigger_event}"
-            )
+            ) from exc
 
         # SECURITY: Validate condition_query to prevent SQL injection
         validate_condition_query(rule_data.condition_query)
@@ -331,10 +331,10 @@ async def update_automation_rule(
         if rule_data.trigger_event is not None:
             try:
                 rule.trigger_event = TriggerEvent(rule_data.trigger_event)
-            except ValueError:
+            except ValueError as exc:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST, detail=f"無效的觸發事件: {rule_data.trigger_event}"
-                )
+                ) from exc
         if rule_data.template_key is not None:
             rule.template_key = rule_data.template_key
         if rule_data.delay_hours is not None:

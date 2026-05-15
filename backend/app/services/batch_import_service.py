@@ -694,11 +694,11 @@ class BatchImportService:
         if semester:
             try:
                 semester_enum = Semester(semester)
-            except ValueError:
+            except ValueError as exc:
                 raise BatchImportError(
                     message=f"無效的學期值: {semester}",
                     batch_id=batch_import.id,
-                )
+                ) from exc
 
         # Find scholarship configuration for this academic period
         config_stmt = select(ScholarshipConfiguration).where(

@@ -202,16 +202,16 @@ class StudentVerificationService:
                     student_id=student_id_number,
                 )
 
-        except requests.exceptions.Timeout:
+        except requests.exceptions.Timeout as exc:
             raise StudentVerificationError(
                 "Student verification API timeout",
                 student_id=student_id_number,
-            )
-        except requests.exceptions.ConnectionError:
+            ) from exc
+        except requests.exceptions.ConnectionError as exc:
             raise StudentVerificationError(
                 "Cannot connect to student verification API",
                 student_id=student_id_number,
-            )
+            ) from exc
         except requests.exceptions.RequestException as e:
             raise StudentVerificationError(
                 f"API request failed: {str(e)}",

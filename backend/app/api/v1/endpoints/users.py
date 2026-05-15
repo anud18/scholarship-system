@@ -217,8 +217,8 @@ async def get_all_users(
         try:
             user_role = UserRole(role.lower())
             stmt = stmt.where(User.role == user_role)
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid role: {role}")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid role: {role}") from exc
 
     if search:
         stmt = stmt.where(

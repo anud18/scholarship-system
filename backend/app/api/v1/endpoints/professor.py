@@ -121,8 +121,8 @@ async def get_professor_review(
             "data": review_response.model_dump(),
         }
 
-    except NotFoundError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Professor review not found")
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Professor review not found") from exc
     except Exception as e:
         logger.error(f"Error fetching professor review: {str(e)}")
         import traceback
@@ -202,8 +202,8 @@ async def submit_professor_review(
             "data": review_response.model_dump(),
         }
 
-    except NotFoundError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found") from exc
     except AuthorizationError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except Exception as e:
@@ -285,8 +285,8 @@ async def update_professor_review(
 
     except AuthorizationError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except NotFoundError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review not found")
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review not found") from exc
     except Exception as e:
         logger.error(f"Error updating professor review: {str(e)}")
         import traceback

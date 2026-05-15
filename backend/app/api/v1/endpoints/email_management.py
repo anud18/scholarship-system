@@ -155,8 +155,8 @@ async def approve_scheduled_email(
         return {"success": True, "message": "Scheduled email approved successfully", "data": scheduled_email}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    except Exception:
-        raise HTTPException(status_code=500, detail="Failed to approve email")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to approve email") from exc
 
 
 @router.patch("/scheduled/{email_id}/cancel")
@@ -174,8 +174,8 @@ async def cancel_scheduled_email(
         return {"success": True, "message": "Scheduled email approved successfully", "data": scheduled_email}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    except Exception:
-        raise HTTPException(status_code=500, detail="Failed to cancel email")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to cancel email") from exc
 
 
 @router.patch("/scheduled/{email_id}")
@@ -200,8 +200,8 @@ async def update_scheduled_email(
         return {"success": True, "message": "Scheduled email approved successfully", "data": scheduled_email}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    except Exception:
-        raise HTTPException(status_code=500, detail="Failed to update scheduled email")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to update scheduled email") from exc
 
 
 @router.post("/scheduled/process")

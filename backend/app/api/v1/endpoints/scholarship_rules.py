@@ -77,8 +77,8 @@ async def list_scholarship_rules(
                     ScholarshipRule.semester.is_(None),  # Include generic rules
                 )
             )
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid semester: {semester}")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid semester: {semester}") from exc
 
     if sub_type:
         stmt = stmt.filter(
