@@ -219,9 +219,9 @@ export function AdminScholarshipManagementInterface({
       if (response.success && response.data) {
         setWhitelist(response.data as WhitelistResponse[]);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Failed to load whitelist:", err);
-      toast.error(err.message || "無法載入白名單");
+      toast.error((err instanceof Error ? err.message : "無法載入白名單"));
     } finally {
       setLoadingWhitelist(false);
     }
@@ -552,9 +552,9 @@ export function AdminScholarshipManagementInterface({
       } else {
         setError(response.message || "範例文件上傳失敗");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Failed to upload example:", err);
-      setError(err.message || "範例文件上傳失敗，請稍後再試");
+      setError((err instanceof Error ? err.message : "範例文件上傳失敗，請稍後再試"));
     } finally {
       setUploadingExampleDocId(null);
       // Reset file input
@@ -633,8 +633,8 @@ export function AdminScholarshipManagementInterface({
         const batchResult = response.data as { success_count: number; failed_items: Array<{ nycu_id: string; reason: string; }>; };
         toast.error(batchResult.failed_items[0].reason);
       }
-    } catch (error: any) {
-      toast.error(error.message || "無法新增學生到白名單");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "無法新增學生到白名單"));
     } finally {
       setAddingStudent(false);
     }
@@ -653,8 +653,8 @@ export function AdminScholarshipManagementInterface({
         setSelectedStudents(new Set());
         await loadWhitelist(activeConfigId);
       }
-    } catch (error: any) {
-      toast.error(error.message || "無法刪除學生");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "無法刪除學生"));
     }
   };
 
@@ -678,8 +678,8 @@ export function AdminScholarshipManagementInterface({
 
         await loadWhitelist(activeConfigId);
       }
-    } catch (error: any) {
-      toast.error(error.message || "無法匯入 Excel 檔案");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "無法匯入 Excel 檔案"));
     } finally {
       setLoadingWhitelist(false);
       if (fileInputRef.current) {
@@ -702,8 +702,8 @@ export function AdminScholarshipManagementInterface({
       window.URL.revokeObjectURL(url);
 
       toast.success("白名單已下載為 Excel 檔案");
-    } catch (error: any) {
-      toast.error(error.message || "無法匯出白名單");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "無法匯出白名單"));
     }
   };
 
@@ -720,8 +720,8 @@ export function AdminScholarshipManagementInterface({
       window.URL.revokeObjectURL(url);
 
       toast.success("匯入模板已下載");
-    } catch (error: any) {
-      toast.error(error.message || "無法下載模板");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "無法下載模板"));
     }
   };
 
