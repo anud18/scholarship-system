@@ -15,7 +15,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.cache import invalidate as cache_invalidate
 from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFoundError, ValidationError
-from app.core.metrics import scholarship_applications_total
+from app.core.metrics import scholarship_applications_total, scholarship_reviews_total
 from app.core.schema_validation import serialize_value
 from app.models.application import Application, ApplicationStatus, ReviewStatus
 from app.models.enums import Semester
@@ -1728,6 +1728,15 @@ class ApplicationService:
         application.updated_at = datetime.now(timezone.utc)
 
         await self.db.commit()
+
+        # Business metric: count professor review actions for the
+        # Scholarship System Overview dashboard. Action is derived from
+        # the overall recommendation so dashboards can split approve vs
+        # reject (issue #159).
+        scholarship_reviews_total.labels(
+            reviewer_type="professor",
+            action=str(overall_recommendation) if overall_recommendation else "unknown",
+        ).inc()
 
         # 觸發教授審查提交事件（會觸發自動化郵件規則）
         try:
