@@ -34,18 +34,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Check for existing authentication on mount
   useEffect(() => {
     const checkExistingAuth = () => {
-      console.log("Checking existing authentication...");
-      // Check if user is already authenticated (from localStorage)
+      logger.debug("Checking existing authentication");
       const token = localStorage.getItem("auth_token");
       const userJson =
         localStorage.getItem("user") || localStorage.getItem("dev_user");
 
-      console.log("Found token:", !!token, "Found user data:", !!userJson);
+      logger.debug("Auth storage probed", {
+        hasToken: !!token,
+        hasUserJson: !!userJson,
+      });
 
       if (token && userJson) {
         try {
           const userData = JSON.parse(userJson);
-          console.log("Parsed user data:", userData);
           apiClient.setToken(token);
           // Convert role to lowercase for frontend consistency
           const normalizedUser = {
@@ -54,15 +55,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             role: userData.role?.toLowerCase(),
           };
           setUser(normalizedUser);
-          console.log("Authentication restored from localStorage");
+          logger.debug("Authentication restored from localStorage", {
+            role: normalizedUser.role,
+          });
         } catch (err) {
-          logger.error("Failed to parse stored user data", {});
+          logger.error("Failed to parse stored user data", { err });
           localStorage.removeItem("auth_token");
           localStorage.removeItem("user");
           localStorage.removeItem("dev_user");
         }
       } else {
-        console.log("No existing authentication found");
+        logger.debug("No existing authentication found");
       }
       setIsLoading(false);
     };
@@ -71,20 +74,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback((token: string, userData: User) => {
-    console.log("🔐 useAuth.login() called with:", {
-      token: !!token,
-      tokenPreview: token ? `${token.substring(0, 20)}...` : "none",
-      userData,
+    logger.debug("useAuth.login() called", {
+      hasToken: !!token,
+      role: userData.role,
     });
 
     try {
-      console.log("🌐 Setting API client token...");
       apiClient.setToken(token);
-      console.log("✅ API client token set");
-
-      console.log("💾 Storing token in localStorage...");
       localStorage.setItem("auth_token", token);
-      console.log("💾 Storing user data in localStorage...");
       localStorage.setItem("user", JSON.stringify(userData));
 
       // Also store as dev_user for backwards compatibility
@@ -93,7 +90,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         name: userData.full_name || userData.name,
         role: userData.role?.toLowerCase(),
       };
-      console.log("💾 Storing dev_user for backwards compatibility...");
       localStorage.setItem("dev_user", JSON.stringify(devUser));
       const finalUser = {
         ...userData,
@@ -105,23 +101,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           | "admin"
           | "super_admin",
       };
-      console.log("👤 Setting user state:", finalUser);
       setUser(finalUser);
       setError(null);
-      console.log("✅ useAuth.login() completed successfully");
-      console.log("🔍 Final authentication state:", {
-        userSet: !!finalUser,
-        userRole: finalUser.role,
-        errorCleared: true,
+      logger.debug("useAuth.login() completed", {
+        role: finalUser.role,
       });
-    } catch (error) {
-      logger.error("Error in login", {});
-      setError(error instanceof Error ? error.message : "Login failed");
+    } catch (err) {
+      logger.error("Error in login", { err });
+      setError(err instanceof Error ? err.message : "Login failed");
     }
   }, []);
 
   const logout = useCallback(() => {
-    console.log("Logging out...");
+    logger.debug("Logging out");
     apiClient.clearToken();
     localStorage.removeItem("auth_token");
     localStorage.removeItem("user");
