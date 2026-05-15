@@ -46,19 +46,8 @@ class TestCollegeReviewService:
             sub_scholarship_type="phd_research",
         )
 
-    @pytest.fixture
-    def sample_college_review(self):
-        """Sample college review for testing"""
-        return CollegeReview(
-            id=1,
-            application_id=1,
-            reviewer_id=2001,
-            academic_score=85.0,
-            professor_review_score=90.0,
-            college_criteria_score=88.0,
-            ranking_score=87.5,
-            review_status="completed",
-        )
+    # NOTE: `sample_college_review` fixture removed alongside the CollegeReview
+    # model in the schema cleanup. No collected test consumed it.
 
     @pytest.fixture
     def sample_ranking(self):
