@@ -75,6 +75,36 @@ interface ScholarshipApplicationStepProps {
   editingApplication?: Application | null;
 }
 
+// Shape of `submitted_form_data.documents[]` entries restored when loading a
+// previously-saved application draft. Same shape as DocumentPayload used
+// elsewhere; duplicated here because the parent module doesn't export one.
+interface SubmittedDocumentPayload {
+  file_id?: string | number;
+  id?: string | number;
+  filename?: string;
+  original_filename?: string;
+  file_size?: number;
+  mime_type?: string;
+  document_type?: string;
+  file_path?: string;
+  download_url?: string;
+  is_verified?: boolean;
+  upload_time?: string;
+  document_id?: string;
+}
+
+// Fields the backend attaches to an Application row that aren't on the
+// canonical Application type (the application-level attached document — a
+// student-uploaded "main file" separate from the per-field documents).
+interface ApplicationDocumentAttachment {
+  application_document_url?: string;
+  application_document_original_filename?: string;
+}
+
+// Files in dynamicFileData are normalized to UploadedFileLike at restore time
+// (see line ~610), so we narrow the `isUploaded` check via a localized type.
+type FileWithUploadedFlag = File & { isUploaded?: boolean };
+
 export function ScholarshipApplicationStep({
   onBack,
   onComplete,
@@ -605,7 +635,7 @@ export function ScholarshipApplicationStep({
       // Load file data
       if (formData.documents) {
         const existingFileData: Record<string, File[]> = {};
-        formData.documents.forEach((doc: any) => {
+        formData.documents.forEach((doc: SubmittedDocumentPayload) => {
           if (doc.document_id && doc.original_filename) {
             const fileData = {
               id: doc.file_id || doc.id,
@@ -624,19 +654,19 @@ export function ScholarshipApplicationStep({
               type: doc.mime_type || "application/octet-stream",
               isUploaded: true,
             };
-            existingFileData[doc.document_id] = [fileData as any];
+            existingFileData[doc.document_id] = [fileData as unknown as File];
           }
         });
         setDynamicFileData(existingFileData);
       }
 
       // Load application document
-      if ((editingApplication as any).application_document_url) {
-        setExistingApplicationDocument(
-          (editingApplication as any).application_document_url
-        );
+      const editingApp = editingApplication as Application &
+        ApplicationDocumentAttachment;
+      if (editingApp.application_document_url) {
+        setExistingApplicationDocument(editingApp.application_document_url);
         setExistingApplicationDocumentName(
-          (editingApplication as any).application_document_original_filename || ""
+          editingApp.application_document_original_filename || ""
         );
       }
 
@@ -882,7 +912,7 @@ export function ScholarshipApplicationStep({
         // Upload new files only
         for (const [docType, files] of Object.entries(dynamicFileData)) {
           for (const file of files) {
-            if (!(file as any).isUploaded) {
+            if (!(file as FileWithUploadedFlag).isUploaded) {
               await uploadDocument(editingApplication.id, file, docType);
             }
           }
@@ -900,7 +930,8 @@ export function ScholarshipApplicationStep({
               appDocResp.data?.application_document_url || null
             );
             setExistingApplicationDocumentName(
-              (appDocResp.data as any)?.application_document_original_filename ||
+              (appDocResp.data as ApplicationDocumentAttachment | undefined)
+                ?.application_document_original_filename ||
                 uploadedFile.name
             );
             setApplicationDocumentFiles([]);
@@ -934,7 +965,8 @@ export function ScholarshipApplicationStep({
                 appDocResp.data?.application_document_url || null
               );
               setExistingApplicationDocumentName(
-                (appDocResp.data as any)?.application_document_original_filename ||
+                (appDocResp.data as ApplicationDocumentAttachment | undefined)
+                ?.application_document_original_filename ||
                   uploadedFile.name
               );
               setApplicationDocumentFiles([]);
@@ -1003,7 +1035,7 @@ export function ScholarshipApplicationStep({
         // Upload new files only
         for (const [docType, files] of Object.entries(dynamicFileData)) {
           for (const file of files) {
-            if (!(file as any).isUploaded) {
+            if (!(file as FileWithUploadedFlag).isUploaded) {
               await uploadDocument(applicationId, file, docType);
             }
           }
