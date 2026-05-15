@@ -758,7 +758,7 @@ class BankVerificationService:
                         # Create new verified account record
                         # First, deactivate any other active accounts for this user
                         deactivate_stmt = select(StudentBankAccount).where(
-                            StudentBankAccount.user_id == application.user_id, StudentBankAccount.is_active == True
+                            StudentBankAccount.user_id == application.user_id, StudentBankAccount.is_active.is_(True)
                         )
                         deactivate_result = await self.db.execute(deactivate_stmt)
                         active_accounts = deactivate_result.scalars().all()

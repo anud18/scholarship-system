@@ -643,8 +643,8 @@ class RosterService:
                         and_(
                             CollegeRanking.scholarship_type_id == config.scholarship_type_id,
                             CollegeRanking.academic_year == academic_year,
-                            CollegeRanking.is_finalized == True,  # 必須已完成
-                            CollegeRanking.distribution_executed == True,  # 必須已執行分發
+                            CollegeRanking.is_finalized.is_(True),  # 必須已完成
+                            CollegeRanking.distribution_executed.is_(True),  # 必須已執行分發
                         )
                     )
                     .order_by(CollegeRanking.finalized_at.desc())
@@ -667,7 +667,7 @@ class RosterService:
             query = query.join(CollegeRankingItem, CollegeRankingItem.application_id == Application.id).filter(
                 and_(
                     CollegeRankingItem.ranking_id == ranking_id,
-                    CollegeRankingItem.is_allocated == True,  # 只選正取學生
+                    CollegeRankingItem.is_allocated.is_(True),  # 只選正取學生
                 )
             )
         else:
@@ -835,7 +835,7 @@ class RosterService:
                 .filter(
                     and_(
                         CollegeRankingItem.application_id == application.id,
-                        CollegeRankingItem.is_allocated == True,
+                        CollegeRankingItem.is_allocated.is_(True),
                         CollegeRanking.academic_year == roster.academic_year,
                     )
                 )
@@ -1448,8 +1448,8 @@ class RosterService:
                     CollegeRanking.scholarship_type_id == scholarship_type_id,
                     CollegeRanking.academic_year == academic_year,
                     sem_filter,
-                    CollegeRanking.is_finalized == True,
-                    CollegeRanking.distribution_executed == True,
+                    CollegeRanking.is_finalized.is_(True),
+                    CollegeRanking.distribution_executed.is_(True),
                 )
             )
             .all()
@@ -1487,7 +1487,7 @@ class RosterService:
             .filter(
                 and_(
                     CollegeRankingItem.ranking_id.in_(ranking_ids),
-                    CollegeRankingItem.is_allocated == True,
+                    CollegeRankingItem.is_allocated.is_(True),
                 )
             )
             .all()

@@ -353,8 +353,8 @@ async def get_distribution_summary(
                 CollegeRanking.scholarship_type_id == scholarship_type_id,
                 CollegeRanking.academic_year == academic_year,
                 sem_filter,
-                CollegeRanking.is_finalized == True,
-                CollegeRanking.distribution_executed == True,
+                CollegeRanking.is_finalized.is_(True),
+                CollegeRanking.distribution_executed.is_(True),
             )
         )
         ranking_result = await db.execute(ranking_stmt)
@@ -375,7 +375,7 @@ async def get_distribution_summary(
             .where(
                 and_(
                     CollegeRankingItem.ranking_id.in_(ranking_ids),
-                    CollegeRankingItem.is_allocated == True,
+                    CollegeRankingItem.is_allocated.is_(True),
                 )
             )
             .options(selectinload(CollegeRankingItem.application))

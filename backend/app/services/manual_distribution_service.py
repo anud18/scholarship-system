@@ -270,7 +270,7 @@ class ManualDistributionService:
                 CollegeRanking.scholarship_type_id == scholarship_type_id,
                 CollegeRanking.academic_year == academic_year,
                 _ranking_semester_condition(semester),
-                CollegeRanking.is_finalized == True,
+                CollegeRanking.is_finalized.is_(True),
             )
         )
         result = await self.db.execute(ranking_query)
@@ -446,7 +446,7 @@ class ManualDistributionService:
             .where(
                 and_(
                     ScholarshipSubTypeConfig.scholarship_type_id == scholarship_type_id,
-                    ScholarshipSubTypeConfig.is_active == True,
+                    ScholarshipSubTypeConfig.is_active.is_(True),
                 )
             )
             .order_by(ScholarshipSubTypeConfig.display_order)
@@ -459,7 +459,7 @@ class ManualDistributionService:
         all_rankings_query = select(CollegeRanking).where(
             and_(
                 CollegeRanking.scholarship_type_id == scholarship_type_id,
-                CollegeRanking.is_finalized == True,
+                CollegeRanking.is_finalized.is_(True),
             )
         )
         result = await self.db.execute(all_rankings_query)
@@ -473,7 +473,7 @@ class ManualDistributionService:
                 .where(
                     and_(
                         CollegeRankingItem.ranking_id.in_(all_ranking_ids),
-                        CollegeRankingItem.is_allocated == True,
+                        CollegeRankingItem.is_allocated.is_(True),
                     )
                 )
             )
@@ -698,7 +698,7 @@ class ManualDistributionService:
                 CollegeRanking.scholarship_type_id == scholarship_type_id,
                 CollegeRanking.academic_year == academic_year,
                 _ranking_semester_condition(semester),
-                CollegeRanking.is_finalized == True,
+                CollegeRanking.is_finalized.is_(True),
             )
         )
         result = await self.db.execute(ranking_query)
@@ -946,7 +946,7 @@ class ManualDistributionService:
             .where(
                 and_(
                     ScholarshipSubTypeConfig.scholarship_type_id == scholarship_type_id,
-                    ScholarshipSubTypeConfig.is_active == True,
+                    ScholarshipSubTypeConfig.is_active.is_(True),
                 )
             )
             .order_by(ScholarshipSubTypeConfig.display_order)
@@ -1008,7 +1008,7 @@ class ManualDistributionService:
                 CollegeRanking.scholarship_type_id == scholarship_type_id,
                 CollegeRanking.academic_year == academic_year,
                 _ranking_semester_condition(semester),
-                CollegeRanking.is_finalized == True,
+                CollegeRanking.is_finalized.is_(True),
             )
         )
         result = await self.db.execute(ranking_query)
