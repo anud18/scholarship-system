@@ -12,7 +12,11 @@
 
 import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
-import type { ApiResponse } from '../types';
+import type {
+  ApiResponse,
+  ScholarshipFormConfig,
+  FormConfigSaveRequest,
+} from '../types';
 
 type ApplicationField = {
   id: number;
@@ -43,27 +47,6 @@ type ApplicationDocument = {
 
 type ApplicationDocumentCreate = Omit<ApplicationDocument, 'id'>;
 type ApplicationDocumentUpdate = Partial<ApplicationDocumentCreate>;
-
-// Form-config endpoints. The module-local ApplicationField / ApplicationDocument
-// types describe a subset shape (snake_case CRUD-friendly), while the canonical
-// types in `../types.ts` carry richer i18n / validation metadata. The form-config
-// GET returns the richer canonical shape and the save accepts either variant.
-// Narrowing here to `Record<string, unknown>[]` rather than the local subset
-// preserves backwards compatibility with both call sites (admin form designer
-// + student form runtime) without claiming a precise shape neither side fully
-// matches. Compare PRs #629/#630 for the same `Record<string, unknown>` pattern
-// applied to other modules; tightening further requires reconciling the
-// duplicate canonical/local interfaces (see ledger entry).
-type ScholarshipFormConfig = {
-  scholarship_type: string;
-  fields: Record<string, unknown>[];
-  documents: Record<string, unknown>[];
-};
-
-type FormConfigSaveRequest = {
-  fields: Record<string, unknown>[];
-  documents: Record<string, unknown>[];
-};
 
 export function createApplicationFieldsApi() {
   return {
@@ -210,7 +193,7 @@ export function createApplicationFieldsApi() {
     uploadDocumentExample: async (
       documentId: number,
       file: File
-    ): Promise<unknown> => {
+    ): Promise<ApiResponse<{ example_file_url?: string }>> => {
       const formData = new FormData();
       formData.append("file", file);
 
