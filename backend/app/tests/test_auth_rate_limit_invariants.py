@@ -54,3 +54,12 @@ def test_mock_sso_login_has_rate_limit_decorator():
     assert any(d.startswith("@rate_limit") for d in decorators), (
         "auth.mock_sso_login must have @rate_limit decorator (commit 001b14b). " f"Found decorators: {decorators}"
     )
+
+
+def test_portal_sso_verify_has_rate_limit_decorator():
+    # The real public SSO entry point — must be rate-limited.
+    # Closes issue #641: rate-limiter built but not applied to /portal-sso/verify.
+    decorators = _function_decorators(auth, "portal_sso_verify")
+    assert any(d.startswith("@rate_limit") for d in decorators), (
+        "auth.portal_sso_verify must have @rate_limit decorator (issue #641). " f"Found decorators: {decorators}"
+    )
