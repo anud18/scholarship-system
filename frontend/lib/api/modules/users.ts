@@ -55,7 +55,13 @@ type UserResponse = {
   last_login_at?: string;
   created_at: string;
   updated_at: string;
-  raw_data?: any;
+  raw_data?: UserRawData;
+};
+
+type UserRawData = {
+  chinese_name?: string;
+  english_name?: string;
+  [key: string]: unknown;
 };
 
 type UserCreate = {
@@ -69,11 +75,7 @@ type UserCreate = {
   dept_name?: string;
   college_code?: string;
   comment?: string;
-  raw_data?: {
-    chinese_name?: string;
-    english_name?: string;
-    [key: string]: any;
-  };
+  raw_data?: UserRawData;
   // Backward compatibility fields
   username?: string;
   full_name?: string;
