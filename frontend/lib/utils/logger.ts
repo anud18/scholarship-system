@@ -29,7 +29,7 @@ class Logger {
    * Production: Generic message only
    * Development: Full details
    */
-  error(message: string, context?: LogContext): void {
+  error(message: string, context?: LogContext | unknown, ...rest: unknown[]): void {
     if (this.isDevelopment) {
       console.error(`[ERROR] ${message}`, context || '');
     } else {
@@ -44,7 +44,7 @@ class Logger {
    * Production: Generic message only
    * Development: Full details
    */
-  warn(message: string, context?: LogContext): void {
+  warn(message: string, context?: LogContext | unknown, ...rest: unknown[]): void {
     if (this.isDevelopment) {
       console.warn(`[WARN] ${message}`, context || '');
     } else {
@@ -57,7 +57,7 @@ class Logger {
    * Production: Silent
    * Development: Full details
    */
-  info(message: string, context?: LogContext): void {
+  info(message: string, context?: LogContext | unknown, ...rest: unknown[]): void {
     if (this.isDevelopment) {
       console.info(`[INFO] ${message}`, context || '');
     }
@@ -66,7 +66,7 @@ class Logger {
   /**
    * Log debug messages (development only)
    */
-  debug(message: string, context?: LogContext): void {
+  debug(message: string, context?: LogContext | unknown, ...rest: unknown[]): void {
     if (this.isDevelopment) {
       console.debug(`[DEBUG] ${message}`, context || '');
     }
@@ -79,7 +79,7 @@ class Logger {
   private sendToExternalLogger(
     level: LogLevel,
     message: string,
-    context?: LogContext
+    context?: LogContext | unknown
   ): void {
     // Future: Send to backend logging endpoint
     // fetch('/api/v1/logs', {
