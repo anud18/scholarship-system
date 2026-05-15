@@ -521,9 +521,3 @@ class TestMinIOService:
         # Assert
         assert cleaned_count == 2
         assert mock_minio_client.remove_object.call_count == 2
-
-    # TODO: Add tests for concurrent file operations
-    # TODO: Add tests for file encryption/decryption
-    # TODO: Add tests for file versioning support
-    # TODO: Add tests for bandwidth limiting
-    # TODO: Add performance tests for large file operations

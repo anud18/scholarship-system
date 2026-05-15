@@ -638,9 +638,3 @@ class TestGetStudentDataFromUser:
 
         # Assert
         assert result is None
-
-    # TODO: Add tests for external API failure handling
-    # TODO: Add tests for student data caching mechanism
-    # TODO: Add tests for student data validation and sanitization
-    # TODO: Add performance tests for bulk application operations
-    # TODO: Add tests for application archiving functionality

@@ -665,9 +665,3 @@ class TestModelTimestamps:
 
         # Assert
         assert user.updated_at > original_updated_at
-
-    # TODO: Add tests for model validation methods
-    # TODO: Add tests for model serialization to dict/JSON
-    # TODO: Add tests for complex query scenarios
-    # TODO: Add tests for model inheritance relationships
-    # TODO: Add performance tests for large dataset operations
