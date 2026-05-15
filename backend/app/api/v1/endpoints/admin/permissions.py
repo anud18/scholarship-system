@@ -191,6 +191,14 @@ async def create_scholarship_permission(
 
     # Check if admin is trying to modify their own permissions (not allowed)
     if current_user.role == UserRole.admin and user_id == current_user.id:
+        logger.warning(
+            "SECURITY: admin attempted to grant scholarship permission to self",
+            extra={
+                "actor_user_id": current_user.id,
+                "actor_role": str(current_user.role),
+                "scholarship_id": scholarship_id,
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Admin users cannot modify their own permissions"
         )
@@ -232,6 +240,20 @@ async def create_scholarship_permission(
     await db.commit()
     await db.refresh(new_permission)
     await cache_invalidate("dashboard:")
+
+    # SECURITY: Permissions are the access-control surface; record who
+    # granted which scholarship to whom for the audit trail.
+    logger.info(
+        "scholarship permission granted",
+        extra={
+            "actor_user_id": current_user.id,
+            "actor_role": str(current_user.role),
+            "permission_id": new_permission.id,
+            "target_admin_id": user_id,
+            "scholarship_id": scholarship_id,
+            "scholarship_name": scholarship.name,
+        },
+    )
 
     return {
         "success": True,
