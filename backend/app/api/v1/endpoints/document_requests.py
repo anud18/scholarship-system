@@ -269,6 +269,15 @@ async def fulfill_document_request(
 
     # Verify student owns the application
     if document_request.application.user_id != current_user.id:
+        logger.warning(
+            "SECURITY: student attempted to fulfill another user's document request",
+            extra={
+                "user_id": current_user.id,
+                "request_id": request_id,
+                "application_id": document_request.application_id,
+                "owner_user_id": document_request.application.user_id,
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only fulfill document requests for your own applications",
