@@ -17,7 +17,7 @@
 
 import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
-import type { ApiResponse } from '../types';
+import type { ApiResponse, HistoricalApplicationFilters } from '../types';
 
 export function createAdminApi() {
   return {
@@ -90,7 +90,9 @@ export function createAdminApi() {
      * Get historical applications with filters
      * Type-safe: Query parameters validated against OpenAPI
      */
-    getHistoricalApplications: async (filters?: any): Promise<ApiResponse<any>> => {
+    getHistoricalApplications: async (
+      filters?: HistoricalApplicationFilters
+    ): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/applications/history', {
         params: {
           query: {
