@@ -38,7 +38,7 @@ type ScheduledEmailParams = {
 };
 
 type PaginatedEmailResponse = {
-  items: any[];
+  items: any[];  // eslint-disable-line @typescript-eslint/no-explicit-any  -- consumed by admin-management-interface as Record<string,unknown>[]
   total: number;
   skip: number;
   limit: number;
@@ -69,8 +69,8 @@ type TestModeAuditLog = {
   event_type: string;
   timestamp: string;
   user_id: number | null;
-  config_before: any;
-  config_after: any;
+  config_before: any;  // eslint-disable-line @typescript-eslint/no-explicit-any  -- consumed by email-test-mode-panel as Record<string,unknown>|null
+  config_after: any;  // eslint-disable-line @typescript-eslint/no-explicit-any  -- consumed by email-test-mode-panel as Record<string,unknown>|null
   original_recipient: string | null;
   actual_recipient: string | null;
   email_subject: string | null;
@@ -83,6 +83,51 @@ type SimpleTestEmailParams = {
   subject: string;
   body: string;
 };
+
+
+/**
+ * React Email template (file-based, mirrors react-email-template-viewer.tsx).
+ */
+export interface ReactEmailTemplate {
+  name: string;
+  display_name: string;
+  description: string;
+  category: string;
+  file_path: string;
+  variables: Array<{
+    name: string;
+    description: string;
+    type: string;
+    default_value?: string;
+  }>;
+  last_modified: string;
+  file_size: number;
+}
+
+/**
+ * Source code payload returned by getReactEmailTemplateSource.
+ */
+export interface ReactEmailTemplateSource {
+  source: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Database-backed email template (text-template-editor consumer).
+ */
+export interface EmailTemplate {
+  id: number;
+  template_key: string;
+  template_name: string;
+  subject_template: string;
+  body_template: string;
+  category: string;
+  variables: string[];
+  is_active: boolean;
+  description?: string;
+}
+
+export type EmailTemplateUpdatePayload = Partial<Omit<EmailTemplate, "id">>;
 
 export function createEmailManagementApi() {
   return {
@@ -292,7 +337,7 @@ export function createEmailManagementApi() {
      * Get all React Email templates
      * NOTE: Using base client until OpenAPI schema is regenerated
      */
-    getReactEmailTemplates: async (): Promise<ApiResponse<any[]>> => {
+    getReactEmailTemplates: async (): Promise<ApiResponse<ReactEmailTemplate[]>> => {
       const { ApiClient } = await import('../client');
       const client = new ApiClient();
       return client.request('/email-management/react-email-templates', {
@@ -304,7 +349,7 @@ export function createEmailManagementApi() {
      * Get specific React Email template
      * NOTE: Using base client until OpenAPI schema is regenerated
      */
-    getReactEmailTemplate: async (templateName: string): Promise<ApiResponse<any>> => {
+    getReactEmailTemplate: async (templateName: string): Promise<ApiResponse<ReactEmailTemplate>> => {
       const { ApiClient } = await import('../client');
       const client = new ApiClient();
       return client.request(`/email-management/react-email-templates/${templateName}`, {
@@ -316,7 +361,7 @@ export function createEmailManagementApi() {
      * Get React Email template source code
      * NOTE: Using base client until OpenAPI schema is regenerated
      */
-    getReactEmailTemplateSource: async (templateName: string): Promise<ApiResponse<any>> => {
+    getReactEmailTemplateSource: async (templateName: string): Promise<ApiResponse<ReactEmailTemplateSource>> => {
       const { ApiClient } = await import('../client');
       const client = new ApiClient();
       return client.request(`/email-management/react-email-templates/${templateName}/source`, {
@@ -328,7 +373,7 @@ export function createEmailManagementApi() {
      * Get all email templates (database templates)
      * NOTE: Using base client until OpenAPI schema is regenerated
      */
-    getEmailTemplates: async (): Promise<ApiResponse<any[]>> => {
+    getEmailTemplates: async (): Promise<ApiResponse<EmailTemplate[]>> => {
       const { ApiClient } = await import('../client');
       const client = new ApiClient();
       return client.request('/email-management/templates', {
@@ -340,7 +385,7 @@ export function createEmailManagementApi() {
      * Update email template (database template)
      * NOTE: Using base client until OpenAPI schema is regenerated
      */
-    updateEmailTemplate: async (templateId: number, data: any): Promise<ApiResponse<any>> => {
+    updateEmailTemplate: async (templateId: number, data: EmailTemplateUpdatePayload): Promise<ApiResponse<EmailTemplate>> => {
       const { ApiClient } = await import('../client');
       const client = new ApiClient();
       return client.request(`/email-management/templates/${templateId}`, {
