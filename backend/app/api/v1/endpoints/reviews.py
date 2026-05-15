@@ -639,35 +639,15 @@ async def get_application_reviewable_sub_types(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """[Not implemented - see issue #649] Get reviewable sub-types for an application.
+
+    Intended to return sub-types filtered by reviewer role (professor: all;
+    college: not rejected by professor; admin: not rejected by professor or
+    college). Calls ``ApplicationService.get_application_available_sub_types``
+    which is not defined on the service. Returns 501 until the role-filtering
+    rules are designed (tracked in issue #649).
     """
-    Get reviewable sub-types for an application (multi-role)
-
-    Returns sub-types that the current user is authorized to review,
-    with localized labels (zh/en) from database configuration.
-
-    Role-based filtering:
-    - Professor: all sub-types
-    - College: sub-types not rejected by professor
-    - Admin: sub-types not rejected by professor or college
-    """
-    logger.info(f"User {current_user.id} ({current_user.role}) requesting sub-types for application {application_id}")
-
-    try:
-        from app.services.application_service import ApplicationService
-
-        service = ApplicationService(db)
-        sub_types = await service.get_application_available_sub_types(application_id)
-
-        logger.info(f"Found {len(sub_types)} sub-types for application {application_id}")
-        return {
-            "success": True,
-            "message": "查詢成功",
-            "data": sub_types,
-        }
-
-    except Exception as e:
-        logger.exception("Error fetching application sub-types")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An internal error occurred while fetching sub-types",
-        ) from e
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="Per-application reviewable sub-type listing is not currently implemented (tracked in issue #649).",
+    )

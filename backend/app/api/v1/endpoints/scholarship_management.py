@@ -13,7 +13,7 @@ Major changes:
 import logging
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,51 +39,21 @@ async def create_comprehensive_application(
     current_user: User = Depends(require_student),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a comprehensive scholarship application with all new features"""
-    from sqlalchemy.orm import sessionmaker
+    """[Not implemented - see issue #649] Create a comprehensive scholarship application.
 
-    from app.services.application_service import get_student_data_from_user
-
-    # Convert AsyncSession to regular Session for our service
-    sync_session = sessionmaker(bind=db.bind)()
-
-    try:
-        student = await get_student_data_from_user(current_user)
-        if not student:
-            raise HTTPException(status_code=404, detail="Student profile not found")
-
-        service = ScholarshipApplicationService(sync_session)
-
-        application, message = service.create_application(
-            user_id=current_user.id,
-            student_id=current_user.id,
-            scholarship_type_id=application_data["scholarship_type_id"],
-            scholarship_type_code=application_data["scholarship_type_code"],
-            semester=application_data["semester"],
-            academic_year=application_data["academic_year"],
-            application_data=application_data.get("form_data", {}),
-            is_renewal=application_data.get("is_renewal", False),
-            previous_application_id=application_data.get("previous_application_id"),
-        )
-
-        return ApiResponse(
-            success=True,
-            message=message,
-            data={
-                "application_id": application.id,
-                "app_id": application.app_id,
-                "scholarship_type_id": application.scholarship_type_id,
-                "sub_type": application.sub_scholarship_type,
-                "is_renewal": application.is_renewal,
-            },
-        )
-
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Application creation failed: {str(e)}") from e
-    finally:
-        sync_session.close()
+    Calls ``ScholarshipApplicationService.create_application`` which has been
+    commented out (see ``app/services/scholarship_service.py:385``) with the
+    note that application creation moved to ``ApplicationService`` with
+    external API integration. The new signature is incompatible with this
+    endpoint's renewal-aware contract, so callers must migrate to
+    ``POST /api/v1/applications/`` and the renewal flow on
+    ``ApplicationService`` instead. Returns 501 until a migration plan is
+    decided (tracked in issue #649).
+    """
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="The comprehensive create endpoint is not currently implemented (tracked in issue #649). Use POST /api/v1/applications/ instead.",
+    )
 
 
 @router.post("/applications/{application_id}/submit-comprehensive")

@@ -2587,7 +2587,16 @@ export interface paths {
         put?: never;
         /**
          * Create Comprehensive Application
-         * @description Create a comprehensive scholarship application with all new features
+         * @description [Not implemented - see issue #649] Create a comprehensive scholarship application.
+         *
+         *     Calls ``ScholarshipApplicationService.create_application`` which has been
+         *     commented out (see ``app/services/scholarship_service.py:385``) with the
+         *     note that application creation moved to ``ApplicationService`` with
+         *     external API integration. The new signature is incompatible with this
+         *     endpoint's renewal-aware contract, so callers must migrate to
+         *     ``POST /api/v1/applications/`` and the renewal flow on
+         *     ``ApplicationService`` instead. Returns 501 until a migration plan is
+         *     decided (tracked in issue #649).
          */
         post: operations["create_comprehensive_application_api_v1_scholarship_management_applications_create_comprehensive_post"];
         delete?: never;
@@ -4332,7 +4341,11 @@ export interface paths {
         };
         /**
          * Get Application Sub Types
-         * @description Get available sub-types for an application (config-driven)
+         * @description [Not implemented - see issue #649] Get available sub-types for an application.
+         *
+         *     Calls ``ApplicationService.get_application_available_sub_types`` which is
+         *     not defined on the service. Returns 501 to stop the false 500 spike until
+         *     the role-filtering rules are designed (tracked in issue #649).
          */
         get: operations["get_application_sub_types_api_v1_professor_applications__application_id__sub_types_get"];
         put?: never;
@@ -5032,15 +5045,13 @@ export interface paths {
         };
         /**
          * Get Application Reviewable Sub Types
-         * @description Get reviewable sub-types for an application (multi-role)
+         * @description [Not implemented - see issue #649] Get reviewable sub-types for an application.
          *
-         *     Returns sub-types that the current user is authorized to review,
-         *     with localized labels (zh/en) from database configuration.
-         *
-         *     Role-based filtering:
-         *     - Professor: all sub-types
-         *     - College: sub-types not rejected by professor
-         *     - Admin: sub-types not rejected by professor or college
+         *     Intended to return sub-types filtered by reviewer role (professor: all;
+         *     college: not rejected by professor; admin: not rejected by professor or
+         *     college). Calls ``ApplicationService.get_application_available_sub_types``
+         *     which is not defined on the service. Returns 501 until the role-filtering
+         *     rules are designed (tracked in issue #649).
          */
         get: operations["get_application_reviewable_sub_types_api_v1_reviews_applications__application_id__sub_types_get"];
         put?: never;
