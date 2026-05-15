@@ -4379,11 +4379,11 @@ export interface paths {
         };
         /**
          * Get Application Sub Types
-         * @description [Not implemented - see issue #649] Get available sub-types for an application.
+         * @description Get available sub-types for an application (config-driven, role-filtered).
          *
-         *     Calls ``ApplicationService.get_application_available_sub_types`` which is
-         *     not defined on the service. Returns 501 to stop the false 500 spike until
-         *     the role-filtering rules are designed (tracked in issue #649).
+         *     Implementation landed in ``ApplicationService.get_application_available_sub_types``;
+         *     closes issue #649 for the professor route. For professors this returns
+         *     every active sub-type configured on the scholarship.
          */
         get: operations["get_application_sub_types_api_v1_professor_applications__application_id__sub_types_get"];
         put?: never;
@@ -5088,13 +5088,16 @@ export interface paths {
         };
         /**
          * Get Application Reviewable Sub Types
-         * @description [Not implemented - see issue #649] Get reviewable sub-types for an application.
+         * @description Get reviewable sub-types for an application (multi-role, role-filtered).
          *
-         *     Intended to return sub-types filtered by reviewer role (professor: all;
-         *     college: not rejected by professor; admin: not rejected by professor or
-         *     college). Calls ``ApplicationService.get_application_available_sub_types``
-         *     which is not defined on the service. Returns 501 until the role-filtering
-         *     rules are designed (tracked in issue #649).
+         *     Returns sub-types that the current user is authorized to review:
+         *
+         *     - Professor: all active sub-types.
+         *     - College: sub-types not rejected by any professor.
+         *     - Admin / super_admin: sub-types not rejected by any professor or college.
+         *
+         *     Implementation lives in ``ApplicationService.get_application_available_sub_types``
+         *     (closes issue #649 for the multi-role review route).
          */
         get: operations["get_application_reviewable_sub_types_api_v1_reviews_applications__application_id__sub_types_get"];
         put?: never;
