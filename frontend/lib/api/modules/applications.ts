@@ -26,7 +26,12 @@ type ApplicationCreate = {
   expected_graduation_date?: string;
   research_topic?: string;
   gpa?: number;
-  [key: string]: any;
+  // Dynamic application fields (bank_account, contact_phone, ...) are bag-passed
+  // through this index signature. Tightened from `any` to `unknown` so the
+  // typed-client `body: applicationData as any` cast at the call site (lines
+  // ~85 / ~274) is the only remaining widening — `unknown` here means callers
+  // can't accidentally read a dynamic field as a typed value without checking.
+  [key: string]: unknown;
 };
 
 export function createApplicationsApi() {
