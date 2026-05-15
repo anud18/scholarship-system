@@ -638,12 +638,16 @@ export function AdminManagementInterface({
       if (response.success && response.data) {
         setScholarshipEmailTemplates(response.data.items);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to load scholarship email templates:", error);
-      // If it's a permission error, switch back to system mode
+      // If it's a permission error, switch back to system mode.
+      // Errors from axios-style clients carry `.response.status`; plain
+      // Error subclasses carry `.message`. Narrow to a focused shape rather
+      // than `any` so the access path is documented.
+      const errShape = error as { response?: { status?: number }; message?: string };
       if (
-        error?.response?.status === 400 ||
-        error?.message?.includes("permission")
+        errShape.response?.status === 400 ||
+        errShape.message?.includes("permission")
       ) {
         setScholarshipEmailTab("system");
         alert("您沒有權限存取此獎學金的郵件模板");
@@ -857,9 +861,11 @@ export function AdminManagementInterface({
         const errorMsg = response.message || "獲取歷史申請失敗";
         setHistoricalApplicationsError(errorMsg);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("獲取歷史申請資料失敗:", error);
-      const errorMsg = error?.message || error?.response?.data?.message || "網路錯誤或伺服器未回應";
+      const errShape = error as { message?: string; response?: { data?: { message?: string } } };
+      const errorMsg =
+        errShape.message || errShape.response?.data?.message || "網路錯誤或伺服器未回應";
       setHistoricalApplicationsError(errorMsg);
     } finally {
       setLoadingHistoricalApplications(false);
