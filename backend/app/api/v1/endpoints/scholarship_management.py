@@ -23,7 +23,6 @@ from app.models.application import Application, ApplicationStatus
 from app.models.scholarship import ScholarshipStatus, ScholarshipType
 from app.models.user import User
 from app.schemas.response import ApiResponse
-from app.services.scholarship_service import ScholarshipApplicationService
 from app.utils.scholarship_helpers import get_distinct_sub_types
 
 logger = logging.getLogger(__name__)
@@ -62,24 +61,21 @@ async def submit_comprehensive_application(
     current_user: User = Depends(require_student),
     db: AsyncSession = Depends(get_db),
 ):
-    """Submit application with comprehensive workflow management"""
-    from sqlalchemy.orm import sessionmaker
+    """[Not implemented - see issue #651] Submit application with comprehensive workflow management.
 
-    sync_session = sessionmaker(bind=db.bind)()
-
-    try:
-        service = ScholarshipApplicationService(sync_session)
-        success, message = service.submit_application(application_id)
-
-        if not success:
-            raise HTTPException(status_code=400, detail=message)
-
-        return ApiResponse(success=True, message=message, data={"application_id": application_id})
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Submission failed: {str(e)}") from e
-    finally:
-        sync_session.close()
+    Calls ``ScholarshipApplicationService.submit_application`` (async) on a
+    synchronously-constructed session, without ``await``. The service body
+    uses ``await self.db.execute(...)`` / ``await self.db.commit()`` which
+    fails against a sync session, and the missing ``await`` would yield a
+    coroutine that cannot be tuple-unpacked into ``(success, message)``.
+    Returns 501 until the service interface is reconciled with the endpoint
+    (tracked in issue #651). Use ``POST /api/v1/applications/{id}/submit``
+    on ``ApplicationService`` instead.
+    """
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="The comprehensive submit endpoint is not currently implemented (tracked in issue #651). Use POST /api/v1/applications/{id}/submit instead.",
+    )
 
 
 @router.get("/applications/by-priority")
@@ -91,74 +87,19 @@ async def get_applications_by_priority(
     current_user: User = Depends(require_staff),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get applications ordered by priority score"""
-    from sqlalchemy.orm import sessionmaker
+    """[Not implemented - see issue #651] Get applications ordered by priority score.
 
-    sync_session = sessionmaker(bind=db.bind)()
-
-    try:
-        service = ScholarshipApplicationService(sync_session)
-
-        # Convert string status to enum if provided
-        status_enum = None
-        if status:
-            try:
-                status_enum = ApplicationStatus(status)
-            except ValueError as e:
-                raise HTTPException(status_code=400, detail=f"Invalid status: {status}") from e
-
-        applications = service.get_applications_by_priority(
-            scholarship_type_id=scholarship_type_id,
-            semester=semester,
-            status=status_enum,
-            limit=limit,
-        )
-
-        application_data = []
-        for app in applications:
-            application_data.append(
-                {
-                    "id": app.id,
-                    "app_id": app.app_id,
-                    "student_id": app.student_id,
-                    "scholarship_type_id": app.scholarship_type_id,
-                    "sub_type": app.sub_scholarship_type,
-                    "is_renewal": app.is_renewal,
-                    "status": app.status,
-                    "submitted_at": app.submitted_at.isoformat() if app.submitted_at else None,
-                    "review_deadline": app.review_deadline.isoformat() if app.review_deadline else None,
-                    "is_overdue": app.is_overdue,
-                }
-            )
-
-        return ApiResponse(
-            success=True,
-            message=f"Retrieved {len(applications)} applications",
-            data={
-                "applications": application_data,
-                "total": len(applications),
-                "filters": {
-                    "scholarship_type_id": scholarship_type_id,
-                    "semester": semester,
-                    "status": status,
-                },
-            },
-        )
-
-    except Exception as e:
-        logger.exception(
-            "Failed to retrieve applications by priority",
-            extra={
-                "scholarship_type_id": scholarship_type_id,
-                "semester": semester,
-                "status": status,
-                "limit": limit,
-                "actor_user_id": current_user.id,
-            },
-        )
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve applications: {str(e)}") from e
-    finally:
-        sync_session.close()
+    Calls ``ScholarshipApplicationService.get_applications_by_priority`` (async)
+    on a synchronously-constructed session, without ``await``. The service body
+    uses ``await self.db.execute(...)`` which fails against a sync session, and
+    the missing ``await`` would yield a coroutine that cannot be iterated.
+    Returns 501 until the service interface is reconciled with the endpoint
+    (tracked in issue #651).
+    """
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="The applications-by-priority endpoint is not currently implemented (tracked in issue #651).",
+    )
 
 
 # Renewal Processing Endpoints
@@ -170,41 +111,19 @@ async def process_renewal_applications(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Process renewal applications with priority"""
-    from sqlalchemy.orm import sessionmaker
+    """[Not implemented - see issue #651] Process renewal applications with priority.
 
-    sync_session = sessionmaker(bind=db.bind)()
-
-    try:
-        service = ScholarshipApplicationService(sync_session)
-        result = service.process_renewal_applications_first(semester)
-
-        logger.warning(
-            "Renewal applications processed for semester=%s by admin user_id=%s",
-            semester,
-            current_user.id,
-            extra={
-                "semester": semester,
-                "actor_user_id": current_user.id,
-                "result_summary": result if isinstance(result, (dict, list)) else str(result),
-            },
-        )
-
-        return ApiResponse(
-            success=True,
-            message="Renewal applications processed successfully",
-            data=result,
-        )
-
-    except Exception as e:
-        logger.exception(
-            "Renewal-applications processing failed for semester=%s",
-            semester,
-            extra={"semester": semester, "actor_user_id": current_user.id},
-        )
-        raise HTTPException(status_code=500, detail=f"Failed to process renewals: {str(e)}") from e
-    finally:
-        sync_session.close()
+    Calls ``ScholarshipApplicationService.process_renewal_applications_first``
+    (async) on a synchronously-constructed session, without ``await``. The
+    service body uses ``await self.db.execute(...)`` which fails against a
+    sync session, and the missing ``await`` would yield a coroutine that is
+    serialized in place of the expected result dict. Returns 501 until the
+    service interface is reconciled with the endpoint (tracked in issue #651).
+    """
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="The renewal-priority processing endpoint is not currently implemented (tracked in issue #651).",
+    )
 
 
 # Analytics and Dashboard Endpoints

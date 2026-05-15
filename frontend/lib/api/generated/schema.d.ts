@@ -2616,7 +2616,16 @@ export interface paths {
         put?: never;
         /**
          * Submit Comprehensive Application
-         * @description Submit application with comprehensive workflow management
+         * @description [Not implemented - see issue #651] Submit application with comprehensive workflow management.
+         *
+         *     Calls ``ScholarshipApplicationService.submit_application`` (async) on a
+         *     synchronously-constructed session, without ``await``. The service body
+         *     uses ``await self.db.execute(...)`` / ``await self.db.commit()`` which
+         *     fails against a sync session, and the missing ``await`` would yield a
+         *     coroutine that cannot be tuple-unpacked into ``(success, message)``.
+         *     Returns 501 until the service interface is reconciled with the endpoint
+         *     (tracked in issue #651). Use ``POST /api/v1/applications/{id}/submit``
+         *     on ``ApplicationService`` instead.
          */
         post: operations["submit_comprehensive_application_api_v1_scholarship_management_applications__application_id__submit_comprehensive_post"];
         delete?: never;
@@ -2634,7 +2643,14 @@ export interface paths {
         };
         /**
          * Get Applications By Priority
-         * @description Get applications ordered by priority score
+         * @description [Not implemented - see issue #651] Get applications ordered by priority score.
+         *
+         *     Calls ``ScholarshipApplicationService.get_applications_by_priority`` (async)
+         *     on a synchronously-constructed session, without ``await``. The service body
+         *     uses ``await self.db.execute(...)`` which fails against a sync session, and
+         *     the missing ``await`` would yield a coroutine that cannot be iterated.
+         *     Returns 501 until the service interface is reconciled with the endpoint
+         *     (tracked in issue #651).
          */
         get: operations["get_applications_by_priority_api_v1_scholarship_management_applications_by_priority_get"];
         put?: never;
@@ -2656,7 +2672,14 @@ export interface paths {
         put?: never;
         /**
          * Process Renewal Applications
-         * @description Process renewal applications with priority
+         * @description [Not implemented - see issue #651] Process renewal applications with priority.
+         *
+         *     Calls ``ScholarshipApplicationService.process_renewal_applications_first``
+         *     (async) on a synchronously-constructed session, without ``await``. The
+         *     service body uses ``await self.db.execute(...)`` which fails against a
+         *     sync session, and the missing ``await`` would yield a coroutine that is
+         *     serialized in place of the expected result dict. Returns 501 until the
+         *     service interface is reconciled with the endpoint (tracked in issue #651).
          */
         post: operations["process_renewal_applications_api_v1_scholarship_management_renewals_process_priority_post"];
         delete?: never;
