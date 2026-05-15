@@ -38,8 +38,10 @@ interface JobInfo {
   misfire_grace_time?: number
   max_instances: number
   coalesce: boolean
-  args: any[]
-  kwargs: any
+  // APScheduler job args/kwargs are inherently dynamic — only opaque JSON
+  // values, never inspected by the UI (we only render counts).
+  args: unknown[]
+  kwargs: Record<string, unknown>
 }
 
 export function SchedulerStatus() {
