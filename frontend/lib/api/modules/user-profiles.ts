@@ -26,18 +26,18 @@ type CompleteUserProfile = {
   bank_document_url?: string;
   advisor_name?: string;
   advisor_email?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 };
 
 type UserProfile = {
   id: number;
   user_id: number;
-  [key: string]: any;
+  [key: string]: unknown;
 };
 
 type UserProfileUpdate = {
   phone?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 };
 
 type BankInfoUpdate = {
@@ -56,7 +56,7 @@ type ProfileHistory = {
   user_id: number;
   changed_at: string;
   changed_by: number;
-  changes: Record<string, any>;
+  changes: Record<string, unknown>;
 };
 
 export function createUserProfilesApi() {
