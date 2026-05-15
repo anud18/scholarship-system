@@ -3,7 +3,7 @@ Unit tests for core security utilities
 """
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import jwt
 import pytest
@@ -40,14 +40,20 @@ class TestTokenOperations:
 
         data = {"sub": "123", "role": "student"}
 
+        # Production code uses `datetime.now(timezone.utc)` (tz-aware) — not
+        # `datetime.utcnow()` (naive). The mock has to honour the same call.
         with patch("app.core.security.datetime") as mock_datetime:
-            mock_now = datetime(2024, 1, 1, 12, 0, 0)
-            mock_datetime.utcnow.return_value = mock_now
+            mock_now = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+            mock_datetime.now.return_value = mock_now
 
             token = create_access_token(data)
 
             # Verify token can be decoded
-            payload = jwt.decode(token, "test_secret", algorithms=["HS256"])
+            # The mocked clock is 2024-01-01, so the token's `exp` lies far
+            # in the past relative to the real clock the test runs under.
+            # Skip expiry validation — this test inspects payload structure,
+            # not expiry enforcement.
+            payload = jwt.decode(token, "test_secret", algorithms=["HS256"], options={"verify_exp": False})
             assert payload["sub"] == "123"
             assert payload["role"] == "student"
             assert payload["exp"] == int((mock_now + timedelta(minutes=30)).timestamp())
@@ -62,13 +68,17 @@ class TestTokenOperations:
         expires_delta = timedelta(hours=2)
 
         with patch("app.core.security.datetime") as mock_datetime:
-            mock_now = datetime(2024, 1, 1, 12, 0, 0)
-            mock_datetime.utcnow.return_value = mock_now
+            mock_now = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+            mock_datetime.now.return_value = mock_now
 
             token = create_access_token(data, expires_delta)
 
             # Verify token can be decoded
-            payload = jwt.decode(token, "test_secret", algorithms=["HS256"])
+            # The mocked clock is 2024-01-01, so the token's `exp` lies far
+            # in the past relative to the real clock the test runs under.
+            # Skip expiry validation — this test inspects payload structure,
+            # not expiry enforcement.
+            payload = jwt.decode(token, "test_secret", algorithms=["HS256"], options={"verify_exp": False})
             assert payload["sub"] == "123"
             assert payload["exp"] == int((mock_now + expires_delta).timestamp())
 
@@ -82,13 +92,17 @@ class TestTokenOperations:
         data = {"sub": "123", "role": "student"}
 
         with patch("app.core.security.datetime") as mock_datetime:
-            mock_now = datetime(2024, 1, 1, 12, 0, 0)
-            mock_datetime.utcnow.return_value = mock_now
+            mock_now = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+            mock_datetime.now.return_value = mock_now
 
             token = create_refresh_token(data)
 
             # Verify token can be decoded
-            payload = jwt.decode(token, "test_secret", algorithms=["HS256"])
+            # The mocked clock is 2024-01-01, so the token's `exp` lies far
+            # in the past relative to the real clock the test runs under.
+            # Skip expiry validation — this test inspects payload structure,
+            # not expiry enforcement.
+            payload = jwt.decode(token, "test_secret", algorithms=["HS256"], options={"verify_exp": False})
             assert payload["sub"] == "123"
             assert payload["role"] == "student"
             assert payload["type"] == "refresh"
@@ -156,22 +170,27 @@ class TestUserAuthentication:
         """Test successful user authentication"""
         # Mock dependencies
         credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="valid_token")
-        mock_db = Mock(spec=AsyncSession)
         mock_user = Mock(spec=User)
         mock_user.id = 123
 
-        with patch("app.core.security.verify_token") as mock_verify, patch.object(mock_db, "get") as mock_get:
-            # Mock token verification
+        # Production calls `db.execute(select(User)...)` then
+        # `result.scalar_one_or_none()`; mock both layers.
+        mock_db = Mock(spec=AsyncSession)
+        mock_result = Mock()
+        mock_result.scalar_one_or_none.return_value = mock_user
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        with patch("app.core.security.verify_token") as mock_verify:
             mock_verify.return_value = {"sub": "123", "role": "student"}
-            mock_get.return_value = mock_user
 
             result = await get_current_user(credentials, mock_db)
 
             # Verify token was verified
             mock_verify.assert_called_once_with("valid_token")
 
-            # Verify user was fetched from database
-            mock_get.assert_called_once_with(User, 123)
+            # Verify user was fetched via execute(select(...))
+            mock_db.execute.assert_awaited_once()
+            mock_result.scalar_one_or_none.assert_called_once()
 
             assert result == mock_user
 
@@ -223,11 +242,17 @@ class TestUserAuthentication:
     async def test_get_current_user_user_not_found(self):
         """Test user authentication when user not found in database"""
         credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="valid_token")
-        mock_db = Mock(spec=AsyncSession)
 
-        with patch("app.core.security.verify_token") as mock_verify, patch.object(mock_db, "get") as mock_get:
+        # Production calls `db.execute(select(User)...).scalar_one_or_none()`;
+        # mock both layers and have the inner call return None to simulate
+        # the user-not-found path.
+        mock_db = Mock(spec=AsyncSession)
+        mock_result = Mock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        with patch("app.core.security.verify_token") as mock_verify:
             mock_verify.return_value = {"sub": "999"}
-            mock_get.return_value = None  # User not found
 
             with pytest.raises(AuthenticationError, match="User not found"):
                 await get_current_user(credentials, mock_db)
