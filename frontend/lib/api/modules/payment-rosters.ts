@@ -57,7 +57,7 @@ export function createPaymentRostersApi() {
       ranking_id?: number;
       auto_export_excel?: boolean;
       force_regenerate?: boolean;
-    }): Promise<ApiResponse<any>> => {
+    }): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.POST('/api/v1/payment-rosters/generate', {
         body: {
           ...data,
@@ -76,7 +76,7 @@ export function createPaymentRostersApi() {
       scholarshipConfigurationId?: number,
       academicYear?: number,
       status?: string
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.GET('/api/v1/payment-rosters', {
         params: {
           query: {
@@ -92,7 +92,7 @@ export function createPaymentRostersApi() {
     /**
      * 取得造冊詳情
      */
-    getRoster: async (rosterId: number): Promise<ApiResponse<any>> => {
+    getRoster: async (rosterId: number): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.GET('/api/v1/payment-rosters/{roster_id}', {
         params: { path: { roster_id: rosterId } },
       });
