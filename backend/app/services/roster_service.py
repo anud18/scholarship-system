@@ -11,6 +11,7 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import RosterAlreadyExistsError, RosterGenerationError, RosterLockedError, RosterNotFoundError
+from app.core.metrics import payment_rosters_total
 from app.core.pii_crypto import redact_dict_pii
 from app.models.application import Application
 from app.models.enums import QuotaManagementMode
@@ -172,6 +173,11 @@ class RosterService:
                 self.db.flush()  # 取得ID
 
                 logger.info(f"Creating new roster {roster_code}")
+
+                # Business metric: count roster creations so the
+                # Scholarship System Overview dashboard reflects when
+                # admins kick off a new payment cycle (issue #159).
+                payment_rosters_total.labels(status="processing").inc()
 
             # 記錄稽核日誌
             user = self.db.query(User).filter(User.id == created_by_user_id).first()
@@ -1690,6 +1696,11 @@ class RosterService:
         roster.verification_api_failures = verification_failures
         roster.status = RosterStatus.COMPLETED
         roster.completed_at = datetime.now(timezone.utc)
+
+        # Business metric: roster reached the completed state. Pairs
+        # with the "processing" increment at creation so dashboards can
+        # show completion ratio over time (issue #159).
+        payment_rosters_total.labels(status="completed").inc()
 
         self.db.flush()
 
