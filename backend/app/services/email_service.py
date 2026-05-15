@@ -149,8 +149,8 @@ class EmailService:
 
             return enabled, test_mode_config
 
-        except Exception as e:
-            logger.error(f"Error checking test mode: {e}")
+        except Exception:
+            logger.exception("Error checking test mode")
             return False, {}
 
     def _transform_recipients_for_test(
@@ -256,8 +256,8 @@ class EmailService:
             )
             self.db.add(audit_log)
             await self.db.commit()
-        except Exception as e:
-            logger.error(f"Failed to log test mode interception: {e}")
+        except Exception:
+            logger.exception("Failed to log test mode interception")
 
     async def send_email(
         self,
@@ -416,9 +416,7 @@ class EmailService:
                 category_label = category_value or "uncategorized"
             email_sent_total.labels(
                 category=str(category_label),
-                status=(
-                    status.value if isinstance(status, EmailStatus) else str(status)
-                ),
+                status=(status.value if isinstance(status, EmailStatus) else str(status)),
             ).inc()
 
             # Log email history if database session provided
@@ -625,8 +623,8 @@ class EmailService:
                 f"Sent React Email template '{template_name}' to {to if isinstance(to, str) else ', '.join(to)} (using fallback template loader)"
             )
 
-        except FileNotFoundError as e:
-            logger.error(f"React Email template not found: {template_name}. Error: {e}")
+        except FileNotFoundError:
+            logger.exception(f"React Email template not found: {template_name}. Error")
             logger.warning("Falling back to plain text email")
 
             # Fallback: send plain text email with minimal formatting
@@ -650,8 +648,8 @@ class EmailService:
                 **metadata,
             )
 
-        except Exception as e:
-            logger.error(f"Error sending React Email template '{template_name}': {e}")
+        except Exception:
+            logger.exception(f"Error sending React Email template '{template_name}'")
             raise
 
     async def schedule_email(

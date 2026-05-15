@@ -342,7 +342,7 @@ class RosterService:
                         disqualified_count += 1
 
                 except Exception as e:
-                    logger.error(f"Error processing application {application.id}: {e}")
+                    logger.exception(f"Error processing application {application.id}")
                     disqualified_count += 1
 
                     # 記錄錯誤日誌
@@ -411,7 +411,7 @@ class RosterService:
         except Exception as e:
             # 不在此處執行 rollback，讓調用者決定如何處理事務
             # 這避免了與 API 端點的 rollback 重複執行
-            logger.error(f"Error generating roster: {e}")
+            logger.exception("Error generating roster")
             raise RosterGenerationError(f"Failed to generate roster: {e}") from e
 
     def validate_roster_consistency(self, roster: PaymentRoster) -> Dict[str, Any]:
@@ -1065,7 +1065,7 @@ class RosterService:
             }
 
         except Exception as e:
-            logger.error(f"Error validating student eligibility for application {application.id}: {e}")
+            logger.exception(f"Error validating student eligibility for application {application.id}")
             return {
                 "is_eligible": False,
                 "failed_rules": [f"驗證過程發生錯誤: {str(e)}"],
@@ -1147,7 +1147,7 @@ class RosterService:
             }
 
         except Exception as e:
-            logger.error(f"Error evaluating rule {rule.id}: {e}")
+            logger.exception(f"Error evaluating rule {rule.id}")
             return {
                 "passed": False,
                 "rule_name": rule.rule_name,
@@ -1394,7 +1394,7 @@ class RosterService:
             return result
 
         except Exception as e:
-            logger.error(f"Dry run failed: {e}")
+            logger.exception("Dry run failed")
             raise ValueError(f"預演失敗: {str(e)}") from e
 
     def generate_rosters_from_distribution(
@@ -1530,8 +1530,8 @@ class RosterService:
             except RosterAlreadyExistsError:
                 logger.info(f"Roster for ({alloc_year}, {sub_type}) already exists, skipping.")
                 continue
-            except Exception as e:
-                logger.error(f"Failed to generate roster for ({alloc_year}, {sub_type}): {e}")
+            except Exception:
+                logger.exception(f"Failed to generate roster for ({alloc_year}, {sub_type})")
                 raise
 
         self.db.commit()
@@ -1686,8 +1686,8 @@ class RosterService:
                 else:
                     disqualified_count += 1
 
-            except Exception as e:
-                logger.error(f"Error processing application {application.id}: {e}")
+            except Exception:
+                logger.exception(f"Error processing application {application.id}")
                 disqualified_count += 1
 
         roster.qualified_count = qualified_count
@@ -1723,8 +1723,8 @@ class RosterService:
             )
             self.db.flush()  # Persist minio_object_name and excel_filename
             logger.info(f"Excel generated for roster {roster_code}: {roster.minio_object_name}")
-        except Exception as e:
-            logger.error(f"Failed to generate Excel for roster {roster_code}: {e}")
+        except Exception:
+            logger.exception(f"Failed to generate Excel for roster {roster_code}")
 
         audit_service.log_roster_operation(
             roster_id=roster.id,

@@ -71,8 +71,8 @@ class ExcelExportService:
             else:
                 logger.warning(f"Template not found at {self.template_path}, using default columns")
                 self._set_default_columns()
-        except Exception as e:
-            logger.error(f"Failed to load template: {e}, using default columns")
+        except Exception:
+            logger.exception("Failed to load template; using default columns")
             self._set_default_columns()
 
     def _set_default_columns(self):
@@ -320,7 +320,7 @@ class ExcelExportService:
             }
 
         except Exception as e:
-            logger.error(f"Excel export failed: {e}")
+            logger.exception("Excel export failed")
             raise FileStorageError(f"Failed to export Excel file: {e}", file_name=file_name) from e
 
     def _get_roster_items(self, roster: PaymentRoster, include_excluded: bool) -> List[PaymentRosterItem]:
@@ -639,7 +639,7 @@ class ExcelExportService:
             logger.info("Excel file created successfully: %s", file_path)
 
         except Exception as e:
-            logger.error(f"Failed to create Excel file: {e}")
+            logger.exception("Failed to create Excel file")
             raise FileStorageError(
                 f"Failed to create Excel file: {e}",
                 file_name=os.path.basename(file_path),
@@ -870,8 +870,8 @@ class ExcelExportService:
             logger.info(f"Deleted Excel file: {roster.excel_file_path}")
             return True
 
-        except Exception as e:
-            logger.error(f"Failed to delete Excel file: {e}")
+        except Exception:
+            logger.exception("Failed to delete Excel file")
             return False
 
     def preview_roster_export(
@@ -920,7 +920,7 @@ class ExcelExportService:
             }
 
         except Exception as e:
-            logger.error(f"Failed to preview roster export: {e}")
+            logger.exception("Failed to preview roster export")
             raise FileStorageError(f"預覽產生失敗: {str(e)}") from e
 
     def process_async_export(
@@ -990,6 +990,6 @@ class ExcelExportService:
             finally:
                 db.close()
 
-        except Exception as e:
-            logger.error(f"Async export failed: roster_id={roster_id}, task_id={task_id}, error={e}")
+        except Exception:
+            logger.exception(f"Async export failed: roster_id={roster_id}, task_id={task_id}")
             # 這裡可以實作錯誤通知機制

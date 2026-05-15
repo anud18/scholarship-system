@@ -105,7 +105,7 @@ class PortalSSOService:
             logger.error("Portal JWT verification timeout")
             raise AuthenticationError("Portal verification timeout") from exc
         except httpx.RequestError as e:
-            logger.error(f"Portal JWT verification request error: {e}")
+            logger.exception("Portal JWT verification request error")
             raise AuthenticationError("Portal verification failed") from e
         except json.JSONDecodeError as exc:
             logger.error("Portal JWT verification returned invalid JSON")
@@ -142,8 +142,8 @@ class PortalSSOService:
                 logger.info(f"User {nycu_id} not found in Student API")
                 return False, None
 
-        except Exception as e:
-            logger.error(f"Error verifying student status for {nycu_id}: {str(e)}")
+        except Exception:
+            logger.exception(f"Error verifying student status for {nycu_id}")
             return False, None
 
     def _get_test_portal_data(self) -> Dict:

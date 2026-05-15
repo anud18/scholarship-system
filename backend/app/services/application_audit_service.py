@@ -99,7 +99,7 @@ class ApplicationAuditService:
 
         except Exception as e:
             await self.db.rollback()
-            logger.error(f"Failed to create audit log for application {application_id}: {e}")
+            logger.exception(f"Failed to create audit log for application {application_id}")
             # 即使稽核失敗也不應該影響主要業務邏輯
             self._fallback_log(application_id, action, user, str(e))
             return None
@@ -515,8 +515,8 @@ class ApplicationAuditService:
 
             return audit_logs
 
-        except Exception as e:
-            logger.error(f"Failed to retrieve audit trail for application {application_id}: {e}")
+        except Exception:
+            logger.exception(f"Failed to retrieve audit trail for application {application_id}")
             return []
 
     async def get_scholarship_audit_trail(
