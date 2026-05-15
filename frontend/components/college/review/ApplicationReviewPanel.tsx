@@ -1078,7 +1078,15 @@ export function ApplicationReviewPanel({
                       <TableCell>
                         {app.professor_review_items?.length > 0 ? (
                           <div className="flex flex-col gap-0.5">
-                            {app.professor_review_items.map((item: any, idx: number) => (
+                            {app.professor_review_items.map(
+                              (
+                                item: {
+                                  sub_type_code: string;
+                                  recommendation: string;
+                                  comments?: string;
+                                },
+                                idx: number
+                              ) => (
                               <TooltipProvider key={`${item.sub_type_code}-${idx}`}>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
