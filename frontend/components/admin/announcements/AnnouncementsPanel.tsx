@@ -43,7 +43,7 @@ interface User {
   raw_data?: {
     chinese_name?: string;
     english_name?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
@@ -204,8 +204,12 @@ export function AnnouncementsPanel({ user }: AnnouncementsPanelProps) {
       title_en: announcement.title_en,
       message: announcement.message,
       message_en: announcement.message_en,
-      notification_type: announcement.notification_type as any,
-      priority: announcement.priority as any,
+      // NotificationResponse types these as widened `string`; AnnouncementCreate
+      // requires the canonical enum literal. Server-provided values are
+      // guaranteed to match the enum, so this is a safe narrowing.
+      notification_type:
+        announcement.notification_type as AnnouncementCreate["notification_type"],
+      priority: announcement.priority as AnnouncementCreate["priority"],
       action_url: announcement.action_url,
       expires_at: announcement.expires_at,
       metadata: announcement.metadata,

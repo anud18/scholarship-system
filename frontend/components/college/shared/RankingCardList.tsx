@@ -5,8 +5,24 @@ import { RankingCard } from "./RankingCard";
 import { Trophy, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+// View-model shape for ranking cards. Mirrors the RankingCard prop contract
+// (so this list can pass items through directly). Optional fields are
+// optional in the underlying CollegeRanking type but are required by the
+// downstream RankingCard renderer; the API guarantees they are present on
+// every row returned by /college-review/rankings.
+interface RankingCardItem {
+  id: number;
+  ranking_name: string;
+  is_finalized: boolean;
+  distribution_executed: boolean;
+  total_applications: number;
+  allocated_count?: number;
+  distribution_date?: string;
+  [key: string]: unknown;
+}
+
 interface RankingCardListProps {
-  rankings: any[];
+  rankings: RankingCardItem[];
   selectedRankingId: number | null;
   onRankingSelect: (id: number) => void;
   showActions?: boolean;
@@ -22,11 +38,11 @@ interface RankingCardListProps {
   };
   editingId?: number | null;
   editingName?: string;
-  onEdit?: (ranking: any) => void;
+  onEdit?: (ranking: RankingCardItem) => void;
   onEditNameChange?: (name: string) => void;
   onEditNameSave?: (id: number) => void;
   onEditNameCancel?: () => void;
-  onDelete?: (ranking: any) => void;
+  onDelete?: (ranking: RankingCardItem) => void;
   onToggleLock?: (id: number, isLocked: boolean) => void;
   locale?: "zh" | "en";
 }

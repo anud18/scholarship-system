@@ -65,20 +65,20 @@ export function ConfigSelector({ onConfigSelect, disabled = false }: ConfigSelec
 
         // Filter by academic year
         if (selectedYear) {
-          filtered = filtered.filter((config: any) =>
+          filtered = filtered.filter((config: ScholarshipConfiguration) =>
             config.academic_year === parseInt(selectedYear)
           )
         }
 
         // Filter by semester
         if (selectedSemester && selectedSemester !== "all") {
-          filtered = filtered.filter((config: any) =>
+          filtered = filtered.filter((config: ScholarshipConfiguration) =>
             config.semester === selectedSemester || !config.semester
           )
         }
 
         // Filter by active status
-        filtered = filtered.filter((config: any) => config.is_active !== false)
+        filtered = filtered.filter((config: ScholarshipConfiguration) => config.is_active !== false)
 
         setConfigurations(filtered)
       } else {
