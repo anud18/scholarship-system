@@ -276,6 +276,22 @@ async def createSystemAnnouncement(
             "metadata": notification.meta_data,
         }
 
+        logger.info(
+            "system-announcement created (orphan route /notifications): id=%s title=%r by user_id=%s",
+            notification.id,
+            notification.title,
+            current_user.id,
+            extra={
+                "actor_user_id": current_user.id,
+                "actor_role": (
+                    current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+                ),
+                "announcement_id": notification.id,
+                "announcement_title": notification.title,
+                "route": "POST /notifications/admin/create-system-announcement",
+            },
+        )
+
         return ApiResponse(success=True, message="系統公告創建成功", data=notification_response)
 
     except Exception as e:
@@ -340,6 +356,21 @@ async def createTestNotifications(current_user: User = Depends(get_current_user)
             action_url="/scholarships",
         )
         created_notifications.append(urgent_notification.id)
+
+        logger.info(
+            "test-notifications created (orphan route /notifications): count=%s ids=%s by user_id=%s",
+            len(created_notifications),
+            created_notifications,
+            current_user.id,
+            extra={
+                "actor_user_id": current_user.id,
+                "actor_role": (
+                    current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+                ),
+                "notification_ids": created_notifications,
+                "route": "POST /notifications/admin/create-test-notifications",
+            },
+        )
 
         return ApiResponse(
             success=True,
@@ -583,6 +614,22 @@ async def createAnnouncement(
             "metadata": notification.meta_data,
         }
 
+        logger.info(
+            "system-announcement created (orphan route /notifications): id=%s title=%r by user_id=%s",
+            notification.id,
+            notification.title,
+            current_user.id,
+            extra={
+                "actor_user_id": current_user.id,
+                "actor_role": (
+                    current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+                ),
+                "announcement_id": notification.id,
+                "announcement_title": notification.title,
+                "route": "POST /notifications/admin/announcements",
+            },
+        )
+
         return ApiResponse(success=True, message="系統公告創建成功", data=notification_response)
 
     except Exception as e:
@@ -626,6 +673,9 @@ async def updateAnnouncement(
 
         if not notification:
             raise HTTPException(status_code=404, detail="系統公告不存在")
+
+        # Capture changed-field set for audit log
+        updated_fields = sorted(notification_data.dict(exclude_unset=True).keys())
 
         # 更新公告數據
         if notification_data.title is not None:
@@ -678,6 +728,24 @@ async def updateAnnouncement(
             "metadata": notification.meta_data,
         }
 
+        logger.info(
+            "system-announcement updated (orphan route /notifications): id=%s title=%r by user_id=%s fields=%s",
+            notification.id,
+            notification.title,
+            current_user.id,
+            updated_fields,
+            extra={
+                "actor_user_id": current_user.id,
+                "actor_role": (
+                    current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+                ),
+                "announcement_id": notification.id,
+                "announcement_title": notification.title,
+                "updated_fields": updated_fields,
+                "route": "PUT /notifications/admin/announcements/{id}",
+            },
+        )
+
         return ApiResponse(success=True, message="系統公告更新成功", data=notification_response)
 
     except HTTPException:
@@ -721,6 +789,10 @@ async def deleteAnnouncement(
         if not notification:
             raise HTTPException(status_code=404, detail="系統公告不存在")
 
+        # Capture pre-delete fields so the audit row remains meaningful after commit.
+        deleted_id = notification.id
+        deleted_title = notification.title
+
         # 同時刪除相關的已讀記錄
         from app.models.notification import NotificationRead
 
@@ -732,6 +804,22 @@ async def deleteAnnouncement(
         await db.execute(delete_stmt)
 
         await db.commit()
+
+        logger.info(
+            "system-announcement deleted (orphan route /notifications): id=%s title=%r by user_id=%s",
+            deleted_id,
+            deleted_title,
+            current_user.id,
+            extra={
+                "actor_user_id": current_user.id,
+                "actor_role": (
+                    current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+                ),
+                "announcement_id": deleted_id,
+                "announcement_title": deleted_title,
+                "route": "DELETE /notifications/admin/announcements/{id}",
+            },
+        )
 
         return ApiResponse(success=True, message="系統公告刪除成功", data={"message": "系統公告已成功刪除"})
 
