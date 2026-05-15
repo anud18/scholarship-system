@@ -639,15 +639,24 @@ async def get_application_reviewable_sub_types(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """[Not implemented - see issue #649] Get reviewable sub-types for an application.
+    """Get reviewable sub-types for an application (multi-role, role-filtered).
 
-    Intended to return sub-types filtered by reviewer role (professor: all;
-    college: not rejected by professor; admin: not rejected by professor or
-    college). Calls ``ApplicationService.get_application_available_sub_types``
-    which is not defined on the service. Returns 501 until the role-filtering
-    rules are designed (tracked in issue #649).
+    Returns sub-types that the current user is authorized to review:
+
+    - Professor: all active sub-types.
+    - College: sub-types not rejected by any professor.
+    - Admin / super_admin: sub-types not rejected by any professor or college.
+
+    Implementation lives in ``ApplicationService.get_application_available_sub_types``
+    (closes issue #649 for the multi-role review route).
     """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Per-application reviewable sub-type listing is not currently implemented (tracked in issue #649).",
-    )
+    from app.core.exceptions import NotFoundError
+    from app.services.application_service import ApplicationService
+
+    service = ApplicationService(db)
+    try:
+        sub_types = await service.get_application_available_sub_types(application_id, current_user)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="申請不存在") from exc
+
+    return {"success": True, "message": "查詢成功", "data": sub_types}

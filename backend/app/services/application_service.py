@@ -2666,6 +2666,87 @@ class ApplicationService:
             "overdue_reviews": 0,
         }
 
+    async def get_application_available_sub_types(
+        self, application_id: int, current_user: User
+    ) -> List[Dict[str, Any]]:
+        """Return sub-types the given user is authorized to review on this application.
+
+        The shape matches the frontend's ``SubTypeOption`` interface
+        (see ``frontend/components/professor-review-component.tsx:81``):
+            ``{"value": str, "label": str, "label_en": str, "is_default": bool}``
+
+        Filtering rules (additive — stricter as the role moves through the
+        review chain):
+
+        - All callers: only ``is_active=True`` sub-type configs.
+        - ``professor``: returns every active sub-type (full set).
+        - ``college``: also excludes sub-types where any professor has
+          recommended ``reject`` on the application.
+        - ``admin`` / ``super_admin``: also excludes sub-types where any
+          college reviewer has recommended ``reject``.
+
+        The result is sorted by ``(display_order, sub_type_code)`` so the
+        frontend list rendering is stable across calls.
+
+        Raises ``NotFoundError`` when the application doesn't exist.
+        """
+        # Load application + its scholarship + that scholarship's sub-type configs
+        # in one round trip so we can iterate ``application.scholarship.sub_type_configs``
+        # without a lazy fetch on the AsyncSession.
+        stmt = (
+            select(Application)
+            .where(Application.id == application_id)
+            .options(selectinload(Application.scholarship).selectinload(ScholarshipType.sub_type_configs))
+        )
+        result = await self.db.execute(stmt)
+        application = result.scalar_one_or_none()
+        if application is None:
+            raise NotFoundError(f"Application {application_id} not found")
+
+        # Empty scholarship or no configured sub-types -> empty list.
+        # The frontend already falls back to a synthetic "default" sub-type
+        # in that case (FALLBACK_SUB_TYPE), so we don't need to return one.
+        if not application.scholarship or not application.scholarship.sub_type_configs:
+            return []
+
+        active_configs = [c for c in application.scholarship.sub_type_configs if c.is_active]
+
+        async def _rejected_by_role(role: UserRole) -> set[str]:
+            """sub_type_codes rejected by any reviewer of the given role on this application."""
+            stmt_rejected = (
+                select(ApplicationReviewItem.sub_type_code)
+                .join(ApplicationReview, ApplicationReviewItem.review_id == ApplicationReview.id)
+                .join(User, ApplicationReview.reviewer_id == User.id)
+                .where(
+                    ApplicationReview.application_id == application_id,
+                    User.role == role,
+                    ApplicationReviewItem.recommendation == "reject",
+                )
+            )
+            res = await self.db.execute(stmt_rejected)
+            return set(res.scalars().all())
+
+        # Professors see everything. College sees what professors didn't reject.
+        # Admin sees what neither professors nor college rejected.
+        excluded_codes: set[str] = set()
+        if current_user.role != UserRole.professor:
+            excluded_codes |= await _rejected_by_role(UserRole.professor)
+        if current_user.role in (UserRole.admin, UserRole.super_admin):
+            excluded_codes |= await _rejected_by_role(UserRole.college)
+
+        available = [c for c in active_configs if c.sub_type_code not in excluded_codes]
+        available.sort(key=lambda c: (c.display_order or 0, c.sub_type_code))
+
+        return [
+            {
+                "value": c.sub_type_code,
+                "label": c.name,
+                "label_en": c.name_en or c.name,
+                "is_default": c.sub_type_code == "default",
+            }
+            for c in available
+        ]
+
     async def get_available_professors(self, user: User, search: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Get professors based on user role:

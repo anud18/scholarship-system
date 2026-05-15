@@ -305,16 +305,19 @@ async def get_application_sub_types(
     current_user: User = Depends(require_professor),
     db: AsyncSession = Depends(get_db),
 ):
-    """[Not implemented - see issue #649] Get available sub-types for an application.
+    """Get available sub-types for an application (config-driven, role-filtered).
 
-    Calls ``ApplicationService.get_application_available_sub_types`` which is
-    not defined on the service. Returns 501 to stop the false 500 spike until
-    the role-filtering rules are designed (tracked in issue #649).
+    Implementation landed in ``ApplicationService.get_application_available_sub_types``;
+    closes issue #649 for the professor route. For professors this returns
+    every active sub-type configured on the scholarship.
     """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Per-application sub-type listing is not currently implemented (tracked in issue #649).",
-    )
+    service = ApplicationService(db)
+    try:
+        sub_types = await service.get_application_available_sub_types(application_id, current_user)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found") from exc
+
+    return {"success": True, "message": "查詢成功", "data": sub_types}
 
 
 @router.get("/stats")
