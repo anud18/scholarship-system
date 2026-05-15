@@ -49,6 +49,7 @@ import { ApplicationFieldForm } from "@/components/application-field-form";
 import { ApplicationDocumentForm } from "@/components/application-document-form";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { api } from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
 import type {
   ApplicationField,
   ApplicationDocument,
@@ -181,7 +182,7 @@ export function AdminScholarshipManagementInterface({
         setError("尚未設定表單配置，請先於後台建立。");
       }
     } catch (err) {
-      console.error("Failed to load form configuration:", err);
+      logger.error("Failed to load form configuration", { err: err });
       setApplicationFields([]);
       setDocumentRequirements([]);
       setFormConfig(null);
@@ -220,7 +221,7 @@ export function AdminScholarshipManagementInterface({
         }
       }
     } catch (err) {
-      console.error("Failed to load scholarship data:", err);
+      logger.error("Failed to load scholarship data", { err: err });
       toast.error("無法載入獎學金資料");
     } finally {
       setLoadingWhitelist(false);
@@ -235,7 +236,7 @@ export function AdminScholarshipManagementInterface({
         setWhitelist(response.data as WhitelistResponse[]);
       }
     } catch (err: unknown) {
-      console.error("Failed to load whitelist:", err);
+      logger.error("Failed to load whitelist", { err: err });
       toast.error((err instanceof Error ? err.message : "無法載入白名單"));
     } finally {
       setLoadingWhitelist(false);
@@ -324,7 +325,7 @@ export function AdminScholarshipManagementInterface({
         setError(response.message || "保存設定時發生錯誤");
       }
     } catch (err) {
-      console.error("Failed to save configuration:", err);
+      logger.error("Failed to save configuration", { err: err });
       setError("保存設定時發生錯誤，請稍後再試");
     } finally {
       setIsSaving(false);
@@ -374,7 +375,7 @@ export function AdminScholarshipManagementInterface({
         setError(errorData.message || "上傳申請條款文件失敗");
       }
     } catch (err) {
-      console.error("Failed to upload terms document:", err);
+      logger.error("Failed to upload terms document", { err: err });
       setError("上傳申請條款文件失敗，請稍後再試");
     } finally {
       setIsUploadingTerms(false);
@@ -406,7 +407,7 @@ export function AdminScholarshipManagementInterface({
         setError(response.message || "新增欄位失敗");
       }
     } catch (err) {
-      console.error("Failed to create field:", err);
+      logger.error("Failed to create field", { err: err });
       setError("新增欄位失敗，請稍後再試");
     }
   };
@@ -433,7 +434,7 @@ export function AdminScholarshipManagementInterface({
         setError(response.message || "更新欄位失敗");
       }
     } catch (err) {
-      console.error("Failed to update field:", err);
+      logger.error("Failed to update field", { err: err });
       setError("更新欄位失敗，請稍後再試");
     }
   };
@@ -450,7 +451,7 @@ export function AdminScholarshipManagementInterface({
         setError(response.message || "刪除欄位失敗");
       }
     } catch (err) {
-      console.error("Failed to delete field:", err);
+      logger.error("Failed to delete field", { err: err });
       setError("刪除欄位失敗，請稍後再試");
     }
   };
@@ -475,7 +476,7 @@ export function AdminScholarshipManagementInterface({
         setError(response.message || "新增文件要求失敗");
       }
     } catch (err) {
-      console.error("Failed to create document:", err);
+      logger.error("Failed to create document", { err: err });
       setError("新增文件要求失敗，請稍後再試");
     }
   };
@@ -524,7 +525,7 @@ export function AdminScholarshipManagementInterface({
         setError(response.message || "更新文件要求失敗");
       }
     } catch (err) {
-      console.error("Failed to update document:", err);
+      logger.error("Failed to update document", { err: err });
       setError("更新文件要求失敗，請稍後再試");
     }
   };
@@ -541,7 +542,7 @@ export function AdminScholarshipManagementInterface({
         setError(response.message || "刪除文件要求失敗");
       }
     } catch (err) {
-      console.error("Failed to delete document:", err);
+      logger.error("Failed to delete document", { err: err });
       setError("刪除文件要求失敗，請稍後再試");
     }
   };
@@ -578,7 +579,7 @@ export function AdminScholarshipManagementInterface({
         setError(response.message || "範例文件上傳失敗");
       }
     } catch (err: unknown) {
-      console.error("Failed to upload example:", err);
+      logger.error("Failed to upload example", { err: err });
       setError((err instanceof Error ? err.message : "範例文件上傳失敗，請稍後再試"));
     } finally {
       setUploadingExampleDocId(null);
@@ -630,7 +631,7 @@ export function AdminScholarshipManagementInterface({
         setError(response.message || "範例文件刪除失敗");
       }
     } catch (err) {
-      console.error("Failed to delete example:", err);
+      logger.error("Failed to delete example", { err: err });
       setError("範例文件刪除失敗，請稍後再試");
     }
   };
@@ -696,7 +697,7 @@ export function AdminScholarshipManagementInterface({
         const message = `成功: ${result.success_count} 筆，失敗: ${result.failed_items.length} 筆`;
         if (result.failed_items.length > 0) {
           toast.error(message);
-          console.error("Import errors:", result.failed_items);
+          logger.error("Import errors:", result.failed_items);
         } else {
           toast.success(message);
         }

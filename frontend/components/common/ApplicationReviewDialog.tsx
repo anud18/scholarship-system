@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import {
   Dialog,
   DialogContent,
@@ -751,7 +752,7 @@ export function ApplicationReviewDialog({
         );
       }
     } catch (error) {
-      console.error("Post office verification error:", error);
+      logger.error("Post office verification error", { error: error });
       toast.error(
         locale === "zh" ? "郵局驗證錯誤" : "Post Office Verification Error",
         {
@@ -955,7 +956,7 @@ export function ApplicationReviewDialog({
             });
 
             // Debug logging
-            console.log('📋 Loaded existing review:', {
+            logger.debug('📋 Loaded existing review:', {
               reviewId: reviewResponse.data.id,
               reviewedAt: reviewResponse.data.reviewed_at,
               existingItemsCount: existingItems.length,
@@ -976,7 +977,7 @@ export function ApplicationReviewDialog({
         }
       }
     } catch (err) {
-      console.error("Error loading sub-types and review:", err);
+      logger.error("Error loading sub-types and review", { err: err });
     } finally {
       setIsLoadingSubTypes(false);
     }
@@ -1034,12 +1035,12 @@ export function ApplicationReviewDialog({
             scholarshipType = scholarshipResponse.data.code;
           }
         } catch (error) {
-          console.error("Failed to get scholarship type:", error);
+          logger.error("Failed to get scholarship type", { error: error });
         }
       }
 
       if (!scholarshipType) {
-        console.error("Cannot determine scholarship type");
+        logger.error("Cannot determine scholarship type");
         setDocumentLabels({});
         setFieldLabels({});
         setApplicationFields([]);
@@ -1080,7 +1081,7 @@ export function ApplicationReviewDialog({
         }
       }
     } catch (error) {
-      console.error("Failed to load form config:", error);
+      logger.error("Failed to load form config", { error: error });
       setDocumentLabels({});
       setFieldLabels({});
       setApplicationFields([]);
@@ -1118,7 +1119,7 @@ export function ApplicationReviewDialog({
         setApplicationFiles(files);
       }
     } catch (error) {
-      console.error("Failed to load application files:", error);
+      logger.error("Failed to load application files", { error: error });
       setApplicationFiles([]);
     } finally {
       setIsLoadingFiles(false);
@@ -1129,18 +1130,18 @@ export function ApplicationReviewDialog({
   const handleFilePreview = (file: DocumentPayload) => {
     const filename = file.filename || file.original_filename;
     if (!filename) {
-      console.error("No filename available for preview");
+      logger.error("No filename available for preview");
       return;
     }
 
     if (!file.file_path) {
-      console.error("No file path available for preview");
+      logger.error("No file path available for preview");
       return;
     }
 
     const urlParts = file.file_path.split("?");
     if (urlParts.length < 2) {
-      console.error("Invalid file URL format");
+      logger.error("Invalid file URL format");
       return;
     }
 
@@ -1148,7 +1149,7 @@ export function ApplicationReviewDialog({
     const token = urlParams.get("token");
 
     if (!token) {
-      console.error("No token found in file URL");
+      logger.error("No token found in file URL");
       return;
     }
 
@@ -1306,7 +1307,7 @@ export function ApplicationReviewDialog({
         throw new Error(safeErrorMessage(response.message) || "Failed to submit review");
       }
     } catch (err: unknown) {
-      console.error("Failed to submit review:", err);
+      logger.error("Failed to submit review", { err: err });
 
       // Extract detailed error message from various possible locations.
       // Use a focused axios+Error shape cast rather than `any` so each
@@ -1356,7 +1357,7 @@ export function ApplicationReviewDialog({
         // Close dialog after successful approval
         onOpenChange(false);
       } catch (error) {
-        console.error('Failed to approve application:', error);
+        logger.error('Failed to approve application:', error);
         // Error handling is done in the parent component (toast notification)
       } finally {
         setIsSubmitting(false);
@@ -1372,7 +1373,7 @@ export function ApplicationReviewDialog({
         // Close dialog after successful rejection
         onOpenChange(false);
       } catch (error) {
-        console.error('Failed to reject application:', error);
+        logger.error('Failed to reject application:', error);
         // Error handling is done in the parent component (toast notification)
       } finally {
         setIsSubmitting(false);
@@ -1806,15 +1807,15 @@ export function ApplicationReviewDialog({
                         <>
                           {/* Debug logging for form data */}
                           {(() => {
-                            console.log(
+                            logger.debug(
                               "🔍 Form Tab - detailedApplication:",
                               detailedApplication
                             );
-                            console.log(
+                            logger.debug(
                               "🔍 Form Tab - submitted_form_data:",
                               detailedApplication?.submitted_form_data
                             );
-                            console.log(
+                            logger.debug(
                               "🔍 Form Tab - fields:",
                               detailedApplication?.submitted_form_data?.fields
                             );

@@ -42,6 +42,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useScholarshipSpecificApplications } from "@/hooks/use-admin";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
 import { Locale } from "@/lib/validators";
 import { getDisplayStatusInfo } from "@/lib/utils/application-helpers";
 import {
@@ -199,8 +200,8 @@ interface DashboardApplication {
 // loose rather than re-declare the entire transform.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const transformApplicationData = (app: any): DashboardApplication => {
-  console.log("🔍 Transforming application data:", app.app_id);
-  console.log("📊 Professor data in raw API response:", app.professor);
+  logger.debug("🔍 Transforming application data:", app.app_id);
+  logger.debug("📊 Professor data in raw API response:", app.professor);
 
   // Ensure submitted_form_data has the correct structure for file preview
   let submittedFormData = app.submitted_form_data;
@@ -270,11 +271,11 @@ const transformApplicationData = (app: any): DashboardApplication => {
     scholarship_configuration: app.scholarship_configuration,
   };
 
-  console.log("✅ Transformed result:", transformed.app_id);
-  console.log("📋 Professor in transformed data:", transformed.professor);
-  console.log("🎯 Professor name in transformed:", transformed.professor?.name);
-  console.log("🔢 Professor ID in transformed:", transformed.professor_id);
-  console.log("⚙️ Scholarship configuration:", app.scholarship_configuration);
+  logger.debug("✅ Transformed result:", transformed.app_id);
+  logger.debug("📋 Professor in transformed data:", transformed.professor);
+  logger.debug("🎯 Professor name in transformed:", transformed.professor?.name);
+  logger.debug("🔢 Professor ID in transformed:", transformed.professor_id);
+  logger.debug("⚙️ Scholarship configuration:", app.scholarship_configuration);
   return transformed;
 };
 
@@ -306,7 +307,7 @@ export function AdminScholarshipDashboard({
   const { subTypeTranslations } = useScholarshipData();
 
   // Debug logging
-  console.log("ScholarshipSpecificDashboard render:", {
+  logger.debug("ScholarshipSpecificDashboard render:", {
     scholarshipTypes,
     scholarshipStats,
     applicationsByType,
@@ -372,7 +373,7 @@ export function AdminScholarshipDashboard({
 
     // Debug logging
     if (transformedApplications.length > 0) {
-      console.log(
+      logger.debug(
         `Transformed applications for ${type}:`,
         transformedApplications[0]
       );
@@ -478,9 +479,9 @@ export function AdminScholarshipDashboard({
     newStatus: string
   ) => {
     try {
-      console.log("Status update request:", { applicationId, newStatus });
+      logger.debug("Status update request:", { applicationId, newStatus });
       const result = await updateApplicationStatus(applicationId, newStatus);
-      console.log("Status update result:", result);
+      logger.debug("Status update result:", result);
 
       // 檢查是否成功（即使拋出錯誤，實際上也可能成功了）
       toast.success(`申請狀態已更新為${newStatus === "approved" ? "已核准" : newStatus === "rejected" ? "已駁回" : newStatus}`);
@@ -488,7 +489,7 @@ export function AdminScholarshipDashboard({
       // 重新載入數據
       refetch();
     } catch (error) {
-      console.error("Failed to update application status:", error);
+      logger.error("Failed to update application status", { error: error });
       // 嘗試重新載入以檢查狀態是否實際上已更新
       await new Promise(resolve => setTimeout(resolve, 500));
       refetch();
@@ -509,7 +510,7 @@ export function AdminScholarshipDashboard({
         toast.error("無法載入申請詳情");
       }
     } catch (error) {
-      console.error("Failed to fetch application details:", error);
+      logger.error("Failed to fetch application details", { error: error });
       toast.error("載入申請詳情時發生錯誤");
     } finally {
       setLoadingApplicationDetail(false);
@@ -537,7 +538,7 @@ export function AdminScholarshipDashboard({
         toast.error(response.message || "無法完成郵局帳戶驗證");
       }
     } catch (error) {
-      console.error("Post office verification error:", error);
+      logger.error("Post office verification error", { error: error });
       toast.error("郵局帳戶驗證過程中發生錯誤");
     } finally {
       setBankVerificationLoading(prev => ({ ...prev, [applicationId]: false }));
@@ -558,7 +559,7 @@ export function AdminScholarshipDashboard({
         toast.error(response.message || "無法載入驗證資料");
       }
     } catch (error) {
-      console.error("Failed to load post office verification data:", error);
+      logger.error("Failed to load post office verification data", { error: error });
       toast.error("載入驗證資料時發生錯誤");
     } finally {
       setBankVerificationLoading(prev => ({ ...prev, [applicationId]: false }));
@@ -583,7 +584,7 @@ export function AdminScholarshipDashboard({
         toast.error(response.message || "無法執行郵局帳號驗證");
       }
     } catch (error) {
-      console.error("Failed to verify post office account:", error);
+      logger.error("Failed to verify post office account", { error: error });
       toast.error("執行驗證時發生錯誤");
     } finally {
       setBankVerificationLoading(prev => ({ ...prev, [applicationId]: false }));
@@ -610,7 +611,7 @@ export function AdminScholarshipDashboard({
         toast.error(response.message || "無法完成批量郵局帳戶驗證");
       }
     } catch (error) {
-      console.error("Batch post office verification error:", error);
+      logger.error("Batch post office verification error", { error: error });
       toast.error("批量郵局帳戶驗證過程中發生錯誤");
     } finally {
       setBatchVerificationLoading(false);
@@ -725,7 +726,7 @@ export function AdminScholarshipDashboard({
         toast.error(response.message || "無法載入操作紀錄");
       }
     } catch (error) {
-      console.error("Failed to fetch audit logs:", error);
+      logger.error("Failed to fetch audit logs", { error: error });
       toast.error("無法載入操作紀錄，請稍後再試");
     } finally {
       setAuditLoading(false);
@@ -1000,26 +1001,26 @@ export function AdminScholarshipDashboard({
                                   <CheckCircle className="h-4 w-4 text-green-600" />
                                     <span className="text-sm font-medium text-green-800 whitespace-nowrap">
                                     {(() => {
-                                      console.log(
+                                      logger.debug(
                                         "🎯 Display logic - App:",
                                         app.app_id
                                       );
-                                      console.log(
+                                      logger.debug(
                                         "📋 Professor object:",
                                         app.professor
                                       );
-                                      console.log(
+                                      logger.debug(
                                         "📝 Professor name:",
                                         app.professor?.name
                                       );
-                                      console.log(
+                                      logger.debug(
                                         "🔢 Professor ID:",
                                         app.professor_id
                                       );
                                       const displayName =
                                         app.professor?.name ||
                                         `教授 #${app.professor_id}`;
-                                      console.log(
+                                      logger.debug(
                                         "✨ Final display name:",
                                         displayName
                                       );
@@ -1087,26 +1088,26 @@ export function AdminScholarshipDashboard({
                             <div className="flex items-center gap-1">
                               <span className="text-sm font-medium text-green-800 whitespace-nowrap">
                                 {(() => {
-                                  console.log(
+                                  logger.debug(
                                     "🎯 Display logic (readonly) - App:",
                                     app.app_id
                                   );
-                                  console.log(
+                                  logger.debug(
                                     "📋 Professor object:",
                                     app.professor
                                   );
-                                  console.log(
+                                  logger.debug(
                                     "📝 Professor name:",
                                     app.professor?.name
                                   );
-                                  console.log(
+                                  logger.debug(
                                     "🔢 Professor ID:",
                                     app.professor_id
                                   );
                                   const displayName =
                                     app.professor?.name ||
                                     `教授 #${app.professor_id}`;
-                                  console.log(
+                                  logger.debug(
                                     "✨ Final display name:",
                                     displayName
                                   );

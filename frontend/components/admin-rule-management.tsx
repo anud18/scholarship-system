@@ -23,6 +23,7 @@ import {
   Upload,
 } from "lucide-react";
 import { ScholarshipType, ScholarshipRule, api } from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
 import { ScholarshipRuleModal } from "./scholarship-rule-modal";
 import { CopyRulesModal } from "./copy-rules-modal";
 import { toast } from "sonner";
@@ -79,7 +80,7 @@ export function AdminRuleManagement({
           throw new Error(response.message || "獲取可用年份失敗");
         }
       } catch (error) {
-        console.error("獲取可用年份失敗:", error);
+        logger.error("獲取可用年份失敗", { error: error });
         toast.error("無法載入可用年份，將使用預設年份範圍");
         // Set a default range of years if API fails
         const currentYear = new Date().getFullYear() - 1911;
@@ -170,18 +171,18 @@ export function AdminRuleManagement({
           params.semester = semester;
         }
 
-        console.log("[RULES] Fetching rules with params:", params);
+        logger.debug("[RULES] Fetching rules with params:", params);
         const response = await api.admin.getScholarshipRules(params);
-        console.log("[RULES] API response:", response);
+        logger.debug("[RULES] API response:", response);
 
         if (response.success && response.data) {
-          console.log("[RULES] Setting rules:", response.data.length, "rules found");
+          logger.debug("[RULES] Setting rules:", response.data.length, "rules found");
           setRules(response.data);
         } else {
           throw new Error(response.message || "載入規則失敗");
         }
       } catch (error) {
-        console.error("載入規則失敗:", error);
+        logger.error("載入規則失敗", { error: error });
         toast.error("載入規則失敗: " + (error as Error).message);
         // Set empty rules on error
         setRules([]);
@@ -230,7 +231,7 @@ export function AdminRuleManagement({
       await loadRules(selectedScholarshipType!, selectedYear, selectedSemester);
       toast.success("規則刪除成功");
     } catch (error) {
-      console.error("刪除規則失敗:", error);
+      logger.error("刪除規則失敗", { error: error });
       toast.error("刪除規則失敗: " + (error as Error).message);
     }
   };
@@ -250,7 +251,7 @@ export function AdminRuleManagement({
       await loadRules(selectedScholarshipType, selectedYear, selectedSemester);
       toast.success(isCreating ? "規則創建成功" : "規則更新成功");
     } catch (error) {
-      console.error("提交規則失敗:", error);
+      logger.error("提交規則失敗", { error: error });
       toast.error("提交規則失敗: " + (error as Error).message);
     }
   };
@@ -272,14 +273,14 @@ export function AdminRuleManagement({
     overwriteExisting: boolean = false
   ) => {
     try {
-      console.log("[COPY RULES] Starting copy process...");
-      console.log("[COPY RULES] Source:", {
+      logger.debug("[COPY RULES] Starting copy process...");
+      logger.debug("[COPY RULES] Source:", {
         year: selectedYear,
         semester: selectedSemester,
         rulesCount: selectedRulesForCopy.length,
         ruleIds: selectedRulesForCopy.map(rule => rule.id),
       });
-      console.log("[COPY RULES] Target:", {
+      logger.debug("[COPY RULES] Target:", {
         year: targetYear,
         semester: targetSemester,
         overwriteExisting,
@@ -298,18 +299,18 @@ export function AdminRuleManagement({
         overwrite_existing: overwriteExisting,
       };
 
-      console.log("[COPY RULES] Request payload:", copyRequest);
+      logger.debug("[COPY RULES] Request payload:", copyRequest);
 
       const response = await api.admin.copyRulesBetweenPeriods(copyRequest);
 
-      console.log("[COPY RULES] Response:", response);
-      console.log("[COPY RULES] Response data:", response.data);
+      logger.debug("[COPY RULES] Response:", response);
+      logger.debug("[COPY RULES] Response data:", response.data);
 
       if (response.success) {
         const copiedCount = response.data?.length || 0;
         const skippedCount = selectedRulesForCopy.length - copiedCount;
 
-        console.log("[COPY RULES] Results:", {
+        logger.debug("[COPY RULES] Results:", {
           totalRules: selectedRulesForCopy.length,
           copiedCount,
           skippedCount,
@@ -321,12 +322,12 @@ export function AdminRuleManagement({
           message += `，跳過 ${skippedCount} 條重複規則`;
         }
 
-        console.log("[COPY RULES] Alert message:", message);
+        logger.debug("[COPY RULES] Alert message:", message);
         alert(message);
 
         // 如果複製到新的年份（不在現有列表中），重新載入可用年份
         if (!availableYears.includes(targetYear)) {
-          console.log(
+          logger.debug(
             "[COPY RULES] New year detected, reloading available years..."
           );
           try {
@@ -335,7 +336,7 @@ export function AdminRuleManagement({
               setAvailableYears(response.data);
             }
           } catch (error) {
-            console.error("Failed to reload available years:", error);
+            logger.error("Failed to reload available years", { error: error });
             toast.error("重新載入可用年份失敗");
           }
         }
@@ -346,7 +347,7 @@ export function AdminRuleManagement({
           ((!targetSemester && !selectedSemester) ||
             targetSemester === selectedSemester)
         ) {
-          console.log("[COPY RULES] Reloading rules for current period...");
+          logger.debug("[COPY RULES] Reloading rules for current period...");
           await loadRules(
             selectedScholarshipType!,
             selectedYear,
@@ -354,12 +355,12 @@ export function AdminRuleManagement({
           );
         }
       } else {
-        console.error("[COPY RULES] Copy failed:", response.message);
+        logger.error("[COPY RULES] Copy failed:", response.message);
         throw new Error(response.message || "複製失敗");
       }
     } catch (error) {
-      console.error("[COPY RULES] Error in copy process:", error);
-      console.error("複製規則失敗:", error);
+      logger.error("[COPY RULES] Error in copy process", { error: error });
+      logger.error("複製規則失敗", { error: error });
       toast.error("複製規則失敗: " + (error as Error).message);
     }
   };
