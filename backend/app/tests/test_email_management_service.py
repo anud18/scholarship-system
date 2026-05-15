@@ -439,9 +439,3 @@ class TestEmailManagementService:
         # Act & Assert
         with pytest.raises(Exception, match="Database connection failed"):
             await email_service.get_email_history(db=mock_db_session, user=admin_user)
-
-    # TODO: Add tests for email retry mechanism when implemented
-    # TODO: Add tests for email template system integration
-    # TODO: Add tests for email delivery status webhook handling
-    # TODO: Add performance tests for large email history queries
-    # TODO: Add tests for email content sanitization
