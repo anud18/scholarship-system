@@ -1235,8 +1235,8 @@ async def export_ranking_excel(
         )
         db.add(audit_log)
         await db.commit()
-    except Exception as exc:  # noqa: BLE001 — audit failure must not block download
-        logger.error(f"Failed to record pii_access audit log for ranking {ranking_id}: {exc}")
+    except Exception:  # noqa: BLE001 — audit failure must not block download
+        logger.exception("Failed to record pii_access audit log for ranking %s", ranking_id)
         await db.rollback()
 
     return StreamingResponse(

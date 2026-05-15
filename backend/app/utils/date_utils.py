@@ -53,7 +53,7 @@ def parse_date_field(date_input: Optional[Union[str, datetime]]) -> Optional[dat
             try:
                 return dateutil.parser.parse(date_input)
             except Exception as e2:
-                logger.error(f"Could not parse date '{date_input}' with any method: {e2}")
+                logger.exception("Could not parse date %r with any method", date_input)
                 raise ValueError(f"Invalid date format: {date_input}") from e2
 
     return None

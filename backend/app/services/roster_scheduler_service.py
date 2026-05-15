@@ -456,7 +456,11 @@ class RosterSchedulerService:
 
     def _job_error_listener(self, event):
         """作業執行錯誤監聽器"""
-        logger.error(f"Job {event.job_id} failed: {event.exception}")
+        logger.error(
+            "Job %s failed",
+            event.job_id,
+            exc_info=event.exception,
+        )
 
     def _job_missed_listener(self, event):
         """作業錯過執行監聽器"""
