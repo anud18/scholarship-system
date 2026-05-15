@@ -93,7 +93,8 @@ export const getApplicationTimeline = (
 
   // 獲取學院審核資訊
   const collegeReview = application.application_reviews?.find(
-    (r: any) => r.review_stage === "college_review"
+    (r: { review_stage?: string; reviewed_at?: string }) =>
+      r.review_stage === "college_review"
   );
   const hasCollegeReview = Boolean(collegeReview?.reviewed_at);
 
