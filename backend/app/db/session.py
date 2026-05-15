@@ -233,3 +233,57 @@ def set_postgresql_connection_options(dbapi_connection, connection_record):
     if hasattr(dbapi_connection, "autocommit"):
         # Configure connection settings for better error handling
         pass  # Configuration is handled via connect_args
+
+
+# =============================================================================
+# Prometheus query-duration instrumentation (issue #159)
+# =============================================================================
+# The db_query_duration_seconds Histogram in app.core.metrics is observed via
+# SQLAlchemy `before_cursor_execute` / `after_cursor_execute` hooks on both
+# the async and sync engines. Operation label is the first SQL keyword
+# (SELECT / INSERT / UPDATE / DELETE / OTHER) so the dashboard can split
+# read vs write latency without high-cardinality statement labels.
+
+# Imported here so a metrics-init failure cannot break engine creation above.
+from app.core.metrics import db_query_duration_seconds  # noqa: E402
+
+
+def _classify_operation(statement: str) -> str:
+    """Best-effort SQL verb extraction for the metric label."""
+    if not statement:
+        return "other"
+    head = statement.lstrip().split(" ", 1)[0].upper()
+    if head in {"SELECT", "INSERT", "UPDATE", "DELETE"}:
+        return head.lower()
+    return "other"
+
+
+def _install_query_timing_listeners(engine) -> None:
+    """
+    Wire before/after cursor-execute hooks so query latency lands in the
+    db_query_duration_seconds histogram. Idempotent — re-installing on the
+    same engine is harmless because SQLAlchemy's event subsystem dedupes by
+    (target, identifier, listener) tuple.
+    """
+    import time
+
+    @event.listens_for(engine.sync_engine if hasattr(engine, "sync_engine") else engine, "before_cursor_execute")
+    def _before(conn, cursor, statement, parameters, context, executemany):  # noqa: ARG001
+        context._metric_start_time = time.perf_counter()
+
+    @event.listens_for(engine.sync_engine if hasattr(engine, "sync_engine") else engine, "after_cursor_execute")
+    def _after(conn, cursor, statement, parameters, context, executemany):  # noqa: ARG001
+        start = getattr(context, "_metric_start_time", None)
+        if start is None:
+            return
+        elapsed = time.perf_counter() - start
+        db_query_duration_seconds.labels(
+            operation=_classify_operation(statement)
+        ).observe(elapsed)
+
+
+# Async engines expose their sync core via `.sync_engine`; the connect-level
+# hooks below intercept all queries regardless of which session the call
+# went through.
+_install_query_timing_listeners(async_engine)
+_install_query_timing_listeners(sync_engine)
