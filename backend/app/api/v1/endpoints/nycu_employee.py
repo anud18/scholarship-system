@@ -4,10 +4,11 @@ NYCU Employee API endpoints.
 
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.core.cache import cached
+from app.core.security import require_admin
 from app.integrations.nycu_emp import (
     NYCUEmpAuthenticationError,
     NYCUEmpConnectionError,
@@ -19,7 +20,10 @@ from app.integrations.nycu_emp import (
     create_nycu_emp_client_from_env,
 )
 
-router = APIRouter()
+# SECURITY: All NYCU employee directory endpoints expose internal staff PII
+# (names, departments, positions, employee numbers). Gate the entire router
+# behind admin authentication — no public access to the directory.
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 
 class EmployeeListResponse(BaseModel):
