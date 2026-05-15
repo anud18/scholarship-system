@@ -241,7 +241,10 @@ export function ScholarshipRuleModal({
     loadSubTypes();
   }, [isOpen, scholarshipTypeId]);
 
-  const handleChange = (field: keyof ScholarshipRule, value: any) => {
+  const handleChange = <K extends keyof ScholarshipRule>(
+    field: K,
+    value: ScholarshipRule[K]
+  ) => {
     setFormData(prev => {
       const newData = { ...prev, [field]: value };
 
@@ -356,7 +359,10 @@ export function ScholarshipRuleModal({
             <Select
               value={formData.sub_type || "__general__"}
               onValueChange={value =>
-                handleChange("sub_type", value === "__general__" ? null : value)
+                handleChange(
+                  "sub_type",
+                  value === "__general__" ? undefined : value
+                )
               }
               disabled={loadingSubTypes}
             >

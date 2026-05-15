@@ -246,11 +246,14 @@ export function UserPermissionManagement() {
     }
   }, [userSearch, userRoleFilter]);
 
-  const handleUserFormChange = (field: keyof UserCreateForm, value: any) => {
+  const handleUserFormChange = <K extends keyof UserCreateForm>(
+    field: K,
+    value: UserCreateForm[K]
+  ) => {
     setUserForm((prev) => ({ ...prev, [field]: value }));
 
     if (field === "role") {
-      if (!["college", "admin"].includes(value)) {
+      if (!["college", "admin"].includes(value as string)) {
         if (editingUser) {
           setScholarshipPermissions((prev) =>
             prev.filter((p) => p.user_id !== Number(editingUser.id))

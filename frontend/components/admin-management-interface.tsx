@@ -1290,13 +1290,16 @@ export function AdminManagementInterface({
     }
   };
 
-  const handleUserFormChange = (field: keyof UserCreate, value: any) => {
+  const handleUserFormChange = <K extends keyof UserCreate>(
+    field: K,
+    value: UserCreate[K]
+  ) => {
     setUserForm(prev => ({ ...prev, [field]: value }));
 
     // 當角色改變時，處理獎學金權限
     if (field === "role") {
       // 如果角色不是 college 或 admin，清除該用戶的所有獎學金權限
-      if (!["college", "admin"].includes(value)) {
+      if (!["college", "admin"].includes(value as string)) {
         if (editingUser) {
           // 編輯現有用戶時，清除該用戶的權限
           setScholarshipPermissions(prev =>

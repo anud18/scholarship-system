@@ -139,11 +139,13 @@ export function BatchApplicationFileUpload({
         const response = await apiClient.applicationFields.getFormConfig(scholarshipType);
         if (response.success && response.data?.documents && response.data.documents.length > 0) {
           // Transform API response to DocumentType format
-          const transformedDocs: DocumentType[] = response.data.documents.map((doc: any) => ({
-            value: doc.document_name.toLowerCase().replace(/\s+/g, "_"),
-            label_zh: doc.document_name,
-            label_en: doc.document_name_en || doc.document_name,
-          }));
+          const transformedDocs: DocumentType[] = response.data.documents.map(
+            (doc: { document_name: string; document_name_en?: string }) => ({
+              value: doc.document_name.toLowerCase().replace(/\s+/g, "_"),
+              label_zh: doc.document_name,
+              label_en: doc.document_name_en || doc.document_name,
+            })
+          );
           setScholarshipDocuments(transformedDocs);
         } else {
           setScholarshipDocuments([]);
