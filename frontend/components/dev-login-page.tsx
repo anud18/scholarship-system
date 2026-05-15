@@ -22,6 +22,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { apiClient as api } from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
 import { useAuth } from "@/hooks/use-auth";
 
 interface MockUser {
@@ -62,7 +63,7 @@ const roleLabels = {
 };
 
 export function DevLoginPage() {
-  console.log("DevLoginPage component rendering...");
+  logger.debug("DevLoginPage rendering");
   const { login } = useAuth();
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -71,22 +72,25 @@ export function DevLoginPage() {
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const router = useRouter();
 
-  console.log("DevLoginPage state:", {
+  logger.debug("DevLoginPage state probe", {
     selectedUser,
     isLoggingIn,
-    error,
+    hasError: !!error,
     usersCount: mockUsers.length,
   });
 
   // Load mock users from API
   const loadMockUsers = async () => {
     try {
-      console.log("Loading mock users from API...");
+      logger.debug("Loading mock users from API");
       setIsLoadingUsers(true);
       setError(null);
 
       const response = await api.auth.getMockUsers();
-      console.log("Mock users response:", response);
+      logger.debug("Mock users response received", {
+        success: response.success,
+        count: response.data?.length ?? 0,
+      });
 
       if (response.success && response.data) {
         setMockUsers(response.data);
@@ -96,7 +100,7 @@ export function DevLoginPage() {
         );
       }
     } catch (err) {
-      console.error("Failed to load mock users:", err);
+      logger.error("Failed to load mock users", { err });
       let errorMessage = "Failed to load users. ";
       if (err instanceof Error) {
         if (
@@ -118,12 +122,10 @@ export function DevLoginPage() {
 
   // Check if we should allow dev login and load users
   useEffect(() => {
-    console.log(
-      "DevLoginPage useEffect running, NODE_ENV:",
-      process.env.NODE_ENV
-    );
-    console.log("Current hostname:", window.location.hostname);
-    console.log("API client:", api);
+    logger.debug("DevLoginPage useEffect running", {
+      nodeEnv: process.env.NODE_ENV,
+      hostname: window.location.hostname,
+    });
 
     // Allow dev login if:
     // 1. We're on localhost or 127.0.0.1 (local development)
@@ -136,8 +138,10 @@ export function DevLoginPage() {
 
     const isDevLoginPath = window.location.pathname === "/dev-login";
 
-    console.log("Is localhost:", isLocalhost);
-    console.log("Is dev-login path:", isDevLoginPath);
+    logger.debug("Dev-login gate evaluation", {
+      isLocalhost,
+      isDevLoginPath,
+    });
 
     // Only redirect if we're in a real production environment
     if (
@@ -146,39 +150,41 @@ export function DevLoginPage() {
       !isLocalhost &&
       !isDevLoginPath
     ) {
-      console.log("Real production mode detected, redirecting to home page");
+      logger.debug("Real production mode detected, redirecting to home page");
       router.push("/");
     } else {
-      console.log("Allowing dev login access");
       // Load mock users when component mounts
       loadMockUsers();
     }
   }, [router]);
 
   const handleUserLogin = async (user: MockUser) => {
-    console.log("Calling mock SSO login API with nycu_id:", user.nycu_id);
+    logger.debug("Calling mock SSO login API", { nycu_id: user.nycu_id });
 
     try {
       const response = await api.auth.mockSSOLogin(user.nycu_id);
-      console.log("Mock SSO login response:", response);
+      logger.debug("Mock SSO login response received", {
+        success: response.success,
+      });
 
       if (response.success && response.data) {
         // Store token and user data using the authentication context
         const { access_token, user: userData } = response.data;
-        console.log("Login successful, setting authentication via context");
+        logger.debug("Login successful, setting authentication via context");
 
         // Use the auth context login function to properly set state
         login(access_token, userData);
 
-        console.log("Redirecting to main page");
         // Redirect to main page (role-based dashboard)
         router.push("/");
       } else {
-        console.error("Mock login failed with response:", response);
+        logger.error("Mock login failed with response", {
+          success: response.success,
+        });
         setError("Mock login failed: " + (response.message || "Unknown error"));
       }
     } catch (error) {
-      console.error("Dev login failed with error:", error);
+      logger.error("Dev login failed with error", { error });
 
       // More detailed error message
       let errorMessage = "Mock login failed. ";
@@ -223,7 +229,7 @@ export function DevLoginPage() {
     !isLocalhost &&
     !isDevLoginPath
   ) {
-    console.log("Blocking dev login in real production");
+    logger.debug("Blocking dev login in real production");
     return null;
   }
 
@@ -264,7 +270,7 @@ export function DevLoginPage() {
         <div className="mb-6 flex gap-2">
           <Button
             onClick={() => {
-              console.log("Refresh users button clicked!");
+              logger.debug("Refresh users button clicked");
               loadMockUsers();
             }}
             disabled={isLoadingUsers}
@@ -290,7 +296,7 @@ export function DevLoginPage() {
             </p>
             <Button
               onClick={() => {
-                console.log("Refresh users button clicked!");
+                logger.debug("Refresh users button clicked");
                 loadMockUsers();
               }}
               disabled={isLoadingUsers}
@@ -306,7 +312,7 @@ export function DevLoginPage() {
                 key={user.id}
                 className="border border-gray-200 hover:border-gray-300 transition-all hover:shadow-md cursor-pointer"
                 onClick={() => {
-                  console.log("Card clicked!", user);
+                  logger.debug("Mock user card clicked", { nycu_id: user.nycu_id });
                   handleUserLogin(user);
                 }}
               >
@@ -340,7 +346,7 @@ export function DevLoginPage() {
                   </p>
                   <Button
                     onClick={e => {
-                      console.log("Button clicked!", user);
+                      logger.debug("Mock user login button clicked", { nycu_id: user.nycu_id });
                       e.stopPropagation(); // Prevent card click
                       handleUserLogin(user);
                     }}
