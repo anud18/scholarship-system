@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Label } from "@/components/ui/label";
 import { Locale } from "@/lib/validators";
 import {
+  formatDisplayValue,
   formatFieldName,
   formatFieldValue,
 } from "@/lib/utils/application-helpers";
@@ -185,9 +186,12 @@ export function ApplicationFormDataDisplay({
                 <p className="text-sm text-gray-600 mt-1">
                   {key === "scholarship_type"
                     ? "載入中..."
-                    : typeof value === "string" && value.length > 100
-                      ? `${value.substring(0, 100)}...`
-                      : String(value)}
+                    : (() => {
+                        const rendered = formatDisplayValue(value);
+                        return rendered.length > 100
+                          ? `${rendered.substring(0, 100)}...`
+                          : rendered;
+                      })()}
                 </p>
               </div>
             </div>
@@ -221,9 +225,12 @@ export function ApplicationFormDataDisplay({
                 {getFieldLabel(key, locale, fieldLabels)}
               </Label>
               <p className="text-sm text-gray-600 mt-1">
-                {typeof value === "string" && value.length > 100
-                  ? `${value.substring(0, 100)}...`
-                  : String(value)}
+                {(() => {
+                  const rendered = formatDisplayValue(value);
+                  return rendered.length > 100
+                    ? `${rendered.substring(0, 100)}...`
+                    : rendered;
+                })()}
               </p>
             </div>
           </div>
