@@ -20,6 +20,19 @@ interface AcademicConfig {
 
 type SubTypeQuotaBreakdown = Record<string, { quota?: number; label?: string; label_en?: string }>;
 
+interface AvailableOptions {
+  scholarship_types: Array<{ id: number; code: string; name: string; name_en?: string }>;
+  academic_years: number[];
+  semesters: string[];
+}
+
+interface ManagedCollege {
+  code: string;
+  name: string;
+  name_en: string;
+  scholarship_count: number;
+}
+
 interface RankingData {
   applications: any[];
   totalQuota: number;
@@ -87,12 +100,8 @@ interface CollegeManagementContextType {
   setSelectedScholarshipType: (type: string | undefined) => void;
 
   // Available options
-  availableOptions: {
-    scholarship_types: Array<{ id: number; code: string; name: string; name_en?: string }>;
-    academic_years: number[];
-    semesters: string[];
-  } | null;
-  setAvailableOptions: (options: any) => void;
+  availableOptions: AvailableOptions | null;
+  setAvailableOptions: (options: AvailableOptions | null) => void;
 
   // College quota info (for review panel)
   collegeQuotaInfo: {
@@ -102,13 +111,8 @@ interface CollegeManagementContextType {
   setCollegeQuotaInfo: (info: { collegeQuota: number | null; breakdown: Record<string, number> } | null) => void;
 
   // Managed college
-  managedCollege: {
-    code: string;
-    name: string;
-    name_en: string;
-    scholarship_count: number;
-  } | null;
-  setManagedCollege: (college: any) => void;
+  managedCollege: ManagedCollege | null;
+  setManagedCollege: (college: ManagedCollege | null) => void;
   collegeDisplayName: string;
 
   // Dialog states
