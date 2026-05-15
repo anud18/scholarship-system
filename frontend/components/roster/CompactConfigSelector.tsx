@@ -15,8 +15,15 @@ interface ScholarshipConfiguration {
     name: string
   }
   is_active: boolean
-  quotas?: any
+  quotas?: Record<string, unknown>
   has_college_quota?: boolean
+}
+
+interface ScholarshipTypeConfigRow {
+  scholarship_type_id?: number
+  scholarship_type_name?: string
+  scholarship_type_code?: string
+  [key: string]: unknown
 }
 
 interface ScholarshipType {
@@ -95,7 +102,7 @@ export function CompactConfigSelector({ onConfigSelect, disabled = false }: Comp
         // Extract unique scholarship types from configurations
         const typesMap = new Map<number, ScholarshipType>()
 
-        response.data.forEach((config: any) => {
+        ;(response.data as ScholarshipTypeConfigRow[]).forEach(config => {
           if (config.scholarship_type_id && config.scholarship_type_name) {
             typesMap.set(config.scholarship_type_id, {
               id: config.scholarship_type_id,

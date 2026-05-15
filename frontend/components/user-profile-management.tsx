@@ -61,10 +61,18 @@ interface UserProfile {
   updated_at: string;
 }
 
+interface StudentInfoSnapshot {
+  std_degree?: string;
+  std_studingstatus?: string;
+  std_enrollyear?: string | number;
+  std_termcount?: string | number;
+  [key: string]: unknown;
+}
+
 interface CompleteUserProfile {
   user_info: UserResponse;
   profile: UserProfile | null;
-  student_info?: any;
+  student_info?: StudentInfoSnapshot | null;
 }
 
 interface ProfileHistory {
@@ -249,7 +257,7 @@ export default function UserProfileManagement() {
     setSaving(true);
     try {
       let endpoint = "/user-profiles/me";
-      let data: any = {};
+      let data: Record<string, unknown> = {};
 
       switch (section) {
         case "bank":
@@ -275,16 +283,20 @@ export default function UserProfileManagement() {
           };
           break;
         default:
-          data = editingProfile;
+          data = { ...editingProfile };
       }
 
       let response;
       switch (section) {
         case "bank":
-          response = await api.userProfiles.updateBankInfo(data);
+          response = await api.userProfiles.updateBankInfo(
+            data as Parameters<typeof api.userProfiles.updateBankInfo>[0]
+          );
           break;
         case "advisor":
-          response = await api.userProfiles.updateAdvisorInfo(data);
+          response = await api.userProfiles.updateAdvisorInfo(
+            data as Parameters<typeof api.userProfiles.updateAdvisorInfo>[0]
+          );
           break;
         default:
           response = await api.userProfiles.updateProfile(editingProfile);
