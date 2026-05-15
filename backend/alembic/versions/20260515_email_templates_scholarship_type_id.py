@@ -23,7 +23,7 @@ endpoints from working.
   old constraint name fails (e.g., on a fresh DB where the unique was
   created via the new schema), the migration falls back gracefully.
 
-Revision ID: email_tpl_scholarship_type_id_001
+Revision ID: email_tpl_scholar_type_001
 Revises: merge_20260515_heads
 Create Date: 2026-05-15
 """
@@ -34,7 +34,7 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "email_tpl_scholarship_type_id_001"
+revision: str = "email_tpl_scholar_type_001"
 down_revision: Union[str, Sequence[str], None] = "merge_20260515_heads"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
