@@ -283,6 +283,7 @@ async def get_portal_sso_data(
 
 
 @router.post("/portal-sso/verify")
+@rate_limit(requests=30, window_seconds=60)  # 30 SSO verifications / min per IP — slows token-replay / brute attempts
 async def portal_sso_verify(
     request: Request,
     db: AsyncSession = Depends(get_db),
