@@ -49,13 +49,10 @@ describe("getTranslation", () => {
 
   it("returns the key when partial path resolves to an object (not a string)", () => {
     /** Truncated dot-path lands on a nested object (e.g., "nav" resolves
-     * to the whole nav dict). The `|| key` fallback applies because
-     * an object is truthy and would otherwise be returned. Pin actual
-     * behavior: object IS returned (the implementation accepts that). */
+     * to the whole nav dict). The function now enforces its declared
+     * `string` return type — non-string resolutions fall back to the key. */
     const result = getTranslation("zh", "nav");
-    // The function returns the truthy intermediate object — pin this
-    // current behavior so a future "must be string" guard surfaces here.
-    expect(typeof result).toBe("object");
+    expect(result).toBe("nav");
   });
 
   it("resolves English equivalent paths", () => {

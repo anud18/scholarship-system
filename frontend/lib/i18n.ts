@@ -1032,11 +1032,15 @@ export const translations = {
 
 export function getTranslation(locale: "zh" | "en", key: string): string {
   const keys = key.split(".");
-  let value: any = translations[locale];
+  let value: unknown = translations[locale];
 
   for (const k of keys) {
-    value = value?.[k];
+    if (value && typeof value === "object") {
+      value = (value as Record<string, unknown>)[k];
+    } else {
+      value = undefined;
+    }
   }
 
-  return value || key;
+  return typeof value === "string" ? value : key;
 }
