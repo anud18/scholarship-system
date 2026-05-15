@@ -10,6 +10,7 @@ Major changes:
 - Dashboard and types endpoints now use ScholarshipType table
 """
 
+import logging
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
@@ -24,6 +25,8 @@ from app.models.user import User
 from app.schemas.response import ApiResponse
 from app.services.scholarship_service import ScholarshipApplicationService
 from app.utils.scholarship_helpers import get_distinct_sub_types
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -76,9 +79,9 @@ async def create_comprehensive_application(
         )
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Application creation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Application creation failed: {str(e)}") from e
     finally:
         sync_session.close()
 
@@ -104,7 +107,7 @@ async def submit_comprehensive_application(
         return ApiResponse(success=True, message=message, data={"application_id": application_id})
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Submission failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Submission failed: {str(e)}") from e
     finally:
         sync_session.close()
 
@@ -131,8 +134,8 @@ async def get_applications_by_priority(
         if status:
             try:
                 status_enum = ApplicationStatus(status)
-            except ValueError:
-                raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=f"Invalid status: {status}") from e
 
         applications = service.get_applications_by_priority(
             scholarship_type_id=scholarship_type_id,
@@ -173,7 +176,17 @@ async def get_applications_by_priority(
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve applications: {str(e)}")
+        logger.exception(
+            "Failed to retrieve applications by priority",
+            extra={
+                "scholarship_type_id": scholarship_type_id,
+                "semester": semester,
+                "status": status,
+                "limit": limit,
+                "actor_user_id": current_user.id,
+            },
+        )
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve applications: {str(e)}") from e
     finally:
         sync_session.close()
 
@@ -196,6 +209,17 @@ async def process_renewal_applications(
         service = ScholarshipApplicationService(sync_session)
         result = service.process_renewal_applications_first(semester)
 
+        logger.warning(
+            "Renewal applications processed for semester=%s by admin user_id=%s",
+            semester,
+            current_user.id,
+            extra={
+                "semester": semester,
+                "actor_user_id": current_user.id,
+                "result_summary": result if isinstance(result, (dict, list)) else str(result),
+            },
+        )
+
         return ApiResponse(
             success=True,
             message="Renewal applications processed successfully",
@@ -203,7 +227,12 @@ async def process_renewal_applications(
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to process renewals: {str(e)}")
+        logger.exception(
+            "Renewal-applications processing failed for semester=%s",
+            semester,
+            extra={"semester": semester, "actor_user_id": current_user.id},
+        )
+        raise HTTPException(status_code=500, detail=f"Failed to process renewals: {str(e)}") from e
     finally:
         sync_session.close()
 
@@ -288,7 +317,15 @@ async def get_scholarship_dashboard(
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get dashboard data: {str(e)}")
+        logger.exception(
+            "Failed to get scholarship dashboard data",
+            extra={
+                "academic_year": academic_year,
+                "semester": semester,
+                "actor_user_id": current_user.id,
+            },
+        )
+        raise HTTPException(status_code=500, detail=f"Failed to get dashboard data: {str(e)}") from e
 
 
 @router.get("/types/available")
@@ -379,6 +416,25 @@ async def simulate_priority_processing(
 
     # Sort by submission date (renewal applications first)
     simulation_results.sort(key=lambda x: (not x["is_renewal"], x["submission_date"] or ""))
+
+    logger.info(
+        "Priority-processing simulated for %d applications by admin user_id=%s "
+        "(AY=%d semester=%s scholarship_type_id=%d sub_type=%s)",
+        len(simulation_results),
+        current_user.id,
+        academic_year,
+        semester,
+        scholarship_type_id,
+        sub_type,
+        extra={
+            "application_count": len(simulation_results),
+            "academic_year": academic_year,
+            "semester": semester,
+            "scholarship_type_id": scholarship_type_id,
+            "sub_type": sub_type,
+            "actor_user_id": current_user.id,
+        },
+    )
 
     return ApiResponse(
         success=True,
