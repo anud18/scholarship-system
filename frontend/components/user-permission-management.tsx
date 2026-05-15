@@ -134,7 +134,13 @@ export function UserPermissionManagement() {
         .map((role) => role.trim())
         .join(",");
 
-      const params: any = {
+      const params: {
+        page: number;
+        size: number;
+        roles: string;
+        search?: string;
+        role?: string;
+      } = {
         page: userPagination.page,
         size: userPagination.size,
         roles: rolesParam,
@@ -263,7 +269,10 @@ export function UserPermissionManagement() {
 
     try {
       // Only send fields that have values - SSO will populate the rest on first login
-      const createData: any = {
+      const createData: Partial<UserCreateType> & {
+        nycu_id: string;
+        role: UserCreateType["role"];
+      } = {
         nycu_id: userForm.nycu_id,
         role: userForm.role,
       };
@@ -272,7 +281,10 @@ export function UserPermissionManagement() {
       if (userForm.comment) createData.comment = userForm.comment;
       if (userForm.college_code) createData.college_code = userForm.college_code;
 
-      const response = await apiClient.users.create(createData);
+      // Cast required because backend supports SSO-bootstrap creation with only
+      // nycu_id + role; email/name are filled in on first login. The frontend
+      // UserCreate type marks them required to model the post-bootstrap shape.
+      const response = await apiClient.users.create(createData as UserCreateType);
 
       if (response.success) {
         const newUserId = response.data?.id;
@@ -466,7 +478,7 @@ export function UserPermissionManagement() {
   };
 
   const handlePermissionChange = useCallback(
-    (permissions: any[]) => {
+    (permissions: ScholarshipPermission[]) => {
       const userId = editingUser?.id;
       if (userId) {
         const otherUserPermissions = scholarshipPermissions.filter(
