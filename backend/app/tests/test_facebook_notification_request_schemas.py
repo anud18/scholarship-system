@@ -1,15 +1,14 @@
 """
-Tests for the inline Pydantic request schemas in
-`app.api.v1.endpoints.notifications_facebook_demo`:
+Tests for the Pydantic request schemas in
+`app.schemas.notification_facebook`:
 
   - CreateNotificationRequest
   - BatchNotificationRequest
   - PreferenceUpdateRequest
 
 Module had ZERO test coverage. These schemas drive the Facebook-
-style notification demo endpoints. While the endpoints themselves
-are DB-coupled, the schemas are pure Pydantic with carefully-
-chosen defaults that affect:
+style notification flow. The schemas are pure Pydantic with
+carefully-chosen defaults that affect:
 
   - Notification priority routing (default "normal")
   - Batch send rate-limiting (batch_size=100, delay_minutes=5 —
@@ -21,12 +20,17 @@ Wave 6a112 pins these defaults so a refactor doesn't silently
 change rollout behaviour or default privacy posture.
 
 13 cases.
+
+The schemas were originally defined inline in
+``app.api.v1.endpoints.notifications_facebook_demo`` but that module
+was deleted (it was never router-mounted in production). See issue
+#665 category C.
 """
 
 import pytest
 from pydantic import ValidationError
 
-from app.api.v1.endpoints.notifications_facebook_demo import (
+from app.schemas.notification_facebook import (
     BatchNotificationRequest,
     CreateNotificationRequest,
     PreferenceUpdateRequest,
