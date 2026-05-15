@@ -49,6 +49,7 @@ import apiClient, {
   ScholarshipConfiguration,
   ScholarshipPermission,
   ScholarshipRule,
+  ScholarshipType,
   SystemStats,
   UserCreate,
   UserListResponse,
@@ -93,7 +94,7 @@ interface User {
   raw_data?: {
     chinese_name?: string;
     english_name?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
@@ -229,7 +230,7 @@ export function AdminManagementInterface({
   const [ruleTypeFilter, setRuleTypeFilter] = useState<
     "initial" | "renewal" | "all"
   >("all");
-  const [scholarshipTypes, setScholarshipTypes] = useState<any[]>([]);
+  const [scholarshipTypes, setScholarshipTypes] = useState<ScholarshipType[]>([]);
   const [loadingScholarshipTypes, setLoadingScholarshipTypes] = useState(false);
 
   // Scholarship Configurations for Workflow
@@ -262,8 +263,16 @@ export function AdminManagementInterface({
 
   // Email Management states
   const [emailManagementTab, setEmailManagementTab] = useState("templates");
-  const [emailHistory, setEmailHistory] = useState<any[]>([]);
-  const [scheduledEmails, setScheduledEmails] = useState<any[]>([]);
+  // Email history / scheduled emails are managed as opaque records here;
+  // the consumer tabs read fields like `recipient`, `subject`, `status` lazily,
+  // so we keep them as Record<string, unknown> rather than reaching for a
+  // backend schema that itself is `any[]` on the OpenAPI side.
+  const [emailHistory, setEmailHistory] = useState<Record<string, unknown>[]>(
+    []
+  );
+  const [scheduledEmails, setScheduledEmails] = useState<
+    Record<string, unknown>[]
+  >([]);
   const [loadingEmailHistory, setLoadingEmailHistory] = useState(false);
   const [loadingScheduledEmails, setLoadingScheduledEmails] = useState(false);
   const [emailHistoryPagination, setEmailHistoryPagination] = useState({
@@ -305,13 +314,13 @@ export function AdminManagementInterface({
   // Scholarship Email Template states
   const [scholarshipEmailTab, setScholarshipEmailTab] = useState("system");
   const [scholarshipEmailTemplates, setScholarshipEmailTemplates] = useState<
-    any[]
+    Record<string, unknown>[]
   >([]);
   const [loadingScholarshipTemplates, setLoadingScholarshipTemplates] =
     useState(false);
   const [currentScholarshipTemplate, setCurrentScholarshipTemplate] =
-    useState<any>(null);
-  const [myScholarships, setMyScholarships] = useState<any[]>([]);
+    useState<Record<string, unknown> | null>(null);
+  const [myScholarships, setMyScholarships] = useState<ScholarshipType[]>([]);
 
   // 歷史申請相關狀態
   const [historicalApplications, setHistoricalApplications] = useState<
@@ -441,7 +450,7 @@ export function AdminManagementInterface({
 
   // 使用 useCallback 來確保 onPermissionChange 捕獲最新的狀態
   const handlePermissionChange = useCallback(
-    (permissions: any[]) => {
+    (permissions: ScholarshipPermission[]) => {
       // 更新該用戶的獎學金權限
       const userId = editingUser?.id;
       if (userId) {
@@ -1217,7 +1226,13 @@ export function AdminManagementInterface({
         .split(",")
         .map(role => role.trim().toUpperCase())
         .join(",");
-      const params: any = {
+      const params: {
+        page: number;
+        size: number;
+        roles: string;
+        search?: string;
+        role?: string;
+      } = {
         page: userPagination.page,
         size: userPagination.size,
         roles: rolesParam,
@@ -1826,7 +1841,10 @@ export function AdminManagementInterface({
   };
 
   // Update scholarship type when child component modifies it
-  const handleScholarshipTypeUpdate = (id: number, updates: Partial<any>) => {
+  const handleScholarshipTypeUpdate = (
+    id: number,
+    updates: Partial<ScholarshipType>
+  ) => {
     setScholarshipTypes(prev =>
       prev.map(type => (type.id === id ? { ...type, ...updates } : type))
     );
