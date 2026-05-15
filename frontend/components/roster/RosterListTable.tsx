@@ -52,12 +52,20 @@ interface Period {
 interface RosterListTableProps {
   periods: Period[];
   configId: number;
+  /**
+   * Roster cycle from the parent schedule (monthly | semi_yearly | yearly).
+   * Required — previously this was hardcoded to "monthly" when generating
+   * rosters, which silently mislabelled rosters generated against
+   * semi-yearly / yearly schedules. See PR #507.
+   */
+  rosterCycle: string;
   onRosterGenerated?: () => void;
 }
 
 export function RosterListTable({
   periods,
   configId,
+  rosterCycle,
   onRosterGenerated,
 }: RosterListTableProps) {
   const [selectedPeriod, setSelectedPeriod] = useState<Period | null>(null);
@@ -157,7 +165,7 @@ export function RosterListTable({
         body: JSON.stringify({
           scholarship_configuration_id: configId,
           period_label: period.label,
-          roster_cycle: "monthly", // TODO: Get from schedule
+          roster_cycle: rosterCycle,
           academic_year: parseInt(period.label.split("-")[0]),
           student_verification_enabled: true,
           auto_export_excel: true,

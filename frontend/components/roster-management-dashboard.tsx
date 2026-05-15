@@ -289,6 +289,7 @@ export function RosterManagementDashboard() {
                     <RosterListTable
                       periods={cycleData.periods}
                       configId={selectedConfig.id}
+                      rosterCycle={selectedSchedule.roster_cycle}
                       onRosterGenerated={refetchCycleData}
                     />
                   )}
