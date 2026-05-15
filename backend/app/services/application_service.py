@@ -15,6 +15,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.cache import invalidate as cache_invalidate
 from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFoundError, ValidationError
+from app.core.metrics import scholarship_applications_total
 from app.core.schema_validation import serialize_value
 from app.models.application import Application, ApplicationStatus, ReviewStatus
 from app.models.enums import Semester
@@ -538,6 +539,12 @@ class ApplicationService:
         self.db.add(application)
         await self.db.commit()
         await self.db.refresh(application)
+
+        # Business metric: count the application by the status it was
+        # created in (draft for save-as-draft, submitted for direct
+        # submission). Mirrors what _submit also emits so dashboards can
+        # decompose the total either way (issue #159).
+        scholarship_applications_total.labels(status=application.status).inc()
 
         # Clone fixed documents (like bank account proof) for both draft and submitted applications
         # This ensures that fixed documents are available for preview and progress calculation
@@ -1246,6 +1253,13 @@ class ApplicationService:
         application.status_name = ScholarshipI18n.get_application_status_text(ApplicationStatus.submitted.value)
         application.submitted_at = datetime.now(timezone.utc)
         application.updated_at = datetime.now(timezone.utc)
+
+        # Business metric: increment submitted counter so the Scholarship
+        # System Overview dashboard panel for new submissions starts
+        # reflecting real KPIs (issue #159).
+        scholarship_applications_total.labels(
+            status=ApplicationStatus.submitted.value
+        ).inc()
 
         # Load user profile once (reused for auto-assign professor and email notification)
         user_profile_stmt = select(UserProfile).where(UserProfile.user_id == application.user_id)
