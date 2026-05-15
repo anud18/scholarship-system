@@ -259,4 +259,4 @@ async def get_student_sis_data(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Failed to fetch student data from SIS: {str(e)}"
-        )
+        ) from e

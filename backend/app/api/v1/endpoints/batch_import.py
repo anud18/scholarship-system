@@ -138,7 +138,7 @@ async def upload_batch_import_data(
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail=f"檔案結構驗證失敗: {str(e)}",
-        )
+        ) from e
 
     # Parse and validate
     normalized_semester = (semester.strip() if isinstance(semester, str) else semester) or None

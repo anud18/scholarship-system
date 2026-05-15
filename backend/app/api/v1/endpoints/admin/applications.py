@@ -385,7 +385,7 @@ async def assign_professor_to_application(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND if isinstance(e, NotFoundError) else status.HTTP_403_FORBIDDEN,
             detail=str(e),
-        )
+        ) from e
     except SQLAlchemyError as e:
         logger.error(f"Database error assigning professor: {str(e)}")
         raise HTTPException(

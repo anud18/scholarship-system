@@ -80,7 +80,7 @@ async def get_all_configurations(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve configurations: {str(e)}"
-        )
+        ) from e
 
 
 _ALLOWED_DOC_KEYS = {"regulations_url", "sample_document_url"}
@@ -247,7 +247,7 @@ async def get_system_doc_file(
         )
         file_content = response.read()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"無法取得文件: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"無法取得文件: {str(e)}") from e
 
     content_type = "application/pdf"
     if object_name.endswith(".doc"):
@@ -329,7 +329,7 @@ async def get_configuration(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve configuration: {str(e)}"
-        )
+        ) from e
 
 
 @router.post("")
@@ -389,7 +389,7 @@ async def create_configuration(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create configuration: {str(e)}"
-        )
+        ) from e
 
 
 @router.put("/{id}")
@@ -457,7 +457,7 @@ async def update_configuration(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update configuration: {str(e)}"
-        )
+        ) from e
 
 
 @router.delete("/{id}")
@@ -489,7 +489,7 @@ async def delete_configuration(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete configuration: {str(e)}"
-        )
+        ) from e
 
 
 @router.post("/validate")
@@ -520,7 +520,7 @@ async def validate_configuration(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to validate configuration: {str(e)}"
-        )
+        ) from e
 
 
 @router.get("/categories")
@@ -610,4 +610,4 @@ async def get_configuration_audit_logs(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve audit logs: {str(e)}"
-        )
+        ) from e

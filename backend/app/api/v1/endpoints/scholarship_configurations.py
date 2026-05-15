@@ -518,7 +518,7 @@ async def get_colleges(current_user: User = Depends(require_admin), db: AsyncSes
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve colleges: {str(e)}"
-        )
+        ) from e
 
 
 @router.get("/scholarship-types")
@@ -582,7 +582,7 @@ async def get_scholarship_types(current_user: User = Depends(require_staff), db:
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve scholarship types: {str(e)}"
-        )
+        ) from e
 
 
 @router.get("/overview/{period}")
@@ -718,7 +718,7 @@ async def get_quota_overview(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve quota overview: {str(e)}"
-        )
+        ) from e
 
 
 # CRUD Endpoints for ScholarshipConfiguration Management
@@ -908,7 +908,7 @@ async def get_scholarship_configuration(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve configuration: {str(e)}"
-        )
+        ) from e
 
 
 @router.put("/configurations/{id}")
@@ -1328,7 +1328,7 @@ async def list_scholarship_configurations(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to list configurations: {str(e)}"
-        )
+        ) from e
 
 
 # Whitelist Management Endpoints

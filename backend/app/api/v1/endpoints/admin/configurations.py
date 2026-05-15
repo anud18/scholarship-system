@@ -181,7 +181,7 @@ async def create_configuration(
         return {"success": True, "message": f"Configuration '{config.key}' created successfully", "data": response_data}
 
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except SQLAlchemyError as e:
         logger.error(f"Database error creating configuration: {str(e)}")
         raise HTTPException(
@@ -358,7 +358,7 @@ async def delete_configuration(
         return {"success": True, "message": f"Configuration '{key}' deleted successfully", "data": key}
 
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except SQLAlchemyError as e:
         logger.error(f"Database error deleting configuration: {str(e)}")
         raise HTTPException(
