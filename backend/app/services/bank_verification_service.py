@@ -817,4 +817,4 @@ class BankVerificationService:
         except Exception as e:
             # Rollback on any error
             await self.db.rollback()
-            raise ValueError(f"Failed to process manual review: {str(e)}") from e
+            raise ValueError("Failed to process manual review") from e

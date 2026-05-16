@@ -811,7 +811,7 @@ class CollegeReviewService:
         except (RankingNotFoundError, RankingModificationError):
             raise  # Re-raise specific exceptions
         except Exception as e:
-            raise BusinessLogicError(f"Failed to finalize ranking {ranking_id}: {str(e)}") from e
+            raise BusinessLogicError(f"Failed to finalize ranking {ranking_id}") from e
 
     async def unfinalize_ranking(self, ranking_id: int) -> CollegeRanking:
         """Unfinalize a ranking (makes it editable again)"""
@@ -842,7 +842,7 @@ class CollegeReviewService:
         except (RankingNotFoundError, RankingModificationError):
             raise  # Re-raise specific exceptions
         except Exception as e:
-            raise BusinessLogicError(f"Failed to unfinalize ranking {ranking_id}: {str(e)}") from e
+            raise BusinessLogicError(f"Failed to unfinalize ranking {ranking_id}") from e
 
     async def get_quota_status(
         self,
