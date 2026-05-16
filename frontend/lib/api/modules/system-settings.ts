@@ -65,12 +65,14 @@ export function createSystemSettingsApi() {
       category?: string,
       includeSensitive?: boolean
     ): Promise<ApiResponse<SystemConfiguration[]>> => {
-      const response = await (typedClient.raw.GET as any)('/api/v1/system-settings', {
+      // Schema marks `category` as a strict enum but the frontend filter
+      // accepts any string (categories are dynamic, fetched via getCategories()).
+      const response = await typedClient.raw.GET('/api/v1/system-settings', {
         params: {
           query: {
             category,
             include_sensitive: includeSensitive,
-          },
+          } as never,
         },
       });
       return toApiResponse(response);
@@ -102,8 +104,10 @@ export function createSystemSettingsApi() {
     createConfiguration: async (
       configData: SystemConfigurationCreate
     ): Promise<ApiResponse<SystemConfiguration>> => {
-      const response = await (typedClient.raw.POST as any)('/api/v1/system-settings', {
-        body: configData,
+      // Schema requires `allow_empty: boolean` (server-side default), but
+      // local SystemConfigurationCreate keeps it optional for callers.
+      const response = await typedClient.raw.POST('/api/v1/system-settings', {
+        body: configData as never,
       });
       return toApiResponse<SystemConfiguration>(response);
     },
@@ -118,7 +122,7 @@ export function createSystemSettingsApi() {
     ): Promise<ApiResponse<SystemConfiguration>> => {
       const response = await typedClient.raw.PUT('/api/v1/system-settings/{id}', {
         params: { path: { id: key } },
-        body: configData as any, // Categories are dynamic (fetched via getCategories()), cannot be static enum
+        body: configData as never, // Categories are dynamic (fetched via getCategories()), cannot be static enum
       });
       return toApiResponse<SystemConfiguration>(response);
     },
@@ -131,7 +135,7 @@ export function createSystemSettingsApi() {
       configData: SystemConfigurationValidation
     ): Promise<ApiResponse<ConfigurationValidationResult>> => {
       const response = await typedClient.raw.POST('/api/v1/system-settings/validate', {
-        body: configData as any, // Data types are dynamic (fetched via getDataTypes()), cannot be static enum
+        body: configData as never, // Data types are dynamic (fetched via getDataTypes()), cannot be static enum
       });
       return toApiResponse<ConfigurationValidationResult>(response);
     },
@@ -196,8 +200,8 @@ export function createSystemSettingsApi() {
         sample_document_url_filename?: string;
       }>
     > => {
-      const response = await (typedClient.raw.GET as any)(
-        "/api/v1/system-settings/public-docs"
+      const response = await typedClient.raw.GET(
+        '/api/v1/system-settings/public-docs'
       );
       return toApiResponse(response);
     },

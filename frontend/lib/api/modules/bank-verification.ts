@@ -137,7 +137,7 @@ export function createBankVerificationApi() {
       forceRecheck: boolean = false
     ): Promise<ApiResponse<BankVerificationResult>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/bank-verification', {
-        body: { application_id: applicationId, force_recheck: forceRecheck } as any,
+        body: { application_id: applicationId, force_recheck: forceRecheck },
       });
       return toApiResponse<BankVerificationResult>(response);
     },
@@ -151,7 +151,7 @@ export function createBankVerificationApi() {
       forceRecheck: boolean = false
     ): Promise<ApiResponse<BankVerificationBatchResult>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/bank-verification/batch', {
-        body: { application_ids: applicationIds, force_recheck: forceRecheck } as any,
+        body: { application_ids: applicationIds, force_recheck: forceRecheck },
       });
       return toApiResponse<BankVerificationBatchResult>(response);
     },
@@ -164,7 +164,7 @@ export function createBankVerificationApi() {
       reviewData: ManualBankReviewRequest
     ): Promise<ApiResponse<ManualBankReviewResult>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/bank-verification/manual-review', {
-        body: reviewData as any,
+        body: reviewData,
       });
       return toApiResponse<ManualBankReviewResult>(response);
     },
@@ -177,7 +177,7 @@ export function createBankVerificationApi() {
       applicationIds: number[]
     ): Promise<ApiResponse<BatchVerificationAsyncResponse>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/bank-verification/batch-async', {
-        body: { application_ids: applicationIds } as any,
+        body: { application_ids: applicationIds } as never,
       });
       return toApiResponse<BatchVerificationAsyncResponse>(response);
     },
