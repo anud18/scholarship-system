@@ -28,7 +28,7 @@ type ApplicationCreate = {
   gpa?: number;
   // Dynamic application fields (bank_account, contact_phone, ...) are bag-passed
   // through this index signature. Tightened from `any` to `unknown` so the
-  // typed-client `body: applicationData as any` cast at the call site (lines
+  // typed-client `body: applicationData as never` cast at the call site (lines
   // ~85 / ~274) is the only remaining widening — `unknown` here means callers
   // can't accidentally read a dynamic field as a typed value without checking.
   [key: string]: unknown;
@@ -87,7 +87,7 @@ export function createApplicationsApi() {
     ): Promise<ApiResponse<Application>> => {
       const response = await typedClient.raw.POST('/api/v1/applications', {
         params: { query: isDraft ? { is_draft: true } : undefined },
-        body: applicationData as any, // Frontend includes dynamic fields via [key: string]: any
+        body: applicationData as never, // Dynamic fields via [key: string]: unknown bypass strict schema
       });
       return toApiResponse<Application>(response);
     },
@@ -115,7 +115,7 @@ export function createApplicationsApi() {
     ): Promise<ApiResponse<Application>> => {
       const response = await typedClient.raw.PUT('/api/v1/applications/{id}', {
         params: { path: { id } },
-        body: applicationData as any, // Partial<ApplicationCreate> makes all fields optional for updates
+        body: applicationData as never, // Partial<ApplicationCreate> makes all fields optional for updates
       });
       return toApiResponse<Application>(response);
     },
@@ -136,7 +136,7 @@ export function createApplicationsApi() {
     ): Promise<ApiResponse<ApplicationStatusUpdateResponse>> => {
       const response = await typedClient.raw.PUT('/api/v1/applications/{id}/status', {
         params: { path: { id } },
-        body: statusData as any,
+        body: statusData,
       });
       return toApiResponse<ApplicationStatusUpdateResponse>(response);
     },
@@ -151,7 +151,7 @@ export function createApplicationsApi() {
     ): Promise<ApiResponse<ApplicationStatusUpdateResponse>> => {
       const response = await typedClient.raw.PUT('/api/v1/applications/{id}/status', {
         params: { path: { id } },
-        body: statusData as any,
+        body: statusData,
       });
       return toApiResponse<ApplicationStatusUpdateResponse>(response);
     },
@@ -276,7 +276,7 @@ export function createApplicationsApi() {
     ): Promise<ApiResponse<Application>> => {
       const response = await typedClient.raw.POST('/api/v1/applications', {
         params: { query: { is_draft: true } },
-        body: applicationData as any, // Frontend includes dynamic fields via [key: string]: any
+        body: applicationData as never, // Dynamic fields via [key: string]: unknown bypass strict schema
       });
 
       const apiResponse = toApiResponse<Application>(response);
@@ -310,7 +310,7 @@ export function createApplicationsApi() {
           review_stage: reviewStage,
           recommendation,
           ...(selectedAwards ? { selected_awards: selectedAwards } : {}),
-        } as any,
+        } as never,
       });
       return toApiResponse<Application>(response);
     },
@@ -354,7 +354,7 @@ export function createApplicationsApi() {
         '/api/v1/applications/{application_id}/document-requests',
         {
           params: { path: { application_id: applicationId } },
-          body: requestData as any,
+          body: requestData,
         }
       );
       return toApiResponse<unknown>(response);
