@@ -296,10 +296,6 @@ async def create_application(
         ) from e
     except Exception as e:
         logger.exception("Unexpected error during application creation")
-        import traceback
-
-        error_trace = traceback.format_exc()
-        logger.debug(f"Full traceback: {error_trace}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
