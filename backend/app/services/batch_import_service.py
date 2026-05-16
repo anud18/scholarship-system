@@ -624,9 +624,10 @@ class BatchImportService:
                         logger.warning(
                             f"SIS API unavailable for student {student_id}. Creating user with batch import data."
                         )
-                    except Exception as e:
-                        logger.error(
-                            f"Error fetching SIS data for student {student_id}: {e}. Creating user with batch import data."
+                    except Exception:
+                        logger.exception(
+                            "Error fetching SIS data for student %s. Creating user with batch import data.",
+                            student_id,
                         )
 
                     new_user = User(
@@ -800,10 +801,10 @@ class BatchImportService:
                         f"SIS API unavailable or student not found for {student_id}: {e}. "
                         "Creating application without student snapshot."
                     )
-                except Exception as e:
-                    logger.error(
-                        f"Error fetching student snapshot for {student_id}: {e}. "
-                        "Creating application without student snapshot."
+                except Exception:
+                    logger.exception(
+                        "Error fetching student snapshot for %s. Creating application without student snapshot.",
+                        student_id,
                     )
 
                 # Construct submitted_form_data, primarily from batch import, but override dept_code if SIS has it
