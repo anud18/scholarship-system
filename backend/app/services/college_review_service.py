@@ -21,12 +21,11 @@ from sqlalchemy.orm import selectinload
 from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFoundError
 from app.core.metrics import scholarship_reviews_total
 from app.models.application import Application, ApplicationStatus
-from app.models.college_review import CollegeRanking, CollegeRankingItem, QuotaDistribution
+from app.models.college_review import CollegeRanking, CollegeRankingItem
 from app.models.enums import Semester
 from app.models.review import ApplicationReview  # Unified review system
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole
-from app.services.email_automation_service import email_automation_service
 
 func: Any = sa_func
 

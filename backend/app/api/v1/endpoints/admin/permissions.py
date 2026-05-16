@@ -8,8 +8,7 @@ import logging
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -18,7 +17,6 @@ from app.core.security import check_scholarship_permission, get_current_user, re
 from app.db.deps import get_db
 from app.models.scholarship import ScholarshipType
 from app.models.user import AdminScholarship, User, UserRole
-from app.schemas.common import ApiResponse
 
 logger = logging.getLogger(__name__)
 
