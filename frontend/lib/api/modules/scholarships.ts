@@ -50,6 +50,9 @@ export function createScholarshipsApi() {
      * Type-safe: Response array inferred from OpenAPI
      */
     getCombined: async (): Promise<ApiResponse<ScholarshipType[]>> => {
+      // Path is not in the generated OpenAPI schema (orphan endpoint, see
+      // issue #665). The function-cast bypasses typed-route inference.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const response = await (typedClient.raw.GET as any)('/api/v1/scholarships/combined/list', {});
       return toApiResponse<ScholarshipType[]>(response);
     },
@@ -78,6 +81,9 @@ export function createScholarshipsApi() {
         application_end_date?: string;
       }>;
     }): Promise<ApiResponse<ScholarshipType>> => {
+      // Path is not in the generated OpenAPI schema (orphan endpoint, see
+      // issue #665). The function-cast bypasses typed-route inference.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const response = await (typedClient.raw.POST as any)('/api/v1/scholarships/combined/phd', {
         body: data,
       });
