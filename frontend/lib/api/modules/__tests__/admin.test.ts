@@ -225,19 +225,18 @@ describe("createAdminApi", () => {
 
   // ─── Scholarship audit trail uses TEMPLATE-LITERAL URL (NOT path) ─
 
-  it("getScholarshipAuditTrail builds URL via template literal (NOT openapi path template)", async () => {
-    // Pin DOCUMENTED-QUIRK: this method uses backtick template
-    // literal to interpolate scholarshipIdentifier into URL.
-    // Distinct from most other methods which use openapi-fetch
-    // path templates ({scholarship_code}). Pin so refactor doesn't
-    // collide with backend route registration.
+  it("getScholarshipAuditTrail uses typed-route {scholarship_identifier} path param", async () => {
+    // Pin: scholarshipIdentifier flows through params.path now that the
+    // generated OpenAPI schema includes this endpoint (was template-literal
+    // before, see #707). Backend route is /admin/scholarships/{scholarship_identifier}/audit-trail.
     mockedRaw.GET.mockResolvedValueOnce({});
     const api = createAdminApi();
     await api.getScholarshipAuditTrail("nstc", "status_change", 50, 0);
     expect(mockedRaw.GET).toHaveBeenCalledWith(
-      "/api/v1/admin/scholarships/nstc/audit-trail",
+      "/api/v1/admin/scholarships/{scholarship_identifier}/audit-trail",
       {
         params: {
+          path: { scholarship_identifier: "nstc" },
           query: { action_filter: "status_change", limit: 50, offset: 0 },
         },
       }
