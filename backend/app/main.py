@@ -295,7 +295,7 @@ async def health_check():
         # Get logger instance for this function
         health_logger = logging.getLogger(__name__)
         try:
-            health_logger.error("Health check failed: %s", exc)
+            health_logger.exception("Health check failed")
         except Exception:
             # Fallback logging if logger fails
             print(
