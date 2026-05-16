@@ -125,9 +125,6 @@ async def get_professor_review(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Professor review not found") from exc
     except Exception as e:
         logger.exception("Error fetching professor review")
-        import traceback
-
-        logger.error(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while fetching review",
@@ -208,9 +205,6 @@ async def submit_professor_review(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except Exception as e:
         logger.exception("Error submitting professor review")
-        import traceback
-
-        logger.error(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while submitting review",
@@ -289,9 +283,6 @@ async def update_professor_review(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review not found") from exc
     except Exception as e:
         logger.exception("Error updating professor review")
-        import traceback
-
-        logger.error(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while updating review",

@@ -623,9 +623,6 @@ async def get_user_application_review(
 
     except Exception as e:
         logger.exception("Error fetching user review")
-        import traceback
-
-        logger.error(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while fetching review",

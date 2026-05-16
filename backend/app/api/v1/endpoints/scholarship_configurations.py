@@ -179,11 +179,9 @@ async def get_available_semesters(
 
     except Exception as e:
         import logging
-        import traceback
 
         logger = logging.getLogger(__name__)
         logger.error(f"Error in get_available_semesters: {type(e).__name__}: {str(e)}", exc_info=True)
-        logger.error(f"Full traceback: {traceback.format_exc()}")
 
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
