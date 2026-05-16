@@ -145,19 +145,19 @@ def _generate_payment_roster_inner(
 
     except RosterAlreadyExistsError as e:
         # Roster already exists for this configuration/period
-        logger.warning(f"Roster already exists: {e}")
+        logger.warning("Roster already exists", exc_info=True)
         db.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
     except RosterLockedError as e:
         # Trying to regenerate a locked roster
-        logger.warning(f"Roster is locked: {e}")
+        logger.warning("Roster is locked", exc_info=True)
         db.rollback()
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
 
     except RosterNotFoundError as e:
         # Referenced roster not found (for regeneration)
-        logger.warning(f"Roster not found: {e}")
+        logger.warning("Roster not found", exc_info=True)
         db.rollback()
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
@@ -196,7 +196,7 @@ def _generate_payment_roster_inner(
 
     except ValueError as e:
         # Validation errors (missing data, invalid parameters)
-        logger.warning(f"Roster generation validation error: {e}")
+        logger.warning("Roster generation validation error", exc_info=True)
         db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -665,7 +665,7 @@ async def preview_roster_students(
                         student_info["has_fresh_data"] = bool(fresh_student_data)
 
                 except Exception as e:
-                    logger.warning(f"Verification failed for student {student_id_number}: {e}")
+                    logger.warning(f"Verification failed for student {student_id_number}", exc_info=True)
                     student_info["verification_status"] = "error"
                     student_info["verification_message"] = str(e)
                     summary["verification_stats"]["api_errors"] += 1
@@ -680,8 +680,8 @@ async def preview_roster_students(
                 student_info["is_eligible"] = eligibility_result.get("is_eligible", True)
                 student_info["failed_rules"] = eligibility_result.get("failed_rules", [])
                 student_info["warning_rules"] = eligibility_result.get("warning_rules", [])
-            except Exception as e:
-                logger.warning(f"Eligibility validation failed for application {application.id}: {e}")
+            except Exception:
+                logger.warning(f"Eligibility validation failed for application {application.id}", exc_info=True)
                 student_info["is_eligible"] = True  # Don't exclude on validation error
 
             # Validation Step 4: Bank account check
@@ -1635,8 +1635,8 @@ async def download_roster_excel(
                     },
                 )
 
-            except Exception as e:
-                logger.warning(f"MinIO download failed, falling back to local file: {e}")
+            except Exception:
+                logger.warning("MinIO download failed, falling back to local file", exc_info=True)
                 use_minio = False
 
         if not use_minio or not (hasattr(roster, "minio_object_name") and roster.minio_object_name):

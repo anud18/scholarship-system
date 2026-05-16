@@ -58,7 +58,7 @@ async def get_quota_status(
         return ApiResponse(success=True, message="Quota status retrieved successfully", data=quota_status)
 
     except ValueError as e:
-        logger.warning(f"Invalid quota status parameters: {str(e)}")
+        logger.warning("Invalid quota status parameters", exc_info=True)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid parameters") from e
     except CollegeReviewError as e:
         logger.exception("College review error retrieving quota status")

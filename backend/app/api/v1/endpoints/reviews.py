@@ -540,10 +540,10 @@ async def submit_application_review(
         # Re-raise FastAPI HTTPException as-is (preserves status code and detail)
         raise
     except ValueError as e:
-        logger.warning(f"Invalid review data for application {application_id}: {str(e)}")
+        logger.warning(f"Invalid review data for application {application_id}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid review data") from e
     except PermissionError as e:
-        logger.warning(f"Permission denied for review creation by user {current_user.id}: {str(e)}")
+        logger.warning(f"Permission denied for review creation by user {current_user.id}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to review this application"
         ) from e

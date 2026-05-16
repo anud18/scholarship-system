@@ -998,12 +998,12 @@ async def upload_application_document(
     if previous_object and previous_object != object_name:
         try:
             minio_service.client.remove_object(minio_service.default_bucket, previous_object)
-        except Exception as exc:
+        except Exception:
             logger.warning(
-                "Failed to remove orphaned MinIO object %s for application %s: %s",
+                "Failed to remove orphaned MinIO object %s for application %s",
                 previous_object,
                 application_id,
-                exc,
+                exc_info=True,
             )
 
     return {
@@ -1136,12 +1136,12 @@ async def delete_application_document(
     if previous_object:
         try:
             minio_service.client.remove_object(minio_service.default_bucket, previous_object)
-        except Exception as exc:
+        except Exception:
             logger.warning(
-                "Failed to remove MinIO object %s after delete for application %s: %s",
+                "Failed to remove MinIO object %s after delete for application %s",
                 previous_object,
                 application_id,
-                exc,
+                exc_info=True,
             )
 
     return {"success": True, "message": "申請文件已刪除", "data": None}

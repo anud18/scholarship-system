@@ -1433,8 +1433,8 @@ async def delete_batch_import(
         try:
             minio_service = MinIOService()
             minio_service.delete_file(bucket_name=settings.minio_bucket, object_name=batch_import.file_path)
-        except Exception as e:
-            logger.warning(f"Failed to delete batch import file from MinIO: {e}")
+        except Exception:
+            logger.warning("Failed to delete batch import file from MinIO", exc_info=True)
             # Continue with batch deletion even if MinIO deletion fails
 
     # Delete batch import record
