@@ -102,7 +102,7 @@ export function ApplicationFormDataDisplay({
           typeof fieldData === "object" &&
           "value" in fieldData
         ) {
-          const value = (fieldData as any).value;
+          const value = (fieldData as { value: unknown }).value;
 
           // 跳過空值、files 欄位和 agree_terms
           if (
