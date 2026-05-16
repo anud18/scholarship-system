@@ -267,15 +267,6 @@ export interface ScholarshipType {
 /**
  * Whitelist student info
  */
-export interface WhitelistStudentInfo {
-  student_id: number | null;
-  nycu_id: string;
-  name: string | null;
-  sub_type: string;
-  note?: string | null;
-  is_registered?: boolean;
-}
-
 /**
  * Whitelist response
  */
@@ -486,31 +477,6 @@ export interface SystemConfiguration {
   updated_at?: string;
 }
 
-export interface SystemConfiguration {
-  id: number;
-  key: string;
-  value: string;
-  category:
-    | "FEATURES"
-    | "SECURITY"
-    | "EMAIL"
-    | "DATABASE"
-    | "API_KEYS"
-    | "FILE_STORAGE"
-    | "NOTIFICATION"
-    | "OCR"
-    | "INTEGRATIONS";
-  data_type: "string" | "integer" | "float" | "boolean" | "json";
-  is_sensitive: boolean;
-  is_readonly: boolean;
-  description?: string;
-  validation_regex?: string;
-  default_value?: string;
-  last_modified_by?: number;
-  created_at: string;
-  updated_at?: string;
-}
-
 export interface SystemConfigurationCreate {
   key: string;
   value: string;
@@ -588,34 +554,6 @@ export interface BankVerificationResult {
   processed_at: string;
 }
 
-export interface BankVerificationResult {
-  application_id: number;
-  verification_status: "verified" | "failed" | "partial" | "no_document";
-  verification_details: {
-    account_number?: {
-      form_value: string;
-      ocr_value: string;
-      similarity: number;
-      match: boolean;
-    };
-    account_holder?: {
-      form_value: string;
-      ocr_value: string;
-      similarity: number;
-      match: boolean;
-    };
-    branch_name?: {
-      form_value: string;
-      ocr_value: string;
-      similarity: number;
-      match: boolean;
-    };
-  };
-  overall_confidence: number;
-  recommendations: string[];
-  processed_at: string;
-}
-
 export interface BankVerificationBatchResult {
   total_applications: number;
   processed_count: number;
@@ -626,37 +564,6 @@ export interface BankVerificationBatchResult {
 }
 
 // === Professor-Student Relationship Types === //
-export interface ProfessorStudentRelationship {
-  id: number;
-  professor_id: number;
-  student_id: number;
-  relationship_type:
-    | "advisor"
-    | "supervisor"
-    | "committee_member"
-    | "co_advisor";
-  status: "active" | "inactive" | "pending" | "terminated";
-  start_date: string;
-  end_date?: string;
-  notes?: string;
-  created_at: string;
-  updated_at: string;
-  professor?: {
-    id: number;
-    name: string;
-    nycu_id?: string;
-    email?: string;
-    department?: string;
-  };
-  student?: {
-    id: number;
-    name: string;
-    student_no?: string;
-    email?: string;
-    department?: string;
-  };
-}
-
 export interface ProfessorStudentRelationship {
   id: number;
   professor_id: number;
@@ -893,39 +800,6 @@ export interface UserStats {
 }
 
 // Application Fields Configuration interfaces
-export interface ApplicationField {
-  id: number;
-  scholarship_type: string;
-  field_name: string;
-  field_label: string;
-  field_label_en?: string;
-  field_type: string;
-  is_required: boolean;
-  placeholder?: string;
-  placeholder_en?: string;
-  max_length?: number;
-  min_value?: number;
-  max_value?: number;
-  step_value?: number;
-  field_options?: Array<{ value: string; label: string; label_en?: string }>;
-  display_order: number;
-  is_active: boolean;
-  help_text?: string;
-  help_text_en?: string;
-  validation_rules?: Record<string, any>;
-  conditional_rules?: Record<string, any>;
-  include_in_college_export?: boolean;
-  export_column_label?: string | null;
-  created_at: string;
-  updated_at: string;
-  created_by?: number;
-  updated_by?: number;
-  // Fixed field properties
-  is_fixed?: boolean;
-  prefill_value?: string;
-  existing_file_url?: string;
-}
-
 export interface ApplicationField {
   id: number;
   scholarship_type: string;
@@ -1199,18 +1073,6 @@ export interface Workflow {
   updated_at: string;
 }
 
-export interface Workflow {
-  id: string;
-  name: string;
-  version: string;
-  status: "active" | "draft" | "inactive";
-  lastModified: string;
-  steps: number;
-  description?: string;
-  created_at: string;
-  updated_at: string;
-}
-
 // Legacy alias. Both DashboardStats and SystemStats describe the same
 // `GET /api/v1/admin/dashboard/stats` response (see issue #642). New code
 // should use DashboardStats directly.
@@ -1299,38 +1161,6 @@ export interface ScholarshipConfigurationFormData {
 }
 
 // User Profile interfaces
-export interface UserProfile {
-  id: number;
-  user_id: number;
-  account_number?: string;
-  account_holder_name?: string;
-  advisor_name?: string;
-  advisor_name_en?: string;
-  advisor_email?: string;
-  advisor_phone?: string;
-  advisor_department?: string;
-  advisor_title?: string;
-  preferred_email?: string;
-  phone_number?: string;
-  mobile_number?: string;
-  current_address?: string;
-  permanent_address?: string;
-  postal_code?: string;
-  emergency_contact_name?: string;
-  emergency_contact_relationship?: string;
-  emergency_contact_phone?: string;
-  preferred_language: string;
-  bio?: string;
-  interests?: string;
-  social_links?: Record<string, string>;
-  profile_photo_url?: string;
-  has_complete_bank_info: boolean;
-  has_advisor_info: boolean;
-  profile_completion_percentage: number;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface UserProfile {
   id: number;
   user_id: number;
