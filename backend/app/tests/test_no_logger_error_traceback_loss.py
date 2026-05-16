@@ -1,24 +1,24 @@
 """
 Source-level regression for the traceback-preservation sweep
-(PRs #574-#588 + #681 + service-layer follow-ups).
+(PRs #574-#588 + #681 + #695 + #696 + service-layer follow-ups).
 
-The sweep replaced every `logger.error(f"...{e}")` (no exc_info) in
-backend/app/ with `logger.exception(...)` or `logger.error(...,
-exc_info=True)` so structured logs capture the full stack trace
-instead of just str(exc). If a future PR re-introduces the pattern
-at ERROR level, this test fails before the change ships.
+The sweep replaced every `logger.error(...)` call that interpolated
+an exception variable with `logger.exception(...)` or
+`logger.error(..., exc_info=True)` so structured logs capture the
+full stack trace instead of just str(exc).
 
-The check is an AST walk: it finds every `logger.error(...)` call
-and verifies that if the first positional arg is an f-string
-referencing `{e}` / `{exc}` / `{str(e)}` / etc., then `exc_info=`
-is also passed (or the call is `logger.exception(...)` which
-implicitly carries exc_info).
+Two syntactic variants are guarded:
+1. **f-string** — `logger.error(f"...: {e}")` (caught by #695)
+2. **positional** — `logger.error("...: %s", e)` (caught by #696)
 
-Scope: ERROR level only. The same pattern at WARNING level is a
-separate (larger, ~47-site) cleanup tracked for a follow-up — for
-many warnings the missing trace is less load-bearing because the
-exception is recoverable and the message itself names the failure
-mode adequately. Tightening WARNING is out of scope here.
+If a future PR re-introduces either pattern at ERROR level without
+`exc_info=True`, this test fails before the change ships.
+
+Scope: ERROR level only. The same pattern at WARNING level was
+swept by PRs #698 + #699 but is not yet CI-guarded here — the
+noise/signal tradeoff differs for WARNING (some recoverable paths
+in `endpoint_decorators.py` intentionally retain f-string form for
+readability since the trace would be noise).
 
 The check runs in <1s. No DB, no fixtures, no HTTP client.
 """
@@ -96,7 +96,30 @@ def _iter_app_files() -> list[Path]:
     return sorted(p for p in APP_DIR.rglob("*.py") if "__pycache__" not in p.parts and p.parts[-2] != "tests")
 
 
-def _scan_file(path: Path) -> list[tuple[str, int, str]]:
+def _has_exception_positional_arg(call: ast.Call) -> bool:
+    """True iff any positional arg (after the format string) is a bare
+    exception variable reference like `logger.error("...", e)` or a
+    `str(e)` wrapper. Catches the pattern fixed by PR #696."""
+    # Skip the first positional arg (the format string itself).
+    for arg in call.args[1:]:
+        if isinstance(arg, ast.Name) and arg.id in LEAK_VARS:
+            return True
+        if (
+            isinstance(arg, ast.Call)
+            and isinstance(arg.func, ast.Name)
+            and arg.func.id == "str"
+            and len(arg.args) == 1
+            and isinstance(arg.args[0], ast.Name)
+            and arg.args[0].id in LEAK_VARS
+        ):
+            return True
+    return False
+
+
+def _scan_file(path: Path) -> list[tuple[str, int, str, str]]:
+    """Return [(handler, lineno, excerpt, kind)] for each violation.
+    `kind` is 'fstring' or 'positional' so the failure message can
+    point at the relevant fix recipe."""
     src = path.read_text()
     tree = ast.parse(src)
     findings = []
@@ -105,32 +128,49 @@ def _scan_file(path: Path) -> list[tuple[str, int, str]]:
             continue
         if _has_exc_info_truthy(node):
             continue
-        if not node.args or not _is_leak_fstring(node.args[0]):
+        if not node.args:
+            continue
+        kind = None
+        if _is_leak_fstring(node.args[0]):
+            kind = "fstring"
+        elif _has_exception_positional_arg(node):
+            kind = "positional"
+        if kind is None:
             continue
         handler = _enclosing_function(node, tree)
         excerpt = ast.unparse(node).splitlines()[0][:120]
-        findings.append((handler, node.lineno, excerpt))
+        findings.append((handler, node.lineno, excerpt, kind))
     return findings
 
 
-def test_no_logger_error_with_exception_fstring_lacks_exc_info():
-    """Every `logger.error(f"...{e}")` call in backend/app/ must also
-    pass `exc_info=True`, or be converted to `logger.exception(...)`.
-    Without one of those, the traceback is discarded — only str(exc)
-    reaches Loki."""
+def test_no_logger_error_traceback_loss():
+    """Every `logger.error(...)` call that interpolates an exception
+    variable (either as f-string `{e}` or as positional `%s`-style
+    arg) must also pass `exc_info=True`, or be converted to
+    `logger.exception(...)`. Without one of those, the traceback is
+    discarded — only str(exc) reaches Loki.
+
+    PRs #574-#588 + #681 + #695 swept the f-string variant.
+    PR #696 swept the positional-arg variant.
+    This invariant catches regressions of either."""
     violations = []
     for path in _iter_app_files():
         rel = path.relative_to(APP_DIR.parent)
-        for handler, lineno, excerpt in _scan_file(path):
-            violations.append(f"{rel}:{lineno}  {handler}()  {excerpt!r}")
+        for handler, lineno, excerpt, kind in _scan_file(path):
+            violations.append(f"{rel}:{lineno}  [{kind}]  {handler}()  {excerpt!r}")
 
     if violations:
         msg = (
-            'Found `logger.error(f"...{e/exc/str(e)}")` calls lacking '
-            "`exc_info=True`. PRs #574-#588 + #681 swept this pattern; "
-            "do not re-introduce it. Use `logger.exception(...)` (which "
-            "implicitly carries exc_info=True) so the full traceback "
-            "lands in structured logs instead of just str(exc).\n\n"
+            "Found `logger.error(...)` calls that interpolate an exception "
+            "variable but lack `exc_info=True`. The trace gets discarded — "
+            "only str(exc) reaches structured logs. Two variants both "
+            "forbidden:\n"
+            '  - [fstring]    logger.error(f"...: {e}")    → '
+            "logger.exception(...) (drop the {e})\n"
+            '  - [positional] logger.error("...: %s", e)   → '
+            "logger.exception(...) (drop the e)\n"
+            "Either form, the fix is the same: use logger.exception() so "
+            "exc_info is carried automatically.\n\n"
             "Violations:\n  " + "\n  ".join(violations)
         )
         pytest.fail(msg)
