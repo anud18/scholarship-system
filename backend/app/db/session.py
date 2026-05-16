@@ -92,12 +92,12 @@ async def handle_cached_statement_error(session: AsyncSession, operation_func, *
 
     try:
         return await operation_func(*args, **kwargs)
-    except InvalidCachedStatementError as e:
+    except InvalidCachedStatementError:
         # Log the error for monitoring
         import logging
 
         logger = logging.getLogger(__name__)
-        logger.warning(f"Cached statement plan invalidated, retrying operation: {e}")
+        logger.warning("Cached statement plan invalidated, retrying operation", exc_info=True)
 
         # Invalidate the connection and get a fresh one
         await session.invalidate()

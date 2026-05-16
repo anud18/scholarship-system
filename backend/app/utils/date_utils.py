@@ -47,8 +47,8 @@ def parse_date_field(date_input: Optional[Union[str, datetime]]) -> Optional[dat
             # Fallback to dateutil parser for other formats
             else:
                 return dateutil.parser.parse(date_input)
-        except (ValueError, TypeError) as e:
-            logger.warning(f"Failed to parse date string '{date_input}': {e}")
+        except (ValueError, TypeError):
+            logger.warning("Failed to parse date string %r", date_input, exc_info=True)
             # Try dateutil as last resort
             try:
                 return dateutil.parser.parse(date_input)

@@ -73,8 +73,8 @@ def get_rate_limiter() -> RateLimiter:
 
             redis_url = settings.redis_url
             _rate_limiter = RateLimiter(redis_url)
-        except Exception as e:
-            logger.warning(f"Could not initialize rate limiter: {e}")
+        except Exception:
+            logger.warning("Could not initialize rate limiter", exc_info=True)
             # Create with default URL as fallback
             _rate_limiter = RateLimiter()
     return _rate_limiter
