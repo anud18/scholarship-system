@@ -961,7 +961,9 @@ class CollegeReviewService:
                                 f"  Sub-type {sub_type_code}: {numeric_quota} quota for college {college_code}"
                             )
                     except (TypeError, ValueError) as e:
-                        logger.warning(f"Invalid quota value for {sub_type_code}/{college_code}: {quota_value} ({e})")
+                        logger.warning(
+                            f"Invalid quota value for {sub_type_code}/{college_code}: {quota_value} ()", exc_info=True
+                        )
                         pass
 
             if total_college_quota > 0:

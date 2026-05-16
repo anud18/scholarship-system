@@ -1116,7 +1116,9 @@ class ApplicationService:
         try:
             await self._clone_user_profile_documents(application, current_user)
         except Exception as e:
-            logger.warning(f"Failed to clone bank account proof document for application {application.app_id}: {e}")
+            logger.warning(
+                f"Failed to clone bank account proof document for application {application.app_id}", exc_info=True
+            )
             import traceback
 
             traceback.print_exc()
@@ -1129,9 +1131,11 @@ class ApplicationService:
             )
             try:
                 await self._clone_user_profile_documents(application, current_user)
-            except Exception as e:
+            except Exception:
                 logger.warning(
-                    f"Failed to re-clone fixed documents after subtype change for application {application.app_id}: {e}"
+                    "Failed to re-clone fixed documents after subtype change for application %s",
+                    application.app_id,
+                    exc_info=True,
                 )
 
         return application

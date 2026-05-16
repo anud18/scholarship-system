@@ -717,8 +717,8 @@ class RosterService:
                         logger.info(
                             f"Filtering semester-based scholarship for semester '{semester}' (month {month_int})"
                         )
-                except ValueError as e:
-                    logger.warning(f"Invalid month in period_label: {month} ({e})")
+                except ValueError:
+                    logger.warning("Invalid month in period_label: %s", month, exc_info=True)
         else:
             # 學年制獎學金：不應用學期過濾
             # 申請的 semester 應該是 NULL
@@ -1344,7 +1344,7 @@ class RosterService:
 
                 except Exception as e:
                     potential_issues.append(f"處理申請 {application.id} 時發生錯誤: {str(e)}")
-                    logger.warning(f"Error processing application {application.id} in dry run: {e}")
+                    logger.warning(f"Error processing application {application.id} in dry run", exc_info=True)
 
             # 5. 產生驗證摘要
             validation_summary = {

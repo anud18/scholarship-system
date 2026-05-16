@@ -121,7 +121,7 @@ class ScholarshipService:
                                 }
                                 student_data_cache["student_term"][cache_key] = current_student_data
                         except Exception as e:
-                            logger.warning(f"Student term API unavailable, continuing with basic data: {e}")
+                            logger.warning("Student term API unavailable, continuing with basic data", exc_info=True)
                             # Mark term data as API error (system issue)
                             current_student_data = {
                                 **student_data,

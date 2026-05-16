@@ -550,9 +550,11 @@ async def init_scheduler():
                     logger.info(f"Email processor interval configured to {interval_seconds} seconds")
                 else:
                     logger.info(f"Using default email processor interval: {interval_seconds} seconds")
-        except Exception as e:
+        except Exception:
             logger.warning(
-                f"Failed to read email processor interval from settings, using default {interval_seconds}s: {e}"
+                "Failed to read email processor interval from settings, using default %ss",
+                interval_seconds,
+                exc_info=True,
             )
 
         roster_scheduler.scheduler.add_job(

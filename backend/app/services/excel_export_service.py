@@ -788,7 +788,7 @@ class ExcelExportService:
                 db.close()
 
         except Exception as e:
-            logger.warning(f"Failed to get advisor name for student {student.id}: {e}")
+            logger.warning(f"Failed to get advisor name for student {student.id}", exc_info=True)
 
         return ""
 
