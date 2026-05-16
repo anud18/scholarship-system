@@ -222,7 +222,7 @@ async def process_due_emails(
         stats = await email_service.process_due_emails(db=db, batch_size=batch_size)
         return {"success": True, "message": "Emails processed successfully", "data": EmailProcessingStats(**stats)}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to process emails: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Failed to process emails") from e
 
 
 @router.get("/categories")
@@ -288,7 +288,7 @@ async def get_test_mode_status(*, db: AsyncSession = Depends(get_db), current_us
         return ApiResponse(success=True, message="Test mode status retrieved successfully", data=test_config)
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get test mode status: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Failed to get test mode status") from e
 
 
 @router.post("/test-mode/enable")
@@ -356,7 +356,7 @@ async def enable_test_mode(
 
     except Exception as e:
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to enable test mode: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Failed to enable test mode") from e
 
 
 @router.post("/test-mode/disable")
@@ -407,7 +407,7 @@ async def disable_test_mode(
 
     except Exception as e:
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to disable test mode: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Failed to disable test mode") from e
 
 
 @router.get("/test-mode/audit")
@@ -457,7 +457,7 @@ async def get_test_mode_audit_logs(
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get audit logs: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Failed to get audit logs") from e
 
 
 @router.delete("/test-mode/audit-logs/cleanup")
@@ -507,7 +507,7 @@ async def cleanup_old_audit_logs(
 
     except Exception as e:
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to cleanup audit logs: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Failed to cleanup audit logs") from e
 
 
 # ========== Manual Test Email Endpoints ==========
@@ -548,6 +548,12 @@ async def send_test_email(
                 request.body_override if request.body_override else template.body_template.format(**request.test_data)
             )
         except KeyError as e:
+            # SECURITY: intentional exception detail in client response.
+            # KeyError.args[0] is the missing template-variable name (e.g.
+            # 'student_name'). The user needs that name to fix their
+            # test_data payload — generic "missing variable" gives them
+            # nothing actionable. The exception is from str.format() so
+            # there's no path-traversal / DB / auth context to leak.
             raise HTTPException(
                 status_code=400, detail=f"模板變數缺失：{str(e)}。請確保 test_data 包含所有必需的變數"
             ) from e
@@ -736,7 +742,7 @@ async def get_email_templates(*, db: AsyncSession = Depends(get_db), current_use
         return ApiResponse(success=True, message=f"成功獲取 {len(template_list)} 個郵件模板", data=template_list)
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"獲取郵件模板失敗: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="獲取郵件模板失敗") from e
 
 
 # ========== React Email Template Endpoints ==========
@@ -759,7 +765,7 @@ async def get_react_email_templates(*, current_user: User = Depends(require_admi
 
     except Exception as e:
         logger.exception("Failed to scan React Email templates")
-        raise HTTPException(status_code=500, detail=f"獲取 React Email 模板失敗: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="獲取 React Email 模板失敗") from e
 
 
 @router.get("/react-email-templates/{template_name}")
@@ -787,7 +793,7 @@ async def get_react_email_template(*, template_name: str, current_user: User = D
         raise
     except Exception as e:
         logger.exception(f"Failed to get React Email template {template_name}")
-        raise HTTPException(status_code=500, detail=f"獲取模板失敗: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="獲取模板失敗") from e
 
 
 @router.get("/react-email-templates/{template_name}/source")
@@ -819,4 +825,4 @@ async def get_react_email_template_source(*, template_name: str, current_user: U
         raise
     except Exception as e:
         logger.exception(f"Failed to get React Email template source {template_name}")
-        raise HTTPException(status_code=500, detail=f"獲取模板源碼失敗: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="獲取模板源碼失敗") from e
