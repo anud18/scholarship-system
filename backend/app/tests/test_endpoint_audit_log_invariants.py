@@ -91,6 +91,18 @@ AUDIT_LOG_INVARIANTS = [
     ),
     # --- PR #663: admin/students directed PII access ---
     ("app.api.v1.endpoints.admin.students", "get_student_detail", 663),
+    # --- PR #501: scholarship-rule write endpoints (top-level module) ---
+    ("app.api.v1.endpoints.scholarship_rules", "bulk_rule_operation", 501),
+    ("app.api.v1.endpoints.scholarship_rules", "copy_rules", 501),
+    # --- PR #502: users.py destructive endpoints ---
+    ("app.api.v1.endpoints.users", "update_user_college", 502),
+    ("app.api.v1.endpoints.users", "bulk_assign_scholarships", 502),
+    # --- PR #503: pre_authorization access-control ---
+    ("app.api.v1.endpoints.pre_authorization", "assign_scholarship_to_admin", 503),
+    # --- PR #506: scholarship_management bulk admin endpoints ---
+    ("app.api.v1.endpoints.scholarship_management", "simulate_priority_processing", 506),
+    # --- PR #576: email_automation audit logging ---
+    ("app.api.v1.endpoints.email_automation", "toggle_automation_rule", 576),
 ]
 
 
