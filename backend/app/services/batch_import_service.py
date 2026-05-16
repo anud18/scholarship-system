@@ -453,8 +453,12 @@ class BatchImportService:
                         )
                         api_failed = True
                     break
-                except Exception as exc:  # pylint: disable=broad-except
-                    logger.warning("Student API unexpected error for %s: %s", student_id, exc)
+                except Exception:  # pylint: disable=broad-except
+                    logger.warning(
+                        "Student API unexpected error for %s",
+                        student_id,
+                        exc_info=True,
+                    )
                     add_warning(
                         student_id,
                         "student_api_error",
