@@ -53,7 +53,7 @@ async def getUserNotifications(
 
     except Exception as e:
         logger.exception("Failed to fetch notifications for user_id=%s", current_user.id)
-        raise HTTPException(status_code=500, detail=f"獲取通知失敗: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="獲取通知失敗") from e
 
 
 @router.get("/unread-count")
@@ -72,7 +72,7 @@ async def getUnreadNotificationCount(
 
     except Exception as e:
         logger.exception("Failed to fetch unread notification count for user_id=%s", current_user.id)
-        raise HTTPException(status_code=500, detail=f"獲取未讀通知數量失敗: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="獲取未讀通知數量失敗") from e
 
 
 @router.patch("/{notification_id}/read")
@@ -97,7 +97,7 @@ async def markNotificationAsRead(
     except Exception as e:
         await db.rollback()
         logger.exception("Failed to mark notification as read for user_id=%s", current_user.id)
-        raise HTTPException(status_code=500, detail=f"標記通知為已讀失敗: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="標記通知為已讀失敗") from e
 
 
 @router.patch("/mark-all-read")
@@ -119,7 +119,7 @@ async def markAllNotificationsAsRead(
     except Exception as e:
         await db.rollback()
         logger.exception("Failed to mark all notifications as read for user_id=%s", current_user.id)
-        raise HTTPException(status_code=500, detail=f"標記所有通知為已讀失敗: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="標記所有通知為已讀失敗") from e
 
 
 @router.patch("/{notification_id}/dismiss")
@@ -155,7 +155,7 @@ async def dismissNotification(
     except Exception as e:
         await db.rollback()
         logger.exception("Failed to dismiss notification for user_id=%s", current_user.id)
-        raise HTTPException(status_code=500, detail=f"關閉通知失敗: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="關閉通知失敗") from e
 
 
 @router.get("/{notification_id}")
@@ -211,7 +211,7 @@ async def getNotificationDetail(
         raise
     except Exception as e:
         logger.exception("Failed to fetch notification detail for user_id=%s", current_user.id)
-        raise HTTPException(status_code=500, detail=f"獲取通知詳情失敗: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="獲取通知詳情失敗") from e
 
 
 @router.post("/admin/create-system-announcement")
@@ -297,7 +297,7 @@ async def createSystemAnnouncement(
     except Exception as e:
         await db.rollback()
         logger.exception("Failed to create system announcement by user_id=%s", current_user.id)
-        raise HTTPException(status_code=500, detail=f"創建系統公告失敗: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="創建系統公告失敗") from e
 
 
 @router.post("/admin/create-test-notifications")
@@ -384,7 +384,7 @@ async def createTestNotifications(current_user: User = Depends(get_current_user)
     except Exception as e:
         await db.rollback()
         logger.exception("Failed to create test notifications by user_id=%s", current_user.id)
-        raise HTTPException(status_code=500, detail=f"創建測試通知失敗: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="創建測試通知失敗") from e
 
 
 # === Admin Announcement Management Endpoints === #
@@ -481,7 +481,7 @@ async def getAllAnnouncements(
 
     except Exception as e:
         logger.exception("Failed to list system announcements for user_id=%s", current_user.id)
-        raise HTTPException(status_code=500, detail=f"獲取系統公告列表失敗: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="獲取系統公告列表失敗") from e
 
 
 @router.get("/admin/announcements/{announcement_id}")
@@ -549,7 +549,7 @@ async def getAnnouncement(
         raise
     except Exception as e:
         logger.exception("Failed to fetch system announcement detail for user_id=%s", current_user.id)
-        raise HTTPException(status_code=500, detail=f"獲取系統公告詳情失敗: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="獲取系統公告詳情失敗") from e
 
 
 @router.post("/admin/announcements")
@@ -635,7 +635,7 @@ async def createAnnouncement(
     except Exception as e:
         await db.rollback()
         logger.exception("Failed to create system announcement by user_id=%s", current_user.id)
-        raise HTTPException(status_code=500, detail=f"創建系統公告失敗: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="創建系統公告失敗") from e
 
 
 @router.put("/admin/announcements/{announcement_id}")
@@ -753,7 +753,7 @@ async def updateAnnouncement(
     except Exception as e:
         await db.rollback()
         logger.exception("Failed to update system announcement by user_id=%s", current_user.id)
-        raise HTTPException(status_code=500, detail=f"更新系統公告失敗: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="更新系統公告失敗") from e
 
 
 @router.delete("/admin/announcements/{announcement_id}")
@@ -828,4 +828,4 @@ async def deleteAnnouncement(
     except Exception as e:
         await db.rollback()
         logger.exception("Failed to delete system announcement by user_id=%s", current_user.id)
-        raise HTTPException(status_code=500, detail=f"刪除系統公告失敗: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="刪除系統公告失敗") from e
