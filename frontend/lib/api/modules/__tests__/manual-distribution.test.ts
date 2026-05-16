@@ -170,31 +170,40 @@ describe("createManualDistributionApi", () => {
 
   // ─── getHistory (path-templated scholarship_type_id) ──────────────
 
-  it("getHistory templates scholarship_type_id directly into URL path", async () => {
-    // Pin: scholarship_type_id is in PATH (not query) for history
-    // — uses backtick template string. Pin so refactor moving it
-    // to query breaks the admin history view.
+  it("getHistory uses typed-route path param for scholarship_type_id", async () => {
+    // Pin: scholarship_type_id is in PATH (not query) for history.
+    // Uses openapi-fetch typed-route form: literal {scholarship_type_id}
+    // in the URL string, real value via params.path. Pin so refactor
+    // moving it to query breaks the admin history view.
     mockedRaw.GET.mockResolvedValueOnce({});
     const api = createManualDistributionApi();
     await api.getHistory(7, 114, "first");
     expect(mockedRaw.GET).toHaveBeenCalledWith(
-      "/api/v1/manual-distribution/7/history",
-      { params: { query: { academic_year: 114, semester: "first" } } }
+      "/api/v1/manual-distribution/{scholarship_type_id}/history",
+      {
+        params: {
+          path: { scholarship_type_id: 7 },
+          query: { academic_year: 114, semester: "first" },
+        },
+      }
     );
   });
 
   // ─── restoreFromHistory ───────────────────────────────────────────
 
-  it("restoreFromHistory POSTs /{id}/restore with history_id body", async () => {
+  it("restoreFromHistory POSTs typed-route /{id}/restore with history_id body", async () => {
     // Pin SECURITY: restore replays a historical allocation —
-    // path-templated scholarship_type_id + body with history_id.
-    // Pin so refactor doesn't mismatch scholarship vs. history.
+    // typed-route scholarship_type_id in params.path + body with
+    // history_id. Pin so refactor doesn't mismatch scholarship vs. history.
     mockedRaw.POST.mockResolvedValueOnce({});
     const api = createManualDistributionApi();
     await api.restoreFromHistory(7, { history_id: 42 });
     expect(mockedRaw.POST).toHaveBeenCalledWith(
-      "/api/v1/manual-distribution/7/restore",
-      { body: { history_id: 42 } }
+      "/api/v1/manual-distribution/{scholarship_type_id}/restore",
+      {
+        params: { path: { scholarship_type_id: 7 } },
+        body: { history_id: 42 },
+      }
     );
   });
 
