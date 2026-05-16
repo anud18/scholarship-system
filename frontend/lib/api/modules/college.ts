@@ -135,7 +135,7 @@ export function createCollegeApi() {
       data: { ranking_name: string }
     ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.PUT(
-        "/api/v1/college-review/rankings/{ranking_id}" as any,
+        "/api/v1/college-review/rankings/{ranking_id}",
         {
           params: { path: { ranking_id: rankingId } },
           body: data,
@@ -186,7 +186,7 @@ export function createCollegeApi() {
       rankingId: number
     ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.POST(
-        "/api/v1/college-review/rankings/{ranking_id}/unfinalize" as any,
+        "/api/v1/college-review/rankings/{ranking_id}/unfinalize",
         {
           params: { path: { ranking_id: rankingId } },
         }
@@ -207,7 +207,7 @@ export function createCollegeApi() {
       }>
     ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.POST(
-        "/api/v1/college-review/rankings/{ranking_id}/import-excel" as any,
+        "/api/v1/college-review/rankings/{ranking_id}/import-excel",
         {
           params: { path: { ranking_id: rankingId } },
           body: importData,
@@ -224,7 +224,7 @@ export function createCollegeApi() {
       rankingId: number
     ): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.GET(
-        "/api/v1/college-review/rankings/{ranking_id}/distribution-details" as any,
+        "/api/v1/college-review/rankings/{ranking_id}/distribution-details",
         {
           params: { path: { ranking_id: rankingId } },
         }
@@ -241,7 +241,7 @@ export function createCollegeApi() {
       rankingId: number
     ): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.GET(
-        "/api/v1/college-review/rankings/{ranking_id}/roster-status" as any,
+        "/api/v1/college-review/rankings/{ranking_id}/roster-status",
         {
           params: { path: { ranking_id: rankingId } },
         }
@@ -319,7 +319,7 @@ export function createCollegeApi() {
       rankingId: number
     ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.DELETE(
-        "/api/v1/college-review/rankings/{ranking_id}" as any,
+        "/api/v1/college-review/rankings/{ranking_id}",
         {
           params: { path: { ranking_id: rankingId } },
         }
@@ -345,12 +345,15 @@ export function createCollegeApi() {
         needs_special_attention?: boolean;
       }
     ): Promise<ApiResponse<any>> => {
+      // Path is not in the generated OpenAPI schema (orphan/legacy route);
+      // the `as never` cast bypasses typed-route inference while keeping the
+      // call working at runtime. See issue #665.
       const response = await typedClient.raw.POST(
-        "/api/v1/college-review/applications/{application_id}/review" as any,
+        "/api/v1/college-review/applications/{application_id}/review" as never,
         {
           params: { path: { application_id: applicationId } },
           body: reviewData,
-        }
+        } as never
       );
       return toApiResponse<any>(response);
     },
@@ -366,7 +369,7 @@ export function createCollegeApi() {
       }>
     > => {
       const response = await typedClient.raw.GET(
-        "/api/v1/college-review/sub-type-translations" as any,
+        "/api/v1/college-review/sub-type-translations",
         {}
       );
       return toApiResponse<{
@@ -388,7 +391,7 @@ export function createCollegeApi() {
       } | null>
     > => {
       const response = await typedClient.raw.GET(
-        "/api/v1/college-review/managed-college" as any,
+        "/api/v1/college-review/managed-college",
         {}
       );
       return toApiResponse<{
@@ -426,7 +429,7 @@ export function createCollegeApi() {
      */
     getSubTypes: async (applicationId: number): Promise<ApiResponse<string[]>> => {
       const response = await typedClient.raw.GET(
-        "/api/v1/reviews/applications/{application_id}/sub-types" as any,
+        "/api/v1/reviews/applications/{application_id}/sub-types",
         {
           params: { path: { application_id: applicationId } },
         }
@@ -441,7 +444,7 @@ export function createCollegeApi() {
      */
     getReview: async (applicationId: number): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.GET(
-        "/api/v1/reviews/applications/{application_id}/review" as any,
+        "/api/v1/reviews/applications/{application_id}/review",
         {
           params: { path: { application_id: applicationId } },
         }
@@ -465,7 +468,7 @@ export function createCollegeApi() {
       }
     ): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.POST(
-        "/api/v1/reviews/applications/{application_id}/review" as any,
+        "/api/v1/reviews/applications/{application_id}/review",
         {
           params: { path: { application_id: applicationId } },
           body: reviewData,
