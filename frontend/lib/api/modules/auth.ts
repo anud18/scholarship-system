@@ -98,7 +98,10 @@ export function createAuthApi() {
       full_name: string;
     }): Promise<ApiResponse<User>> => {
       const response = await typedClient.raw.POST('/api/v1/auth/register', {
-        body: userData as any, // TODO: Update OpenAPI schema for registration endpoint
+        // TODO: Update OpenAPI schema for registration endpoint — until then,
+        // `as never` documents the intentional widening (schema generator
+        // hasn't yet captured the register-body shape).
+        body: userData as never,
       });
 
       return toApiResponse<User>(response);
