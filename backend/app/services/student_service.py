@@ -270,7 +270,7 @@ class StudentService:
                         term_error_message = f"No data for {academic_year} in both term 1 and 2"
 
             except Exception as e:
-                logger.warning(f"Failed to fetch term data for {student_code}: {e}")
+                logger.warning(f"Failed to fetch term data for {student_code}", exc_info=True)
                 term_data_status = "error"
                 term_error_message = str(e)
 

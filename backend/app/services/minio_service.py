@@ -110,8 +110,8 @@ class MinIOService:
 
                 self.client.set_bucket_policy(bucket_name, json.dumps(policy))
 
-        except Exception as e:
-            logger.warning(f"Failed to set bucket policy for {bucket_name}: {e}")
+        except Exception:
+            logger.warning(f"Failed to set bucket policy for {bucket_name}", exc_info=True)
 
     def upload_roster_file(
         self,

@@ -796,10 +796,11 @@ class BatchImportService:
                     student_data = await self.student_service.get_student_snapshot(
                         student_id, academic_year=str(academic_year), semester=semester
                     )
-                except (NotFoundError, ServiceUnavailableError) as e:
+                except (NotFoundError, ServiceUnavailableError):
                     logger.warning(
-                        f"SIS API unavailable or student not found for {student_id}: {e}. "
-                        "Creating application without student snapshot."
+                        "SIS API unavailable or student not found for %s. Creating application without student snapshot.",
+                        student_id,
+                        exc_info=True,
                     )
                 except Exception:
                     logger.exception(

@@ -673,7 +673,7 @@ class ManualDistributionService:
                 self.db.add(history)
                 await self.db.flush()
         except Exception as e:
-            logger.warning(f"Failed to record allocation history: {e}")
+            logger.warning("Failed to record allocation history", exc_info=True)
             # Don't fail the allocation if history recording fails
 
         return {"updated_count": updated_count}
@@ -782,7 +782,7 @@ class ManualDistributionService:
             self.db.add(history)
             await self.db.flush()
         except Exception as e:
-            logger.warning(f"Failed to record finalization history: {e}")
+            logger.warning("Failed to record finalization history", exc_info=True)
             # Don't fail the finalization if history recording fails
 
         return {
@@ -862,8 +862,8 @@ class ManualDistributionService:
             )
             self.db.add(history)
             await self.db.flush()
-        except Exception as e:
-            logger.warning(f"Failed to record restore history: {e}")
+        except Exception:
+            logger.warning("Failed to record restore history", exc_info=True)
 
         return {"restored_count": restored_count}
 
