@@ -447,8 +447,10 @@ async def get_managed_college(
         return ApiResponse(success=True, message="Managed college retrieved successfully", data=managed_college_data)
 
     except Exception as e:
-        logger.error(
-            f"Error retrieving managed college for user {current_user.nycu_id} (ID: {current_user.id}): {str(e)}"
+        logger.exception(
+            "Error retrieving managed college for user %s (ID: %s)",
+            current_user.nycu_id,
+            current_user.id,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve managed college"

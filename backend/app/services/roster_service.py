@@ -1235,9 +1235,12 @@ class RosterService:
                 logger.warning(f"Unknown operator: {operator}")
                 return False
 
-        except (ValueError, TypeError) as e:
-            logger.error(
-                f"Error evaluating condition: actual={actual_value}, operator={operator}, expected={expected_value}, error={e}"
+        except (ValueError, TypeError):
+            logger.exception(
+                "Error evaluating condition: actual=%s, operator=%s, expected=%s",
+                actual_value,
+                operator,
+                expected_value,
             )
             return False
 

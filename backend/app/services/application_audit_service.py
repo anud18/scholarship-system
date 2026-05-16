@@ -619,9 +619,10 @@ class ApplicationAuditService:
 
             return enriched_logs
 
-        except Exception as e:
-            logger.error(
-                f"Failed to retrieve scholarship audit trail for scholarship_type_id {scholarship_type_id}: {e}"
+        except Exception:
+            logger.exception(
+                "Failed to retrieve scholarship audit trail for scholarship_type_id %s",
+                scholarship_type_id,
             )
             return []
 
