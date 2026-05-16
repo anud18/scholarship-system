@@ -526,7 +526,7 @@ async def create_custom_profile(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid profile data: {str(e)}",
+            detail="Invalid profile data",
         ) from e
 
 

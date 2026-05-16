@@ -185,7 +185,7 @@ async def get_available_semesters(
 
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve available semesters: {str(e)}",
+            detail="Failed to retrieve available semesters",
         ) from e
 
 
@@ -372,7 +372,7 @@ async def get_matrix_quota_status(
         logger.error(f"Error in get_matrix_quota_status: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve matrix quota status: {str(e)}",
+            detail="Failed to retrieve matrix quota status",
         ) from e
 
 
@@ -497,7 +497,7 @@ async def update_matrix_quota(
         logger = logging.getLogger(__name__)
         logger.error(f"Error in update_matrix_quota: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update matrix quota: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update matrix quota"
         ) from e
 
 
@@ -515,7 +515,7 @@ async def get_colleges(current_user: User = Depends(require_admin), db: AsyncSes
 
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve colleges: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve colleges"
         ) from e
 
 
@@ -579,7 +579,7 @@ async def get_scholarship_types(current_user: User = Depends(require_staff), db:
 
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve scholarship types: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve scholarship types"
         ) from e
 
 
@@ -715,7 +715,7 @@ async def get_quota_overview(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid period format: {period}") from exc
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve quota overview: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve quota overview"
         ) from e
 
 
@@ -807,7 +807,7 @@ async def create_scholarship_configuration(
     except Exception as e:
         await db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create configuration: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create configuration"
         ) from e
 
 
@@ -905,7 +905,7 @@ async def get_scholarship_configuration(
         raise
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve configuration: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve configuration"
         ) from e
 
 
@@ -1058,7 +1058,7 @@ async def update_scholarship_configuration(
         logger = logging.getLogger(__name__)
         logger.error(f"Error in update_scholarship_configuration: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update configuration: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update configuration"
         ) from e
 
 
@@ -1108,7 +1108,7 @@ async def deactivate_scholarship_configuration(
     except Exception as e:
         await db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to deactivate configuration: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to deactivate configuration"
         ) from e
 
 
@@ -1195,7 +1195,7 @@ async def duplicate_scholarship_configuration(
     except Exception as e:
         await db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to duplicate configuration: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to duplicate configuration"
         ) from e
 
 
@@ -1325,7 +1325,7 @@ async def list_scholarship_configurations(
 
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to list configurations: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to list configurations"
         ) from e
 
 

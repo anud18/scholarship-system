@@ -383,7 +383,7 @@ async def get_sub_type_translations(
         logger.exception("Error retrieving sub-type translations")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve sub-type translations: {str(e)}",
+            detail="Failed to retrieve sub-type translations",
         ) from e
 
 
@@ -451,5 +451,5 @@ async def get_managed_college(
             f"Error retrieving managed college for user {current_user.nycu_id} (ID: {current_user.id}): {str(e)}"
         )
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve managed college: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve managed college"
         ) from e

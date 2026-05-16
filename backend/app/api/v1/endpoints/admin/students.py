@@ -316,5 +316,5 @@ async def get_student_sis_data(
     except Exception as e:
         logger.exception("admin SIS-data lookup failed", extra=log_extra)
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Failed to fetch student data from SIS: {str(e)}"
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Failed to fetch student data from SIS"
         ) from e
