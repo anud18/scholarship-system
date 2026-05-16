@@ -400,7 +400,7 @@ class EmailService:
         except Exception as e:
             status = EmailStatus.failed
             error_message = str(e)
-            logger.error("Failed to send email to %s: %s", primary_recipient, e)
+            logger.exception("Failed to send email to %s", primary_recipient)
             # Re-raise the exception so callers can handle it
             raise
 
@@ -484,8 +484,8 @@ class EmailService:
                 await audit_db.commit()
                 logger.debug(f"Email history logged for {recipient_email}")
 
-            except Exception as e:
-                logger.error("Failed to log email history: %s", e)
+            except Exception:
+                logger.exception("Failed to log email history")
                 await audit_db.rollback()
                 # Don't re-raise - audit logging failure shouldn't break email sending
 
