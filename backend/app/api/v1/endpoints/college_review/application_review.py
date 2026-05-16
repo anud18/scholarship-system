@@ -104,10 +104,10 @@ async def get_applications_for_review(
     except HTTPException:
         raise
     except ValueError as e:
-        logger.warning(f"Invalid request parameters for college applications: {str(e)}")
+        logger.warning("Invalid request parameters for college applications", exc_info=True)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid request parameters") from e
     except ReviewPermissionError as e:
-        logger.warning(f"Permission denied for college applications access: {str(e)}")
+        logger.warning("Permission denied for college applications access", exc_info=True)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except DatabaseError as e:
         logger.exception("Database error retrieving applications")

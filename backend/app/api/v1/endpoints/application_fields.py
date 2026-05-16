@@ -355,8 +355,8 @@ async def upload_document_example(
                 minio_service.client.remove_object(
                     bucket_name=minio_service.default_bucket, object_name=document.example_file_url
                 )
-            except Exception as e:
-                logger.warning(f"Failed to delete old example file: {str(e)}")
+            except Exception:
+                logger.warning("Failed to delete old example file", exc_info=True)
 
         # Update database with new object name
         document.example_file_url = object_name

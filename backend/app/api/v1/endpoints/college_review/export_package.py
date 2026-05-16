@@ -74,7 +74,7 @@ async def export_application_package(
             college_code=college_code,
         )
     except ValueError as e:
-        logger.warning("export-package rejected: %s", e, extra=log_extra)
+        logger.warning("export-package rejected: %s", extra=log_extra, exc_info=True)
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.exception("export-package zip generation failed", extra=log_extra)

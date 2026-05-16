@@ -188,7 +188,7 @@ async def get_rankings(
         )
 
     except ValueError as e:
-        logger.warning(f"Invalid query parameters for rankings: {str(e)}")
+        logger.warning("Invalid query parameters for rankings", exc_info=True)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid query parameters") from e
     except CollegeReviewError as e:
         logger.exception("College review error retrieving rankings")
@@ -255,7 +255,7 @@ async def create_ranking(
     except NotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except ValueError as e:
-        logger.warning(f"Invalid ranking creation data: {str(e)}")
+        logger.warning("Invalid ranking creation data", exc_info=True)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ranking data") from e
     except CollegeReviewError as e:
         logger.exception("College review error creating ranking")
@@ -560,7 +560,7 @@ async def get_ranking(
     except HTTPException:
         raise
     except RankingNotFoundError as e:
-        logger.warning(f"Ranking not found: {str(e)}")
+        logger.warning("Ranking not found", exc_info=True)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except CollegeReviewError as e:
         logger.exception("College review error retrieving ranking")
@@ -652,13 +652,13 @@ async def update_ranking_order(
     except NotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except RankingNotFoundError as e:
-        logger.warning(f"Ranking not found for order update: {str(e)}")
+        logger.warning("Ranking not found for order update", exc_info=True)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except RankingModificationError as e:
-        logger.warning(f"Cannot modify ranking: {str(e)}")
+        logger.warning("Cannot modify ranking", exc_info=True)
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except InvalidRankingDataError as e:
-        logger.warning(f"Invalid ranking data: {str(e)}")
+        logger.warning("Invalid ranking data", exc_info=True)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except CollegeReviewError as e:
         logger.exception("College review error during ranking update")
@@ -753,10 +753,10 @@ async def finalize_ranking(
     except NotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except RankingNotFoundError as e:
-        logger.warning(f"Ranking not found for finalization: {str(e)}")
+        logger.warning("Ranking not found for finalization", exc_info=True)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except RankingModificationError as e:
-        logger.warning(f"Cannot finalize ranking: {str(e)}")
+        logger.warning("Cannot finalize ranking", exc_info=True)
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except CollegeReviewError as e:
         logger.exception("College review error during finalization")
@@ -849,10 +849,10 @@ async def unfinalize_ranking(
     except NotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except RankingNotFoundError as e:
-        logger.warning(f"Ranking not found for unfinalization: {str(e)}")
+        logger.warning("Ranking not found for unfinalization", exc_info=True)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except RankingModificationError as e:
-        logger.warning(f"Cannot unfinalize ranking: {str(e)}")
+        logger.warning("Cannot unfinalize ranking", exc_info=True)
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except CollegeReviewError as e:
         logger.exception("College review error during unfinalization")

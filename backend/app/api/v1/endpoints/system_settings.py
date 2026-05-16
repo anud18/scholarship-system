@@ -196,11 +196,11 @@ async def upload_system_doc(
     if previous_object and previous_object != object_name:
         try:
             minio_service.client.remove_object(minio_service.default_bucket, previous_object)
-        except Exception as exc:
+        except Exception:
             logger.warning(
-                "Failed to remove orphaned MinIO system doc %s: %s",
+                "Failed to remove orphaned MinIO system doc %s",
                 previous_object,
-                exc,
+                exc_info=True,
             )
 
     return {
