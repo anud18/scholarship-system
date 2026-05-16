@@ -129,7 +129,7 @@ async def get_scholarship_dashboard(
                 "actor_user_id": current_user.id,
             },
         )
-        raise HTTPException(status_code=500, detail=f"Failed to get dashboard data: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Failed to get dashboard data") from e
 
 
 @router.get("/types/available")

@@ -59,7 +59,7 @@ async def get_quota_status(
 
     except ValueError as e:
         logger.warning(f"Invalid quota status parameters: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid parameters: {str(e)}") from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid parameters") from e
     except CollegeReviewError as e:
         logger.exception("College review error retrieving quota status")
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
@@ -391,5 +391,5 @@ async def get_distribution_details(
         logger.exception("Error retrieving distribution details")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve distribution details: {str(e)}",
+            detail="Failed to retrieve distribution details",
         ) from e

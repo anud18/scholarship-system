@@ -245,7 +245,7 @@ def _generate_payment_roster_inner(
             logger.error(f"Error updating roster status to FAILED: {update_error}")
             db.rollback()
 
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"造冊產生失敗: {str(e)}") from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="造冊產生失敗") from e
 
 
 @router.post("/generate")

@@ -1073,7 +1073,7 @@ async def get_application_document_file(
             "Failed to fetch application document from MinIO",
             extra={"application_id": application.id, "object_name": object_name},
         )
-        raise HTTPException(status_code=500, detail=f"無法取得文件: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="無法取得文件") from e
 
     content_type = "application/octet-stream"
     lower = object_name.lower()

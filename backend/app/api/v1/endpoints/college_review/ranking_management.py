@@ -189,9 +189,7 @@ async def get_rankings(
 
     except ValueError as e:
         logger.warning(f"Invalid query parameters for rankings: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid query parameters: {str(e)}"
-        ) from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid query parameters") from e
     except CollegeReviewError as e:
         logger.exception("College review error retrieving rankings")
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
@@ -258,7 +256,7 @@ async def create_ranking(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except ValueError as e:
         logger.warning(f"Invalid ranking creation data: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid ranking data: {str(e)}") from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ranking data") from e
     except CollegeReviewError as e:
         logger.exception("College review error creating ranking")
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
@@ -956,9 +954,7 @@ async def delete_ranking(
         raise
     except Exception as e:
         logger.exception(f"Error deleting ranking {ranking_id}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete ranking: {str(e)}"
-        ) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete ranking") from e
 
 
 @router.post("/rankings/{ranking_id}/import-excel")
@@ -1112,7 +1108,7 @@ async def import_ranking_from_excel(
         logger.exception("Error importing ranking data")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to import ranking data: {str(e)}",
+            detail="Failed to import ranking data",
         ) from e
 
 

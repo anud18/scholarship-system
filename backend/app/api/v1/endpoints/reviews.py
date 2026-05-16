@@ -541,7 +541,7 @@ async def submit_application_review(
         raise
     except ValueError as e:
         logger.warning(f"Invalid review data for application {application_id}: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid review data: {str(e)}") from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid review data") from e
     except PermissionError as e:
         logger.warning(f"Permission denied for review creation by user {current_user.id}: {str(e)}")
         raise HTTPException(
