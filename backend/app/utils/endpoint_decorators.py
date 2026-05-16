@@ -40,6 +40,15 @@ def handle_college_review_errors(func: Callable) -> Callable:
 
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
+        # SECURITY: the four logger.warning(f"...: {str(e)}") calls in this
+        # function intentionally interpolate the exception variable without
+        # exc_info=True. These are recoverable business errors that map to
+        # specific HTTP 4xx responses — the trace would be noise. The
+        # CI invariant test_no_logger_warning_traceback_loss allowlists
+        # ("utils/endpoint_decorators.py", "wrapper") to permit this. If
+        # adding new branches here that follow the same pattern, no
+        # invariant update is needed; if a branch needs a real trace,
+        # add exc_info=True at that single call site.
         try:
             return await func(*args, **kwargs)
 

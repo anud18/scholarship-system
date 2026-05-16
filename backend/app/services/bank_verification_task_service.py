@@ -341,13 +341,13 @@ class BankVerificationTaskService:
             )
             result = await self.db.execute(stmt)
             return result.scalar_one_or_none() is not None
-        except Exception as exc:  # noqa: BLE001
+        except Exception:  # noqa: BLE001
             # Fall through to normal verification on any lookup error — this is
             # an optimisation, not a correctness boundary, so we don't want it
             # to mask real verification work.
             logger.warning(
-                "Skip-check failed for application %s; falling through to full verification: %s",
+                "Skip-check failed for application %s; falling through to full verification",
                 application_id,
-                exc,
+                exc_info=True,
             )
             return False

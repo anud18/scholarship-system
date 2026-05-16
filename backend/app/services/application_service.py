@@ -70,8 +70,8 @@ class ApplicationService:
         try:
             await cache_invalidate("dashboard:")
             await cache_invalidate("quota:")
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("cache invalidation failed (non-fatal): %s", exc)
+        except Exception:  # noqa: BLE001
+            logger.warning("cache invalidation failed (non-fatal)", exc_info=True)
 
     def _serialize_for_json(self, data: Any) -> Any:
         """Serialize data for JSON response"""
@@ -1115,7 +1115,7 @@ class ApplicationService:
         logger.info(f"Cloning bank account proof document for application {application.app_id}")
         try:
             await self._clone_user_profile_documents(application, current_user)
-        except Exception as e:
+        except Exception:
             logger.warning(
                 f"Failed to clone bank account proof document for application {application.app_id}", exc_info=True
             )
