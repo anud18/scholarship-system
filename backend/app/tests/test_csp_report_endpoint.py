@@ -188,7 +188,7 @@ async def test_info_endpoint_includes_endpoint_path():
 async def test_info_endpoint_includes_spec_link():
     # Pin: documentation link to W3C CSP2 spec.
     response = await csp_report_info()
-    assert "w3.org" in response["data"]["specification"]
+    assert response["data"]["specification"] == "https://www.w3.org/TR/CSP2/#reporting"
 
 
 @pytest.mark.asyncio
