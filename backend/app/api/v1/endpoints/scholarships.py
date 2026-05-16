@@ -563,7 +563,7 @@ async def upload_terms_document(
             "Failed to upload terms document",
             extra={"scholarship_type": scholarship_type, "actor_user_id": current_user.id},
         )
-        raise HTTPException(status_code=500, detail=f"Failed to upload terms document: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Failed to upload terms document") from e
 
 
 @router.get("/{scholarship_type}/terms")
@@ -626,7 +626,7 @@ async def get_terms_document(
             "Failed to retrieve terms document",
             extra={"scholarship_type": scholarship_type},
         )
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve terms document: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Failed to retrieve terms document") from e
 
 
 @router.patch("/{id}/whitelist")

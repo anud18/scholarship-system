@@ -79,7 +79,7 @@ async def get_all_configurations(
         }
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve configurations: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve configurations"
         ) from e
 
 
@@ -247,7 +247,7 @@ async def get_system_doc_file(
         )
         file_content = response.read()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"無法取得文件: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="無法取得文件") from e
 
     content_type = "application/pdf"
     if object_name.endswith(".doc"):
@@ -328,7 +328,7 @@ async def get_configuration(
         raise
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve configuration: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve configuration"
         ) from e
 
 
@@ -412,7 +412,7 @@ async def create_configuration(
             extra={"actor_user_id": current_user.id, "config_key": configuration.key},
         )
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create configuration: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create configuration"
         ) from e
 
 
@@ -501,7 +501,7 @@ async def update_configuration(
             extra={"actor_user_id": current_user.id, "config_key": id},
         )
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update configuration: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update configuration"
         ) from e
 
 
@@ -557,7 +557,7 @@ async def delete_configuration(
             extra={"actor_user_id": current_user.id, "config_key": id},
         )
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete configuration: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete configuration"
         ) from e
 
 
@@ -588,7 +588,7 @@ async def validate_configuration(
         }
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to validate configuration: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to validate configuration"
         ) from e
 
 
@@ -678,5 +678,5 @@ async def get_configuration_audit_logs(
         }
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve audit logs: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve audit logs"
         ) from e

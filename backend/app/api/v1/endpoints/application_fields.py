@@ -368,7 +368,7 @@ async def upload_document_example(
     except Exception as e:
         logger.exception("Failed to upload example file")
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"範例文件上傳失敗: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="範例文件上傳失敗") from e
 
 
 @router.get("/documents/{document_id}/example")
@@ -427,7 +427,7 @@ async def get_document_example(
 
     except Exception as e:
         logger.exception("Failed to get example file")
-        raise HTTPException(status_code=500, detail=f"範例文件讀取失敗: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="範例文件讀取失敗") from e
 
 
 @router.delete("/documents/{document_id}/example")
@@ -474,4 +474,4 @@ async def delete_document_example(
     except Exception as e:
         logger.exception("Failed to delete example file")
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"範例文件刪除失敗: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="範例文件刪除失敗") from e
