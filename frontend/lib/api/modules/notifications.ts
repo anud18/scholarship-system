@@ -135,7 +135,7 @@ export function createNotificationsApi() {
       announcementData: AnnouncementCreate
     ): Promise<ApiResponse<NotificationResponse>> => {
       const response = await typedClient.raw.POST('/api/v1/notifications/admin/create-system-announcement', {
-        body: announcementData as any, // Frontend AnnouncementCreate type includes priority field not in schema
+        body: announcementData as never, // Frontend AnnouncementCreate type includes priority field not in schema
       });
       return toApiResponse<NotificationResponse>(response);
     },

@@ -135,7 +135,7 @@ export function createUsersApi() {
       studentData: Record<string, any>
     ): Promise<ApiResponse<StudentInfoResponse>> => {
       const response = await typedClient.raw.PUT('/api/v1/users/student-info', {
-        body: studentData as any,
+        body: studentData as never,
       });
       return toApiResponse<StudentInfoResponse>(response);
     },
@@ -173,7 +173,7 @@ export function createUsersApi() {
      */
     create: async (userData: UserCreate) => {
       const response = await typedClient.raw.POST('/api/v1/users', {
-        body: userData as any, // TypeScript undefined vs Python None/null handling difference
+        body: userData as never, // TypeScript undefined vs Python None/null handling difference
       });
       return toApiResponse<UserResponse>(response);
     },
