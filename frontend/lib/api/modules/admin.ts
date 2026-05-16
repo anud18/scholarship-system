@@ -125,7 +125,7 @@ export function createAdminApi() {
     ): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.PATCH('/api/v1/admin/applications/{id}/status', {
         params: { path: { id: applicationId } },
-        body: { status, review_notes: reviewNotes } as any,
+        body: { status, review_notes: reviewNotes },
       });
       return toApiResponse(response) as ApiResponse<any>;
     },
@@ -247,7 +247,7 @@ export function createAdminApi() {
     ): Promise<ApiResponse<{ items: any[]; total: number }>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/scholarship-email-templates/{scholarship_type_id}/bulk-create', {
         params: { path: { scholarship_type_id: scholarshipTypeId } },
-        body: {} as any,
+        body: {} as never,
       });
       return toApiResponse(response) as ApiResponse<{ items: any[]; total: number }>;
     },
@@ -379,6 +379,12 @@ export function createAdminApi() {
       subType?: string,
       status?: string
     ): Promise<ApiResponse<any[]>> => {
+      // Path is not in the generated OpenAPI schema (orphan endpoint, see
+      // issue #665). The `as any` cast on the GET method bypasses typed-route
+      // inference; the runtime call still works because the FastAPI route
+      // exists. Once #665 cleans up orphan endpoints this can either be
+      // removed or regenerated through the openapi-fetch types.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const response = await (typedClient.raw.GET as any)('/api/v1/admin/scholarships/{scholarship_code}/applications', {
         params: {
           path: { scholarship_code: scholarshipCode },
@@ -422,8 +428,9 @@ export function createAdminApi() {
       limit?: number,
       offset?: number
     ): Promise<ApiResponse<any[]>> => {
-      const response = await (typedClient.raw.GET as any)(`/api/v1/admin/scholarships/${scholarshipIdentifier}/audit-trail`, {
+      const response = await typedClient.raw.GET('/api/v1/admin/scholarships/{scholarship_identifier}/audit-trail', {
         params: {
+          path: { scholarship_identifier: scholarshipIdentifier },
           query: {
             action_filter: actionFilter,
             limit,
@@ -825,7 +832,7 @@ export function createAdminApi() {
     assignProfessor: async (applicationId: number, professorNycuId: string): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.PUT('/api/v1/admin/applications/{id}/assign-professor', {
         params: { path: { id: applicationId } },
-        body: { professor_nycu_id: professorNycuId } as any,
+        body: { professor_nycu_id: professorNycuId },
       });
       return toApiResponse(response) as ApiResponse<any>;
     },
@@ -909,8 +916,13 @@ export function createAdminApi() {
      * Type-safe: Request body validated against OpenAPI
      */
     verifyBankAccount: async (applicationId: number): Promise<ApiResponse<any>> => {
+      // SECURITY: do NOT default force_recheck=true. The generated schema
+      // marks force_recheck as required (because it has a server-side
+      // @default), but emitting it from the client could override a
+      // server-side policy. The `as never` cast keeps the request
+      // server-default-bound rather than over-asserting it here.
       const response = await typedClient.raw.POST('/api/v1/admin/bank-verification', {
-        body: { application_id: applicationId } as any,
+        body: { application_id: applicationId } as never,
       });
       return toApiResponse(response) as ApiResponse<any>;
     },
@@ -920,8 +932,9 @@ export function createAdminApi() {
      * Type-safe: Request body validated against OpenAPI
      */
     verifyBankAccountsBatch: async (applicationIds: number[]): Promise<ApiResponse<any>> => {
+      // SECURITY: see force_recheck note in verifyBankAccount above.
       const response = await typedClient.raw.POST('/api/v1/admin/bank-verification/batch', {
-        body: { application_ids: applicationIds } as any,
+        body: { application_ids: applicationIds } as never,
       });
       return toApiResponse(response) as ApiResponse<any>;
     },
@@ -965,7 +978,7 @@ export function createAdminApi() {
      * Type-safe: Path parameter validated against OpenAPI
      */
     getReviewableSubTypes: async (applicationId: number): Promise<ApiResponse<any[]>> => {
-      const response = await typedClient.raw.GET('/api/v1/reviews/applications/{application_id}/sub-types' as any, {
+      const response = await typedClient.raw.GET('/api/v1/reviews/applications/{application_id}/sub-types', {
         params: { path: { application_id: applicationId } },
       });
       return toApiResponse<any[]>(response);
@@ -976,7 +989,7 @@ export function createAdminApi() {
      * Type-safe: Path parameter validated against OpenAPI
      */
     getApplicationReview: async (applicationId: number): Promise<ApiResponse<any>> => {
-      const response = await typedClient.raw.GET('/api/v1/reviews/applications/{application_id}/review' as any, {
+      const response = await typedClient.raw.GET('/api/v1/reviews/applications/{application_id}/review', {
         params: { path: { application_id: applicationId } },
       });
       return toApiResponse<any>(response);
@@ -996,7 +1009,7 @@ export function createAdminApi() {
         }>;
       }
     ): Promise<ApiResponse<any>> => {
-      const response = await typedClient.raw.POST('/api/v1/reviews/applications/{application_id}/review' as any, {
+      const response = await typedClient.raw.POST('/api/v1/reviews/applications/{application_id}/review', {
         params: { path: { application_id: applicationId } },
         body: reviewData,
       });
