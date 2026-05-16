@@ -105,9 +105,7 @@ async def get_applications_for_review(
         raise
     except ValueError as e:
         logger.warning(f"Invalid request parameters for college applications: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid request parameters: {str(e)}"
-        ) from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid request parameters") from e
     except ReviewPermissionError as e:
         logger.warning(f"Permission denied for college applications access: {str(e)}")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
@@ -221,5 +219,5 @@ async def get_student_preview(
     except Exception as e:
         logger.exception(f"Error retrieving student preview for {student_id}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve student preview: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve student preview"
         ) from e

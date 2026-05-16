@@ -145,7 +145,7 @@ def validate_condition_query(query: Optional[str]) -> None:
         logger.exception("Regex validation error in condition_query")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"condition_query contains invalid pattern that cannot be safely validated: {str(e)}",
+            detail="condition_query contains invalid pattern that cannot be safely validated",
         ) from e
 
     logger.info(f"✓ Query validation passed: {query[:100]}...")
@@ -232,9 +232,7 @@ async def get_automation_rules(
 
     except Exception as e:
         logger.exception("獲取自動化規則失敗")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"獲取自動化規則失敗: {str(e)}"
-        ) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="獲取自動化規則失敗") from e
 
 
 @router.post("")
@@ -312,9 +310,7 @@ async def create_automation_rule(
             extra={"actor_user_id": current_user.id, "rule_name": rule_data.name},
         )
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"創建自動化規則失敗: {str(e)}"
-        ) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="創建自動化規則失敗") from e
 
 
 @router.put("/{rule_id}")
@@ -398,9 +394,7 @@ async def update_automation_rule(
             extra={"actor_user_id": current_user.id, "rule_id": rule_id},
         )
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"更新自動化規則失敗: {str(e)}"
-        ) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="更新自動化規則失敗") from e
 
 
 @router.delete("/{rule_id}")
@@ -440,9 +434,7 @@ async def delete_automation_rule(
             extra={"actor_user_id": current_user.id, "rule_id": rule_id},
         )
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"刪除自動化規則失敗: {str(e)}"
-        ) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="刪除自動化規則失敗") from e
 
 
 @router.patch("/{rule_id}/toggle")
@@ -505,9 +497,7 @@ async def toggle_automation_rule(
             extra={"actor_user_id": current_user.id, "rule_id": rule_id},
         )
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"切換自動化規則狀態失敗: {str(e)}"
-        ) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="切換自動化規則狀態失敗") from e
 
 
 @router.get("/trigger-events")

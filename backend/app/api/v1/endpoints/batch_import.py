@@ -135,10 +135,7 @@ async def upload_batch_import_data(
             # Verify it's a valid CSV/text file
             pd.read_csv(BytesIO(file_content), nrows=0)
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=f"檔案結構驗證失敗: {str(e)}",
-        ) from e
+        raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="檔案結構驗證失敗") from e
 
     # Parse and validate
     normalized_semester = (semester.strip() if isinstance(semester, str) else semester) or None
