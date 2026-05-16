@@ -1395,7 +1395,7 @@ class RosterService:
 
         except Exception as e:
             logger.exception("Dry run failed")
-            raise ValueError(f"預演失敗: {str(e)}") from e
+            raise ValueError("預演失敗") from e
 
     def generate_rosters_from_distribution(
         self,

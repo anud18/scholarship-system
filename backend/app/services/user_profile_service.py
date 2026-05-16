@@ -203,7 +203,7 @@ class UserProfileService:
             try:
                 image_data = base64.b64decode(document_upload.photo_data)
             except Exception as e:
-                raise ValueError(f"Invalid base64 data: {str(e)}") from e
+                raise ValueError("Invalid base64 data") from e
 
             # Verify actual size after decoding
             if len(image_data) > self.MAX_FILE_SIZE:
@@ -261,7 +261,7 @@ class UserProfileService:
                 preview_url = f"/api/v1/user-profiles/files/bank_documents/{object_name.split('/')[-1]}"
 
             except Exception as e:
-                raise ValueError(f"Failed to upload to MinIO: {str(e)}") from e
+                raise ValueError("Failed to upload to MinIO") from e
 
             # Update profile with new document URL
             profile = await self.get_user_profile(user_id)
@@ -289,7 +289,7 @@ class UserProfileService:
             return profile.bank_document_photo_url
 
         except Exception as e:
-            raise ValueError(f"Failed to upload bank document: {str(e)}") from e
+            raise ValueError("Failed to upload bank document") from e
 
     async def upload_bank_document(
         self,
@@ -322,7 +322,7 @@ class UserProfileService:
             try:
                 image_data = base64.b64decode(document_upload.photo_data)
             except Exception as e:
-                raise ValueError(f"Invalid base64 data: {str(e)}") from e
+                raise ValueError("Invalid base64 data") from e
 
             # Verify actual size after decoding (final check)
             if len(image_data) > self.MAX_FILE_SIZE:
@@ -420,7 +420,7 @@ class UserProfileService:
             return profile.bank_document_photo_url
 
         except Exception as e:
-            raise ValueError(f"Failed to upload bank document: {str(e)}") from e
+            raise ValueError("Failed to upload bank document") from e
 
     async def delete_bank_document(self, user_id: int) -> bool:
         """Delete bank document"""
