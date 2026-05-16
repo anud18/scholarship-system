@@ -220,7 +220,7 @@ export function ReviewerDashboard({
             </div>
 
             <div className="flex items-center justify-between">
-              <Badge variant={getStatusColor(app.status) as any}>
+              <Badge variant={getStatusColor(app.status)}>
                 {app.statusName}
               </Badge>
               <span className="text-sm text-muted-foreground">
@@ -397,7 +397,7 @@ export function ReviewerDashboard({
                 <TableCell>{app.gpa}</TableCell>
                 <TableCell>NT$ {app.amount.toLocaleString()}</TableCell>
                 <TableCell>
-                  <Badge variant={getStatusColor(app.status) as any}>
+                  <Badge variant={getStatusColor(app.status)}>
                     {app.statusName}
                   </Badge>
                 </TableCell>

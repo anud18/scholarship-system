@@ -701,7 +701,7 @@ export function EnhancedStudentPortal({
         // 上傳新文件
         for (const [docType, files] of Object.entries(dynamicFileData)) {
           for (const file of files) {
-            if (!(file as any).isUploaded) {
+            if (!(file as File & { isUploaded?: boolean }).isUploaded) {
               await uploadDocument(editingApplication.id, file, docType);
             }
           }
@@ -838,7 +838,7 @@ export function EnhancedStudentPortal({
         // 上傳新文件
         for (const [docType, files] of Object.entries(dynamicFileData)) {
           for (const file of files) {
-            if (!(file as any).isUploaded) {
+            if (!(file as File & { isUploaded?: boolean }).isUploaded) {
               await uploadDocument(editingApplication.id, file, docType);
             }
           }
@@ -854,7 +854,7 @@ export function EnhancedStudentPortal({
           // 上傳文件
           for (const [docType, files] of Object.entries(dynamicFileData)) {
             for (const file of files) {
-              if (!(file as any).isUploaded) {
+              if (!(file as File & { isUploaded?: boolean }).isUploaded) {
                 await uploadDocument(application.id, file, docType);
               }
             }
