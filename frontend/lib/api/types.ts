@@ -800,36 +800,6 @@ export interface UserListResponse {
   student_no?: string;
 }
 
-export interface UserListResponse {
-  id: number;
-  nycu_id: string;
-  email: string;
-  name: string;
-  user_type?: string;
-  status?: string;
-  dept_code?: string;
-  dept_name?: string;
-  college_code?: string; // 系統內學院管理權限
-  role: string;
-  comment?: string;
-  created_at: string;
-  updated_at?: string;
-  last_login_at?: string;
-  raw_data?: {
-    chinese_name?: string;
-    english_name?: string;
-    [key: string]: unknown;
-  };
-  // 向後相容性欄位
-  username?: string;
-  full_name?: string;
-  chinese_name?: string;
-  english_name?: string;
-  is_active?: boolean;
-  is_verified?: boolean;
-  student_no?: string;
-}
-
 export interface UserResponse {
   id: number;
   nycu_id: string;
