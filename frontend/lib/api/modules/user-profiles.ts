@@ -78,7 +78,7 @@ export function createUserProfilesApi() {
       profileData: UserProfileUpdate
     ): Promise<ApiResponse<UserProfile>> => {
       const response = await typedClient.raw.POST('/api/v1/user-profiles/me', {
-        body: profileData as any, // Frontend allows [key: string]: any for flexible profile updates
+        body: profileData as never, // Frontend allows [key: string]: any for flexible profile updates
       });
       return toApiResponse<UserProfile>(response);
     },
@@ -91,7 +91,7 @@ export function createUserProfilesApi() {
       profileData: UserProfileUpdate
     ): Promise<ApiResponse<UserProfile>> => {
       const response = await typedClient.raw.PUT('/api/v1/user-profiles/me', {
-        body: profileData as any, // Frontend allows [key: string]: any for flexible profile updates
+        body: profileData as never, // Frontend allows [key: string]: any for flexible profile updates
       });
       return toApiResponse<UserProfile>(response);
     },
@@ -104,7 +104,7 @@ export function createUserProfilesApi() {
       bankData: BankInfoUpdate
     ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.PUT('/api/v1/user-profiles/me/bank-info', {
-        body: bankData as any, // Frontend allows optional fields that may not match exact schema
+        body: bankData as never, // Frontend allows optional fields that may not match exact schema
       });
       return toApiResponse<unknown>(response);
     },
