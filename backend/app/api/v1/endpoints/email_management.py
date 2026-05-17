@@ -156,6 +156,7 @@ async def approve_scheduled_email(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as exc:
+        logger.exception("Failed to approve email")
         raise HTTPException(status_code=500, detail="Failed to approve email") from exc
 
 
@@ -175,6 +176,7 @@ async def cancel_scheduled_email(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as exc:
+        logger.exception("Failed to cancel email")
         raise HTTPException(status_code=500, detail="Failed to cancel email") from exc
 
 
@@ -201,6 +203,7 @@ async def update_scheduled_email(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as exc:
+        logger.exception("Failed to update scheduled email")
         raise HTTPException(status_code=500, detail="Failed to update scheduled email") from exc
 
 
@@ -222,6 +225,7 @@ async def process_due_emails(
         stats = await email_service.process_due_emails(db=db, batch_size=batch_size)
         return {"success": True, "message": "Emails processed successfully", "data": EmailProcessingStats(**stats)}
     except Exception as e:
+        logger.exception("Failed to process emails")
         raise HTTPException(status_code=500, detail="Failed to process emails") from e
 
 
@@ -288,6 +292,7 @@ async def get_test_mode_status(*, db: AsyncSession = Depends(get_db), current_us
         return ApiResponse(success=True, message="Test mode status retrieved successfully", data=test_config)
 
     except Exception as e:
+        logger.exception("Failed to get test mode status")
         raise HTTPException(status_code=500, detail="Failed to get test mode status") from e
 
 
@@ -356,6 +361,7 @@ async def enable_test_mode(
 
     except Exception as e:
         await db.rollback()
+        logger.exception("Failed to enable test mode")
         raise HTTPException(status_code=500, detail="Failed to enable test mode") from e
 
 
@@ -407,6 +413,7 @@ async def disable_test_mode(
 
     except Exception as e:
         await db.rollback()
+        logger.exception("Failed to disable test mode")
         raise HTTPException(status_code=500, detail="Failed to disable test mode") from e
 
 
@@ -457,6 +464,7 @@ async def get_test_mode_audit_logs(
         )
 
     except Exception as e:
+        logger.exception("Failed to get audit logs")
         raise HTTPException(status_code=500, detail="Failed to get audit logs") from e
 
 
@@ -507,6 +515,7 @@ async def cleanup_old_audit_logs(
 
     except Exception as e:
         await db.rollback()
+        logger.exception("Failed to cleanup audit logs")
         raise HTTPException(status_code=500, detail="Failed to cleanup audit logs") from e
 
 
@@ -742,6 +751,7 @@ async def get_email_templates(*, db: AsyncSession = Depends(get_db), current_use
         return ApiResponse(success=True, message=f"成功獲取 {len(template_list)} 個郵件模板", data=template_list)
 
     except Exception as e:
+        logger.exception("獲取郵件模板失敗")
         raise HTTPException(status_code=500, detail="獲取郵件模板失敗") from e
 
 
