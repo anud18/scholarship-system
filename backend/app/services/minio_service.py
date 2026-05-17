@@ -88,7 +88,7 @@ class MinIOService:
             logger.exception("Failed to ensure buckets exist")
             from fastapi import HTTPException
 
-            raise HTTPException(status_code=500, detail=f"MinIO bucket initialization failed: {str(e)}") from e
+            raise HTTPException(status_code=500, detail="MinIO bucket initialization failed") from e
 
     def _set_bucket_policy(self, bucket_name: str, private: bool = True):
         """設定bucket政策"""
@@ -255,7 +255,7 @@ class MinIOService:
 
             from fastapi import HTTPException
 
-            raise HTTPException(status_code=500, detail=str(e)) from e
+            raise HTTPException(status_code=500, detail="File upload failed") from e
 
     def get_file_stream(self, object_name: str):
         """
@@ -335,7 +335,7 @@ class MinIOService:
             logger.exception(f"Failed to clone file {source_object_name}")
             from fastapi import HTTPException
 
-            raise HTTPException(status_code=500, detail=str(e)) from e
+            raise HTTPException(status_code=500, detail="File clone failed") from e
 
     def extract_object_name_from_url(self, url: str) -> Optional[str]:
         """
