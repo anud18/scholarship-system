@@ -43,7 +43,6 @@ import { useAuth } from "@/hooks/use-auth";
 import { DevLoginPage } from "@/components/dev-login-page";
 import { SSOLoginPage } from "@/components/sso-login-page";
 import { useAdminDashboard } from "@/hooks/use-admin";
-import { apiClient } from "@/lib/api";
 import { User } from "@/types/user";
 import { decodeJWT } from "@/lib/utils/jwt";
 import { logger } from "@/lib/utils/logger";
@@ -51,11 +50,6 @@ import { logger } from "@/lib/utils/logger";
 export default function ScholarshipManagementSystem() {
   const [activeTab, setActiveTab] = useState("main");
   const [editingApplicationId, setEditingApplicationId] = useState<number | null>(null);
-
-  // Debug activeTab changes
-  useEffect(() => {
-    logger.debug("activeTab changed", { activeTab });
-  }, [activeTab]);
 
   // Check if this is an SSO callback request
   useEffect(() => {
@@ -153,38 +147,6 @@ export default function ScholarshipManagementSystem() {
     fetchRecentApplications,
     fetchDashboardStats,
   } = useAdminDashboard();
-
-  // 調試信息
-  useEffect(() => {
-    if (authError) {
-      logger.error("Auth error reported", { authError });
-    }
-
-    // 檢查 localStorage 中的認證信息
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("auth_token");
-      const userJson = localStorage.getItem("user");
-      logger.debug("Auth storage probe", {
-        hasToken: !!token,
-        hasUser: !!userJson,
-      });
-      try {
-        logger.debug("API client token probe", {
-          hasApiClientToken: !!(apiClient as unknown as { token?: string })
-            .token,
-        });
-      } catch (e) {
-        logger.debug("Could not access apiClient token", { e });
-      }
-    }
-  }, [
-    user,
-    isAuthenticated,
-    authLoading,
-    authError,
-    recentApplications,
-    error,
-  ]);
 
   // Handle hash-based navigation
   useEffect(() => {

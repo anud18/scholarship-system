@@ -33,10 +33,7 @@ export function NotificationButton({
     }
   };
 
-  // 處理通知點擊
-  const handleNotificationClick = () => {
-    console.log("Notification clicked");
-  };
+  const handleNotificationClick = () => {};
 
   return (
     <Popover open={isOpen} onOpenChange={handleOpenChange}>

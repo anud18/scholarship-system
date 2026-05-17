@@ -22,14 +22,14 @@
 import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ErrorBoundary, useErrorHandler, withErrorBoundary } from "../error-boundary";
+import * as loggerModule from "@/lib/utils/logger";
 
 // Suppress console.error from React's internal error reporting
-let consoleErrorSpy: jest.SpyInstance;
 beforeEach(() => {
-  consoleErrorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+  jest.spyOn(console, "error").mockImplementation(() => {});
 });
 afterEach(() => {
-  consoleErrorSpy.mockRestore();
+  jest.restoreAllMocks();
 });
 
 // A component that throws on render when shouldThrow=true
@@ -205,10 +205,12 @@ describe("withErrorBoundary HOC", () => {
 // ─── useErrorHandler hook ──────────────────────────────────────────
 
 describe("useErrorHandler hook", () => {
-  it("returns a function that logs the error", () => {
+  it("returns a function that logs the error via logger", () => {
     // Pin: hook returns a stable callable. Used by functional
     // components that catch errors imperatively (try/catch in
-    // async handlers).
+    // async handlers). Logs via logger.error (not console.error
+    // directly) so production noise is filtered by log level.
+    const loggerErrorSpy = jest.spyOn(loggerModule.logger, "error").mockImplementation(() => {});
     let captured: ((err: Error, info?: string) => void) | undefined;
     function Probe() {
       captured = useErrorHandler();
@@ -217,10 +219,8 @@ describe("useErrorHandler hook", () => {
     render(<Probe />);
     expect(typeof captured).toBe("function");
 
-    // Invoking the handler logs (we mocked console.error in
-    // beforeEach so this should produce a captured call).
     const err = new Error("handled");
     captured!(err, "ctx");
-    expect(consoleErrorSpy).toHaveBeenCalled();
+    expect(loggerErrorSpy).toHaveBeenCalled();
   });
 });
