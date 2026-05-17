@@ -40,22 +40,22 @@ export function createAdminApi() {
      * Get recent applications
      * Type-safe: Query parameters validated against OpenAPI
      */
-    getRecentApplications: async (limit?: number): Promise<ApiResponse<any[]>> => {
+    getRecentApplications: async (limit?: number): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/recent-applications', {
         params: { query: { limit } },
       });
-      return toApiResponse(response) as ApiResponse<any[]>;
+      return toApiResponse(response) as ApiResponse<unknown[]>;
     },
 
     /**
      * Get system announcements
      * Type-safe: Query parameters validated against OpenAPI
      */
-    getSystemAnnouncements: async (limit?: number): Promise<ApiResponse<any[]>> => {
+    getSystemAnnouncements: async (limit?: number): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/system-announcements', {
         params: { query: { limit } },
       });
-      return toApiResponse(response) as ApiResponse<any[]>;
+      return toApiResponse(response) as ApiResponse<unknown[]>;
     },
 
     /**
@@ -79,7 +79,7 @@ export function createAdminApi() {
       page?: number,
       size?: number,
       status?: string
-    ): Promise<ApiResponse<{ items: any[]; total: number; page: number; size: number }>> => {
+    ): Promise<ApiResponse<{ items: unknown[]; total: number; page: number; size: number }>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/applications', {
         params: {
           query: {
@@ -89,7 +89,7 @@ export function createAdminApi() {
           },
         },
       });
-      return toApiResponse(response) as ApiResponse<any>;
+      return toApiResponse(response) as ApiResponse<unknown>;
     },
 
     /**
@@ -98,7 +98,7 @@ export function createAdminApi() {
      */
     getHistoricalApplications: async (
       filters?: HistoricalApplicationFilters
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/applications/history', {
         params: {
           query: {
@@ -112,7 +112,7 @@ export function createAdminApi() {
           },
         },
       });
-      return toApiResponse(response) as ApiResponse<any>;
+      return toApiResponse(response) as ApiResponse<unknown>;
     },
 
     /**
@@ -123,12 +123,12 @@ export function createAdminApi() {
       applicationId: number,
       status: string,
       reviewNotes?: string
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.PATCH('/api/v1/admin/applications/{id}/status', {
         params: { path: { id: applicationId } },
         body: { status, review_notes: reviewNotes },
       });
-      return toApiResponse(response) as ApiResponse<any>;
+      return toApiResponse(response) as ApiResponse<unknown>;
     },
 
     // ========== Email Templates ==========
@@ -137,11 +137,11 @@ export function createAdminApi() {
      * Get email template by key
      * Type-safe: Query parameters validated against OpenAPI
      */
-    getEmailTemplate: async (key: string): Promise<ApiResponse<any>> => {
+    getEmailTemplate: async (key: string): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/email-template', {
         params: { query: { key } },
       });
-      return toApiResponse(response) as ApiResponse<any>;
+      return toApiResponse(response) as ApiResponse<unknown>;
     },
 
     /**
@@ -159,11 +159,11 @@ export function createAdminApi() {
      * Get email templates by sending type
      * Type-safe: Query parameters validated against OpenAPI
      */
-    getEmailTemplatesBySendingType: async (sendingType?: string): Promise<ApiResponse<any[]>> => {
+    getEmailTemplatesBySendingType: async (sendingType?: string): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/email-templates', {
         params: { query: { sending_type: sendingType } },
       });
-      return toApiResponse(response) as ApiResponse<any[]>;
+      return toApiResponse(response) as ApiResponse<unknown[]>;
     },
 
     // Scholarship Email Templates
@@ -173,11 +173,11 @@ export function createAdminApi() {
      */
     getScholarshipEmailTemplates: async (
       scholarshipTypeId: number
-    ): Promise<ApiResponse<{ items: any[]; total: number }>> => {
+    ): Promise<ApiResponse<{ items: unknown[]; total: number }>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarship-email-templates/{scholarship_type_id}', {
         params: { path: { scholarship_type_id: scholarshipTypeId } },
       });
-      return toApiResponse(response) as ApiResponse<{ items: any[]; total: number }>;
+      return toApiResponse(response) as ApiResponse<{ items: unknown[]; total: number }>;
     },
 
     /**
@@ -187,11 +187,11 @@ export function createAdminApi() {
     getScholarshipEmailTemplate: async (
       scholarshipTypeId: number,
       templateKey: string
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarship-email-templates/{scholarship_type_id}/{template_key}', {
         params: { path: { scholarship_type_id: scholarshipTypeId, template_key: templateKey } },
       });
-      return toApiResponse(response) as ApiResponse<any>;
+      return toApiResponse(response) as ApiResponse<unknown>;
     },
 
     /**
@@ -245,12 +245,12 @@ export function createAdminApi() {
      */
     bulkCreateScholarshipEmailTemplates: async (
       scholarshipTypeId: number
-    ): Promise<ApiResponse<{ items: any[]; total: number }>> => {
+    ): Promise<ApiResponse<{ items: unknown[]; total: number }>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/scholarship-email-templates/{scholarship_type_id}/bulk-create', {
         params: { path: { scholarship_type_id: scholarshipTypeId } },
         body: {} as never,
       });
-      return toApiResponse(response) as ApiResponse<{ items: any[]; total: number }>;
+      return toApiResponse(response) as ApiResponse<{ items: unknown[]; total: number }>;
     },
 
     /**
@@ -259,11 +259,11 @@ export function createAdminApi() {
      */
     getAvailableScholarshipEmailTemplates: async (
       scholarshipTypeId: number
-    ): Promise<ApiResponse<any[]>> => {
+    ): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarship-email-templates/{scholarship_type_id}/available', {
         params: { path: { scholarship_type_id: scholarshipTypeId } },
       });
-      return toApiResponse(response) as ApiResponse<any[]>;
+      return toApiResponse(response) as ApiResponse<unknown[]>;
     },
 
     // ========== System Settings ==========
@@ -272,11 +272,11 @@ export function createAdminApi() {
      * Get system setting by key
      * Type-safe: Query parameters validated against OpenAPI
      */
-    getSystemSetting: async (key: string): Promise<ApiResponse<any>> => {
+    getSystemSetting: async (key: string): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/system-setting', {
         params: { query: { key } },
       });
-      return toApiResponse(response) as ApiResponse<any>;
+      return toApiResponse(response) as ApiResponse<unknown>;
     },
 
     /**
@@ -301,7 +301,7 @@ export function createAdminApi() {
       size?: number,
       notificationType?: string,
       priority?: string
-    ): Promise<ApiResponse<{ items: any[]; total: number; page: number; size: number }>> => {
+    ): Promise<ApiResponse<{ items: unknown[]; total: number; page: number; size: number }>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/announcements', {
         params: {
           query: {
@@ -312,18 +312,18 @@ export function createAdminApi() {
           },
         },
       });
-      return toApiResponse(response) as ApiResponse<any>;
+      return toApiResponse(response) as ApiResponse<unknown>;
     },
 
     /**
      * Get announcement by ID
      * Type-safe: Path parameter validated against OpenAPI
      */
-    getAnnouncement: async (id: number): Promise<ApiResponse<any>> => {
+    getAnnouncement: async (id: number): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/announcements/{id}', {
         params: { path: { id } },
       });
-      return toApiResponse(response) as ApiResponse<any>;
+      return toApiResponse(response) as ApiResponse<unknown>;
     },
 
     /**
@@ -366,9 +366,9 @@ export function createAdminApi() {
      * Get scholarship statistics
      * Type-safe: Response type inferred from OpenAPI
      */
-    getScholarshipStats: async (): Promise<ApiResponse<Record<string, any>>> => {
+    getScholarshipStats: async (): Promise<ApiResponse<Record<string, unknown>>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarships/stats');
-      return toApiResponse(response) as ApiResponse<Record<string, any>>;
+      return toApiResponse(response) as ApiResponse<Record<string, unknown>>;
     },
 
     /**
@@ -379,7 +379,7 @@ export function createAdminApi() {
       scholarshipCode: string,
       subType?: string,
       status?: string
-    ): Promise<ApiResponse<any[]>> => {
+    ): Promise<ApiResponse<unknown[]>> => {
       // Path is not in the generated OpenAPI schema (orphan endpoint, see
       // issue #665). The `as any` cast on the GET method bypasses typed-route
       // inference; the runtime call still works because the FastAPI route
@@ -395,18 +395,18 @@ export function createAdminApi() {
           },
         },
       });
-      return toApiResponse(response) as ApiResponse<any[]>;
+      return toApiResponse(response) as ApiResponse<unknown[]>;
     },
 
     /**
      * Get scholarship sub-types
      * Type-safe: Path parameter validated against OpenAPI
      */
-    getScholarshipSubTypes: async (scholarshipCode: string): Promise<ApiResponse<any[]>> => {
+    getScholarshipSubTypes: async (scholarshipCode: string): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarships/{scholarship_code}/sub-types', {
         params: { path: { scholarship_code: scholarshipCode } },
       });
-      return toApiResponse(response) as ApiResponse<any[]>;
+      return toApiResponse(response) as ApiResponse<unknown[]>;
     },
 
     /**
@@ -428,7 +428,7 @@ export function createAdminApi() {
       actionFilter?: string,
       limit?: number,
       offset?: number
-    ): Promise<ApiResponse<any[]>> => {
+    ): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarships/{scholarship_identifier}/audit-trail', {
         params: {
           path: { scholarship_identifier: scholarshipIdentifier },
@@ -439,12 +439,12 @@ export function createAdminApi() {
           },
         },
       });
-      return toApiResponse(response) as ApiResponse<any[]>;
+      return toApiResponse(response) as ApiResponse<unknown[]>;
     },
 
     // ========== Workflows (Not Implemented) ==========
 
-    getWorkflows: async (): Promise<ApiResponse<any[]>> => {
+    getWorkflows: async (): Promise<ApiResponse<unknown[]>> => {
       return Promise.resolve({
         success: true,
         data: [],
@@ -488,22 +488,22 @@ export function createAdminApi() {
         is_template?: boolean;
         is_active?: boolean;
       }
-    ): Promise<ApiResponse<any[]>> => {
+    ): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarship-rules', {
         params: { query: filters },
       });
-      return toApiResponse(response) as ApiResponse<any[]>;
+      return toApiResponse(response) as ApiResponse<unknown[]>;
     },
 
     /**
      * Get scholarship rule by ID
      * Type-safe: Path parameter validated against OpenAPI
      */
-    getScholarshipRule: async (id: number): Promise<ApiResponse<any>> => {
+    getScholarshipRule: async (id: number): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarship-rules/{id}', {
         params: { path: { id } },
       });
-      return toApiResponse(response) as ApiResponse<any>;
+      return toApiResponse(response) as ApiResponse<unknown>;
     },
 
     /**
@@ -566,11 +566,11 @@ export function createAdminApi() {
      * Get rule templates
      * Type-safe: Query parameters validated against OpenAPI
      */
-    getRuleTemplates: async (scholarship_type_id?: number): Promise<ApiResponse<any[]>> => {
+    getRuleTemplates: async (scholarship_type_id?: number): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarship-rules/templates', {
         params: { query: { scholarship_type_id } },
       });
-      return toApiResponse(response) as ApiResponse<any[]>;
+      return toApiResponse(response) as ApiResponse<unknown[]>;
     },
 
     /**
@@ -616,11 +616,11 @@ export function createAdminApi() {
      * Get scholarship rule sub-types
      * Type-safe: Path parameter validated against OpenAPI
      */
-    getScholarshipRuleSubTypes: async (scholarshipTypeId: number): Promise<ApiResponse<any[]>> => {
+    getScholarshipRuleSubTypes: async (scholarshipTypeId: number): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET('/api/v1/scholarship-rules/scholarship-types/{scholarship_type_id}/sub-types', {
         params: { path: { scholarship_type_id: scholarshipTypeId } },
       });
-      return toApiResponse(response) as unknown as ApiResponse<any[]>;
+      return toApiResponse(response) as unknown as ApiResponse<unknown[]>;
     },
 
     // ========== Scholarship Permissions ==========
@@ -629,20 +629,20 @@ export function createAdminApi() {
      * Get scholarship permissions
      * Type-safe: Query parameters validated against OpenAPI
      */
-    getScholarshipPermissions: async (userId?: number): Promise<ApiResponse<any[]>> => {
+    getScholarshipPermissions: async (userId?: number): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarship-permissions', {
         params: { query: { user_id: userId } },
       });
-      return toApiResponse(response) as ApiResponse<any[]>;
+      return toApiResponse(response) as ApiResponse<unknown[]>;
     },
 
     /**
      * Get current user scholarship permissions
      * Type-safe: Response type inferred from OpenAPI
      */
-    getCurrentUserScholarshipPermissions: async (): Promise<ApiResponse<any[]>> => {
+    getCurrentUserScholarshipPermissions: async (): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarship-permissions/current-user');
-      return toApiResponse(response) as ApiResponse<any[]>;
+      return toApiResponse(response) as ApiResponse<unknown[]>;
     },
 
     /**
@@ -683,18 +683,18 @@ export function createAdminApi() {
      * Get all scholarships for permissions
      * Type-safe: Response type inferred from OpenAPI
      */
-    getAllScholarshipsForPermissions: async (): Promise<ApiResponse<any[]>> => {
+    getAllScholarshipsForPermissions: async (): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarships/all-for-permissions');
-      return toApiResponse(response) as ApiResponse<any[]>;
+      return toApiResponse(response) as ApiResponse<unknown[]>;
     },
 
     /**
      * Get my scholarships
      * Type-safe: Response type inferred from OpenAPI
      */
-    getMyScholarships: async (): Promise<ApiResponse<any[]>> => {
+    getMyScholarships: async (): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarships/my-scholarships');
-      return toApiResponse(response) as ApiResponse<any[]>;
+      return toApiResponse(response) as ApiResponse<unknown[]>;
     },
 
     /**
@@ -723,9 +723,9 @@ export function createAdminApi() {
      * Get scholarship config types
      * Type-safe: Response type inferred from OpenAPI
      */
-    getScholarshipConfigTypes: async (): Promise<ApiResponse<any[]>> => {
+    getScholarshipConfigTypes: async (): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET('/api/v1/scholarship-configurations/scholarship-types');
-      return toApiResponse(response) as unknown as ApiResponse<any[]>;
+      return toApiResponse(response) as unknown as ApiResponse<unknown[]>;
     },
 
     /**
@@ -739,7 +739,7 @@ export function createAdminApi() {
         semester?: string | null;
         is_active?: boolean;
       }
-    ): Promise<ApiResponse<any[]>> => {
+    ): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET('/api/v1/scholarship-configurations/configurations', {
         params: {
           query: {
@@ -750,52 +750,52 @@ export function createAdminApi() {
           },
         },
       });
-      return toApiResponse(response) as unknown as ApiResponse<any[]>;
+      return toApiResponse(response) as unknown as ApiResponse<unknown[]>;
     },
 
     /**
      * Get scholarship configuration by ID
      * Type-safe: Path parameter validated against OpenAPI
      */
-    getScholarshipConfiguration: async (id: number): Promise<ApiResponse<any>> => {
+    getScholarshipConfiguration: async (id: number): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.GET('/api/v1/scholarship-configurations/configurations/{id}', {
         params: { path: { id } },
       });
-      return toApiResponse(response) as ApiResponse<any>;
+      return toApiResponse(response) as ApiResponse<unknown>;
     },
 
     /**
      * Create scholarship configuration
      * Type-safe: Request body validated against OpenAPI
      */
-    createScholarshipConfiguration: async (configData: any): Promise<ApiResponse<any>> => {
+    createScholarshipConfiguration: async (configData: unknown): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.POST('/api/v1/scholarship-configurations/configurations', {
-        body: configData,
+        body: configData as never,
       });
-      return toApiResponse(response) as ApiResponse<any>;
+      return toApiResponse(response) as ApiResponse<unknown>;
     },
 
     /**
      * Update scholarship configuration
      * Type-safe: Path parameter and request body validated against OpenAPI
      */
-    updateScholarshipConfiguration: async (id: number, configData: any): Promise<ApiResponse<any>> => {
+    updateScholarshipConfiguration: async (id: number, configData: unknown): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.PUT('/api/v1/scholarship-configurations/configurations/{id}', {
         params: { path: { id } },
-        body: configData,
+        body: configData as never,
       });
-      return toApiResponse(response) as ApiResponse<any>;
+      return toApiResponse(response) as ApiResponse<unknown>;
     },
 
     /**
      * Delete scholarship configuration
      * Type-safe: Path parameter validated against OpenAPI
      */
-    deleteScholarshipConfiguration: async (id: number): Promise<ApiResponse<any>> => {
+    deleteScholarshipConfiguration: async (id: number): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.DELETE('/api/v1/scholarship-configurations/configurations/{id}', {
         params: { path: { id } },
       });
-      return toApiResponse(response) as ApiResponse<any>;
+      return toApiResponse(response) as ApiResponse<unknown>;
     },
 
     /**
@@ -804,13 +804,13 @@ export function createAdminApi() {
      */
     duplicateScholarshipConfiguration: async (
       id: number,
-      targetData: any
-    ): Promise<ApiResponse<any>> => {
+      targetData: unknown
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.POST('/api/v1/scholarship-configurations/configurations/{id}/duplicate', {
         params: { path: { id } },
-        body: targetData,
+        body: targetData as never,
       });
-      return toApiResponse(response) as ApiResponse<any>;
+      return toApiResponse(response) as ApiResponse<unknown>;
     },
 
     // ========== Professor Management ==========
@@ -819,34 +819,34 @@ export function createAdminApi() {
      * Get professors with search
      * Type-safe: Query parameters validated against OpenAPI
      */
-    getProfessors: async (search?: string): Promise<ApiResponse<any[]>> => {
+    getProfessors: async (search?: string): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/professors', {
         params: { query: { search } },
       });
-      return toApiResponse(response) as ApiResponse<any[]>;
+      return toApiResponse(response) as ApiResponse<unknown[]>;
     },
 
     /**
      * Assign professor to application
      * Type-safe: Path parameter and request body validated against OpenAPI
      */
-    assignProfessor: async (applicationId: number, professorNycuId: string): Promise<ApiResponse<any>> => {
+    assignProfessor: async (applicationId: number, professorNycuId: string): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.PUT('/api/v1/admin/applications/{id}/assign-professor', {
         params: { path: { id: applicationId } },
         body: { professor_nycu_id: professorNycuId },
       });
-      return toApiResponse(response) as ApiResponse<any>;
+      return toApiResponse(response) as ApiResponse<unknown>;
     },
 
     /**
      * Get available professors (alias for getProfessors)
      * Type-safe: Query parameters validated against OpenAPI
      */
-    getAvailableProfessors: async (search?: string): Promise<ApiResponse<any[]>> => {
+    getAvailableProfessors: async (search?: string): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/professors', {
         params: { query: { search } },
       });
-      return toApiResponse(response) as ApiResponse<any[]>;
+      return toApiResponse(response) as ApiResponse<unknown[]>;
     },
 
     // ========== System Configuration Management ==========
@@ -855,20 +855,20 @@ export function createAdminApi() {
      * Get configurations
      * Type-safe: Response type inferred from OpenAPI
      */
-    getConfigurations: async (): Promise<ApiResponse<any[]>> => {
+    getConfigurations: async (): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/configurations');
-      return toApiResponse(response) as ApiResponse<any[]>;
+      return toApiResponse(response) as ApiResponse<unknown[]>;
     },
 
     /**
      * Create configuration
      * Type-safe: Request body validated against OpenAPI
      */
-    createConfiguration: async (configData: any): Promise<ApiResponse<any>> => {
+    createConfiguration: async (configData: components["schemas"]["ConfigurationCreateSchema"]): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/configurations', {
         body: configData,
       });
-      return toApiResponse(response) as ApiResponse<any>;
+      return toApiResponse(response) as ApiResponse<unknown>;
     },
 
     /**
@@ -876,27 +876,27 @@ export function createAdminApi() {
      * Type-safe: Request body validated against OpenAPI
      */
     updateConfigurationsBulk: async (
-      configurations: any[],
+      configurations: Array<components["schemas"]["ConfigurationUpdateSchema"]>,
       changeReason?: string
-    ): Promise<ApiResponse<any[]>> => {
+    ): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.PUT('/api/v1/admin/configurations/bulk', {
         body: {
           updates: configurations,
           ...(changeReason && { change_reason: changeReason }),
         },
       });
-      return toApiResponse(response) as ApiResponse<any[]>;
+      return toApiResponse(response) as ApiResponse<unknown[]>;
     },
 
     /**
      * Validate configuration
      * Type-safe: Request body validated against OpenAPI
      */
-    validateConfiguration: async (configData: any): Promise<ApiResponse<any>> => {
+    validateConfiguration: async (configData: components["schemas"]["ConfigurationValidationSchema"]): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/configurations/validate', {
         body: configData,
       });
-      return toApiResponse(response) as ApiResponse<any>;
+      return toApiResponse(response) as ApiResponse<unknown>;
     },
 
     /**
@@ -916,7 +916,7 @@ export function createAdminApi() {
      * Verify bank account (admin duplicate of bank-verification module)
      * Type-safe: Request body validated against OpenAPI
      */
-    verifyBankAccount: async (applicationId: number): Promise<ApiResponse<any>> => {
+    verifyBankAccount: async (applicationId: number): Promise<ApiResponse<unknown>> => {
       // SECURITY: do NOT default force_recheck=true. The generated schema
       // marks force_recheck as required (because it has a server-side
       // @default), but emitting it from the client could override a
@@ -925,19 +925,19 @@ export function createAdminApi() {
       const response = await typedClient.raw.POST('/api/v1/admin/bank-verification', {
         body: { application_id: applicationId } as never,
       });
-      return toApiResponse(response) as ApiResponse<any>;
+      return toApiResponse(response) as ApiResponse<unknown>;
     },
 
     /**
      * Verify bank accounts in batch (admin duplicate of bank-verification module)
      * Type-safe: Request body validated against OpenAPI
      */
-    verifyBankAccountsBatch: async (applicationIds: number[]): Promise<ApiResponse<any>> => {
+    verifyBankAccountsBatch: async (applicationIds: number[]): Promise<ApiResponse<unknown>> => {
       // SECURITY: see force_recheck note in verifyBankAccount above.
       const response = await typedClient.raw.POST('/api/v1/admin/bank-verification/batch', {
         body: { application_ids: applicationIds } as never,
       });
-      return toApiResponse(response) as ApiResponse<any>;
+      return toApiResponse(response) as ApiResponse<unknown>;
     },
 
     // ========== Professor-Student Relationships ==========
@@ -948,7 +948,7 @@ export function createAdminApi() {
      */
     getProfessorStudentRelationships: async (
       params?: { page?: number; size?: number }
-    ): Promise<ApiResponse<any[]>> => {
+    ): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/professor-student-relationships', {
         params: {
           query: {
@@ -957,18 +957,18 @@ export function createAdminApi() {
           },
         },
       });
-      return toApiResponse(response) as ApiResponse<any[]>;
+      return toApiResponse(response) as ApiResponse<unknown[]>;
     },
 
     /**
      * Create professor-student relationship
      * Type-safe: Request body validated against OpenAPI
      */
-    createProfessorStudentRelationship: async (relationshipData: any): Promise<ApiResponse<any>> => {
+    createProfessorStudentRelationship: async (relationshipData: unknown): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/professor-student-relationships', {
         params: { query: { relationship_data: relationshipData } },
       });
-      return toApiResponse(response) as ApiResponse<any>;
+      return toApiResponse(response) as ApiResponse<unknown>;
     },
 
     // ========== Unified Review System (Admin Role) ==========
@@ -978,22 +978,22 @@ export function createAdminApi() {
      * Uses multi-role review API - supports professor, college, and admin roles.
      * Type-safe: Path parameter validated against OpenAPI
      */
-    getReviewableSubTypes: async (applicationId: number): Promise<ApiResponse<any[]>> => {
+    getReviewableSubTypes: async (applicationId: number): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET('/api/v1/reviews/applications/{application_id}/sub-types', {
         params: { path: { application_id: applicationId } },
       });
-      return toApiResponse<any[]>(response);
+      return toApiResponse<unknown[]>(response);
     },
 
     /**
      * Get current admin user's review for an application
      * Type-safe: Path parameter validated against OpenAPI
      */
-    getApplicationReview: async (applicationId: number): Promise<ApiResponse<any>> => {
+    getApplicationReview: async (applicationId: number): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.GET('/api/v1/reviews/applications/{application_id}/review', {
         params: { path: { application_id: applicationId } },
       });
-      return toApiResponse<any>(response);
+      return toApiResponse<unknown>(response);
     },
 
     /**
@@ -1009,12 +1009,12 @@ export function createAdminApi() {
           comments?: string;
         }>;
       }
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.POST('/api/v1/reviews/applications/{application_id}/review', {
         params: { path: { application_id: applicationId } },
         body: reviewData,
       });
-      return toApiResponse<any>(response);
+      return toApiResponse<unknown>(response);
     },
 
     /**
