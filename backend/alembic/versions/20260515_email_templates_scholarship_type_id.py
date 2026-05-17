@@ -40,20 +40,25 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-def _existing_key_unique_constraint_name(inspector) -> Union[str, None]:
-    """Return the auto-generated name of the existing single-column unique on ``key``.
+def _existing_key_unique_constraint_name(inspector) -> tuple:
+    """Return (name, kind) for the existing single-column unique on ``key``.
 
-    The constraint may have been created either as a real UNIQUE CONSTRAINT
-    or as a UNIQUE INDEX; check both. Returns ``None`` if neither is found
-    (e.g., a fresh DB built directly from the new model).
+    kind is ``"constraint"`` when found via get_unique_constraints (can be
+    dropped with op.drop_constraint), or ``"index"`` when found via
+    get_indexes (must be dropped with op.drop_index). Returns (None, None)
+    if neither is found (fresh DB built from the new model).
+
+    Returning the kind avoids the try/except anti-pattern where
+    op.drop_constraint fails with UndefinedObject, the PostgreSQL transaction
+    enters aborted state, and the fallback op.drop_index also fails.
     """
     for c in inspector.get_unique_constraints("email_templates"):
         if c.get("column_names") == ["key"]:
-            return c["name"]
+            return c["name"], "constraint"
     for ix in inspector.get_indexes("email_templates"):
         if ix.get("unique") and ix.get("column_names") == ["key"]:
-            return ix["name"]
-    return None
+            return ix["name"], "index"
+    return None, None
 
 
 def _fks_targeting_email_templates_key(inspector, table_name: str) -> list:
@@ -111,12 +116,14 @@ def upgrade() -> None:
         )
 
     # 3. Drop the auto-generated single-column unique on ``key``.
-    existing_unique_name = _existing_key_unique_constraint_name(inspector)
+    existing_unique_name, unique_kind = _existing_key_unique_constraint_name(inspector)
     if existing_unique_name:
-        # Try dropping as a unique constraint first; fall back to index drop.
-        try:
+        # Use the correct DDL based on how the unique was created. Mixing them
+        # (e.g., calling op.drop_constraint on a UNIQUE INDEX) raises
+        # UndefinedObject and aborts the transaction before the fallback runs.
+        if unique_kind == "constraint":
             op.drop_constraint(existing_unique_name, "email_templates", type_="unique")
-        except Exception:
+        else:
             op.drop_index(existing_unique_name, table_name="email_templates")
 
     # 4. Add the compound unique constraint.
