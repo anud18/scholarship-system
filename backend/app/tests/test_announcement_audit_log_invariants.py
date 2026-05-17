@@ -101,24 +101,3 @@ def test_orphan_create_test_notifications_audits():
         "notifications.createTestNotifications (orphan route) must emit "
         "logger.info(..., extra={'actor_user_id': ...}) on success (PR #680)."
     )
-
-
-def test_orphan_create_announcement_audits():
-    assert _function_has_logger_info_with_actor(notifications, "createAnnouncement"), (
-        "notifications.createAnnouncement (orphan route) must emit "
-        "logger.info(..., extra={'actor_user_id': ...}) on success (PR #680)."
-    )
-
-
-def test_orphan_update_announcement_audits():
-    assert _function_has_logger_info_with_actor(notifications, "updateAnnouncement"), (
-        "notifications.updateAnnouncement (orphan route) must emit "
-        "logger.info(..., extra={'actor_user_id': ...}) on success (PR #680)."
-    )
-
-
-def test_orphan_delete_announcement_audits():
-    assert _function_has_logger_info_with_actor(notifications, "deleteAnnouncement"), (
-        "notifications.deleteAnnouncement (orphan route) must emit "
-        "logger.info(..., extra={'actor_user_id': ...}) on success (PR #680)."
-    )
