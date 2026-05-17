@@ -475,6 +475,7 @@ async def get_bank_document(
     except HTTPException:
         raise
     except Exception as exc:
+        logger.exception("檔案服務發生錯誤")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="檔案服務發生錯誤") from exc
 
 

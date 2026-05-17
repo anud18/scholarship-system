@@ -3,6 +3,7 @@ Scholarship Configuration Management API endpoints
 Clean, database-driven approach for dynamic scholarship configuration management
 """
 
+import logging
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
@@ -32,6 +33,8 @@ from app.schemas.scholarship_configuration import (
     WhitelistStudentInfo,
 )
 from app.services.whitelist_excel_service import whitelist_excel_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -514,6 +517,7 @@ async def get_colleges(current_user: User = Depends(require_admin), db: AsyncSes
         return ApiResponse(success=True, message=f"Retrieved {len(colleges)} colleges", data=colleges)
 
     except Exception as e:
+        logger.exception("Failed to retrieve colleges")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve colleges"
         ) from e
@@ -578,6 +582,7 @@ async def get_scholarship_types(current_user: User = Depends(require_staff), db:
         return ApiResponse(success=True, message=f"Retrieved {len(type_configs)} scholarship types", data=type_configs)
 
     except Exception as e:
+        logger.exception("Failed to retrieve scholarship types")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve scholarship types"
         ) from e
@@ -714,6 +719,7 @@ async def get_quota_overview(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid period format: {period}") from exc
     except Exception as e:
+        logger.exception("Failed to retrieve quota overview")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve quota overview"
         ) from e
@@ -806,6 +812,7 @@ async def create_scholarship_configuration(
         raise
     except Exception as e:
         await db.rollback()
+        logger.exception("Failed to create configuration")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create configuration"
         ) from e
@@ -904,6 +911,7 @@ async def get_scholarship_configuration(
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("Failed to retrieve configuration")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve configuration"
         ) from e
@@ -1107,6 +1115,7 @@ async def deactivate_scholarship_configuration(
         raise
     except Exception as e:
         await db.rollback()
+        logger.exception("Failed to deactivate configuration")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to deactivate configuration"
         ) from e
@@ -1194,6 +1203,7 @@ async def duplicate_scholarship_configuration(
         raise
     except Exception as e:
         await db.rollback()
+        logger.exception("Failed to duplicate configuration")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to duplicate configuration"
         ) from e
@@ -1324,6 +1334,7 @@ async def list_scholarship_configurations(
         return ApiResponse(success=True, message=f"Retrieved {len(config_list)} configurations", data=config_list)
 
     except Exception as e:
+        logger.exception("Failed to list configurations")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to list configurations"
         ) from e

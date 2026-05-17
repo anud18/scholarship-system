@@ -2,6 +2,7 @@
 NYCU Employee API endpoints.
 """
 
+import logging
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -19,6 +20,8 @@ from app.integrations.nycu_emp import (
     NYCUEmpValidationError,
     create_nycu_emp_client_from_env,
 )
+
+logger = logging.getLogger(__name__)
 
 # SECURITY: All NYCU employee directory endpoints expose internal staff PII
 # (names, departments, positions, employee numbers). Gate the entire router
@@ -121,6 +124,7 @@ async def get_employees(
     except NYCUEmpError as e:
         raise HTTPException(status_code=500, detail="API error") from e
     except Exception as e:
+        logger.exception("Unexpected error")
         raise HTTPException(status_code=500, detail="Unexpected error") from e
 
 
@@ -168,6 +172,7 @@ async def get_all_employees(status: str = Query("01", description="Employee stat
     except NYCUEmpError as e:
         raise HTTPException(status_code=500, detail="API error") from e
     except Exception as e:
+        logger.exception("Unexpected error")
         raise HTTPException(status_code=500, detail="Unexpected error") from e
 
 
@@ -241,6 +246,7 @@ async def search_employees(
     except NYCUEmpError as e:
         raise HTTPException(status_code=500, detail="API error") from e
     except Exception as e:
+        logger.exception("Unexpected error")
         raise HTTPException(status_code=500, detail="Unexpected error") from e
 
 
@@ -286,4 +292,5 @@ async def get_employee_by_no(
     except NYCUEmpError as e:
         raise HTTPException(status_code=500, detail="API error") from e
     except Exception as e:
+        logger.exception("Unexpected error")
         raise HTTPException(status_code=500, detail="Unexpected error") from e

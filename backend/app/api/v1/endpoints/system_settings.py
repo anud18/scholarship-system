@@ -78,6 +78,7 @@ async def get_all_configurations(
             "trace_id": None,
         }
     except Exception as e:
+        logger.exception("Failed to retrieve configurations")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve configurations"
         ) from e
@@ -247,6 +248,7 @@ async def get_system_doc_file(
         )
         file_content = response.read()
     except Exception as e:
+        logger.exception("無法取得文件")
         raise HTTPException(status_code=500, detail="無法取得文件") from e
 
     content_type = "application/pdf"
@@ -327,6 +329,7 @@ async def get_configuration(
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("Failed to retrieve configuration")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve configuration"
         ) from e
@@ -587,6 +590,7 @@ async def validate_configuration(
             "data": response_data.model_dump() if hasattr(response_data, "model_dump") else response_data.dict(),
         }
     except Exception as e:
+        logger.exception("Failed to validate configuration")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to validate configuration"
         ) from e
@@ -677,6 +681,7 @@ async def get_configuration_audit_logs(
             "trace_id": None,
         }
     except Exception as e:
+        logger.exception("Failed to retrieve audit logs")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve audit logs"
         ) from e
