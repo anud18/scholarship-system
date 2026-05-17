@@ -25,14 +25,14 @@ export const announcementsService = {
   create: async (
     data: AnnouncementCreate
   ): Promise<ApiResponse<NotificationResponse>> => {
-    return apiClient.admin.createAnnouncement(data);
+    return apiClient.admin.createAnnouncement(data) as unknown as ApiResponse<NotificationResponse>;
   },
 
   update: async (
     id: number,
     data: AnnouncementUpdate
   ): Promise<ApiResponse<NotificationResponse>> => {
-    return apiClient.admin.updateAnnouncement(id, data);
+    return apiClient.admin.updateAnnouncement(id, data) as unknown as ApiResponse<NotificationResponse>;
   },
 
   delete: async (id: number): Promise<ApiResponse<void>> => {
