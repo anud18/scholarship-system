@@ -504,3 +504,119 @@ def test_no_service_raises_http_exception_leaking_exception_detail():
             "Violations:\n  " + "\n  ".join(violations)
         )
         pytest.fail(msg)
+
+
+# ---------------------------------------------------------------------------
+# Sixth check: broad-except 5xx HTTPException without logger.exception before raise
+# ---------------------------------------------------------------------------
+# Pattern caught:
+#   except Exception [as ...]:
+#       ...  # no logger.exception / logger.error / logger.critical call
+#       raise HTTPException(status_code=5xx, ...)
+#
+# When a broad except handler converts any exception to a 5xx HTTPException
+# without logging first, the full traceback silently disappears. FastAPI's
+# exception handler only returns the HTTP response — it does NOT log the
+# chained __cause__ exception. The only way the trace reaches structured logs
+# is for the handler to explicitly call logger.exception() before raising.
+#
+# 28 such sites were fixed across 5 endpoint files in PR #726. This invariant
+# prevents future regressions. Services/ and utils/ are intentionally excluded
+# here because they are covered by the fifth check (which focuses on whether
+# str(e) leaks into the detail= field).
+
+
+def _has_logger_call_before_raise(handler_body: list[ast.stmt], raise_line: int) -> bool:
+    """Return True iff handler_body contains a logger.exception / logger.error /
+    logger.critical call at a line BEFORE raise_line."""
+    for stmt in handler_body:
+        if getattr(stmt, "lineno", 0) >= raise_line:
+            continue
+        for node in ast.walk(stmt):
+            if not isinstance(node, ast.Expr):
+                continue
+            if not isinstance(node.value, ast.Call):
+                continue
+            call = node.value
+            if not isinstance(call.func, ast.Attribute):
+                continue
+            if call.func.attr not in {"exception", "error", "critical"}:
+                continue
+            if isinstance(call.func.value, ast.Name) and call.func.value.id in {"logger", "log"}:
+                return True
+    return False
+
+
+def _handler_is_broad(handler: ast.ExceptHandler) -> bool:
+    """Return True iff the ExceptHandler is a broad catch (bare except or except Exception)."""
+    if handler.type is None:
+        return True
+    if isinstance(handler.type, ast.Name) and handler.type.id in {"Exception", "BaseException"}:
+        return True
+    if isinstance(handler.type, ast.Attribute) and handler.type.attr in {"Exception", "BaseException"}:
+        return True
+    return False
+
+
+def _scan_file_5xx_broad_except_no_log(path: Path) -> list[tuple[str, int, str]]:
+    """Return [(handler_name, lineno, excerpt)] for broad-except 5xx raises without
+    a preceding logger.exception/error/critical call in the same handler body."""
+    src = path.read_text()
+    tree = ast.parse(src)
+    findings = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Try):
+            continue
+        for handler in node.handlers:
+            if not _handler_is_broad(handler):
+                continue
+            for stmt in handler.body:
+                if not _is_http_exception_raise(stmt):
+                    continue
+                if not _status_code_is_5xx(stmt.exc):
+                    continue
+                raise_line = getattr(stmt, "lineno", 0)
+                if _has_logger_call_before_raise(handler.body, raise_line):
+                    continue
+                fn = _enclosing_function(stmt, tree) or "<module>"
+                excerpt = ast.unparse(stmt).splitlines()[0][:120]
+                findings.append((fn, raise_line, excerpt))
+    return findings
+
+
+def test_no_5xx_broad_except_endpoint_missing_logger_before_raise():
+    """Every broad `except Exception:` handler in backend/app/api/v1/endpoints/ that
+    raises HTTPException(status_code=5xx) MUST call logger.exception() (or
+    logger.error() / logger.critical()) before the raise.
+
+    Without such a call the full traceback is silently dropped: FastAPI converts
+    the HTTPException to an HTTP response and the chained __cause__ is never
+    captured in structured logs. The developer has no visibility into what failed.
+
+    28 such sites were fixed across 5 endpoint files in PR #726. This invariant
+    pins that clean state and prevents future regressions.
+
+    Fix pattern:
+        except Exception as exc:
+            logger.exception("<same message as detail>")
+            raise HTTPException(status_code=500, detail="<static message>") from exc
+    """
+    violations = []
+    for path in _iter_endpoint_files():
+        rel = path.relative_to(ENDPOINTS_DIR)
+        for fn, lineno, excerpt in _scan_file_5xx_broad_except_no_log(path):
+            violations.append(f"{rel}:{lineno}  {fn}()  {excerpt!r}")
+
+    if violations:
+        msg = (
+            "Found broad-except 5xx HTTPException raises with no logger.exception() before them.\n"
+            "The traceback is silently dropped — FastAPI converts the HTTPException to an\n"
+            "HTTP response and the __cause__ is never captured in structured logs.\n\n"
+            "Fix: add `logger.exception('<message>')` as the FIRST statement in the handler:\n"
+            "    except Exception as exc:\n"
+            "        logger.exception('<same message as detail>')\n"
+            "        raise HTTPException(status_code=500, detail='<static>') from exc\n\n"
+            "PR #726 sanitized 28 such sites; do not re-introduce the pattern.\n\n"
+            "Violations:\n  " + "\n  ".join(violations)
+        )
+        pytest.fail(msg)
