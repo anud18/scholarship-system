@@ -28,6 +28,13 @@ containing str(e) values on 5xx responses. This pattern was sanitized
 in applications.py (PR #721) and evaded both prior checks because
 the dict wrapper hides the str(e) call from the top-level keyword scan.
 
+A fourth check catches the class of bug fixed in PR #722: a broad
+`except Exception:` (or bare `except:`) handler raising an
+`HTTPException` with `detail=str(e)` on a 4xx response. The previous
+three checks only covered 5xx, so this pattern evaded all guards.
+Pre_authorization.py had three such sites (lines 82, 140, 252) —
+all sanitized in PR #722. The invariant pins that clean state.
+
 The checks run in <1s. No DB, no fixtures, no HTTP client.
 """
 
@@ -304,6 +311,111 @@ def test_no_5xx_endpoint_leaks_dict_detail_str_exception():
             'detail={"message": "<static>", "error_code": "..."} + raise ... from e\n'
             "The traceback is captured by logger.exception() / exc_info=True "
             "and must NOT be echoed verbatim to the HTTP client.\n\n"
+            "Violations:\n  " + "\n  ".join(violations)
+        )
+        pytest.fail(msg)
+
+
+# ---------------------------------------------------------------------------
+# Fourth check: broad except Exception → detail=str(e) on 4xx responses
+# ---------------------------------------------------------------------------
+# PR #722 fixed three such sites in pre_authorization.py (lines 82, 140, 252).
+# The previous three checks only cover 5xx, so broad-except 4xx detail=str(e)
+# evaded all guards. This check closes that gap.
+
+_4XX_ATTR_PREFIXES = ("HTTP_4",)
+
+
+def _status_code_is_4xx(call: ast.Call) -> bool:
+    """Return True iff the status_code keyword resolves to a 4xx value."""
+    for kw in call.keywords:
+        if kw.arg != "status_code":
+            continue
+        if isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, int):
+            return 400 <= kw.value.value < 500
+        if isinstance(kw.value, ast.Attribute):
+            return any(kw.value.attr.startswith(p) for p in _4XX_ATTR_PREFIXES)
+    return False
+
+
+def _enclosing_handler_is_broad_except(node: ast.AST, tree: ast.AST) -> bool:
+    """Return True iff `node` is lexically inside a broad except handler.
+
+    A broad handler is either:
+    - bare `except:` (handler.type is None)
+    - `except Exception:` / `except BaseException:`
+    """
+    target_line = getattr(node, "lineno", None)
+    if target_line is None:
+        return False
+    for try_node in ast.walk(tree):
+        if not isinstance(try_node, ast.Try):
+            continue
+        for handler in try_node.handlers:
+            h_start = getattr(handler, "lineno", None)
+            h_end = getattr(handler, "end_lineno", None)
+            if h_start is None or h_end is None:
+                continue
+            if not (h_start <= target_line <= h_end):
+                continue
+            # bare except:
+            if handler.type is None:
+                return True
+            # except Exception: or except BaseException:
+            if isinstance(handler.type, ast.Name) and handler.type.id in {"Exception", "BaseException"}:
+                return True
+            if isinstance(handler.type, ast.Attribute) and handler.type.attr in {"Exception", "BaseException"}:
+                return True
+    return False
+
+
+def _scan_file_4xx_broad_except_str(path: Path) -> list[tuple[str, int, str]]:
+    """Return [(handler_name, lineno, excerpt)] for broad-except 4xx detail=str(e)."""
+    src = path.read_text()
+    tree = ast.parse(src)
+    findings = []
+    for node in ast.walk(tree):
+        if not _is_http_exception_raise(node):
+            continue
+        if not _detail_is_bare_str_exception(node.exc):
+            continue
+        if not _status_code_is_4xx(node.exc):
+            continue
+        if not _enclosing_handler_is_broad_except(node, tree):
+            continue
+        handler = _enclosing_function(node, tree) or "<module>"
+        excerpt = ast.unparse(node).splitlines()[0][:120]
+        findings.append((handler, node.lineno, excerpt))
+    return findings
+
+
+def test_no_4xx_broad_except_endpoint_leaks_detail_str_exception():
+    """No broad `except Exception:` handler in backend/app/api/v1/endpoints/ may
+    raise `HTTPException(status_code=4xx, detail=str(e))`.
+
+    This pattern leaks internal exception messages (SQL, file paths, auth context,
+    service error detail) to the client via 4xx responses. Because `except Exception`
+    catches every application exception, the leaked string is unpredictable and
+    cannot be pre-screened by the developer at write time.
+
+    Three such sites were sanitized in pre_authorization.py by PR #722.
+    This test pins that clean state and prevents future regressions.
+
+    Intentional `except ValueError` / `except SomeSpecificError` narrow-catch
+    handlers are NOT flagged — only broad catches that accept any exception type."""
+    violations = []
+    for path in _iter_endpoint_files():
+        rel = path.relative_to(ENDPOINTS_DIR)
+        for handler, lineno, excerpt in _scan_file_4xx_broad_except_str(path):
+            violations.append(f"{rel}:{lineno}  {handler}()  {excerpt!r}")
+
+    if violations:
+        msg = (
+            "Found broad-except 4xx detail=str(e) regressions (class of bug fixed in PR #722).\n"
+            "Inside a broad `except Exception:` handler, `detail=str(e)` leaks\n"
+            "arbitrary internal exception messages to the HTTP client.\n"
+            "Fix: use a static detail string and let the exception chain carry the trace:\n"
+            '    raise HTTPException(status_code=400, detail="<static message>") from e\n\n'
             "Violations:\n  " + "\n  ".join(violations)
         )
         pytest.fail(msg)
