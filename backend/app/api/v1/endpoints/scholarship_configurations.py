@@ -181,10 +181,7 @@ async def get_available_semesters(
         )
 
     except Exception as e:
-        import logging
-
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error in get_available_semesters: {type(e).__name__}: {str(e)}", exc_info=True)
+        logger.error("Error in get_available_semesters: %s: %s", type(e).__name__, e, exc_info=True)
 
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -369,10 +366,7 @@ async def get_matrix_quota_status(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid period format: {period}") from exc
     except Exception as e:
-        import logging
-
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error in get_matrix_quota_status: {type(e).__name__}: {str(e)}", exc_info=True)
+        logger.error("Error in get_matrix_quota_status: %s: %s", type(e).__name__, e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve matrix quota status",
@@ -495,10 +489,7 @@ async def update_matrix_quota(
 
     except Exception as e:
         await db.rollback()
-        import logging
-
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error in update_matrix_quota: {type(e).__name__}: {str(e)}", exc_info=True)
+        logger.error("Error in update_matrix_quota: %s: %s", type(e).__name__, e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update matrix quota"
         ) from e
@@ -1061,10 +1052,7 @@ async def update_scholarship_configuration(
         raise
     except Exception as e:
         await db.rollback()
-        import logging
-
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error in update_scholarship_configuration: {type(e).__name__}: {str(e)}", exc_info=True)
+        logger.error("Error in update_scholarship_configuration: %s: %s", type(e).__name__, e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update configuration"
         ) from e

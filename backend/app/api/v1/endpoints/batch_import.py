@@ -232,11 +232,9 @@ async def upload_batch_import_data(
             content_type=content_type,
         )
         batch_import.file_path = object_name
-    except Exception as e:
+    except Exception:
         # Log error but don't fail the upload if MinIO is unavailable
-        import logging
-
-        logging.error(f"Failed to upload batch import file to MinIO: {e}")
+        logger.warning("Failed to upload batch import file to MinIO", exc_info=True)
 
     # Store parsed data for confirm step
     batch_import.parsed_data = {
