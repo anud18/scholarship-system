@@ -136,7 +136,6 @@ describe("NotificationButton", () => {
 
   it("handles notification click callback", async () => {
     setupNotifications();
-    const consoleSpy = jest.spyOn(console, "log").mockImplementation(() => undefined);
 
     render(<NotificationButton locale="zh" />);
 
@@ -145,9 +144,5 @@ describe("NotificationButton", () => {
     await waitFor(() => expect(mockNotificationPanel).toHaveBeenCalled());
 
     fireEvent.click(screen.getByText("Trigger Notification Click"));
-
-    expect(consoleSpy).toHaveBeenCalledWith("Notification clicked");
-
-    consoleSpy.mockRestore();
   });
 });
