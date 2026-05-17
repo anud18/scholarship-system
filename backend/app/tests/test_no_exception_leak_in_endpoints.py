@@ -18,7 +18,12 @@ argument is not an f-string containing a `{str(e)}` / `{e}` /
 One intentional retention is allowlisted (email_management.py
 template-variable KeyError — see SECURITY comment in PR #686).
 
-The check runs in <1s. No DB, no fixtures, no HTTP client.
+A second check (added in the same file) catches bare `detail=str(e)`
+(no f-string wrapper) on 5xx responses. This pattern was missed by
+the original sweep and was sanitized in the payment_rosters.py
+RosterGenerationError handler.
+
+The checks run in <1s. No DB, no fixtures, no HTTP client.
 """
 
 import ast
@@ -138,6 +143,91 @@ def test_no_endpoint_raises_http_exception_leaking_exception_detail():
             'the leak pattern. Use detail="<message>" + `raise ... from e` '
             "instead, so the trace lands in structured logs without "
             "echoing internal exception text to the client.\n\n"
+            "Violations:\n  " + "\n  ".join(violations)
+        )
+        pytest.fail(msg)
+
+
+# ---------------------------------------------------------------------------
+# Second check: bare `detail=str(e)` on 5xx responses
+# ---------------------------------------------------------------------------
+
+_EXC_NAMES = {"e", "exc", "e2", "ex", "err", "error"}
+_5XX_ATTR_PREFIXES = ("HTTP_5",)
+
+
+def _detail_is_bare_str_exception(call: ast.Call) -> bool:
+    """Return True iff `detail=str(<exception-name>)` (not inside f-string)."""
+    for kw in call.keywords:
+        if kw.arg != "detail":
+            continue
+        # Must be a bare Call (not a JoinedStr / f-string)
+        if not isinstance(kw.value, ast.Call):
+            continue
+        fn = kw.value.func
+        if not (isinstance(fn, ast.Name) and fn.id == "str"):
+            continue
+        if len(kw.value.args) != 1:
+            continue
+        if isinstance(kw.value.args[0], ast.Name) and kw.value.args[0].id in _EXC_NAMES:
+            return True
+    return False
+
+
+def _status_code_is_5xx(call: ast.Call) -> bool:
+    """Return True iff the status_code keyword resolves to a 5xx value."""
+    for kw in call.keywords:
+        if kw.arg != "status_code":
+            continue
+        # Literal integer: 500, 502, ...
+        if isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, int):
+            return kw.value.value >= 500
+        # Attribute access: status.HTTP_5xx or HTTP_5xx
+        if isinstance(kw.value, ast.Attribute):
+            attr_name = kw.value.attr
+            return any(attr_name.startswith(p) for p in _5XX_ATTR_PREFIXES)
+    return False
+
+
+def _scan_file_5xx_bare_str(path: Path) -> list[tuple[str, int, str]]:
+    """Return [(handler_name, lineno, excerpt)] for bare `detail=str(e)` on 5xx."""
+    src = path.read_text()
+    tree = ast.parse(src)
+    findings = []
+    for node in ast.walk(tree):
+        if not _is_http_exception_raise(node):
+            continue
+        if not _detail_is_bare_str_exception(node.exc):
+            continue
+        if not _status_code_is_5xx(node.exc):
+            continue
+        handler = _enclosing_function(node, tree) or "<module>"
+        excerpt = ast.unparse(node).splitlines()[0][:120]
+        findings.append((handler, node.lineno, excerpt))
+    return findings
+
+
+def test_no_5xx_endpoint_leaks_bare_str_exception():
+    """No `raise HTTPException(status_code=5xx, detail=str(e))` pattern is
+    allowed in backend/app/api/v1/endpoints/. Bare str(e) on a 5xx
+    response leaks internal exception context (SQL, file paths, etc.)
+    to the client without going through the structured log filter.
+
+    Fixed in payment_rosters.py RosterGenerationError handler; this test
+    prevents future regressions of the same pattern."""
+    violations = []
+    for path in _iter_endpoint_files():
+        rel = path.relative_to(ENDPOINTS_DIR)
+        for handler, lineno, excerpt in _scan_file_5xx_bare_str(path):
+            violations.append(f"{rel}:{lineno}  {handler}()  {excerpt!r}")
+
+    if violations:
+        msg = (
+            "Found HTTPException(status_code=5xx, detail=str(e)) regressions.\n"
+            "5xx responses must use a static detail string: "
+            'detail="<static message>" + raise ... from e\n'
+            "The traceback is captured by logger.exception() / exc_info=True "
+            "and must NOT be echoed verbatim to the HTTP client.\n\n"
             "Violations:\n  " + "\n  ".join(violations)
         )
         pytest.fail(msg)
