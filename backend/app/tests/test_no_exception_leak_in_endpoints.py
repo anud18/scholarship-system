@@ -307,3 +307,88 @@ def test_no_5xx_endpoint_leaks_dict_detail_str_exception():
             "Violations:\n  " + "\n  ".join(violations)
         )
         pytest.fail(msg)
+
+
+# ---------------------------------------------------------------------------
+# Fifth check: extend exception-detail-leak coverage to services/ and utils/
+# ---------------------------------------------------------------------------
+# The prior four checks only scan backend/app/api/v1/endpoints/. However,
+# services can also raise HTTPException directly (e.g. MinioService).
+# Three such sites in minio_service.py were sanitized in PR #724; this
+# check prevents future regressions in the service layer.
+#
+# Scope: backend/app/services/ + backend/app/utils/ (excluding
+# endpoint_decorators.py which has intentional narrow-exception patterns
+# where str(e) is appropriate because the exception type carries a
+# user-facing message by design).
+#
+# Pattern caught: detail=str(e)  OR  detail=f"...{str(e)/e}..."
+
+SERVICES_DIR = Path(__file__).resolve().parent.parent / "services"
+UTILS_DIR = Path(__file__).resolve().parent.parent / "utils"
+
+# endpoint_decorators.py uses narrow-catch exceptions (CollegeReviewAccessError,
+# RankingNotFoundError, etc.) whose messages are user-facing by contract.
+# Those are intentional and excluded from this check.
+_SERVICES_ALLOWLIST: set[str] = {
+    str(UTILS_DIR / "endpoint_decorators.py"),
+}
+
+
+def _iter_service_util_files() -> list[Path]:
+    """Yield every .py file under services/ and utils/, excluding allowlisted files."""
+    paths = []
+    for base in (SERVICES_DIR, UTILS_DIR):
+        if base.exists():
+            paths.extend(
+                p
+                for p in base.rglob("*.py")
+                if p.name != "__init__.py" and "__pycache__" not in p.parts and str(p) not in _SERVICES_ALLOWLIST
+            )
+    return sorted(paths)
+
+
+def _scan_service_file(path: Path) -> list[tuple[str, int, str]]:
+    """Return [(handler_name, lineno, excerpt)] for any HTTPException detail leak."""
+    src = path.read_text()
+    tree = ast.parse(src)
+    findings = []
+    for node in ast.walk(tree):
+        if not _is_http_exception_raise(node):
+            continue
+        is_bad = _detail_is_bare_str_exception(node.exc) or _detail_is_unsanitized_fstring(node.exc)
+        if not is_bad:
+            continue
+        handler = _enclosing_function(node, tree) or "<module>"
+        excerpt = ast.unparse(node).splitlines()[0][:120]
+        findings.append((handler, node.lineno, excerpt))
+    return findings
+
+
+def test_no_service_raises_http_exception_leaking_exception_detail():
+    """No `raise HTTPException(detail=str(e))` or `detail=f"...{str(e)}..."` pattern
+    is allowed in backend/app/services/ or backend/app/utils/ (excluding
+    endpoint_decorators.py which uses intentional narrow-catch patterns).
+
+    Services that raise HTTPException directly (e.g. MinioService) can leak
+    internal SDK error text (bucket names, paths, error codes) to the HTTP
+    client through the detail field. PR #724 sanitized 3 such sites in
+    minio_service.py; this test pins that clean state.
+
+    The traceback must reach structured logs via logger.exception() or
+    exc_info=True — it must NOT be echoed verbatim to the HTTP client."""
+    violations = []
+    for path in _iter_service_util_files():
+        for handler, lineno, excerpt in _scan_service_file(path):
+            rel = path.relative_to(Path(__file__).resolve().parent.parent.parent)
+            violations.append(f"{rel}:{lineno}  {handler}()  {excerpt!r}")
+
+    if violations:
+        msg = (
+            "Found HTTPException(detail=str(e) / f-string) regressions in services/ or utils/.\n"
+            "Services that raise HTTPException directly must use static detail strings.\n"
+            "Use: raise HTTPException(status_code=5xx, detail='<static>') from e\n"
+            "The full error is captured by logger.exception() and must NOT reach the client.\n\n"
+            "Violations:\n  " + "\n  ".join(violations)
+        )
+        pytest.fail(msg)
