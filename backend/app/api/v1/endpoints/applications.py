@@ -118,14 +118,11 @@ async def create_application(
             logger.debug("Form data validated successfully")
         except Exception as e:
             logger.exception("Form data validation failed")
-            # Do not log raw form data as it may contain sensitive information
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail={
                     "message": "Invalid form data structure",
                     "error_code": "INVALID_FORM_DATA",
-                    "error": str(e),
-                    "received_form_data": str(application_data.form_data),
                 },
             ) from e
 
@@ -276,14 +273,12 @@ async def create_application(
         raise
     except IntegrityError as e:
         logger.exception("Database integrity error during application creation")
-        # Check for specific constraint violations if needed, e.g., unique constraint
         if "duplicate key value violates unique constraint" in str(e):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
                     "message": "Duplicate entry: An application with these details already exists.",
                     "error_code": "DUPLICATE_ENTRY",
-                    "detail": str(e),
                 },
             ) from e
         raise HTTPException(
@@ -291,7 +286,6 @@ async def create_application(
             detail={
                 "message": "A database integrity error occurred.",
                 "error_code": "DATABASE_INTEGRITY_ERROR",
-                "detail": str(e),
             },
         ) from e
     except Exception as e:

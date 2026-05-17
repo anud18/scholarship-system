@@ -23,6 +23,11 @@ A second check (added in the same file) catches bare `detail=str(e)`
 the original sweep and was sanitized in the payment_rosters.py
 RosterGenerationError handler.
 
+A third check catches `detail={"key": str(e)}` — dict-form detail
+containing str(e) values on 5xx responses. This pattern was sanitized
+in applications.py (PR #721) and evaded both prior checks because
+the dict wrapper hides the str(e) call from the top-level keyword scan.
+
 The checks run in <1s. No DB, no fixtures, no HTTP client.
 """
 
@@ -146,6 +151,7 @@ def test_no_endpoint_raises_http_exception_leaking_exception_detail():
             "Violations:\n  " + "\n  ".join(violations)
         )
         pytest.fail(msg)
+        pytest.fail(msg)
 
 
 # ---------------------------------------------------------------------------
@@ -226,6 +232,76 @@ def test_no_5xx_endpoint_leaks_bare_str_exception():
             "Found HTTPException(status_code=5xx, detail=str(e)) regressions.\n"
             "5xx responses must use a static detail string: "
             'detail="<static message>" + raise ... from e\n'
+            "The traceback is captured by logger.exception() / exc_info=True "
+            "and must NOT be echoed verbatim to the HTTP client.\n\n"
+            "Violations:\n  " + "\n  ".join(violations)
+        )
+        pytest.fail(msg)
+        pytest.fail(msg)
+
+
+# ---------------------------------------------------------------------------
+# Third check: dict-form detail containing str(e) values
+# ---------------------------------------------------------------------------
+
+
+def _detail_dict_contains_str_exception(call: ast.Call) -> bool:
+    """Return True iff detail={"key": str(<exception-name>), ...} in any value."""
+    for kw in call.keywords:
+        if kw.arg != "detail":
+            continue
+        if not isinstance(kw.value, ast.Dict):
+            continue
+        for val in kw.value.values:
+            if (
+                isinstance(val, ast.Call)
+                and isinstance(val.func, ast.Name)
+                and val.func.id == "str"
+                and len(val.args) == 1
+                and isinstance(val.args[0], ast.Name)
+                and val.args[0].id in _EXC_NAMES
+            ):
+                return True
+    return False
+
+
+def _scan_file_dict_detail_str_exception(path: Path) -> list[tuple[str, int, str]]:
+    """Return [(handler_name, lineno, excerpt)] for dict-detail str(e) on 5xx."""
+    src = path.read_text()
+    tree = ast.parse(src)
+    findings = []
+    for node in ast.walk(tree):
+        if not _is_http_exception_raise(node):
+            continue
+        if not _detail_dict_contains_str_exception(node.exc):
+            continue
+        if not _status_code_is_5xx(node.exc):
+            continue
+        handler = _enclosing_function(node, tree) or "<module>"
+        excerpt = ast.unparse(node).splitlines()[0][:120]
+        findings.append((handler, node.lineno, excerpt))
+    return findings
+
+
+def test_no_5xx_endpoint_leaks_dict_detail_str_exception():
+    """No `raise HTTPException(status_code=5xx, detail={"key": str(e)})` pattern
+    is allowed in backend/app/api/v1/endpoints/. Dict-wrapped str(e) values on
+    5xx responses leak internal exception text (SQL fragments, column values,
+    internal paths) to the client without appearing in the top-level keyword scan.
+
+    Fixed in applications.py (PR #721); this test prevents future regressions."""
+    violations = []
+    for path in _iter_endpoint_files():
+        rel = path.relative_to(ENDPOINTS_DIR)
+        for handler, lineno, excerpt in _scan_file_dict_detail_str_exception(path):
+            violations.append(f"{rel}:{lineno}  {handler}()  {excerpt!r}")
+
+    if violations:
+        msg = (
+            'Found HTTPException(status_code=5xx, detail={"key": str(e)}) regressions.\n'
+            "Dict-wrapped str(e) values on 5xx responses leak internal exception context.\n"
+            "Use static strings only: "
+            'detail={"message": "<static>", "error_code": "..."} + raise ... from e\n'
             "The traceback is captured by logger.exception() / exc_info=True "
             "and must NOT be echoed verbatim to the HTTP client.\n\n"
             "Violations:\n  " + "\n  ".join(violations)
