@@ -79,7 +79,7 @@ async def pre_authorize_user(
                 "actor_user_id": current_user.id,
             },
         )
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to pre-authorize user") from e
 
 
 @router.post("/assign-scholarship")
@@ -137,7 +137,7 @@ async def assign_scholarship_to_admin(
                 "actor_user_id": current_user.id,
             },
         )
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to assign scholarship") from e
 
 
 @router.get("/pre-authorized-users")
@@ -249,7 +249,9 @@ async def remove_admin_from_scholarship(
                 "actor_user_id": current_user.id,
             },
         )
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to remove admin from scholarship"
+        ) from e
 
 
 @router.get("/user/{nycu_id}")

@@ -94,7 +94,6 @@ async def create_application(
                 detail={
                     "message": "Scholarship type is required",
                     "error_code": "MISSING_SCHOLARSHIP_TYPE",
-                    "received_data": application_data.model_dump(exclude_none=True),
                 },
             )
 
@@ -107,7 +106,6 @@ async def create_application(
                 detail={
                     "message": "Form data is required",
                     "error_code": "MISSING_FORM_DATA",
-                    "received_data": application_data.model_dump(exclude_none=True),
                 },
             )
 
@@ -265,7 +263,6 @@ async def create_application(
                 "message": "Validation error",
                 "error_code": "VALIDATION_ERROR",
                 "errors": e.errors() if hasattr(e, "errors") else str(e),
-                "received_data": application_data.dict(exclude_none=True),
             },
         ) from e
     except HTTPException:
