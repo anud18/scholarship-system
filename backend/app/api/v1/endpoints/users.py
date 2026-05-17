@@ -83,9 +83,14 @@ async def get_student_info(current_user: User = Depends(get_current_user), db: A
                     term_data = await student_service.get_student_term_info(student_code, str(year), term)
                     if term_data:
                         semesters.append({"academic_year": str(year), "term": term, **term_data})
-                except Exception:
-                    # Log but continue - some semesters may not exist
-                    pass
+                except Exception as term_exc:
+                    logger.debug(
+                        "SIS term fetch skipped: student=%s year=%s term=%s: %s",
+                        student_code,
+                        year,
+                        term,
+                        term_exc,
+                    )
 
     # Return student information with new structure
     return {

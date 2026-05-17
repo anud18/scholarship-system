@@ -417,8 +417,11 @@ async def get_bank_document(
                 )
 
             except Exception:
-                # If MinIO fails, try fallback to local storage
-                pass
+                logger.warning(
+                    "MinIO bank document fetch failed for object %s; falling back to local storage",
+                    object_name,
+                    exc_info=True,
+                )
 
         # Fallback to local storage (backward compatibility for legacy files
         # uploaded before MinIO migration). The MinIO path above performed
