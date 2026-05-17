@@ -609,9 +609,7 @@ async def send_test_email(
     except HTTPException:
         raise
     except Exception as e:
-        import logging
-
-        logging.error(f"Failed to send test email: {str(e)}", exc_info=True)
+        logger.error("Failed to send test email", exc_info=True)
 
         response_data = SendTestEmailResponse(success=False, message="測試郵件發送失敗", error=str(e))
 
@@ -681,9 +679,7 @@ async def send_simple_test_email(
     except HTTPException:
         raise
     except Exception as e:
-        import logging
-
-        logging.error(f"Failed to send simple test email: {str(e)}", exc_info=True)
+        logger.error("Failed to send simple test email", exc_info=True)
 
         response_data = SimpleTestEmailResponse(success=False, message="Failed to send test email", error=str(e))
 
