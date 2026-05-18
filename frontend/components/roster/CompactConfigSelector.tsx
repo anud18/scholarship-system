@@ -139,7 +139,7 @@ export function CompactConfigSelector({ onConfigSelect, disabled = false }: Comp
       })
 
       if (response.success && response.data) {
-        const configs = response.data
+        const configs = response.data as ScholarshipConfiguration[]
         setConfigurations(configs)
 
         // Extract unique period combinations

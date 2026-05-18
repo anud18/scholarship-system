@@ -147,8 +147,8 @@ export function EmailAutomationManagement() {  const [rules, setRules] = useStat
       const response = await apiClient.admin.getEmailTemplatesBySendingType();
       if (response.success && response.data) {
         // Use subject_template from database as label
-        const templates = response.data.map(
-          (t: { key: string; subject_template?: string }) => ({
+        const templates = (response.data as { key: string; subject_template?: string }[]).map(
+          (t) => ({
             key: t.key,
             label: t.subject_template || t.key, // Use subject as label, fallback to key
             subject_template: t.subject_template,
