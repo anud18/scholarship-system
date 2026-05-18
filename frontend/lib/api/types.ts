@@ -176,6 +176,11 @@ export interface Application {
   };
   academic_year?: number;
   semester?: string | null;
+  professor_review_items?: Array<{
+    sub_type_code: string;
+    recommendation: string;
+    comments?: string;
+  }>;
 }
 
 /**
