@@ -59,11 +59,12 @@ export function useScholarshipPermissions() {
       });
 
       if (response.success && response.data) {
-        setAllowedScholarships(response.data);
+        const scholarships = response.data as AllowedScholarship[];
+        setAllowedScholarships(scholarships);
 
         // Convert to permission format for backward compatibility
         const nowIso = new Date().toISOString();
-        const permissionList = response.data.map(scholarship => ({
+        const permissionList = scholarships.map(scholarship => ({
           id: scholarship.id,
           user_id: Number(user.id),
           scholarship_id: scholarship.id,
