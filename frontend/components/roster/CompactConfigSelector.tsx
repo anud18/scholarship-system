@@ -5,7 +5,7 @@ import { useState, useEffect } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { api } from "@/lib/api"
 
-interface ScholarshipConfiguration {
+export interface ScholarshipConfiguration {
   id: number
   config_name: string
   config_code: string

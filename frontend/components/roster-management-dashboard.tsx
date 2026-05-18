@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { FileSpreadsheet, Settings, Play, Clock } from "lucide-react"
 import { RosterScheduleList } from "./roster-schedule-list"
 import { SchedulerStatus } from "./scheduler-status"
-import { CompactConfigSelector } from "./roster/CompactConfigSelector"
+import { CompactConfigSelector, ScholarshipConfiguration } from "./roster/CompactConfigSelector"
 import { CreateSchedulePrompt } from "./roster/CreateSchedulePrompt"
 import { ConfigInfoCard } from "./roster/ConfigInfoCard"
 import { MatrixQuotaDisplay } from "./roster/MatrixQuotaDisplay"
@@ -36,7 +36,7 @@ export function RosterManagementDashboard() {
   })
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState("roster-management")
-  const [selectedConfig, setSelectedConfig] = useState<any>(null)
+  const [selectedConfig, setSelectedConfig] = useState<ScholarshipConfiguration | null>(null)
   const [selectedSchedule, setSelectedSchedule] = useState<any>(null)
   const [cycleData, setCycleData] = useState<any>(null)
   const [loadingSchedule, setLoadingSchedule] = useState(false)
@@ -77,7 +77,7 @@ export function RosterManagementDashboard() {
     }
   }
 
-  const handleConfigSelect = async (configId: number, config: any) => {
+  const handleConfigSelect = async (configId: number, config: ScholarshipConfiguration) => {
     setSelectedConfig(config)
     setLoadingSchedule(true)
     setLoadingCycle(true)

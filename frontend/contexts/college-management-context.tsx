@@ -50,7 +50,7 @@ interface ManagedCollege {
 }
 
 interface RankingData {
-  applications: any[];
+  applications: Application[];
   totalQuota: number;
   collegeQuota?: number;
   collegeQuotaBreakdown?: SubTypeQuotaBreakdown;
@@ -69,7 +69,7 @@ interface CollegeManagementContextType {
   applications: Application[];
   isLoading: boolean;
   error: string | null;
-  updateApplicationStatus: any;
+  updateApplicationStatus: (applicationId: number, status: string, reviewNotes?: string) => Promise<Application | undefined>;
   fetchCollegeApplications: (academicYear?: number, semester?: string, scholarshipType?: string) => Promise<void>;
 
   // View state
