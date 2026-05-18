@@ -5,6 +5,7 @@ import { apiClient } from "@/lib/api";
 import { useCollegeApplications } from "@/hooks/use-admin";
 import { Semester } from "@/lib/enums";
 import { logger } from "@/lib/utils/logger";
+import { Application } from "@/lib/api/types";
 
 interface ScholarshipConfig {
   id: number;
@@ -20,6 +21,20 @@ interface AcademicConfig {
 }
 
 type SubTypeQuotaBreakdown = Record<string, { quota?: number; label?: string; label_en?: string }>;
+
+interface CollegeRanking {
+  id: number;
+  ranking_name: string;
+  is_finalized: boolean;
+  distribution_executed: boolean;
+  total_applications: number;
+  allocated_count?: number;
+  distribution_date?: string;
+  scholarship_type_id?: number;
+  academic_year?: number;
+  semester?: string | null;
+  [key: string]: unknown;
+}
 
 interface AvailableOptions {
   scholarship_types: Array<{ id: number; code: string; name: string; name_en?: string }>;
@@ -51,17 +66,17 @@ interface CollegeManagementContextType {
   locale: "zh" | "en";
 
   // Applications from hook
-  applications: any[];
+  applications: Application[];
   isLoading: boolean;
   error: string | null;
   updateApplicationStatus: any;
-  fetchCollegeApplications: any;
+  fetchCollegeApplications: (academicYear?: number, semester?: string, scholarshipType?: string) => Promise<void>;
 
   // View state
   viewMode: "card" | "table";
   setViewMode: (mode: "card" | "table") => void;
-  selectedApplication: any | null;
-  setSelectedApplication: (app: any | null) => void;
+  selectedApplication: Application | null;
+  setSelectedApplication: (app: Application | null) => void;
 
   // Tab management
   activeTab: string;
@@ -72,13 +87,13 @@ interface CollegeManagementContextType {
   // Ranking state
   rankingData: RankingData | null;
   setRankingData: (data: RankingData | null) => void;
-  rankings: any[];
-  setRankings: (rankings: any[]) => void;
+  rankings: CollegeRanking[];
+  setRankings: (rankings: CollegeRanking[]) => void;
   selectedRanking: number | null;
   setSelectedRanking: (id: number | null) => void;
   isRankingLoading: boolean;
   setIsRankingLoading: (loading: boolean) => void;
-  filteredRankings: any[];
+  filteredRankings: CollegeRanking[];
 
   // Data version tracking for cross-tab synchronization
   dataVersion: number;
@@ -119,16 +134,16 @@ interface CollegeManagementContextType {
   // Dialog states
   showDeleteDialog: boolean;
   setShowDeleteDialog: (show: boolean) => void;
-  applicationToDelete: any | null;
-  setApplicationToDelete: (app: any | null) => void;
+  applicationToDelete: Application | null;
+  setApplicationToDelete: (app: Application | null) => void;
   showDocumentRequestDialog: boolean;
   setShowDocumentRequestDialog: (show: boolean) => void;
-  applicationToRequestDocs: any | null;
-  setApplicationToRequestDocs: (app: any | null) => void;
+  applicationToRequestDocs: Application | null;
+  setApplicationToRequestDocs: (app: Application | null) => void;
   showDeleteRankingDialog: boolean;
   setShowDeleteRankingDialog: (show: boolean) => void;
-  rankingToDelete: any | null;
-  setRankingToDelete: (ranking: any | null) => void;
+  rankingToDelete: CollegeRanking | null;
+  setRankingToDelete: (ranking: CollegeRanking | null) => void;
 
   // Ranking editing state
   editingRankingId: number | null;
@@ -172,7 +187,7 @@ export function CollegeManagementProvider({
 
   // View state
   const [viewMode, setViewMode] = useState<"card" | "table">("card");
-  const [selectedApplication, setSelectedApplication] = useState<any>(null);
+  const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
 
   // Tab management
   const [activeTab, setActiveTab] = useState("review");
@@ -180,7 +195,7 @@ export function CollegeManagementProvider({
 
   // Ranking state
   const [rankingData, setRankingData] = useState<RankingData | null>(null);
-  const [rankings, setRankings] = useState<any[]>([]);
+  const [rankings, setRankings] = useState<CollegeRanking[]>([]);
   const [selectedRanking, setSelectedRanking] = useState<number | null>(null);
   const [isRankingLoading, setIsRankingLoading] = useState(false);
 
@@ -223,11 +238,11 @@ export function CollegeManagementProvider({
 
   // Dialog states
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [applicationToDelete, setApplicationToDelete] = useState<any>(null);
+  const [applicationToDelete, setApplicationToDelete] = useState<Application | null>(null);
   const [showDocumentRequestDialog, setShowDocumentRequestDialog] = useState(false);
-  const [applicationToRequestDocs, setApplicationToRequestDocs] = useState<any>(null);
+  const [applicationToRequestDocs, setApplicationToRequestDocs] = useState<Application | null>(null);
   const [showDeleteRankingDialog, setShowDeleteRankingDialog] = useState(false);
-  const [rankingToDelete, setRankingToDelete] = useState<any>(null);
+  const [rankingToDelete, setRankingToDelete] = useState<CollegeRanking | null>(null);
 
   // Ranking editing state
   const [editingRankingId, setEditingRankingId] = useState<number | null>(null);
@@ -496,7 +511,7 @@ export function CollegeManagementProvider({
           }
         );
 
-        setRankings(normalizedRankings);
+        setRankings(normalizedRankings as CollegeRanking[]);
       }
     } catch (error) {
       logger.error("Failed to fetch rankings", { error });
