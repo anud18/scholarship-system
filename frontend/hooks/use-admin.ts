@@ -447,7 +447,7 @@ export function useScholarshipSpecificApplications() {
         if (user.role === "admin" || user.role === "college") {
           // Create objects with both id and code for filtering
           const scholarshipObjects = types.map(type => ({
-            id: response.data![type].id, // Use the actual scholarship ID
+            id: (response.data![type] as { id: number }).id, // Use the actual scholarship ID
             code: type, // Keep the code for reference
           }));
 
@@ -617,7 +617,7 @@ export function useScholarshipReview() {
       const response = await apiClient.admin.getScholarshipStats();
 
       if (response.success && response.data) {
-        setScholarshipStats(response.data);
+        setScholarshipStats(response.data as Record<string, ScholarshipStats>);
       } else {
         throw new Error(
           response.message || "Failed to fetch scholarship stats"
