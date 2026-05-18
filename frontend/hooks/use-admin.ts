@@ -375,10 +375,10 @@ export function useCollegeApplications() {
         if (response.success && response.data) {
           // Update the application in the list
           setApplications(prev =>
-            prev.map(app => (app.id === applicationId ? response.data! : app))
+            prev.map(app => (app.id === applicationId ? response.data! as Application : app))
           );
 
-          return response.data;
+          return response.data as Application;
         } else {
           throw new Error(
             response.message || "Failed to update application status"

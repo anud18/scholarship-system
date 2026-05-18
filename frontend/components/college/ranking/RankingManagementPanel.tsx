@@ -167,7 +167,19 @@ export function RankingManagementPanel({
               student_info?: { display_name?: string; student_id?: string };
             };
           }
-          const transformedApplications = (response.data.items || []).map(
+          const rankingPayload = response.data as {
+            items?: RankingItemPayload[];
+            total_quota?: number;
+            college_quota?: number;
+            college_quota_breakdown?: Record<string, unknown>;
+            sub_type_metadata?: Array<{ code?: string; [key: string]: unknown }>;
+            sub_type_code?: string;
+            academic_year?: number;
+            semester?: string | null;
+            is_finalized?: boolean;
+            college_review_end?: string | null;
+          };
+          const transformedApplications = (rankingPayload.items || []).map(
             (item: RankingItemPayload) => ({
               id: item.application?.id || item.id,
               ranking_item_id: item.id,
@@ -200,18 +212,15 @@ export function RankingManagementPanel({
           );
 
           // #91: college_review_end is now returned directly by the ranking detail endpoint
-          setActiveConfigDeadline(
-            (response.data as { college_review_end?: string | null })
-              .college_review_end ?? null
-          );
+          setActiveConfigDeadline(rankingPayload.college_review_end ?? null);
 
           setRankingData({
             applications: transformedApplications,
-            totalQuota: response.data.total_quota || 0,
-            collegeQuota: response.data.college_quota,
-            collegeQuotaBreakdown: response.data.college_quota_breakdown,
-            subTypeMetadata: Array.isArray(response.data.sub_type_metadata)
-              ? response.data.sub_type_metadata.reduce(
+            totalQuota: rankingPayload.total_quota || 0,
+            collegeQuota: rankingPayload.college_quota,
+            collegeQuotaBreakdown: rankingPayload.college_quota_breakdown,
+            subTypeMetadata: Array.isArray(rankingPayload.sub_type_metadata)
+              ? rankingPayload.sub_type_metadata.reduce(
                   (
                     acc: Record<string, { code: string; [key: string]: unknown }>,
                     meta: { code?: string; [key: string]: unknown }
@@ -226,11 +235,11 @@ export function RankingManagementPanel({
                   },
                   {}
                 )
-              : response.data.sub_type_metadata || {},
-            subTypeCode: response.data.sub_type_code || "default",
-            academicYear: response.data.academic_year || 0,
-            semester: response.data.semester,
-            isFinalized: response.data.is_finalized || false,
+              : rankingPayload.sub_type_metadata || {},
+            subTypeCode: rankingPayload.sub_type_code || "default",
+            academicYear: rankingPayload.academic_year || 0,
+            semester: rankingPayload.semester,
+            isFinalized: rankingPayload.is_finalized || false,
           });
         }
       } catch (error) {
@@ -314,17 +323,18 @@ export function RankingManagementPanel({
           // Refresh rankings list
           await fetchRankings();
           // Select the newly created ranking
-          setSelectedRanking(response.data.id);
+          const newRanking = response.data as { id: number; ranking_name?: string };
+          setSelectedRanking(newRanking.id);
           // Load ranking details
-          await fetchRankingDetails(response.data.id);
+          await fetchRankingDetails(newRanking.id);
           // Increment data version
           incrementDataVersion();
 
           // Show success notification
           toast.success(
             locale === "zh"
-              ? `排名「${response.data.ranking_name || "新排名"}」已成功建立`
-              : `Ranking "${response.data.ranking_name || "New Ranking"}" has been created successfully`
+              ? `排名「${newRanking.ranking_name || "新排名"}」已成功建立`
+              : `Ranking "${newRanking.ranking_name || "New Ranking"}" has been created successfully`
           );
         } catch (fetchError) {
           logger.error("Failed to load ranking after creation", { fetchError: fetchError });
@@ -442,7 +452,15 @@ export function RankingManagementPanel({
 
         // 檢查是否自動重新執行了分發
         if (response.success && response.data) {
-          const redistribution = response.data.redistribution_info;
+          const reviewResult = response.data as {
+            redistribution_info?: {
+              auto_redistributed?: boolean;
+              reason?: string;
+              total_allocated?: number;
+              roster_info?: { roster_code?: string };
+            };
+          };
+          const redistribution = reviewResult.redistribution_info;
 
           if (redistribution?.auto_redistributed) {
             toast.success(
