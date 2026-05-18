@@ -271,12 +271,15 @@ export function RosterManagementDashboard() {
               ) : (
                 <div className="space-y-4">
                   {/* Config Info Card */}
-                  <ConfigInfoCard config={selectedConfig} schedule={selectedSchedule} />
+                  <ConfigInfoCard
+                    config={{ ...selectedConfig, semester: selectedConfig.semester ?? undefined }}
+                    schedule={selectedSchedule}
+                  />
 
                   {/* Matrix Quota Display (if applicable) */}
                   <MatrixQuotaDisplay
-                    quotas={selectedConfig.quotas}
-                    hasMatrix={selectedConfig.has_college_quota}
+                    quotas={(selectedConfig.quotas as Record<string, Record<string, number>>) ?? null}
+                    hasMatrix={selectedConfig.has_college_quota ?? false}
                   />
 
                   {/* Student Roster Preview */}
@@ -326,7 +329,7 @@ export function RosterManagementDashboard() {
           open={scheduleDialogOpen}
           onOpenChange={setScheduleDialogOpen}
           schedule={selectedSchedule}
-          onUpdated={() => handleConfigSelect(selectedConfig.id, selectedConfig)}
+          onUpdated={() => handleConfigSelect(selectedConfig!.id, selectedConfig!)}
         />
       )}
     </div>

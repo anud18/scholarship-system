@@ -50,7 +50,8 @@ interface ManagedCollege {
 }
 
 interface RankingData {
-  applications: Application[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  applications: any[];
   totalQuota: number;
   collegeQuota?: number;
   collegeQuotaBreakdown?: SubTypeQuotaBreakdown;

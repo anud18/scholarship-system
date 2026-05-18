@@ -17,7 +17,7 @@ import { ConfigSelector } from "../shared/ConfigSelector";
 import { RankingCardList } from "../shared/RankingCardList";
 import { Plus, Loader2, Clock, AlertTriangle, Lock } from "lucide-react";
 import { toast } from "sonner";
-import { apiClient, Application } from "@/lib/api";
+import { apiClient } from "@/lib/api";
 import { logger } from "@/lib/utils/logger";
 
 // #63: surface the college-review deadline visibly on the ranking page
@@ -382,7 +382,8 @@ export function RankingManagementPanel({
   ]);
 
   const handleRankingChange = useCallback(
-    async (newOrder: Application[]) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    async (newOrder: any[]) => {
       if (!rankingData || !selectedRanking) return;
 
       setRankingData({
