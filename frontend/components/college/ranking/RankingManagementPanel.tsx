@@ -382,11 +382,6 @@ export function RankingManagementPanel({
   ]);
 
   const handleRankingChange = useCallback(
-    // newOrder is the typed `Application[]` from CollegeRankingTable;
-    // we narrow to the subset we actually read (ranking_item_id) when building
-    // the updateRankingOrder payload below. The application objects are passed
-    // straight through to setRankingData, whose .applications field is itself
-    // `any[]` in the context type for the same reason.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     async (newOrder: any[]) => {
       if (!rankingData || !selectedRanking) return;

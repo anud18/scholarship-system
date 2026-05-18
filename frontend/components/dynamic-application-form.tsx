@@ -50,6 +50,7 @@ type Locale = "zh" | "en";
 interface DynamicApplicationFormProps {
   scholarshipType: string;
   locale?: Locale;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onFieldChange?: (fieldName: string, value: any) => void;
   onFileChange?: (documentType: string, files: File[]) => void;
   initialValues?: Record<string, any>;
@@ -60,6 +61,7 @@ interface DynamicApplicationFormProps {
 }
 
 interface FormData {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any;
 }
 
@@ -156,7 +158,7 @@ export function DynamicApplicationForm({
     }
   };
 
-  const handleFieldChange = (fieldName: string, value: any) => {
+  const handleFieldChange = (fieldName: string, value: unknown) => {
     const newFormData = { ...formData, [fieldName]: value };
     setFormData(newFormData);
     onFieldChange?.(fieldName, value);

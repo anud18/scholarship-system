@@ -50,6 +50,7 @@ interface ManagedCollege {
 }
 
 interface RankingData {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   applications: any[];
   totalQuota: number;
   collegeQuota?: number;
@@ -69,7 +70,7 @@ interface CollegeManagementContextType {
   applications: Application[];
   isLoading: boolean;
   error: string | null;
-  updateApplicationStatus: any;
+  updateApplicationStatus: (applicationId: number, status: string, reviewNotes?: string) => Promise<Application | undefined>;
   fetchCollegeApplications: (academicYear?: number, semester?: string, scholarshipType?: string) => Promise<void>;
 
   // View state

@@ -181,6 +181,12 @@ export interface Application {
     recommendation: string;
     comments?: string;
   }>;
+  redistribution_info?: {
+    auto_redistributed: boolean;
+    rankings_processed: number;
+    successful_count: number;
+    total_allocated: number;
+  };
 }
 
 /**
