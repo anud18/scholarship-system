@@ -1081,7 +1081,7 @@ export function ApplicationReviewPanel({
 
                       {/* 6.5 教授推薦 */}
                       <TableCell>
-                        {app.professor_review_items?.length > 0 ? (
+                        {(app.professor_review_items?.length ?? 0) > 0 ? (
                           <div className="flex flex-col gap-0.5">
                             {app.professor_review_items.map(
                               (
