@@ -1318,6 +1318,12 @@ async def supplementary_import(
     dynamic_field_names = [f.field_name for f in dynamic_fields]
 
     # Parse Excel
+    allowed_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    if file.content_type and file.content_type != allowed_mime:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="只接受 .xlsx 檔案",
+        )
     file_bytes = await file.read()
     MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
     if len(file_bytes) > MAX_UPLOAD_BYTES:
@@ -1352,7 +1358,11 @@ async def supplementary_import(
 
     # Fetch student data from SIS API
     student_ids = [r.student_id for r in rows]
-    student_data_map, missing_ids = await service.fetch_student_data_bulk(student_ids)
+    student_data_map, missing_ids = await service.fetch_student_data_bulk(
+        student_ids,
+        academic_year=ranking.academic_year,
+        semester=ranking.semester,
+    )
     if missing_ids:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -1373,13 +1383,34 @@ async def supplementary_import(
     imported_count = await service.create_applications_and_items(
         rows, user_map, student_data_map, ranking, max_existing_rank
     )
-    ranking.total_applications = max_existing_rank + imported_count
+    ranking.total_applications = len(ranking.items) + imported_count
     await db.commit()
 
     logger.info(
         "Supplementary import: ranking_id=%s imported=%s by user=%s",
         ranking_id, imported_count, current_user.id,
     )
+
+    try:
+        audit_log = AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.pii_access.value,  # closest fit — Application/User/UserProfile rows created with PII
+            resource_type="college_ranking",
+            resource_id=str(ranking_id),
+            description=f"補充匯入：建立 {imported_count} 筆申請",
+            new_values={
+                "ranking_id": ranking_id,
+                "imported_count": imported_count,
+                "student_ids": [r.student_id for r in rows],
+                "max_existing_rank": max_existing_rank,
+            },
+            status="success",
+        )
+        db.add(audit_log)
+        await db.commit()
+    except Exception as exc:  # audit failure must not block the import
+        logger.warning("Failed to record supplementary import audit log: %s", exc)
+        await db.rollback()
 
     return ApiResponse(
         success=True,

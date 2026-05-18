@@ -85,7 +85,7 @@ class SupplementaryImportService:
         seen_ranks: Dict[int, int] = {}        # rank -> first excel row number
 
         try:
-            wb = load_workbook(io.BytesIO(file_bytes), data_only=True)
+            wb = load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
             ws = wb.active
         except Exception as exc:
             return [], [f"無法讀取 Excel 檔案：{exc}"]
@@ -222,13 +222,19 @@ class SupplementaryImportService:
         return [user_id_to_nycu[uid] for uid in conflicting_user_ids if uid in user_id_to_nycu]
 
     async def fetch_student_data_bulk(
-        self, student_ids: List[str]
+        self,
+        student_ids: List[str],
+        academic_year: int,
+        semester: Optional[str],
     ) -> Tuple[Dict[str, dict], List[str]]:
         """Fetch student_data from SIS API for each student_id.
 
         Returns (data_map, missing_ids).
         Raises ValueError if SIS API is not enabled.
+        Uses get_student_snapshot to capture API 1 + API 2 + metadata.
         """
+        from app.core.exceptions import NotFoundError
+
         if not getattr(self.student_service, "api_enabled", False):
             raise ValueError("學生 API 未啟用，無法驗證學生資料")
 
@@ -237,16 +243,20 @@ class SupplementaryImportService:
 
         for student_id in student_ids:
             try:
-                data = await self.student_service.get_student_basic_info(student_id)
+                data = await self.student_service.get_student_snapshot(
+                    student_id,
+                    academic_year=str(academic_year),
+                    semester=semester,
+                )
+            except NotFoundError:
+                missing.append(student_id)
+                continue
             except Exception as exc:
                 logger.warning("SIS API error for %s: %s", student_id, exc)
                 missing.append(student_id)
                 continue
 
-            if not data:
-                missing.append(student_id)
-            else:
-                data_map[student_id] = data
+            data_map[student_id] = data
 
         return data_map, missing
 
@@ -326,7 +336,7 @@ class SupplementaryImportService:
         rows: List["SupplementaryRow"],
         user_map: Dict[str, object],
         student_data_map: Dict[str, dict],
-        ranking,
+        ranking,  # CollegeRanking ORM object
         max_existing_rank: int,
     ) -> int:
         """Create Application + CollegeRankingItem for each supplementary row.
@@ -338,37 +348,45 @@ class SupplementaryImportService:
         from app.models.application_sequence import ApplicationSequence
         from app.models.college_review import CollegeRankingItem
 
+        if not rows:
+            return 0
+
         semester_str = ranking.semester if ranking.semester else "yearly"
 
+        # Lock sequence once, reserve len(rows) slots
+        seq_stmt = (
+            select(ApplicationSequence)
+            .where(
+                ApplicationSequence.academic_year == ranking.academic_year,
+                ApplicationSequence.semester == semester_str,
+            )
+            .with_for_update()
+        )
+        seq_result = await self.db.execute(seq_stmt)
+        seq_record = seq_result.scalar_one_or_none()
+        if not seq_record:
+            seq_record = ApplicationSequence(
+                academic_year=ranking.academic_year,
+                semester=semester_str,
+                last_sequence=0,
+            )
+            self.db.add(seq_record)
+            await self.db.flush()
+
+        base_seq = seq_record.last_sequence
+        seq_record.last_sequence = base_seq + len(rows)
+        await self.db.flush()
+
         created = 0
-        for row in rows:
+        for idx, row in enumerate(rows):
             user = user_map.get(row.student_id)
             if not user:
                 continue
 
             sis_data = student_data_map.get(row.student_id, {})
 
-            seq_stmt = (
-                select(ApplicationSequence)
-                .where(
-                    ApplicationSequence.academic_year == ranking.academic_year,
-                    ApplicationSequence.semester == semester_str,
-                )
-                .with_for_update()
-            )
-            seq_result = await self.db.execute(seq_stmt)
-            seq_record = seq_result.scalar_one_or_none()
-            if not seq_record:
-                seq_record = ApplicationSequence(
-                    academic_year=ranking.academic_year,
-                    semester=semester_str,
-                    last_sequence=0,
-                )
-                self.db.add(seq_record)
-                await self.db.flush()
-            seq_record.last_sequence += 1
             app_id = ApplicationSequence.format_app_id(
-                ranking.academic_year, semester_str, seq_record.last_sequence
+                ranking.academic_year, semester_str, base_seq + idx + 1
             )
 
             submitted_form_data = {
