@@ -204,7 +204,7 @@ export function useAdminDashboard() {
         if (response.success && response.data) {
           // Update the application in the list
           setAllApplications(prev =>
-            prev.map(app => (app.id === applicationId ? response.data! : app))
+            prev.map(app => (app.id === applicationId ? response.data! as Application : app))
           );
 
           // Refresh stats to reflect the change
@@ -512,7 +512,7 @@ export function useScholarshipSpecificApplications() {
             await apiClient.admin.getApplicationsByScholarship(type);
 
           if (response.success && response.data) {
-            applications[type] = response.data;
+            applications[type] = response.data as Application[];
             logger.debug("Applications fetched for type", {
               type,
               count: response.data.length,
@@ -654,7 +654,7 @@ export function useScholarshipReview() {
         if (response.success && response.data) {
           setApplicationsByScholarship(prev => ({
             ...prev,
-            [scholarshipCode]: response.data || [],
+            [scholarshipCode]: (response.data as Application[]) || [],
           }));
         } else {
           throw new Error(response.message || "Failed to fetch applications");
@@ -687,7 +687,7 @@ export function useScholarshipReview() {
         if (response.success && response.data) {
           setSubTypeStats(prev => ({
             ...prev,
-            [scholarshipCode]: response.data || [],
+            [scholarshipCode]: (response.data as SubTypeStats[]) || [],
           }));
         } else {
           throw new Error(response.message || "Failed to fetch sub-type stats");
