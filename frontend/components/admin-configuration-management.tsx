@@ -222,7 +222,7 @@ export function AdminConfigurationManagement({
           ...(inactiveResponse.success ? inactiveResponse.data || [] : []),
         ];
 
-        setConfigurations(allConfigurations);
+        setConfigurations(allConfigurations as ScholarshipConfiguration[]);
       } catch (error) {
         logger.error("載入配置失敗", { error: error });
         toast.error("載入配置失敗: " + (error as Error).message);
@@ -417,7 +417,7 @@ export function AdminConfigurationManagement({
       // Refetch the latest configuration to ensure quotas and other data are up-to-date
       const response = await api.admin.getScholarshipConfiguration(config.id);
       if (response.success && response.data) {
-        setSelectedConfig(response.data);
+        setSelectedConfig(response.data as ScholarshipConfiguration);
         setShowViewDialog(true);
       } else {
         toast.error("無法載入配置詳情");

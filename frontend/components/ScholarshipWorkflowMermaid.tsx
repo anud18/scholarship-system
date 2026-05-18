@@ -215,7 +215,7 @@ export function ScholarshipWorkflowMermaid({
       );
 
       if (response.success && response.data) {
-        const applications = response.data;
+        const applications = response.data as StageApplicationRow[];
 
         // 計算統計資料
         const totalApplications = applications.length;
@@ -436,21 +436,22 @@ export function ScholarshipWorkflowMermaid({
       );
       if (response.success && response.data) {
         // 根據階段篩選申請
-        let filteredApplications = response.data;
+        const allApplications = response.data as StageApplicationRow[];
+        let filteredApplications = allApplications;
 
         // 可以根據 stageName 和當前時間來篩選相關的申請
         if (stageName.includes("申請")) {
-          filteredApplications = response.data.filter(
+          filteredApplications = allApplications.filter(
             app => app.status === "submitted" || app.status === "under_review"
           );
         } else if (stageName.includes("教授")) {
-          filteredApplications = response.data.filter(
+          filteredApplications = allApplications.filter(
             app =>
               app.status === "professor_review_pending" ||
               app.status === "professor_reviewed"
           );
         } else if (stageName.includes("學院")) {
-          filteredApplications = response.data.filter(
+          filteredApplications = allApplications.filter(
             app =>
               app.status === "college_review_pending" ||
               app.status === "college_reviewed"

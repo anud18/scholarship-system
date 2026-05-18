@@ -98,7 +98,7 @@ export function createAdminApi() {
      */
     getHistoricalApplications: async (
       filters?: HistoricalApplicationFilters
-    ): Promise<ApiResponse<unknown>> => {
+    ): Promise<ApiResponse<{ items: unknown[]; page: number; size: number; total: number; pages: number }>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/applications/history', {
         params: {
           query: {
@@ -112,7 +112,7 @@ export function createAdminApi() {
           },
         },
       });
-      return toApiResponse(response) as ApiResponse<unknown>;
+      return toApiResponse(response) as ApiResponse<{ items: unknown[]; page: number; size: number; total: number; pages: number }>;
     },
 
     /**
@@ -148,9 +148,9 @@ export function createAdminApi() {
      * Update email template
      * Type-safe: Request body validated against OpenAPI
      */
-    updateEmailTemplate: async (template: components["schemas"]["EmailTemplateUpdateSchema"]): Promise<ApiResponse<unknown>> => {
+    updateEmailTemplate: async (template: unknown): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.PUT('/api/v1/admin/email-template', {
-        body: template,
+        body: template as never,
       });
       return toApiResponse(response) as ApiResponse<unknown>;
     },
@@ -312,7 +312,7 @@ export function createAdminApi() {
           },
         },
       });
-      return toApiResponse(response) as ApiResponse<unknown>;
+      return toApiResponse(response) as ApiResponse<{ items: unknown[]; total: number; page: number; size: number }>;
     },
 
     /**
