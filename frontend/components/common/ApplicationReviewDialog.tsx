@@ -914,7 +914,7 @@ export function ApplicationReviewDialog({
         ? await api.admin.getReviewableSubTypes(applicationId)
         : await api.college.getSubTypes(applicationId);
       if (subTypesResponse.success && subTypesResponse.data) {
-        const availableSubTypes = subTypesResponse.data;
+        const availableSubTypes = subTypesResponse.data as SubTypeOption[];
         setSubTypes(availableSubTypes);
 
         // Initialize items based on available sub-types

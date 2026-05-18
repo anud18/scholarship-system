@@ -62,7 +62,7 @@ export function ConfigSelector({ onConfigSelect, disabled = false }: ConfigSelec
 
       if (response.success && response.data) {
         // Filter by selected criteria
-        let filtered = response.data
+        let filtered = response.data as ScholarshipConfiguration[]
 
         // Filter by academic year
         if (selectedYear) {
