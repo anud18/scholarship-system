@@ -177,7 +177,7 @@ export function AdminRuleManagement({
 
         if (response.success && response.data) {
           logger.debug("[RULES] Setting rules:", response.data.length, "rules found");
-          setRules(response.data);
+          setRules(response.data as ScholarshipRule[]);
         } else {
           throw new Error(response.message || "載入規則失敗");
         }
