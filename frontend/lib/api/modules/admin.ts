@@ -89,7 +89,7 @@ export function createAdminApi() {
           },
         },
       });
-      return toApiResponse(response) as ApiResponse<unknown>;
+      return toApiResponse(response) as ApiResponse<{ items: unknown[]; total: number; page: number; size: number }>;
     },
 
     /**
