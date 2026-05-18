@@ -218,24 +218,27 @@ export function RankingManagementPanel({
             applications: transformedApplications,
             totalQuota: rankingPayload.total_quota || 0,
             collegeQuota: rankingPayload.college_quota,
-            collegeQuotaBreakdown: rankingPayload.college_quota_breakdown,
+            collegeQuotaBreakdown: rankingPayload.college_quota_breakdown as
+              | Record<string, { quota?: number; label?: string; label_en?: string }>
+              | undefined,
             subTypeMetadata: Array.isArray(rankingPayload.sub_type_metadata)
-              ? rankingPayload.sub_type_metadata.reduce(
+              ? (rankingPayload.sub_type_metadata.reduce(
                   (
-                    acc: Record<string, { code: string; [key: string]: unknown }>,
+                    acc: Record<string, { code: string; label: string; label_en: string }>,
                     meta: { code?: string; [key: string]: unknown }
                   ) => {
                     if (meta.code) {
                       acc[meta.code] = meta as {
                         code: string;
-                        [key: string]: unknown;
+                        label: string;
+                        label_en: string;
                       };
                     }
                     return acc;
                   },
                   {}
-                )
-              : rankingPayload.sub_type_metadata || {},
+                ) as Record<string, { code: string; label: string; label_en: string }>)
+              : (rankingPayload.sub_type_metadata as Record<string, { code: string; label: string; label_en: string }> | undefined) || {},
             subTypeCode: rankingPayload.sub_type_code || "default",
             academicYear: rankingPayload.academic_year || 0,
             semester: rankingPayload.semester,

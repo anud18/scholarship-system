@@ -958,8 +958,8 @@ export function ApplicationReviewDialog({
 
             // Debug logging
             logger.debug('📋 Loaded existing review:', {
-              reviewId: reviewResponse.data.id,
-              reviewedAt: reviewResponse.data.reviewed_at,
+              reviewId: reviewData?.id,
+              reviewedAt: reviewData?.reviewed_at,
               existingItemsCount: existingItems.length,
               mergedItemsCount: mergedItems.length,
               mergedItems: mergedItems

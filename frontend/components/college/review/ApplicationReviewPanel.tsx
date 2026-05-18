@@ -177,7 +177,7 @@ export function ApplicationReviewPanel({
         };
         setCollegeQuotaInfo({
           collegeQuota: quotaData.college_quota ?? null,
-          breakdown: quotaData.college_quota_breakdown ?? {},
+          breakdown: (quotaData.college_quota_breakdown as Record<string, number>) ?? {},
         });
         logger.debug("College quota fetched:", quotaData.college_quota);
       } else {
