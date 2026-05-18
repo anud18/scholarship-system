@@ -1081,7 +1081,7 @@ export function ApplicationReviewPanel({
 
                       {/* 6.5 教授推薦 */}
                       <TableCell>
-                        {app.professor_review_items?.length > 0 ? (
+                        {app.professor_review_items && app.professor_review_items.length > 0 ? (
                           <div className="flex flex-col gap-0.5">
                             {app.professor_review_items.map(
                               (
@@ -1203,8 +1203,8 @@ export function ApplicationReviewPanel({
           setShowDeleteDialog(open);
           if (!open) setApplicationToDelete(null);
         }}
-        applicationId={applicationToDelete?.id}
-        applicationName={applicationToDelete?.student_name}
+        applicationId={applicationToDelete!.id}
+        applicationName={applicationToDelete!.student_name ?? ""}
         onSuccess={() => {
           // Close the ApplicationReviewDialog
           setSelectedApplication(null);
@@ -1227,8 +1227,8 @@ export function ApplicationReviewPanel({
           setShowDocumentRequestDialog(open);
           if (!open) setApplicationToRequestDocs(null);
         }}
-        applicationId={applicationToRequestDocs?.id}
-        applicationName={applicationToRequestDocs?.student_name}
+        applicationId={applicationToRequestDocs!.id}
+        applicationName={applicationToRequestDocs!.student_name ?? ""}
       />
 
       <FilePreviewDialog

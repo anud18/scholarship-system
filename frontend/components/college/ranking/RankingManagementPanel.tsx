@@ -767,8 +767,7 @@ export function RankingManagementPanel({
   // fetched ranking-detail value, while the active-config call is in flight.
   const deadlineISO = useMemo(() => {
     const fromList = filteredRankings.find(
-      (r: { college_review_end?: string | null } | null | undefined) =>
-        r && r.college_review_end
+      r => r && r.college_review_end
     )?.college_review_end as string | undefined;
     return panelDeadline ?? fromList ?? activeConfigDeadline ?? null;
   }, [panelDeadline, filteredRankings, activeConfigDeadline]);
