@@ -1832,7 +1832,7 @@ export function AdminManagementInterface({
           response.data.length,
           "types"
         );
-        setScholarshipTypes(response.data);
+        setScholarshipTypes(response.data as ScholarshipType[]);
       } else {
         logger.debug("❌ Failed to get scholarship types:", response.message);
         setScholarshipTypes([]);
@@ -1938,7 +1938,7 @@ export function AdminManagementInterface({
       const response = await apiClient.admin.getScholarshipPermissions();
 
       if (response.success && response.data) {
-        setScholarshipPermissions(response.data);
+        setScholarshipPermissions(response.data as ScholarshipPermission[]);
       } else {
         setPermissionsError(response.message || "獲取獎學金權限失敗");
       }
@@ -1961,7 +1961,7 @@ export function AdminManagementInterface({
     try {
       const response = await apiClient.admin.getAllScholarshipsForPermissions();
       if (response.success && response.data) {
-        setAvailableScholarships(response.data);
+        setAvailableScholarships(response.data as Array<{ id: number; name: string; name_en?: string; code: string }>);
       }
     } catch (error) {
       logger.error("獲取獎學金列表失敗", { error: error });
