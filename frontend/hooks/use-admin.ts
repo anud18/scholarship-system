@@ -170,7 +170,7 @@ export function useAdminDashboard() {
         );
 
         if (response.success && response.data) {
-          setAllApplications(response.data.items);
+          setAllApplications(response.data.items as Application[]);
           setPagination({
             page: response.data.page,
             size: response.data.size,
