@@ -92,7 +92,7 @@ export function useAdminDashboard() {
       });
 
       if (response.success && response.data) {
-        setRecentApplications(response.data);
+        setRecentApplications(response.data as Application[]);
       } else {
         const errorMsg =
           response.message || "Failed to fetch recent applications";
@@ -131,7 +131,7 @@ export function useAdminDashboard() {
       const response = await apiClient.admin.getSystemAnnouncements(5);
 
       if (response.success && response.data) {
-        setSystemAnnouncements(response.data);
+        setSystemAnnouncements(response.data as NotificationResponse[]);
       } else {
         throw new Error(
           response.message || "Failed to fetch system announcements"
