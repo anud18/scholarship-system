@@ -720,7 +720,7 @@ export function AdminScholarshipDashboard({
       const response = await apiClient.admin.getScholarshipAuditTrail(activeTab);
 
       if (response.success && response.data) {
-        setAuditLogs(response.data);
+        setAuditLogs(response.data as AuditLogEntry[]);
         setShowAuditModal(true);
       } else {
         toast.error(response.message || "無法載入操作紀錄");

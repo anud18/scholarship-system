@@ -72,7 +72,7 @@ function ProfessorAssignmentDropdownInner({
     try {
       const response = await apiClient.admin.getProfessors(searchQuery);
       if (response.success && response.data) {
-        setProfessors(response.data);
+        setProfessors(response.data as Professor[]);
       }
     } catch (error) {
       logger.error("Failed to fetch professors", { error: error });

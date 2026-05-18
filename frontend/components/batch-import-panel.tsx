@@ -164,7 +164,7 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
     try {
       const response = await apiClient.admin.getMyScholarships();
       if (response.success && response.data) {
-        setScholarships(response.data);
+        setScholarships(response.data as Scholarship[]);
       }
     } catch (error) {
       logger.error("Failed to fetch scholarships", { error: error });

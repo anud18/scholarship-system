@@ -130,7 +130,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
       const response = await apiClient.admin.getHistoricalApplications(filters);
 
       if (response.success && response.data) {
-        const applications = response.data.items || [];
+        const applications = (response.data.items || []) as HistoricalApplication[];
         setHistoricalApplications(applications);
 
         setHistoricalApplicationsPagination({
@@ -181,7 +181,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
         });
 
         if (response.success && response.data) {
-          const pageApplications = response.data.items || [];
+          const pageApplications = (response.data.items || []) as HistoricalApplication[];
           allApplications = [...allApplications, ...pageApplications];
 
           // 檢查是否還有更多數據

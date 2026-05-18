@@ -215,7 +215,7 @@ export function ScholarshipRuleModal({
         const response =
           await api.admin.getScholarshipRuleSubTypes(scholarshipTypeId);
         if (response.success && response.data && Array.isArray(response.data)) {
-          setSubTypeOptions(response.data);
+          setSubTypeOptions(response.data as SubTypeOption[]);
         } else {
           logger.error("Failed to load sub-types", { responseMessage: response.message });
           // Keep default options on error

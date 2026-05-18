@@ -92,7 +92,7 @@ export function AnnouncementsPanel({ user }: AnnouncementsPanelProps) {
       );
 
       if (response.success && response.data) {
-        setAnnouncements(response.data.items || []);
+        setAnnouncements((response.data.items || []) as NotificationResponse[]);
         setAnnouncementPagination(prev => ({
           ...prev,
           total: response.data?.total || 0,

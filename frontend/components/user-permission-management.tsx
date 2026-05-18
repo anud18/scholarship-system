@@ -200,7 +200,7 @@ export function UserPermissionManagement() {
     try {
       const response = await apiClient.admin.getScholarshipPermissions();
       if (response.success && response.data) {
-        setScholarshipPermissions(response.data);
+        setScholarshipPermissions(response.data as ScholarshipPermission[]);
       }
     } catch (error) {
       logger.error("Error fetching permissions", { error: error });
@@ -213,7 +213,7 @@ export function UserPermissionManagement() {
     try {
       const response = await apiClient.admin.getAllScholarshipsForPermissions();
       if (response.success && response.data) {
-        setAvailableScholarships(response.data);
+        setAvailableScholarships(response.data as Scholarship[]);
       }
     } catch (error) {
       logger.error("獲取獎學金列表失敗", { error: error });
