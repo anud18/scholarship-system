@@ -171,11 +171,15 @@ export function ApplicationReviewPanel({
       );
 
       if (response.success && response.data) {
+        const quotaData = response.data as {
+          college_quota?: number | null;
+          college_quota_breakdown?: Record<string, unknown>;
+        };
         setCollegeQuotaInfo({
-          collegeQuota: response.data.college_quota ?? null,
-          breakdown: response.data.college_quota_breakdown ?? {},
+          collegeQuota: quotaData.college_quota ?? null,
+          breakdown: (quotaData.college_quota_breakdown as Record<string, number>) ?? {},
         });
-        logger.debug("College quota fetched:", response.data.college_quota);
+        logger.debug("College quota fetched:", quotaData.college_quota);
       } else {
         setCollegeQuotaInfo(null);
       }

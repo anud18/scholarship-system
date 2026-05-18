@@ -481,8 +481,9 @@ export function CollegeManagementProvider({
         logger.debug("Rankings fetched", { count: response.data.length });
 
         // Normalize semester values (consistent with RankingManagementPanel logic)
-        const normalizedRankings = response.data.map(
-          (ranking: { semester?: string | null; [key: string]: unknown }) => {
+        const rawRankings = response.data as Array<{ semester?: string | null; [key: string]: unknown }>;
+        const normalizedRankings = rawRankings.map(
+          (ranking) => {
             const rawSemester =
               typeof ranking.semester === "string" && ranking.semester.length > 0
                 ? ranking.semester.toLowerCase()

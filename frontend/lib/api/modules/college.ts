@@ -30,7 +30,7 @@ export function createCollegeApi() {
      */
     getApplicationsForReview: async (
       queryString?: string
-    ): Promise<ApiResponse<any[]>> => {
+    ): Promise<ApiResponse<unknown[]>> => {
       // Parse query string into params object
       const queryParams: {
         academic_year?: number;
@@ -67,7 +67,7 @@ export function createCollegeApi() {
           params: { query: queryParams },
         }
       );
-      return toApiResponse<any[]>(response);
+      return toApiResponse<unknown[]>(response);
     },
 
     /**
@@ -77,7 +77,7 @@ export function createCollegeApi() {
     getRankings: async (
       academicYear?: number,
       semester?: string
-    ): Promise<ApiResponse<any[]>> => {
+    ): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET(
         "/api/v1/college-review/rankings",
         {
@@ -89,21 +89,21 @@ export function createCollegeApi() {
           },
         }
       );
-      return toApiResponse<any[]>(response);
+      return toApiResponse<unknown[]>(response);
     },
 
     /**
      * Get ranking details by ID
      * Type-safe: Path parameter validated against OpenAPI
      */
-    getRanking: async (rankingId: number): Promise<ApiResponse<any>> => {
+    getRanking: async (rankingId: number): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.GET(
         "/api/v1/college-review/rankings/{ranking_id}",
         {
           params: { path: { ranking_id: rankingId } },
         }
       );
-      return toApiResponse<any>(response);
+      return toApiResponse<unknown>(response);
     },
 
     /**
@@ -112,7 +112,7 @@ export function createCollegeApi() {
      */
     createRanking: async (
       data: CreateRankingInput
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const payload: CreateRankingRequest = {
         ...data,
         force_new: data.force_new ?? false,
@@ -123,7 +123,7 @@ export function createCollegeApi() {
           body: payload,
         }
       );
-      return toApiResponse<any>(response);
+      return toApiResponse<unknown>(response);
     },
 
     /**
@@ -222,14 +222,14 @@ export function createCollegeApi() {
      */
     getDistributionDetails: async (
       rankingId: number
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.GET(
         "/api/v1/college-review/rankings/{ranking_id}/distribution-details",
         {
           params: { path: { ranking_id: rankingId } },
         }
       );
-      return toApiResponse<any>(response);
+      return toApiResponse<unknown>(response);
     },
 
     /**
@@ -239,14 +239,14 @@ export function createCollegeApi() {
      */
     getRankingRosterStatus: async (
       rankingId: number
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.GET(
         "/api/v1/college-review/rankings/{ranking_id}/roster-status",
         {
           params: { path: { ranking_id: rankingId } },
         }
       );
-      return toApiResponse<any>(response);
+      return toApiResponse<unknown>(response);
     },
 
     /**
@@ -257,7 +257,7 @@ export function createCollegeApi() {
       scholarshipTypeId: number,
       academicYear: number,
       semester?: string
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.GET(
         "/api/v1/college-review/quota-status",
         {
@@ -270,7 +270,7 @@ export function createCollegeApi() {
           },
         }
       );
-      return toApiResponse<any>(response);
+      return toApiResponse<unknown>(response);
     },
 
     /**
@@ -344,7 +344,7 @@ export function createCollegeApi() {
         is_priority?: boolean;
         needs_special_attention?: boolean;
       }
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       // Path is not in the generated OpenAPI schema (orphan/legacy route);
       // the `as never` cast bypasses typed-route inference while keeping the
       // call working at runtime. See issue #665.
@@ -355,7 +355,7 @@ export function createCollegeApi() {
           body: reviewData,
         } as never
       );
-      return toApiResponse<any>(response);
+      return toApiResponse<unknown>(response);
     },
 
     /**
@@ -409,7 +409,7 @@ export function createCollegeApi() {
     getStudentPreview: async (
       studentId: string,
       academicYear?: number
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.GET(
         "/api/v1/college-review/students/{student_id}/preview",
         {
@@ -419,7 +419,7 @@ export function createCollegeApi() {
           },
         }
       );
-      return toApiResponse<any>(response);
+      return toApiResponse<unknown>(response);
     },
 
     /**
@@ -442,14 +442,14 @@ export function createCollegeApi() {
      * Uses multi-role review API endpoint
      * Type-safe: Path parameter validated against OpenAPI
      */
-    getReview: async (applicationId: number): Promise<ApiResponse<any>> => {
+    getReview: async (applicationId: number): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.GET(
         "/api/v1/reviews/applications/{application_id}/review",
         {
           params: { path: { application_id: applicationId } },
         }
       );
-      return toApiResponse<any>(response);
+      return toApiResponse<unknown>(response);
     },
 
     /**
@@ -466,7 +466,7 @@ export function createCollegeApi() {
           comments?: string;
         }>;
       }
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.POST(
         "/api/v1/reviews/applications/{application_id}/review",
         {
@@ -474,7 +474,7 @@ export function createCollegeApi() {
           body: reviewData,
         }
       );
-      return toApiResponse<any>(response);
+      return toApiResponse<unknown>(response);
     },
 
     /**

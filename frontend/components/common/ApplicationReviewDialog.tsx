@@ -929,11 +929,12 @@ export function ApplicationReviewDialog({
           const reviewResponse = (role === "admin" || role === "super_admin")
             ? await api.admin.getApplicationReview(applicationId)
             : await api.college.getReview(applicationId);
-          if (reviewResponse.success && reviewResponse.data && reviewResponse.data.id > 0) {
-            setExistingReview(reviewResponse.data);
+          const reviewData = reviewResponse.data as ExistingReview | undefined;
+          if (reviewResponse.success && reviewData && reviewData.id > 0) {
+            setExistingReview(reviewData);
 
             // Merge existing review items with all available sub-types
-            const existingItems = reviewResponse.data.items || [];
+            const existingItems = reviewData.items || [];
             const mergedItems = availableSubTypes.map((subType: SubTypeOption) => {
               const existingItem = existingItems.find(
                 (item: SubTypeReviewItem) => item.sub_type_code === subType.value
@@ -957,8 +958,8 @@ export function ApplicationReviewDialog({
 
             // Debug logging
             logger.debug('📋 Loaded existing review:', {
-              reviewId: reviewResponse.data.id,
-              reviewedAt: reviewResponse.data.reviewed_at,
+              reviewId: reviewData?.id,
+              reviewedAt: reviewData?.reviewed_at,
               existingItemsCount: existingItems.length,
               mergedItemsCount: mergedItems.length,
               mergedItems: mergedItems
