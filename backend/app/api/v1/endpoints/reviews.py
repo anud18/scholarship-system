@@ -23,7 +23,9 @@ from app.models.review import ApplicationReview, ApplicationReviewItem
 from app.models.user import User
 from app.schemas.response import ApiResponse
 from app.schemas.review import ReviewCreate, ReviewItemResponse, ReviewResponse, ReviewSubmitRequest
+from app.models.scholarship import ScholarshipType
 from app.services.application_audit_service import ApplicationAuditService
+from app.services.email_automation_service import email_automation_service
 from app.services.review_service import ReviewService
 
 logger = logging.getLogger(__name__)
@@ -506,6 +508,42 @@ async def submit_application_review(
             },
             status="success",
         )
+
+        # Trigger college_review_submitted email automation (college role only)
+        if current_user.is_college():
+            try:
+                stmt_app = select(Application).where(Application.id == application_id)
+                result_app = await db.execute(stmt_app)
+                application = result_app.scalar_one_or_none()
+                if application:
+                    stmt_student = select(User).where(User.id == application.user_id)
+                    result_student = await db.execute(stmt_student)
+                    student = result_student.scalar_one_or_none()
+
+                    stmt_scholarship = select(ScholarshipType).where(
+                        ScholarshipType.id == application.scholarship_type_id
+                    )
+                    result_scholarship = await db.execute(stmt_scholarship)
+                    scholarship = result_scholarship.scalar_one_or_none()
+
+                    await email_automation_service.trigger_college_review_submitted(
+                        db=db,
+                        application_id=application.id,
+                        review_data={
+                            "app_id": application.app_id,
+                            "student_name": student.name if student else "Unknown",
+                            "student_email": student.email if student else "",
+                            "college_name": current_user.name,
+                            "recommendation": review.recommendation,
+                            "comments": review.comments or "",
+                            "reviewer_name": current_user.name,
+                            "scholarship_type": scholarship.name if scholarship else "Unknown",
+                            "scholarship_type_id": application.scholarship_type_id,
+                            "review_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                        },
+                    )
+            except Exception:
+                logger.exception("Failed to trigger college review automation")
 
         # Build response with unified format
         review_response = ReviewResponse(
