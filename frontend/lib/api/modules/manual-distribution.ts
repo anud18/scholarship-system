@@ -1,1 +1,422 @@
-LyoqCiAqIE1hbnVhbCBEaXN0cmlidXRpb24gQVBJIE1vZHVsZQogKgogKiBQcm92aWRlcyBlbmRwb2ludHMgZm9yIGFkbWluIHRvIG1hbnVhbGx5IGFsbG9jYXRlIHNjaG9sYXJzaGlwcyB0byBzdHVkZW50cy4KICogUmVwbGFjZXMgdGhlIGF1dG9tYXRlZCBxdW90YS9tYXRyaXggZGlzdHJpYnV0aW9uIHdpdGggYSBVSS1kcml2ZW4gd29ya2Zsb3cuCiAqLwoKaW1wb3J0IHsgdHlwZWRDbGllbnQgfSBmcm9tICIuLi90eXBlZC1jbGllbnQiOwppbXBvcnQgeyB0b0FwaVJlc3BvbnNlIH0gZnJvbSAiLi4vY29tcGF0IjsKaW1wb3J0IHR5cGUgeyBBcGlSZXNwb25zZSB9IGZyb20gIi4uL3R5cGVzIjsKCmV4cG9ydCBpbnRlcmZhY2UgRGlzdHJpYnV0aW9uU3R1ZGVudCB7CiAgcmFua2luZ19pdGVtX2lkOiBudW1iZXI7CiAgYXBwbGljYXRpb25faWQ6IG51bWJlcjsKICByYW5rX3Bvc2l0aW9uOiBudW1iZXI7CiAgYXBwbGllZF9zdWJfdHlwZXM6IHN0cmluZ1tdOwogIHJlamVjdGVkX3N1Yl90eXBlczogc3RyaW5nW107CiAgYWxsb2NhdGVkX3N1Yl90eXBlOiBzdHJpbmcgfCBudWxsOwogIGFsbG9jYXRpb25feWVhcjogbnVtYmVyIHwgbnVsbDsKICBzdGF0dXM6IHN0cmluZzsKICBjb2xsZWdlX3JlamVjdGVkOiBib29sZWFuOwogIGNvbGxlZ2VfY29kZTogc3RyaW5nOwogIGNvbGxlZ2VfbmFtZTogc3RyaW5nOwogIGRlcGFydG1lbnRfbmFtZTogc3RyaW5nOwogIHRlcm1fY291bnQ6IG51bWJlciB8IG51bGw7CiAgc3R1ZGVudF9uYW1lOiBzdHJpbmc7CiAgbmF0aW9uYWxpdHk6IHN0cmluZzsKICBlbnJvbGxtZW50X2RhdGU6IHN0cmluZzsKICBzdHVkZW50X2lkOiBzdHJpbmc7CiAgYXBwbGljYXRpb25faWRlbnRpdHk6IHN0cmluZzsKICBpc19yZW5ld2FsOiBib29sZWFuOwogIHJlbmV3YWxfeWVhcjogbnVtYmVyIHwgbnVsbDsKICByZW5ld2FsX3N1Yl90eXBlOiBzdHJpbmcgfCBudWxsOwogIHJlY2VpdmVkX21vbnRoczogbnVtYmVyIHwgbnVsbDsKICByZWNlaXZlZF9tb250aHNfc291cmNlOiBzdHJpbmcgfCBudWxsOwogIGlzX3N1cHBsZW1lbnRhcnk6IGJvb2xlYW47Cn0KCmV4cG9ydCBpbnRlcmZhY2UgQ29sbGVnZVF1b3RhIHsKICB0b3RhbDogbnVtYmVyOwogIGFsbG9jYXRlZDogbnVtYmVyOwogIHJlbWFpbmluZzogbnVtYmVyOwp9CgpleHBvcnQgaW50ZXJmYWNlIFllYXJRdW90YSB7CiAgdG90YWw6IG51bWJlcjsKICBhbGxvY2F0ZWQ6IG51bWJlcjsKICByZW1haW5pbmc6IG51bWJlcjsKICBieV9jb2xsZWdlOiBSZWNvcmQ8c3RyaW5nLCBDb2xsZWdlUXVvdGE+Owp9CgpleHBvcnQgaW50ZXJmYWNlIFN1YlR5cGVRdW90YVN0YXR1cyB7CiAgZGlzcGxheV9uYW1lOiBzdHJpbmc7CiAgLyoqIE11bHRpLXllYXIgcXVvdGEgZGF0YTogeWVhciBzdHJpbmcg4oaSIHF1b3RhIGluZm8gKi8KICBieV95ZWFyOiBSZWNvcmQ8c3RyaW5nLCBZZWFyUXVvdGE+Owp9CgpleHBvcnQgdHlwZSBRdW90YVN0YXR1cyA9IFJlY29yZDxzdHJpbmcsIFN1YlR5cGVRdW90YVN0YXR1cz47CgovKiogQSBmbGF0dGVuZWQgKHN1Yl90eXBlIMOXIHllYXIpIGNvbHVtbiBkZXNjcmlwdG9yIGZvciB0aGUgZGlzdHJpYnV0aW9uIHRhYmxlICovCmV4cG9ydCBpbnRlcmZhY2UgU3ViVHlwZVllYXJDb2wgewogIHN1Yl90eXBlOiBzdHJpbmc7CiAgeWVhcjogbnVtYmVyOwogIGRpc3BsYXlfbmFtZTogc3RyaW5nOyAvLyBlLmcuLCAiMTE05bm0IOWci+enkeacg+WNmuWjq+eUn+eNjuWtuOmHkSIKICB0b3RhbDogbnVtYmVyOwogIHJlbWFpbmluZzogbnVtYmVyOyAvLyBiYXNlZCBvbiBEQi1jb25maXJtZWQgYWxsb2NhdGlvbnMKICBrZXk6IHN0cmluZzsgLy8gY29tcG9zaXRlIGtleTogIm5zdGM6MTE0Igp9CgpleHBvcnQgaW50ZXJmYWNlIEFsbG9jYXRpb25JdGVtIHsKICByYW5raW5nX2l0ZW1faWQ6IG51bWJlcjsKICBzdWJfdHlwZV9jb2RlOiBzdHJpbmcgfCBudWxsOwogIGFsbG9jYXRpb25feWVhcjogbnVtYmVyIHwgbnVsbDsKfQoKZXhwb3J0IGludGVyZmFjZSBBbGxvY2F0aW9uU3VnZ2VzdGlvbiB7CiAgcmFua2luZ19pdGVtX2lkOiBudW1iZXI7CiAgc3ViX3R5cGVfY29kZTogc3RyaW5nIHwgbnVsbDsKICBhbGxvY2F0aW9uX3llYXI6IG51bWJlciB8IG51bGw7Cn0KCmV4cG9ydCBpbnRlcmZhY2UgQWxsb2NhdGVSZXF1ZXN0IHsKICBzY2hvbGFyc2hpcF90eXBlX2lkOiBudW1iZXI7CiAgYWNhZGVtaWNfeWVhcjogbnVtYmVyOwogIHNlbWVzdGVyOiBzdHJpbmc7CiAgYWxsb2NhdGlvbnM6IEFsbG9jYXRpb25JdGVtW107Cn0KCmV4cG9ydCBpbnRlcmZhY2UgRmluYWxpemVSZXF1ZXN0IHsKICBzY2hvbGFyc2hpcF90eXBlX2lkOiBudW1iZXI7CiAgYWNhZGVtaWNfeWVhcjogbnVtYmVyOwogIHNlbWVzdGVyOiBzdHJpbmc7Cn0KCmV4cG9ydCBpbnRlcmZhY2UgQWxsb2NhdGVSZXN1bHQgewogIHVwZGF0ZWRfY291bnQ6IG51bWJlcjsKfQoKZXhwb3J0IGludGVyZmFjZSBGaW5hbGl6ZVJlc3VsdCB7CiAgYXBwcm92ZWRfY291bnQ6IG51bWJlcjsKICByZWplY3RlZF9jb3VudDogbnVtYmVyOwogIHRvdGFsOiBudW1iZXI7Cn0KCmV4cG9ydCBpbnRlcmZhY2UgRGlzdHJpYnV0aW9uSGlzdG9yeVJlY29yZCB7CiAgaWQ6IG51bWJlcjsKICBvcGVyYXRpb25fdHlwZTogc3RyaW5nOwogIGNoYW5nZV9zdW1tYXJ5OiBzdHJpbmcgfCBudWxsOwogIHRvdGFsX2FsbG9jYXRlZDogbnVtYmVyIHwgbnVsbDsKICBjcmVhdGVkX2F0OiBzdHJpbmcgfCBudWxsOwogIGNyZWF0ZWRfYnk6IG51bWJlciB8IG51bGw7Cn0KCmV4cG9ydCBpbnRlcmZhY2UgUmVzdG9yZVJlcXVlc3QgewogIGhpc3RvcnlfaWQ6IG51bWJlcjsKfQoKZXhwb3J0IGludGVyZmFjZSBSZXN0b3JlUmVzdWx0IHsKICByZXN0b3JlZF9jb3VudDogbnVtYmVyOwp9CgpleHBvcnQgaW50ZXJmYWNlIFJvc3RlclN1bW1hcnkgewogIGlkOiBudW1iZXI7CiAgcm9zdGVyX2NvZGU6IHN0cmluZzsKICBzdWJfdHlwZTogc3RyaW5nOwogIGFsbG9jYXRpb25feWVhcjogbnVtYmVyOwogIHByb2plY3RfbnVtYmVyOiBzdHJpbmcgfCBudWxsOwogIHBlcmlvZF9sYWJlbDogc3RyaW5nOwogIHN0YXR1czogc3RyaW5nOwogIHF1YWxpZmllZF9jb3VudDogbnVtYmVyOwogIGRpc3F1YWxpZmllZF9jb3VudDogbnVtYmVyOwogIHRvdGFsX2Ftb3VudDogc3RyaW5nOwp9CgpleHBvcnQgaW50ZXJmYWNlIEdlbmVyYXRlUm9zdGVyc1JlcXVlc3QgewogIHNjaG9sYXJzaGlwX3R5cGVfaWQ6IG51bWJlcjsKICBhY2FkZW1pY195ZWFyOiBudW1iZXI7CiAgc2VtZXN0ZXI6IHN0cmluZzsKICBzdHVkZW50X3ZlcmlmaWNhdGlvbl9lbmFibGVkPzogYm9vbGVhbjsKICBmb3JjZV9yZWdlbmVyYXRlPzogYm9vbGVhbjsKfQoKZXhwb3J0IGludGVyZmFjZSBHZW5lcmF0ZVJvc3RlcnNSZXN1bHQgewogIHJvc3RlcnNfY3JlYXRlZDogbnVtYmVyOwogIHJvc3RlcnM6IFJvc3RlclN1bW1hcnlbXTsKfQoKZXhwb3J0IGludGVyZmFjZSBEaXN0cmlidXRpb25TdW1tYXJ5U3R1ZGVudCB7CiAgcmFua2luZ19pdGVtX2lkOiBudW1iZXI7CiAgYXBwbGljYXRpb25faWQ6IG51bWJlcjsKICBzdHVkZW50X25hbWU6IHN0cmluZzsKICBzdHVkZW50X2lkOiBzdHJpbmc7CiAgY29sbGVnZV9jb2RlOiBzdHJpbmc7CiAgY29sbGVnZV9uYW1lOiBzdHJpbmc7CiAgZGVwYXJ0bWVudF9uYW1lOiBzdHJpbmc7CiAgcmFua19wb3NpdGlvbjogbnVtYmVyOwogIGNvbGxlZ2VfcmVqZWN0ZWQ/OiBib29sZWFuOwogIGlzX3N1cHBsZW1lbnRhcnk/OiBib29sZWFuOwp9CgpleHBvcnQgaW50ZXJmYWNlIERpc3RyaWJ1dGlvblN1bW1hcnlHcm91cCB7CiAgc3ViX3R5cGU6IHN0cmluZzsKICBhbGxvY2F0aW9uX3llYXI6IG51bWJlcjsKICBjb3VudDogbnVtYmVyOwogIHN0dWRlbnRzOiBEaXN0cmlidXRpb25TdW1tYXJ5U3R1ZGVudFtdOwp9CgpleHBvcnQgaW50ZXJmYWNlIERpc3RyaWJ1dGlvblN1bW1hcnlSZXN1bHQgewogIGdyb3VwczogRGlzdHJpYnV0aW9uU3VtbWFyeUdyb3VwW107CiAgdG90YWxfYWxsb2NhdGVkOiBudW1iZXI7Cn0KCmV4cG9ydCBpbnRlcmZhY2UgQXZhaWxhYmxlQ29tYmluYXRpb25zIHsKICBzY2hvbGFyc2hpcF90eXBlczogQXJyYXk8ewogICAgaWQ6IG51bWJlcjsKICAgIGNvZGU6IHN0cmluZzsKICAgIG5hbWU6IHN0cmluZzsKICAgIG5hbWVfZW4/OiBzdHJpbmc7CiAgfT47CiAgYWNhZGVtaWNfeWVhcnM6IG51bWJlcltdOwogIHNlbWVzdGVyczogc3RyaW5nW107Cn0KCmV4cG9ydCBmdW5jdGlvbiBjcmVhdGVNYW51YWxEaXN0cmlidXRpb25BcGkoKSB7CiAgcmV0dXJuIHsKICAgIC8qKgogICAgICogR2V0IGFsbCBhY3RpdmUgc2Nob2xhcnNoaXAgdHlwZXMgYW5kIGNvbmZpZ3VyYXRpb25zIGZvciBhZG1pbiBkaXN0cmlidXRpb24uCiAgICAgKi8KICAgIGdldEF2YWlsYWJsZUNvbWJpbmF0aW9uczogYXN5bmMgKCk6IFByb21pc2U8CiAgICAgIEFwaVJlc3BvbnNlPEF2YWlsYWJsZUNvbWJpbmF0aW9ucz4KICAgID4gPT4gewogICAgICBjb25zdCByZXNwb25zZSA9IGF3YWl0IHR5cGVkQ2xpZW50LnJhdy5HRVQoCiAgICAgICAgIi9hcGkvdjEvbWFudWFsLWRpc3RyaWJ1dGlvbi9hdmFpbGFibGUtY29tYmluYXRpb25zIiBhcyBhbnksCiAgICAgICAge30KICAgICAgKTsKICAgICAgcmV0dXJuIHRvQXBpUmVzcG9uc2UocmVzcG9uc2UpIGFzIEFwaVJlc3BvbnNlPEF2YWlsYWJsZUNvbWJpbmF0aW9ucz47CiAgICB9LAoKICAgIC8qKgogICAgICogR2V0IHJhbmtlZCBzdHVkZW50cyB3aXRoIGFsbG9jYXRpb24gc3RhdHVzIGZvciBtYW51YWwgZGlzdHJpYnV0aW9uLgogICAgICovCiAgICBnZXRTdHVkZW50czogYXN5bmMgKAogICAgICBzY2hvbGFyc2hpcF90eXBlX2lkOiBudW1iZXIsCiAgICAgIGFjYWRlbWljX3llYXI6IG51bWJlciwKICAgICAgc2VtZXN0ZXI6IHN0cmluZywKICAgICAgY29sbGVnZV9jb2RlPzogc3RyaW5nCiAgICApOiBQcm9taXNlPEFwaVJlc3BvbnNlPERpc3RyaWJ1dGlvblN0dWRlbnRbXT4+ID0+IHsKICAgICAgY29uc3QgcmVzcG9uc2UgPSBhd2FpdCB0eXBlZENsaWVudC5yYXcuR0VUKAogICAgICAgICIvYXBpL3YxL21hbnVhbC1kaXN0cmlidXRpb24vc3R1ZGVudHMiIGFzIGFueSwKICAgICAgICB7CiAgICAgICAgICBwYXJhbXM6IHsKICAgICAgICAgICAgcXVlcnk6IHsKICAgICAgICAgICAgICBzY2hvbGFyc2hpcF90eXBlX2lkLAogICAgICAgICAgICAgIGFjYWRlbWljX3llYXIsCiAgICAgICAgICAgICAgc2VtZXN0ZXIsCiAgICAgICAgICAgICAgLi4uKGNvbGxlZ2VfY29kZSA/IHsgY29sbGVnZV9jb2RlIH0gOiB7fSksCiAgICAgICAgICAgIH0gYXMgYW55LAogICAgICAgICAgfSwKICAgICAgICB9CiAgICAgICk7CiAgICAgIHJldHVybiB0b0FwaVJlc3BvbnNlKHJlc3BvbnNlKSBhcyBBcGlSZXNwb25zZTxEaXN0cmlidXRpb25TdHVkZW50W10+OwogICAgfSwKCiAgICAvKioKICAgICAqIEdldCByZWFsLXRpbWUgcXVvdGEgc3RhdHVzIHBlciBzdWItdHlwZSBwZXIgY29sbGVnZS4KICAgICAqLwogICAgZ2V0UXVvdGFTdGF0dXM6IGFzeW5jICgKICAgICAgc2Nob2xhcnNoaXBfdHlwZV9pZDogbnVtYmVyLAogICAgICBhY2FkZW1pY195ZWFyOiBudW1iZXIsCiAgICAgIHNlbWVzdGVyOiBzdHJpbmcKICAgICk6IFByb21pc2U8QXBpUmVzcG9uc2U8UXVvdGFTdGF0dXM+PiA9PiB7CiAgICAgIGNvbnN0IHJlc3BvbnNlID0gYXdhaXQgdHlwZWRDbGllbnQucmF3LkdFVCgKICAgICAgICAiL2FwaS92MS9tYW51YWwtZGlzdHJpYnV0aW9uL3F1b3RhLXN0YXR1cyIgYXMgYW55LAogICAgICAgIHsKICAgICAgICAgIHBhcmFtczogewogICAgICAgICAgICBxdWVyeTogeyBzY2hvbGFyc2hpcF90eXBlX2lkLCBhY2FkZW1pY195ZWFyLCBzZW1lc3RlciB9IGFzIGFueSwKICAgICAgICAgIH0sCiAgICAgICAgfQogICAgICApOwogICAgICByZXR1cm4gdG9BcGlSZXNwb25zZShyZXNwb25zZSkgYXMgQXBpUmVzcG9uc2U8UXVvdGFTdGF0dXM+OwogICAgfSwKCiAgICAvKioKICAgICAqIFNhdmUgbWFudWFsIGFsbG9jYXRpb24gc2VsZWN0aW9ucy4KICAgICAqLwogICAgYWxsb2NhdGU6IGFzeW5jICgKICAgICAgcmVxdWVzdDogQWxsb2NhdGVSZXF1ZXN0CiAgICApOiBQcm9taXNlPEFwaVJlc3BvbnNlPEFsbG9jYXRlUmVzdWx0Pj4gPT4gewogICAgICBjb25zdCByZXNwb25zZSA9IGF3YWl0IHR5cGVkQ2xpZW50LnJhdy5QT1NUKAogICAgICAgICIvYXBpL3YxL21hbnVhbC1kaXN0cmlidXRpb24vYWxsb2NhdGUiIGFzIGFueSwKICAgICAgICB7IGJvZHk6IHJlcXVlc3QgYXMgYW55IH0KICAgICAgKTsKICAgICAgcmV0dXJuIHRvQXBpUmVzcG9uc2UocmVzcG9uc2UpIGFzIEFwaVJlc3BvbnNlPEFsbG9jYXRlUmVzdWx0PjsKICAgIH0sCgogICAgLyoqCiAgICAgKiBGaW5hbGl6ZSBkaXN0cmlidXRpb24gLSBsb2NrIGFuZCB1cGRhdGUgYXBwbGljYXRpb24gc3RhdHVzZXMuCiAgICAgKi8KICAgIGZpbmFsaXplOiBhc3luYyAoCiAgICAgIHJlcXVlc3Q6IEZpbmFsaXplUmVxdWVzdAogICAgKTogUHJvbWlzZTxBcGlSZXNwb25zZTxGaW5hbGl6ZVJlc3VsdD4+ID0+IHsKICAgICAgY29uc3QgcmVzcG9uc2UgPSBhd2FpdCB0eXBlZENsaWVudC5yYXcuUE9TVCgKICAgICAgICAiL2FwaS92MS9tYW51YWwtZGlzdHJpYnV0aW9uL2ZpbmFsaXplIiBhcyBhbnksCiAgICAgICAgeyBib2R5OiByZXF1ZXN0IGFzIGFueSB9CiAgICAgICk7CiAgICAgIHJldHVybiB0b0FwaVJlc3BvbnNlKHJlc3BvbnNlKSBhcyBBcGlSZXNwb25zZTxGaW5hbGl6ZVJlc3VsdD47CiAgICB9LAoKICAgIC8qKgogICAgICogR2V0IGFsbG9jYXRpb24gaGlzdG9yeSBmb3IgYSBzY2hvbGFyc2hpcC95ZWFyL3NlbWVzdGVyIGNvbWJpbmF0aW9uLgogICAgICovCiAgICBnZXRIaXN0b3J5OiBhc3luYyAoCiAgICAgIHNjaG9sYXJzaGlwX3R5cGVfaWQ6IG51bWJlciwKICAgICAgYWNhZGVtaWNfeWVhcjogbnVtYmVyLAogICAgICBzZW1lc3Rlcjogc3RyaW5nCiAgICApOiBQcm9taXNlPEFwaVJlc3BvbnNlPERpc3RyaWJ1dGlvbkhpc3RvcnlSZWNvcmRbXT4+ID0+IHsKICAgICAgY29uc3QgcmVzcG9uc2UgPSBhd2FpdCB0eXBlZENsaWVudC5yYXcuR0VUKAogICAgICAgIGAvYXBpL3YxL21hbnVhbC1kaXN0cmlidXRpb24vJHtzY2hvbGFyc2hpcF90eXBlX2lkfS9oaXN0b3J5YCBhcyBhbnksCiAgICAgICAgewogICAgICAgICAgcGFyYW1zOiB7CiAgICAgICAgICAgIHF1ZXJ5OiB7IGFjYWRlbWljX3llYXIsIHNlbWVzdGVyIH0gYXMgYW55LAogICAgICAgICAgfSwKICAgICAgICB9CiAgICAgICk7CiAgICAgIHJldHVybiB0b0FwaVJlc3BvbnNlKHJlc3BvbnNlKSBhcyBBcGlSZXNwb25zZTwKICAgICAgICBEaXN0cmlidXRpb25IaXN0b3J5UmVjb3JkW10KICAgICAgPjsKICAgIH0sCgogICAgLyoqCiAgICAgKiBSZXN0b3JlIGFsbG9jYXRpb25zIGZyb20gYSBzcGVjaWZpYyBoaXN0b3J5IHJlY29yZC4KICAgICAqLwogICAgcmVzdG9yZUZyb21IaXN0b3J5OiBhc3luYyAoCiAgICAgIHNjaG9sYXJzaGlwX3R5cGVfaWQ6IG51bWJlciwKICAgICAgcmVxdWVzdDogUmVzdG9yZVJlcXVlc3QKICAgICk6IFByb21pc2U8QXBpUmVzcG9uc2U8UmVzdG9yZVJlc3VsdD4+ID0+IHsKICAgICAgY29uc3QgcmVzcG9uc2UgPSBhd2FpdCB0eXBlZENsaWVudC5yYXcuUE9TVCgKICAgICAgICBgL2FwaS92MS9tYW51YWwtZGlzdHJpYnV0aW9uLyR7c2Nob2xhcnNoaXBfdHlwZV9pZH0vcmVzdG9yZWAgYXMgYW55LAogICAgICAgIHsgYm9keTogcmVxdWVzdCBhcyBhbnkgfQogICAgICApOwogICAgICByZXR1cm4gdG9BcGlSZXNwb25zZShyZXNwb25zZSkgYXMgQXBpUmVzcG9uc2U8UmVzdG9yZVJlc3VsdD47CiAgICB9LAoKICAgIC8qKgogICAgICogR2V0IGRpc3RyaWJ1dGlvbiBzdW1tYXJ5OiBhbGwgYWxsb2NhdGVkIHN0dWRlbnRzIGdyb3VwZWQgYnkgc3ViX3R5cGUgw5cgYWxsb2NhdGlvbl95ZWFyLgogICAgICovCiAgICBnZXREaXN0cmlidXRpb25TdW1tYXJ5OiBhc3luYyAoCiAgICAgIHNjaG9sYXJzaGlwX3R5cGVfaWQ6IG51bWJlciwKICAgICAgYWNhZGVtaWNfeWVhcjogbnVtYmVyLAogICAgICBzZW1lc3Rlcjogc3RyaW5nCiAgICApOiBQcm9taXNlPEFwaVJlc3BvbnNlPERpc3RyaWJ1dGlvblN1bW1hcnlSZXN1bHQ+PiA9PiB7CiAgICAgIGNvbnN0IHJlc3BvbnNlID0gYXdhaXQgdHlwZWRDbGllbnQucmF3LkdFVCgKICAgICAgICAiL2FwaS92MS9tYW51YWwtZGlzdHJpYnV0aW9uL2Rpc3RyaWJ1dGlvbi1zdW1tYXJ5IiBhcyBhbnksCiAgICAgICAgewogICAgICAgICAgcGFyYW1zOiB7CiAgICAgICAgICAgIHF1ZXJ5OiB7IHNjaG9sYXJzaGlwX3R5cGVfaWQsIGFjYWRlbWljX3llYXIsIHNlbWVzdGVyIH0gYXMgYW55LAogICAgICAgICAgfSwKICAgICAgICB9CiAgICAgICk7CiAgICAgIHJldHVybiB0b0FwaVJlc3BvbnNlKHJlc3BvbnNlKSBhcyBBcGlSZXNwb25zZTxEaXN0cmlidXRpb25TdW1tYXJ5UmVzdWx0PjsKICAgIH0sCgogICAgLyoqCiAgICAgKiBHZXQgYXV0by1hbGxvY2F0aW9uIHByZXZpZXcgc3VnZ2VzdGlvbnMuCiAgICAgKi8KICAgIGdldEF1dG9BbGxvY2F0ZVByZXZpZXc6IGFzeW5jICgKICAgICAgc2Nob2xhcnNoaXBfdHlwZV9pZDogbnVtYmVyLAogICAgICBhY2FkZW1pY195ZWFyOiBudW1iZXIsCiAgICAgIHNlbWVzdGVyOiBzdHJpbmcKICAgICk6IFByb21pc2U8QXBpUmVzcG9uc2U8eyBzdWdnZXN0aW9uczogQWxsb2NhdGlvblN1Z2dlc3Rpb25bXSB9Pj4gPT4gewogICAgICBjb25zdCByZXNwb25zZSA9IGF3YWl0IHR5cGVkQ2xpZW50LnJhdy5HRVQoCiAgICAgICAgIi9hcGkvdjEvbWFudWFsLWRpc3RyaWJ1dGlvbi9hdXRvLWFsbG9jYXRlLXByZXZpZXciIGFzIGFueSwKICAgICAgICB7CiAgICAgICAgICBwYXJhbXM6IHsKICAgICAgICAgICAgcXVlcnk6IHsKICAgICAgICAgICAgICBzY2hvbGFyc2hpcF90eXBlX2lkLAogICAgICAgICAgICAgIGFjYWRlbWljX3llYXIsCiAgICAgICAgICAgICAgc2VtZXN0ZXIsCiAgICAgICAgICAgIH0gYXMgYW55LAogICAgICAgICAgfSwKICAgICAgICB9CiAgICAgICk7CiAgICAgIHJldHVybiB0b0FwaVJlc3BvbnNlKHJlc3BvbnNlKSBhcyBBcGlSZXNwb25zZTx7CiAgICAgICAgc3VnZ2VzdGlvbnM6IEFsbG9jYXRpb25TdWdnZXN0aW9uW107CiAgICAgIH0+OwogICAgfSwKCiAgICAvKioKICAgICAqIEdlbmVyYXRlIHBheW1lbnQgcm9zdGVycyBmcm9tIGEgZmluYWxpemVkK2Rpc3RyaWJ1dGVkIHJhbmtpbmcuCiAgICAgKiBDcmVhdGVzIG9uZSByb3N0ZXIgcGVyIChhbGxvY2F0aW9uX3llYXIsIHN1Yl90eXBlKSBjb21iaW5hdGlvbi4KICAgICAqLwogICAgZ2VuZXJhdGVSb3N0ZXJzRnJvbURpc3RyaWJ1dGlvbjogYXN5bmMgKAogICAgICByZXF1ZXN0OiBHZW5lcmF0ZVJvc3RlcnNSZXF1ZXN0CiAgICApOiBQcm9taXNlPEFwaVJlc3BvbnNlPEdlbmVyYXRlUm9zdGVyc1Jlc3VsdD4+ID0+IHsKICAgICAgY29uc3QgcmVzcG9uc2UgPSBhd2FpdCB0eXBlZENsaWVudC5yYXcuUE9TVCgKICAgICAgICAiL2FwaS92MS9tYW51YWwtZGlzdHJpYnV0aW9uL2dlbmVyYXRlLXJvc3RlcnMtZnJvbS1kaXN0cmlidXRpb24iIGFzIGFueSwKICAgICAgICB7IGJvZHk6IHJlcXVlc3QgYXMgYW55IH0KICAgICAgKTsKICAgICAgcmV0dXJuIHRvQXBpUmVzcG9uc2UocmVzcG9uc2UpIGFzIEFwaVJlc3BvbnNlPEdlbmVyYXRlUm9zdGVyc1Jlc3VsdD47CiAgICB9LAoKICAgIC8qKgogICAgICogSW1wb3J0IHJlY2VpdmVkIG1vbnRocyBmcm9tIEV4Y2VsIGZpbGUuCiAgICAgKi8KICAgIGltcG9ydFJlY2VpdmVkTW9udGhzOiBhc3luYyAoCiAgICAgIHNjaG9sYXJzaGlwVHlwZUlkOiBudW1iZXIsCiAgICAgIGFjYWRlbWljWWVhcjogbnVtYmVyLAogICAgICBzZW1lc3Rlcjogc3RyaW5nLAogICAgICBmaWxlOiBGaWxlCiAgICApOiBQcm9taXNlPAogICAgICBBcGlSZXNwb25zZTx7IG1hdGNoZWQ6IG51bWJlcjsgbm90X2ZvdW5kOiBzdHJpbmdbXTsgdXBkYXRlZDogbnVtYmVyIH0+CiAgICA+ID0+IHsKICAgICAgY29uc3QgZm9ybURhdGEgPSBuZXcgRm9ybURhdGEoKTsKICAgICAgZm9ybURhdGEuYXBwZW5kKCJmaWxlIiwgZmlsZSk7CgogICAgICBjb25zdCBwYXJhbXMgPSBuZXcgVVJMU2VhcmNoUGFyYW1zKHsKICAgICAgICBzY2hvbGFyc2hpcF90eXBlX2lkOiBTdHJpbmcoc2Nob2xhcnNoaXBUeXBlSWQpLAogICAgICAgIGFjYWRlbWljX3llYXI6IFN0cmluZyhhY2FkZW1pY1llYXIpLAogICAgICAgIHNlbWVzdGVyLAogICAgICB9KTsKCiAgICAgIGNvbnN0IHRva2VuID0gdHlwZWRDbGllbnQuZ2V0VG9rZW4oKTsKICAgICAgY29uc3QgcmVzcG9uc2UgPSBhd2FpdCBmZXRjaCgKICAgICAgICBgL2FwaS92MS9tYW51YWwtZGlzdHJpYnV0aW9uL2ltcG9ydC1yZWNlaXZlZC1tb250aHM/JHtwYXJhbXN9YCwKICAgICAgICB7CiAgICAgICAgICBtZXRob2Q6ICJQT1NUIiwKICAgICAgICAgIGJvZHk6IGZvcm1EYXRhLAogICAgICAgICAgaGVhZGVyczogewogICAgICAgICAgICAuLi4odG9rZW4gPyB7IEF1dGhvcml6YXRpb246IGBCZWFyZXIgJHt0b2tlbn1gIH0gOiB7fSksCiAgICAgICAgICB9LAogICAgICAgIH0KICAgICAgKTsKCiAgICAgIGxldCBib2R5OiBhbnkgPSBudWxsOwogICAgICB0cnkgewogICAgICAgIGJvZHkgPSBhd2FpdCByZXNwb25zZS5qc29uKCk7CiAgICAgIH0gY2F0Y2ggewogICAgICAgIC8vIE5vbi1KU09OIHJlc3BvbnNlIOKAlCBrZWVwIGJvZHkgbnVsbCBhbmQgZmFsbCB0aHJvdWdoIHRvIGVycm9yIHNoYXBlCiAgICAgIH0KCiAgICAgIGlmICghcmVzcG9uc2Uub2spIHsKICAgICAgICByZXR1cm4gewogICAgICAgICAgc3VjY2VzczogZmFsc2UsCiAgICAgICAgICBtZXNzYWdlOgogICAgICAgICAgICAoYm9keSAmJiAoYm9keS5tZXNzYWdlIHx8IGJvZHkuZGV0YWlsKSkgfHwKICAgICAgICAgICAgYFVwbG9hZCBmYWlsZWQgKEhUVFAgJHtyZXNwb25zZS5zdGF0dXN9KWAsCiAgICAgICAgICBkYXRhOiB1bmRlZmluZWQsCiAgICAgICAgfSBhcyBBcGlSZXNwb25zZTx7CiAgICAgICAgICBtYXRjaGVkOiBudW1iZXI7CiAgICAgICAgICBub3RfZm91bmQ6IHN0cmluZ1tdOwogICAgICAgICAgdXBkYXRlZDogbnVtYmVyOwogICAgICAgIH0+OwogICAgICB9CgogICAgICByZXR1cm4gYm9keSBhcyBBcGlSZXNwb25zZTx7CiAgICAgICAgbWF0Y2hlZDogbnVtYmVyOwogICAgICAgIG5vdF9mb3VuZDogc3RyaW5nW107CiAgICAgICAgdXBkYXRlZDogbnVtYmVyOwogICAgICB9PjsKICAgIH0sCiAgfTsKfQo=
+/**
+ * Manual Distribution API Module
+ *
+ * Provides endpoints for admin to manually allocate scholarships to students.
+ * Replaces the automated quota/matrix distribution with a UI-driven workflow.
+ */
+
+import { typedClient } from "../typed-client";
+import { toApiResponse } from "../compat";
+import type { ApiResponse } from "../types";
+
+export interface DistributionStudent {
+  ranking_item_id: number;
+  application_id: number;
+  rank_position: number;
+  applied_sub_types: string[];
+  rejected_sub_types: string[];
+  allocated_sub_type: string | null;
+  allocation_year: number | null;
+  status: string;
+  college_rejected: boolean;
+  college_code: string;
+  college_name: string;
+  department_name: string;
+  term_count: number | null;
+  student_name: string;
+  nationality: string;
+  enrollment_date: string;
+  student_id: string;
+  application_identity: string;
+  is_renewal: boolean;
+  renewal_year: number | null;
+  renewal_sub_type: string | null;
+  received_months: number | null;
+  received_months_source: string | null;
+  is_supplementary: boolean;
+}
+
+export interface CollegeQuota {
+  total: number;
+  allocated: number;
+  remaining: number;
+}
+
+export interface YearQuota {
+  total: number;
+  allocated: number;
+  remaining: number;
+  by_college: Record<string, CollegeQuota>;
+}
+
+export interface SubTypeQuotaStatus {
+  display_name: string;
+  /** Multi-year quota data: year string → quota info */
+  by_year: Record<string, YearQuota>;
+}
+
+export type QuotaStatus = Record<string, SubTypeQuotaStatus>;
+
+/** A flattened (sub_type × year) column descriptor for the distribution table */
+export interface SubTypeYearCol {
+  sub_type: string;
+  year: number;
+  display_name: string; // e.g., "114年 國科會博士生獎學金"
+  total: number;
+  remaining: number; // based on DB-confirmed allocations
+  key: string; // composite key: "nstc:114"
+}
+
+export interface AllocationItem {
+  ranking_item_id: number;
+  sub_type_code: string | null;
+  allocation_year: number | null;
+}
+
+export interface AllocationSuggestion {
+  ranking_item_id: number;
+  sub_type_code: string | null;
+  allocation_year: number | null;
+}
+
+export interface AllocateRequest {
+  scholarship_type_id: number;
+  academic_year: number;
+  semester: string;
+  allocations: AllocationItem[];
+}
+
+export interface FinalizeRequest {
+  scholarship_type_id: number;
+  academic_year: number;
+  semester: string;
+}
+
+export interface AllocateResult {
+  updated_count: number;
+}
+
+export interface FinalizeResult {
+  approved_count: number;
+  rejected_count: number;
+  total: number;
+}
+
+export interface DistributionHistoryRecord {
+  id: number;
+  operation_type: string;
+  change_summary: string | null;
+  total_allocated: number | null;
+  created_at: string | null;
+  created_by: number | null;
+}
+
+export interface RestoreRequest {
+  history_id: number;
+}
+
+export interface RestoreResult {
+  restored_count: number;
+}
+
+export interface RosterSummary {
+  id: number;
+  roster_code: string;
+  sub_type: string;
+  allocation_year: number;
+  project_number: string | null;
+  period_label: string;
+  status: string;
+  qualified_count: number;
+  disqualified_count: number;
+  total_amount: string;
+}
+
+export interface GenerateRostersRequest {
+  scholarship_type_id: number;
+  academic_year: number;
+  semester: string;
+  student_verification_enabled?: boolean;
+  force_regenerate?: boolean;
+}
+
+export interface GenerateRostersResult {
+  rosters_created: number;
+  rosters: RosterSummary[];
+}
+
+export interface DistributionSummaryStudent {
+  ranking_item_id: number;
+  application_id: number;
+  student_name: string;
+  student_id: string;
+  college_code: string;
+  college_name: string;
+  department_name: string;
+  rank_position: number;
+  college_rejected?: boolean;
+  is_supplementary?: boolean;
+}
+
+export interface DistributionSummaryGroup {
+  sub_type: string;
+  allocation_year: number;
+  count: number;
+  students: DistributionSummaryStudent[];
+}
+
+export interface DistributionSummaryResult {
+  groups: DistributionSummaryGroup[];
+  total_allocated: number;
+}
+
+export interface AvailableCombinations {
+  scholarship_types: Array<{
+    id: number;
+    code: string;
+    name: string;
+    name_en?: string;
+  }>;
+  academic_years: number[];
+  semesters: string[];
+}
+
+export function createManualDistributionApi() {
+  return {
+    /**
+     * Get all active scholarship types and configurations for admin distribution.
+     */
+    getAvailableCombinations: async (): Promise<
+      ApiResponse<AvailableCombinations>
+    > => {
+      const response = await typedClient.raw.GET(
+        "/api/v1/manual-distribution/available-combinations" as any,
+        {}
+      );
+      return toApiResponse(response) as ApiResponse<AvailableCombinations>;
+    },
+
+    /**
+     * Get ranked students with allocation status for manual distribution.
+     */
+    getStudents: async (
+      scholarship_type_id: number,
+      academic_year: number,
+      semester: string,
+      college_code?: string
+    ): Promise<ApiResponse<DistributionStudent[]>> => {
+      const response = await typedClient.raw.GET(
+        "/api/v1/manual-distribution/students" as any,
+        {
+          params: {
+            query: {
+              scholarship_type_id,
+              academic_year,
+              semester,
+              ...(college_code ? { college_code } : {}),
+            } as any,
+          },
+        }
+      );
+      return toApiResponse(response) as ApiResponse<DistributionStudent[]>;
+    },
+
+    /**
+     * Get real-time quota status per sub-type per college.
+     */
+    getQuotaStatus: async (
+      scholarship_type_id: number,
+      academic_year: number,
+      semester: string
+    ): Promise<ApiResponse<QuotaStatus>> => {
+      const response = await typedClient.raw.GET(
+        "/api/v1/manual-distribution/quota-status" as any,
+        {
+          params: {
+            query: { scholarship_type_id, academic_year, semester } as any,
+          },
+        }
+      );
+      return toApiResponse(response) as ApiResponse<QuotaStatus>;
+    },
+
+    /**
+     * Save manual allocation selections.
+     */
+    allocate: async (
+      request: AllocateRequest
+    ): Promise<ApiResponse<AllocateResult>> => {
+      const response = await typedClient.raw.POST(
+        "/api/v1/manual-distribution/allocate" as any,
+        { body: request as any }
+      );
+      return toApiResponse(response) as ApiResponse<AllocateResult>;
+    },
+
+    /**
+     * Finalize distribution - lock and update application statuses.
+     */
+    finalize: async (
+      request: FinalizeRequest
+    ): Promise<ApiResponse<FinalizeResult>> => {
+      const response = await typedClient.raw.POST(
+        "/api/v1/manual-distribution/finalize" as any,
+        { body: request as any }
+      );
+      return toApiResponse(response) as ApiResponse<FinalizeResult>;
+    },
+
+    /**
+     * Get allocation history for a scholarship/year/semester combination.
+     */
+    getHistory: async (
+      scholarship_type_id: number,
+      academic_year: number,
+      semester: string
+    ): Promise<ApiResponse<DistributionHistoryRecord[]>> => {
+      const response = await typedClient.raw.GET(
+        `/api/v1/manual-distribution/${scholarship_type_id}/history` as any,
+        {
+          params: {
+            query: { academic_year, semester } as any,
+          },
+        }
+      );
+      return toApiResponse(response) as ApiResponse<
+        DistributionHistoryRecord[]
+      >;
+    },
+
+    /**
+     * Restore allocations from a specific history record.
+     */
+    restoreFromHistory: async (
+      scholarship_type_id: number,
+      request: RestoreRequest
+    ): Promise<ApiResponse<RestoreResult>> => {
+      const response = await typedClient.raw.POST(
+        `/api/v1/manual-distribution/${scholarship_type_id}/restore` as any,
+        { body: request as any }
+      );
+      return toApiResponse(response) as ApiResponse<RestoreResult>;
+    },
+
+    /**
+     * Get distribution summary: all allocated students grouped by sub_type × allocation_year.
+     */
+    getDistributionSummary: async (
+      scholarship_type_id: number,
+      academic_year: number,
+      semester: string
+    ): Promise<ApiResponse<DistributionSummaryResult>> => {
+      const response = await typedClient.raw.GET(
+        "/api/v1/manual-distribution/distribution-summary" as any,
+        {
+          params: {
+            query: { scholarship_type_id, academic_year, semester } as any,
+          },
+        }
+      );
+      return toApiResponse(response) as ApiResponse<DistributionSummaryResult>;
+    },
+
+    /**
+     * Get auto-allocation preview suggestions.
+     */
+    getAutoAllocatePreview: async (
+      scholarship_type_id: number,
+      academic_year: number,
+      semester: string
+    ): Promise<ApiResponse<{ suggestions: AllocationSuggestion[] }>> => {
+      const response = await typedClient.raw.GET(
+        "/api/v1/manual-distribution/auto-allocate-preview" as any,
+        {
+          params: {
+            query: {
+              scholarship_type_id,
+              academic_year,
+              semester,
+            } as any,
+          },
+        }
+      );
+      return toApiResponse(response) as ApiResponse<{
+        suggestions: AllocationSuggestion[];
+      }>;
+    },
+
+    /**
+     * Generate payment rosters from a finalized+distributed ranking.
+     * Creates one roster per (allocation_year, sub_type) combination.
+     */
+    generateRostersFromDistribution: async (
+      request: GenerateRostersRequest
+    ): Promise<ApiResponse<GenerateRostersResult>> => {
+      const response = await typedClient.raw.POST(
+        "/api/v1/manual-distribution/generate-rosters-from-distribution" as any,
+        { body: request as any }
+      );
+      return toApiResponse(response) as ApiResponse<GenerateRostersResult>;
+    },
+
+    /**
+     * Import received months from Excel file.
+     */
+    importReceivedMonths: async (
+      scholarshipTypeId: number,
+      academicYear: number,
+      semester: string,
+      file: File
+    ): Promise<
+      ApiResponse<{ matched: number; not_found: string[]; updated: number }>
+    > => {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const params = new URLSearchParams({
+        scholarship_type_id: String(scholarshipTypeId),
+        academic_year: String(academicYear),
+        semester,
+      });
+
+      const token = typedClient.getToken();
+      const response = await fetch(
+        `/api/v1/manual-distribution/import-received-months?${params}`,
+        {
+          method: "POST",
+          body: formData,
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
+      );
+
+      let body: any = null;
+      try {
+        body = await response.json();
+      } catch {
+        // Non-JSON response — keep body null and fall through to error shape
+      }
+
+      if (!response.ok) {
+        return {
+          success: false,
+          message:
+            (body && (body.message || body.detail)) ||
+            `Upload failed (HTTP ${response.status})`,
+          data: undefined,
+        } as ApiResponse<{
+          matched: number;
+          not_found: string[];
+          updated: number;
+        }>;
+      }
+
+      return body as ApiResponse<{
+        matched: number;
+        not_found: string[];
+        updated: number;
+      }>;
+    },
+  };
+}
