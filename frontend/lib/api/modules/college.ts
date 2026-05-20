@@ -504,7 +504,9 @@ export function createCollegeApi() {
       );
       if (!resp.ok) {
         const err = await resp.json().catch(() => null);
-        throw new Error(err?.detail || "操作失敗");
+        // Backend wraps HTTPException into ApiResponse { success, message, trace_id }
+        // — prefer `message`, fall back to FastAPI's bare `detail` shape.
+        throw new Error(err?.message || err?.detail || "操作失敗");
       }
       return resp.json();
     },
@@ -538,7 +540,9 @@ export function createCollegeApi() {
       );
       if (!resp.ok) {
         const err = await resp.json().catch(() => null);
-        throw new Error(err?.detail || "匯入失敗");
+        // Backend wraps HTTPException into ApiResponse { success, message, trace_id }
+        // — prefer `message`, fall back to FastAPI's bare `detail` shape.
+        throw new Error(err?.message || err?.detail || "匯入失敗");
       }
       return resp.json();
     },
