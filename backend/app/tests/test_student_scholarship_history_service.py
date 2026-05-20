@@ -43,3 +43,37 @@ class TestBuildSummary:
         records = [_record("國科會", "100"), _record("國科會", "100"), _record("國科會", "100")]
         result = svc._build_summary(records, snapshot_name=None)
         assert result.scholarship_type_count == 1
+
+
+from app.schemas.student_scholarship_history import AcademicInfo
+
+
+class TestBuildAcademicInfo:
+    def test_none_sis_data_marks_unavailable(self):
+        svc = StudentScholarshipHistoryService()
+        result = svc._build_academic_info(None, error_message="SIS timeout")
+        assert isinstance(result, AcademicInfo)
+        assert result.available is False
+        assert result.error == "SIS timeout"
+        assert result.basic_info is None
+
+    def test_valid_sis_data_extracts_basic_info(self):
+        svc = StudentScholarshipHistoryService()
+        sis = {
+            "std_cname": "王小明",
+            "std_ename": "Wang",
+            "std_degree": "1",
+            "std_studingstatus": "在學",
+            "std_aca_cname": "電機學院",
+            "std_depname": "電子博士班",
+            "std_depno": "4460",
+            "com_email": "wang@nycu.edu.tw",
+            "irrelevant_field": "ignored",
+        }
+        result = svc._build_academic_info(sis, error_message=None)
+        assert result.available is True
+        assert result.error is None
+        assert result.basic_info is not None
+        assert result.basic_info.std_cname == "王小明"
+        assert result.basic_info.std_degree == "1"
+        assert result.basic_info.com_email == "wang@nycu.edu.tw"
