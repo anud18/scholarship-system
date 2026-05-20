@@ -42,7 +42,9 @@ class StudentScholarshipHistoryService:
     ) -> AcademicInfo:
         if not sis_data:
             return AcademicInfo(available=False, error=error_message, basic_info=None)
-        subset = {k: sis_data.get(k) for k in self._BASIC_INFO_FIELDS}
+        # SIS returns some fields as ints (e.g. std_degree=1); coerce to str so
+        # the frontend's string-keyed degree/status lookups work uniformly.
+        subset = {k: (None if (v := sis_data.get(k)) is None else str(v)) for k in self._BASIC_INFO_FIELDS}
         return AcademicInfo(
             available=True,
             error=None,

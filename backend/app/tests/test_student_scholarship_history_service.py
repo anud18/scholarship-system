@@ -91,6 +91,15 @@ class TestBuildAcademicInfo:
         assert result.basic_info.std_degree == "1"
         assert result.basic_info.com_email == "wang@nycu.edu.tw"
 
+    def test_coerces_int_sis_fields_to_str(self):
+        """SIS sometimes returns std_degree/std_studingstatus as ints — coerce to str."""
+        svc = StudentScholarshipHistoryService()
+        sis = {"std_cname": "王小明", "std_degree": 1, "std_studingstatus": 2}
+        result = svc._build_academic_info(sis, error_message=None)
+        assert result.available is True
+        assert result.basic_info.std_degree == "1"
+        assert result.basic_info.std_studingstatus == "2"
+
 
 @pytest_asyncio.fixture
 async def seeded_rosters(db):
