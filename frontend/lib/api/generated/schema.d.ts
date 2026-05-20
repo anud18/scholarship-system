@@ -839,7 +839,15 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update Application Status
+         * @description Update application status (staff only)
+         *
+         *     This endpoint updates an application's status and automatically triggers redistribution
+         *     if the status changes to 'approved' or 'rejected'. The response includes information
+         *     about any auto-redistribution that was performed.
+         */
+        patch: operations["update_application_status_api_v1_applications__id__status_patch"];
         trace?: never;
     };
     "/api/v1/applications/{id}/review": {
@@ -11334,6 +11342,42 @@ export interface operations {
         };
     };
     update_application_status_api_v1_applications__id__status_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Application ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplicationStatusUpdate"];
+            };
+        };
+        responses: {
+            /** @description Application status updated successfully */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationStatusUpdateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_application_status_api_v1_applications__id__status_patch: {
         parameters: {
             query?: never;
             header?: never;
