@@ -41,6 +41,7 @@ from app.services.college_review_service import (
     RankingNotFoundError,
 )
 from app.services.review_service import ReviewService
+from app.utils.application_helpers import get_college_code_from_data
 from app.services.supplementary_import_service import SupplementaryImportService
 
 from ._helpers import (
@@ -1368,13 +1369,16 @@ async def supplementary_import(
     # Each ranking belongs to one college (via its creator). Reject any student
     # whose SIS-reported college doesn't match — colleges may only import their
     # own students even when admin opens the toggle for the whole config.
+    # Use the canonical extractor so we honor std_academyno → academy_code →
+    # college_code → std_college precedence (some SIS records carry the field
+    # under a different key).
     expected_college = (getattr(ranking.creator, "college_code", None) or "").strip()
     if expected_college:
-        mismatched = [
-            f"{sid}({(data.get('std_academyno') or '').strip() or '無學院'})"
-            for sid, data in student_data_map.items()
-            if (data.get("std_academyno") or "").strip() != expected_college
-        ]
+        mismatched = []
+        for sid, data in student_data_map.items():
+            student_college = (get_college_code_from_data(data) or "").strip()
+            if student_college != expected_college:
+                mismatched.append(f"{sid}({student_college or '無學院'})")
         if mismatched:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
