@@ -11,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { CollegeRankingTable } from "@/components/college-ranking-table";
 import { ConfigSelector } from "../shared/ConfigSelector";
@@ -24,6 +25,8 @@ import {
   Upload,
   FileSpreadsheet,
   Sparkles,
+  AlertCircle,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
@@ -101,20 +104,23 @@ function SupplementaryImportDropZone({
 }) {
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [lastError, setLastError] = useState<string | null>(null);
   const inputId = `supplementary-file-input-${rankingId}`;
 
   const handleFile = useCallback(
     async (file: File) => {
       if (uploading) return;
+      setLastError(null);
       const lower = file.name.toLowerCase();
       if (!lower.endsWith(".xlsx") && !lower.endsWith(".xls")) {
+        setLastError("僅接受 .xlsx 或 .xls 檔案");
         toast.error("僅接受 .xlsx 或 .xls 檔案");
         return;
       }
       if (file.size > SUPPLEMENTARY_MAX_BYTES) {
-        toast.error(
-          `檔案過大（${(file.size / 1024 / 1024).toFixed(1)} MB），上限 10 MB`
-        );
+        const msg = `檔案過大（${(file.size / 1024 / 1024).toFixed(1)} MB），上限 10 MB`;
+        setLastError(msg);
+        toast.error(msg);
         return;
       }
       setUploading(true);
@@ -130,7 +136,14 @@ function SupplementaryImportDropZone({
           await onUploaded();
         }
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "匯入失敗");
+        const detail = err instanceof Error ? err.message : "匯入失敗";
+        setLastError(detail);
+        // Toast preview (first line only) — full detail rendered in the inline Alert
+        const firstLine = detail.split("\n")[0].slice(0, 120);
+        toast.error(firstLine, {
+          description: detail.length > firstLine.length ? "詳細原因見下方提示" : undefined,
+          duration: 8000,
+        });
       } finally {
         setUploading(false);
       }
@@ -232,6 +245,27 @@ function SupplementaryImportDropZone({
               )}
             </label>
           </div>
+
+          {lastError && (
+            <Alert
+              variant="destructive"
+              className="mt-3 border-red-300 bg-red-50/80"
+            >
+              <AlertCircle className="h-4 w-4" />
+              <button
+                type="button"
+                aria-label="關閉錯誤提示"
+                onClick={() => setLastError(null)}
+                className="absolute right-3 top-3 rounded p-0.5 text-red-500/70 hover:bg-red-100 hover:text-red-700"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+              <AlertTitle className="pr-6 text-sm font-semibold">匯入失敗</AlertTitle>
+              <AlertDescription className="mt-1 whitespace-pre-line text-xs leading-relaxed text-red-900/90">
+                {lastError}
+              </AlertDescription>
+            </Alert>
+          )}
         </div>
       </div>
     </Card>
