@@ -489,9 +489,13 @@ class ReviewService:
                 ApplicationStatus.under_review.value if awaits_further else ApplicationStatus.approved.value
             )
         elif all_rejected:
-            # Outright rejection is terminal regardless of remaining reviewers —
-            # if every sub-type is rejected, no later role can rescue it.
-            application.status = ApplicationStatus.rejected.value
+            if latest_reviewer_role == "professor":
+                # Professor rejection is advisory only; a later college/admin review
+                # may still approve — keep the application in review rather than
+                # setting a terminal status that students cannot appeal.
+                application.status = ApplicationStatus.under_review.value
+            else:
+                application.status = ApplicationStatus.rejected.value
         else:
             # 部分同意 — also gated: if college hasn't weighed in yet, we
             # shouldn't lock a partial outcome in (and the student should
