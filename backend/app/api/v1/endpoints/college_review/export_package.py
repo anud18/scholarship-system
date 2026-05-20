@@ -86,7 +86,7 @@ async def export_application_package(
         zip_filename,
         file_size,
         college_code,
-        extra={**log_extra, "filename": zip_filename, "size_bytes": file_size, "college_code": college_code},
+        extra={**log_extra, "export_filename": zip_filename, "size_bytes": file_size, "college_code": college_code},
     )
 
     encoded_filename = quote(zip_filename)
