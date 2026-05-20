@@ -1365,6 +1365,25 @@ async def supplementary_import(
             detail=f"學籍系統查無以下學號：{', '.join(missing_ids)}",
         )
 
+    # Each ranking belongs to one college (via its creator). Reject any student
+    # whose SIS-reported college doesn't match — colleges may only import their
+    # own students even when admin opens the toggle for the whole config.
+    expected_college = (getattr(ranking.creator, "college_code", None) or "").strip()
+    if expected_college:
+        mismatched = [
+            f"{sid}({(data.get('std_academyno') or '').strip() or '無學院'})"
+            for sid, data in student_data_map.items()
+            if (data.get("std_academyno") or "").strip() != expected_college
+        ]
+        if mismatched:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"以下學生不屬於本學院（{expected_college}），無法匯入："
+                    f"{', '.join(mismatched)}"
+                ),
+            )
+
     # Compute max existing rank for offset
     existing_ranks = [item.rank_position for item in ranking.items]
     max_existing_rank = max(existing_ranks) if existing_ranks else 0
