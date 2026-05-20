@@ -17,6 +17,7 @@ from app.db.deps import get_sync_db
 from app.models.application import Application
 from app.models.college_review import CollegeRanking, CollegeRankingItem, ManualDistributionHistory
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
+from app.schemas.application import RevokeRequest, SuspendRequest
 from app.services.manual_distribution_service import ManualDistributionService
 
 logger = logging.getLogger(__name__)
@@ -623,3 +624,51 @@ async def import_received_months(
             "updated": updated,
         },
     }
+
+
+@router.post("/applications/{application_id}/revoke")
+async def revoke_application_allocation(
+    application_id: int,
+    request: RevokeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_admin_user),
+):
+    """撤銷已分發學生：從未鎖定造冊移除 + 標記 application 為 cancelled/revoked。"""
+    service = ManualDistributionService(db)
+    try:
+        result = await service.revoke_allocation(
+            application_id=application_id,
+            admin_user_id=current_user.id,
+            reason=request.reason,
+        )
+        await db.commit()
+        return {"success": True, "message": "已撤銷", "data": result}
+    except ValueError as e:
+        msg = str(e)
+        if "already" in msg:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg) from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg) from e
+
+
+@router.post("/applications/{application_id}/suspend")
+async def suspend_application_allocation(
+    application_id: int,
+    request: SuspendRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_admin_user),
+):
+    """停發已分發學生：從未鎖定造冊移除 + 標記 application 為 cancelled/suspended。"""
+    service = ManualDistributionService(db)
+    try:
+        result = await service.suspend_allocation(
+            application_id=application_id,
+            admin_user_id=current_user.id,
+            reason=request.reason,
+        )
+        await db.commit()
+        return {"success": True, "message": "已停發", "data": result}
+    except ValueError as e:
+        msg = str(e)
+        if "already" in msg:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg) from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg) from e

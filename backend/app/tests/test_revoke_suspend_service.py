@@ -165,7 +165,7 @@ async def locked_roster_with_item(db, allocated_application, admin_db_user):
 @pytest.mark.asyncio
 async def test_revoke_sets_status_and_metadata(db, allocated_application, admin_db_user):
     svc = ManualDistributionService(db)
-    await svc.revoke_allocation(
+    result = await svc.revoke_allocation(
         application_id=allocated_application.id,
         admin_user_id=admin_db_user.id,
         reason="violated terms",
@@ -177,6 +177,9 @@ async def test_revoke_sets_status_and_metadata(db, allocated_application, admin_
     assert allocated_application.revoke_reason == "violated terms"
     assert allocated_application.revoked_by == admin_db_user.id
     assert allocated_application.revoked_at is not None
+    # The spec mandates ranking_item_id in the response dict (may be None when
+    # no CollegeRankingItem is linked — as is the case in this fixture).
+    assert "ranking_item_id" in result
 
 
 @pytest.mark.asyncio

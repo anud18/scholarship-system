@@ -1193,6 +1193,16 @@ class ManualDistributionService:
                 f"(quota_allocation_status={app.quota_allocation_status})"
             )
 
+        # Find the CollegeRankingItem for this application (the row that drove the
+        # allocation in the manual-distribution flow). The spec response includes
+        # ranking_item_id so downstream consumers can reference it.
+        ranking_item_result = await self.db.execute(
+            select(CollegeRankingItem.id).where(
+                CollegeRankingItem.application_id == application_id
+            ).limit(1)
+        )
+        ranking_item_id = ranking_item_result.scalar_one_or_none()
+
         now = datetime.now(timezone.utc)
 
         # 4. Update application columns
@@ -1245,6 +1255,7 @@ class ManualDistributionService:
         timestamp_key = "revoked_at" if mode == "revoke" else "suspended_at"
         return {
             "application_id": application_id,
+            "ranking_item_id": ranking_item_id,
             "quota_allocation_status": app.quota_allocation_status,
             timestamp_key: now.isoformat(),
             "affected_unlocked_rosters": affected_roster_ids,
