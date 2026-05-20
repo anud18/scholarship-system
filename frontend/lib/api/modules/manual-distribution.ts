@@ -33,6 +33,7 @@ export interface DistributionStudent {
   renewal_sub_type: string | null;
   received_months: number | null;
   received_months_source: string | null;
+  is_supplementary: boolean;
 }
 
 export interface CollegeQuota {
@@ -154,6 +155,7 @@ export interface DistributionSummaryStudent {
   department_name: string;
   rank_position: number;
   college_rejected?: boolean;
+  is_supplementary?: boolean;
 }
 
 export interface DistributionSummaryGroup {

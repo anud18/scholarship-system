@@ -3344,6 +3344,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/scholarship-configurations/configurations/{id}/supplementary-import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Toggle Configuration Supplementary Import
+         * @description Admin toggle: open or close supplementary import for a scholarship configuration.
+         *
+         *     Applies to all colleges' rankings under this (scholarship_type, academic_year, semester).
+         */
+        patch: operations["toggle_configuration_supplementary_import_api_v1_scholarship_configurations_configurations__id__supplementary_import_patch"];
+        trace?: never;
+    };
     "/api/v1/scholarship-configurations/configurations/{id}/duplicate": {
         parameters: {
             query?: never;
@@ -4558,6 +4580,30 @@ export interface paths {
         get: operations["export_ranking_excel_api_v1_college_review_rankings__ranking_id__export_excel_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/rankings/{ranking_id}/supplementary-import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Supplementary Import
+         * @description College upload: import new students via 學生資料彙整表 Excel after distribution.
+         *
+         *     The supplementary-import flag is read from the matching ScholarshipConfiguration
+         *     (one flag per scholarship_type/academic_year/semester) — admin toggles it from
+         *     系統管理 → 獎學金配置.
+         */
+        post: operations["supplementary_import_api_v1_college_review_rankings__ranking_id__supplementary_import_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7847,6 +7893,14 @@ export interface components {
             /** Sub Type */
             sub_type: string;
         };
+        /** Body_supplementary_import_api_v1_college_review_rankings__ranking_id__supplementary_import_post */
+        Body_supplementary_import_api_v1_college_review_rankings__ranking_id__supplementary_import_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+        };
         /** Body_update_matrix_quota_api_v1_scholarship_configurations_matrix_quota_put */
         Body_update_matrix_quota_api_v1_scholarship_configurations_matrix_quota_put: {
             /** Sub Type */
@@ -9672,6 +9726,11 @@ export interface components {
              * @description 指導教授所屬系所
              */
             supervisor_department?: string | null;
+        };
+        /** SupplementaryImportToggle */
+        SupplementaryImportToggle: {
+            /** Allow */
+            allow: boolean;
         };
         /**
          * SystemSettingCreate
@@ -15834,6 +15893,41 @@ export interface operations {
             };
         };
     };
+    toggle_configuration_supplementary_import_api_v1_scholarship_configurations_configurations__id__supplementary_import_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupplementaryImportToggle"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     duplicate_scholarship_configuration_api_v1_scholarship_configurations_configurations__id__duplicate_post: {
         parameters: {
             query?: never;
@@ -17923,6 +18017,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    supplementary_import_api_v1_college_review_rankings__ranking_id__supplementary_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ranking_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_supplementary_import_api_v1_college_review_rankings__ranking_id__supplementary_import_post"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

@@ -489,6 +489,74 @@ export function createCollegeApi() {
     },
 
     /**
+     * Admin: toggle supplementary import open/close for a scholarship configuration.
+     * PATCH /api/v1/scholarship-configurations/configurations/{id}/supplementary-import
+     *
+     * The flag applies to ALL colleges' rankings under that
+     * (scholarship_type, academic_year, semester) configuration.
+     */
+    toggleConfigSupplementaryImport: async (
+      configurationId: number,
+      allow: boolean
+    ): Promise<ApiResponse<{ id: number; allow_supplementary_import: boolean }>> => {
+      const token = typedClient.getToken();
+      const resp = await fetch(
+        `/api/v1/scholarship-configurations/configurations/${configurationId}/supplementary-import`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ allow }),
+        }
+      );
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => null);
+        // Backend wraps HTTPException into ApiResponse { success, message, trace_id }
+        // — prefer `message`, fall back to FastAPI's bare `detail` shape.
+        throw new Error(err?.message || err?.detail || "操作失敗");
+      }
+      return resp.json();
+    },
+
+    /**
+     * College: upload supplementary Excel for a ranking.
+     * POST /api/v1/college-review/rankings/{ranking_id}/supplementary-import
+     */
+    uploadSupplementaryImport: async (
+      rankingId: number,
+      file: File
+    ): Promise<
+      ApiResponse<{
+        imported_count: number;
+        max_existing_rank: number;
+        new_rank_range: string;
+      }>
+    > => {
+      const token = typedClient.getToken();
+      const formData = new FormData();
+      formData.append("file", file);
+      const resp = await fetch(
+        `/api/v1/college-review/rankings/${rankingId}/supplementary-import`,
+        {
+          method: "POST",
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: formData,
+        }
+      );
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => null);
+        // Backend wraps HTTPException into ApiResponse { success, message, trace_id }
+        // — prefer `message`, fall back to FastAPI's bare `detail` shape.
+        throw new Error(err?.message || err?.detail || "匯入失敗");
+      }
+      return resp.json();
+    },
+
+    /**
      * Download application materials export package as ZIP
      */
     exportPackage: async (params: {

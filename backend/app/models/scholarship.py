@@ -635,6 +635,9 @@ class ScholarshipConfiguration(Base):
 
     review_deadline = Column(DateTime(timezone=True), nullable=True)
 
+    # 補充匯入開關 — admin 控制，分發完成後是否開放學院上傳新學生 Excel
+    allow_supplementary_import = Column(Boolean, default=False, nullable=False, server_default="false")
+
     # 狀態與有效性
     is_active = Column(Boolean, default=True, nullable=False)
     effective_start_date = Column(DateTime(timezone=True), nullable=True)  # 生效開始日期
