@@ -1,18 +1,24 @@
 """Service: assemble admin student scholarship history (academic + payments)."""
 
+import logging
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import NotFoundError
 from app.models.payment_roster import PaymentRoster, PaymentRosterItem, RosterStatus
 from app.schemas.student_scholarship_history import (
     AcademicBasicInfo,
     AcademicInfo,
     HistorySummary,
     PaymentRecord,
+    StudentScholarshipHistoryData,
 )
+from app.services.student_service import StudentService
+
+logger = logging.getLogger(__name__)
 
 
 class StudentScholarshipHistoryService:
@@ -93,4 +99,36 @@ class StudentScholarshipHistoryService:
             total_amount=total_amount,
             scholarship_type_count=type_count,
             snapshot_name=snapshot_name,
+        )
+
+    async def get_history(
+        self,
+        db: AsyncSession,
+        student_number: str,
+    ) -> StudentScholarshipHistoryData:
+        """Orchestrate SIS lookup + locked-payment retrieval. Raises NotFoundError
+        when both sources are empty."""
+        sis_error: Optional[str] = None
+        sis_data: Optional[Dict[str, Any]] = None
+        try:
+            sis_data = await StudentService().get_student_basic_info(student_number)
+        except Exception as exc:  # noqa: BLE001 — tolerate any SIS failure
+            logger.warning(
+                "SIS lookup failed for student %s: %s", student_number, exc
+            )
+            sis_error = str(exc)
+
+        records, snapshot_name = await self._fetch_locked_payments(db, student_number)
+
+        academic_info = self._build_academic_info(sis_data, error_message=sis_error)
+
+        if not academic_info.available and not records:
+            raise NotFoundError(f"查無此學生資料: {student_number}")
+
+        summary = self._build_summary(records, snapshot_name=snapshot_name)
+        return StudentScholarshipHistoryData(
+            student_number=student_number,
+            academic_info=academic_info,
+            summary=summary,
+            payment_records=records,
         )

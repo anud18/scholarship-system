@@ -189,3 +189,87 @@ async def test_fetch_locked_payments_returns_empty_for_unknown_student(db, seede
     records, snapshot_name = await svc._fetch_locked_payments(db, "NOBODY")
     assert records == []
     assert snapshot_name is None
+
+
+from unittest.mock import AsyncMock, patch
+
+from app.core.exceptions import NotFoundError
+
+
+class TestGetHistory:
+    @pytest.mark.asyncio
+    async def test_raises_not_found_when_sis_fails_and_no_payments(self, db):
+        """Both SIS error AND empty payment list → NotFoundError."""
+        svc = StudentScholarshipHistoryService()
+        with patch.object(svc, "_fetch_locked_payments", new=AsyncMock(return_value=([], None))):
+            with patch(
+                "app.services.student_scholarship_history_service.StudentService"
+            ) as MockStudent:
+                MockStudent.return_value.get_student_basic_info = AsyncMock(
+                    side_effect=Exception("SIS down")
+                )
+                with pytest.raises(NotFoundError):
+                    await svc.get_history(db, "DOES_NOT_EXIST")
+
+    @pytest.mark.asyncio
+    async def test_returns_data_when_sis_fails_but_payments_exist(self, db):
+        """SIS error but payments present → returns data with academic_info.available=False."""
+        svc = StudentScholarshipHistoryService()
+        sample_records = [
+            PaymentRecord(
+                roster_id=1,
+                roster_code="R",
+                period_label="114-10",
+                academic_year=114,
+                roster_cycle="monthly",
+                scholarship_name="A",
+                scholarship_amount=Decimal("1000"),
+            )
+        ]
+        with patch.object(
+            svc, "_fetch_locked_payments", new=AsyncMock(return_value=(sample_records, "王小明"))
+        ):
+            with patch(
+                "app.services.student_scholarship_history_service.StudentService"
+            ) as MockStudent:
+                MockStudent.return_value.get_student_basic_info = AsyncMock(
+                    side_effect=Exception("SIS down")
+                )
+                result = await svc.get_history(db, "S001")
+        assert result.academic_info.available is False
+        assert "SIS down" in (result.academic_info.error or "")
+        assert result.summary.total_records == 1
+        assert result.summary.snapshot_name == "王小明"
+
+    @pytest.mark.asyncio
+    async def test_returns_full_data_when_both_succeed(self, db):
+        svc = StudentScholarshipHistoryService()
+        sample_records = [
+            PaymentRecord(
+                roster_id=1,
+                roster_code="R",
+                period_label="114-10",
+                academic_year=114,
+                roster_cycle="monthly",
+                scholarship_name="A",
+                scholarship_amount=Decimal("1000"),
+            )
+        ]
+        with patch.object(
+            svc, "_fetch_locked_payments", new=AsyncMock(return_value=(sample_records, "王小明"))
+        ):
+            with patch(
+                "app.services.student_scholarship_history_service.StudentService"
+            ) as MockStudent:
+                MockStudent.return_value.get_student_basic_info = AsyncMock(
+                    return_value={
+                        "std_cname": "王小明",
+                        "std_degree": "1",
+                        "std_depname": "EE PhD",
+                    }
+                )
+                result = await svc.get_history(db, "S001")
+        assert result.academic_info.available is True
+        assert result.academic_info.basic_info.std_cname == "王小明"
+        assert result.payment_records[0].scholarship_name == "A"
+        assert result.student_number == "S001"
