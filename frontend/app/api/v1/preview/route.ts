@@ -246,6 +246,17 @@ export async function GET(request: NextRequest) {
       finalContentType = contentType.startsWith("image/")
         ? contentType
         : "image/jpeg";
+    } else {
+      // type param may be a document category (e.g. "bank_account_cover") rather than
+      // a mime hint — infer from filename extension as a reliable fallback
+      const lowerFilename = (filename || "").toLowerCase();
+      if (lowerFilename.endsWith(".pdf")) {
+        finalContentType = "application/pdf";
+      } else if (/\.(jpe?g|png|gif|bmp|webp)$/.test(lowerFilename)) {
+        finalContentType = contentType.startsWith("image/")
+          ? contentType
+          : "image/jpeg";
+      }
     }
 
     // 處理中文文件名編碼

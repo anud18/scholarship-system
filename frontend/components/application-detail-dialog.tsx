@@ -453,20 +453,24 @@ export function ApplicationDetailDialog({
       return;
     }
 
-    // 構建前端預覽URL，包含token參數
-    const previewUrl = `/api/v1/preview?fileId=${file.id ?? ""}&filename=${encodeURIComponent(filename)}&type=${encodeURIComponent(file.file_type ?? "")}&applicationId=${application?.id}&token=${token}`;
-
-    // 判斷文件類型
+    // 判斷文件類型（必須先於 previewUrl 建立，以傳遞正確的 type 參數）
     let fileType = "other";
+    let proxyType = "";
     if (filename.toLowerCase().endsWith(".pdf")) {
       fileType = "application/pdf";
+      proxyType = "pdf";
     } else if (
       [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"].some(ext =>
         filename.toLowerCase().endsWith(ext)
       )
     ) {
       fileType = "image";
+      proxyType = "image";
     }
+
+    // 構建前端預覽URL，包含token參數
+    // 使用從檔名偵測到的 proxyType，而非 file.file_type（文件分類名稱）
+    const previewUrl = `/api/v1/preview?fileId=${file.id ?? ""}&filename=${encodeURIComponent(filename)}&type=${encodeURIComponent(proxyType)}&applicationId=${application?.id}&token=${token}`;
 
     logger.debug("Opening file preview:", {
       filename,
