@@ -30,6 +30,10 @@ from app.models.payment_roster import (
 )
 from app.models.user import User, UserRole
 from app.schemas.response import ApiResponse
+from app.schemas.payment_roster import (
+    RemoveLockedItemRequest,
+    RevokedSuspendedListResponse,
+)
 from app.schemas.roster import (
     RosterAuditLogResponse,
     RosterCreateRequest,
@@ -47,6 +51,12 @@ from app.utils.academic_period import get_roster_period_dates
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _require_admin(user: User) -> None:
+    """Raise 403 if user is not admin or super_admin."""
+    if user.role not in (UserRole.admin, UserRole.super_admin):
+        raise HTTPException(status_code=403, detail="Admin role required")
 
 
 def _generate_payment_roster_inner(
@@ -2017,3 +2027,45 @@ async def get_roster_audit_logs(
     except Exception as e:
         logger.exception(f"Failed to get audit logs for roster {roster_id}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="查詢稽核日誌失敗") from e
+
+
+@router.get("/{roster_id}/revoked-suspended")
+def get_revoked_suspended(
+    roster_id: int,
+    db: Session = Depends(get_sync_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List students still embedded in this roster whose allocation was
+    later revoked or suspended."""
+    _require_admin(current_user)
+    svc = RosterService(db)
+    try:
+        result = svc.get_revoked_suspended_for_roster(roster_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    payload = RevokedSuspendedListResponse(**result).model_dump()
+    return {"success": True, "message": "OK", "data": payload}
+
+
+@router.delete("/{roster_id}/items/{item_id}")
+def remove_locked_roster_item(
+    roster_id: int,
+    item_id: int,
+    request: RemoveLockedItemRequest,
+    db: Session = Depends(get_sync_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Hard-delete a single item from a LOCKED roster. Roster stays LOCKED;
+    excel_stale is set to True; audit log written."""
+    _require_admin(current_user)
+    svc = RosterService(db)
+    try:
+        result = svc.remove_item_from_locked_roster(
+            roster_id=roster_id,
+            item_id=item_id,
+            admin_user_id=current_user.id,
+            reason=request.reason,
+        )
+    except (ValueError, RosterLockedError) as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {"success": True, "message": "已從造冊移除", "data": result}
