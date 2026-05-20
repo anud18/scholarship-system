@@ -2,10 +2,24 @@
 
 from decimal import Decimal
 
+import pytest
+import pytest_asyncio
+from datetime import datetime, timezone
+
 from app.schemas.student_scholarship_history import PaymentRecord
 from app.services.student_scholarship_history_service import (
     StudentScholarshipHistoryService,
 )
+from app.models.payment_roster import (
+    PaymentRoster,
+    PaymentRosterItem,
+    RosterCycle,
+    RosterStatus,
+    RosterTriggerType,
+    StudentVerificationStatus,
+)
+from app.models.scholarship import ScholarshipConfiguration
+from app.models.user import User, UserRole, UserType
 
 
 def _record(name: str, amount: str, period: str = "114-10") -> PaymentRecord:
@@ -77,3 +91,101 @@ class TestBuildAcademicInfo:
         assert result.basic_info.std_cname == "王小明"
         assert result.basic_info.std_degree == "1"
         assert result.basic_info.com_email == "wang@nycu.edu.tw"
+
+
+@pytest_asyncio.fixture
+async def seeded_rosters(db):
+    """Seed: 1 admin + 1 config + 3 rosters with mixed status/included for stdcodes S001/S002."""
+    from app.models.scholarship import ScholarshipType
+
+    admin = User(
+        nycu_id="adminseed",
+        name="Admin Seed",
+        email="adminseed@nycu.edu.tw",
+        user_type=UserType.employee,
+        role=UserRole.admin,
+    )
+    db.add(admin)
+    await db.flush()
+
+    stype = ScholarshipType(
+        code="TEST",
+        name="Test Scholarship",
+    )
+    db.add(stype)
+    await db.flush()
+
+    cfg = ScholarshipConfiguration(
+        config_code="TEST-001",
+        config_name="Test Config",
+        is_active=True,
+        scholarship_type_id=stype.id,
+        academic_year=114,
+        amount=10000,
+    )
+    db.add(cfg)
+    await db.flush()
+
+    def make_roster(period: str, year: int, status: RosterStatus) -> PaymentRoster:
+        roster = PaymentRoster(
+            roster_code=f"ROSTER-{year}-{period}-{cfg.config_code}",
+            scholarship_configuration_id=cfg.id,
+            period_label=period,
+            academic_year=year,
+            roster_cycle=RosterCycle.MONTHLY,
+            status=status,
+            trigger_type=RosterTriggerType.MANUAL,
+            created_by=admin.id,
+            locked_at=datetime.now(timezone.utc) if status == RosterStatus.LOCKED else None,
+        )
+        db.add(roster)
+        return roster
+
+    roster_a = make_roster("114-10", 114, RosterStatus.LOCKED)
+    roster_b = make_roster("114-09", 114, RosterStatus.LOCKED)
+    roster_c = make_roster("114-08", 114, RosterStatus.DRAFT)
+    await db.flush()
+
+    def make_item(roster, stdcode: str, name: str, amount: str, included: bool = True):
+        item = PaymentRosterItem(
+            roster_id=roster.id,
+            application_id=1,  # placeholder — SQLite test DB doesn't enforce FK
+            student_id_number=stdcode,
+            student_name="王小明",
+            scholarship_name=name,
+            scholarship_amount=amount,
+            verification_status=StudentVerificationStatus.VERIFIED,
+            is_included=included,
+        )
+        db.add(item)
+        return item
+
+    make_item(roster_a, "S001", "國科會", "10000")
+    make_item(roster_a, "S001", "MOE", "5000")
+    make_item(roster_b, "S001", "國科會", "999", included=False)  # excluded → filter
+    make_item(roster_c, "S001", "國科會", "888")  # draft → filter
+    make_item(roster_a, "S002", "國科會", "777")  # different student → filter
+    await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_fetch_locked_payments_returns_only_locked_and_included(db, seeded_rosters):
+    """Service must filter status=LOCKED AND is_included=TRUE AND matching student_id_number."""
+    svc = StudentScholarshipHistoryService()
+    records, snapshot_name = await svc._fetch_locked_payments(db, "S001")
+
+    assert len(records) == 2
+    # Sort: most-recent first — both items live on roster_a (114-10)
+    assert {r.scholarship_name for r in records} == {"國科會", "MOE"}
+    assert all(r.period_label == "114-10" for r in records)
+    assert all(r.academic_year == 114 for r in records)
+    assert sum(r.scholarship_amount for r in records) == Decimal("15000")
+    assert snapshot_name == "王小明"
+
+
+@pytest.mark.asyncio
+async def test_fetch_locked_payments_returns_empty_for_unknown_student(db, seeded_rosters):
+    svc = StudentScholarshipHistoryService()
+    records, snapshot_name = await svc._fetch_locked_payments(db, "NOBODY")
+    assert records == []
+    assert snapshot_name is None

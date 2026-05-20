@@ -1,8 +1,12 @@
 """Service: assemble admin student scholarship history (academic + payments)."""
 
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.payment_roster import PaymentRoster, PaymentRosterItem, RosterStatus
 from app.schemas.student_scholarship_history import (
     AcademicBasicInfo,
     AcademicInfo,
@@ -38,6 +42,44 @@ class StudentScholarshipHistoryService:
             error=None,
             basic_info=AcademicBasicInfo(**subset),
         )
+
+    async def _fetch_locked_payments(
+        self,
+        db: AsyncSession,
+        student_number: str,
+    ) -> Tuple[List[PaymentRecord], Optional[str]]:
+        stmt = (
+            select(PaymentRosterItem, PaymentRoster)
+            .join(PaymentRoster, PaymentRosterItem.roster_id == PaymentRoster.id)
+            .where(
+                PaymentRosterItem.student_id_number == student_number,
+                PaymentRosterItem.is_included.is_(True),
+                PaymentRoster.status == RosterStatus.LOCKED,
+            )
+            .order_by(
+                PaymentRoster.academic_year.desc(),
+                PaymentRoster.period_label.desc(),
+            )
+        )
+        result = await db.execute(stmt)
+        rows = result.all()
+        records = [
+            PaymentRecord(
+                roster_id=roster.id,
+                roster_code=roster.roster_code,
+                period_label=roster.period_label,
+                academic_year=roster.academic_year,
+                roster_cycle=roster.roster_cycle.value,
+                scholarship_name=item.scholarship_name,
+                scholarship_amount=item.scholarship_amount,
+                scholarship_subtype=item.scholarship_subtype,
+                allocation_year=item.allocation_year,
+                locked_at=roster.locked_at,
+            )
+            for item, roster in rows
+        ]
+        snapshot_name = rows[0][0].student_name if rows else None
+        return records, snapshot_name
 
     def _build_summary(
         self,
