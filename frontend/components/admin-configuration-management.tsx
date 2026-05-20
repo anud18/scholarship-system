@@ -49,7 +49,14 @@ import {
   FileText,
   Clock,
   Info,
+  Loader2,
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { format } from "date-fns";
 import { zhTW } from "date-fns/locale";
 import apiClient, {
@@ -61,6 +68,97 @@ import { WhitelistManagementDialog } from "./whitelist-management-dialog";
 import { QuotaManagementMode, getQuotaManagementModeLabel } from "@/lib/enums";
 import { toast } from "sonner";
 const api = apiClient;
+
+/**
+ * Toggle for opening/closing post-distribution supplementary import per configuration.
+ * Owns its own loading + optimistic state so the row stays interactive while PATCH is in-flight.
+ */
+function SupplementaryImportToggle({
+  configId,
+  initialOpen,
+  onChange,
+}: {
+  configId: number;
+  initialOpen: boolean;
+  onChange?: (open: boolean) => void;
+}) {
+  const [open, setOpen] = useState(initialOpen);
+  const [saving, setSaving] = useState(false);
+
+  // Keep local state in sync if parent reloads configs and prop changes.
+  useEffect(() => {
+    setOpen(initialOpen);
+  }, [initialOpen]);
+
+  const handleToggle = async (next: boolean) => {
+    const prev = open;
+    setOpen(next); // optimistic
+    setSaving(true);
+    try {
+      await api.college.toggleConfigSupplementaryImport(configId, next);
+      toast.success(next ? "已開放補充匯入" : "已關閉補充匯入");
+      onChange?.(next);
+    } catch (err) {
+      setOpen(prev); // rollback
+      toast.error(err instanceof Error ? err.message : "操作失敗");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <TooltipProvider delayDuration={250}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="inline-flex items-center gap-2.5">
+            <Switch
+              checked={open}
+              disabled={saving}
+              onCheckedChange={handleToggle}
+              aria-label="開放/關閉學院補充匯入"
+              className={
+                open
+                  ? "data-[state=checked]:bg-emerald-600"
+                  : undefined
+              }
+            />
+            <span
+              className={[
+                "inline-flex items-center gap-1.5 text-xs font-medium tracking-wide tabular-nums transition-colors",
+                open ? "text-emerald-700" : "text-muted-foreground",
+              ].join(" ")}
+            >
+              {saving ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <span className="relative inline-flex h-2 w-2">
+                  <span
+                    className={[
+                      "absolute inline-flex h-full w-full rounded-full opacity-60",
+                      open ? "animate-ping bg-emerald-400" : "bg-transparent",
+                    ].join(" ")}
+                  />
+                  <span
+                    className={[
+                      "relative inline-flex h-2 w-2 rounded-full",
+                      open ? "bg-emerald-500" : "bg-muted-foreground/40",
+                    ].join(" ")}
+                  />
+                </span>
+              )}
+              {open ? "開放中" : "已關閉"}
+            </span>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          {open
+            ? "學院可於分發後上傳新申請學生 Excel；排名接續於現有名單之後"
+            : "點擊以開放學院上傳補充申請名單（Excel）"}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 interface AdminConfigurationManagementProps {
   scholarshipTypes: ScholarshipType[];
@@ -734,42 +832,17 @@ export function AdminConfigurationManagement({
                               </Badge>
                             </td>
                             <td className="p-4">
-                              <Button
-                                size="sm"
-                                variant={
-                                  config.allow_supplementary_import
-                                    ? "outline"
-                                    : "secondary"
-                                }
-                                className="text-xs whitespace-nowrap"
-                                onClick={async () => {
-                                  try {
-                                    const next = !config.allow_supplementary_import;
-                                    await api.college.toggleConfigSupplementaryImport(
-                                      config.id,
-                                      next
-                                    );
-                                    toast.success(
-                                      next ? "已開放補充匯入" : "已關閉補充匯入"
-                                    );
-                                    // Refresh the configurations list to reflect the change
-                                    if (selectedScholarshipType) {
-                                      await loadConfigurations(selectedScholarshipType);
-                                    }
-                                  } catch (err) {
-                                    toast.error(
-                                      err instanceof Error
-                                        ? err.message
-                                        : "操作失敗"
+                              <SupplementaryImportToggle
+                                configId={config.id}
+                                initialOpen={!!config.allow_supplementary_import}
+                                onChange={() => {
+                                  if (selectedScholarshipType) {
+                                    void loadConfigurations(
+                                      selectedScholarshipType
                                     );
                                   }
                                 }}
-                                title="開放/關閉學院補充匯入 (Excel)"
-                              >
-                                {config.allow_supplementary_import
-                                  ? "已開放"
-                                  : "未開放"}
-                              </Button>
+                              />
                             </td>
                             <td className="p-4">
                               <div className="flex justify-end gap-1">

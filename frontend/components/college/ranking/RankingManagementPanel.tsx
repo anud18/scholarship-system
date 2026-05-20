@@ -15,9 +15,21 @@ import { Button } from "@/components/ui/button";
 import { CollegeRankingTable } from "@/components/college-ranking-table";
 import { ConfigSelector } from "../shared/ConfigSelector";
 import { RankingCardList } from "../shared/RankingCardList";
-import { Plus, Loader2, Clock, AlertTriangle, Lock } from "lucide-react";
+import {
+  Plus,
+  Loader2,
+  Clock,
+  AlertTriangle,
+  Lock,
+  Upload,
+  FileSpreadsheet,
+  Sparkles,
+} from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
+
+const SUPPLEMENTARY_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+const SUPPLEMENTARY_ACCEPT = ".xlsx,.xls";
 
 // #63: surface the college-review deadline visibly on the ranking page
 // and warn / lock once the deadline approaches or passes.
@@ -74,6 +86,156 @@ import {
 interface RankingManagementPanelProps {
   user: User;
   scholarshipType: { code: string; name: string };
+}
+
+/**
+ * Drop-zone style uploader for post-distribution supplementary import.
+ * Renders inline beneath the ranking header when admin has opened supplementary import.
+ */
+function SupplementaryImportDropZone({
+  rankingId,
+  onUploaded,
+}: {
+  rankingId: number;
+  onUploaded: () => void | Promise<void>;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const inputId = `supplementary-file-input-${rankingId}`;
+
+  const handleFile = useCallback(
+    async (file: File) => {
+      if (uploading) return;
+      const lower = file.name.toLowerCase();
+      if (!lower.endsWith(".xlsx") && !lower.endsWith(".xls")) {
+        toast.error("僅接受 .xlsx 或 .xls 檔案");
+        return;
+      }
+      if (file.size > SUPPLEMENTARY_MAX_BYTES) {
+        toast.error(
+          `檔案過大（${(file.size / 1024 / 1024).toFixed(1)} MB），上限 10 MB`
+        );
+        return;
+      }
+      setUploading(true);
+      try {
+        const result = await apiClient.college.uploadSupplementaryImport(
+          rankingId,
+          file
+        );
+        if (result.success && result.data) {
+          toast.success(
+            `已匯入 ${result.data.imported_count} 位學生（排名 ${result.data.new_rank_range}）`
+          );
+          await onUploaded();
+        }
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "匯入失敗");
+      } finally {
+        setUploading(false);
+      }
+    },
+    [rankingId, uploading, onUploaded]
+  );
+
+  return (
+    <Card className="overflow-hidden border-emerald-200/70 bg-gradient-to-br from-emerald-50/60 via-background to-background">
+      <div className="flex">
+        {/* Left accent stripe — signals this is the post-distribution capability */}
+        <div
+          aria-hidden
+          className="w-1 bg-gradient-to-b from-emerald-400 to-emerald-600"
+        />
+        <div className="flex-1 p-4 md:p-5">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="rounded-lg bg-emerald-100 p-2 text-emerald-700 ring-1 ring-emerald-200">
+                <Sparkles className="h-4 w-4" />
+              </div>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold tracking-tight">
+                    分發後補充匯入
+                  </h3>
+                  <span className="rounded-full bg-emerald-600/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-700">
+                    Open
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  上傳新申請學生 Excel；排名將自動接續於現有名單之後
+                </p>
+              </div>
+            </div>
+
+            <label
+              htmlFor={inputId}
+              onDragOver={e => {
+                e.preventDefault();
+                if (!uploading) setDragging(true);
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={e => {
+                e.preventDefault();
+                setDragging(false);
+                const file = e.dataTransfer.files?.[0];
+                if (file) void handleFile(file);
+              }}
+              className={[
+                "group relative flex min-w-[260px] cursor-pointer items-center gap-3 rounded-lg border-2 border-dashed px-4 py-3 text-sm transition-all",
+                uploading
+                  ? "cursor-wait border-emerald-300 bg-emerald-50/70"
+                  : dragging
+                    ? "border-emerald-500 bg-emerald-50 ring-4 ring-emerald-100"
+                    : "border-emerald-300 bg-white/60 hover:border-emerald-500 hover:bg-emerald-50/80",
+              ].join(" ")}
+              aria-disabled={uploading}
+            >
+              <input
+                id={inputId}
+                type="file"
+                accept={SUPPLEMENTARY_ACCEPT}
+                disabled={uploading}
+                className="sr-only"
+                onChange={async e => {
+                  const file = e.target.files?.[0];
+                  if (file) await handleFile(file);
+                  e.target.value = "";
+                }}
+              />
+              {uploading ? (
+                <>
+                  <Loader2 className="h-5 w-5 shrink-0 animate-spin text-emerald-600" />
+                  <div className="leading-tight">
+                    <div className="font-medium text-emerald-800">
+                      上傳中…
+                    </div>
+                    <div className="text-[11px] text-emerald-700/70">
+                      正在解析並比對 SIS 資料
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="relative shrink-0">
+                    <FileSpreadsheet className="h-5 w-5 text-emerald-700" />
+                    <Upload className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full bg-white p-0.5 text-emerald-600 ring-1 ring-emerald-200" />
+                  </div>
+                  <div className="leading-tight">
+                    <div className="font-medium text-foreground group-hover:text-emerald-800">
+                      點擊或拖曳 Excel
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      支援 .xlsx / .xls · 上限 10 MB
+                    </div>
+                  </div>
+                </>
+              )}
+            </label>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
 }
 
 export function RankingManagementPanel({
@@ -872,56 +1034,10 @@ export function RankingManagementPanel({
             {/* Post-distribution supplementary import (college upload only —
                 admin toggle lives in 系統管理 → 獎學金配置) */}
             {rankingData && rankingData.allowSupplementaryImport && !isAdmin && (
-              <Card>
-                <CardContent className="flex items-center justify-between gap-4 py-4">
-                  <div className="flex flex-col gap-1">
-                    <span className="text-sm font-medium">補充匯入</span>
-                    <span className="text-xs text-muted-foreground">
-                      上傳新學生 Excel；排名將接在現有名單之後
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      id="supplementary-file-input"
-                      type="file"
-                      accept=".xlsx,.xls"
-                      className="hidden"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        try {
-                          const result = await apiClient.college.uploadSupplementaryImport(
-                            selectedRanking!,
-                            file
-                          );
-                          if (result.success && result.data) {
-                            toast.success(
-                              `已匯入 ${result.data.imported_count} 位學生（排名 ${result.data.new_rank_range}）`
-                            );
-                            await fetchRankingDetails(selectedRanking!);
-                          }
-                        } catch (err) {
-                          toast.error(
-                            err instanceof Error ? err.message : "匯入失敗"
-                          );
-                        } finally {
-                          e.target.value = "";
-                        }
-                      }}
-                    />
-                    <Button
-                      size="sm"
-                      onClick={() =>
-                        document
-                          .getElementById("supplementary-file-input")
-                          ?.click()
-                      }
-                    >
-                      上傳補充名單
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+              <SupplementaryImportDropZone
+                rankingId={selectedRanking!}
+                onUploaded={() => fetchRankingDetails(selectedRanking!)}
+              />
             )}
             <CollegeRankingTable
               applications={rankingData.applications}
