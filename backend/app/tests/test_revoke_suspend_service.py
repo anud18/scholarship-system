@@ -243,3 +243,41 @@ async def test_revoke_writes_audit_log(db, allocated_application, admin_db_user)
     assert log.user_id == admin_db_user.id
     assert log.new_values["reason"] == "reason text"
     assert "affected_unlocked_rosters" in log.new_values
+
+
+# ---------------------------------------------------------------------------
+# Task 4: Suspend-side coverage
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_suspend_sets_status_and_metadata(db, allocated_application, admin_db_user):
+    svc = ManualDistributionService(db)
+    await svc.suspend_allocation(allocated_application.id, admin_db_user.id, "leave")
+    await db.commit()
+    await db.refresh(allocated_application)
+    assert allocated_application.status == ApplicationStatus.cancelled
+    assert allocated_application.quota_allocation_status == "suspended"
+    assert allocated_application.suspend_reason == "leave"
+    assert allocated_application.suspended_by == admin_db_user.id
+
+
+@pytest.mark.asyncio
+async def test_suspend_then_revoke_raises_conflict(db, allocated_application, admin_db_user):
+    svc = ManualDistributionService(db)
+    await svc.suspend_allocation(allocated_application.id, admin_db_user.id, "first")
+    await db.commit()
+    with pytest.raises(ValueError, match="already"):
+        await svc.revoke_allocation(allocated_application.id, admin_db_user.id, "second")
+
+
+@pytest.mark.asyncio
+async def test_suspend_writes_audit_log_with_suspend_action(db, allocated_application, admin_db_user):
+    from sqlalchemy import select
+    svc = ManualDistributionService(db)
+    await svc.suspend_allocation(allocated_application.id, admin_db_user.id, "x")
+    await db.commit()
+    log = (await db.execute(
+        select(AuditLog).where(AuditLog.action == "application.suspend")
+    )).scalar_one()
+    assert log.resource_id == str(allocated_application.id)
