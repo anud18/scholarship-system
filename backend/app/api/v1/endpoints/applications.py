@@ -652,6 +652,15 @@ async def get_applications_for_review(
     }
 
 
+@router.patch(
+    "/{id}/status",
+    responses={
+        200: {
+            "description": "Application status updated successfully",
+            "model": ApplicationStatusUpdateResponse,
+        }
+    },
+)
 @router.put(
     "/{id}/status",
     responses={

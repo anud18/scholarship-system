@@ -61,8 +61,8 @@ class BulkApprovalService:
                 try:
                     # Validate application can be approved
                     if application.status not in [
-                        ApplicationStatus.submitted.value,
-                        ApplicationStatus.under_review.value,
+                        ApplicationStatus.submitted,
+                        ApplicationStatus.under_review,
                     ]:
                         results["failed_approvals"].append(
                             {
@@ -163,8 +163,8 @@ class BulkApprovalService:
                 try:
                     # Validate application can be rejected
                     if application.status not in [
-                        ApplicationStatus.submitted.value,
-                        ApplicationStatus.under_review.value,
+                        ApplicationStatus.submitted,
+                        ApplicationStatus.under_review,
                     ]:
                         results["failed_rejections"].append(
                             {

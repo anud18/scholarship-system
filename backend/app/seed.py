@@ -456,6 +456,36 @@ async def seed_scholarships(session: AsyncSession):
     print(f"  ✓ {len(scholarships_data)} scholarship types created/updated")
 
 
+async def seed_admin_scholarships(session: AsyncSession):
+    """
+    Link the seeded 'admin' user to all scholarship types via AdminScholarship.
+    Required so the admin user can create/edit scholarship configurations in E2E tests.
+    """
+    print("🔗 Linking admin user to all scholarship types...")
+
+    admin_result = await session.execute(text("SELECT id FROM users WHERE nycu_id = 'admin'"))
+    admin_id = admin_result.scalar()
+    if not admin_id:
+        print("  ❌ admin user not found — skipping AdminScholarship seeding")
+        return
+
+    scholarship_result = await session.execute(text("SELECT id FROM scholarship_types"))
+    scholarship_ids = [row[0] for row in scholarship_result.fetchall()]
+
+    for sid in scholarship_ids:
+        await session.execute(
+            text("""
+                INSERT INTO admin_scholarships (admin_id, scholarship_id, assigned_at)
+                VALUES (:admin_id, :scholarship_id, NOW())
+                ON CONFLICT ON CONSTRAINT uq_admin_scholarship DO NOTHING
+            """),
+            {"admin_id": admin_id, "scholarship_id": sid},
+        )
+
+    await session.commit()
+    print(f"  ✓ admin linked to {len(scholarship_ids)} scholarship types")
+
+
 async def seed_application_fields(session: AsyncSession):
     """
     建立申請欄位配置
@@ -590,6 +620,9 @@ async def seed_development():
 
             # 3. Scholarships
             await seed_scholarships(session)
+
+            # 3.1. Admin-scholarship links (required for admin E2E tests)
+            await seed_admin_scholarships(session)
 
             # 4. Application fields
             await seed_application_fields(session)
