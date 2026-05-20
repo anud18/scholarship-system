@@ -11,7 +11,7 @@ Give admins a single-student lookup tool that answers: *"What scholarships has t
 ## 2. Scope
 
 **In scope**
-- New admin page `/admin/student-history` for single-student lookup by 學號
+- New tab "學生領取歷史" inside the existing `AdminManagementShell` (matches the existing admin UI pattern of one shell + tabs, not separate Next.js routes)
 - New backend endpoint that returns combined academic info + payment history in one response
 - Read-only — no edits, no batch operations
 - Data source for payments: **`payment_rosters.status = LOCKED`** items only (no in-flight applications, no draft rosters)
@@ -28,7 +28,7 @@ Give admins a single-student lookup tool that answers: *"What scholarships has t
 ## 3. Architecture
 
 ```
-admin browser → /admin/student-history page (Next.js client component)
+admin browser → AdminManagementShell, tab "student-history" (StudentHistoryPanel)
                               │ (admin enters 學號)
                               ▼
                   GET /api/v1/admin/student-history/{student_number}
@@ -179,8 +179,7 @@ async def get_history(self, db, stdcode):
 
 ### 6.1 New files
 
-- `frontend/app/admin/student-history/page.tsx` — server component shell that renders the client panel
-- `frontend/components/admin/student-history/StudentHistoryPanel.tsx` — input, React Query state, top-level error/empty handling
+- `frontend/components/admin/student-history/StudentHistoryPanel.tsx` — top-level panel mounted by the new tab; owns input + React Query state + top-level error/empty handling
 - `frontend/components/admin/student-history/AcademicInfoCard.tsx` — renders `academic_info` or the SIS-unavailable warning
 - `frontend/components/admin/student-history/SummaryCards.tsx` — three KPI cards
 - `frontend/components/admin/student-history/PaymentHistoryTable.tsx` — sortable flat table
@@ -188,8 +187,8 @@ async def get_history(self, db, stdcode):
 
 ### 6.2 Modified files
 
+- `frontend/components/admin/AdminManagementShell.tsx` — add a new `TabsTrigger value="student-history"` (label "學生領取歷史") and matching `TabsContent` rendering `<StudentHistoryPanel />`; bump the `grid-cols-N` count on the `TabsList` accordingly (currently `grid-cols-11`/`grid-cols-12` depending on `hasQuotaPermission`)
 - `frontend/lib/api/index.ts` — register the new API module
-- Admin sidebar/nav component (located during implementation) — add "學生領取歷史查詢" link
 
 ### 6.3 Page layout
 
@@ -262,7 +261,7 @@ Per CLAUDE.md §8, after adding the endpoint run `cd frontend && npm run api:gen
 
 `frontend/e2e/admin-student-history.spec.ts` (Playwright):
 - Login as `admin@nycu.edu.tw`
-- Navigate to `/admin/student-history`
+- Navigate to admin shell and click the "學生領取歷史" tab
 - Submit empty → validation message visible
 - Submit seeded student number → summary cards + table rows visible
 - Submit nonexistent number → "查無此學生資料" empty state visible
@@ -280,7 +279,7 @@ None — all decisions resolved during brainstorming:
 | Decision | Resolution |
 |---|---|
 | Data source | Locked rosters only |
-| UI placement | New standalone page `/admin/student-history` |
+| UI placement | New tab "學生領取歷史" inside `AdminManagementShell` (matches existing admin tab pattern) |
 | "總月數" math | Count payment records (no period conversion) |
 | Display organization | Summary cards + flat detail table |
 | SIS lookup failure | Show payment records + warning card |
