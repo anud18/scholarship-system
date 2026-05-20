@@ -19,10 +19,24 @@ def _make_excel(rows: list[list]) -> bytes:
     ws.cell(row=1, column=1, value="Title")
     # Row 2: static headers (18 columns)
     headers = [
-        "NO.", "學院初審會議之學院排序", "申請獎學金類別", "學院", "系所",
-        "年級", "是否為逕博學生", "學生中文姓名", "學生英文姓名", "國籍",
-        "性別", "註冊入學日期", "學號", "學生身分證字號", "學生匯款帳號",
-        "學生E-mail", "學生通訊地址", "指導教授姓名",
+        "NO.",
+        "學院初審會議之學院排序",
+        "申請獎學金類別",
+        "學院",
+        "系所",
+        "年級",
+        "是否為逕博學生",
+        "學生中文姓名",
+        "學生英文姓名",
+        "國籍",
+        "性別",
+        "註冊入學日期",
+        "學號",
+        "學生身分證字號",
+        "學生匯款帳號",
+        "學生E-mail",
+        "學生通訊地址",
+        "指導教授姓名",
     ]
     for col_idx, h in enumerate(headers, start=1):
         ws.cell(row=2, column=col_idx, value=h)
@@ -67,15 +81,29 @@ class TestParseScholarshipTypeCell:
 
 class TestParseExcel:
     def test_parses_student_id_rank_and_scholarship(self):
-        row = [1, 1, "國科會博士生研究獎學金", "工學院", "電機系",
-               2, "否", "王小明", "Wang", "台灣", "男", "113.9.1",
-               "310460001", "A123456789", "12345678", "test@nycu.edu.tw",
-               "新竹市", "指導教授A"]
+        row = [
+            1,
+            1,
+            "國科會博士生研究獎學金",
+            "工學院",
+            "電機系",
+            2,
+            "否",
+            "王小明",
+            "Wang",
+            "台灣",
+            "男",
+            "113.9.1",
+            "310460001",
+            "A123456789",
+            "12345678",
+            "test@nycu.edu.tw",
+            "新竹市",
+            "指導教授A",
+        ]
         file_bytes = _make_excel([row])
         dynamic_field_names: list[str] = []
-        rows, errors = SupplementaryImportService.parse_excel(
-            file_bytes, LABEL_TO_CODE, dynamic_field_names
-        )
+        rows, errors = SupplementaryImportService.parse_excel(file_bytes, LABEL_TO_CODE, dynamic_field_names)
         assert not errors
         assert len(rows) == 1
         r = rows[0]
@@ -87,32 +115,60 @@ class TestParseExcel:
         assert r.submitted_form_fields == {}
 
     def test_duplicate_student_ids_reported(self):
-        row = [1, 1, "國科會博士生研究獎學金", "", "", 2, "", "王A", "", "", "", "",
-               "310460001", "", "", "", "", ""]
-        row2 = [2, 2, "國科會博士生研究獎學金", "", "", 2, "", "王B", "", "", "", "",
-                "310460001", "", "", "", "", ""]
+        row = [1, 1, "國科會博士生研究獎學金", "", "", 2, "", "王A", "", "", "", "", "310460001", "", "", "", "", ""]
+        row2 = [2, 2, "國科會博士生研究獎學金", "", "", 2, "", "王B", "", "", "", "", "310460001", "", "", "", "", ""]
         file_bytes = _make_excel([row, row2])
-        rows, errors = SupplementaryImportService.parse_excel(
-            file_bytes, LABEL_TO_CODE, []
-        )
+        rows, errors = SupplementaryImportService.parse_excel(file_bytes, LABEL_TO_CODE, [])
         assert any("重複" in e for e in errors)
 
     def test_non_integer_rank_reported(self):
-        row = [1, "abc", "國科會博士生研究獎學金", "", "", 2, "", "王A", "", "", "", "",
-               "310460001", "", "", "", "", ""]
+        row = [
+            1,
+            "abc",
+            "國科會博士生研究獎學金",
+            "",
+            "",
+            2,
+            "",
+            "王A",
+            "",
+            "",
+            "",
+            "",
+            "310460001",
+            "",
+            "",
+            "",
+            "",
+            "",
+        ]
         file_bytes = _make_excel([row])
-        rows, errors = SupplementaryImportService.parse_excel(
-            file_bytes, LABEL_TO_CODE, []
-        )
+        rows, errors = SupplementaryImportService.parse_excel(file_bytes, LABEL_TO_CODE, [])
         assert any("排名" in e for e in errors)
 
     def test_skips_empty_rows(self):
         empty_row = [""] * 18
-        real_row = [1, 1, "國科會博士生研究獎學金", "", "", 2, "", "王A", "", "", "", "",
-                    "310460001", "", "", "", "", ""]
+        real_row = [
+            1,
+            1,
+            "國科會博士生研究獎學金",
+            "",
+            "",
+            2,
+            "",
+            "王A",
+            "",
+            "",
+            "",
+            "",
+            "310460001",
+            "",
+            "",
+            "",
+            "",
+            "",
+        ]
         file_bytes = _make_excel([empty_row, real_row])
-        rows, errors = SupplementaryImportService.parse_excel(
-            file_bytes, LABEL_TO_CODE, []
-        )
+        rows, errors = SupplementaryImportService.parse_excel(file_bytes, LABEL_TO_CODE, [])
         assert not errors
         assert len(rows) == 1

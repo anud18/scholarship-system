@@ -25,17 +25,47 @@ def _build_xlsx_bytes() -> bytes:
     ws = wb.active
     ws.cell(row=1, column=1, value="Title")
     headers = [
-        "NO.", "學院初審會議之學院排序", "申請獎學金類別", "學院", "系所",
-        "年級", "是否為逕博學生", "學生中文姓名", "學生英文姓名", "國籍",
-        "性別", "註冊入學日期", "學號", "學生身分證字號", "學生匯款帳號",
-        "學生E-mail", "學生通訊地址", "指導教授姓名",
+        "NO.",
+        "學院初審會議之學院排序",
+        "申請獎學金類別",
+        "學院",
+        "系所",
+        "年級",
+        "是否為逕博學生",
+        "學生中文姓名",
+        "學生英文姓名",
+        "國籍",
+        "性別",
+        "註冊入學日期",
+        "學號",
+        "學生身分證字號",
+        "學生匯款帳號",
+        "學生E-mail",
+        "學生通訊地址",
+        "指導教授姓名",
     ]
     for col_idx, h in enumerate(headers, start=1):
         ws.cell(row=2, column=col_idx, value=h)
-    row = [1, 1, "國科會博士生研究獎學金", "工學院", "電機系", 2, "否",
-           "王小明", "Wang", "台灣", "男", "113.9.1",
-           "310460099", "A123456789", "12345678", "test99@nycu.edu.tw",
-           "新竹市", "指導教授A"]
+    row = [
+        1,
+        1,
+        "國科會博士生研究獎學金",
+        "工學院",
+        "電機系",
+        2,
+        "否",
+        "王小明",
+        "Wang",
+        "台灣",
+        "男",
+        "113.9.1",
+        "310460099",
+        "A123456789",
+        "12345678",
+        "test99@nycu.edu.tw",
+        "新竹市",
+        "指導教授A",
+    ]
     for col_idx, val in enumerate(row, start=1):
         ws.cell(row=3, column=col_idx, value=val)
     buf = io.BytesIO()
@@ -86,9 +116,7 @@ async def scholarship(db: AsyncSession) -> ScholarshipType:
 
 
 @pytest_asyncio.fixture
-async def configuration(
-    db: AsyncSession, scholarship: ScholarshipType, admin_user: User
-) -> ScholarshipConfiguration:
+async def configuration(db: AsyncSession, scholarship: ScholarshipType, admin_user: User) -> ScholarshipConfiguration:
     cfg = ScholarshipConfiguration(
         scholarship_type_id=scholarship.id,
         academic_year=114,
@@ -150,9 +178,7 @@ class TestAdminConfigToggle:
         data = resp.json()
         assert data["data"]["allow_supplementary_import"] is True
 
-    async def test_returns_404_for_unknown_configuration(
-        self, client: AsyncClient, db: AsyncSession, admin_user: User
-    ):
+    async def test_returns_404_for_unknown_configuration(self, client: AsyncClient, db: AsyncSession, admin_user: User):
         app.dependency_overrides[require_admin] = lambda: admin_user
         try:
             resp = await client.patch(
@@ -190,9 +216,7 @@ class TestSupplementaryImportEndpoint:
             app.dependency_overrides.pop(require_college, None)
         assert resp.status_code == 403
 
-    async def test_returns_404_for_unknown_ranking(
-        self, client: AsyncClient, db: AsyncSession, college_user: User
-    ):
+    async def test_returns_404_for_unknown_ranking(self, client: AsyncClient, db: AsyncSession, college_user: User):
         app.dependency_overrides[require_college] = lambda: college_user
         try:
             xlsx_bytes = _build_xlsx_bytes()
@@ -238,18 +262,13 @@ class TestSupplementaryImportEndpoint:
         # Bypass SIS: return a student whose std_academyno is "EE" (not "A")
         async def fake_fetch(self, student_ids, **kwargs):
             return (
-                {
-                    sid: {"std_academyno": "EE", "std_cname": "他院學生"}
-                    for sid in student_ids
-                },
+                {sid: {"std_academyno": "EE", "std_cname": "他院學生"} for sid in student_ids},
                 [],
             )
 
         from app.services.supplementary_import_service import SupplementaryImportService
 
-        monkeypatch.setattr(
-            SupplementaryImportService, "fetch_student_data_bulk", fake_fetch
-        )
+        monkeypatch.setattr(SupplementaryImportService, "fetch_student_data_bulk", fake_fetch)
 
         app.dependency_overrides[require_college] = lambda: college_user
         try:

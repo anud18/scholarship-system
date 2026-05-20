@@ -71,22 +71,16 @@ class TestFetchStudentDataBulk:
             }
         )
         service = SupplementaryImportService(db, student_service=mock_student_service)
-        data_map, missing = await service.fetch_student_data_bulk(
-            ["310460001"], academic_year=114, semester="yearly"
-        )
+        data_map, missing = await service.fetch_student_data_bulk(["310460001"], academic_year=114, semester="yearly")
         assert "310460001" in data_map
         assert missing == []
 
     async def test_returns_missing_for_unknown_ids(self, db: AsyncSession):
         mock_student_service = AsyncMock()
         mock_student_service.api_enabled = True
-        mock_student_service.get_student_snapshot = AsyncMock(
-            side_effect=NotFoundError("student not found")
-        )
+        mock_student_service.get_student_snapshot = AsyncMock(side_effect=NotFoundError("student not found"))
         service = SupplementaryImportService(db, student_service=mock_student_service)
-        data_map, missing = await service.fetch_student_data_bulk(
-            ["999999"], academic_year=114, semester="yearly"
-        )
+        data_map, missing = await service.fetch_student_data_bulk(["999999"], academic_year=114, semester="yearly")
         assert missing == ["999999"]
         assert data_map == {}
 
@@ -95,9 +89,7 @@ class TestFetchStudentDataBulk:
         mock_student_service.api_enabled = False
         service = SupplementaryImportService(db, student_service=mock_student_service)
         with pytest.raises(ValueError, match="學生 API 未啟用"):
-            await service.fetch_student_data_bulk(
-                ["310460001"], academic_year=114, semester="yearly"
-            )
+            await service.fetch_student_data_bulk(["310460001"], academic_year=114, semester="yearly")
 
 
 @pytest.mark.asyncio
@@ -137,9 +129,7 @@ class TestFindOrCreateUsers:
 
 @pytest.mark.asyncio
 class TestCreateApplicationsAndItems:
-    async def test_populates_scholarship_subtype_list_for_distribution_panel(
-        self, db: AsyncSession
-    ):
+    async def test_populates_scholarship_subtype_list_for_distribution_panel(self, db: AsyncSession):
         """Distribution panel reads applied_sub_types from
         scholarship_subtype_list — supplementary import must populate it
         (not just sub_type_preferences) or imported students go invisible there.
@@ -194,9 +184,7 @@ class TestCreateApplicationsAndItems:
                 submitted_form_fields={},
             )
         ]
-        student_data_map = {
-            "310460050": {"std_stdcode": "310460050", "std_cname": "新生"}
-        }
+        student_data_map = {"310460050": {"std_stdcode": "310460050", "std_cname": "新生"}}
         user_map = await service.find_or_create_users(student_data_map)
 
         created = await service.create_applications_and_items(
@@ -207,12 +195,10 @@ class TestCreateApplicationsAndItems:
 
         # Inspect the resulting Application
         from sqlalchemy import select
-        result = await db.execute(
-            select(Application).where(Application.user_id == user_map["310460050"].id)
-        )
+
+        result = await db.execute(select(Application).where(Application.user_id == user_map["310460050"].id))
         app_row = result.scalar_one()
         assert app_row.scholarship_subtype_list == ["nstc", "moe_1w"], (
-            "scholarship_subtype_list must be populated so manual distribution panel "
-            "renders the applied sub-types"
+            "scholarship_subtype_list must be populated so manual distribution panel " "renders the applied sub-types"
         )
         assert app_row.sub_type_preferences == ["nstc", "moe_1w"]

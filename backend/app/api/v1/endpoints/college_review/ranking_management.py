@@ -1336,9 +1336,7 @@ async def supplementary_import(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail="檔案大小不能超過 10 MB",
         )
-    rows, parse_errors = SupplementaryImportService.parse_excel(
-        file_bytes, label_to_code, dynamic_field_names
-    )
+    rows, parse_errors = SupplementaryImportService.parse_excel(file_bytes, label_to_code, dynamic_field_names)
     if parse_errors:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -1390,10 +1388,7 @@ async def supplementary_import(
         if mismatched:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=(
-                    f"以下學生不屬於本學院（{expected_college}），無法匯入："
-                    f"{', '.join(mismatched)}"
-                ),
+                detail=(f"以下學生不屬於本學院（{expected_college}），無法匯入：" f"{', '.join(mismatched)}"),
             )
 
     # Compute max existing rank for offset
@@ -1415,7 +1410,9 @@ async def supplementary_import(
 
     logger.info(
         "Supplementary import: ranking_id=%s imported=%s by user=%s",
-        ranking_id, imported_count, current_user.id,
+        ranking_id,
+        imported_count,
+        current_user.id,
     )
 
     try:

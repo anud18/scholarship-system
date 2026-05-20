@@ -41,9 +41,7 @@ def parse_scholarship_type_cell(cell_value: str, label_to_code: Dict[str, str]) 
         "XXX(第一志願)暨YYY(第二志願)"              -> [code_of_XXX, code_of_YYY]
     """
     cell_value = (cell_value or "").strip()
-    dual_match = re.fullmatch(
-        r"(.+?)\(第一志願\)暨(.+?)\(第二志願\)", cell_value
-    )
+    dual_match = re.fullmatch(r"(.+?)\(第一志願\)暨(.+?)\(第二志願\)", cell_value)
     if dual_match:
         first_label = dual_match.group(1).strip()
         second_label = dual_match.group(2).strip()
@@ -63,6 +61,7 @@ class SupplementaryImportService:
 
     def __init__(self, db, student_service=None):
         from app.services.student_service import StudentService
+
         self.db = db
         self.student_service = student_service or StudentService()
 
@@ -82,7 +81,7 @@ class SupplementaryImportService:
         errors: List[str] = []
         rows: List[SupplementaryRow] = []
         seen_student_ids: Dict[str, int] = {}  # student_id -> first excel row number
-        seen_ranks: Dict[int, int] = {}        # rank -> first excel row number
+        seen_ranks: Dict[int, int] = {}  # rank -> first excel row number
 
         try:
             wb = load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
@@ -102,9 +101,7 @@ class SupplementaryImportService:
 
             # Duplicate student ID check
             if student_id in seen_student_ids:
-                errors.append(
-                    f"學號重複：{student_id}（首次出現在第 {seen_student_ids[student_id]} 行）"
-                )
+                errors.append(f"學號重複：{student_id}（首次出現在第 {seen_student_ids[student_id]} 行）")
                 continue
             seen_student_ids[student_id] = excel_row_num
 
@@ -124,7 +121,9 @@ class SupplementaryImportService:
             seen_ranks[excel_rank] = excel_row_num
 
             # Parse 申請獎學金類別 (col 3)
-            scholarship_cell_raw = excel_row[_COL_SCHOLARSHIP_TYPE - 1] if len(excel_row) >= _COL_SCHOLARSHIP_TYPE else None
+            scholarship_cell_raw = (
+                excel_row[_COL_SCHOLARSHIP_TYPE - 1] if len(excel_row) >= _COL_SCHOLARSHIP_TYPE else None
+            )
             scholarship_cell = str(scholarship_cell_raw or "").strip()
             try:
                 sub_type_preferences = parse_scholarship_type_cell(scholarship_cell, label_to_code)
@@ -165,9 +164,7 @@ class SupplementaryImportService:
             actual = {r.excel_rank for r in rows}
             missing = expected - actual
             if missing:
-                errors.append(
-                    f"排名不連續：缺少第 {', '.join(str(r) for r in sorted(missing))} 名"
-                )
+                errors.append(f"排名不連續：缺少第 {', '.join(str(r) for r in sorted(missing))} 名")
 
         return rows, errors
 
@@ -260,9 +257,7 @@ class SupplementaryImportService:
 
         return data_map, missing
 
-    async def find_or_create_users(
-        self, student_data_map: Dict[str, dict]
-    ) -> Dict[str, object]:
+    async def find_or_create_users(self, student_data_map: Dict[str, dict]) -> Dict[str, object]:
         """Return {student_id: User} — creates User if not found."""
         from sqlalchemy import select
         from app.models.user import User, UserRole, UserType
@@ -385,9 +380,7 @@ class SupplementaryImportService:
 
             sis_data = student_data_map.get(row.student_id, {})
 
-            app_id = ApplicationSequence.format_app_id(
-                ranking.academic_year, semester_str, base_seq + idx + 1
-            )
+            app_id = ApplicationSequence.format_app_id(ranking.academic_year, semester_str, base_seq + idx + 1)
 
             submitted_form_data = {
                 "fields": {
