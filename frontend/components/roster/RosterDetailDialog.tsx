@@ -33,6 +33,7 @@ import {
 import { Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
+import type { RevokedSuspendedList } from "@/lib/api/modules/payment-rosters";
 
 interface Period {
   label: string;
@@ -55,6 +56,7 @@ interface Period {
   period_end_date?: string;
   sub_type?: string | null;
   allocation_year?: number | null;
+  excel_stale?: boolean;
 }
 
 interface RosterDetailDialogProps {
@@ -94,6 +96,13 @@ export function RosterDetailDialog({
   const [selectedCollege, setSelectedCollege] = useState<string>("");
   const [hasMatrix, setHasMatrix] = useState(false);
 
+  // Revoked/suspended status change notice (Task 10)
+  const [revokedSuspended, setRevokedSuspended] = useState<RevokedSuspendedList>({
+    revoked: [],
+    suspended: [],
+  });
+  const [removingItemId, setRemovingItemId] = useState<number | null>(null);
+
   // #66: exclude-item dialog state
   const [excludeTarget, setExcludeTarget] = useState<RosterItem | null>(null);
   const [excludeCategory, setExcludeCategory] = useState<
@@ -106,6 +115,52 @@ export function RosterDetailDialog({
     setExcludeTarget(item);
     setExcludeCategory("returned");
     setExcludeNote("");
+  };
+
+  // Fetch revoked/suspended list when dialog opens for a locked roster
+  useEffect(() => {
+    if (!open || !period.roster_id || period.roster_status !== "locked") return;
+    let cancelled = false;
+    apiClient.paymentRosters.getRevokedSuspended(period.roster_id).then((resp) => {
+      if (!cancelled && resp.success && resp.data) {
+        setRevokedSuspended(resp.data);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, period.roster_id, period.roster_status]);
+
+  const handleRemoveLockedItem = async (itemId: number, studentName: string) => {
+    if (!period.roster_id) return;
+    if (
+      !confirm(
+        `確認從本造冊移除 ${studentName}？(此操作會將造冊標記為「需重新匯出 Excel」)`
+      )
+    )
+      return;
+    setRemovingItemId(itemId);
+    try {
+      const resp = await apiClient.paymentRosters.removeItemFromLockedRoster(
+        period.roster_id,
+        itemId,
+        undefined
+      );
+      if (resp.success) {
+        const refresh = await apiClient.paymentRosters.getRevokedSuspended(
+          period.roster_id
+        );
+        if (refresh.success && refresh.data) setRevokedSuspended(refresh.data);
+        // No onChanged callback on this dialog; parent will see updated state
+        // the next time it opens. To propagate excel_stale, a full reload of
+        // roster list data would be needed — wire onChanged if added to props later.
+        toast.success(`已從造冊移除 ${studentName}`);
+      } else {
+        alert(resp.message || "移除失敗");
+      }
+    } finally {
+      setRemovingItemId(null);
+    }
   };
 
   const submitExclude = async () => {
@@ -310,6 +365,107 @@ export function RosterDetailDialog({
             )}
           </DialogDescription>
         </DialogHeader>
+
+        {/* Task 10: Status-change notice panel + Excel-stale banner (LOCKED rosters only) */}
+        {period.roster_status === "locked" && (
+          <>
+            {period.excel_stale && (
+              <div className="mb-3 p-3 border border-amber-300 bg-amber-50 rounded flex items-center justify-between">
+                <span className="text-amber-800 text-sm">
+                  ⚠️ 造冊資料已變更，請重新匯出 Excel
+                </span>
+                {/* Reuse existing "重新匯出 Excel" handler if wired in this component in future */}
+              </div>
+            )}
+
+            {(revokedSuspended.revoked.length > 0 ||
+              revokedSuspended.suspended.length > 0) && (
+              <div className="mb-4 space-y-3">
+                {revokedSuspended.revoked.length > 0 && (
+                  <details
+                    open
+                    className="border border-red-300 bg-red-50 rounded p-3"
+                  >
+                    <summary className="text-red-800 font-semibold cursor-pointer text-sm">
+                      ⚠️ 此造冊有 {revokedSuspended.revoked.length}{" "}
+                      位學生被撤銷，請手動處理
+                    </summary>
+                    <ul className="mt-2 space-y-2">
+                      {revokedSuspended.revoked.map((s) => (
+                        <li
+                          key={s.application_id}
+                          className="text-sm flex items-start justify-between gap-3"
+                        >
+                          <div>
+                            <div>
+                              <span className="font-medium">{s.student_name}</span>
+                              <span className="text-slate-500">
+                                {" "}
+                                ({s.student_id_number})
+                              </span>
+                              <span className="text-xs text-slate-500 ml-2">
+                                撤銷於 {new Date(s.event_at).toLocaleDateString()}
+                              </span>
+                            </div>
+                            {s.reason && (
+                              <div className="text-xs text-slate-600">
+                                原因：{s.reason}
+                              </div>
+                            )}
+                          </div>
+                          {s.item_id !== null && (
+                            <button
+                              onClick={() =>
+                                handleRemoveLockedItem(s.item_id!, s.student_name)
+                              }
+                              disabled={removingItemId === s.item_id}
+                              className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 whitespace-nowrap"
+                            >
+                              {removingItemId === s.item_id
+                                ? "處理中…"
+                                : "從本造冊移除"}
+                            </button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+
+                {revokedSuspended.suspended.length > 0 && (
+                  <details
+                    open
+                    className="border border-slate-300 bg-slate-50 rounded p-3"
+                  >
+                    <summary className="text-slate-700 font-semibold cursor-pointer text-sm">
+                      ℹ️ 此造冊有 {revokedSuspended.suspended.length}{" "}
+                      位學生被停發（僅資訊）
+                    </summary>
+                    <ul className="mt-2 space-y-1">
+                      {revokedSuspended.suspended.map((s) => (
+                        <li key={s.application_id} className="text-sm">
+                          <span className="font-medium">{s.student_name}</span>
+                          <span className="text-slate-500">
+                            {" "}
+                            ({s.student_id_number})
+                          </span>
+                          <span className="text-xs text-slate-500 ml-2">
+                            停發於 {new Date(s.event_at).toLocaleDateString()}
+                          </span>
+                          {s.reason && (
+                            <div className="text-xs text-slate-600">
+                              原因：{s.reason}
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </div>
+            )}
+          </>
+        )}
 
         {loading ? (
           <div className="flex items-center justify-center py-12">
