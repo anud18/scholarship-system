@@ -400,6 +400,10 @@ class SupplementaryImportService:
                 }
             }
 
+            # scholarship_subtype_list is what the manual-distribution panel reads
+            # as `applied_sub_types`; sub_type_preferences is the ordered preference list
+            # used by allocation logic. Set both from the Excel 申請獎學金類別 column so
+            # admin can see + distribute supplementary students.
             app = Application(
                 app_id=app_id,
                 user_id=user.id,
@@ -409,6 +413,7 @@ class SupplementaryImportService:
                 status=ApplicationStatus.submitted,
                 sub_type_selection_mode=ranking.scholarship_type.sub_type_selection_mode,
                 student_data=sis_data,
+                scholarship_subtype_list=list(row.sub_type_preferences or []),
                 sub_type_preferences=row.sub_type_preferences,
                 submitted_form_data=submitted_form_data,
             )
