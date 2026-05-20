@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -18,10 +18,10 @@ import {
   FileText,
   AlertTriangle,
   ChevronRight,
-  ArrowDown,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
+import { InlinePdfViewer } from "@/components/inline-pdf-viewer";
 
 interface NoticeAgreementStepProps {
   agreedToTerms: boolean;
@@ -37,31 +37,6 @@ export function NoticeAgreementStep({
   locale,
 }: NoticeAgreementStepProps) {
   const [hasReadNotice, setHasReadNotice] = useState(false);
-  const noticeScrollRef = useRef<HTMLDivElement | null>(null);
-
-  // #59: enable the agreement checkbox only after the user has scrolled
-  // to the bottom of the notice list. Once reached, latches to true so
-  // bouncing back up doesn't disable the agree checkbox again.
-  const handleNoticeScroll = useCallback(
-    (e: React.UIEvent<HTMLDivElement>) => {
-      if (hasReadNotice) return; // already latched
-      const el = e.currentTarget;
-      const reachedBottom =
-        el.scrollHeight - el.scrollTop - el.clientHeight <= 8; // 8px slack
-      if (reachedBottom) setHasReadNotice(true);
-    },
-    [hasReadNotice]
-  );
-
-  // If the notice fits without needing to scroll, treat it as already read
-  // once the element mounts (otherwise the checkbox would never enable).
-  useEffect(() => {
-    const el = noticeScrollRef.current;
-    if (!el) return;
-    if (el.scrollHeight <= el.clientHeight + 8) {
-      setHasReadNotice(true);
-    }
-  }, []);
 
   const [publicDocs, setPublicDocs] = useState<{
     regulations_url?: string;
@@ -69,6 +44,7 @@ export function NoticeAgreementStep({
     regulations_url_filename?: string;
     sample_document_url_filename?: string;
   }>({});
+  const [docsLoaded, setDocsLoaded] = useState(false);
   const [previewFile, setPreviewFile] = useState<{
     url: string;
     filename: string;
@@ -79,26 +55,18 @@ export function NoticeAgreementStep({
   useEffect(() => {
     api.systemSettings.getPublicDocs().then((res) => {
       if (res.success && res.data) setPublicDocs(res.data);
+      setDocsLoaded(true);
     });
   }, []);
 
-  const handleOpenDoc = (
-    key: "regulations_url" | "sample_document_url",
-    label: string
-  ) => {
+  const handleOpenSampleDoc = (label: string) => {
     const token = localStorage.getItem("auth_token") || "";
-    const originalName =
-      key === "regulations_url"
-        ? publicDocs.regulations_url_filename
-        : publicDocs.sample_document_url_filename;
-    const objectName =
-      key === "regulations_url"
-        ? publicDocs.regulations_url
-        : publicDocs.sample_document_url;
-    const cacheBuster = encodeURIComponent(
-      objectName?.split("/").pop() || ""
-    );
-    const url = `/api/v1/system-settings/file-proxy?key=${key}&token=${encodeURIComponent(token)}&v=${cacheBuster}`;
+    const objectName = publicDocs.sample_document_url;
+    const originalName = publicDocs.sample_document_url_filename;
+    const cacheBuster = encodeURIComponent(objectName?.split("/").pop() || "");
+    const url = `/api/v1/system-settings/file-proxy?key=sample_document_url&token=${encodeURIComponent(
+      token,
+    )}&v=${cacheBuster}`;
     const filename = originalName || label;
     const lower = (originalName || objectName || "").toLowerCase();
     let type = "application/pdf";
@@ -113,10 +81,24 @@ export function NoticeAgreementStep({
     setShowPreview(true);
   };
 
+  const regulationsViewerUrl = (() => {
+    const objectName = publicDocs.regulations_url;
+    if (!objectName) return null;
+    const token =
+      typeof window !== "undefined"
+        ? localStorage.getItem("auth_token") || ""
+        : "";
+    const cacheBuster = encodeURIComponent(objectName.split("/").pop() || "");
+    return `/api/v1/system-settings/file-proxy?key=regulations_url&token=${encodeURIComponent(
+      token,
+    )}&v=${cacheBuster}`;
+  })();
+
   const notices = {
     zh: {
       title: "獎學金申請注意事項",
-      subtitle: "請詳細閱讀以下內容後，勾選同意方可繼續申請",
+      subtitle:
+        "請詳細閱讀以下內容，並滑完下方的「獎學金要點」後勾選同意方可繼續申請",
       items: [
         {
           title: "申請資格",
@@ -162,20 +144,24 @@ export function NoticeAgreementStep({
       importantNotice: "重要提醒",
       importantContent:
         "請務必詳細閱讀各獎學金的申請條款與相關規定。每位學生每學期限申請一項獎學金，請謹慎選擇。",
-      agreementText: "我已詳細閱讀並了解上述注意事項，同意遵守相關規定",
-      readNoticeText: "已詳閱所有注意事項",
-      readNoticeHint: "請滑到下方注意事項的最底端，閱讀完成後才能勾選同意",
+      agreementText: "我已詳細閱讀並了解獎學金要點，同意遵守相關規定",
+      readNoticeText: "已詳閱獎學金要點",
+      readNoticeHint:
+        "請將下方獎學金要點滑到底端，閱讀完成後才能勾選同意",
       readNoticeDone: "已閱讀完成",
       nextButton: "同意並繼續",
-      readFirst: "請先滑到注意事項底部完成閱讀",
-      referenceDocs: "參考文件",
-      regulations: "獎學金要點",
-      sampleDocument: "申請文件範例檔",
-      notProvided: "尚未提供",
+      readFirst: "請先滑到獎學金要點底部完成閱讀",
+      sampleDocumentLabel: "申請文件範例檔",
+      sampleDocumentRow: "需要參考申請文件格式？",
+      sampleDocumentNotProvided: "尚未提供",
+      regulationsHeader: "獎學金要點",
+      regulationsMissing:
+        "系統管理員尚未上傳獎學金要點，目前無法進行申請。請聯絡承辦單位。",
     },
     en: {
       title: "Scholarship Application Notice",
-      subtitle: "Please read the following carefully and check to agree before proceeding",
+      subtitle:
+        "Read the following carefully. Scroll the Scholarship Regulations below to the bottom before agreeing to continue.",
       items: [
         {
           title: "Eligibility",
@@ -222,16 +208,19 @@ export function NoticeAgreementStep({
       importantContent:
         "Please read the terms and conditions of each scholarship carefully. Each student may only apply for one scholarship per semester. Choose wisely.",
       agreementText:
-        "I have read and understand the above notice and agree to comply with the regulations",
-      readNoticeText: "I have read all notices",
-      readNoticeHint: "Scroll to the bottom of the notices to confirm you have read them",
+        "I have read and understand the scholarship regulations and agree to comply",
+      readNoticeText: "I have read the scholarship regulations",
+      readNoticeHint:
+        "Scroll the regulations document to the bottom to enable the agree checkbox",
       readNoticeDone: "Reading complete",
       nextButton: "Agree and Continue",
-      readFirst: "Please scroll to the bottom of the notices first",
-      referenceDocs: "Reference Documents",
-      regulations: "Scholarship Regulations",
-      sampleDocument: "Sample Application Documents",
-      notProvided: "Not available",
+      readFirst: "Please scroll to the bottom of the regulations first",
+      sampleDocumentLabel: "Sample Application Documents",
+      sampleDocumentRow: "Need to see the application document format?",
+      sampleDocumentNotProvided: "Not available",
+      regulationsHeader: "Scholarship Regulations",
+      regulationsMissing:
+        "The system administrator has not uploaded the scholarship regulations. Applications cannot proceed. Please contact the administrative office.",
     },
   };
 
@@ -259,52 +248,13 @@ export function NoticeAgreementStep({
               <div className="font-semibold text-amber-900 mb-1">
                 {t.importantNotice}
               </div>
-              <div className="text-sm text-amber-800">
-                {t.importantContent}
-              </div>
+              <div className="text-sm text-amber-800">{t.importantContent}</div>
             </AlertDescription>
           </Alert>
 
-          {/* Reference Documents */}
-          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="text-sm font-semibold text-blue-900 mb-3">{t.referenceDocs}</p>
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleOpenDoc("regulations_url", t.regulations)}
-                disabled={!publicDocs.regulations_url}
-                className="flex items-center gap-2"
-              >
-                <FileText className="h-4 w-4" />
-                {t.regulations}
-                {!publicDocs.regulations_url && (
-                  <span className="text-xs text-gray-400 ml-1">({t.notProvided})</span>
-                )}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleOpenDoc("sample_document_url", t.sampleDocument)}
-                disabled={!publicDocs.sample_document_url}
-                className="flex items-center gap-2"
-              >
-                <FileText className="h-4 w-4" />
-                {t.sampleDocument}
-                {!publicDocs.sample_document_url && (
-                  <span className="text-xs text-gray-400 ml-1">({t.notProvided})</span>
-                )}
-              </Button>
-            </div>
-          </div>
-
-          {/* Notice Content — scroll-to-bottom triggers hasReadNotice (#59) */}
-          <Card className="border-2 relative">
-            <div
-              ref={noticeScrollRef}
-              onScroll={handleNoticeScroll}
-              className="h-[400px] overflow-y-auto p-6"
-            >
+          {/* 8-item static summary (no scroll, no gate) */}
+          <Card className="border-2">
+            <div className="p-6">
               <div className="space-y-4">
                 {t.items.map((item, index) => (
                   <div
@@ -326,31 +276,72 @@ export function NoticeAgreementStep({
                     </div>
                   </div>
                 ))}
-                {/* End-of-notice marker — visible only when scrolled to bottom */}
-                <div className="pt-2 text-center text-xs text-emerald-600 font-medium">
-                  ── {locale === "zh" ? "已到底部" : "End of notices"} ──
-                </div>
               </div>
             </div>
-            {!hasReadNotice && (
-              <div className="absolute bottom-2 right-3 flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs text-amber-800 shadow-sm pointer-events-none">
-                <ArrowDown className="h-3 w-3 animate-bounce" />
-                {t.readNoticeHint}
-              </div>
-            )}
           </Card>
 
-          {/* Read confirmation — auto-checked when user scrolls to bottom */}
+          {/* Reference row: sample document button (regulations are rendered
+              inline below, so they no longer need a button here). */}
+          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 flex items-center justify-between gap-3">
+            <p className="text-sm text-blue-900">{t.sampleDocumentRow}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleOpenSampleDoc(t.sampleDocumentLabel)}
+              disabled={!publicDocs.sample_document_url}
+              className="flex items-center gap-2"
+            >
+              <FileText className="h-4 w-4" />
+              {t.sampleDocumentLabel}
+              {!publicDocs.sample_document_url && (
+                <span className="text-xs text-gray-400 ml-1">
+                  ({t.sampleDocumentNotProvided})
+                </span>
+              )}
+            </Button>
+          </div>
+
+          {/* Inline regulations viewer (the gated content) */}
+          <div>
+            <h3 className="font-semibold text-nycu-navy-800 mb-2">
+              {t.regulationsHeader}
+            </h3>
+            {!docsLoaded ? (
+              <div className="h-[500px] rounded-lg border bg-gray-50" />
+            ) : regulationsViewerUrl ? (
+              <>
+                <InlinePdfViewer
+                  url={regulationsViewerUrl}
+                  height={500}
+                  locale={locale}
+                  onReachedBottom={() => setHasReadNotice(true)}
+                />
+                {!hasReadNotice && (
+                  <p className="text-xs text-amber-700 mt-2 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    {t.readNoticeHint}
+                  </p>
+                )}
+              </>
+            ) : (
+              <Alert className="border-amber-300 bg-amber-50">
+                <AlertCircle className="h-5 w-5 text-amber-700" />
+                <AlertDescription className="text-amber-900">
+                  {t.regulationsMissing}
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
+
+          {/* Read confirmation — auto-checked when viewer reports bottom reached */}
           <div
             className={`flex items-center space-x-2 p-4 rounded-lg transition-colors ${
-              hasReadNotice ? "bg-emerald-50 border border-emerald-200" : "bg-gray-50"
+              hasReadNotice
+                ? "bg-emerald-50 border border-emerald-200"
+                : "bg-gray-50"
             }`}
           >
-            <Checkbox
-              id="read-notice"
-              checked={hasReadNotice}
-              disabled
-            />
+            <Checkbox id="read-notice" checked={hasReadNotice} disabled />
             <Label
               htmlFor="read-notice"
               className="text-sm font-medium leading-none cursor-default"
