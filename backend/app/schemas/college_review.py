@@ -154,8 +154,8 @@ class RankingImportItem(BaseModel):
                 return "N"
             try:
                 v = int(v)
-            except ValueError:
-                raise ValueError(f"排名格式無效：'{v}'，只接受正整數或 'N'")
+            except ValueError as exc:
+                raise ValueError(f"排名格式無效：'{v}'，只接受正整數或 'N'") from exc
         if isinstance(v, float):
             if not v.is_integer():
                 raise ValueError(f"排名必須為整數，收到：{v}")

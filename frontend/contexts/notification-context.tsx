@@ -4,6 +4,7 @@ import React, { createContext, useContext, useCallback, useEffect } from "react"
 import { apiClient } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import { useNotificationCount } from "@/hooks/use-notification-count";
+import { logger } from "@/lib/utils/logger";
 
 interface NotificationContextValue {
   unreadCount: number;
@@ -33,7 +34,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     try {
       await mutate();
     } catch (err) {
-      console.error("獲取未讀通知數量錯誤:", err);
+      logger.error("Failed to fetch unread notification count", { err });
     }
   }, [mutate, user]);
 
@@ -51,7 +52,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         }));
       }
     } catch (err) {
-      console.error("標記已讀失敗:", err);
+      logger.error("Failed to mark notification as read", { err });
     }
   }, [mutate]);
 
@@ -66,7 +67,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         window.dispatchEvent(new CustomEvent("notifications-all-read"));
       }
     } catch (err) {
-      console.error("標記全部已讀失敗:", err);
+      logger.error("Failed to mark all notifications as read", { err });
     }
   }, [mutate]);
 

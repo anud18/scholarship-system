@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -35,7 +36,9 @@ interface StudentInfo {
   sub_type: string;
   amount: number;
   rank_position: number | null;
-  backup_info: any[];
+  // backup_info is rendered via the BackupInfoBadges helper which accepts
+  // an opaque list — never inspected here, so we keep it as unknown[].
+  backup_info: unknown[];
   allocated_sub_type?: string | null;
   allocation_year?: number | null;
   // Validation fields
@@ -106,7 +109,9 @@ export function StudentRosterPreview({
     setError(null);
 
     try {
-      const params: any = { config_id: configId };
+      const params: { config_id: number; ranking_id?: number | null } = {
+        config_id: configId,
+      };
       if (rankingId) {
         params.ranking_id = rankingId;
       }
@@ -133,17 +138,18 @@ export function StudentRosterPreview({
         setError("無法載入學生資料");
       }
     } catch (err) {
-      console.error("Failed to load student data:", err);
+      logger.error("Failed to load student data", { err: err });
       // Try to extract error message from different error sources
       let errorMessage = "載入學生資料時發生錯誤";
 
       if (err instanceof Error) {
         errorMessage = err.message;
       } else if (typeof err === "object" && err !== null) {
-        if ("detail" in err) {
-          errorMessage = (err as any).detail;
-        } else if ("message" in err) {
-          errorMessage = (err as any).message;
+        const errObj = err as { detail?: unknown; message?: unknown };
+        if (typeof errObj.detail === "string") {
+          errorMessage = errObj.detail;
+        } else if (typeof errObj.message === "string") {
+          errorMessage = errObj.message;
         }
       }
 

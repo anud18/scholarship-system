@@ -71,7 +71,7 @@
     "embla-carousel-react": "8.5.1",
     "input-otp": "1.4.1",
     "lucide-react": "^0.454.0",
-    "next": "^15.5.15",
+    "next": "^15.5.18",
     "next-themes": "^0.4.6",
     "openapi-fetch": "^0.14.1",
     "react": "^18.3.1",
@@ -123,7 +123,11 @@
   },
   "overrides": {
     "@react-email/preview-server": {
-      "next": "15.5.15"
+      "next": "15.5.18",
+      "postcss": "$postcss"
+    },
+    "next": {
+      "postcss": "$postcss"
     },
     "@isaacs/brace-expansion": ">=5.0.1",
     "glob": ">=13.0.2",
@@ -138,6 +142,7 @@
     "flatted": ">=3.4.2",
     "serialize-javascript": ">=7.0.5",
     "socket.io-parser": ">=4.2.6",
-    "yaml": ">=1.10.3"
+    "yaml": ">=1.10.3",
+    "@tootallnate/once": ">=3.0.1"
   }
 }

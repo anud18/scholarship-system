@@ -1,5 +1,6 @@
 "use client"
 
+import { logger } from "@/lib/utils/logger";
 import { useState, useEffect } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
@@ -61,31 +62,31 @@ export function ConfigSelector({ onConfigSelect, disabled = false }: ConfigSelec
 
       if (response.success && response.data) {
         // Filter by selected criteria
-        let filtered = response.data
+        let filtered = response.data as ScholarshipConfiguration[]
 
         // Filter by academic year
         if (selectedYear) {
-          filtered = filtered.filter((config: any) =>
+          filtered = filtered.filter((config: ScholarshipConfiguration) =>
             config.academic_year === parseInt(selectedYear)
           )
         }
 
         // Filter by semester
         if (selectedSemester && selectedSemester !== "all") {
-          filtered = filtered.filter((config: any) =>
+          filtered = filtered.filter((config: ScholarshipConfiguration) =>
             config.semester === selectedSemester || !config.semester
           )
         }
 
         // Filter by active status
-        filtered = filtered.filter((config: any) => config.is_active !== false)
+        filtered = filtered.filter((config: ScholarshipConfiguration) => config.is_active !== false)
 
         setConfigurations(filtered)
       } else {
         setConfigurations([])
       }
     } catch (error) {
-      console.error("Failed to load configurations:", error)
+      logger.error("Failed to load configurations", { error: error })
       setConfigurations([])
     } finally {
       setIsLoadingConfigs(false)

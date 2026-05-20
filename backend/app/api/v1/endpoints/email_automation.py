@@ -142,11 +142,11 @@ def validate_condition_query(query: Optional[str]) -> None:
 
     except RegexValidationError as e:
         # Regex pattern itself is malicious or causes ReDoS
-        logger.error(f"Regex validation error in condition_query: {e}")
+        logger.exception("Regex validation error in condition_query")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"condition_query contains invalid pattern that cannot be safely validated: {str(e)}",
-        )
+            detail="condition_query contains invalid pattern that cannot be safely validated",
+        ) from e
 
     logger.info(f"✓ Query validation passed: {query[:100]}...")
 
@@ -231,8 +231,8 @@ async def get_automation_rules(
         return ApiResponse(success=True, message=f"成功獲取 {len(rules_data)} 條自動化規則", data=rules_data)
 
     except Exception as e:
-        logger.error(f"獲取自動化規則失敗: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"獲取自動化規則失敗: {str(e)}")
+        logger.exception("獲取自動化規則失敗")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="獲取自動化規則失敗") from e
 
 
 @router.post("")
@@ -250,10 +250,10 @@ async def create_automation_rule(
         # Validate trigger event
         try:
             trigger_enum = TriggerEvent(rule_data.trigger_event)
-        except ValueError:
+        except ValueError as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail=f"無效的觸發事件: {rule_data.trigger_event}"
-            )
+            ) from exc
 
         # SECURITY: Validate condition_query to prevent SQL injection
         validate_condition_query(rule_data.condition_query)
@@ -274,6 +274,18 @@ async def create_automation_rule(
         await db.commit()
         await db.refresh(new_rule)
 
+        logger.info(
+            "Email automation rule created",
+            extra={
+                "rule_id": new_rule.id,
+                "rule_name": new_rule.name,
+                "trigger_event": new_rule.trigger_event.value,
+                "template_key": new_rule.template_key,
+                "is_active": new_rule.is_active,
+                "actor_user_id": current_user.id,
+            },
+        )
+
         response_data = {
             "id": new_rule.id,
             "name": new_rule.name,
@@ -293,9 +305,12 @@ async def create_automation_rule(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"創建自動化規則失敗: {e}")
+        logger.exception(
+            "Failed to create email automation rule",
+            extra={"actor_user_id": current_user.id, "rule_name": rule_data.name},
+        )
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"創建自動化規則失敗: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="創建自動化規則失敗") from e
 
 
 @router.put("/{rule_id}")
@@ -327,10 +342,10 @@ async def update_automation_rule(
         if rule_data.trigger_event is not None:
             try:
                 rule.trigger_event = TriggerEvent(rule_data.trigger_event)
-            except ValueError:
+            except ValueError as exc:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST, detail=f"無效的觸發事件: {rule_data.trigger_event}"
-                )
+                ) from exc
         if rule_data.template_key is not None:
             rule.template_key = rule_data.template_key
         if rule_data.delay_hours is not None:
@@ -344,6 +359,16 @@ async def update_automation_rule(
 
         await db.commit()
         await db.refresh(rule)
+
+        logger.info(
+            "Email automation rule updated",
+            extra={
+                "rule_id": rule.id,
+                "rule_name": rule.name,
+                "is_active": rule.is_active,
+                "actor_user_id": current_user.id,
+            },
+        )
 
         response_data = {
             "id": rule.id,
@@ -364,9 +389,12 @@ async def update_automation_rule(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"更新自動化規則失敗: {e}")
+        logger.exception(
+            "Failed to update email automation rule",
+            extra={"actor_user_id": current_user.id, "rule_id": rule_id},
+        )
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"更新自動化規則失敗: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="更新自動化規則失敗") from e
 
 
 @router.delete("/{rule_id}")
@@ -387,17 +415,26 @@ async def delete_automation_rule(
         if not rule:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"找不到 ID 為 {rule_id} 的自動化規則")
 
+        deleted_name = rule.name
         await db.delete(rule)
         await db.commit()
+
+        logger.info(
+            "Email automation rule deleted",
+            extra={"rule_id": rule_id, "rule_name": deleted_name, "actor_user_id": current_user.id},
+        )
 
         return ApiResponse(success=True, message="成功刪除自動化規則", data=None)
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"刪除自動化規則失敗: {e}")
+        logger.exception(
+            "Failed to delete email automation rule",
+            extra={"actor_user_id": current_user.id, "rule_id": rule_id},
+        )
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"刪除自動化規則失敗: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="刪除自動化規則失敗") from e
 
 
 @router.patch("/{rule_id}/toggle")
@@ -424,6 +461,16 @@ async def toggle_automation_rule(
         await db.commit()
         await db.refresh(rule)
 
+        logger.info(
+            "Email automation rule toggled",
+            extra={
+                "rule_id": rule.id,
+                "rule_name": rule.name,
+                "is_active": rule.is_active,
+                "actor_user_id": current_user.id,
+            },
+        )
+
         response_data = {
             "id": rule.id,
             "name": rule.name,
@@ -445,11 +492,12 @@ async def toggle_automation_rule(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"切換自動化規則狀態失敗: {e}")
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"切換自動化規則狀態失敗: {str(e)}"
+        logger.exception(
+            "Failed to toggle email automation rule",
+            extra={"actor_user_id": current_user.id, "rule_id": rule_id},
         )
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="切換自動化規則狀態失敗") from e
 
 
 @router.get("/trigger-events")

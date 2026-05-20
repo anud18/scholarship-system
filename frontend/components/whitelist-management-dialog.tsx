@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { logger } from "@/lib/utils/logger";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -80,8 +81,8 @@ export function WhitelistManagementDialog({
       if (response.success && response.data) {
         setWhitelist(response.data);
       }
-    } catch (error: any) {
-      toast.error(error.message || "無法載入申請白名單");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "無法載入申請白名單"));
     } finally {
       setLoading(false);
     }
@@ -107,8 +108,8 @@ export function WhitelistManagementDialog({
       } else if (response.data?.failed_items && response.data.failed_items.length > 0) {
         toast.error(response.data.failed_items[0].reason);
       }
-    } catch (error: any) {
-      toast.error(error.message || "無法新增學生到申請白名單");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "無法新增學生到申請白名單"));
     } finally {
       setAddingStudent(false);
     }
@@ -129,8 +130,8 @@ export function WhitelistManagementDialog({
         setSelectedStudents(new Set());
         await loadWhitelist();
       }
-    } catch (error: any) {
-      toast.error(error.message || "無法刪除學生");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "無法刪除學生"));
     }
   };
 
@@ -153,13 +154,13 @@ export function WhitelistManagementDialog({
         }
 
         if (result.failed_items.length > 0) {
-          console.error("Import errors:", result.failed_items);
+          logger.error("Import errors", { failed_items: result.failed_items });
         }
 
         await loadWhitelist();
       }
-    } catch (error: any) {
-      toast.error(error.message || "無法匯入 Excel 檔案");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "無法匯入 Excel 檔案"));
     } finally {
       setLoading(false);
       if (fileInputRef.current) {
@@ -181,8 +182,8 @@ export function WhitelistManagementDialog({
       window.URL.revokeObjectURL(url);
 
       toast.success("申請白名單已下載為 Excel 檔案");
-    } catch (error: any) {
-      toast.error(error.message || "無法匯出申請白名單");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "無法匯出申請白名單"));
     }
   };
 
@@ -198,8 +199,8 @@ export function WhitelistManagementDialog({
       window.URL.revokeObjectURL(url);
 
       toast.success("匯入模板已下載");
-    } catch (error: any) {
-      toast.error(error.message || "無法下載模板");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "無法下載模板"));
     }
   };
 

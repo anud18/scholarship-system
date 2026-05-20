@@ -94,7 +94,6 @@ async def create_application(
                 detail={
                     "message": "Scholarship type is required",
                     "error_code": "MISSING_SCHOLARSHIP_TYPE",
-                    "received_data": application_data.model_dump(exclude_none=True),
                 },
             )
 
@@ -107,7 +106,6 @@ async def create_application(
                 detail={
                     "message": "Form data is required",
                     "error_code": "MISSING_FORM_DATA",
-                    "received_data": application_data.model_dump(exclude_none=True),
                 },
             )
 
@@ -117,17 +115,14 @@ async def create_application(
             application_data.form_data.dict()
             logger.debug("Form data validated successfully")
         except Exception as e:
-            logger.error(f"Form data validation failed: {str(e)}")
-            # Do not log raw form data as it may contain sensitive information
+            logger.exception("Form data validation failed")
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail={
                     "message": "Invalid form data structure",
                     "error_code": "INVALID_FORM_DATA",
-                    "error": str(e),
-                    "received_form_data": str(application_data.form_data),
                 },
-            )
+            ) from e
 
         # Get scholarship configuration to extract scholarship_type_id, academic_year, semester
         logger.debug(f"Fetching scholarship configuration: {application_data.configuration_id}")
@@ -259,7 +254,7 @@ async def create_application(
         }
 
     except ValidationError as e:
-        logger.error(f"Validation error: {str(e)}")
+        logger.exception("Validation error")
         if hasattr(e, "errors"):
             logger.debug(f"Validation error details: {[error.get('loc', []) for error in e.errors()]}")
         raise HTTPException(
@@ -268,38 +263,30 @@ async def create_application(
                 "message": "Validation error",
                 "error_code": "VALIDATION_ERROR",
                 "errors": e.errors() if hasattr(e, "errors") else str(e),
-                "received_data": application_data.dict(exclude_none=True),
             },
-        )
+        ) from e
     except HTTPException:
         # Re-raise HTTPException directly as they are already properly formatted
         raise
     except IntegrityError as e:
-        logger.error(f"Database integrity error during application creation: {str(e)}")
-        # Check for specific constraint violations if needed, e.g., unique constraint
+        logger.exception("Database integrity error during application creation")
         if "duplicate key value violates unique constraint" in str(e):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
                     "message": "Duplicate entry: An application with these details already exists.",
                     "error_code": "DUPLICATE_ENTRY",
-                    "detail": str(e),
                 },
-            )
+            ) from e
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "message": "A database integrity error occurred.",
                 "error_code": "DATABASE_INTEGRITY_ERROR",
-                "detail": str(e),
             },
-        )
+        ) from e
     except Exception as e:
-        logger.error(f"Unexpected error during application creation: {str(e)}")
-        import traceback
-
-        error_trace = traceback.format_exc()
-        logger.debug(f"Full traceback: {error_trace}")
+        logger.exception("Unexpected error during application creation")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -307,7 +294,7 @@ async def create_application(
                 "error_code": "UNEXPECTED_ERROR",
                 "error_type": type(e).__name__,
             },
-        )
+        ) from e
 
 
 @router.get("")
@@ -473,8 +460,8 @@ async def delete_application(
                 else deleted_app.model_dump() if hasattr(deleted_app, "model_dump") else {"id": id}
             ),
         }
-    except Exception as e:
-        logger.error(f"Error deleting application {id}: {str(e)}")
+    except Exception:
+        logger.exception(f"Error deleting application {id}")
         raise
 
 
@@ -553,7 +540,7 @@ async def restore_application(
                 else status.HTTP_404_NOT_FOUND if isinstance(e, NotFoundError) else status.HTTP_403_FORBIDDEN
             ),
             detail=str(e),
-        )
+        ) from e
 
 
 @router.get("/{id}/files")
@@ -665,6 +652,15 @@ async def get_applications_for_review(
     }
 
 
+@router.patch(
+    "/{id}/status",
+    responses={
+        200: {
+            "description": "Application status updated successfully",
+            "model": ApplicationStatusUpdateResponse,
+        }
+    },
+)
 @router.put(
     "/{id}/status",
     responses={
@@ -837,7 +833,7 @@ async def update_student_data(
                 else status.HTTP_404_NOT_FOUND if isinstance(e, NotFoundError) else status.HTTP_403_FORBIDDEN
             ),
             detail=str(e),
-        )
+        ) from e
 
 
 @router.get("/{id}/student-data")
@@ -895,8 +891,8 @@ async def get_application_audit_trail(
     service = ApplicationService(db)
     try:
         await service.get_application_by_id(id, current_user)
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found") from exc
 
     # Get audit trail
     audit_service = ApplicationAuditService(db)
@@ -1002,12 +998,12 @@ async def upload_application_document(
     if previous_object and previous_object != object_name:
         try:
             minio_service.client.remove_object(minio_service.default_bucket, previous_object)
-        except Exception as exc:
+        except Exception:
             logger.warning(
-                "Failed to remove orphaned MinIO object %s for application %s: %s",
+                "Failed to remove orphaned MinIO object %s for application %s",
                 previous_object,
                 application_id,
-                exc,
+                exc_info=True,
             )
 
     return {
@@ -1073,7 +1069,7 @@ async def get_application_document_file(
             "Failed to fetch application document from MinIO",
             extra={"application_id": application.id, "object_name": object_name},
         )
-        raise HTTPException(status_code=500, detail=f"無法取得文件: {str(e)}")
+        raise HTTPException(status_code=500, detail="無法取得文件") from e
 
     content_type = "application/octet-stream"
     lower = object_name.lower()
@@ -1140,12 +1136,12 @@ async def delete_application_document(
     if previous_object:
         try:
             minio_service.client.remove_object(minio_service.default_bucket, previous_object)
-        except Exception as exc:
+        except Exception:
             logger.warning(
-                "Failed to remove MinIO object %s after delete for application %s: %s",
+                "Failed to remove MinIO object %s after delete for application %s",
                 previous_object,
                 application_id,
-                exc,
+                exc_info=True,
             )
 
     return {"success": True, "message": "申請文件已刪除", "data": None}

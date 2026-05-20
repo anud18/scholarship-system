@@ -70,11 +70,11 @@ export class ApiClient {
       // Browser environment - always use relative path
       // Nginx reverse proxy will handle routing /api/* to backend
       this.baseURL = "";
-      console.log("🌐 API Client Browser mode - using relative path (Nginx proxy)");
+      logger.debug("API Client browser mode (Nginx proxy via relative path)");
     } else {
       // Server-side environment - use internal Docker network or localhost
       this.baseURL = process.env.INTERNAL_API_URL || "http://localhost:8000";
-      console.log("🖥️ API Client Server-side mode - using:", this.baseURL);
+      logger.debug("API Client server-side mode", { baseURL: this.baseURL });
     }
 
     // Try to get token from localStorage on client side with safe access

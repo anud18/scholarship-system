@@ -265,7 +265,7 @@ class BankVerificationTaskService:
                         }
 
                 except Exception as e:
-                    logger.error(f"Error verifying application {app_id}: {str(e)}")
+                    logger.exception(f"Error verifying application {app_id}")
                     failed_count += 1
                     results[app_id] = {
                         "status": "error",
@@ -296,7 +296,7 @@ class BankVerificationTaskService:
             )
 
         except Exception as e:
-            logger.error(f"Fatal error processing task {task_id}: {str(e)}")
+            logger.exception(f"Fatal error processing task {task_id}")
             await self.mark_task_as_failed(task_id, str(e))
             raise
 
@@ -341,13 +341,13 @@ class BankVerificationTaskService:
             )
             result = await self.db.execute(stmt)
             return result.scalar_one_or_none() is not None
-        except Exception as exc:  # noqa: BLE001
+        except Exception:  # noqa: BLE001
             # Fall through to normal verification on any lookup error — this is
             # an optimisation, not a correctness boundary, so we don't want it
             # to mask real verification work.
             logger.warning(
-                "Skip-check failed for application %s; falling through to full verification: %s",
+                "Skip-check failed for application %s; falling through to full verification",
                 application_id,
-                exc,
+                exc_info=True,
             )
             return False

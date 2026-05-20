@@ -1,5 +1,6 @@
 "use client"
 
+import { logger } from "@/lib/utils/logger";
 import React, { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -8,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { FileSpreadsheet, Settings, Play, Clock } from "lucide-react"
 import { RosterScheduleList } from "./roster-schedule-list"
 import { SchedulerStatus } from "./scheduler-status"
-import { CompactConfigSelector } from "./roster/CompactConfigSelector"
+import { CompactConfigSelector, ScholarshipConfiguration } from "./roster/CompactConfigSelector"
 import { CreateSchedulePrompt } from "./roster/CreateSchedulePrompt"
 import { ConfigInfoCard } from "./roster/ConfigInfoCard"
 import { MatrixQuotaDisplay } from "./roster/MatrixQuotaDisplay"
@@ -35,7 +36,7 @@ export function RosterManagementDashboard() {
   })
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState("roster-management")
-  const [selectedConfig, setSelectedConfig] = useState<any>(null)
+  const [selectedConfig, setSelectedConfig] = useState<ScholarshipConfiguration | null>(null)
   const [selectedSchedule, setSelectedSchedule] = useState<any>(null)
   const [cycleData, setCycleData] = useState<any>(null)
   const [loadingSchedule, setLoadingSchedule] = useState(false)
@@ -64,19 +65,19 @@ export function RosterManagementDashboard() {
 
       setStats({
         totalSchedules: scheduleData.total || 0,
-        activeSchedules: scheduleData.items?.filter((s: any) => s.status === "active").length || 0,
+        activeSchedules: scheduleData.items?.filter((s: { status: string }) => s.status === "active").length || 0,
         totalRosters: rosterData.total || 0,
-        pendingRosters: rosterData.items?.filter((r: any) => r.status === "pending").length || 0,
+        pendingRosters: rosterData.items?.filter((r: { status: string }) => r.status === "pending").length || 0,
         schedulerRunning: schedulerData.scheduler_running || false
       })
     } catch (error) {
-      console.error("獲取儀表板統計失敗:", error)
+      logger.error("獲取儀表板統計失敗", { error: error })
     } finally {
       setLoading(false)
     }
   }
 
-  const handleConfigSelect = async (configId: number, config: any) => {
+  const handleConfigSelect = async (configId: number, config: ScholarshipConfiguration) => {
     setSelectedConfig(config)
     setLoadingSchedule(true)
     setLoadingCycle(true)
@@ -91,7 +92,7 @@ export function RosterManagementDashboard() {
         setSelectedSchedule(null)
       }
     } catch (error) {
-      console.error("Failed to load schedule:", error)
+      logger.error("Failed to load schedule", { error: error })
       setSelectedSchedule(null)
     } finally {
       setLoadingSchedule(false)
@@ -110,7 +111,7 @@ export function RosterManagementDashboard() {
         setCycleData(null)
       }
     } catch (error) {
-      console.error("Failed to load cycle status:", error)
+      logger.error("Failed to load cycle status", { error: error })
       setCycleData(null)
     } finally {
       setLoadingCycle(false)
@@ -133,7 +134,7 @@ export function RosterManagementDashboard() {
         setCycleData(null)
       }
     } catch (error) {
-      console.error("Failed to refetch cycle status:", error)
+      logger.error("Failed to refetch cycle status", { error: error })
       setCycleData(null)
     } finally {
       setLoadingCycle(false)
@@ -270,12 +271,15 @@ export function RosterManagementDashboard() {
               ) : (
                 <div className="space-y-4">
                   {/* Config Info Card */}
-                  <ConfigInfoCard config={selectedConfig} schedule={selectedSchedule} />
+                  <ConfigInfoCard
+                    config={{ ...selectedConfig, semester: selectedConfig.semester ?? undefined }}
+                    schedule={selectedSchedule}
+                  />
 
                   {/* Matrix Quota Display (if applicable) */}
                   <MatrixQuotaDisplay
-                    quotas={selectedConfig.quotas}
-                    hasMatrix={selectedConfig.has_college_quota}
+                    quotas={(selectedConfig.quotas as Record<string, Record<string, number>>) ?? null}
+                    hasMatrix={selectedConfig.has_college_quota ?? false}
                   />
 
                   {/* Student Roster Preview */}
@@ -289,6 +293,7 @@ export function RosterManagementDashboard() {
                     <RosterListTable
                       periods={cycleData.periods}
                       configId={selectedConfig.id}
+                      rosterCycle={selectedSchedule.roster_cycle}
                       onRosterGenerated={refetchCycleData}
                     />
                   )}
@@ -324,7 +329,7 @@ export function RosterManagementDashboard() {
           open={scheduleDialogOpen}
           onOpenChange={setScheduleDialogOpen}
           schedule={selectedSchedule}
-          onUpdated={() => handleConfigSelect(selectedConfig.id, selectedConfig)}
+          onUpdated={() => handleConfigSelect(selectedConfig!.id, selectedConfig!)}
         />
       )}
     </div>

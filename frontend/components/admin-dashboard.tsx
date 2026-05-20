@@ -1,5 +1,6 @@
 "use client";
 
+import { logger } from "@/lib/utils/logger";
 import {
   Card,
   CardContent,
@@ -18,22 +19,28 @@ import {
   Award,
   Loader2,
 } from "lucide-react";
-import { api } from "@/lib/api";
+import {
+  api,
+  Application,
+  DashboardStats,
+  NotificationResponse,
+  User,
+} from "@/lib/api";
 import { ScholarshipTimeline } from "@/components/scholarship-timeline";
 import { useScholarshipPermissions } from "@/hooks/use-scholarship-permissions";
 import { getDisplayStatusInfo } from "@/lib/utils/application-helpers";
 
 interface AdminDashboardProps {
-  stats: any;
-  recentApplications: any[];
-  systemAnnouncements: any[];
+  stats: DashboardStats | null;
+  recentApplications: Application[];
+  systemAnnouncements: NotificationResponse[];
   isStatsLoading: boolean;
   isRecentLoading: boolean;
   isAnnouncementsLoading: boolean;
   error: string | null;
   isAuthenticated: boolean;
-  user: any;
-  login: (token: string, userData: any) => void;
+  user: User | null;
+  login: (token: string, userData: User) => void;
   logout: () => void;
   fetchRecentApplications: () => void;
   fetchDashboardStats: () => void;
@@ -114,7 +121,7 @@ export function AdminDashboard({
             <div className="flex gap-2">
               <button
                 onClick={async () => {
-                  console.log("Manual retry triggered");
+                  logger.debug("Manual retry triggered");
                   fetchRecentApplications();
                 }}
                 className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
@@ -125,17 +132,17 @@ export function AdminDashboard({
               <button
                 onClick={async () => {
                   try {
-                    console.log("Testing super_admin login...");
+                    logger.debug("Testing super_admin login...");
                     const response = await api.auth.mockSSOLogin("super_admin");
-                    console.log("Mock login response:", response);
+                    logger.debug("Mock login response:", response);
 
                     if (response.success && response.data) {
                       const { access_token, user: userData } = response.data;
                       login(access_token, userData);
-                      console.log("Super admin login successful");
+                      logger.debug("Super admin login successful");
                     }
                   } catch (e) {
-                    console.error("Test login failed:", e);
+                    logger.error("Test login failed", { e: e });
                   }
                 }}
                 className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
@@ -226,7 +233,7 @@ export function AdminDashboard({
       </div>
 
       {/* 獎學金時間軸 - 根據用戶權限顯示 */}
-      <ScholarshipTimeline user={user} />
+      {user && <ScholarshipTimeline user={user} />}
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="academic-card border-nycu-blue-200">

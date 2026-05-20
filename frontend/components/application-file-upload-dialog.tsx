@@ -95,9 +95,9 @@ export function ApplicationFileUploadDialog({
         setUploadStatus("error");
         setUploadMessage(t("form_dialog.partial_upload_failed"));
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setUploadStatus("error");
-      setUploadMessage(err.message || t("form_dialog.upload_failed"));
+      setUploadMessage((err instanceof Error ? err.message : t("form_dialog.upload_failed")));
     } finally {
       setUploading(false);
     }

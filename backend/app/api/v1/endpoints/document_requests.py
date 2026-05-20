@@ -115,9 +115,9 @@ async def create_document_request(
                 },
             )
             logger.info(f"Document request automation triggered for {student_email}")
-    except Exception as e:
+    except Exception:
         # Log error but don't fail the request creation
-        logger.error(f"Failed to trigger supplement request automation: {e}")
+        logger.exception("Failed to trigger supplement request automation")
 
     # Build response
     response_data = DocumentRequestResponse.model_validate(document_request)
@@ -269,6 +269,15 @@ async def fulfill_document_request(
 
     # Verify student owns the application
     if document_request.application.user_id != current_user.id:
+        logger.warning(
+            "SECURITY: student attempted to fulfill another user's document request",
+            extra={
+                "user_id": current_user.id,
+                "request_id": request_id,
+                "application_id": document_request.application_id,
+                "owner_user_id": document_request.application.user_id,
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only fulfill document requests for your own applications",

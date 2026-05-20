@@ -236,7 +236,7 @@ class BankVerificationService:
                 file_stream.close()
                 file_stream.release_conn()
             except Exception as e:
-                raise OCRError(f"Failed to read file from storage: {str(e)}")
+                raise OCRError(f"Failed to read file from storage: {str(e)}") from e
 
             # Perform OCR extraction
             ocr_result = await ocr_service.extract_bank_info_from_image(image_data=image_data, db=self.db)
@@ -758,7 +758,7 @@ class BankVerificationService:
                         # Create new verified account record
                         # First, deactivate any other active accounts for this user
                         deactivate_stmt = select(StudentBankAccount).where(
-                            StudentBankAccount.user_id == application.user_id, StudentBankAccount.is_active == True
+                            StudentBankAccount.user_id == application.user_id, StudentBankAccount.is_active.is_(True)
                         )
                         deactivate_result = await self.db.execute(deactivate_stmt)
                         active_accounts = deactivate_result.scalars().all()
@@ -817,4 +817,4 @@ class BankVerificationService:
         except Exception as e:
             # Rollback on any error
             await self.db.rollback()
-            raise ValueError(f"Failed to process manual review: {str(e)}") from e
+            raise ValueError("Failed to process manual review") from e

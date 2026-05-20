@@ -8,8 +8,7 @@ import logging
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -18,7 +17,6 @@ from app.core.security import check_scholarship_permission, get_current_user, re
 from app.db.deps import get_db
 from app.models.scholarship import ScholarshipType
 from app.models.user import AdminScholarship, User, UserRole
-from app.schemas.common import ApiResponse
 
 logger = logging.getLogger(__name__)
 
@@ -191,6 +189,14 @@ async def create_scholarship_permission(
 
     # Check if admin is trying to modify their own permissions (not allowed)
     if current_user.role == UserRole.admin and user_id == current_user.id:
+        logger.warning(
+            "SECURITY: admin attempted to grant scholarship permission to self",
+            extra={
+                "actor_user_id": current_user.id,
+                "actor_role": str(current_user.role),
+                "scholarship_id": scholarship_id,
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Admin users cannot modify their own permissions"
         )
@@ -232,6 +238,20 @@ async def create_scholarship_permission(
     await db.commit()
     await db.refresh(new_permission)
     await cache_invalidate("dashboard:")
+
+    # SECURITY: Permissions are the access-control surface; record who
+    # granted which scholarship to whom for the audit trail.
+    logger.info(
+        "scholarship permission granted",
+        extra={
+            "actor_user_id": current_user.id,
+            "actor_role": str(current_user.role),
+            "permission_id": new_permission.id,
+            "target_admin_id": user_id,
+            "scholarship_id": scholarship_id,
+            "scholarship_name": scholarship.name,
+        },
+    )
 
     return {
         "success": True,
@@ -305,6 +325,15 @@ async def delete_scholarship_permission(
 
     # Check if admin is trying to delete their own permissions (not allowed)
     if current_user.role == UserRole.admin and permission.admin_id == current_user.id:
+        logger.warning(
+            "SECURITY: admin attempted to delete own scholarship permission",
+            extra={
+                "actor_user_id": current_user.id,
+                "actor_role": str(current_user.role),
+                "permission_id": id,
+                "scholarship_id": permission.scholarship_id,
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Admin users cannot delete their own permissions"
         )
@@ -312,9 +341,28 @@ async def delete_scholarship_permission(
     # Check if current user has permission for this scholarship
     check_scholarship_permission(current_user, permission.scholarship_id)
 
+    # Capture audit fields before the row is gone.
+    target_admin_id = permission.admin_id
+    target_scholarship_id = permission.scholarship_id
+    target_scholarship_name = permission.scholarship.name if permission.scholarship else None
+
     # Delete permission
     await db.delete(permission)
     await db.commit()
     await cache_invalidate("dashboard:")
+
+    # SECURITY: Permissions are the access-control surface for admin /
+    # college users; the audit trail must persist after the row is gone.
+    logger.info(
+        "scholarship permission deleted",
+        extra={
+            "actor_user_id": current_user.id,
+            "actor_role": str(current_user.role),
+            "permission_id": id,
+            "target_admin_id": target_admin_id,
+            "scholarship_id": target_scholarship_id,
+            "scholarship_name": target_scholarship_name,
+        },
+    )
 
     return {"success": True, "message": "Scholarship permission deleted successfully", "data": None}

@@ -770,9 +770,3 @@ class TestAdminEndpoints:
             json={"reason": "x"},
         )
         assert response.status_code == 403
-
-    # TODO: Add tests for rate limiting on admin endpoints
-    # TODO: Add tests for admin action logging and audit trail
-    # TODO: Add tests for admin permission inheritance and delegation
-    # TODO: Add performance tests for bulk operations
-    # TODO: Add tests for data export in different formats (Excel, JSON)

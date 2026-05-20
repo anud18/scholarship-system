@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
+import { logger } from "@/lib/utils/logger";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -60,7 +61,7 @@ interface User {
   raw_data?: {
     chinese_name?: string;
     english_name?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
@@ -129,7 +130,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
       const response = await apiClient.admin.getHistoricalApplications(filters);
 
       if (response.success && response.data) {
-        const applications = response.data.items || [];
+        const applications = (response.data.items || []) as HistoricalApplication[];
         setHistoricalApplications(applications);
 
         setHistoricalApplicationsPagination({
@@ -143,11 +144,12 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
         const errorMsg = response.message || "獲取歷史申請失敗";
         setHistoricalApplicationsError(errorMsg);
       }
-    } catch (error: any) {
-      console.error("獲取歷史申請資料失敗:", error);
+    } catch (error: unknown) {
+      logger.error("獲取歷史申請資料失敗", { error: error });
+      const errShape = error as { message?: string; response?: { data?: { message?: string } } };
       const errorMsg =
-        error?.message ||
-        error?.response?.data?.message ||
+        errShape.message ||
+        errShape.response?.data?.message ||
         "網路錯誤或伺服器未回應";
       setHistoricalApplicationsError(errorMsg);
     } finally {
@@ -179,7 +181,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
         });
 
         if (response.success && response.data) {
-          const pageApplications = response.data.items || [];
+          const pageApplications = (response.data.items || []) as HistoricalApplication[];
           allApplications = [...allApplications, ...pageApplications];
 
           // 檢查是否還有更多數據
@@ -209,7 +211,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
         setActiveHistoricalTab("all"); // 保持全部為默認
       }
     } catch (error) {
-      console.error("獲取歷史申請 tab 資料失敗:", error);
+      logger.error("獲取歷史申請 tab 資料失敗", { error: error });
     }
   }, [user, activeHistoricalTab]);
 

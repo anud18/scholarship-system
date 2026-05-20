@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { logger } from "@/lib/utils/logger";
 import {
   Dialog,
   DialogContent,
@@ -100,10 +101,11 @@ export function DocumentRequestForm({
             (locale === "zh" ? "送出失敗" : "Failed to send request")
         );
       }
-    } catch (error: any) {
-      console.error("Failed to create document request:", error);
+    } catch (error: unknown) {
+      logger.error("Failed to create document request", { error: error });
+      const errShape = error as { response?: { data?: { message?: string } } };
       toast.error(
-        error?.response?.data?.message ||
+        errShape.response?.data?.message ||
           (locale === "zh" ? "建立文件要求時發生錯誤" : "Error creating document request")
       );
     } finally {

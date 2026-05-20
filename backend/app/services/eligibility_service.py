@@ -614,8 +614,8 @@ class EligibilityService:
                 logger.warning(f"Unknown operator: {rule.operator}")
                 return False
 
-        except (ValueError, TypeError) as e:
-            logger.error(f"Error evaluating rule {rule.rule_name}: {e}")
+        except (ValueError, TypeError):
+            logger.exception(f"Error evaluating rule {rule.rule_name}")
             return False
 
     def _get_nested_field_value(self, data: Dict[str, Any], field_path: str) -> Any:

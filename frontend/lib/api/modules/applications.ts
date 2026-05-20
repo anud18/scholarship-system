@@ -13,6 +13,7 @@
 import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
 import { createFileUploadFormData, type MultipartFormData } from '../form-data-helpers';
+import type { AuditLog } from "@/types/audit";
 import type { ApiResponse } from '../types';
 import type { Application, ApplicationFile } from '../types';
 import type { components } from '../generated/schema';
@@ -25,7 +26,12 @@ type ApplicationCreate = {
   expected_graduation_date?: string;
   research_topic?: string;
   gpa?: number;
-  [key: string]: any;
+  // Dynamic application fields (bank_account, contact_phone, ...) are bag-passed
+  // through this index signature. Tightened from `any` to `unknown` so the
+  // typed-client `body: applicationData as never` cast at the call site (lines
+  // ~85 / ~274) is the only remaining widening — `unknown` here means callers
+  // can't accidentally read a dynamic field as a typed value without checking.
+  [key: string]: unknown;
 };
 
 export function createApplicationsApi() {
@@ -81,7 +87,7 @@ export function createApplicationsApi() {
     ): Promise<ApiResponse<Application>> => {
       const response = await typedClient.raw.POST('/api/v1/applications', {
         params: { query: isDraft ? { is_draft: true } : undefined },
-        body: applicationData as any, // Frontend includes dynamic fields via [key: string]: any
+        body: applicationData as never, // Dynamic fields via [key: string]: unknown bypass strict schema
       });
       return toApiResponse<Application>(response);
     },
@@ -109,7 +115,7 @@ export function createApplicationsApi() {
     ): Promise<ApiResponse<Application>> => {
       const response = await typedClient.raw.PUT('/api/v1/applications/{id}', {
         params: { path: { id } },
-        body: applicationData as any, // Partial<ApplicationCreate> makes all fields optional for updates
+        body: applicationData as never, // Partial<ApplicationCreate> makes all fields optional for updates
       });
       return toApiResponse<Application>(response);
     },
@@ -130,7 +136,7 @@ export function createApplicationsApi() {
     ): Promise<ApiResponse<ApplicationStatusUpdateResponse>> => {
       const response = await typedClient.raw.PUT('/api/v1/applications/{id}/status', {
         params: { path: { id } },
-        body: statusData as any,
+        body: statusData,
       });
       return toApiResponse<ApplicationStatusUpdateResponse>(response);
     },
@@ -145,7 +151,7 @@ export function createApplicationsApi() {
     ): Promise<ApiResponse<ApplicationStatusUpdateResponse>> => {
       const response = await typedClient.raw.PUT('/api/v1/applications/{id}/status', {
         params: { path: { id } },
-        body: statusData as any,
+        body: statusData,
       });
       return toApiResponse<ApplicationStatusUpdateResponse>(response);
     },
@@ -158,14 +164,14 @@ export function createApplicationsApi() {
       applicationId: number,
       file: File,
       fileType: string
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const formData = createFileUploadFormData({ file, file_type: fileType });
 
       const response = await typedClient.raw.POST('/api/v1/applications/{id}/files', {
         params: { path: { id: applicationId } },
         body: formData as MultipartFormData<{ file: string }>,
       });
-      return toApiResponse<any>(response);
+      return toApiResponse<unknown>(response);
     },
 
     /**
@@ -191,14 +197,14 @@ export function createApplicationsApi() {
     deleteApplication: async (
       applicationId: number,
       reason?: string
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.DELETE('/api/v1/applications/{id}', {
         params: {
           path: { id: applicationId },
           query: reason ? { reason } : undefined,
         },
       });
-      return toApiResponse<any>(response);
+      return toApiResponse<unknown>(response);
     },
 
     /**
@@ -235,7 +241,7 @@ export function createApplicationsApi() {
       applicationId: number,
       file: File,
       fileType: string = 'other'
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const formData = createFileUploadFormData({ file });
 
       const response = await typedClient.raw.POST('/api/v1/applications/{id}/files/upload', {
@@ -245,7 +251,7 @@ export function createApplicationsApi() {
         },
         body: formData as MultipartFormData<{ file: string }>,
       });
-      return toApiResponse<any>(response);
+      return toApiResponse<unknown>(response);
     },
 
     /**
@@ -270,7 +276,7 @@ export function createApplicationsApi() {
     ): Promise<ApiResponse<Application>> => {
       const response = await typedClient.raw.POST('/api/v1/applications', {
         params: { query: { is_draft: true } },
-        body: applicationData as any, // Frontend includes dynamic fields via [key: string]: any
+        body: applicationData as never, // Dynamic fields via [key: string]: unknown bypass strict schema
       });
 
       const apiResponse = toApiResponse<Application>(response);
@@ -304,7 +310,7 @@ export function createApplicationsApi() {
           review_stage: reviewStage,
           recommendation,
           ...(selectedAwards ? { selected_awards: selectedAwards } : {}),
-        } as any,
+        } as never,
       });
       return toApiResponse<Application>(response);
     },
@@ -318,7 +324,7 @@ export function createApplicationsApi() {
       limit: number = 50,
       offset: number = 0,
       actionFilter?: string
-    ): Promise<ApiResponse<any[]>> => {
+    ): Promise<ApiResponse<AuditLog[]>> => {
       const response = await typedClient.raw.GET('/api/v1/applications/{id}/audit-trail', {
         params: {
           path: { id: applicationId },
@@ -329,7 +335,7 @@ export function createApplicationsApi() {
           },
         },
       });
-      return toApiResponse<any[]>(response);
+      return toApiResponse<AuditLog[]>(response);
     },
 
     /**
@@ -343,15 +349,15 @@ export function createApplicationsApi() {
         reason: string;
         notes?: string;
       }
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.POST(
         '/api/v1/applications/{application_id}/document-requests',
         {
           params: { path: { application_id: applicationId } },
-          body: requestData as any,
+          body: requestData,
         }
       );
-      return toApiResponse<any>(response);
+      return toApiResponse<unknown>(response);
     },
 
     /**
@@ -361,7 +367,7 @@ export function createApplicationsApi() {
     listDocumentRequests: async (
       applicationId: number,
       status?: string
-    ): Promise<ApiResponse<any[]>> => {
+    ): Promise<ApiResponse<unknown[]>> => {
       const response = await typedClient.raw.GET(
         '/api/v1/applications/{application_id}/document-requests',
         {
@@ -371,7 +377,7 @@ export function createApplicationsApi() {
           },
         }
       );
-      return toApiResponse<any[]>(response);
+      return toApiResponse<unknown[]>(response);
     },
 
     /**

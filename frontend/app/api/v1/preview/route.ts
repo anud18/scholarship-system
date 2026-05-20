@@ -166,12 +166,13 @@ export async function GET(request: NextRequest) {
           { status: 400 }
         );
       }
-    } catch (validationError: any) {
+    } catch (validationError: unknown) {
       logger.error("Input validation error", {});
-      return NextResponse.json(
-        { error: validationError.message },
-        { status: 400 }
-      );
+      const message =
+        validationError instanceof Error
+          ? validationError.message
+          : "Invalid input";
+      return NextResponse.json({ error: message }, { status: 400 });
     }
 
     if (!token) {
@@ -185,7 +186,7 @@ export async function GET(request: NextRequest) {
     let backendUrl: URL;
     try {
       backendUrl = getSafeBackendUrl();
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error("Backend URL validation error", {});
       return NextResponse.json(
         { error: "Invalid backend configuration" },
@@ -209,7 +210,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log("Preview API called:", {
+    logger.debug("Preview API called:", {
       fileId,
       applicationId,
       userId,
@@ -320,7 +321,7 @@ async function handleRosterPreview(
     let backendUrl: URL;
     try {
       backendUrl = getSafeBackendUrl();
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error("Roster Preview: Backend URL validation error", {});
       return NextResponse.json(
         {
@@ -338,7 +339,7 @@ async function handleRosterPreview(
     backendUrl.searchParams.set("max_preview_rows", String(max_preview_rows));
     backendUrl.searchParams.set("include_excluded", String(include_excluded));
 
-    console.log(`[Roster Preview] Fetching: ${backendUrl.toString()}`);
+    logger.debug(`[Roster Preview] Fetching: ${backendUrl.toString()}`);
 
     // 調用後端 API
     const response = await fetch(backendUrl, {
@@ -400,7 +401,20 @@ async function handleRosterPreview(
 }
 
 // 生成造冊預覽 HTML
-function generateRosterPreviewHTML(data: any): string {
+interface RosterPreviewPayload {
+  roster_code: string;
+  preview_data: (string | number | null)[][];
+  total_rows: number;
+  column_headers: string[];
+  validation_result?: {
+    is_valid?: boolean;
+    errors?: string[];
+    warnings?: string[];
+    [key: string]: unknown;
+  };
+}
+
+function generateRosterPreviewHTML(data: RosterPreviewPayload): string {
   const { roster_code, preview_data, total_rows, column_headers, validation_result } = data;
 
   return `
@@ -556,11 +570,20 @@ function generateRosterPreviewHTML(data: any): string {
           </tr>
         </thead>
         <tbody>
-          ${preview_data.map((row: any[]) => `
+          ${preview_data
+            .map(
+              row => `
             <tr>
-              ${row.map((cell: any) => `<td>${cell !== null && cell !== undefined ? cell : '-'}</td>`).join('')}
+              ${row
+                .map(
+                  cell =>
+                    `<td>${cell !== null && cell !== undefined ? cell : '-'}</td>`
+                )
+                .join('')}
             </tr>
-          `).join('')}
+          `
+            )
+            .join('')}
         </tbody>
       </table>
       ` : `

@@ -1,6 +1,7 @@
 "use client";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { logger } from "@/lib/utils/logger";
 import { AdminManagementProvider, useAdminManagement } from "@/contexts/admin-management-context";
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
@@ -50,7 +51,7 @@ interface User {
   raw_data?: {
     chinese_name?: string;
     english_name?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
@@ -74,13 +75,11 @@ function AdminManagementContent({ user }: AdminManagementShellProps) {
         const response = await apiClient.admin.getCurrentUserScholarshipPermissions();
         if (response.success && response.data) {
           const permissions = response.data as ScholarshipPermission[];
-          const hasQuota = permissions.some(
-            (p: any) => p.can_manage_quota
-          );
+          const hasQuota = permissions.some(p => p.can_manage_quota);
           setHasQuotaPermission(hasQuota);
         }
       } catch (error) {
-        console.error("Failed to check quota permissions:", error);
+        logger.error("Failed to check quota permissions", { error: error });
       }
     };
 

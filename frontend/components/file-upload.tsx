@@ -12,6 +12,17 @@ import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { Locale } from "@/lib/validators";
 import { getTranslation } from "@/lib/i18n";
 
+// Files passed as `initialFiles` may have been previously uploaded — the
+// caller attaches server-side metadata (id, url, file_path, originalSize)
+// onto the File-shaped object. We narrow each access site via this type
+// instead of widening File globally.
+type UploadedFileLike = File & {
+  id?: string | number;
+  url?: string;
+  file_path?: string;
+  originalSize?: number;
+};
+
 interface FileUploadProps {
   onFilesChange: (files: File[]) => void;
   acceptedTypes?: string[];
@@ -58,12 +69,29 @@ export function FileUpload({
 
   // 檢查文件是否為已上傳的文件
   const isUploadedFile = (file: File) => {
-    return (file as any).id || (file as any).file_path || (file as any).url;
+    const f = file as UploadedFileLike;
+    return f.id || f.file_path || f.url;
   };
 
   // 初始化和同步外部文件
+  //
+  // INFINITE-LOOP FIX (PR #509):
+  // The default `initialFiles = []` parameter creates a fresh array
+  // reference on every render. With a naive `setFiles([...initialFiles])`,
+  // this useEffect would fire every render, schedule a state update,
+  // trigger another render, and loop indefinitely. Compare contents
+  // before setting state — if they match, return the previous reference
+  // so React's bailout breaks the cycle.
   useEffect(() => {
-    setFiles([...initialFiles]);
+    setFiles((prev) => {
+      if (
+        prev.length === initialFiles.length &&
+        prev.every((f, i) => f === initialFiles[i])
+      ) {
+        return prev;
+      }
+      return [...initialFiles];
+    });
   }, [initialFiles]);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -168,9 +196,10 @@ export function FileUpload({
 
   // 獲取文件的顯示大小
   const getFileDisplaySize = (file: File) => {
+    const uploaded = file as UploadedFileLike;
     // 如果是已上傳的文件，優先使用 originalSize
-    if (isUploadedFile(file) && (file as any).originalSize) {
-      return formatFileSize((file as any).originalSize);
+    if (isUploadedFile(file) && uploaded.originalSize) {
+      return formatFileSize(uploaded.originalSize);
     }
     return formatFileSize(file.size);
   };
@@ -178,11 +207,10 @@ export function FileUpload({
   // 獲取文件的預覽URL
   const getFilePreviewUrl = (file: File) => {
     if (isUploadedFile(file)) {
+      const uploaded = file as UploadedFileLike;
       // 如果是已上傳的文件，使用其URL
       return (
-        (file as any).url ||
-        (file as any).file_path ||
-        URL.createObjectURL(file)
+        uploaded.url || uploaded.file_path || URL.createObjectURL(file)
       );
     }
     // 如果是本地文件，創建臨時URL

@@ -1,5 +1,6 @@
 "use client"
 
+import { logger } from "@/lib/utils/logger";
 import React, { useState, useEffect } from "react"
 import {
   Dialog,
@@ -30,7 +31,7 @@ interface VerificationFieldData {
   needs_manual_review?: boolean
 }
 
-interface BankVerificationData {
+export interface BankVerificationData {
   application_id: number
   verification_status: string
   account_number_status?: string
@@ -41,7 +42,7 @@ interface BankVerificationData {
     account_holder?: VerificationFieldData
   }
   form_data?: { [key: string]: string }
-  ocr_data?: { [key: string]: any }
+  ocr_data?: { [key: string]: unknown }
   passbook_document?: {
     file_path: string
     original_filename: string
@@ -85,7 +86,7 @@ export function BankVerificationReviewDialog({
       // 從 file_path URL 參數中提取 token（參考 ApplicationReviewDialog 的做法）
       const urlParts = doc.file_path.split("?")
       if (urlParts.length < 2) {
-        console.error("Invalid file URL format")
+        logger.error("Invalid file URL format")
         return
       }
 
@@ -93,7 +94,7 @@ export function BankVerificationReviewDialog({
       const token = urlParams.get("token")
 
       if (!token) {
-        console.error("No token found in file URL")
+        logger.error("No token found in file URL")
         return
       }
 
@@ -209,8 +210,8 @@ export function BankVerificationReviewDialog({
       } else {
         setError(response.message || "提交審核失敗")
       }
-    } catch (err: any) {
-      setError(err.message || "提交審核時發生錯誤")
+    } catch (err: unknown) {
+      setError((err instanceof Error ? err.message : "提交審核時發生錯誤"))
     } finally {
       setSubmitting(false)
     }
@@ -253,6 +254,7 @@ export function BankVerificationReviewDialog({
                   {imageLoading && (
                     <Skeleton className="absolute inset-4 rounded" />
                   )}
+                  {/* eslint-disable-next-line @next/next/no-img-element -- user-uploaded passbook scan, unknown aspect ratio; next/image gives no benefit with images.unoptimized */}
                   <img
                     src={previewUrl}
                     alt="存摺封面"

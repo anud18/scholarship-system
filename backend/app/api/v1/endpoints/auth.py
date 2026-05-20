@@ -2,6 +2,7 @@
 Authentication API endpoints
 """
 
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
@@ -18,7 +19,21 @@ from app.services.developer_profile_service import DeveloperProfile, DeveloperPr
 from app.services.mock_sso_service import MockSSOService
 from app.services.portal_sso_service import PortalSSOService
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _client_ip(request: Request) -> str:
+    """
+    Extract client IP for SECURITY audit logs.
+    Honours X-Forwarded-For (set by ingress / nginx) so logs reflect the
+    real client behind a reverse proxy rather than the proxy itself.
+    """
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        # First entry in the chain is the originating client.
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
 
 
 async def populate_college_info(user_data: UserResponse, db: AsyncSession, user: User):
@@ -40,8 +55,33 @@ async def populate_college_info(user_data: UserResponse, db: AsyncSession, user:
 @rate_limit(requests=10, window_seconds=600)  # 10 registrations / 10 min per IP
 async def register(request: Request, user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     """Register a new user"""
-    auth_service = AuthService(db)
-    user = await auth_service.register_user(user_data)
+    client_ip = _client_ip(request)
+    try:
+        auth_service = AuthService(db)
+        user = await auth_service.register_user(user_data)
+    except Exception:
+        # SECURITY audit: capture every failed registration with the
+        # attempted nycu_id + client IP so brute-force / enumeration
+        # attempts are visible in Loki even when AuthService swallows
+        # the surface-level reason.
+        logger.warning(
+            "SECURITY: registration attempt failed",
+            extra={
+                "attempted_nycu_id": getattr(user_data, "nycu_id", None),
+                "ip": client_ip,
+            },
+        )
+        raise
+
+    logger.info(
+        "User registered",
+        extra={
+            "user_id": user.id,
+            "nycu_id": user.nycu_id,
+            "role": user.role.value if hasattr(user.role, "value") else str(user.role),
+            "ip": client_ip,
+        },
+    )
 
     # Convert to dict for response
     user_dict = {
@@ -64,13 +104,43 @@ async def register(request: Request, user_data: UserCreate, db: AsyncSession = D
 @rate_limit(requests=20, window_seconds=300)  # 20 attempts / 5 min per IP — slows brute force
 async def login(request: Request, login_data: UserLogin, db: AsyncSession = Depends(get_db)):
     """Login user and return access token"""
-    auth_service = AuthService(db)
-    token_response = await auth_service.login(login_data)
+    client_ip = _client_ip(request)
+    try:
+        auth_service = AuthService(db)
+        token_response = await auth_service.login(login_data)
+    except Exception:
+        # SECURITY audit: log every failed login. nycu_id (not the
+        # password — never the password) plus client IP lets ops detect
+        # credential-stuffing patterns from the log layer. The rate-
+        # limit decorator throttles, but auth failures still need to
+        # be tracked individually.
+        logger.warning(
+            "SECURITY: login attempt failed",
+            extra={
+                "attempted_nycu_id": getattr(login_data, "nycu_id", None),
+                "ip": client_ip,
+            },
+        )
+        raise
 
     # Populate college_name from Academy table
     user = await db.get(User, token_response.user.id)
     if user:
         await populate_college_info(token_response.user, db, user)
+
+    logger.info(
+        "User logged in",
+        extra={
+            "user_id": token_response.user.id,
+            "nycu_id": token_response.user.nycu_id,
+            "role": (
+                token_response.user.role.value
+                if hasattr(token_response.user.role, "value")
+                else str(token_response.user.role)
+            ),
+            "ip": client_ip,
+        },
+    )
 
     # Return wrapped in standard ApiResponse format
     return {
@@ -186,7 +256,7 @@ async def mock_sso_login(request: Request, request_data: PortalSSORequest, db: A
             },
         }
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 async def get_portal_sso_data(
@@ -213,6 +283,7 @@ async def get_portal_sso_data(
 
 
 @router.post("/portal-sso/verify")
+@rate_limit(requests=30, window_seconds=60)  # 30 SSO verifications / min per IP — slows token-replay / brute attempts
 async def portal_sso_verify(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -240,10 +311,6 @@ async def portal_sso_verify(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Portal SSO is disabled")
 
     # Debug logging to see what parameters are being sent
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     received_params = {
         "token": token,
         "nycu_id": nycu_id,
@@ -274,7 +341,7 @@ async def portal_sso_verify(
             # Return in exact portal format for testing
             return {"status": "success", "message": "jwt pass", "data": portal_data}
         except ValueError as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
     # Real Portal SSO flow
     if not final_token:
@@ -308,11 +375,16 @@ async def portal_sso_verify(
             status_code=302,
         )
     except Exception as e:
-        logger.error(f"Portal SSO error: {str(e)}")
+        logger.exception(
+            "Portal SSO verification failed",
+            extra={"error": str(e)},
+        )
+        # SECURITY: Don't leak internal exception text to clients (this is an
+        # anonymous-user endpoint pre-auth). Full detail is in the structured log.
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Portal SSO verification failed: {str(e)}",
-        )
+            detail="Portal SSO verification failed",
+        ) from e
 
 
 @router.get("/portal-sso/verify/{username}")
@@ -328,7 +400,7 @@ async def portal_sso_verify_get(username: str, db: AsyncSession = Depends(get_db
         # Return in exact portal format
         return {"status": "success", "message": "jwt pass", "data": portal_data}
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 # Developer Profile endpoints for personalized testing
@@ -454,8 +526,8 @@ async def create_custom_profile(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid profile data: {str(e)}",
-        )
+            detail="Invalid profile data",
+        ) from e
 
 
 @router.post("/dev-profiles/{developer_id}/student-suite")
@@ -562,5 +634,5 @@ async def delete_specific_profile(developer_id: str, role: str, db: AsyncSession
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Profile not found: {developer_id}/{role}",
             )
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid role: {role}")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid role: {role}") from exc

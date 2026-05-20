@@ -7,6 +7,14 @@
 
 import type { ApiResponse } from './types';
 
+// FastAPI validation error row — emitted in error.detail arrays.
+interface FastApiValidationErrorRow {
+  loc?: (string | number)[];
+  msg?: string;
+  type?: string;
+  [key: string]: unknown;
+}
+
 /**
  * openapi-fetch response type
  * Flexible definition to handle various error structures from FastAPI
@@ -14,9 +22,10 @@ import type { ApiResponse } from './types';
 export interface FetchResponse<T> {
   data?: T;
   error?: {
-    detail?: string | any[] | any; // FastAPI can return string, validation errors array, or other structures
+    // FastAPI can return string, validation errors array, or other structures
+    detail?: string | FastApiValidationErrorRow[] | Record<string, unknown>;
     message?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   response: Response;
 }
@@ -24,22 +33,23 @@ export interface FetchResponse<T> {
 /**
  * Helper function to safely convert any value to a string message
  */
-function safeStringify(value: any): string {
+function safeStringify(value: unknown): string {
   if (typeof value === 'string') {
     return value;
   }
   if (value && typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
     // Handle Error objects
-    if (value.message && typeof value.message === 'string') {
-      return value.message;
+    if (typeof obj.message === 'string') {
+      return obj.message;
     }
     // Handle arrays
     if (Array.isArray(value)) {
       return value.map(v => safeStringify(v)).join(', ');
     }
     // Handle objects with detail field
-    if (value.detail) {
-      return safeStringify(value.detail);
+    if (obj.detail) {
+      return safeStringify(obj.detail);
     }
     // Fallback: stringify the object
     try {
@@ -60,11 +70,17 @@ function safeStringify(value: any): string {
  * - HTTP status codes
  * - Error message extraction
  *
- * @param response - openapi-fetch response object (uses any to accept full OpenAPI types)
+ * @param response - openapi-fetch response object. Typed as
+ *   ``FetchResponse<unknown>`` so callers can pass any openapi-fetch
+ *   response without forcing the caller's `T` to flow through the
+ *   typed-client's generated union (which is often
+ *   `Record<string, never>` for nested body schemas the backend doesn't
+ *   fully emit). The wrapper inspects ``response.data`` and re-narrows
+ *   to ``T`` at the return boundary.
  * @returns ApiResponse<T> in standard format
  */
 export function toApiResponse<T>(
-  response: any
+  response: FetchResponse<unknown>
 ): ApiResponse<T> {
   // Handle error responses
   if (response.error) {
@@ -76,7 +92,10 @@ export function toApiResponse<T>(
     } else if (Array.isArray(response.error.detail)) {
       // FastAPI validation errors
       errorMessage = response.error.detail
-        .map((err: any) => `${err.loc?.join('.')}: ${err.msg}`)
+        .map(
+          (err: FastApiValidationErrorRow) =>
+            `${err.loc?.join('.')}: ${err.msg}`
+        )
         .join(', ');
     } else if (response.error.detail) {
       // Handle object detail - use safeStringify
@@ -98,7 +117,9 @@ export function toApiResponse<T>(
   // Handle success responses
   // Backend already returns ApiResponse format {success, message, data}
   if (response.data && typeof response.data === 'object') {
-    const data = response.data as any;
+    // Narrow to dict for the field-presence check below; payload shape is
+    // generic across endpoints so structural access is the safe minimum.
+    const data = response.data as Record<string, unknown>;
 
     // If backend returns ApiResponse format, use it directly
     if ('success' in data && 'data' in data) {
@@ -108,7 +129,11 @@ export function toApiResponse<T>(
         : safeStringify(data.message) || 'Request completed successfully';
 
       return {
-        success: data.success,
+        // `data` is `Record<string, unknown>` from the structural narrow above;
+        // backend ApiResponse format guarantees `success: boolean`. Coerce
+        // explicitly so the strict prod build (Next.js TS) accepts the
+        // assignment.
+        success: Boolean(data.success),
         message: message,
         data: data.data as T,
       };
@@ -129,7 +154,7 @@ export function toApiResponse<T>(
  * @param response - openapi-fetch response object
  * @returns Error message string
  */
-export function extractErrorMessage(response: FetchResponse<any>): string {
+export function extractErrorMessage(response: FetchResponse<unknown>): string {
   if (response.error) {
     // Handle different error detail formats
     if (typeof response.error.detail === 'string') {
@@ -137,7 +162,10 @@ export function extractErrorMessage(response: FetchResponse<any>): string {
     } else if (Array.isArray(response.error.detail)) {
       // FastAPI validation errors
       return response.error.detail
-        .map((err: any) => `${err.loc?.join('.')}: ${err.msg}`)
+        .map(
+          (err: FastApiValidationErrorRow) =>
+            `${err.loc?.join('.')}: ${err.msg}`
+        )
         .join(', ');
     } else if (response.error.detail) {
       // Handle object detail - use safeStringify

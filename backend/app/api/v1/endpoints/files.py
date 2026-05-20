@@ -44,8 +44,8 @@ async def get_file_proxy(
         try:
             payload = verify_token(token)
             user_id = int(payload.get("sub"))
-        except Exception:
-            raise HTTPException(status_code=401, detail="Invalid token")
+        except Exception as exc:
+            raise HTTPException(status_code=401, detail="Invalid token") from exc
 
         # Get user from token
         auth_service = AuthService(db)
@@ -75,10 +75,28 @@ async def get_file_proxy(
         if current_user.role == UserRole.student:
             # Students can only access their own files
             if application.user_id != current_user.id:
+                logger.warning(
+                    "SECURITY: student attempted to access another user's file",
+                    extra={
+                        "user_id": current_user.id,
+                        "file_id": file_id,
+                        "owner_user_id": application.user_id,
+                        "application_id": application.id,
+                    },
+                )
                 raise HTTPException(status_code=403, detail="Access denied")
         elif current_user.role == UserRole.professor:
             # Professors can access files from their students
             if not current_user.can_access_student_data(application.user_id, "view_applications"):
+                logger.warning(
+                    "SECURITY: professor lacked relationship to access student file",
+                    extra={
+                        "user_id": current_user.id,
+                        "file_id": file_id,
+                        "student_user_id": application.user_id,
+                        "application_id": application.id,
+                    },
+                )
                 raise HTTPException(status_code=403, detail="Access denied - no relationship with student")
         elif current_user.role in [
             UserRole.college,
@@ -89,6 +107,14 @@ async def get_file_proxy(
             pass
         else:
             # Other roles are not allowed
+            logger.warning(
+                "SECURITY: unexpected role attempted file access",
+                extra={
+                    "user_id": current_user.id,
+                    "role": str(current_user.role),
+                    "file_id": file_id,
+                },
+            )
             raise HTTPException(status_code=403, detail="Access denied")
 
         # Get file stream from MinIO
@@ -123,7 +149,7 @@ async def get_file_proxy(
         raise
     except Exception as e:
         logger.error(f"Error serving file {file_id}: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.get("/applications/{application_id}/files/{file_id}/download")
@@ -147,8 +173,8 @@ async def download_file_proxy(
         try:
             payload = verify_token(token)
             user_id = int(payload.get("sub"))
-        except Exception:
-            raise HTTPException(status_code=401, detail="Invalid token")
+        except Exception as exc:
+            raise HTTPException(status_code=401, detail="Invalid token") from exc
 
         # Get user from token
         auth_service = AuthService(db)
@@ -178,10 +204,28 @@ async def download_file_proxy(
         if current_user.role == UserRole.student:
             # Students can only access their own files
             if application.user_id != current_user.id:
+                logger.warning(
+                    "SECURITY: student attempted to access another user's file",
+                    extra={
+                        "user_id": current_user.id,
+                        "file_id": file_id,
+                        "owner_user_id": application.user_id,
+                        "application_id": application.id,
+                    },
+                )
                 raise HTTPException(status_code=403, detail="Access denied")
         elif current_user.role == UserRole.professor:
             # Professors can access files from their students
             if not current_user.can_access_student_data(application.user_id, "view_applications"):
+                logger.warning(
+                    "SECURITY: professor lacked relationship to access student file",
+                    extra={
+                        "user_id": current_user.id,
+                        "file_id": file_id,
+                        "student_user_id": application.user_id,
+                        "application_id": application.id,
+                    },
+                )
                 raise HTTPException(status_code=403, detail="Access denied - no relationship with student")
         elif current_user.role in [
             UserRole.college,
@@ -192,6 +236,14 @@ async def download_file_proxy(
             pass
         else:
             # Other roles are not allowed
+            logger.warning(
+                "SECURITY: unexpected role attempted file access",
+                extra={
+                    "user_id": current_user.id,
+                    "role": str(current_user.role),
+                    "file_id": file_id,
+                },
+            )
             raise HTTPException(status_code=403, detail="Access denied")
 
         # Get file stream from MinIO
@@ -226,4 +278,4 @@ async def download_file_proxy(
         raise
     except Exception as e:
         logger.error(f"Error downloading file {file_id}: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from e

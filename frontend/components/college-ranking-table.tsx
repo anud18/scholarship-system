@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import {
   DndContext,
   closestCenter,
@@ -8,6 +9,7 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
+  type DragEndEvent,
 } from "@dnd-kit/core";
 import {
   arrayMove,
@@ -146,6 +148,19 @@ interface Application {
   review_status?: string;
 }
 
+// Excel import row shape produced by handleFileUpload before being passed up
+// via onImportExcel — three columns (學號/姓名/排名) parsed and normalized.
+interface ExcelRankingImportRow {
+  student_id: string;
+  student_name: string;
+  rank_position: number | string;
+}
+
+// Per-application review scratch state, keyed by application id. Each entry is
+// a free-form field map written by handleScoreUpdate; the values are opaque
+// to this component (the parent reads them via the onRankingChange flow).
+type ReviewScoresState = Record<number, Record<string, unknown>>;
+
 interface CollegeRankingTableProps {
   applications: Application[];
   totalQuota: number;
@@ -166,7 +181,7 @@ interface CollegeRankingTableProps {
     comments?: string
   ) => void;
   onFinalizeRanking: () => void;
-  onImportExcel?: (data: any[]) => Promise<void>;
+  onImportExcel?: (data: ExcelRankingImportRow[]) => Promise<void>;
   locale?: "zh" | "en";
   subTypeMeta?: Record<
     string,
@@ -199,8 +214,8 @@ function SortableItem({
     action: "approve" | "reject",
     comments?: string
   ) => void;
-  reviewScores: { [key: number]: any };
-  handleScoreUpdate: (appId: number, field: string, value: any) => void;
+  reviewScores: ReviewScoresState;
+  handleScoreUpdate: (appId: number, field: string, value: unknown) => void;
   subTypeMeta?: Record<
     string,
     { label: string; label_en: string; code?: string }
@@ -487,7 +502,7 @@ export function CollegeRankingTable({
     useState<Application[]>(applications);
   const [selectedApplication, setSelectedApplication] =
     useState<Application | null>(null);
-  const [reviewScores, setReviewScores] = useState<{ [key: number]: any }>({});
+  const [reviewScores, setReviewScores] = useState<ReviewScoresState>({});
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [selectedAppForDialog, setSelectedAppForDialog] =
@@ -508,7 +523,7 @@ export function CollegeRankingTable({
     setLocalApplications(sortedApps);
   }, [applications]);
 
-  const handleDragEnd = (event: any) => {
+  const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
 
     if (!over || active.id === over.id || editingLocked) {
@@ -537,7 +552,11 @@ export function CollegeRankingTable({
     onRankingChange(updatedItems);
   };
 
-  const handleScoreUpdate = (appId: number, field: string, value: any) => {
+  const handleScoreUpdate = (
+    appId: number,
+    field: string,
+    value: unknown
+  ) => {
     setReviewScores(prev => ({
       ...prev,
       [appId]: {
@@ -578,13 +597,13 @@ export function CollegeRankingTable({
 
       // Parse Excel data - expected columns: 學號, 姓名, 排名
       const errors: string[] = [];
-      const importData: Array<{
-        student_id: string;
-        student_name: string;
-        rank_position: number | string;
-      }> = [];
+      const importData: ExcelRankingImportRow[] = [];
 
-      jsonData.forEach((row: any, index: number) => {
+      // XLSX.utils.sheet_to_json returns a heterogeneous record per row keyed by
+      // column header — the cell values are inherently dynamic (Excel allows
+      // strings/numbers/dates/etc per cell), so `unknown` here is correct and
+      // the field-by-field coercion below narrows for use.
+      (jsonData as Array<Record<string, unknown>>).forEach((row, index) => {
         const rowNum = index + 2; // Excel row (header = row 1)
         const studentId = String(row["學號"] || row["student_id"] || "").trim();
         const studentName = String(
@@ -695,7 +714,7 @@ export function CollegeRankingTable({
         setIsImportDialogOpen(false);
       }
     } catch (error) {
-      console.error("Excel import error:", error);
+      logger.error("Excel import error", { error: error });
       toast.error(
         error instanceof Error ? error.message : "無法讀取 Excel 檔案"
       );
@@ -746,7 +765,7 @@ export function CollegeRankingTable({
 
       toast.success(`已下載範本檔案：${filename}`);
     } catch (error) {
-      console.error("Template download error:", error);
+      logger.error("Template download error", { error: error });
       toast.error(error instanceof Error ? error.message : "無法產生範本檔案");
     }
   };
@@ -768,7 +787,7 @@ export function CollegeRankingTable({
       URL.revokeObjectURL(url);
       toast.success(`已下載 ${filename}`);
     } catch (error) {
-      console.error("Export error:", error);
+      logger.error("Export error", { error: error });
       toast.error(error instanceof Error ? error.message : "無法匯出排名資料");
     }
   };

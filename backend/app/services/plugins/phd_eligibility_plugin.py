@@ -177,6 +177,6 @@ def _calculate_received_months(db: Session, student_nycu_id: str, scholarship_co
             f"Student {student_nycu_id} has received {months} months " f"for scholarship_config {scholarship_config.id}"
         )
         return months
-    except Exception as e:
-        logger.error(f"Error calculating received months for student {student_nycu_id}: {e}")
+    except Exception:
+        logger.exception(f"Error calculating received months for student {student_nycu_id}")
         return 0

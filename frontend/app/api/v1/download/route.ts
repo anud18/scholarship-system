@@ -97,12 +97,13 @@ export async function GET(request: NextRequest) {
           { status: 400 }
         );
       }
-    } catch (validationError: any) {
+    } catch (validationError: unknown) {
       logger.error("Input validation error", {});
-      return NextResponse.json(
-        { error: validationError.message },
-        { status: 400 }
-      );
+      const message =
+        validationError instanceof Error
+          ? validationError.message
+          : "Invalid input";
+      return NextResponse.json({ error: message }, { status: 400 });
     }
 
     if (!token) {
@@ -116,7 +117,7 @@ export async function GET(request: NextRequest) {
     let backendUrl: URL;
     try {
       backendUrl = getSafeBackendUrl();
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error("Backend URL validation error", {});
       return NextResponse.json(
         { error: "Invalid backend configuration" },
@@ -140,7 +141,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log("Download API called:", {
+    logger.debug("Download API called:", {
       fileId,
       applicationId,
       userId,

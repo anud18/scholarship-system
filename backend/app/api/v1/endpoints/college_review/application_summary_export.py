@@ -76,9 +76,21 @@ async def export_department_summary_single(
 
     normalised_semester = normalize_semester_value(semester)
 
+    log_extra = {
+        "actor_user_id": current_user.id,
+        "actor_role": (current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)),
+        "scholarship_type_id": scholarship_type_id,
+        "academic_year": academic_year,
+        "semester": normalised_semester,
+        "department_code": department_code,
+        "scope": "single",
+    }
+
     if not await _check_scholarship_permission(current_user, scholarship_type_id, db):
+        logger.warning("department-summary-export denied: scholarship permission missing", extra=log_extra)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限存取此獎學金類型")
     if not await _check_academic_year_permission(current_user, academic_year, db):
+        logger.warning("department-summary-export denied: academic-year permission missing", extra=log_extra)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限存取此學年度")
 
     # Resolve department row + auth check
@@ -93,6 +105,10 @@ async def export_department_summary_single(
         user_college = (current_user.college_code or "").strip()
         dept_academy = (dept.academy_code or "").strip()
         if not user_college or not dept_academy or user_college != dept_academy:
+            logger.warning(
+                "department-summary-export denied: cross-college export attempt",
+                extra={**log_extra, "user_college": user_college, "dept_academy": dept_academy},
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="無權限匯出此系所之資料",
@@ -166,6 +182,20 @@ async def export_department_summary_single(
         sheet_name=sheet_name,
     )
 
+    logger.info(
+        "department-summary-export issued (single): dept=%s row_count=%d size_bytes=%d",
+        department_code,
+        len(export_rows),
+        len(payload),
+        extra={
+            **log_extra,
+            "dept_name": dept_name,
+            "row_count": len(export_rows),
+            "size_bytes": len(payload),
+            "export_filename": base_filename,
+        },
+    )
+
     return StreamingResponse(
         iter([payload]),
         media_type=XLSX_MEDIA_TYPE,
@@ -189,14 +219,29 @@ async def export_department_summary_bulk(
 
     normalised_semester = normalize_semester_value(semester)
 
+    log_extra = {
+        "actor_user_id": current_user.id,
+        "actor_role": (current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)),
+        "scholarship_type_id": scholarship_type_id,
+        "academic_year": academic_year,
+        "semester": normalised_semester,
+        "scope": scope,
+    }
+
     if not await _check_scholarship_permission(current_user, scholarship_type_id, db):
+        logger.warning("department-summary-export-bulk denied: scholarship permission missing", extra=log_extra)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限存取此獎學金類型")
     if not await _check_academic_year_permission(current_user, academic_year, db):
+        logger.warning("department-summary-export-bulk denied: academic-year permission missing", extra=log_extra)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限存取此學年度")
 
     is_admin = current_user.role in (UserRole.admin, UserRole.super_admin)
 
     if scope == "all" and not is_admin:
+        logger.warning(
+            "department-summary-export-bulk denied: non-admin requested 'all' scope",
+            extra=log_extra,
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="學院使用者僅能匯出本學院資料",
@@ -321,6 +366,21 @@ async def export_department_summary_bulk(
         f"_{_sanitise_filename_part(scope_label or '全部')}.zip"
     )
     encoded = _url_quote(base_filename, safe="")
+
+    logger.info(
+        "department-summary-export-bulk issued: scope=%s departments=%d row_count=%d size_bytes=%d",
+        scope,
+        len(groups),
+        len(apps),
+        len(payload),
+        extra={
+            **log_extra,
+            "departments_count": len(groups),
+            "row_count": len(apps),
+            "size_bytes": len(payload),
+            "export_filename": base_filename,
+        },
+    )
 
     return StreamingResponse(
         iter([payload]),

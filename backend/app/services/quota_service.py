@@ -39,7 +39,7 @@ class QuotaService:
             and_(
                 ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
                 ScholarshipConfiguration.academic_year == academic_year,
-                ScholarshipConfiguration.is_active == True,
+                ScholarshipConfiguration.is_active.is_(True),
             )
         )
 

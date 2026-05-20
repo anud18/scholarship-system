@@ -24,23 +24,31 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+// One validation error attached to a specific row (and optionally a specific
+// cell) — produced by the backend Excel parser; the editor highlights cells
+// and rows that match.
+interface BatchImportValidationError {
+  row: number;
+  field?: string;
+  message: string;
+}
+
 interface BatchImportEditorProps {
   batchId: number;
-  previewData: Array<Record<string, any>>;
-  validationErrors: Array<{
-    row: number;
-    field?: string;
-    message: string;
-  }>;
-  onDataChange?: (newData: Array<Record<string, any>>) => void;
-  onValidationChange?: (errors: Array<any>) => void;
+  // Each row is an opaque key→value map (cell values can be string/number/
+  // bool/null depending on the column); editor reads keys + values without
+  // assuming a fixed schema, which is why `unknown` is the right level here.
+  previewData: Array<Record<string, unknown>>;
+  validationErrors: BatchImportValidationError[];
+  onDataChange?: (newData: Array<Record<string, unknown>>) => void;
+  onValidationChange?: (errors: BatchImportValidationError[]) => void;
   locale?: "zh" | "en";
 }
 
 interface EditingCell {
   rowIndex: number;
   field: string;
-  value: any;
+  value: unknown;
 }
 
 export function BatchImportEditor({
@@ -75,7 +83,11 @@ export function BatchImportEditor({
     return errors.find((e) => e.row === rowIndex + 2 && e.field === field);
   };
 
-  const handleStartEdit = (rowIndex: number, field: string, value: any) => {
+  const handleStartEdit = (
+    rowIndex: number,
+    field: string,
+    value: unknown
+  ) => {
     setEditingCell({ rowIndex, field, value });
   };
 
@@ -117,10 +129,10 @@ export function BatchImportEditor({
           text: response.message || (locale === "zh" ? "更新失敗" : "Update failed"),
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setMessage({
         type: "error",
-        text: error.message || (locale === "zh" ? "更新時發生錯誤" : "Error during update"),
+        text: (error instanceof Error ? error.message : (locale === "zh" ? "更新時發生錯誤" : "Error during update")),
       });
     } finally {
       setIsSaving(false);
@@ -169,10 +181,10 @@ export function BatchImportEditor({
           text: response.message || (locale === "zh" ? "刪除失敗" : "Delete failed"),
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setMessage({
         type: "error",
-        text: error.message || (locale === "zh" ? "刪除時發生錯誤" : "Error during deletion"),
+        text: (error instanceof Error ? error.message : (locale === "zh" ? "刪除時發生錯誤" : "Error during deletion")),
       });
     } finally {
       setIsDeleting(null);
@@ -205,10 +217,10 @@ export function BatchImportEditor({
           text: response.message || (locale === "zh" ? "驗證失敗" : "Validation failed"),
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setMessage({
         type: "error",
-        text: error.message || (locale === "zh" ? "驗證時發生錯誤" : "Error during validation"),
+        text: (error instanceof Error ? error.message : (locale === "zh" ? "驗證時發生錯誤" : "Error during validation")),
       });
     } finally {
       setIsRevalidating(false);
@@ -321,7 +333,11 @@ export function BatchImportEditor({
                         {isEditing ? (
                           <div className="flex items-center gap-2">
                             <Input
-                              value={editingCell.value}
+                              value={
+                                editingCell.value == null
+                                  ? ""
+                                  : String(editingCell.value)
+                              }
                               onChange={(e) =>
                                 setEditingCell({
                                   ...editingCell,

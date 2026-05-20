@@ -1,10 +1,11 @@
 "use client"
 
+import { logger } from "@/lib/utils/logger";
 import { useState, useEffect } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { api } from "@/lib/api"
 
-interface ScholarshipConfiguration {
+export interface ScholarshipConfiguration {
   id: number
   config_name: string
   config_code: string
@@ -15,8 +16,15 @@ interface ScholarshipConfiguration {
     name: string
   }
   is_active: boolean
-  quotas?: any
+  quotas?: Record<string, unknown>
   has_college_quota?: boolean
+}
+
+interface ScholarshipTypeConfigRow {
+  scholarship_type_id?: number
+  scholarship_type_name?: string
+  scholarship_type_code?: string
+  [key: string]: unknown
 }
 
 interface ScholarshipType {
@@ -95,7 +103,7 @@ export function CompactConfigSelector({ onConfigSelect, disabled = false }: Comp
         // Extract unique scholarship types from configurations
         const typesMap = new Map<number, ScholarshipType>()
 
-        response.data.forEach((config: any) => {
+        ;(response.data as ScholarshipTypeConfigRow[]).forEach(config => {
           if (config.scholarship_type_id && config.scholarship_type_name) {
             typesMap.set(config.scholarship_type_id, {
               id: config.scholarship_type_id,
@@ -111,11 +119,11 @@ export function CompactConfigSelector({ onConfigSelect, disabled = false }: Comp
 
         setScholarshipTypes(types)
       } else {
-        console.error("Failed to load scholarship types")
+        logger.error("Failed to load scholarship types")
         setScholarshipTypes([])
       }
     } catch (error) {
-      console.error("Failed to load scholarship types:", error)
+      logger.error("Failed to load scholarship types", { error: error })
       setScholarshipTypes([])
     } finally {
       setIsLoadingTypes(false)
@@ -131,7 +139,7 @@ export function CompactConfigSelector({ onConfigSelect, disabled = false }: Comp
       })
 
       if (response.success && response.data) {
-        const configs = response.data
+        const configs = response.data as ScholarshipConfiguration[]
         setConfigurations(configs)
 
         // Extract unique period combinations
@@ -177,7 +185,7 @@ export function CompactConfigSelector({ onConfigSelect, disabled = false }: Comp
         setPeriodOptions([])
       }
     } catch (error) {
-      console.error("Failed to load configurations:", error)
+      logger.error("Failed to load configurations", { error: error })
       setConfigurations([])
       setPeriodOptions([])
     } finally {

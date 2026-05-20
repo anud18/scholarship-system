@@ -52,10 +52,10 @@ def verify_token(token: str) -> Dict[str, Any]:
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
         return payload
-    except jwt.ExpiredSignatureError:
-        raise AuthenticationError("Token has expired")
-    except jwt.PyJWTError:
-        raise AuthenticationError("Invalid token")
+    except jwt.ExpiredSignatureError as exc:
+        raise AuthenticationError("Token has expired") from exc
+    except jwt.PyJWTError as exc:
+        raise AuthenticationError("Invalid token") from exc
 
 
 async def get_current_user(
@@ -74,8 +74,8 @@ async def get_current_user(
         user_id = int(user_id_str)  # Convert string back to int
     except AuthenticationError:
         raise  # Re-raise authentication errors as-is
-    except Exception:
-        raise AuthenticationError("Could not validate credentials")
+    except Exception as exc:
+        raise AuthenticationError("Could not validate credentials") from exc
 
     # Get user from database with relationships that will be used in-request
     stmt = select(User).options(selectinload(User.admin_scholarships)).where(User.id == user_id)

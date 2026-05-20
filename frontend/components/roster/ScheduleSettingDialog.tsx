@@ -1,5 +1,6 @@
 "use client"
 
+import { logger } from "@/lib/utils/logger";
 import { useState, useEffect } from "react"
 import {
   Dialog,
@@ -99,9 +100,9 @@ export function ScheduleSettingDialog({
       } else {
         throw new Error(response.message || "更新失敗")
       }
-    } catch (error: any) {
-      console.error("Failed to update schedule:", error)
-      toast.error(`儲存失敗: ${error.message || "無法更新排程設定"}`)
+    } catch (error: unknown) {
+      logger.error("Failed to update schedule", { error: error })
+      toast.error(`儲存失敗: ${(error instanceof Error ? error.message : "無法更新排程設定")}`)
     } finally {
       setSaving(false)
     }

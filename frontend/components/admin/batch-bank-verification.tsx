@@ -10,6 +10,7 @@
 
 'use client';
 
+import { logger } from "@/lib/utils/logger";
 import { useState, useEffect } from 'react';
 import { AlertCircle, CheckCircle, Clock, XCircle, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -24,7 +25,10 @@ const api = createBankVerificationApi();
 
 interface BatchBankVerificationProps {
   applicationIds: number[];
-  onComplete?: (taskId: string, results: any) => void;
+  onComplete?: (
+    taskId: string,
+    results: BankVerificationTask["results"]
+  ) => void;
   onNeedsReview?: (applicationIds: number[]) => void;
 }
 
@@ -62,7 +66,7 @@ export function BatchBankVerification({
           }
         }
       } catch (err) {
-        console.error('Failed to fetch task status:', err);
+        logger.error('Failed to fetch task status:', err);
       }
     }, 2000); // Poll every 2 seconds
 
@@ -82,7 +86,7 @@ export function BatchBankVerification({
       }
     } catch (err) {
       setError('啟動批次驗證時發生錯誤');
-      console.error(err);
+      logger.error('Failed to start batch verification', { err });
     } finally {
       setIsStarting(false);
     }

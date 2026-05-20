@@ -540,25 +540,29 @@ async def submit_application_review(
         # Re-raise FastAPI HTTPException as-is (preserves status code and detail)
         raise
     except ValueError as e:
-        logger.warning(f"Invalid review data for application {application_id}: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid review data: {str(e)}")
+        logger.warning(f"Invalid review data for application {application_id}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid review data") from e
     except PermissionError as e:
-        logger.warning(f"Permission denied for review creation by user {current_user.id}: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to review this application")
+        logger.warning(f"Permission denied for review creation by user {current_user.id}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to review this application"
+        ) from e
     except IntegrityError as e:
-        logger.error(f"Database integrity error creating review for application {application_id}: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Review creation conflicts with existing data")
+        logger.exception("Database integrity error creating review for application %s", application_id)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Review creation conflicts with existing data"
+        ) from e
     except DatabaseError as e:
-        logger.error(f"Database error creating review for application {application_id}: {str(e)}")
+        logger.exception("Database error creating review for application %s", application_id)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database service temporarily unavailable"
-        )
+        ) from e
     except Exception as e:
-        logger.error(f"Unexpected error creating review for application {application_id}: {str(e)}")
+        logger.exception("Unexpected error creating review for application %s", application_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while creating the review",
-        )
+        ) from e
 
 
 @router.get("/applications/{application_id}/review")
@@ -618,14 +622,11 @@ async def get_user_application_review(
         }
 
     except Exception as e:
-        logger.error(f"Error fetching user review: {str(e)}")
-        import traceback
-
-        logger.error(f"Full traceback: {traceback.format_exc()}")
+        logger.exception("Error fetching user review")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while fetching review",
-        )
+        ) from e
 
 
 @router.get("/applications/{application_id}/sub-types")
@@ -635,35 +636,24 @@ async def get_application_reviewable_sub_types(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """Get reviewable sub-types for an application (multi-role, role-filtered).
+
+    Returns sub-types that the current user is authorized to review:
+
+    - Professor: all active sub-types.
+    - College: sub-types not rejected by any professor.
+    - Admin / super_admin: sub-types not rejected by any professor or college.
+
+    Implementation lives in ``ApplicationService.get_application_available_sub_types``
+    (closes issue #649 for the multi-role review route).
     """
-    Get reviewable sub-types for an application (multi-role)
+    from app.core.exceptions import NotFoundError
+    from app.services.application_service import ApplicationService
 
-    Returns sub-types that the current user is authorized to review,
-    with localized labels (zh/en) from database configuration.
-
-    Role-based filtering:
-    - Professor: all sub-types
-    - College: sub-types not rejected by professor
-    - Admin: sub-types not rejected by professor or college
-    """
-    logger.info(f"User {current_user.id} ({current_user.role}) requesting sub-types for application {application_id}")
-
+    service = ApplicationService(db)
     try:
-        from app.services.application_service import ApplicationService
+        sub_types = await service.get_application_available_sub_types(application_id, current_user)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="申請不存在") from exc
 
-        service = ApplicationService(db)
-        sub_types = await service.get_application_available_sub_types(application_id)
-
-        logger.info(f"Found {len(sub_types)} sub-types for application {application_id}")
-        return {
-            "success": True,
-            "message": "查詢成功",
-            "data": sub_types,
-        }
-
-    except Exception as e:
-        logger.error(f"Error fetching application sub-types: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An internal error occurred while fetching sub-types",
-        )
+    return {"success": True, "message": "查詢成功", "data": sub_types}

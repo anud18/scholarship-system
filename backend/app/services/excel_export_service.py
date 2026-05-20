@@ -71,8 +71,8 @@ class ExcelExportService:
             else:
                 logger.warning(f"Template not found at {self.template_path}, using default columns")
                 self._set_default_columns()
-        except Exception as e:
-            logger.error(f"Failed to load template: {e}, using default columns")
+        except Exception:
+            logger.exception("Failed to load template; using default columns")
             self._set_default_columns()
 
     def _set_default_columns(self):
@@ -320,8 +320,8 @@ class ExcelExportService:
             }
 
         except Exception as e:
-            logger.error(f"Excel export failed: {e}")
-            raise FileStorageError(f"Failed to export Excel file: {e}", file_name=file_name)
+            logger.exception("Excel export failed")
+            raise FileStorageError(f"Failed to export Excel file: {e}", file_name=file_name) from e
 
     def _get_roster_items(self, roster: PaymentRoster, include_excluded: bool) -> List[PaymentRosterItem]:
         """取得造冊明細"""
@@ -503,7 +503,7 @@ class ExcelExportService:
         # STD_UP_MIXLISTA必填欄位檢查
         required_fields = ["身分證字號", "姓名"]  # 第1、2欄必填
 
-        for idx, row in enumerate(excel_data, start=1):
+        for _idx, row in enumerate(excel_data, start=1):
             # 檢查必填欄位
             missing_required = False
             for field in required_fields:
@@ -639,11 +639,11 @@ class ExcelExportService:
             logger.info("Excel file created successfully: %s", file_path)
 
         except Exception as e:
-            logger.error(f"Failed to create Excel file: {e}")
+            logger.exception("Failed to create Excel file")
             raise FileStorageError(
                 f"Failed to create Excel file: {e}",
                 file_name=os.path.basename(file_path),
-            )
+            ) from e
 
     def _apply_excel_styling(self, ws, max_row: int, include_header: bool):
         """應用Excel樣式"""
@@ -788,7 +788,7 @@ class ExcelExportService:
                 db.close()
 
         except Exception as e:
-            logger.warning(f"Failed to get advisor name for student {student.id}: {e}")
+            logger.warning(f"Failed to get advisor name for student {student.id}", exc_info=True)
 
         return ""
 
@@ -870,8 +870,8 @@ class ExcelExportService:
             logger.info(f"Deleted Excel file: {roster.excel_file_path}")
             return True
 
-        except Exception as e:
-            logger.error(f"Failed to delete Excel file: {e}")
+        except Exception:
+            logger.exception("Failed to delete Excel file")
             return False
 
     def preview_roster_export(
@@ -920,8 +920,8 @@ class ExcelExportService:
             }
 
         except Exception as e:
-            logger.error(f"Failed to preview roster export: {e}")
-            raise FileStorageError(f"預覽產生失敗: {str(e)}")
+            logger.exception("Failed to preview roster export")
+            raise FileStorageError(f"預覽產生失敗: {str(e)}") from e
 
     def process_async_export(
         self,
@@ -990,6 +990,6 @@ class ExcelExportService:
             finally:
                 db.close()
 
-        except Exception as e:
-            logger.error(f"Async export failed: roster_id={roster_id}, task_id={task_id}, error={e}")
+        except Exception:
+            logger.exception(f"Async export failed: roster_id={roster_id}, task_id={task_id}")
             # 這裡可以實作錯誤通知機制

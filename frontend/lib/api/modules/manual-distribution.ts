@@ -190,7 +190,7 @@ export function createManualDistributionApi() {
       ApiResponse<AvailableCombinations>
     > => {
       const response = await typedClient.raw.GET(
-        "/api/v1/manual-distribution/available-combinations" as any,
+        "/api/v1/manual-distribution/available-combinations",
         {}
       );
       return toApiResponse(response) as ApiResponse<AvailableCombinations>;
@@ -206,7 +206,7 @@ export function createManualDistributionApi() {
       college_code?: string
     ): Promise<ApiResponse<DistributionStudent[]>> => {
       const response = await typedClient.raw.GET(
-        "/api/v1/manual-distribution/students" as any,
+        "/api/v1/manual-distribution/students",
         {
           params: {
             query: {
@@ -214,7 +214,7 @@ export function createManualDistributionApi() {
               academic_year,
               semester,
               ...(college_code ? { college_code } : {}),
-            } as any,
+            },
           },
         }
       );
@@ -230,10 +230,10 @@ export function createManualDistributionApi() {
       semester: string
     ): Promise<ApiResponse<QuotaStatus>> => {
       const response = await typedClient.raw.GET(
-        "/api/v1/manual-distribution/quota-status" as any,
+        "/api/v1/manual-distribution/quota-status",
         {
           params: {
-            query: { scholarship_type_id, academic_year, semester } as any,
+            query: { scholarship_type_id, academic_year, semester },
           },
         }
       );
@@ -247,8 +247,8 @@ export function createManualDistributionApi() {
       request: AllocateRequest
     ): Promise<ApiResponse<AllocateResult>> => {
       const response = await typedClient.raw.POST(
-        "/api/v1/manual-distribution/allocate" as any,
-        { body: request as any }
+        "/api/v1/manual-distribution/allocate",
+        { body: request }
       );
       return toApiResponse(response) as ApiResponse<AllocateResult>;
     },
@@ -260,8 +260,8 @@ export function createManualDistributionApi() {
       request: FinalizeRequest
     ): Promise<ApiResponse<FinalizeResult>> => {
       const response = await typedClient.raw.POST(
-        "/api/v1/manual-distribution/finalize" as any,
-        { body: request as any }
+        "/api/v1/manual-distribution/finalize",
+        { body: request }
       );
       return toApiResponse(response) as ApiResponse<FinalizeResult>;
     },
@@ -275,10 +275,11 @@ export function createManualDistributionApi() {
       semester: string
     ): Promise<ApiResponse<DistributionHistoryRecord[]>> => {
       const response = await typedClient.raw.GET(
-        `/api/v1/manual-distribution/${scholarship_type_id}/history` as any,
+        `/api/v1/manual-distribution/{scholarship_type_id}/history`,
         {
           params: {
-            query: { academic_year, semester } as any,
+            path: { scholarship_type_id },
+            query: { academic_year, semester },
           },
         }
       );
@@ -295,8 +296,11 @@ export function createManualDistributionApi() {
       request: RestoreRequest
     ): Promise<ApiResponse<RestoreResult>> => {
       const response = await typedClient.raw.POST(
-        `/api/v1/manual-distribution/${scholarship_type_id}/restore` as any,
-        { body: request as any }
+        `/api/v1/manual-distribution/{scholarship_type_id}/restore`,
+        {
+          params: { path: { scholarship_type_id } },
+          body: request,
+        }
       );
       return toApiResponse(response) as ApiResponse<RestoreResult>;
     },
@@ -310,10 +314,10 @@ export function createManualDistributionApi() {
       semester: string
     ): Promise<ApiResponse<DistributionSummaryResult>> => {
       const response = await typedClient.raw.GET(
-        "/api/v1/manual-distribution/distribution-summary" as any,
+        "/api/v1/manual-distribution/distribution-summary",
         {
           params: {
-            query: { scholarship_type_id, academic_year, semester } as any,
+            query: { scholarship_type_id, academic_year, semester },
           },
         }
       );
@@ -329,14 +333,14 @@ export function createManualDistributionApi() {
       semester: string
     ): Promise<ApiResponse<{ suggestions: AllocationSuggestion[] }>> => {
       const response = await typedClient.raw.GET(
-        "/api/v1/manual-distribution/auto-allocate-preview" as any,
+        "/api/v1/manual-distribution/auto-allocate-preview",
         {
           params: {
             query: {
               scholarship_type_id,
               academic_year,
               semester,
-            } as any,
+            },
           },
         }
       );
@@ -353,8 +357,8 @@ export function createManualDistributionApi() {
       request: GenerateRostersRequest
     ): Promise<ApiResponse<GenerateRostersResult>> => {
       const response = await typedClient.raw.POST(
-        "/api/v1/manual-distribution/generate-rosters-from-distribution" as any,
-        { body: request as any }
+        "/api/v1/manual-distribution/generate-rosters-from-distribution",
+        { body: request as never }
       );
       return toApiResponse(response) as ApiResponse<GenerateRostersResult>;
     },
@@ -391,7 +395,7 @@ export function createManualDistributionApi() {
         }
       );
 
-      let body: any = null;
+      let body: unknown = null;
       try {
         body = await response.json();
       } catch {
@@ -399,11 +403,17 @@ export function createManualDistributionApi() {
       }
 
       if (!response.ok) {
+        const bodyObj =
+          body && typeof body === "object"
+            ? (body as { message?: unknown; detail?: unknown })
+            : null;
+        const message =
+          (typeof bodyObj?.message === "string" && bodyObj.message) ||
+          (typeof bodyObj?.detail === "string" && bodyObj.detail) ||
+          `Upload failed (HTTP ${response.status})`;
         return {
           success: false,
-          message:
-            (body && (body.message || body.detail)) ||
-            `Upload failed (HTTP ${response.status})`,
+          message,
           data: undefined,
         } as ApiResponse<{
           matched: number;

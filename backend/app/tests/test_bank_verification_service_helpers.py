@@ -54,11 +54,23 @@ class TestValidatePostalAccountFormat:
         assert err is None
 
     def test_valid_with_dashes_and_spaces(self, service: BankVerificationService) -> None:
-        """Real-world bank pamphlets format as '0001234-5678901-2' or similar
-        — the validator strips non-digits before counting."""
-        ok, err = service.validate_postal_account_format("0001234-5678901-2")
+        """Real-world bank pamphlets format as '0001234-5678901' (7-7 split,
+        14 digits) — the validator strips non-digits before counting.
+
+        Previously this test asserted "0001234-5678901-2" (15 digits) was
+        valid, but the validator correctly requires exactly 14 digits; the
+        test input had an extra trailing "-2" by mistake.
+        """
+        ok, err = service.validate_postal_account_format("0001234-5678901")
         assert ok is True
         assert err is None
+
+    def test_15_digit_input_rejected(self, service: BankVerificationService) -> None:
+        """Pin: 15 digits (one too many) → rejected with explicit count.
+        Regression guard for the off-by-one fix above."""
+        ok, err = service.validate_postal_account_format("0001234-5678901-2")
+        assert ok is False
+        assert err is not None and "15 位" in err
 
     def test_empty_string_rejected(self, service: BankVerificationService) -> None:
         ok, err = service.validate_postal_account_format("")

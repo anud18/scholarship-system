@@ -78,9 +78,10 @@ async def get_all_configurations(
             "trace_id": None,
         }
     except Exception as e:
+        logger.exception("Failed to retrieve configurations")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve configurations: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve configurations"
+        ) from e
 
 
 _ALLOWED_DOC_KEYS = {"regulations_url", "sample_document_url"}
@@ -196,11 +197,11 @@ async def upload_system_doc(
     if previous_object and previous_object != object_name:
         try:
             minio_service.client.remove_object(minio_service.default_bucket, previous_object)
-        except Exception as exc:
+        except Exception:
             logger.warning(
-                "Failed to remove orphaned MinIO system doc %s: %s",
+                "Failed to remove orphaned MinIO system doc %s",
                 previous_object,
-                exc,
+                exc_info=True,
             )
 
     return {
@@ -247,7 +248,8 @@ async def get_system_doc_file(
         )
         file_content = response.read()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"無法取得文件: {str(e)}")
+        logger.exception("無法取得文件")
+        raise HTTPException(status_code=500, detail="無法取得文件") from e
 
     content_type = "application/pdf"
     if object_name.endswith(".doc"):
@@ -327,9 +329,10 @@ async def get_configuration(
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("Failed to retrieve configuration")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve configuration: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve configuration"
+        ) from e
 
 
 @router.post("")
@@ -379,6 +382,25 @@ async def create_configuration(
             "updated_at": new_configuration.updated_at,
         }
 
+        logger.info(
+            "system-configuration created: key=%s category=%s data_type=%s by user_id=%s",
+            new_configuration.key,
+            new_configuration.category,
+            new_configuration.data_type,
+            current_user.id,
+            extra={
+                "actor_user_id": current_user.id,
+                "actor_role": (
+                    current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+                ),
+                "config_key": new_configuration.key,
+                "config_category": str(new_configuration.category),
+                "config_data_type": str(new_configuration.data_type),
+                "is_sensitive": new_configuration.is_sensitive,
+                "value_len": len(new_configuration.value) if new_configuration.value else 0,
+            },
+        )
+
         return {
             "success": True,
             "message": "Configuration created successfully",
@@ -387,9 +409,14 @@ async def create_configuration(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create configuration: {str(e)}"
+        logger.exception(
+            "system-configuration create failed: key=%s",
+            configuration.key,
+            extra={"actor_user_id": current_user.id, "config_key": configuration.key},
         )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create configuration"
+        ) from e
 
 
 @router.put("/{id}")
@@ -447,6 +474,22 @@ async def update_configuration(
             "updated_at": updated_configuration.updated_at,
         }
 
+        logger.info(
+            "system-configuration updated: key=%s by user_id=%s",
+            updated_configuration.key,
+            current_user.id,
+            extra={
+                "actor_user_id": current_user.id,
+                "actor_role": (
+                    current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+                ),
+                "config_key": updated_configuration.key,
+                "is_sensitive": updated_configuration.is_sensitive,
+                "previous_value_len": len(existing.value) if existing.value else 0,
+                "new_value_len": (len(updated_configuration.value) if updated_configuration.value else 0),
+            },
+        )
+
         return {
             "success": True,
             "message": "Configuration updated successfully",
@@ -455,9 +498,14 @@ async def update_configuration(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update configuration: {str(e)}"
+        logger.exception(
+            "system-configuration update failed: key=%s",
+            id,
+            extra={"actor_user_id": current_user.id, "config_key": id},
         )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update configuration"
+        ) from e
 
 
 @router.delete("/{id}")
@@ -477,19 +525,43 @@ async def delete_configuration(
                 status_code=status.HTTP_404_NOT_FOUND, detail=f"Configuration with key '{id}' not found"
             )
 
+        # Capture pre-delete attrs so the audit row survives the row removal.
+        deleted_key = existing.key
+        deleted_category = str(existing.category)
+
         success = await config_service.delete_configuration(id, current_user.id)
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete configuration"
             )
 
+        logger.info(
+            "system-configuration deleted: key=%s category=%s by user_id=%s",
+            deleted_key,
+            deleted_category,
+            current_user.id,
+            extra={
+                "actor_user_id": current_user.id,
+                "actor_role": (
+                    current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+                ),
+                "config_key": deleted_key,
+                "config_category": deleted_category,
+            },
+        )
+
         return {"message": "Configuration deleted successfully"}
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete configuration: {str(e)}"
+        logger.exception(
+            "system-configuration delete failed: key=%s",
+            id,
+            extra={"actor_user_id": current_user.id, "config_key": id},
         )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete configuration"
+        ) from e
 
 
 @router.post("/validate")
@@ -518,9 +590,10 @@ async def validate_configuration(
             "data": response_data.model_dump() if hasattr(response_data, "model_dump") else response_data.dict(),
         }
     except Exception as e:
+        logger.exception("Failed to validate configuration")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to validate configuration: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to validate configuration"
+        ) from e
 
 
 @router.get("/categories")
@@ -608,6 +681,7 @@ async def get_configuration_audit_logs(
             "trace_id": None,
         }
     except Exception as e:
+        logger.exception("Failed to retrieve audit logs")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve audit logs: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve audit logs"
+        ) from e

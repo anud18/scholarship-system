@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useCallback, useEffect, useTransition } from "react";
+import { logger } from "@/lib/utils/logger";
 import { apiClient } from "@/lib/api";
 
 /**
@@ -163,10 +164,10 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
     try {
       const response = await apiClient.admin.getMyScholarships();
       if (response.success && response.data) {
-        setScholarships(response.data);
+        setScholarships(response.data as Scholarship[]);
       }
     } catch (error) {
-      console.error("Failed to fetch scholarships:", error);
+      logger.error("Failed to fetch scholarships", { error: error });
       setError(locale === "zh" ? "無法載入獎學金列表" : "Failed to load scholarships");
     } finally {
       setIsLoadingScholarships(false);
@@ -189,7 +190,7 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
         }
       }
     } catch (error) {
-      console.error("Failed to fetch periods:", error);
+      logger.error("Failed to fetch periods", { error: error });
       setError(locale === "zh" ? "無法載入學年學期選項" : "Failed to load period options");
     } finally {
       setIsLoadingPeriods(false);
@@ -203,7 +204,7 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
         setHistory(response.data.items);
       }
     } catch (error) {
-      console.error("Failed to fetch import history:", error);
+      logger.error("Failed to fetch import history", { error: error });
     }
   };
 

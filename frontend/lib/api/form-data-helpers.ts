@@ -57,7 +57,7 @@ export function createFileUploadFormData(data: {
 /**
  * Type guard to check if a value is FormData
  */
-export function isFormData(value: any): value is FormData {
+export function isFormData(value: unknown): value is FormData {
   return value instanceof FormData;
 }
 
@@ -77,7 +77,7 @@ export class TypedFormData<T extends Record<string, any> = Record<string, any>> 
     }
   }
 
-  append(key: keyof T, value: any): this {
+  append(key: keyof T, value: unknown): this {
     if (value instanceof File || value instanceof Blob) {
       this.formData.append(String(key), value);
     } else if (value !== undefined && value !== null) {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import { ErrorBoundary, useErrorHandler } from "@/components/error-boundary";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -96,6 +97,18 @@ interface ReviewData {
   items: ReviewItem[];
 }
 
+// Existing-review payload returned by GET /professor/.../review.
+// Only fields the component reads are typed; backend may attach more.
+interface ExistingReviewPayload {
+  id: number;
+  items?: ReviewItem[];
+  [key: string]: unknown;
+}
+
+// Response shape from professor.submitReview / .updateReview — opaque
+// success/message envelope; we never inspect `data` content here.
+type ProfessorReviewResponse = ApiResponse<{ [key: string]: unknown } | null>;
+
 function ProfessorReviewComponentInner({
   user,
 }: ProfessorReviewComponentProps) {
@@ -130,7 +143,8 @@ function ProfessorReviewComponentInner({
     recommendation: "",
     items: [],
   });
-  const [existingReview, setExistingReview] = useState<any>(null);
+  const [existingReview, setExistingReview] =
+    useState<ExistingReviewPayload | null>(null);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
 
   // Regulations state
@@ -185,8 +199,8 @@ function ProfessorReviewComponentInner({
         setApplications([]);
         setFilteredApplications([]);
       }
-    } catch (e: any) {
-      setError(e.message || "Failed to load applications");
+    } catch (e: unknown) {
+      setError((e instanceof Error ? e.message : "Failed to load applications"));
       setApplications([]);
       setFilteredApplications([]);
     } finally {
@@ -352,9 +366,9 @@ function ProfessorReviewComponentInner({
       }
 
       setReviewModalOpen(true);
-    } catch (e: any) {
-      console.error("Error opening review modal:", e);
-      setError(e.message || "Failed to load review data");
+    } catch (e: unknown) {
+      logger.error("Error opening review modal", { e: e });
+      setError((e instanceof Error ? e.message : "Failed to load review data"));
     } finally {
       setLoading(false);
     }
@@ -369,7 +383,7 @@ function ProfessorReviewComponentInner({
     setSuccess(null);
 
     try {
-      let response: ApiResponse<any>;
+      let response: ProfessorReviewResponse;
 
       // Filter out pending items - only send approve/reject items to API
       const filteredItems = reviewData.items
@@ -430,15 +444,19 @@ function ProfessorReviewComponentInner({
       } else {
         setError(response.message || "Failed to submit review");
       }
-    } catch (e: any) {
-      setError(e.message || "Failed to submit review");
+    } catch (e: unknown) {
+      setError((e instanceof Error ? e.message : "Failed to submit review"));
     } finally {
       setLoading(false);
     }
   };
 
   // Update review item
-  const updateReviewItem = (subTypeCode: string, field: string, value: any) => {
+  const updateReviewItem = (
+    subTypeCode: string,
+    field: keyof ReviewItem,
+    value: ReviewItem[keyof ReviewItem]
+  ) => {
     setReviewData(prev => {
       const newData = {
         ...prev,
@@ -1009,7 +1027,7 @@ export function ProfessorReviewComponent({
   return (
     <ErrorBoundary
       onError={(error, errorInfo) => {
-        console.error("Professor Review Component Error:", error, errorInfo);
+        logger.error("Professor Review Component Error:", error, errorInfo);
         // In production, send to error reporting service
       }}
     >

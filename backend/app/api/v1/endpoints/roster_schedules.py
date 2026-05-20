@@ -104,8 +104,10 @@ async def list_roster_schedules(
         )
 
     except Exception as e:
-        logger.error(f"Error listing roster schedules: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to list roster schedules")
+        logger.exception("Error listing roster schedules")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to list roster schedules"
+        ) from e
 
 
 @router.post("")
@@ -197,10 +199,10 @@ async def create_roster_schedule(
         raise
     except Exception as e:
         await db.rollback()
-        logger.error(f"Error creating roster schedule: {e}")
+        logger.exception("Error creating roster schedule")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create roster schedule"
-        )
+        ) from e
 
 
 @router.get("/{schedule_id}")
@@ -309,10 +311,10 @@ async def update_roster_schedule(
         raise
     except Exception as e:
         await db.rollback()
-        logger.error(f"Error updating roster schedule {schedule_id}: {e}")
+        logger.exception("Error updating roster schedule %s", schedule_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update roster schedule"
-        )
+        ) from e
 
 
 @router.patch("/{schedule_id}/status")
@@ -384,10 +386,10 @@ async def update_schedule_status(
         raise
     except Exception as e:
         await db.rollback()
-        logger.error(f"Error updating schedule status {schedule_id}: {e}")
+        logger.exception("Error updating schedule status %s", schedule_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update schedule status"
-        )
+        ) from e
 
 
 @router.delete("/{schedule_id}")
@@ -425,10 +427,10 @@ async def delete_roster_schedule(
         raise
     except Exception as e:
         await db.rollback()
-        logger.error(f"Error deleting roster schedule {schedule_id}: {e}")
+        logger.exception("Error deleting roster schedule %s", schedule_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete roster schedule"
-        )
+        ) from e
 
 
 @router.post("/{schedule_id}/execute")
@@ -469,8 +471,10 @@ async def execute_schedule_now(
         )
 
     except Exception as e:
-        logger.error(f"Error executing schedule {schedule_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to execute schedule")
+        logger.exception("Error executing schedule %s", schedule_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to execute schedule"
+        ) from e
 
 
 @router.get("/by-config/{config_id}")
@@ -520,10 +524,10 @@ async def get_schedule_by_config(
         )
 
     except Exception as e:
-        logger.error(f"Error getting schedule by config {config_id}: {e}")
+        logger.exception("Error getting schedule by config %s", config_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get schedule by config"
-        )
+        ) from e
 
 
 @router.get("/scheduler/status")
@@ -570,5 +574,7 @@ async def get_scheduler_status(
         )
 
     except Exception as e:
-        logger.error(f"Error getting scheduler status: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get scheduler status")
+        logger.exception("Error getting scheduler status")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get scheduler status"
+        ) from e

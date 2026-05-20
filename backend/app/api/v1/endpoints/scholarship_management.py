@@ -10,202 +10,35 @@ Major changes:
 - Dashboard and types endpoints now use ScholarshipType table
 """
 
-from typing import Any, Dict, Optional
+import logging
+from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import get_current_user, require_admin, require_staff, require_student
+from app.core.security import get_current_user, require_admin, require_staff
 from app.db.deps import get_db
 from app.models.application import Application, ApplicationStatus
 from app.models.scholarship import ScholarshipStatus, ScholarshipType
 from app.models.user import User
 from app.schemas.response import ApiResponse
-from app.services.scholarship_service import ScholarshipApplicationService
 from app.utils.scholarship_helpers import get_distinct_sub_types
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Application Management Endpoints
-
-
-@router.post("/applications/create-comprehensive")
-async def create_comprehensive_application(
-    application_data: Dict[str, Any] = Body(...),
-    current_user: User = Depends(require_student),
-    db: AsyncSession = Depends(get_db),
-):
-    """Create a comprehensive scholarship application with all new features"""
-    from sqlalchemy.orm import sessionmaker
-
-    from app.services.application_service import get_student_data_from_user
-
-    # Convert AsyncSession to regular Session for our service
-    sync_session = sessionmaker(bind=db.bind)()
-
-    try:
-        student = await get_student_data_from_user(current_user)
-        if not student:
-            raise HTTPException(status_code=404, detail="Student profile not found")
-
-        service = ScholarshipApplicationService(sync_session)
-
-        application, message = service.create_application(
-            user_id=current_user.id,
-            student_id=current_user.id,
-            scholarship_type_id=application_data["scholarship_type_id"],
-            scholarship_type_code=application_data["scholarship_type_code"],
-            semester=application_data["semester"],
-            academic_year=application_data["academic_year"],
-            application_data=application_data.get("form_data", {}),
-            is_renewal=application_data.get("is_renewal", False),
-            previous_application_id=application_data.get("previous_application_id"),
-        )
-
-        return ApiResponse(
-            success=True,
-            message=message,
-            data={
-                "application_id": application.id,
-                "app_id": application.app_id,
-                "scholarship_type_id": application.scholarship_type_id,
-                "sub_type": application.sub_scholarship_type,
-                "is_renewal": application.is_renewal,
-            },
-        )
-
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Application creation failed: {str(e)}")
-    finally:
-        sync_session.close()
-
-
-@router.post("/applications/{application_id}/submit-comprehensive")
-async def submit_comprehensive_application(
-    application_id: int = Path(...),
-    current_user: User = Depends(require_student),
-    db: AsyncSession = Depends(get_db),
-):
-    """Submit application with comprehensive workflow management"""
-    from sqlalchemy.orm import sessionmaker
-
-    sync_session = sessionmaker(bind=db.bind)()
-
-    try:
-        service = ScholarshipApplicationService(sync_session)
-        success, message = service.submit_application(application_id)
-
-        if not success:
-            raise HTTPException(status_code=400, detail=message)
-
-        return ApiResponse(success=True, message=message, data={"application_id": application_id})
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Submission failed: {str(e)}")
-    finally:
-        sync_session.close()
-
-
-@router.get("/applications/by-priority")
-async def get_applications_by_priority(
-    scholarship_type_id: Optional[int] = Query(None),
-    semester: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
-    limit: int = Query(100, le=1000),
-    current_user: User = Depends(require_staff),
-    db: AsyncSession = Depends(get_db),
-):
-    """Get applications ordered by priority score"""
-    from sqlalchemy.orm import sessionmaker
-
-    sync_session = sessionmaker(bind=db.bind)()
-
-    try:
-        service = ScholarshipApplicationService(sync_session)
-
-        # Convert string status to enum if provided
-        status_enum = None
-        if status:
-            try:
-                status_enum = ApplicationStatus(status)
-            except ValueError:
-                raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
-
-        applications = service.get_applications_by_priority(
-            scholarship_type_id=scholarship_type_id,
-            semester=semester,
-            status=status_enum,
-            limit=limit,
-        )
-
-        application_data = []
-        for app in applications:
-            application_data.append(
-                {
-                    "id": app.id,
-                    "app_id": app.app_id,
-                    "student_id": app.student_id,
-                    "scholarship_type_id": app.scholarship_type_id,
-                    "sub_type": app.sub_scholarship_type,
-                    "is_renewal": app.is_renewal,
-                    "status": app.status,
-                    "submitted_at": app.submitted_at.isoformat() if app.submitted_at else None,
-                    "review_deadline": app.review_deadline.isoformat() if app.review_deadline else None,
-                    "is_overdue": app.is_overdue,
-                }
-            )
-
-        return ApiResponse(
-            success=True,
-            message=f"Retrieved {len(applications)} applications",
-            data={
-                "applications": application_data,
-                "total": len(applications),
-                "filters": {
-                    "scholarship_type_id": scholarship_type_id,
-                    "semester": semester,
-                    "status": status,
-                },
-            },
-        )
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve applications: {str(e)}")
-    finally:
-        sync_session.close()
-
-
-# Renewal Processing Endpoints
-
-
-@router.post("/renewals/process-priority")
-async def process_renewal_applications(
-    semester: str = Body(...),
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-):
-    """Process renewal applications with priority"""
-    from sqlalchemy.orm import sessionmaker
-
-    sync_session = sessionmaker(bind=db.bind)()
-
-    try:
-        service = ScholarshipApplicationService(sync_session)
-        result = service.process_renewal_applications_first(semester)
-
-        return ApiResponse(
-            success=True,
-            message="Renewal applications processed successfully",
-            data=result,
-        )
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to process renewals: {str(e)}")
-    finally:
-        sync_session.close()
+# Application Management Endpoints (none currently — the four
+# create-comprehensive / submit-comprehensive / by-priority /
+# process-priority endpoints were removed because they each called
+# methods on ScholarshipApplicationService that have been deleted or
+# rewritten against an incompatible signature, the frontend never
+# wired them up, and they had been sitting as 501 stubs from
+# PRs #650 / #652 awaiting product input. If the comprehensive-flow
+# feature is revived, it should land against the current
+# `ApplicationService` API rather than be resurrected from these stubs.
+# Tracked in issues #649 / #651.)
 
 
 # Analytics and Dashboard Endpoints
@@ -288,7 +121,15 @@ async def get_scholarship_dashboard(
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get dashboard data: {str(e)}")
+        logger.exception(
+            "Failed to get scholarship dashboard data",
+            extra={
+                "academic_year": academic_year,
+                "semester": semester,
+                "actor_user_id": current_user.id,
+            },
+        )
+        raise HTTPException(status_code=500, detail="Failed to get dashboard data") from e
 
 
 @router.get("/types/available")
@@ -379,6 +220,25 @@ async def simulate_priority_processing(
 
     # Sort by submission date (renewal applications first)
     simulation_results.sort(key=lambda x: (not x["is_renewal"], x["submission_date"] or ""))
+
+    logger.info(
+        "Priority-processing simulated for %d applications by admin user_id=%s "
+        "(AY=%d semester=%s scholarship_type_id=%d sub_type=%s)",
+        len(simulation_results),
+        current_user.id,
+        academic_year,
+        semester,
+        scholarship_type_id,
+        sub_type,
+        extra={
+            "application_count": len(simulation_results),
+            "academic_year": academic_year,
+            "semester": semester,
+            "scholarship_type_id": scholarship_type_id,
+            "sub_type": sub_type,
+            "actor_user_id": current_user.id,
+        },
+    )
 
     return ApiResponse(
         success=True,

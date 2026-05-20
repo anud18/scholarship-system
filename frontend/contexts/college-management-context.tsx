@@ -4,6 +4,8 @@ import React, { createContext, useContext, useState, useCallback, useRef, useMem
 import { apiClient } from "@/lib/api";
 import { useCollegeApplications } from "@/hooks/use-admin";
 import { Semester } from "@/lib/enums";
+import { logger } from "@/lib/utils/logger";
+import { Application } from "@/lib/api/types";
 
 interface ScholarshipConfig {
   id: number;
@@ -20,7 +22,35 @@ interface AcademicConfig {
 
 type SubTypeQuotaBreakdown = Record<string, { quota?: number; label?: string; label_en?: string }>;
 
+interface CollegeRanking {
+  id: number;
+  ranking_name: string;
+  is_finalized: boolean;
+  distribution_executed: boolean;
+  total_applications: number;
+  allocated_count?: number;
+  distribution_date?: string;
+  scholarship_type_id?: number;
+  academic_year?: number;
+  semester?: string | null;
+  [key: string]: unknown;
+}
+
+interface AvailableOptions {
+  scholarship_types: Array<{ id: number; code: string; name: string; name_en?: string }>;
+  academic_years: number[];
+  semesters: string[];
+}
+
+interface ManagedCollege {
+  code: string;
+  name: string;
+  name_en: string;
+  scholarship_count: number;
+}
+
 interface RankingData {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   applications: any[];
   totalQuota: number;
   collegeQuota?: number;
@@ -38,17 +68,17 @@ interface CollegeManagementContextType {
   locale: "zh" | "en";
 
   // Applications from hook
-  applications: any[];
+  applications: Application[];
   isLoading: boolean;
   error: string | null;
-  updateApplicationStatus: any;
-  fetchCollegeApplications: any;
+  updateApplicationStatus: (applicationId: number, status: string, reviewNotes?: string) => Promise<Application | undefined>;
+  fetchCollegeApplications: (academicYear?: number, semester?: string, scholarshipType?: string) => Promise<void>;
 
   // View state
   viewMode: "card" | "table";
   setViewMode: (mode: "card" | "table") => void;
-  selectedApplication: any | null;
-  setSelectedApplication: (app: any | null) => void;
+  selectedApplication: Application | null;
+  setSelectedApplication: (app: Application | null) => void;
 
   // Tab management
   activeTab: string;
@@ -59,13 +89,13 @@ interface CollegeManagementContextType {
   // Ranking state
   rankingData: RankingData | null;
   setRankingData: (data: RankingData | null) => void;
-  rankings: any[];
-  setRankings: (rankings: any[]) => void;
+  rankings: CollegeRanking[];
+  setRankings: (rankings: CollegeRanking[]) => void;
   selectedRanking: number | null;
   setSelectedRanking: (id: number | null) => void;
   isRankingLoading: boolean;
   setIsRankingLoading: (loading: boolean) => void;
-  filteredRankings: any[];
+  filteredRankings: CollegeRanking[];
 
   // Data version tracking for cross-tab synchronization
   dataVersion: number;
@@ -88,12 +118,8 @@ interface CollegeManagementContextType {
   setSelectedScholarshipType: (type: string | undefined) => void;
 
   // Available options
-  availableOptions: {
-    scholarship_types: Array<{ id: number; code: string; name: string; name_en?: string }>;
-    academic_years: number[];
-    semesters: string[];
-  } | null;
-  setAvailableOptions: (options: any) => void;
+  availableOptions: AvailableOptions | null;
+  setAvailableOptions: (options: AvailableOptions | null) => void;
 
   // College quota info (for review panel)
   collegeQuotaInfo: {
@@ -103,28 +129,23 @@ interface CollegeManagementContextType {
   setCollegeQuotaInfo: (info: { collegeQuota: number | null; breakdown: Record<string, number> } | null) => void;
 
   // Managed college
-  managedCollege: {
-    code: string;
-    name: string;
-    name_en: string;
-    scholarship_count: number;
-  } | null;
-  setManagedCollege: (college: any) => void;
+  managedCollege: ManagedCollege | null;
+  setManagedCollege: (college: ManagedCollege | null) => void;
   collegeDisplayName: string;
 
   // Dialog states
   showDeleteDialog: boolean;
   setShowDeleteDialog: (show: boolean) => void;
-  applicationToDelete: any | null;
-  setApplicationToDelete: (app: any | null) => void;
+  applicationToDelete: Application | null;
+  setApplicationToDelete: (app: Application | null) => void;
   showDocumentRequestDialog: boolean;
   setShowDocumentRequestDialog: (show: boolean) => void;
-  applicationToRequestDocs: any | null;
-  setApplicationToRequestDocs: (app: any | null) => void;
+  applicationToRequestDocs: Application | null;
+  setApplicationToRequestDocs: (app: Application | null) => void;
   showDeleteRankingDialog: boolean;
   setShowDeleteRankingDialog: (show: boolean) => void;
-  rankingToDelete: any | null;
-  setRankingToDelete: (ranking: any | null) => void;
+  rankingToDelete: CollegeRanking | null;
+  setRankingToDelete: (ranking: CollegeRanking | null) => void;
 
   // Ranking editing state
   editingRankingId: number | null;
@@ -168,7 +189,7 @@ export function CollegeManagementProvider({
 
   // View state
   const [viewMode, setViewMode] = useState<"card" | "table">("card");
-  const [selectedApplication, setSelectedApplication] = useState<any>(null);
+  const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
 
   // Tab management
   const [activeTab, setActiveTab] = useState("review");
@@ -176,7 +197,7 @@ export function CollegeManagementProvider({
 
   // Ranking state
   const [rankingData, setRankingData] = useState<RankingData | null>(null);
-  const [rankings, setRankings] = useState<any[]>([]);
+  const [rankings, setRankings] = useState<CollegeRanking[]>([]);
   const [selectedRanking, setSelectedRanking] = useState<number | null>(null);
   const [isRankingLoading, setIsRankingLoading] = useState(false);
 
@@ -219,11 +240,11 @@ export function CollegeManagementProvider({
 
   // Dialog states
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [applicationToDelete, setApplicationToDelete] = useState<any>(null);
+  const [applicationToDelete, setApplicationToDelete] = useState<Application | null>(null);
   const [showDocumentRequestDialog, setShowDocumentRequestDialog] = useState(false);
-  const [applicationToRequestDocs, setApplicationToRequestDocs] = useState<any>(null);
+  const [applicationToRequestDocs, setApplicationToRequestDocs] = useState<Application | null>(null);
   const [showDeleteRankingDialog, setShowDeleteRankingDialog] = useState(false);
-  const [rankingToDelete, setRankingToDelete] = useState<any>(null);
+  const [rankingToDelete, setRankingToDelete] = useState<CollegeRanking | null>(null);
 
   // Ranking editing state
   const [editingRankingId, setEditingRankingId] = useState<number | null>(null);
@@ -321,22 +342,26 @@ export function CollegeManagementProvider({
     try {
       let currentAvailableOptions = availableOptions;
       if (!currentAvailableOptions) {
-        console.log("Available options not loaded yet, fetching now...");
+        logger.debug("Available options not loaded yet, fetching now");
         const isAdmin = userRole === "admin" || userRole === "super_admin";
         const response = isAdmin
           ? await apiClient.manualDistribution.getAvailableCombinations()
           : await apiClient.college.getAvailableCombinations();
-        console.log("Available combinations API response:", response);
+        logger.debug("Available combinations API response received", {
+          success: response.success,
+        });
 
         if (response.success && response.data) {
           currentAvailableOptions = response.data;
         } else {
-          console.error("API returned unsuccessful response:", response);
+          logger.error("API returned unsuccessful response", {
+            success: response.success,
+          });
         }
       }
 
       if (!currentAvailableOptions?.scholarship_types) {
-        console.error("No scholarship types available:", currentAvailableOptions);
+        logger.error("No scholarship types available");
         setScholarshipConfigError(
           locale === "zh"
             ? "無法從學院 API 載入可用的獎學金選項。"
@@ -346,7 +371,7 @@ export function CollegeManagementProvider({
       }
 
       if (currentAvailableOptions.scholarship_types.length === 0) {
-        console.error("Scholarship types array is empty");
+        logger.error("Scholarship types array is empty");
         setScholarshipConfigError(
           locale === "zh"
             ? "沒有可用的獎學金。請聯絡管理員。"
@@ -355,21 +380,25 @@ export function CollegeManagementProvider({
         return []; // Return empty array to prevent further processing
       }
 
-      console.log("Fetching all scholarships to get IDs...");
+      logger.debug("Fetching all scholarships to get IDs");
       const allScholarshipsResponse = await apiClient.scholarships.getAll();
 
       if (allScholarshipsResponse.success && allScholarshipsResponse.data) {
-        console.log("All scholarships:", allScholarshipsResponse.data);
-        console.log(
-          "Available scholarship types from college:",
-          currentAvailableOptions.scholarship_types
-        );
+        logger.debug("Scholarships loaded", {
+          allCount: allScholarshipsResponse.data.length,
+          collegeTypesCount: currentAvailableOptions.scholarship_types.length,
+        });
 
         const configs: ScholarshipConfig[] = [];
 
         for (const collegeType of currentAvailableOptions.scholarship_types) {
           const fullScholarship = allScholarshipsResponse.data.find(
-            (scholarship: any) =>
+            (scholarship: {
+              id: number;
+              code?: string;
+              name?: string;
+              name_en?: string;
+            }) =>
               scholarship.code === collegeType.code ||
               scholarship.name === collegeType.name ||
               scholarship.name_en === collegeType.name
@@ -383,13 +412,14 @@ export function CollegeManagementProvider({
               subTypes: [{ code: "default", name: "Default" }],
             });
           } else {
-            console.warn(
-              `Could not find full scholarship data for college type: ${collegeType.code} - ${collegeType.name}`
+            logger.warn(
+              "Could not find full scholarship data for college type",
+              { code: collegeType.code, name: collegeType.name }
             );
           }
         }
 
-        console.log("Mapped scholarship configs:", configs);
+        logger.debug("Mapped scholarship configs", { count: configs.length });
         setScholarshipConfig(configs);
         return configs;
       }
@@ -401,7 +431,7 @@ export function CollegeManagementProvider({
       );
       return [];
     } catch (error) {
-      console.error("Failed to fetch scholarship configuration:", error);
+      logger.error("Failed to fetch scholarship configuration", { error });
       setScholarshipConfigError(
         locale === "zh"
           ? `無法取得獎學金配置: ${error instanceof Error ? error.message : "未知錯誤"}`
@@ -413,20 +443,23 @@ export function CollegeManagementProvider({
 
   const fetchAvailableOptions = useCallback(async () => {
     try {
-      console.log("Fetching available combinations...");
+      logger.debug("Fetching available combinations");
       const isAdmin = userRole === "admin" || userRole === "super_admin";
       const response = isAdmin
         ? await apiClient.manualDistribution.getAvailableCombinations()
         : await apiClient.college.getAvailableCombinations();
-      console.log("fetchAvailableOptions response:", response);
+      logger.debug("fetchAvailableOptions response received", {
+        success: response.success,
+      });
 
       if (response.success && response.data) {
         if (response.data.scholarship_types && response.data.scholarship_types.length > 0) {
-          console.log("Setting availableOptions:", response.data);
           setAvailableOptions(response.data);
           setScholarshipConfigError(null); // Clear any previous error
         } else {
-          console.warn("API returned no scholarship types in available combinations.");
+          logger.warn(
+            "API returned no scholarship types in available combinations"
+          );
           setScholarshipConfigError(
             locale === "zh"
               ? "沒有可用的獎學金。請聯絡管理員。"
@@ -435,7 +468,9 @@ export function CollegeManagementProvider({
           setAvailableOptions(null); // Ensure availableOptions is null if no types
         }
       } else {
-        console.error("API returned unsuccessful response or no data:", response);
+        logger.error("API returned unsuccessful response or no data", {
+          success: response.success,
+        });
         setScholarshipConfigError(
           locale === "zh"
             ? "無法取得可用的獎學金組合。請聯絡管理員。"
@@ -444,7 +479,7 @@ export function CollegeManagementProvider({
         setAvailableOptions(null); // Ensure availableOptions is null on API failure
       }
     } catch (error) {
-      console.error("Failed to fetch available options:", error);
+      logger.error("Failed to fetch available options", { error });
       setScholarshipConfigError(
         locale === "zh"
           ? `無法取得可用的獎學金選項: ${error instanceof Error ? error.message : "未知錯誤"}`
@@ -456,35 +491,38 @@ export function CollegeManagementProvider({
 
   const fetchRankings = useCallback(async () => {
     try {
-      console.log("[Context] Fetching rankings...");
+      logger.debug("Fetching rankings");
       const response = await apiClient.college.getRankings();
 
       if (response.success && response.data) {
-        console.log(`[Context] Fetched ${response.data.length} rankings`);
+        logger.debug("Rankings fetched", { count: response.data.length });
 
         // Normalize semester values (consistent with RankingManagementPanel logic)
-        const normalizedRankings = response.data.map((ranking: any) => {
-          const rawSemester =
-            typeof ranking.semester === "string" && ranking.semester.length > 0
-              ? ranking.semester.toLowerCase()
-              : null;
-          const safeSemester =
-            rawSemester && rawSemester !== "yearly"
-              ? rawSemester
-              : null;
-          return { ...ranking, semester: safeSemester };
-        });
+        const rawRankings = response.data as Array<{ semester?: string | null; [key: string]: unknown }>;
+        const normalizedRankings = rawRankings.map(
+          (ranking) => {
+            const rawSemester =
+              typeof ranking.semester === "string" && ranking.semester.length > 0
+                ? ranking.semester.toLowerCase()
+                : null;
+            const safeSemester =
+              rawSemester && rawSemester !== "yearly"
+                ? rawSemester
+                : null;
+            return { ...ranking, semester: safeSemester };
+          }
+        );
 
-        setRankings(normalizedRankings);
+        setRankings(normalizedRankings as CollegeRanking[]);
       }
     } catch (error) {
-      console.error("[Context] Failed to fetch rankings:", error);
+      logger.error("Failed to fetch rankings", { error });
     }
   }, []);
 
   const refreshPermissions = useCallback(async () => {
     try {
-      console.log("Refreshing permissions and scholarship configuration...");
+      logger.debug("Refreshing permissions and scholarship configuration");
 
       // Reset error state
       setScholarshipConfigError(null);
@@ -494,9 +532,9 @@ export function CollegeManagementProvider({
       await fetchAvailableOptions();
       await getScholarshipConfig();
 
-      console.log("Permissions refreshed successfully");
+      logger.debug("Permissions refreshed successfully");
     } catch (error) {
-      console.error("Failed to refresh permissions:", error);
+      logger.error("Failed to refresh permissions", { error });
       setScholarshipConfigError(
         locale === "zh"
           ? "無法重新整理權限設置。請稍後再試。"

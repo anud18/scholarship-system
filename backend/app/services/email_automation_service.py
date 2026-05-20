@@ -43,8 +43,8 @@ class EmailAutomationService:
 
             return list(rules)
 
-        except Exception as e:
-            logger.error(f"❌ Error fetching automation rules for trigger '{trigger_event}': {e}")
+        except Exception:
+            logger.exception(f"❌ Error fetching automation rules for trigger '{trigger_event}'")
             return []
 
     async def process_trigger(self, db: AsyncSession, trigger_event: str, context: Dict[str, Any]):
@@ -56,12 +56,12 @@ class EmailAutomationService:
             for rule in rules:
                 try:
                     await self._process_single_rule(db, rule, context)
-                except Exception as e:
-                    logger.error(f"Failed to process rule {rule.template_key}: {e}")
+                except Exception:
+                    logger.exception(f"Failed to process rule {rule.template_key}")
                     # Continue processing other rules even if one fails
 
-        except Exception as e:
-            logger.error(f"Failed to process trigger '{trigger_event}': {e}")
+        except Exception:
+            logger.exception(f"Failed to process trigger '{trigger_event}'")
             raise
 
     async def _process_single_rule(self, db: AsyncSession, rule: EmailAutomationRule, context: Dict[str, Any]):
@@ -112,8 +112,8 @@ class EmailAutomationService:
                     context,
                 )
 
-            except Exception as e:
-                logger.error(f"Failed to schedule email to {recipient.get('email', 'unknown')}: {e}")
+            except Exception:
+                logger.exception(f"Failed to schedule email to {recipient.get('email', 'unknown')}")
 
     async def _get_recipients(
         self, db: AsyncSession, rule: EmailAutomationRule, context: Dict[str, Any]
@@ -156,8 +156,8 @@ class EmailAutomationService:
             logger.info(f"✓ Found {len(recipients)} recipients: {[r['email'] for r in recipients]}")
             return recipients
 
-        except Exception as e:
-            logger.error(f"❌ Failed to execute condition query for rule {rule.template_key}: {e}")
+        except Exception:
+            logger.exception(f"❌ Failed to execute condition query for rule {rule.template_key}")
             logger.error(f"   Context: {context}")
             logger.error(f"   Query: {rule.condition_query}")
             return []
@@ -232,8 +232,8 @@ class EmailAutomationService:
                     f"✓ Successfully sent plain text email using database template {template_key} to {recipient_email}"
                 )
 
-        except Exception as e:
-            logger.error(f"❌ Failed to send automated email: {e}")
+        except Exception:
+            logger.exception("❌ Failed to send automated email")
             logger.error(f"   Template: {template_key}, Recipient: {recipient_email}")
             raise
 
@@ -294,8 +294,8 @@ class EmailAutomationService:
                     else:
                         logger.warning(f"⚠️  Frontend rendering returned no HTML for template '{react_template_name}'")
 
-                except Exception as e:
-                    logger.error(f"❌ Failed to render email via frontend: {e}")
+                except Exception:
+                    logger.exception("❌ Failed to render email via frontend")
                     # Continue without HTML - will fall back to plain text
                     html_content = None
 
@@ -316,8 +316,8 @@ class EmailAutomationService:
             logger.info(f"Scheduled automated email {template_key} for {recipient_email} at {scheduled_for}")
             return scheduled_email
 
-        except Exception as e:
-            logger.error(f"Failed to schedule automated email: {e}")
+        except Exception:
+            logger.exception("Failed to schedule automated email")
             raise
 
     def _get_email_category_from_template_key(self, template_key: str) -> EmailCategory:
@@ -701,7 +701,7 @@ class EmailAutomationService:
                     await db.execute(update_query, {"email_id": email_row.id})
 
                 except Exception as e:
-                    logger.error(f"Failed to send scheduled email {email_row.id}: {e}")
+                    logger.exception(f"Failed to send scheduled email {email_row.id}")
 
                     # Mark as failed
                     fail_query = text("""
@@ -714,8 +714,8 @@ class EmailAutomationService:
             await db.commit()
             logger.info(f"✓ Completed processing {len(scheduled_emails)} scheduled emails")
 
-        except Exception as e:
-            logger.error(f"Failed to process scheduled emails: {e}")
+        except Exception:
+            logger.exception("Failed to process scheduled emails")
             await db.rollback()
             raise
 

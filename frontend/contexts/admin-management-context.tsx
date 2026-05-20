@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useCallback } from "react";
+import type { ScholarshipType } from "@/lib/api";
 
 interface AdminManagementContextType {
   // Active tab management
@@ -14,8 +15,8 @@ interface AdminManagementContextType {
   canManageSystem: boolean;
 
   // Shared caches
-  scholarshipTypes: any[];
-  setScholarshipTypes: (types: any[]) => void;
+  scholarshipTypes: ScholarshipType[];
+  setScholarshipTypes: (types: ScholarshipType[]) => void;
 
   // Common filters that might be shared
   selectedAcademicYear: number;
@@ -41,7 +42,7 @@ export function AdminManagementProvider({
   userRole?: string | null;
 }) {
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [scholarshipTypes, setScholarshipTypes] = useState<any[]>([]);
+  const [scholarshipTypes, setScholarshipTypes] = useState<ScholarshipType[]>([]);
   const [selectedAcademicYear, setSelectedAcademicYear] = useState(114);
   const [selectedSemester, setSelectedSemester] = useState<string | null>(null);
   const [isLoadingShared, setIsLoadingShared] = useState(false);

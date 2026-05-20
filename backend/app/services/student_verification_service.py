@@ -74,7 +74,7 @@ class StudentVerificationService:
                 return self._api_verification(student_id_number, student_name)
 
         except Exception as e:
-            logger.error(f"Student verification failed for {student_id_number}: {e}")
+            logger.exception(f"Student verification failed for {student_id_number}")
             return {
                 "status": StudentVerificationStatus.API_ERROR,
                 "message": f"驗證過程發生錯誤: {str(e)}",
@@ -202,21 +202,21 @@ class StudentVerificationService:
                     student_id=student_id_number,
                 )
 
-        except requests.exceptions.Timeout:
+        except requests.exceptions.Timeout as exc:
             raise StudentVerificationError(
                 "Student verification API timeout",
                 student_id=student_id_number,
-            )
-        except requests.exceptions.ConnectionError:
+            ) from exc
+        except requests.exceptions.ConnectionError as exc:
             raise StudentVerificationError(
                 "Cannot connect to student verification API",
                 student_id=student_id_number,
-            )
+            ) from exc
         except requests.exceptions.RequestException as e:
             raise StudentVerificationError(
                 f"API request failed: {str(e)}",
                 student_id=student_id_number,
-            )
+            ) from e
 
     def _parse_api_response(self, data: Dict[str, Any], student_id_number: str) -> Dict[str, Any]:
         """
@@ -251,7 +251,7 @@ class StudentVerificationService:
             }
 
         except Exception as e:
-            logger.error(f"Failed to parse API response for {student_id_number}: {e}")
+            logger.exception(f"Failed to parse API response for {student_id_number}")
             return {
                 "status": StudentVerificationStatus.API_ERROR,
                 "message": f"API回應解析錯誤: {str(e)}",
@@ -284,7 +284,7 @@ class StudentVerificationService:
                 result = self.verify_student(student_id, student_name)
                 results[student_id] = result
             except Exception as e:
-                logger.error(f"Batch verification failed for {student_id}: {e}")
+                logger.exception(f"Batch verification failed for {student_id}")
                 results[student_id] = {
                     "status": StudentVerificationStatus.API_ERROR,
                     "message": f"批次驗證錯誤: {str(e)}",

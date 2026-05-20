@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -124,7 +125,7 @@ export function EmailHistoryTable({ className }: EmailHistoryTableProps) {
         }));
       }
     } catch (error) {
-      console.error("Failed to load email history:", error);
+      logger.error("Failed to load email history", { error: error });
     } finally {
       setLoading(false);
     }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Check, ChevronsUpDown, Search, User } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -71,10 +72,10 @@ function ProfessorAssignmentDropdownInner({
     try {
       const response = await apiClient.admin.getProfessors(searchQuery);
       if (response.success && response.data) {
-        setProfessors(response.data);
+        setProfessors(response.data as Professor[]);
       }
     } catch (error) {
-      console.error("Failed to fetch professors:", error);
+      logger.error("Failed to fetch professors", { error: error });
     } finally {
       setLoading(false);
     }
@@ -109,7 +110,7 @@ function ProfessorAssignmentDropdownInner({
         onAssigned?.(professor);
       }
     } catch (error) {
-      console.error("Failed to assign professor:", error);
+      logger.error("Failed to assign professor", { error: error });
     } finally {
       setAssigning(false);
     }
@@ -204,7 +205,7 @@ export function ProfessorAssignmentDropdown(
   return (
     <ErrorBoundary
       onError={(error, errorInfo) => {
-        console.error("Professor Assignment Dropdown Error:", error, errorInfo);
+        logger.error("Professor Assignment Dropdown Error:", error, errorInfo);
       }}
     >
       <ProfessorAssignmentDropdownInner {...props} />

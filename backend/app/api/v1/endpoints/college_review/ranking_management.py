@@ -193,14 +193,16 @@ async def get_rankings(
         )
 
     except ValueError as e:
-        logger.warning(f"Invalid query parameters for rankings: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid query parameters: {str(e)}")
+        logger.warning("Invalid query parameters for rankings", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid query parameters") from e
     except CollegeReviewError as e:
-        logger.error(f"College review error retrieving rankings: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        logger.exception("College review error retrieving rankings")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving rankings: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve rankings")
+        logger.exception("Unexpected error retrieving rankings")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve rankings"
+        ) from e
 
 
 @router.post("/rankings")
@@ -254,18 +256,18 @@ async def create_ranking(
         )
 
     except AuthorizationError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except NotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except ValueError as e:
-        logger.warning(f"Invalid ranking creation data: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid ranking data: {str(e)}")
+        logger.warning("Invalid ranking creation data", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ranking data") from e
     except CollegeReviewError as e:
-        logger.error(f"College review error creating ranking: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        logger.exception("College review error creating ranking")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"Unexpected error creating ranking: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create ranking")
+        logger.exception("Unexpected error creating ranking")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create ranking") from e
 
 
 @router.get("/rankings/{ranking_id}")
@@ -566,14 +568,16 @@ async def get_ranking(
     except HTTPException:
         raise
     except RankingNotFoundError as e:
-        logger.warning(f"Ranking not found: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        logger.warning("Ranking not found", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except CollegeReviewError as e:
-        logger.error(f"College review error retrieving ranking: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        logger.exception("College review error retrieving ranking")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"Unexpected error retrieving ranking: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve ranking")
+        logger.exception("Unexpected error retrieving ranking")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve ranking"
+        ) from e
 
 
 @router.put("/rankings/{ranking_id}")
@@ -623,8 +627,8 @@ async def update_ranking(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error updating ranking: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update ranking")
+        logger.exception("Unexpected error updating ranking")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update ranking") from e
 
 
 @router.put("/rankings/{ranking_id}/order")
@@ -652,24 +656,26 @@ async def update_ranking_order(
         )
 
     except AuthorizationError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except NotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except RankingNotFoundError as e:
-        logger.warning(f"Ranking not found for order update: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        logger.warning("Ranking not found for order update", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except RankingModificationError as e:
-        logger.warning(f"Cannot modify ranking: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+        logger.warning("Cannot modify ranking", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except InvalidRankingDataError as e:
-        logger.warning(f"Invalid ranking data: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        logger.warning("Invalid ranking data", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except CollegeReviewError as e:
-        logger.error(f"College review error during ranking update: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        logger.exception("College review error during ranking update")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"Unexpected error updating ranking order: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update ranking order")
+        logger.exception("Unexpected error updating ranking order")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update ranking order"
+        ) from e
 
 
 @router.post("/rankings/{ranking_id}/finalize")
@@ -751,21 +757,23 @@ async def finalize_ranking(
         )
 
     except AuthorizationError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except NotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except RankingNotFoundError as e:
-        logger.warning(f"Ranking not found for finalization: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        logger.warning("Ranking not found for finalization", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except RankingModificationError as e:
-        logger.warning(f"Cannot finalize ranking: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+        logger.warning("Cannot finalize ranking", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except CollegeReviewError as e:
-        logger.error(f"College review error during finalization: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        logger.exception("College review error during finalization")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"Unexpected error finalizing ranking: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to finalize ranking")
+        logger.exception("Unexpected error finalizing ranking")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to finalize ranking"
+        ) from e
 
 
 @router.post("/rankings/{ranking_id}/unfinalize")
@@ -845,21 +853,23 @@ async def unfinalize_ranking(
         )
 
     except AuthorizationError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except NotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except RankingNotFoundError as e:
-        logger.warning(f"Ranking not found for unfinalization: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        logger.warning("Ranking not found for unfinalization", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except RankingModificationError as e:
-        logger.warning(f"Cannot unfinalize ranking: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+        logger.warning("Cannot unfinalize ranking", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except CollegeReviewError as e:
-        logger.error(f"College review error during unfinalization: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        logger.exception("College review error during unfinalization")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"Unexpected error unfinalizing ranking: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to unfinalize ranking")
+        logger.exception("Unexpected error unfinalizing ranking")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to unfinalize ranking"
+        ) from e
 
 
 @router.delete("/rankings/{ranking_id}")
@@ -951,10 +961,8 @@ async def delete_ranking(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error deleting ranking {ranking_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete ranking: {str(e)}"
-        )
+        logger.exception(f"Error deleting ranking {ranking_id}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete ranking") from e
 
 
 @router.post("/rankings/{ranking_id}/import-excel")
@@ -1105,11 +1113,11 @@ async def import_ranking_from_excel(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error importing ranking data: {str(e)}")
+        logger.exception("Error importing ranking data")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to import ranking data: {str(e)}",
-        )
+            detail="Failed to import ranking data",
+        ) from e
 
 
 @router.get("/rankings/{ranking_id}/export-excel")
@@ -1231,8 +1239,8 @@ async def export_ranking_excel(
         )
         db.add(audit_log)
         await db.commit()
-    except Exception as exc:  # noqa: BLE001 — audit failure must not block download
-        logger.error(f"Failed to record pii_access audit log for ranking {ranking_id}: {exc}")
+    except Exception:  # noqa: BLE001 — audit failure must not block download
+        logger.exception("Failed to record pii_access audit log for ranking %s", ranking_id)
         await db.rollback()
 
     return StreamingResponse(

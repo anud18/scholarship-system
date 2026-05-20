@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import {
   Dialog,
   DialogContent,
@@ -43,6 +44,7 @@ import {
   getDocumentLabel,
   fetchApplicationFiles,
   formatFieldName,
+  formatDisplayValue,
 } from "@/lib/utils/application-helpers";
 import { useReferenceData, getDegreeName } from "@/hooks/use-reference-data";
 import {
@@ -51,6 +53,48 @@ import {
   getDegreeCode,
   getTermCount,
 } from "@/lib/utils/student-data-helpers";
+
+// Shape of document entries in `application.submitted_form_data.documents`
+// and on the local `applicationFiles` state. All fields optional because the
+// upstream JSON can come from several sources (legacy form_data, current
+// submitted_form_data, the SIS file-upload endpoint).
+interface DocumentPayload {
+  file_id?: string | number;
+  id?: string | number;
+  filename?: string;
+  original_filename?: string;
+  file_size?: number;
+  mime_type?: string;
+  document_type?: string;
+  file_type?: string;
+  file_path?: string;
+  download_url?: string;
+  is_verified?: boolean;
+  upload_time?: string;
+  uploaded_at?: string;
+}
+
+// Read-only summary of the professor row injected by
+// ProfessorAssignmentDropdown. Matches the dropdown's local Professor
+// shape (the dropdown does not export the type) but with all fields
+// optional to handle partial payloads gracefully.
+interface ProfessorInfoSnapshot {
+  id?: number;
+  name?: string;
+  nycu_id?: string;
+  email?: string;
+  dept_name?: string;
+  role?: string;
+}
+
+// Minimal professor-review summary surfaced in the detail dialog. Mirrors
+// what ApplicationReview / ProfessorReview rows expose to the read-only
+// status panel.
+interface ProfessorReviewSummary {
+  status?: string;
+  reviewed_at?: string | null;
+  recommendation?: string | null;
+}
 
 interface ApplicationDetailDialogProps {
   isOpen: boolean;
@@ -67,7 +111,9 @@ export function ApplicationDetailDialog({
   locale,
   user,
 }: ApplicationDetailDialogProps) {
-  const [applicationFiles, setApplicationFiles] = useState<any[]>([]);
+  const [applicationFiles, setApplicationFiles] = useState<DocumentPayload[]>(
+    []
+  );
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [previewFile, setPreviewFile] = useState<{
     url: string;
@@ -86,8 +132,10 @@ export function ApplicationDetailDialog({
   const [applicationFields, setApplicationFields] = useState<string[]>([]);
   const [isLoadingFields, setIsLoadingFields] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [professorInfo, setProfessorInfo] = useState<any>(null);
-  const [professorReview, setProfessorReview] = useState<any>(null);
+  const [professorInfo, setProfessorInfo] =
+    useState<ProfessorInfoSnapshot | null>(null);
+  const [professorReview, setProfessorReview] =
+    useState<ProfessorReviewSummary | null>(null);
   const [bankVerificationLoading, setBankVerificationLoading] = useState(false);
 
   const t = (k: string) => getTranslation(locale, k);
@@ -123,7 +171,7 @@ export function ApplicationDetailDialog({
     user && ["admin", "super_admin", "college"].includes(user.role);
 
   // Handle professor assignment
-  const handleProfessorAssigned = (professor: any) => {
+  const handleProfessorAssigned = (professor: ProfessorInfoSnapshot) => {
     setProfessorInfo(professor);
     // You might want to refresh the application data here
   };
@@ -147,7 +195,7 @@ export function ApplicationDetailDialog({
         );
       }
     } catch (error) {
-      console.error("Bank verification error:", error);
+      logger.error("Bank verification error", { error: error });
       toast.error(t("dialogs.application_detail.bank_verification_error"));
     } finally {
       setBankVerificationLoading(false);
@@ -248,7 +296,7 @@ export function ApplicationDetailDialog({
             scholarshipType = scholarshipResponse.data.code;
           } else {
             const errorMsg = `${t("dialogs.application_detail.scholarship_type_fetch_failed")}: ${scholarshipResponse.message}`;
-            console.error(errorMsg);
+            logger.error(errorMsg);
             setError(errorMsg);
             setDocumentLabels({});
             setFieldLabels({});
@@ -259,7 +307,7 @@ export function ApplicationDetailDialog({
           }
         } catch (error) {
           const errorMsg = `${t("dialogs.application_detail.scholarship_type_fetch_error")}: ${error instanceof Error ? error.message : "未知錯誤"}`;
-          console.error(errorMsg);
+          logger.error(errorMsg);
           setError(errorMsg);
           setDocumentLabels({});
           setFieldLabels({});
@@ -274,7 +322,7 @@ export function ApplicationDetailDialog({
         const errorMsg = t(
           "dialogs.application_detail.scholarship_type_undetermined"
         );
-        console.error(errorMsg);
+        logger.error(errorMsg);
         setError(errorMsg);
         setDocumentLabels({});
         setFieldLabels({});
@@ -318,7 +366,7 @@ export function ApplicationDetailDialog({
         }
       } else {
         const errorMsg = `${t("dialogs.application_detail.form_config_load_failed")}: ${response.message}`;
-        console.error(errorMsg);
+        logger.error(errorMsg);
         setError(errorMsg);
         setDocumentLabels({});
         setFieldLabels({});
@@ -326,7 +374,7 @@ export function ApplicationDetailDialog({
       }
     } catch (error) {
       const errorMsg = `${t("dialogs.application_detail.form_config_load_error")}: ${error instanceof Error ? error.message : "未知錯誤"}`;
-      console.error(errorMsg);
+      logger.error(errorMsg);
       setError(errorMsg);
       setDocumentLabels({});
       setFieldLabels({});
@@ -347,7 +395,7 @@ export function ApplicationDetailDialog({
       if (application.submitted_form_data?.documents) {
         // 將 documents 轉換為 ApplicationFile 格式以保持向後兼容
         const files = application.submitted_form_data.documents.map(
-          (doc: any) => ({
+          (doc: DocumentPayload) => ({
             id: doc.file_id || doc.id,
             filename: doc.filename,
             original_filename: doc.original_filename,
@@ -367,26 +415,33 @@ export function ApplicationDetailDialog({
         setApplicationFiles(files);
       }
     } catch (error) {
-      console.error("Failed to load application files:", error);
+      logger.error("Failed to load application files", { error: error });
       setApplicationFiles([]);
     } finally {
       setIsLoadingFiles(false);
     }
   };
 
-  const handleFilePreview = (file: any) => {
+  const handleFilePreview = (file: DocumentPayload) => {
+    // Stricter narrowing — these fields are documented as required for
+    // preview but are typed optional on the upstream JSON. Bail early
+    // with a console error rather than producing an invalid preview URL.
     const filename = file.filename || file.original_filename;
+    if (!filename) {
+      logger.error("No filename available for preview");
+      return;
+    }
 
     // 檢查是否有文件路徑
     if (!file.file_path) {
-      console.error("No file path available for preview");
+      logger.error("No file path available for preview");
       return;
     }
 
     // 從後端URL中提取token
     const urlParts = file.file_path.split("?");
     if (urlParts.length < 2) {
-      console.error("Invalid file URL format");
+      logger.error("Invalid file URL format");
       return;
     }
 
@@ -394,12 +449,12 @@ export function ApplicationDetailDialog({
     const token = urlParams.get("token");
 
     if (!token) {
-      console.error("No token found in file URL");
+      logger.error("No token found in file URL");
       return;
     }
 
     // 構建前端預覽URL，包含token參數
-    const previewUrl = `/api/v1/preview?fileId=${file.id}&filename=${encodeURIComponent(filename)}&type=${encodeURIComponent(file.file_type)}&applicationId=${application?.id}&token=${token}`;
+    const previewUrl = `/api/v1/preview?fileId=${file.id ?? ""}&filename=${encodeURIComponent(filename)}&type=${encodeURIComponent(file.file_type ?? "")}&applicationId=${application?.id}&token=${token}`;
 
     // 判斷文件類型
     let fileType = "other";
@@ -413,7 +468,7 @@ export function ApplicationDetailDialog({
       fileType = "image";
     }
 
-    console.log("Opening file preview:", {
+    logger.debug("Opening file preview:", {
       filename,
       fileType,
       previewUrl,
@@ -730,9 +785,12 @@ export function ApplicationDetailDialog({
                             {getFieldLabel(key, locale, fieldLabels)}
                           </Label>
                           <p className="text-sm text-gray-800">
-                            {typeof value === "string" && value.length > 50
-                              ? `${value.substring(0, 50)}...`
-                              : String(value)}
+                            {(() => {
+                              const rendered = formatDisplayValue(value);
+                              return rendered.length > 50
+                                ? `${rendered.substring(0, 50)}...`
+                                : rendered;
+                            })()}
                           </p>
                         </div>
                       );
@@ -966,7 +1024,7 @@ export function ApplicationDetailDialog({
                         <div className="flex items-center gap-2 mt-2">
                           <Badge
                             variant={getReviewStatusVariant(
-                              professorReview.status
+                              professorReview.status ?? ""
                             )}
                           >
                             {professorReview.status}
@@ -1021,7 +1079,7 @@ export function ApplicationDetailDialog({
                   </div>
                 ) : applicationFiles.length > 0 ? (
                   <div className="space-y-2">
-                    {applicationFiles.map((file: any, index: number) => (
+                    {applicationFiles.map((file, index) => (
                       <div
                         key={file.id || index}
                         className="flex items-center justify-between p-2 bg-muted rounded-md"

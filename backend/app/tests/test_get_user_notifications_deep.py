@@ -91,8 +91,8 @@ async def _seed_system(
 @pytest.mark.asyncio
 async def test_returns_both_personal_and_system_notifications(db: AsyncSession):
     user = await _seed_user(db, nycu_id="getnotif_mix")
-    p = await _seed_personal(db, user_id=user.id, title="personal-mix")
-    s = await _seed_system(db, title="system-mix")
+    await _seed_personal(db, user_id=user.id, title="personal-mix")
+    await _seed_system(db, title="system-mix")
 
     service = NotificationService(db)
     result = await service.getUserNotifications(user.id)
@@ -120,10 +120,10 @@ async def test_unread_only_excludes_read_personal_and_announcements(db: AsyncSes
     user = await _seed_user(db, nycu_id="getnotif_unread")
     # Personal: 1 unread, 1 read.
     await _seed_personal(db, user_id=user.id, title="p_unread")
-    p_read = await _seed_personal(db, user_id=user.id, title="p_read", is_read=True)
+    await _seed_personal(db, user_id=user.id, title="p_read", is_read=True)
 
     # System: 1 unread, 1 marked read via NotificationRead.
-    s_unread = await _seed_system(db, title="s_unread")
+    await _seed_system(db, title="s_unread")
     s_marked = await _seed_system(db, title="s_marked")
     db.add(NotificationRead(notification_id=s_marked.id, user_id=user.id))
     await db.commit()
@@ -167,9 +167,9 @@ async def test_excludes_expired_notifications(db: AsyncSession):
 async def test_is_read_field_reflects_underlying_state(db: AsyncSession):
     """Personal: is_read column. System: NotificationRead row presence."""
     user = await _seed_user(db, nycu_id="getnotif_isread")
-    p_unread = await _seed_personal(db, user_id=user.id, title="p_isread_no")
-    p_read = await _seed_personal(db, user_id=user.id, title="p_isread_yes", is_read=True)
-    s_unread = await _seed_system(db, title="s_isread_no")
+    await _seed_personal(db, user_id=user.id, title="p_isread_no")
+    await _seed_personal(db, user_id=user.id, title="p_isread_yes", is_read=True)
+    await _seed_system(db, title="s_isread_no")
     s_read = await _seed_system(db, title="s_isread_yes")
     db.add(NotificationRead(notification_id=s_read.id, user_id=user.id))
     await db.commit()

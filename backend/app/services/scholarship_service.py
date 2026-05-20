@@ -39,8 +39,8 @@ class ScholarshipService:
             else:
                 logger.warning(f"Unexpected GPA type: {type(gpa)}, value: {gpa}")
                 return Decimal("0.0")
-        except Exception as e:
-            logger.error(f"Error converting GPA '{gpa}' to Decimal: {e}")
+        except Exception:
+            logger.exception(f"Error converting GPA '{gpa}' to Decimal")
             return Decimal("0.0")
 
     def _is_dev_mode(self) -> bool:
@@ -121,7 +121,7 @@ class ScholarshipService:
                                 }
                                 student_data_cache["student_term"][cache_key] = current_student_data
                         except Exception as e:
-                            logger.warning(f"Student term API unavailable, continuing with basic data: {e}")
+                            logger.warning("Student term API unavailable, continuing with basic data", exc_info=True)
                             # Mark term data as API error (system issue)
                             current_student_data = {
                                 **student_data,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { logger } from "@/lib/utils/logger";
 import { format } from "date-fns";
 import {
   Card,
@@ -58,6 +59,34 @@ interface WorkflowStats {
   nextDeadline?: Date;
 }
 
+interface WorkflowStage {
+  name: string;
+  type: string;
+  status: "completed" | "active" | "pending" | "expired";
+  period?: string;
+}
+
+// Application list-row shape returned by GET /admin/applications when the
+// component requests applications for a specific workflow stage. Only the
+// fields rendered by the stage-details table are typed; backend returns more.
+interface StageApplicationRow {
+  id?: number;
+  app_id?: string;
+  student?: {
+    name?: string;
+    nycu_id?: string;
+  };
+  student_name?: string;
+  student_id?: string;
+  status?: string;
+  status_zh?: string;
+  scholarship_type_zh?: string;
+  scholarship_name?: string;
+  created_at?: string;
+  submitted_at?: string;
+  [key: string]: unknown;
+}
+
 export function ScholarshipWorkflowMermaid({
   configurations,
   selectedConfigId,
@@ -68,7 +97,9 @@ export function ScholarshipWorkflowMermaid({
   const [stats, setStats] = useState<WorkflowStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedStage, setSelectedStage] = useState<string | null>(null);
-  const [stageApplications, setStageApplications] = useState<any[]>([]);
+  const [stageApplications, setStageApplications] = useState<
+    StageApplicationRow[]
+  >([]);
   const [showStageDetails, setShowStageDetails] = useState(false);
 
   // Tab 功能相關狀態
@@ -173,7 +204,7 @@ export function ScholarshipWorkflowMermaid({
     try {
       const config = configurations.find(c => c.id === configId);
       if (!config) {
-        console.warn("Configuration not found for id:", configId);
+        logger.warn("Configuration not found for id:", configId);
         setStats(null);
         return;
       }
@@ -184,7 +215,7 @@ export function ScholarshipWorkflowMermaid({
       );
 
       if (response.success && response.data) {
-        const applications = response.data;
+        const applications = response.data as StageApplicationRow[];
 
         // 計算統計資料
         const totalApplications = applications.length;
@@ -258,7 +289,7 @@ export function ScholarshipWorkflowMermaid({
           nextDeadline,
         });
       } else {
-        console.warn("Failed to load applications:", response.message);
+        logger.warn("Failed to load applications:", response.message);
         setStats({
           totalApplications: 0,
           pendingReviews: 0,
@@ -267,7 +298,7 @@ export function ScholarshipWorkflowMermaid({
         });
       }
     } catch (error) {
-      console.error("Failed to load workflow stats:", error);
+      logger.error("Failed to load workflow stats", { error: error });
       setStats({
         totalApplications: 0,
         pendingReviews: 0,
@@ -301,14 +332,7 @@ export function ScholarshipWorkflowMermaid({
   };
 
   // 準備工作流程階段數據
-  const getWorkflowStages = (config: ScholarshipConfiguration) => {
-    interface WorkflowStage {
-      name: string;
-      type: string;
-      status: "completed" | "active" | "pending" | "expired";
-      period?: string;
-    }
-
+  const getWorkflowStages = (config: ScholarshipConfiguration): WorkflowStage[] => {
     const stages: WorkflowStage[] = [
       {
         name: "開始",
@@ -412,21 +436,22 @@ export function ScholarshipWorkflowMermaid({
       );
       if (response.success && response.data) {
         // 根據階段篩選申請
-        let filteredApplications = response.data;
+        const allApplications = response.data as StageApplicationRow[];
+        let filteredApplications = allApplications;
 
         // 可以根據 stageName 和當前時間來篩選相關的申請
         if (stageName.includes("申請")) {
-          filteredApplications = response.data.filter(
+          filteredApplications = allApplications.filter(
             app => app.status === "submitted" || app.status === "under_review"
           );
         } else if (stageName.includes("教授")) {
-          filteredApplications = response.data.filter(
+          filteredApplications = allApplications.filter(
             app =>
               app.status === "professor_review_pending" ||
               app.status === "professor_reviewed"
           );
         } else if (stageName.includes("學院")) {
-          filteredApplications = response.data.filter(
+          filteredApplications = allApplications.filter(
             app =>
               app.status === "college_review_pending" ||
               app.status === "college_reviewed"
@@ -437,7 +462,7 @@ export function ScholarshipWorkflowMermaid({
         setShowStageDetails(true);
       }
     } catch (error) {
-      console.error("Failed to load stage details:", error);
+      logger.error("Failed to load stage details", { error: error });
     } finally {
       setLoading(false);
     }
@@ -683,7 +708,11 @@ export function ScholarshipWorkflowMermaid({
 
                             <div className="space-y-4">
                               {getWorkflowStages(selectedConfig).map(
-                                (stage: any, index: number, array: any[]) => (
+                                (
+                                  stage: WorkflowStage,
+                                  index: number,
+                                  array: WorkflowStage[]
+                                ) => (
                                   <div
                                     key={index}
                                     className="flex items-center"
@@ -819,7 +848,7 @@ export function ScholarshipWorkflowMermaid({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {stageApplications.map((app: any) => (
+                  {stageApplications.map((app: StageApplicationRow) => (
                     <TableRow key={app.id}>
                       <TableCell className="font-medium">#{app.id}</TableCell>
                       <TableCell>{app.student?.name || "N/A"}</TableCell>
@@ -851,7 +880,7 @@ export function ScholarshipWorkflowMermaid({
                             "college_review_pending",
                             "approved",
                             "rejected",
-                          ].includes(app.status) && app.status}
+                          ].includes(app.status ?? "") && app.status}
                         </Badge>
                       </TableCell>
                       <TableCell>

@@ -66,8 +66,8 @@ class ScholarshipAnalyticsService:
 
             return analytics
 
-        except Exception as e:
-            logger.error(f"Error generating comprehensive analytics: {str(e)}")
+        except Exception:
+            logger.exception("Error generating comprehensive analytics")
             raise
 
     def _calculate_overview_metrics(self, applications: List[Application]) -> Dict[str, Any]:
@@ -449,8 +449,8 @@ class ScholarshipAnalyticsService:
 
             return executive_summary
 
-        except Exception as e:
-            logger.error(f"Error generating executive summary: {str(e)}")
+        except Exception:
+            logger.exception("Error generating executive summary")
             raise
 
     async def get_predictive_insights(self, forecast_months: int = 6) -> Dict[str, Any]:
@@ -498,6 +498,6 @@ class ScholarshipAnalyticsService:
 
             return predictions
 
-        except Exception as e:
-            logger.error(f"Error generating predictive insights: {str(e)}")
+        except Exception:
+            logger.exception("Error generating predictive insights")
             raise

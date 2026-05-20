@@ -4,8 +4,10 @@ import { useMemo } from "react";
 import ReactDiffViewer, { DiffMethod } from "react-diff-viewer-continued";
 
 interface JsonDiffViewerProps {
-  oldValue: any;
-  newValue: any;
+  // Audit-log diffs ship arbitrary JSON payloads (rows from many tables),
+  // so the values are typed as `unknown` and stringified at use-site.
+  oldValue: unknown;
+  newValue: unknown;
   locale?: "zh" | "en";
 }
 

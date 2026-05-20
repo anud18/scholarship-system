@@ -5,28 +5,35 @@ groups:
     folder: Alerts
     interval: 30s
     rules:
+      # ContainerDown was flapping (8 fire/resolve cycles per hour on
+      # 2026-05-15) because cAdvisor's container_last_seen metric goes
+      # stale under scrape jitter — the original `> 60s staleness, for: 2m`
+      # tripped on every short gap. Raise to `> 300s` (5 min) with
+      # `for: 5m` so the alert only fires after a sustained, real outage.
+      # Genuine container crashes still produce 5+ minutes of staleness
+      # and trip the new threshold.
       - uid: alert-container-down
         title: ContainerDown
         condition: A
         data:
           - refId: A
             relativeTimeRange:
-              from: 120
+              from: 600
               to: 0
             datasourceUid: prometheus-uid
             model:
-              expr: time() - container_last_seen{name!=""} > 60
+              expr: time() - container_last_seen{name!=""} > 300
               refId: A
               instant: true
         noDataState: OK
         execErrState: Error
-        for: 2m
+        for: 5m
         labels:
           severity: critical
           category: container
         annotations:
           summary: "Container {{ $labels.name }} is down"
-          description: "Container {{ $labels.name }} on {{ $labels.instance }} ({{ $labels.environment }}) has been down for more than 2 minutes"
+          description: "Container {{ $labels.name }} on {{ $labels.instance }} ({{ $labels.environment }}) has been unreachable to cAdvisor for more than 5 minutes (post-tune threshold; was 2m which flapped under scrape jitter)."
         isPaused: false
 
       - uid: alert-container-high-cpu

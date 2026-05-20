@@ -12,18 +12,11 @@
 
 import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
-import type { ApiResponse } from '../types';
-
-type ScholarshipFormConfig = {
-  scholarship_type: string;
-  fields: any[];
-  documents: any[];
-};
-
-type FormConfigSaveRequest = {
-  fields: any[];
-  documents: any[];
-};
+import type {
+  ApiResponse,
+  ScholarshipFormConfig,
+  FormConfigSaveRequest,
+} from '../types';
 
 type ApplicationField = {
   id: number;
@@ -34,7 +27,7 @@ type ApplicationField = {
   required: boolean;
   display_order: number;
   is_active: boolean;
-  options?: any;
+  options?: unknown;
 };
 
 type ApplicationFieldCreate = Omit<ApplicationField, 'id'>;
@@ -84,7 +77,11 @@ export function createApplicationFieldsApi() {
     ): Promise<ApiResponse<ScholarshipFormConfig>> => {
       const response = await typedClient.raw.POST('/api/v1/application-fields/form-config/{scholarship_type}', {
         params: { path: { scholarship_type: scholarshipType } },
-        body: config,
+        // openapi-fetch generates `Record<string, never>[]` for nested body
+        // schemas the backend doesn't emit fully (Pydantic models are
+        // surfaced as opaque dicts). The canonical FormConfigSaveRequest is
+        // the real shape; cast through `never` per ledger pattern.
+        body: config as never,
       });
       return toApiResponse<ScholarshipFormConfig>(response);
     },
@@ -110,7 +107,7 @@ export function createApplicationFieldsApi() {
       fieldData: ApplicationFieldCreate
     ): Promise<ApiResponse<ApplicationField>> => {
       const response = await typedClient.raw.POST('/api/v1/application-fields/fields', {
-        body: fieldData as any, // Frontend includes additional optional fields not in OpenAPI schema
+        body: fieldData as never, // Frontend includes additional optional fields not in OpenAPI schema
       });
       return toApiResponse<ApplicationField>(response);
     },
@@ -162,7 +159,7 @@ export function createApplicationFieldsApi() {
       documentData: ApplicationDocumentCreate
     ): Promise<ApiResponse<ApplicationDocument>> => {
       const response = await typedClient.raw.POST('/api/v1/application-fields/documents', {
-        body: documentData as any, // Frontend includes additional optional fields not in OpenAPI schema
+        body: documentData as never, // Frontend includes additional optional fields not in OpenAPI schema
       });
       return toApiResponse<ApplicationDocument>(response);
     },
@@ -200,7 +197,7 @@ export function createApplicationFieldsApi() {
     uploadDocumentExample: async (
       documentId: number,
       file: File
-    ): Promise<any> => {
+    ): Promise<ApiResponse<{ example_file_url?: string }>> => {
       const formData = new FormData();
       formData.append("file", file);
 

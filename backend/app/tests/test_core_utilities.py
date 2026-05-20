@@ -139,10 +139,10 @@ class TestSecurityFunctions:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
         assert "exp" in payload
 
-        # Verify expiry is set to default (15 minutes from now)
+        # Verify expiry is set to the configured default (access_token_expire_minutes)
         exp_time = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
         now = datetime.now(timezone.utc)
-        expected_exp = now + timedelta(minutes=15)
+        expected_exp = now + timedelta(minutes=settings.access_token_expire_minutes)
 
         # Allow 1 minute tolerance for test execution time
         assert abs((exp_time - expected_exp).total_seconds()) < 60
@@ -172,7 +172,7 @@ class TestSecurityFunctions:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
 
         # Assert
-        exp_time = datetime.fromtimestamp(payload["exp"])
+        exp_time = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
         now = datetime.now(timezone.utc)
         expected_exp = now + custom_expiry
 
@@ -200,46 +200,47 @@ class TestCustomExceptions:
     def test_not_found_error_creation(self):
         """Test NotFoundError creation"""
         # Arrange
-        message = "Resource not found"
-        resource_type = "User"
-        resource_id = "123"
+        resource = "User"
+        identifier = "123"
 
         # Act
-        error = NotFoundError(message, resource_type=resource_type, resource_id=resource_id)
+        error = NotFoundError(resource, identifier)
 
-        # Assert
-        assert str(error) == message
-        assert error.resource_type == resource_type
-        assert error.resource_id == resource_id
+        # Assert: message includes both resource and identifier
+        assert str(error) == f"{resource} not found: {identifier}"
+        assert error.status_code == 404
+        assert error.error_code == "NOT_FOUND"
 
     def test_authorization_error_creation(self):
         """Test AuthorizationError creation"""
         # Arrange
         message = "Insufficient permissions"
-        required_permission = "admin_access"
 
         # Act
-        error = AuthorizationError(message, required_permission=required_permission)
+        error = AuthorizationError(message)
 
         # Assert
         assert str(error) == message
-        assert error.required_permission == required_permission
+        assert error.status_code == 403
+        assert error.error_code == "AUTHORIZATION_ERROR"
 
     def test_business_logic_error_creation(self):
-        """Test BusinessLogicError creation"""
+        """Test BusinessLogicError creation — error code is fixed, custom data goes in details"""
         # Arrange
         message = "Business rule violation"
-        error_code = "DUPLICATE_APPLICATION"
+        details = {"violation_code": "DUPLICATE_APPLICATION"}
 
         # Act
-        error = BusinessLogicError(message, error_code=error_code)
+        error = BusinessLogicError(message, details=details)
 
         # Assert
         assert str(error) == message
-        assert error.error_code == error_code
+        assert error.status_code == 422
+        assert error.error_code == "BUSINESS_LOGIC_ERROR"
+        assert error.details == details
 
     def test_file_storage_error_creation(self):
-        """Test FileStorageError creation"""
+        """Test FileStorageError creation — file metadata stored in details"""
         # Arrange
         message = "File upload failed"
         file_name = "document.pdf"
@@ -250,8 +251,10 @@ class TestCustomExceptions:
 
         # Assert
         assert str(error) == message
-        assert error.file_name == file_name
-        assert error.storage_path == storage_path
+        assert error.status_code == 500
+        assert error.error_code == "FILE_STORAGE_ERROR"
+        assert error.details["file_name"] == file_name
+        assert error.details["storage_path"] == storage_path
 
 
 @pytest.mark.unit
@@ -541,11 +544,14 @@ class TestValidationHelpers:
         ]
 
         # Act & Assert
+        # check_deliverability=False — CI containers have no DNS resolver
+        # so MX-record lookups fail for every domain, making the test
+        # environment, not the validator, decide the outcome.
         from email_validator import validate_email
 
         for email in valid_emails:
             try:
-                validate_email(email)
+                validate_email(email, check_deliverability=False)
                 is_valid = True
             except Exception:
                 is_valid = False
@@ -567,7 +573,7 @@ class TestValidationHelpers:
 
         for email in invalid_emails:
             with pytest.raises(EmailNotValidError):
-                validate_email(email)
+                validate_email(email, check_deliverability=False)
 
     def test_validate_nycu_id_format(self):
         """Test NYCU ID validation"""
@@ -621,11 +627,16 @@ class TestValidationHelpers:
             sanitized = sanitized.strip(" .")
             return sanitized
 
+        # Each `/` becomes a single `_` (one-to-one substitution); leading
+        # dots are stripped by the trailing strip(" ."). For "../../../etc/passwd"
+        # → "../" * 3 + "etc/passwd" becomes "../_../_../_etc_passwd" via re.sub,
+        # i.e. ".._.._.._etc_passwd"; then strip(" .") trims the leading ".."
+        # → "_.._.._etc_passwd".
         test_cases = [
             ("normal_file.pdf", "normal_file.pdf"),
             ("file with spaces.txt", "file with spaces.txt"),
             ("file<>:pipe.doc", "file___pipe.doc"),
-            ("../../../etc/passwd", "..___..___.._etc_passwd"),
+            ("../../../etc/passwd", "_.._.._etc_passwd"),
             ("  .dotfile.txt  ", "dotfile.txt"),
         ]
 
@@ -633,9 +644,3 @@ class TestValidationHelpers:
         for input_filename, expected_output in test_cases:
             result = sanitize_filename(input_filename)
             assert result == expected_output
-
-    # TODO: Add tests for rate limiting utilities
-    # TODO: Add tests for data encryption/decryption helpers
-    # TODO: Add tests for API response formatting utilities
-    # TODO: Add tests for pagination helpers
-    # TODO: Add performance tests for utility functions with large inputs

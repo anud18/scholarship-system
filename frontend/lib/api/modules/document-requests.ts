@@ -55,7 +55,7 @@ export function createDocumentRequestsApi() {
     fulfillDocumentRequest: async (
       requestId: number,
       notes?: string
-    ): Promise<ApiResponse<any>> => {
+    ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.PATCH(
         '/api/v1/document-requests/{request_id}/fulfill',
         {
@@ -63,7 +63,7 @@ export function createDocumentRequestsApi() {
           body: notes ? { notes } : undefined,
         }
       );
-      return toApiResponse<any>(response);
+      return toApiResponse<unknown>(response);
     },
   };
 }

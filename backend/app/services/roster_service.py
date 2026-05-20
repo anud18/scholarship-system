@@ -11,6 +11,7 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import RosterAlreadyExistsError, RosterGenerationError, RosterLockedError, RosterNotFoundError
+from app.core.metrics import payment_rosters_total
 from app.core.pii_crypto import redact_dict_pii
 from app.models.application import Application
 from app.models.enums import QuotaManagementMode
@@ -172,6 +173,11 @@ class RosterService:
                 self.db.flush()  # 取得ID
 
                 logger.info(f"Creating new roster {roster_code}")
+
+                # Business metric: count roster creations so the
+                # Scholarship System Overview dashboard reflects when
+                # admins kick off a new payment cycle (issue #159).
+                payment_rosters_total.labels(status="processing").inc()
 
             # 記錄稽核日誌
             user = self.db.query(User).filter(User.id == created_by_user_id).first()
@@ -336,7 +342,7 @@ class RosterService:
                         disqualified_count += 1
 
                 except Exception as e:
-                    logger.error(f"Error processing application {application.id}: {e}")
+                    logger.exception(f"Error processing application {application.id}")
                     disqualified_count += 1
 
                     # 記錄錯誤日誌
@@ -405,8 +411,8 @@ class RosterService:
         except Exception as e:
             # 不在此處執行 rollback，讓調用者決定如何處理事務
             # 這避免了與 API 端點的 rollback 重複執行
-            logger.error(f"Error generating roster: {e}")
-            raise RosterGenerationError(f"Failed to generate roster: {e}")
+            logger.exception("Error generating roster")
+            raise RosterGenerationError(f"Failed to generate roster: {e}") from e
 
     def validate_roster_consistency(self, roster: PaymentRoster) -> Dict[str, Any]:
         """
@@ -437,9 +443,14 @@ class RosterService:
             )
 
         # 2. 檢查金額總計是否正確
+        # Skip None amounts in the sum — the per-item check below catches them
+        # as an error. Without this guard, sum() raises TypeError on None and
+        # the validator crashes instead of returning a clean error dict.
         if roster.items:
             actual_total = sum(
-                item.scholarship_amount for item in roster.items if item.is_included and item.is_qualified
+                item.scholarship_amount
+                for item in roster.items
+                if item.is_included and item.is_qualified and item.scholarship_amount is not None
             )
             if abs(float(actual_total) - float(roster.total_amount)) > 0.01:
                 errors.append(f"總金額不一致: 計算值={actual_total}, 儲存值={roster.total_amount}")
@@ -632,8 +643,8 @@ class RosterService:
                         and_(
                             CollegeRanking.scholarship_type_id == config.scholarship_type_id,
                             CollegeRanking.academic_year == academic_year,
-                            CollegeRanking.is_finalized == True,  # 必須已完成
-                            CollegeRanking.distribution_executed == True,  # 必須已執行分發
+                            CollegeRanking.is_finalized.is_(True),  # 必須已完成
+                            CollegeRanking.distribution_executed.is_(True),  # 必須已執行分發
                         )
                     )
                     .order_by(CollegeRanking.finalized_at.desc())
@@ -656,7 +667,7 @@ class RosterService:
             query = query.join(CollegeRankingItem, CollegeRankingItem.application_id == Application.id).filter(
                 and_(
                     CollegeRankingItem.ranking_id == ranking_id,
-                    CollegeRankingItem.is_allocated == True,  # 只選正取學生
+                    CollegeRankingItem.is_allocated.is_(True),  # 只選正取學生
                 )
             )
         else:
@@ -706,8 +717,8 @@ class RosterService:
                         logger.info(
                             f"Filtering semester-based scholarship for semester '{semester}' (month {month_int})"
                         )
-                except ValueError as e:
-                    logger.warning(f"Invalid month in period_label: {month} ({e})")
+                except ValueError:
+                    logger.warning("Invalid month in period_label: %s", month, exc_info=True)
         else:
             # 學年制獎學金：不應用學期過濾
             # 申請的 semester 應該是 NULL
@@ -824,7 +835,7 @@ class RosterService:
                 .filter(
                     and_(
                         CollegeRankingItem.application_id == application.id,
-                        CollegeRankingItem.is_allocated == True,
+                        CollegeRankingItem.is_allocated.is_(True),
                         CollegeRanking.academic_year == roster.academic_year,
                     )
                 )
@@ -1054,7 +1065,7 @@ class RosterService:
             }
 
         except Exception as e:
-            logger.error(f"Error validating student eligibility for application {application.id}: {e}")
+            logger.exception(f"Error validating student eligibility for application {application.id}")
             return {
                 "is_eligible": False,
                 "failed_rules": [f"驗證過程發生錯誤: {str(e)}"],
@@ -1136,7 +1147,7 @@ class RosterService:
             }
 
         except Exception as e:
-            logger.error(f"Error evaluating rule {rule.id}: {e}")
+            logger.exception(f"Error evaluating rule {rule.id}")
             return {
                 "passed": False,
                 "rule_name": rule.rule_name,
@@ -1224,9 +1235,12 @@ class RosterService:
                 logger.warning(f"Unknown operator: {operator}")
                 return False
 
-        except (ValueError, TypeError) as e:
-            logger.error(
-                f"Error evaluating condition: actual={actual_value}, operator={operator}, expected={expected_value}, error={e}"
+        except (ValueError, TypeError):
+            logger.exception(
+                "Error evaluating condition: actual=%s, operator=%s, expected=%s",
+                actual_value,
+                operator,
+                expected_value,
             )
             return False
 
@@ -1330,7 +1344,7 @@ class RosterService:
 
                 except Exception as e:
                     potential_issues.append(f"處理申請 {application.id} 時發生錯誤: {str(e)}")
-                    logger.warning(f"Error processing application {application.id} in dry run: {e}")
+                    logger.warning(f"Error processing application {application.id} in dry run", exc_info=True)
 
             # 5. 產生驗證摘要
             validation_summary = {
@@ -1383,8 +1397,8 @@ class RosterService:
             return result
 
         except Exception as e:
-            logger.error(f"Dry run failed: {e}")
-            raise ValueError(f"預演失敗: {str(e)}")
+            logger.exception("Dry run failed")
+            raise ValueError("預演失敗") from e
 
     def generate_rosters_from_distribution(
         self,
@@ -1437,8 +1451,8 @@ class RosterService:
                     CollegeRanking.scholarship_type_id == scholarship_type_id,
                     CollegeRanking.academic_year == academic_year,
                     sem_filter,
-                    CollegeRanking.is_finalized == True,
-                    CollegeRanking.distribution_executed == True,
+                    CollegeRanking.is_finalized.is_(True),
+                    CollegeRanking.distribution_executed.is_(True),
                 )
             )
             .all()
@@ -1476,7 +1490,7 @@ class RosterService:
             .filter(
                 and_(
                     CollegeRankingItem.ranking_id.in_(ranking_ids),
-                    CollegeRankingItem.is_allocated == True,
+                    CollegeRankingItem.is_allocated.is_(True),
                 )
             )
             .all()
@@ -1519,8 +1533,8 @@ class RosterService:
             except RosterAlreadyExistsError:
                 logger.info(f"Roster for ({alloc_year}, {sub_type}) already exists, skipping.")
                 continue
-            except Exception as e:
-                logger.error(f"Failed to generate roster for ({alloc_year}, {sub_type}): {e}")
+            except Exception:
+                logger.exception(f"Failed to generate roster for ({alloc_year}, {sub_type})")
                 raise
 
         self.db.commit()
@@ -1675,8 +1689,8 @@ class RosterService:
                 else:
                     disqualified_count += 1
 
-            except Exception as e:
-                logger.error(f"Error processing application {application.id}: {e}")
+            except Exception:
+                logger.exception(f"Error processing application {application.id}")
                 disqualified_count += 1
 
         roster.qualified_count = qualified_count
@@ -1685,6 +1699,11 @@ class RosterService:
         roster.verification_api_failures = verification_failures
         roster.status = RosterStatus.COMPLETED
         roster.completed_at = datetime.now(timezone.utc)
+
+        # Business metric: roster reached the completed state. Pairs
+        # with the "processing" increment at creation so dashboards can
+        # show completion ratio over time (issue #159).
+        payment_rosters_total.labels(status="completed").inc()
 
         self.db.flush()
 
@@ -1707,8 +1726,8 @@ class RosterService:
             )
             self.db.flush()  # Persist minio_object_name and excel_filename
             logger.info(f"Excel generated for roster {roster_code}: {roster.minio_object_name}")
-        except Exception as e:
-            logger.error(f"Failed to generate Excel for roster {roster_code}: {e}")
+        except Exception:
+            logger.exception(f"Failed to generate Excel for roster {roster_code}")
 
         audit_service.log_roster_operation(
             roster_id=roster.id,

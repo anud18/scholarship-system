@@ -270,7 +270,7 @@ class ManualDistributionService:
                 CollegeRanking.scholarship_type_id == scholarship_type_id,
                 CollegeRanking.academic_year == academic_year,
                 _ranking_semester_condition(semester),
-                CollegeRanking.is_finalized == True,
+                CollegeRanking.is_finalized.is_(True),
             )
         )
         result = await self.db.execute(ranking_query)
@@ -447,7 +447,7 @@ class ManualDistributionService:
             .where(
                 and_(
                     ScholarshipSubTypeConfig.scholarship_type_id == scholarship_type_id,
-                    ScholarshipSubTypeConfig.is_active == True,
+                    ScholarshipSubTypeConfig.is_active.is_(True),
                 )
             )
             .order_by(ScholarshipSubTypeConfig.display_order)
@@ -460,7 +460,7 @@ class ManualDistributionService:
         all_rankings_query = select(CollegeRanking).where(
             and_(
                 CollegeRanking.scholarship_type_id == scholarship_type_id,
-                CollegeRanking.is_finalized == True,
+                CollegeRanking.is_finalized.is_(True),
             )
         )
         result = await self.db.execute(all_rankings_query)
@@ -474,7 +474,7 @@ class ManualDistributionService:
                 .where(
                     and_(
                         CollegeRankingItem.ranking_id.in_(all_ranking_ids),
-                        CollegeRankingItem.is_allocated == True,
+                        CollegeRankingItem.is_allocated.is_(True),
                     )
                 )
             )
@@ -674,7 +674,7 @@ class ManualDistributionService:
                 self.db.add(history)
                 await self.db.flush()
         except Exception as e:
-            logger.warning(f"Failed to record allocation history: {e}")
+            logger.warning("Failed to record allocation history", exc_info=True)
             # Don't fail the allocation if history recording fails
 
         return {"updated_count": updated_count}
@@ -699,7 +699,7 @@ class ManualDistributionService:
                 CollegeRanking.scholarship_type_id == scholarship_type_id,
                 CollegeRanking.academic_year == academic_year,
                 _ranking_semester_condition(semester),
-                CollegeRanking.is_finalized == True,
+                CollegeRanking.is_finalized.is_(True),
             )
         )
         result = await self.db.execute(ranking_query)
@@ -787,7 +787,7 @@ class ManualDistributionService:
             self.db.add(history)
             await self.db.flush()
         except Exception as e:
-            logger.warning(f"Failed to record finalization history: {e}")
+            logger.warning("Failed to record finalization history", exc_info=True)
             # Don't fail the finalization if history recording fails
 
         return {
@@ -867,8 +867,8 @@ class ManualDistributionService:
             )
             self.db.add(history)
             await self.db.flush()
-        except Exception as e:
-            logger.warning(f"Failed to record restore history: {e}")
+        except Exception:
+            logger.warning("Failed to record restore history", exc_info=True)
 
         return {"restored_count": restored_count}
 
@@ -951,7 +951,7 @@ class ManualDistributionService:
             .where(
                 and_(
                     ScholarshipSubTypeConfig.scholarship_type_id == scholarship_type_id,
-                    ScholarshipSubTypeConfig.is_active == True,
+                    ScholarshipSubTypeConfig.is_active.is_(True),
                 )
             )
             .order_by(ScholarshipSubTypeConfig.display_order)
@@ -1013,7 +1013,7 @@ class ManualDistributionService:
                 CollegeRanking.scholarship_type_id == scholarship_type_id,
                 CollegeRanking.academic_year == academic_year,
                 _ranking_semester_condition(semester),
-                CollegeRanking.is_finalized == True,
+                CollegeRanking.is_finalized.is_(True),
             )
         )
         result = await self.db.execute(ranking_query)
@@ -1072,7 +1072,7 @@ class ManualDistributionService:
 
         # Determine all years to load configs for
         all_prior_years: set[int] = set()
-        for sub_type, years_list in prior_years_map.items():
+        for years_list in prior_years_map.values():
             if isinstance(years_list, list):
                 all_prior_years.update(years_list)
         years_to_check = sorted([academic_year] + list(all_prior_years), reverse=True)

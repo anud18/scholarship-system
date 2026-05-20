@@ -11,7 +11,7 @@ import logging
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import require_admin
@@ -89,6 +89,25 @@ async def update_email_template(
     # Fetch updated template
     updated_template = await EmailTemplateService.get_template(db, template.key)
 
+    logger.info(
+        "email-template updated: key=%s by user_id=%s sending_type=%s",
+        template.key,
+        current_user.id,
+        template.sending_type,
+        extra={
+            "actor_user_id": current_user.id,
+            "actor_role": current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
+            "template_key": template.key,
+            "sending_type": template.sending_type,
+            "subject_template_len": len(template.subject_template) if template.subject_template else 0,
+            "body_template_len": len(template.body_template) if template.body_template else 0,
+            "cc_count": len(template.cc) if template.cc else 0,
+            "bcc_count": len(template.bcc) if template.bcc else 0,
+            "requires_approval": template.requires_approval,
+            "max_recipients": template.max_recipients,
+        },
+    )
+
     return {
         "success": True,
         "message": "Email template updated successfully",
@@ -120,19 +139,33 @@ async def get_email_templates(
     return [EmailTemplateSchema.model_validate(template) for template in templates]
 
 
+# Per-scholarship email templates (closes issue #647)
+#
+# Persistence layer added in the same PR:
+#   - EmailTemplate.scholarship_type_id (NULL = generic; non-NULL = override)
+#   - Compound UNIQUE (key, scholarship_type_id) so generic + per-scholarship
+#     rows coexist for the same key
+#   - EmailTemplateService.{list,get,create,update,delete}_scholarship_template
+
+
 @router.get("/scholarship-email-templates/{scholarship_type_id}")
 async def get_scholarship_email_templates(
     scholarship_type_id: int,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get all email templates for a scholarship type"""
-    service = EmailTemplateService(db)
-    templates = await service.get_scholarship_templates(scholarship_type_id)
+    """Get all per-scholarship email-template overrides for a scholarship type.
+
+    Returns only rows where ``scholarship_type_id`` matches — generic
+    NULL-scoped templates are excluded because clients asking for
+    "this scholarship's templates" shouldn't see the fallback set.
+    """
+    templates = await EmailTemplateService.list_scholarship_templates(db, scholarship_type_id)
+    items = [EmailTemplateSchema.model_validate(t).model_dump() for t in templates]
     return {
         "success": True,
-        "message": "Email templates retrieved successfully",
-        "data": templates,
+        "message": "Scholarship email templates retrieved successfully",
+        "data": {"items": items, "scholarship_type_id": scholarship_type_id},
     }
 
 
@@ -143,29 +176,52 @@ async def get_scholarship_email_template(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get a specific email template"""
-    service = EmailTemplateService(db)
-    template = await service.get_template(scholarship_type_id, template_key)
+    """Get a specific per-scholarship email template (404 if not configured)."""
+    template = await EmailTemplateService.get_scholarship_template(db, scholarship_type_id, template_key)
+    if template is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"No per-scholarship template found for key='{template_key}' "
+                f"scholarship_type_id={scholarship_type_id}"
+            ),
+        )
     return {
         "success": True,
-        "message": "Email template retrieved successfully",
-        "data": template,
+        "message": "Scholarship email template retrieved successfully",
+        "data": EmailTemplateSchema.model_validate(template),
     }
 
 
-@router.post("/scholarship-email-templates")
+@router.post("/scholarship-email-templates", status_code=status.HTTP_201_CREATED)
 async def create_scholarship_email_template(
     template_data: EmailTemplateSchema,
+    scholarship_type_id: int = Query(..., description="Scholarship type to attach the template to"),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a new email template"""
-    service = EmailTemplateService(db)
-    template = await service.create_template(template_data)
+    """Create a new per-scholarship email template (409 if already exists)."""
+    payload = template_data.model_dump()
+    try:
+        template = await EmailTemplateService.create_scholarship_template(db, scholarship_type_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    logger.info(
+        "scholarship-email-template created: scholarship_type_id=%s key=%s by user_id=%s",
+        scholarship_type_id,
+        template.key,
+        current_user.id,
+        extra={
+            "actor_user_id": current_user.id,
+            "scholarship_type_id": scholarship_type_id,
+            "template_key": template.key,
+        },
+    )
     return {
         "success": True,
-        "message": "Email template created successfully",
-        "data": template,
+        "message": "Scholarship email template created successfully",
+        "data": EmailTemplateSchema.model_validate(template),
     }
 
 
@@ -177,13 +233,35 @@ async def update_scholarship_email_template(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Update an email template"""
-    service = EmailTemplateService(db)
-    template = await service.update_template(scholarship_type_id, template_key, template_data)
+    """Update an existing per-scholarship email template (404 if not configured)."""
+    payload = template_data.model_dump(exclude_unset=True)
+    template = await EmailTemplateService.update_scholarship_template(db, scholarship_type_id, template_key, payload)
+    if template is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"No per-scholarship template found for key='{template_key}' "
+                f"scholarship_type_id={scholarship_type_id}"
+            ),
+        )
+
+    logger.info(
+        "scholarship-email-template updated: scholarship_type_id=%s key=%s by user_id=%s fields=%s",
+        scholarship_type_id,
+        template_key,
+        current_user.id,
+        sorted(payload.keys()),
+        extra={
+            "actor_user_id": current_user.id,
+            "scholarship_type_id": scholarship_type_id,
+            "template_key": template_key,
+            "updated_fields": sorted(payload.keys()),
+        },
+    )
     return {
         "success": True,
-        "message": "Email template updated successfully",
-        "data": template,
+        "message": "Scholarship email template updated successfully",
+        "data": EmailTemplateSchema.model_validate(template),
     }
 
 
@@ -194,32 +272,77 @@ async def delete_scholarship_email_template(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Delete an email template"""
-    service = EmailTemplateService(db)
-    await service.delete_template(scholarship_type_id, template_key)
+    """Delete a per-scholarship email template (404 if not configured)."""
+    deleted = await EmailTemplateService.delete_scholarship_template(db, scholarship_type_id, template_key)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"No per-scholarship template found for key='{template_key}' "
+                f"scholarship_type_id={scholarship_type_id}"
+            ),
+        )
+
+    logger.info(
+        "scholarship-email-template deleted: scholarship_type_id=%s key=%s by user_id=%s",
+        scholarship_type_id,
+        template_key,
+        current_user.id,
+        extra={
+            "actor_user_id": current_user.id,
+            "scholarship_type_id": scholarship_type_id,
+            "template_key": template_key,
+        },
+    )
     return {
         "success": True,
-        "message": "Email template deleted successfully",
+        "message": "Scholarship email template deleted successfully",
+        "data": None,
     }
 
 
-@router.post("/scholarship-email-templates/{scholarship_type_id}/bulk-create")
+@router.post(
+    "/scholarship-email-templates/{scholarship_type_id}/bulk-create",
+    status_code=status.HTTP_201_CREATED,
+)
 async def bulk_create_scholarship_email_templates(
     scholarship_type_id: int,
     templates: List[EmailTemplateSchema],
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Bulk create email templates"""
-    service = EmailTemplateService(db)
-    created_templates = []
-    for template_data in templates:
-        template = await service.create_template(template_data)
-        created_templates.append(template)
+    """Create multiple per-scholarship templates in one call (idempotent on conflict)."""
+    created: list = []
+    skipped: list = []
+    for tpl in templates:
+        payload = tpl.model_dump()
+        try:
+            row = await EmailTemplateService.create_scholarship_template(db, scholarship_type_id, payload)
+            created.append(EmailTemplateSchema.model_validate(row))
+        except ValueError:
+            skipped.append(payload["key"])
+
+    logger.info(
+        "scholarship-email-template bulk-create: scholarship_type_id=%s created=%d skipped=%d by user_id=%s",
+        scholarship_type_id,
+        len(created),
+        len(skipped),
+        current_user.id,
+        extra={
+            "actor_user_id": current_user.id,
+            "scholarship_type_id": scholarship_type_id,
+            "created_count": len(created),
+            "skipped_keys": skipped,
+        },
+    )
     return {
         "success": True,
-        "message": f"{len(created_templates)} email templates created successfully",
-        "data": created_templates,
+        "message": f"Bulk created {len(created)} scholarship email templates",
+        "data": {
+            "created": [c.model_dump() for c in created],
+            "skipped_keys": skipped,
+            "scholarship_type_id": scholarship_type_id,
+        },
     }
 
 

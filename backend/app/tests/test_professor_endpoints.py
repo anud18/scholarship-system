@@ -236,24 +236,12 @@ class TestProfessorReviewEndpoints:
         request.client.host = "127.0.0.1"
         return request
 
-    @pytest.fixture
-    def sample_review_create(self):
-        """Sample review creation data"""
-        return ProfessorReviewCreate(
-            recommendation="Student demonstrates excellent academic performance",
-            items=[
-                ProfessorReviewItemCreate(
-                    sub_type_code="nstc",
-                    is_recommended=True,
-                    comments="Highly recommended for NSTC scholarship",
-                ),
-                ProfessorReviewItemCreate(
-                    sub_type_code="moe_1w",
-                    is_recommended=False,
-                    comments="Does not meet MOE requirements",
-                ),
-            ],
-        )
+    # NOTE: `sample_review_create` fixture removed alongside the
+    # ProfessorReviewCreate / ProfessorReviewItemCreate schemas during the
+    # unified-review-schema refactor (see app.schemas.review). The
+    # `test_create_professor_review_success` test that consumed it has
+    # already been removed; the fixture itself was the only remaining F821
+    # reference.
 
     @pytest.mark.asyncio
     async def test_get_professor_review_success(self, mock_professor, mock_db_session, mock_request):

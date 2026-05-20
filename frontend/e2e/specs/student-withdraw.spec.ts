@@ -139,9 +139,11 @@ test.describe("Student withdraws a submitted application", () => {
     expect(afterWithdraw!.status).toBe("draft");
 
     // 3. Second withdraw must be rejected — application is no longer in
-    //    submitted/under_review, so the service raises ValidationError →
-    //    HTTP 400. We pin this so a future change that silently no-ops on
-    //    invalid state transitions fails the test.
+    //    submitted/under_review, so the service raises ValidationError.
+    //    ScholarshipException maps ValidationError → HTTP 422 (see
+    //    backend/app/core/exceptions.py:34). We pin the 4xx outcome so a
+    //    future change that silently no-ops on invalid state transitions
+    //    fails the test.
     const secondWithdrawRes = await apiAs<{ success: boolean; detail?: string }>(
       studentLogin.token,
       "POST",
@@ -151,10 +153,10 @@ test.describe("Student withdraws a submitted application", () => {
     pushTrace(runState, secondWithdrawRes.traceId);
     expect(
       secondWithdrawRes.status,
-      `expected 400 for second withdraw, got ${secondWithdrawRes.status} body=${JSON.stringify(
+      `expected 422 for second withdraw, got ${secondWithdrawRes.status} body=${JSON.stringify(
         secondWithdrawRes.body,
       )}`,
-    ).toBe(400);
+    ).toBe(422);
 
     // Status didn't drift further — still draft.
     const finalState = await getApplication(appId);

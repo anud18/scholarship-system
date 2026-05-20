@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { logger } from "@/lib/utils/logger";
 import {
   Card,
   CardContent,
@@ -123,8 +124,8 @@ export function EmailAutomationManagement() {  const [rules, setRules] = useStat
       if (response.success && response.data) {
         setRules(response.data);
       }
-    } catch (error: any) {
-      toast.error(error.message || "無法載入自動化規則");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "無法載入自動化規則"));
     } finally {
       setIsLoading(false);
     }
@@ -136,8 +137,8 @@ export function EmailAutomationManagement() {  const [rules, setRules] = useStat
       if (response.success && response.data) {
         setTriggerEvents(response.data);
       }
-    } catch (error: any) {
-      console.error("Failed to fetch trigger events:", error);
+    } catch (error: unknown) {
+      logger.error("Failed to fetch trigger events", { error: error });
     }
   };
 
@@ -146,15 +147,17 @@ export function EmailAutomationManagement() {  const [rules, setRules] = useStat
       const response = await apiClient.admin.getEmailTemplatesBySendingType();
       if (response.success && response.data) {
         // Use subject_template from database as label
-        const templates = response.data.map((t: any) => ({
-          key: t.key,
-          label: t.subject_template || t.key, // Use subject as label, fallback to key
-          subject_template: t.subject_template,
-        }));
+        const templates = (response.data as { key: string; subject_template?: string }[]).map(
+          (t) => ({
+            key: t.key,
+            label: t.subject_template || t.key, // Use subject as label, fallback to key
+            subject_template: t.subject_template,
+          })
+        );
         setEmailTemplates(templates);
       }
-    } catch (error: any) {
-      console.error("Failed to fetch email templates:", error);
+    } catch (error: unknown) {
+      logger.error("Failed to fetch email templates", { error: error });
     }
   };
 
@@ -204,8 +207,8 @@ export function EmailAutomationManagement() {  const [rules, setRules] = useStat
         setIsCreateDialogOpen(false);
         fetchRules();
       }
-    } catch (error: any) {
-      toast.error(error.message || "創建規則失敗");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "創建規則失敗"));
     } finally {
       setIsSubmitting(false);
     }
@@ -230,8 +233,8 @@ export function EmailAutomationManagement() {  const [rules, setRules] = useStat
         setIsEditDialogOpen(false);
         fetchRules();
       }
-    } catch (error: any) {
-      toast.error(error.message || "更新規則失敗");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "更新規則失敗"));
     } finally {
       setIsSubmitting(false);
     }
@@ -248,8 +251,8 @@ export function EmailAutomationManagement() {  const [rules, setRules] = useStat
         setIsDeleteDialogOpen(false);
         fetchRules();
       }
-    } catch (error: any) {
-      toast.error(error.message || "刪除規則失敗");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "刪除規則失敗"));
     } finally {
       setIsSubmitting(false);
     }
@@ -262,8 +265,8 @@ export function EmailAutomationManagement() {  const [rules, setRules] = useStat
         toast.success(rule.is_active ? "規則已停用" : "規則已啟用");
         fetchRules();
       }
-    } catch (error: any) {
-      toast.error(error.message || "切換規則狀態失敗");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "切換規則狀態失敗"));
     }
   };
 

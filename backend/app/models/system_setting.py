@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import relationship
 
@@ -87,9 +87,17 @@ class SendingType(enum.Enum):
 
 class EmailTemplate(Base):
     __tablename__ = "email_templates"
+    # SECURITY/CORRECTNESS: uniqueness is on (key, scholarship_type_id) so
+    # generic templates (scholarship_type_id IS NULL) and per-scholarship
+    # overrides can coexist for the same key. PostgreSQL allows multiple
+    # NULLs in a unique constraint by default, which is what we want.
+    __table_args__ = (UniqueConstraint("key", "scholarship_type_id", name="uq_email_templates_key_scholarship"),)
 
     id = Column(Integer, primary_key=True, index=True)
-    key = Column(String(100), unique=True, nullable=False, index=True)
+    key = Column(String(100), nullable=False, index=True)
+    # NULL = generic template (applies to all scholarships).
+    # Non-NULL = per-scholarship override (looked up first by callers).
+    scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=True, index=True)
     subject_template = Column(String(255), nullable=False)
     body_template = Column(Text, nullable=False)
     cc = Column(Text, nullable=True)  # 逗號分隔或 JSON

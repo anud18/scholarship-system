@@ -135,10 +135,7 @@ async def upload_batch_import_data(
             # Verify it's a valid CSV/text file
             pd.read_csv(BytesIO(file_content), nrows=0)
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=f"檔案結構驗證失敗: {str(e)}",
-        )
+        raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="檔案結構驗證失敗") from e
 
     # Parse and validate
     normalized_semester = (semester.strip() if isinstance(semester, str) else semester) or None
@@ -235,11 +232,9 @@ async def upload_batch_import_data(
             content_type=content_type,
         )
         batch_import.file_path = object_name
-    except Exception as e:
+    except Exception:
         # Log error but don't fail the upload if MinIO is unavailable
-        import logging
-
-        logging.error(f"Failed to upload batch import file to MinIO: {e}")
+        logger.warning("Failed to upload batch import file to MinIO", exc_info=True)
 
     # Store parsed data for confirm step
     batch_import.parsed_data = {
@@ -694,11 +689,11 @@ async def upload_batch_documents(
     # Validate ZIP file
     try:
         zip_file = zipfile.ZipFile(BytesIO(zip_content))
-    except zipfile.BadZipFile:
+    except zipfile.BadZipFile as e:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail="無效的 ZIP 檔案",
-        )
+        ) from e
 
     # ZIP bomb protection
     # 1. Check file count limit (max 1000 files)
@@ -1105,6 +1100,20 @@ async def confirm_batch_import(
             created_application_ids=created_ids,
         )
 
+        logger.warning(
+            "Batch import %d confirmed by user_id=%s: %d applications created, %d errors",
+            batch_id,
+            current_user.id,
+            len(created_ids),
+            len(creation_errors),
+            extra={
+                "batch_id": batch_id,
+                "created_application_count": len(created_ids),
+                "creation_error_count": len(creation_errors),
+                "actor_user_id": current_user.id,
+            },
+        )
+
         return {
             "success": True,
             "message": (
@@ -1118,10 +1127,14 @@ async def confirm_batch_import(
     except BatchImportError as e:
         # Re-raise to let the global exception handler deal with it
         # Batch status has already been updated to 'failed' in the service
+        logger.exception(
+            "Batch import confirmation failed",
+            extra={"batch_id": batch_id, "actor_user_id": current_user.id},
+        )
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=e.message,
-        )
+        ) from e
 
 
 @router.get("/history")
@@ -1319,12 +1332,12 @@ async def download_batch_import_file(
     # SECURITY: Validate MinIO object name (CLAUDE.md requirement)
     try:
         validate_object_name_minio(batch_import.file_path)
-    except HTTPException:
+    except HTTPException as exc:
         logger.error(f"Invalid file_path from database: {batch_import.file_path}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="檔案路徑驗證失敗",
-        )
+        ) from exc
 
     # Get file from MinIO
     try:
@@ -1353,13 +1366,14 @@ async def download_batch_import_file(
             headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"},
         )
     except Exception as e:
-        import logging
-
-        logging.error(f"Failed to download batch import file from MinIO: {e}")
+        logger.exception(
+            "Failed to download batch import file from MinIO",
+            extra={"batch_id": batch_id, "file_path": batch_import.file_path},
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="下載檔案時發生錯誤",
-        )
+        ) from e
 
 
 @router.delete("/{batch_id}")
@@ -1373,12 +1387,11 @@ async def delete_batch_import(
 
     **權限**: College 角色僅能刪除自己上傳的批次，Admin/Super Admin 可刪除所有批次
     """
-    import logging
-
     from app.core.config import settings
     from app.services.minio_service import MinIOService
 
-    logger = logging.getLogger(__name__)
+    # Note: `logger` is already configured at module top (line 44); the
+    # local re-import shadowed it for no reason — removed in PR #511.
 
     # Get batch import with related applications
     stmt = select(BatchImport).where(BatchImport.id == batch_id)
@@ -1418,13 +1431,27 @@ async def delete_batch_import(
         try:
             minio_service = MinIOService()
             minio_service.delete_file(bucket_name=settings.minio_bucket, object_name=batch_import.file_path)
-        except Exception as e:
-            logger.warning(f"Failed to delete batch import file from MinIO: {e}")
+        except Exception:
+            logger.warning("Failed to delete batch import file from MinIO", exc_info=True)
             # Continue with batch deletion even if MinIO deletion fails
 
     # Delete batch import record
     await db.delete(batch_import)
     await db.commit()
+
+    logger.warning(
+        "Batch import %d (%s) deleted by user_id=%s; %d related applications removed",
+        batch_id,
+        batch_import.file_name,
+        current_user.id,
+        application_count,
+        extra={
+            "batch_id": batch_id,
+            "file_name": batch_import.file_name,
+            "deleted_application_count": application_count,
+            "actor_user_id": current_user.id,
+        },
+    )
 
     return {
         "success": True,

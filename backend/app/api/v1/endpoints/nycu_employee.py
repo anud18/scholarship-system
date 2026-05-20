@@ -2,12 +2,14 @@
 NYCU Employee API endpoints.
 """
 
+import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.core.cache import cached
+from app.core.security import require_admin
 from app.integrations.nycu_emp import (
     NYCUEmpAuthenticationError,
     NYCUEmpConnectionError,
@@ -19,7 +21,12 @@ from app.integrations.nycu_emp import (
     create_nycu_emp_client_from_env,
 )
 
-router = APIRouter()
+logger = logging.getLogger(__name__)
+
+# SECURITY: All NYCU employee directory endpoints expose internal staff PII
+# (names, departments, positions, employee numbers). Gate the entire router
+# behind admin authentication — no public access to the directory.
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 
 class EmployeeListResponse(BaseModel):
@@ -107,17 +114,18 @@ async def get_employees(
         )
 
     except NYCUEmpAuthenticationError as e:
-        raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
+        raise HTTPException(status_code=401, detail="Authentication failed") from e
     except NYCUEmpValidationError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid request: {str(e)}")
+        raise HTTPException(status_code=400, detail="Invalid request") from e
     except NYCUEmpConnectionError as e:
-        raise HTTPException(status_code=503, detail=f"Service unavailable: {str(e)}")
+        raise HTTPException(status_code=503, detail="Service unavailable") from e
     except NYCUEmpTimeoutError as e:
-        raise HTTPException(status_code=504, detail=f"Request timeout: {str(e)}")
+        raise HTTPException(status_code=504, detail="Request timeout") from e
     except NYCUEmpError as e:
-        raise HTTPException(status_code=500, detail=f"API error: {str(e)}")
+        raise HTTPException(status_code=500, detail="API error") from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+        logger.exception("Unexpected error")
+        raise HTTPException(status_code=500, detail="Unexpected error") from e
 
 
 @router.get("/employees/all")
@@ -154,17 +162,18 @@ async def get_all_employees(status: str = Query("01", description="Employee stat
         return response_pages
 
     except NYCUEmpAuthenticationError as e:
-        raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
+        raise HTTPException(status_code=401, detail="Authentication failed") from e
     except NYCUEmpValidationError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid request: {str(e)}")
+        raise HTTPException(status_code=400, detail="Invalid request") from e
     except NYCUEmpConnectionError as e:
-        raise HTTPException(status_code=503, detail=f"Service unavailable: {str(e)}")
+        raise HTTPException(status_code=503, detail="Service unavailable") from e
     except NYCUEmpTimeoutError as e:
-        raise HTTPException(status_code=504, detail=f"Request timeout: {str(e)}")
+        raise HTTPException(status_code=504, detail="Request timeout") from e
     except NYCUEmpError as e:
-        raise HTTPException(status_code=500, detail=f"API error: {str(e)}")
+        raise HTTPException(status_code=500, detail="API error") from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+        logger.exception("Unexpected error")
+        raise HTTPException(status_code=500, detail="Unexpected error") from e
 
 
 @router.get("/employees/search")
@@ -227,17 +236,18 @@ async def search_employees(
         )
 
     except NYCUEmpAuthenticationError as e:
-        raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
+        raise HTTPException(status_code=401, detail="Authentication failed") from e
     except NYCUEmpValidationError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid request: {str(e)}")
+        raise HTTPException(status_code=400, detail="Invalid request") from e
     except NYCUEmpConnectionError as e:
-        raise HTTPException(status_code=503, detail=f"Service unavailable: {str(e)}")
+        raise HTTPException(status_code=503, detail="Service unavailable") from e
     except NYCUEmpTimeoutError as e:
-        raise HTTPException(status_code=504, detail=f"Request timeout: {str(e)}")
+        raise HTTPException(status_code=504, detail="Request timeout") from e
     except NYCUEmpError as e:
-        raise HTTPException(status_code=500, detail=f"API error: {str(e)}")
+        raise HTTPException(status_code=500, detail="API error") from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+        logger.exception("Unexpected error")
+        raise HTTPException(status_code=500, detail="Unexpected error") from e
 
 
 @router.get("/employees/{employee_no}")
@@ -272,14 +282,15 @@ async def get_employee_by_no(
     except HTTPException:
         raise  # Re-raise HTTP exceptions as-is
     except NYCUEmpAuthenticationError as e:
-        raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
+        raise HTTPException(status_code=401, detail="Authentication failed") from e
     except NYCUEmpValidationError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid request: {str(e)}")
+        raise HTTPException(status_code=400, detail="Invalid request") from e
     except NYCUEmpConnectionError as e:
-        raise HTTPException(status_code=503, detail=f"Service unavailable: {str(e)}")
+        raise HTTPException(status_code=503, detail="Service unavailable") from e
     except NYCUEmpTimeoutError as e:
-        raise HTTPException(status_code=504, detail=f"Request timeout: {str(e)}")
+        raise HTTPException(status_code=504, detail="Request timeout") from e
     except NYCUEmpError as e:
-        raise HTTPException(status_code=500, detail=f"API error: {str(e)}")
+        raise HTTPException(status_code=500, detail="API error") from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+        logger.exception("Unexpected error")
+        raise HTTPException(status_code=500, detail="Unexpected error") from e

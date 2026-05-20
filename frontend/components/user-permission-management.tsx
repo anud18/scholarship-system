@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { logger } from "@/lib/utils/logger";
 import { useAuth } from "@/hooks/use-auth";
 import { apiClient } from "@/lib/api";
 import type { UserStats, UserCreate as UserCreateType } from "@/lib/api";
@@ -134,7 +135,13 @@ export function UserPermissionManagement() {
         .map((role) => role.trim())
         .join(",");
 
-      const params: any = {
+      const params: {
+        page: number;
+        size: number;
+        roles: string;
+        search?: string;
+        role?: string;
+      } = {
         page: userPagination.page,
         size: userPagination.size,
         roles: rolesParam,
@@ -183,7 +190,7 @@ export function UserPermissionManagement() {
         setUserStats(response.data);
       }
     } catch (error) {
-      console.error("獲取使用者統計失敗:", error);
+      logger.error("獲取使用者統計失敗", { error: error });
     }
   };
 
@@ -193,10 +200,10 @@ export function UserPermissionManagement() {
     try {
       const response = await apiClient.admin.getScholarshipPermissions();
       if (response.success && response.data) {
-        setScholarshipPermissions(response.data);
+        setScholarshipPermissions(response.data as ScholarshipPermission[]);
       }
     } catch (error) {
-      console.error("Error fetching permissions:", error);
+      logger.error("Error fetching permissions", { error: error });
     } finally {
       setLoadingPermissions(false);
     }
@@ -206,10 +213,10 @@ export function UserPermissionManagement() {
     try {
       const response = await apiClient.admin.getAllScholarshipsForPermissions();
       if (response.success && response.data) {
-        setAvailableScholarships(response.data);
+        setAvailableScholarships(response.data as Scholarship[]);
       }
     } catch (error) {
-      console.error("獲取獎學金列表失敗:", error);
+      logger.error("獲取獎學金列表失敗", { error: error });
     }
   };
 
@@ -220,7 +227,7 @@ export function UserPermissionManagement() {
         setAcademies(response.data);
       }
     } catch (error) {
-      console.error("獲取學院列表失敗:", error);
+      logger.error("獲取學院列表失敗", { error: error });
     }
   };
 
@@ -240,11 +247,14 @@ export function UserPermissionManagement() {
     }
   }, [userSearch, userRoleFilter]);
 
-  const handleUserFormChange = (field: keyof UserCreateForm, value: any) => {
+  const handleUserFormChange = <K extends keyof UserCreateForm>(
+    field: K,
+    value: UserCreateForm[K]
+  ) => {
     setUserForm((prev) => ({ ...prev, [field]: value }));
 
     if (field === "role") {
-      if (!["college", "admin"].includes(value)) {
+      if (!["college", "admin"].includes(value as string)) {
         if (editingUser) {
           setScholarshipPermissions((prev) =>
             prev.filter((p) => p.user_id !== Number(editingUser.id))
@@ -263,7 +273,10 @@ export function UserPermissionManagement() {
 
     try {
       // Only send fields that have values - SSO will populate the rest on first login
-      const createData: any = {
+      const createData: Partial<UserCreateType> & {
+        nycu_id: string;
+        role: UserCreateType["role"];
+      } = {
         nycu_id: userForm.nycu_id,
         role: userForm.role,
       };
@@ -272,7 +285,10 @@ export function UserPermissionManagement() {
       if (userForm.comment) createData.comment = userForm.comment;
       if (userForm.college_code) createData.college_code = userForm.college_code;
 
-      const response = await apiClient.users.create(createData);
+      // Cast required because backend supports SSO-bootstrap creation with only
+      // nycu_id + role; email/name are filled in on first login. The frontend
+      // UserCreate type marks them required to model the post-bootstrap shape.
+      const response = await apiClient.users.create(createData as UserCreateType);
 
       if (response.success) {
         const newUserId = response.data?.id;
@@ -390,9 +406,9 @@ export function UserPermissionManagement() {
       nycu_id: user.nycu_id,
       email: user.email,
       name: user.name,
-      role: user.role as any,
-      user_type: user.user_type as any,
-      status: user.status as any,
+      role: user.role as UserCreateType["role"],
+      user_type: user.user_type as UserCreateType["user_type"],
+      status: user.status as UserCreateType["status"],
       dept_code: user.dept_code || "",
       dept_name: user.dept_name || "",
       comment: user.comment || "",
@@ -466,7 +482,7 @@ export function UserPermissionManagement() {
   };
 
   const handlePermissionChange = useCallback(
-    (permissions: any[]) => {
+    (permissions: ScholarshipPermission[]) => {
       const userId = editingUser?.id;
       if (userId) {
         const otherUserPermissions = scholarshipPermissions.filter(

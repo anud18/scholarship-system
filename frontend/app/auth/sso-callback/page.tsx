@@ -11,9 +11,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useAuth } from "@/hooks/use-auth";
+import { logger } from "@/lib/utils/logger";
 
 function SSOCallbackContent() {
-  console.log("🚀 SSOCallbackContent component is rendering!");
+  logger.debug("SSOCallbackContent rendering");
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -23,11 +24,9 @@ function SSOCallbackContent() {
   );
   const [message, setMessage] = useState("");
 
-  console.log("🔍 SearchParams available:", !!searchParams);
-  console.log(
-    "🔍 Current search params:",
-    searchParams ? Object.fromEntries(searchParams.entries()) : "Not available"
-  );
+  logger.debug("SearchParams probe", {
+    hasSearchParams: !!searchParams,
+  });
 
   useEffect(() => {
     const handleSSOCallback = async () => {
@@ -36,25 +35,17 @@ function SSOCallbackContent() {
         const token = searchParams.get("token");
         const redirectPath = searchParams.get("redirect") || "dashboard";
 
-        console.log("🔐 SSO Callback - Starting authentication process");
-        console.log(
-          "📄 URL Search Params:",
-          Object.fromEntries(searchParams.entries())
-        );
-        console.log(
-          "🎟️ Token received:",
-          !!token,
-          token ? `${token.substring(0, 20)}...` : "none"
-        );
-        console.log("🔄 Redirect path:", redirectPath);
+        logger.debug("SSO Callback - starting authentication", {
+          hasToken: !!token,
+          redirectPath,
+        });
 
         if (!token) {
-          console.error("❌ No token provided in URL parameters");
+          logger.error("No token provided in SSO callback URL parameters");
           throw new Error("No token provided");
         }
 
         // Decode JWT token directly to get user data
-        console.log("🔓 Decoding JWT token directly...");
         try {
           // Simple JWT decode (we trust the token since it came from our backend)
           const base64Url = token.split(".")[1];
@@ -69,9 +60,7 @@ function SSOCallbackContent() {
           );
 
           const tokenData = JSON.parse(jsonPayload);
-          console.log("🎫 Decoded token data:", tokenData);
-          console.log("🔑 User role from token:", tokenData.role);
-          console.log("🆔 User ID from token:", tokenData.nycu_id);
+          logger.debug("JWT decoded", { role: tokenData.role });
 
           // Create user object from token data
           const userData = {
@@ -84,12 +73,9 @@ function SSOCallbackContent() {
             updated_at: new Date().toISOString(),
           };
 
-          console.log("👤 Constructed user data:", userData);
-
           // Use the login function from useAuth to set authentication state
-          console.log("🔄 Calling login() with token and user data...");
           login(token, userData);
-          console.log("✅ login() function called successfully");
+          logger.debug("login() called successfully");
 
           setStatus("success");
           setMessage("登入成功！正在重導向...");
@@ -98,57 +84,37 @@ function SSOCallbackContent() {
           const userRole = userData.role;
           let finalPath = "/";
 
-          console.log("🎯 Determining redirect path based on role:", userRole);
-
           // Role-based redirection
           if (userRole === "admin" || userRole === "super_admin") {
             finalPath = "/#dashboard"; // Admin dashboard
-            console.log("👑 Admin/Super Admin - redirecting to dashboard");
           } else if (userRole === "professor") {
             finalPath = "/#main"; // Professor review page
-            console.log("🎓 Professor - redirecting to main");
           } else if (userRole === "college") {
             finalPath = "/#main"; // College dashboard
-            console.log("🏫 College - redirecting to main");
           } else {
             finalPath = "/#main"; // Student portal
-            console.log("🎒 Student - redirecting to main");
           }
 
-          console.log("🚀 Final redirect path:", finalPath);
+          logger.debug("SSO redirect resolved", { role: userRole, finalPath });
 
           setTimeout(() => {
             router.push(finalPath);
           }, 200);
         } catch (decodeError) {
-          console.error("💥 Token decoding failed:", decodeError);
-          console.error(
-            "📡 Decode error details:",
-            decodeError instanceof Error ? decodeError.message : decodeError
-          );
+          logger.error("Token decoding failed", { decodeError });
           setStatus("error");
           setMessage("登入驗證失敗，請重新嘗試");
 
-          console.log("🔄 Redirecting to login page after token decode error");
           // Redirect to login page after error
           setTimeout(() => {
             router.push("/");
           }, 3000);
         }
       } catch (error) {
-        console.error("💥 SSO callback error:", error);
-        console.error(
-          "💥 Error details:",
-          error instanceof Error ? error.message : error
-        );
-        console.error(
-          "💥 Error stack:",
-          error instanceof Error ? error.stack : "No stack trace"
-        );
+        logger.error("SSO callback error", { error });
         setStatus("error");
         setMessage("登入失敗，請重新嘗試");
 
-        console.log("🔄 Redirecting to login page after general error");
         // Redirect to login page after error
         setTimeout(() => {
           router.push("/");
@@ -177,45 +143,15 @@ function SSOCallbackContent() {
           )}
 
           {status === "success" && (
-            <>
-              <div className="h-8 w-8 mx-auto mb-4 text-green-600 flex items-center justify-center">
-                <svg
-                  className="h-8 w-8"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              </div>
-              <p className="text-green-600 font-medium">{message}</p>
-            </>
+            <div className="text-green-600">
+              <p>{message}</p>
+            </div>
           )}
 
           {status === "error" && (
-            <>
-              <div className="h-8 w-8 mx-auto mb-4 text-red-600 flex items-center justify-center">
-                <svg
-                  className="h-8 w-8"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </div>
-              <p className="text-red-600 font-medium">{message}</p>
-            </>
+            <div className="text-red-600">
+              <p>{message}</p>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -224,28 +160,11 @@ function SSOCallbackContent() {
 }
 
 export default function SSOCallbackPage() {
-  console.log("🎯 SSO Callback Page component is rendering!");
-  console.log(
-    "📍 Current location:",
-    typeof window !== "undefined" ? window.location.href : "SSR"
-  );
-
   return (
     <Suspense
       fallback={
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-nycu-blue-50 flex items-center justify-center">
-          <Card className="w-full max-w-md">
-            <CardHeader className="text-center">
-              <CardTitle className="text-2xl text-nycu-navy-800">
-                Portal SSO 登入
-              </CardTitle>
-              <CardDescription>正在處理您的登入請求...</CardDescription>
-            </CardHeader>
-            <CardContent className="text-center">
-              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-nycu-blue-600" />
-              <p className="text-nycu-navy-600">正在載入頁面...</p>
-            </CardContent>
-          </Card>
+          <Loader2 className="h-8 w-8 animate-spin text-nycu-blue-600" />
         </div>
       }
     >

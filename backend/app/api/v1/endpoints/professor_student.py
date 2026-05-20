@@ -101,11 +101,11 @@ async def get_professor_student_relationships(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error fetching professor-student relationships: {str(e)}")
+        logger.exception("Error fetching professor-student relationships")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while fetching relationships",
-        )
+        ) from e
 
 
 @router.post("")
@@ -192,11 +192,11 @@ async def create_professor_student_relationship(
         raise
     except Exception as e:
         await db.rollback()
-        logger.error(f"Error creating professor-student relationship: {str(e)}")
+        logger.exception("Error creating professor-student relationship")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while creating relationship",
-        )
+        ) from e
 
 
 @router.put("/{id}")
@@ -263,11 +263,11 @@ async def update_professor_student_relationship(
         raise
     except Exception as e:
         await db.rollback()
-        logger.error(f"Error updating professor-student relationship: {str(e)}")
+        logger.exception("Error updating professor-student relationship")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while updating relationship",
-        )
+        ) from e
 
 
 @router.delete("/{id}")
@@ -308,8 +308,8 @@ async def delete_professor_student_relationship(
         raise
     except Exception as e:
         await db.rollback()
-        logger.error(f"Error deleting professor-student relationship: {str(e)}")
+        logger.exception("Error deleting professor-student relationship")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while deleting relationship",
-        )
+        ) from e

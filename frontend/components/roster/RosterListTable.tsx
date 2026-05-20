@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { logger } from "@/lib/utils/logger";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -52,12 +53,20 @@ interface Period {
 interface RosterListTableProps {
   periods: Period[];
   configId: number;
+  /**
+   * Roster cycle from the parent schedule (monthly | semi_yearly | yearly).
+   * Required — previously this was hardcoded to "monthly" when generating
+   * rosters, which silently mislabelled rosters generated against
+   * semi-yearly / yearly schedules. See PR #507.
+   */
+  rosterCycle: string;
   onRosterGenerated?: () => void;
 }
 
 export function RosterListTable({
   periods,
   configId,
+  rosterCycle,
   onRosterGenerated,
 }: RosterListTableProps) {
   const [selectedPeriod, setSelectedPeriod] = useState<Period | null>(null);
@@ -139,7 +148,7 @@ export function RosterListTable({
 
       toast.success("造冊檔案已下載");
     } catch (error) {
-      console.error("Failed to download roster:", error);
+      logger.error("Failed to download roster", { error: error });
       toast.error("下載失敗: 無法下載造冊檔案");
     } finally {
       setDownloading(null);
@@ -157,7 +166,7 @@ export function RosterListTable({
         body: JSON.stringify({
           scholarship_configuration_id: configId,
           period_label: period.label,
-          roster_cycle: "monthly", // TODO: Get from schedule
+          roster_cycle: rosterCycle,
           academic_year: parseInt(period.label.split("-")[0]),
           student_verification_enabled: true,
           auto_export_excel: true,
@@ -174,9 +183,9 @@ export function RosterListTable({
       } else {
         throw new Error(response.message || "產生造冊失敗");
       }
-    } catch (error: any) {
-      console.error("Failed to generate roster:", error);
-      toast.error(`產生造冊失敗: ${error.message || "無法產生造冊"}`);
+    } catch (error: unknown) {
+      logger.error("Failed to generate roster", { error: error });
+      toast.error(`產生造冊失敗: ${(error instanceof Error ? error.message : "無法產生造冊")}`);
     } finally {
       setGenerating(null);
     }

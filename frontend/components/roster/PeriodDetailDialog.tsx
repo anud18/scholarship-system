@@ -1,5 +1,6 @@
 "use client"
 
+import { logger } from "@/lib/utils/logger";
 import { useState } from "react"
 import {
   Dialog,
@@ -49,6 +50,13 @@ interface PeriodDetailDialogProps {
   onOpenChange: (open: boolean) => void
   period: Period
   configId: number
+  /**
+   * Roster cycle from the parent schedule (monthly | semi_yearly | yearly).
+   * Required — previously hardcoded to "monthly" when generating rosters,
+   * which silently mislabelled rosters generated against semi-yearly /
+   * yearly schedules. See PR #507.
+   */
+  rosterCycle: string
   onRosterGenerated?: () => void
 }
 
@@ -57,6 +65,7 @@ export function PeriodDetailDialog({
   onOpenChange,
   period,
   configId,
+  rosterCycle,
   onRosterGenerated,
 }: PeriodDetailDialogProps) {
   const [downloading, setDownloading] = useState(false)
@@ -117,7 +126,7 @@ export function PeriodDetailDialog({
 
       toast.success("造冊檔案已下載")
     } catch (error) {
-      console.error("Failed to download roster:", error)
+      logger.error("Failed to download roster", { error: error })
       toast.error("下載失敗: 無法下載造冊檔案")
     } finally {
       setDownloading(false)
@@ -127,14 +136,12 @@ export function PeriodDetailDialog({
   const handleGenerateNow = async () => {
     setGenerating(true)
     try {
-      // TODO: Need to get schedule_id from parent component
-      // For now, we'll use the generate API directly
       const response = await apiClient.request("/payment-rosters/generate", {
         method: "POST",
         body: JSON.stringify({
           scholarship_configuration_id: configId,
           period_label: period.label,
-          roster_cycle: "monthly", // TODO: Get from schedule
+          roster_cycle: rosterCycle,
           academic_year: parseInt(period.label.split("-")[0]),
           student_verification_enabled: true,
           auto_export_excel: true,
@@ -151,9 +158,9 @@ export function PeriodDetailDialog({
       } else {
         throw new Error(response.message || "產生造冊失敗")
       }
-    } catch (error: any) {
-      console.error("Failed to generate roster:", error)
-      toast.error(`產生造冊失敗: ${error.message || "無法產生造冊"}`)
+    } catch (error: unknown) {
+      logger.error("Failed to generate roster", { error: error })
+      toast.error(`產生造冊失敗: ${(error instanceof Error ? error.message : "無法產生造冊")}`)
     } finally {
       setGenerating(false)
     }

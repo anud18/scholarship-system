@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { logger } from "@/lib/utils/logger";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -70,10 +71,11 @@ export function DeleteApplicationDialog({
           response.message || t("dialogs.delete_application.delete_failed")
         );
       }
-    } catch (error: any) {
-      console.error("Failed to delete application:", error);
+    } catch (error: unknown) {
+      logger.error("Failed to delete application", { error: error });
+      const errShape = error as { response?: { data?: { message?: string } } };
       toast.error(
-        error?.response?.data?.message ||
+        errShape.response?.data?.message ||
           t("dialogs.delete_application.delete_error")
       );
     } finally {

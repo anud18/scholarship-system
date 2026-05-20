@@ -14,7 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_admin_user, get_db
 from app.db.deps import get_sync_db
-from app.models.college_review import CollegeRanking, ManualDistributionHistory
+from app.models.application import Application
+from app.models.college_review import CollegeRanking, CollegeRankingItem, ManualDistributionHistory
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.services.manual_distribution_service import ManualDistributionService
 
@@ -109,11 +110,11 @@ async def get_admin_available_combinations(
             },
         }
     except Exception as e:
-        logger.error(f"Error retrieving admin available combinations: {str(e)}")
+        logger.exception("Error retrieving admin available combinations")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve available combinations",
-        )
+        ) from e
 
 
 @router.get("/students")
@@ -176,7 +177,7 @@ async def auto_allocate_preview(
         }
     except Exception as e:
         logger.error("Error generating auto-allocation preview: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to generate auto-allocation preview")
+        raise HTTPException(status_code=500, detail="Failed to generate auto-allocation preview") from e
 
 
 @router.post("/allocate")
@@ -201,7 +202,7 @@ async def allocate(
             "data": result,
         }
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post("/finalize")
@@ -225,7 +226,7 @@ async def finalize(
             "data": result,
         }
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.get("/{scholarship_type_id}/history")
@@ -267,11 +268,11 @@ async def get_distribution_history(
             "data": history_data,
         }
     except Exception as e:
-        logger.error(f"Error retrieving distribution history: {str(e)}")
+        logger.exception("Error retrieving distribution history")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve distribution history",
-        )
+        ) from e
 
 
 @router.post("/{scholarship_type_id}/restore")
@@ -311,13 +312,13 @@ async def restore_from_history(
             "data": restore_result,
         }
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"Error restoring from history: {str(e)}")
+        logger.exception("Error restoring from history")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to restore from history",
-        )
+        ) from e
 
 
 @router.get("/distribution-summary")
@@ -334,8 +335,6 @@ async def get_distribution_summary(
     """
     from sqlalchemy import and_, or_
     from sqlalchemy.orm import selectinload
-    from app.models.college_review import CollegeRanking, CollegeRankingItem
-    from app.models.application import Application
 
     try:
         # 取得已完成分發的排名
@@ -353,8 +352,8 @@ async def get_distribution_summary(
                 CollegeRanking.scholarship_type_id == scholarship_type_id,
                 CollegeRanking.academic_year == academic_year,
                 sem_filter,
-                CollegeRanking.is_finalized == True,
-                CollegeRanking.distribution_executed == True,
+                CollegeRanking.is_finalized.is_(True),
+                CollegeRanking.distribution_executed.is_(True),
             )
         )
         ranking_result = await db.execute(ranking_stmt)
@@ -375,7 +374,7 @@ async def get_distribution_summary(
             .where(
                 and_(
                     CollegeRankingItem.ranking_id.in_(ranking_ids),
-                    CollegeRankingItem.is_allocated == True,
+                    CollegeRankingItem.is_allocated.is_(True),
                 )
             )
             .options(selectinload(CollegeRankingItem.application))
@@ -435,7 +434,7 @@ async def get_distribution_summary(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="取得分發摘要失敗",
-        )
+        ) from e
 
 
 class GenerateRostersRequest(BaseModel):
@@ -496,13 +495,10 @@ async def generate_rosters_from_distribution(
             },
         }
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Error generating rosters from distribution: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"造冊產生失敗: {str(e)}",
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="造冊產生失敗") from e
 
 
 @router.post("/import-received-months")
@@ -517,9 +513,6 @@ async def import_received_months(
     """Import received months from Excel for students in a distribution."""
     import openpyxl
     from io import BytesIO
-
-    from app.models.college_review import CollegeRanking, CollegeRankingItem
-    from app.models.application import Application
 
     # Validate file type
     if not file.filename or not file.filename.endswith(".xlsx"):
@@ -542,7 +535,7 @@ async def import_received_months(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"無法解析 Excel 檔案，請確認格式正確: {type(e).__name__}",
-        )
+        ) from e
 
     if not rows:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Excel 檔案沒有資料列")

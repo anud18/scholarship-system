@@ -256,8 +256,8 @@ class ApplicationFieldService:
                     "advisor_nycu_id": profile.advisor_nycu_id,
                 }
             return None
-        except Exception as e:
-            self.logger.error(f"Error fetching user profile data: {str(e)}")
+        except Exception:
+            self.logger.exception("Error fetching user profile data")
             return None
 
     def _create_fixed_bank_account_field(
@@ -434,8 +434,8 @@ class ApplicationFieldService:
                     return True
 
             return False
-        except Exception as e:
-            self.logger.error(f"Error checking professor recommendation requirement: {str(e)}")
+        except Exception:
+            self.logger.exception("Error checking professor recommendation requirement")
             return False
 
     async def inject_fixed_fields(
@@ -488,8 +488,8 @@ class ApplicationFieldService:
 
             return fields, documents
 
-        except Exception as e:
-            self.logger.error(f"Error injecting fixed fields: {str(e)}")
+        except Exception:
+            self.logger.exception("Error injecting fixed fields")
             return fields, documents
 
     # Combined methods
@@ -555,9 +555,9 @@ class ApplicationFieldService:
             return config
 
         except Exception as e:
-            self.logger.error(f"Error getting form config for {scholarship_type}: {str(e)}")
+            self.logger.exception(f"Error getting form config for {scholarship_type}")
             # Re-raise the exception instead of returning empty config
-            raise e
+            raise e from e
 
     async def save_scholarship_form_config(
         self,

@@ -8,6 +8,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from sqlalchemy.exc import IntegrityError
+
 from app.core.exceptions import AuthorizationError, ConflictError, ValidationError
 from app.models.application import Application, ApplicationStatus
 from app.models.enums import QuotaManagementMode, Semester
@@ -423,5 +425,5 @@ class TestCriticalDataIntegrity:
         db.add(config2)
 
         # Should raise integrity error
-        with pytest.raises(Exception):  # SQLAlchemy IntegrityError
+        with pytest.raises(IntegrityError):
             await db.commit()

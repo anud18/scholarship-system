@@ -49,6 +49,7 @@ import { ApplicationFieldForm } from "@/components/application-field-form";
 import { ApplicationDocumentForm } from "@/components/application-document-form";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { api } from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
 import type {
   ApplicationField,
   ApplicationDocument,
@@ -57,11 +58,21 @@ import type {
   ApplicationFieldUpdate,
   ApplicationDocumentCreate,
   ApplicationDocumentUpdate,
+  ScholarshipType as ScholarshipTypeRecord,
   WhitelistResponse,
 } from "@/lib/api";
 import { toast } from "sonner";
 
 type ScholarshipType = "undergraduate_freshman" | "direct_phd" | "phd";
+
+// The /scholarships endpoint returns rows that include semester +
+// academic_year alongside the documented ScholarshipType fields (those two
+// flow from the scholarship_configuration join). We narrow with an
+// intersection rather than widening the canonical ScholarshipType.
+type ScholarshipTypeRow = ScholarshipTypeRecord & {
+  semester?: string;
+  academic_year?: number;
+};
 
 interface AdminScholarshipManagementInterfaceProps {
   type: ScholarshipType;
@@ -120,7 +131,8 @@ export function AdminScholarshipManagementInterface({
     useState<ApplicationDocument | null>(null);
 
   // Scholarship type data for whitelist
-  const [scholarshipTypeData, setScholarshipTypeData] = useState<any | null>(null);
+  const [scholarshipTypeData, setScholarshipTypeData] =
+    useState<ScholarshipTypeRow | null>(null);
   const [activeConfigId, setActiveConfigId] = useState<number | null>(null);
 
   // Whitelist management states
@@ -170,7 +182,7 @@ export function AdminScholarshipManagementInterface({
         setError("尚未設定表單配置，請先於後台建立。");
       }
     } catch (err) {
-      console.error("Failed to load form configuration:", err);
+      logger.error("Failed to load form configuration", { err: err });
       setApplicationFields([]);
       setDocumentRequirements([]);
       setFormConfig(null);
@@ -186,16 +198,20 @@ export function AdminScholarshipManagementInterface({
       const response = await api.scholarships.getAll();
       if (response.success && response.data) {
         // Find scholarship matching the type prop by code
-        const scholarships = response.data as any[];
+        const scholarships = response.data as ScholarshipTypeRow[];
         const scholarship = scholarships.find(s => s.code === type);
         if (scholarship) {
           setScholarshipTypeData(scholarship);
-          const configId = scholarship.configuration_id;
+          const configId = scholarship.configuration_id ?? null;
           setActiveConfigId(configId);
 
           // Initialize sub_type for new student form
-          if (scholarship.eligible_sub_types && scholarship.eligible_sub_types.length > 0) {
-            setNewStudentSubType(scholarship.eligible_sub_types[0].value || scholarship.eligible_sub_types[0]);
+          if (
+            scholarship.eligible_sub_types &&
+            scholarship.eligible_sub_types.length > 0
+          ) {
+            const first = scholarship.eligible_sub_types[0];
+            setNewStudentSubType(first.value ?? first.label);
           }
 
           // Load whitelist if configuration exists
@@ -205,7 +221,7 @@ export function AdminScholarshipManagementInterface({
         }
       }
     } catch (err) {
-      console.error("Failed to load scholarship data:", err);
+      logger.error("Failed to load scholarship data", { err: err });
       toast.error("無法載入獎學金資料");
     } finally {
       setLoadingWhitelist(false);
@@ -219,9 +235,9 @@ export function AdminScholarshipManagementInterface({
       if (response.success && response.data) {
         setWhitelist(response.data as WhitelistResponse[]);
       }
-    } catch (err: any) {
-      console.error("Failed to load whitelist:", err);
-      toast.error(err.message || "無法載入白名單");
+    } catch (err: unknown) {
+      logger.error("Failed to load whitelist", { err: err });
+      toast.error((err instanceof Error ? err.message : "無法載入白名單"));
     } finally {
       setLoadingWhitelist(false);
     }
@@ -309,7 +325,7 @@ export function AdminScholarshipManagementInterface({
         setError(response.message || "保存設定時發生錯誤");
       }
     } catch (err) {
-      console.error("Failed to save configuration:", err);
+      logger.error("Failed to save configuration", { err: err });
       setError("保存設定時發生錯誤，請稍後再試");
     } finally {
       setIsSaving(false);
@@ -359,7 +375,7 @@ export function AdminScholarshipManagementInterface({
         setError(errorData.message || "上傳申請條款文件失敗");
       }
     } catch (err) {
-      console.error("Failed to upload terms document:", err);
+      logger.error("Failed to upload terms document", { err: err });
       setError("上傳申請條款文件失敗，請稍後再試");
     } finally {
       setIsUploadingTerms(false);
@@ -376,7 +392,12 @@ export function AdminScholarshipManagementInterface({
   // Field management handlers
   const handleCreateField = async (fieldData: ApplicationFieldCreate) => {
     try {
-      const response = await api.applicationFields.createField(fieldData as any);
+      const response = await api.applicationFields.createField(
+        // The typed client's ApplicationFieldCreate requires `required` field;
+        // we pass the looser @/lib/api shape (UI-friendly), which the backend
+        // accepts because the field is server-defaulted.
+        fieldData as Parameters<typeof api.applicationFields.createField>[0]
+      );
       if (response.success && response.data) {
         const newField = response.data as unknown as ApplicationField;
         setApplicationFields(prev => [...prev, newField]);
@@ -386,7 +407,7 @@ export function AdminScholarshipManagementInterface({
         setError(response.message || "新增欄位失敗");
       }
     } catch (err) {
-      console.error("Failed to create field:", err);
+      logger.error("Failed to create field", { err: err });
       setError("新增欄位失敗，請稍後再試");
     }
   };
@@ -413,7 +434,7 @@ export function AdminScholarshipManagementInterface({
         setError(response.message || "更新欄位失敗");
       }
     } catch (err) {
-      console.error("Failed to update field:", err);
+      logger.error("Failed to update field", { err: err });
       setError("更新欄位失敗，請稍後再試");
     }
   };
@@ -430,7 +451,7 @@ export function AdminScholarshipManagementInterface({
         setError(response.message || "刪除欄位失敗");
       }
     } catch (err) {
-      console.error("Failed to delete field:", err);
+      logger.error("Failed to delete field", { err: err });
       setError("刪除欄位失敗，請稍後再試");
     }
   };
@@ -440,7 +461,12 @@ export function AdminScholarshipManagementInterface({
     documentData: ApplicationDocumentCreate
   ) => {
     try {
-      const response = await api.applicationFields.createDocument(documentData as any);
+      const response = await api.applicationFields.createDocument(
+        // Same as createField above — typed client has stricter required field.
+        documentData as Parameters<
+          typeof api.applicationFields.createDocument
+        >[0]
+      );
       if (response.success && response.data) {
         const newDocument = response.data as unknown as ApplicationDocument;
         setDocumentRequirements(prev => [...prev, newDocument]);
@@ -450,7 +476,7 @@ export function AdminScholarshipManagementInterface({
         setError(response.message || "新增文件要求失敗");
       }
     } catch (err) {
-      console.error("Failed to create document:", err);
+      logger.error("Failed to create document", { err: err });
       setError("新增文件要求失敗，請稍後再試");
     }
   };
@@ -499,7 +525,7 @@ export function AdminScholarshipManagementInterface({
         setError(response.message || "更新文件要求失敗");
       }
     } catch (err) {
-      console.error("Failed to update document:", err);
+      logger.error("Failed to update document", { err: err });
       setError("更新文件要求失敗，請稍後再試");
     }
   };
@@ -516,7 +542,7 @@ export function AdminScholarshipManagementInterface({
         setError(response.message || "刪除文件要求失敗");
       }
     } catch (err) {
-      console.error("Failed to delete document:", err);
+      logger.error("Failed to delete document", { err: err });
       setError("刪除文件要求失敗，請稍後再試");
     }
   };
@@ -540,11 +566,18 @@ export function AdminScholarshipManagementInterface({
       );
 
       if (response.success) {
-        // Update the document in state with new example_file_url
+        // Update the document in state with new example_file_url.
+        // ApiResponse.data is typed as `T | undefined`; the `response.success`
+        // check above doesn't narrow it (no discriminated union), so use `?.`
+        // and fall back to the existing url if the backend omitted it.
         setDocumentRequirements(prev =>
           prev.map(doc =>
             doc.id === documentId
-              ? { ...doc, example_file_url: response.data.example_file_url }
+              ? {
+                  ...doc,
+                  example_file_url:
+                    response.data?.example_file_url ?? doc.example_file_url,
+                }
               : doc
           )
         );
@@ -552,9 +585,9 @@ export function AdminScholarshipManagementInterface({
       } else {
         setError(response.message || "範例文件上傳失敗");
       }
-    } catch (err: any) {
-      console.error("Failed to upload example:", err);
-      setError(err.message || "範例文件上傳失敗，請稍後再試");
+    } catch (err: unknown) {
+      logger.error("Failed to upload example", { err: err });
+      setError((err instanceof Error ? err.message : "範例文件上傳失敗，請稍後再試"));
     } finally {
       setUploadingExampleDocId(null);
       // Reset file input
@@ -605,7 +638,7 @@ export function AdminScholarshipManagementInterface({
         setError(response.message || "範例文件刪除失敗");
       }
     } catch (err) {
-      console.error("Failed to delete example:", err);
+      logger.error("Failed to delete example", { err: err });
       setError("範例文件刪除失敗，請稍後再試");
     }
   };
@@ -633,8 +666,8 @@ export function AdminScholarshipManagementInterface({
         const batchResult = response.data as { success_count: number; failed_items: Array<{ nycu_id: string; reason: string; }>; };
         toast.error(batchResult.failed_items[0].reason);
       }
-    } catch (error: any) {
-      toast.error(error.message || "無法新增學生到白名單");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "無法新增學生到白名單"));
     } finally {
       setAddingStudent(false);
     }
@@ -653,8 +686,8 @@ export function AdminScholarshipManagementInterface({
         setSelectedStudents(new Set());
         await loadWhitelist(activeConfigId);
       }
-    } catch (error: any) {
-      toast.error(error.message || "無法刪除學生");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "無法刪除學生"));
     }
   };
 
@@ -671,15 +704,15 @@ export function AdminScholarshipManagementInterface({
         const message = `成功: ${result.success_count} 筆，失敗: ${result.failed_items.length} 筆`;
         if (result.failed_items.length > 0) {
           toast.error(message);
-          console.error("Import errors:", result.failed_items);
+          logger.error("Import errors", { failed_items: result.failed_items });
         } else {
           toast.success(message);
         }
 
         await loadWhitelist(activeConfigId);
       }
-    } catch (error: any) {
-      toast.error(error.message || "無法匯入 Excel 檔案");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "無法匯入 Excel 檔案"));
     } finally {
       setLoadingWhitelist(false);
       if (fileInputRef.current) {
@@ -702,8 +735,8 @@ export function AdminScholarshipManagementInterface({
       window.URL.revokeObjectURL(url);
 
       toast.success("白名單已下載為 Excel 檔案");
-    } catch (error: any) {
-      toast.error(error.message || "無法匯出白名單");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "無法匯出白名單"));
     }
   };
 
@@ -720,8 +753,8 @@ export function AdminScholarshipManagementInterface({
       window.URL.revokeObjectURL(url);
 
       toast.success("匯入模板已下載");
-    } catch (error: any) {
-      toast.error(error.message || "無法下載模板");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : "無法下載模板"));
     }
   };
 
@@ -1561,9 +1594,12 @@ export function AdminScholarshipManagementInterface({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {subTypes.map((type: any) => (
-                            <SelectItem key={type.value || type} value={type.value || type}>
-                              {type.label || type}
+                          {subTypes.map((type) => (
+                            <SelectItem
+                              key={type.value ?? type.label}
+                              value={type.value ?? type.label}
+                            >
+                              {type.label}
                             </SelectItem>
                           ))}
                         </SelectContent>

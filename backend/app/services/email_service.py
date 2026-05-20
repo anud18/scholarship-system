@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.dynamic_config import dynamic_config
+from app.core.metrics import email_sent_total
 from app.models.email_management import EmailCategory, EmailHistory, EmailStatus, EmailTestModeAudit, ScheduledEmail
 from app.services.system_setting_service import EmailTemplateService
 
@@ -148,8 +149,8 @@ class EmailService:
 
             return enabled, test_mode_config
 
-        except Exception as e:
-            logger.error(f"Error checking test mode: {e}")
+        except Exception:
+            logger.exception("Error checking test mode")
             return False, {}
 
     def _transform_recipients_for_test(
@@ -255,8 +256,8 @@ class EmailService:
             )
             self.db.add(audit_log)
             await self.db.commit()
-        except Exception as e:
-            logger.error(f"Failed to log test mode interception: {e}")
+        except Exception:
+            logger.exception("Failed to log test mode interception")
 
     async def send_email(
         self,
@@ -399,11 +400,25 @@ class EmailService:
         except Exception as e:
             status = EmailStatus.failed
             error_message = str(e)
-            logger.error("Failed to send email to %s: %s", primary_recipient, e)
+            logger.exception("Failed to send email to %s", primary_recipient)
             # Re-raise the exception so callers can handle it
             raise
 
         finally:
+            # Business metric: count every send attempt so the Scholarship
+            # System Overview dashboard's email panel reflects real traffic
+            # (issue #159). Category comes from caller-supplied metadata; we
+            # fall back to "uncategorized" so the counter is never skipped.
+            category_value = metadata.get("email_category")
+            if hasattr(category_value, "value"):
+                category_label = category_value.value
+            else:
+                category_label = category_value or "uncategorized"
+            email_sent_total.labels(
+                category=str(category_label),
+                status=(status.value if isinstance(status, EmailStatus) else str(status)),
+            ).inc()
+
             # Log email history if database session provided
             if db:
                 try:
@@ -469,8 +484,8 @@ class EmailService:
                 await audit_db.commit()
                 logger.debug(f"Email history logged for {recipient_email}")
 
-            except Exception as e:
-                logger.error("Failed to log email history: %s", e)
+            except Exception:
+                logger.exception("Failed to log email history")
                 await audit_db.rollback()
                 # Don't re-raise - audit logging failure shouldn't break email sending
 
@@ -608,8 +623,8 @@ class EmailService:
                 f"Sent React Email template '{template_name}' to {to if isinstance(to, str) else ', '.join(to)} (using fallback template loader)"
             )
 
-        except FileNotFoundError as e:
-            logger.error(f"React Email template not found: {template_name}. Error: {e}")
+        except FileNotFoundError:
+            logger.exception(f"React Email template not found: {template_name}. Error")
             logger.warning("Falling back to plain text email")
 
             # Fallback: send plain text email with minimal formatting
@@ -633,8 +648,8 @@ class EmailService:
                 **metadata,
             )
 
-        except Exception as e:
-            logger.error(f"Error sending React Email template '{template_name}': {e}")
+        except Exception:
+            logger.exception(f"Error sending React Email template '{template_name}'")
             raise
 
     async def schedule_email(

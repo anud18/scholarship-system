@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
     // Construct URL with validated components only
     const backendUrl = new URL(`/api/v1/scholarships/${scholarshipType}/terms`, baseUrl).toString();
 
-    console.log("Terms preview API called:", {
+    logger.debug("Terms preview API called:", {
       scholarshipType,
       backendUrl,
     });

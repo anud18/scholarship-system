@@ -47,14 +47,14 @@ def parse_date_field(date_input: Optional[Union[str, datetime]]) -> Optional[dat
             # Fallback to dateutil parser for other formats
             else:
                 return dateutil.parser.parse(date_input)
-        except (ValueError, TypeError) as e:
-            logger.warning(f"Failed to parse date string '{date_input}': {e}")
+        except (ValueError, TypeError):
+            logger.warning("Failed to parse date string %r", date_input, exc_info=True)
             # Try dateutil as last resort
             try:
                 return dateutil.parser.parse(date_input)
             except Exception as e2:
-                logger.error(f"Could not parse date '{date_input}' with any method: {e2}")
-                raise ValueError(f"Invalid date format: {date_input}")
+                logger.exception("Could not parse date %r with any method", date_input)
+                raise ValueError(f"Invalid date format: {date_input}") from e2
 
     return None
 
@@ -76,8 +76,8 @@ def format_date_for_display(date_obj: Optional[datetime], format_string: str = "
 
     try:
         return date_obj.strftime(format_string)
-    except Exception as e:
-        logger.error(f"Failed to format date {date_obj}: {e}")
+    except Exception:
+        logger.exception(f"Failed to format date {date_obj}")
         return default
 
 

@@ -83,9 +83,14 @@ async def get_student_info(current_user: User = Depends(get_current_user), db: A
                     term_data = await student_service.get_student_term_info(student_code, str(year), term)
                     if term_data:
                         semesters.append({"academic_year": str(year), "term": term, **term_data})
-                except Exception:
-                    # Log but continue - some semesters may not exist
-                    pass
+                except Exception as term_exc:
+                    logger.debug(
+                        "SIS term fetch skipped: student=%s year=%s term=%s: %s",
+                        student_code,
+                        year,
+                        term,
+                        term_exc,
+                    )
 
     # Return student information with new structure
     return {
@@ -211,14 +216,14 @@ async def get_all_users(
             user_roles = [UserRole(r) for r in role_list]
             stmt = stmt.where(User.role.in_(user_roles))
         except ValueError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid role in roles parameter: {e}")
+            raise HTTPException(status_code=400, detail="Invalid role in roles parameter") from e
     elif role:
         # Handle single role (backward compatibility)
         try:
             user_role = UserRole(role.lower())
             stmt = stmt.where(User.role == user_role)
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid role: {role}")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid role: {role}") from exc
 
     if search:
         stmt = stmt.where(
@@ -386,9 +391,28 @@ async def delete_user(
     if user.id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
 
+    # Capture identity *before* the delete so the audit log survives the
+    # SQLAlchemy cascade. After db.delete(user) the attached object's
+    # attributes may be expired.
+    deleted_email = user.email
+    deleted_role = user.role.value if hasattr(user.role, "value") else str(user.role)
+
     await db.delete(user)
     await db.commit()
     await cache_invalidate("dashboard:")
+
+    logger.warning(
+        "User %s (role=%s) hard-deleted by admin user_id=%s",
+        id,
+        deleted_role,
+        current_user.id,
+        extra={
+            "deleted_user_id": id,
+            "deleted_email": deleted_email,
+            "deleted_role": deleted_role,
+            "actor_user_id": current_user.id,
+        },
+    )
 
     return {
         "success": True,
@@ -443,10 +467,25 @@ async def update_user_college(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    previous_college_code = user.college_code
     user.college_code = college_code
     await db.commit()
     await db.refresh(user)
     await cache_invalidate("dashboard:")
+
+    logger.info(
+        "User %s college_code changed %r → %r by super-admin user_id=%s",
+        id,
+        previous_college_code,
+        college_code,
+        current_user.id,
+        extra={
+            "target_user_id": id,
+            "previous_college_code": previous_college_code,
+            "new_college_code": college_code,
+            "actor_user_id": current_user.id,
+        },
+    )
 
     return {
         "success": True,
@@ -544,6 +583,25 @@ async def bulk_assign_scholarships(
         removed_count=removed_count,
         total_scholarships=len(scholarships),
         scholarships=[{"id": s.id, "code": s.code, "name": s.name} for s in scholarships],
+    )
+
+    logger.info(
+        "Bulk scholarship %s on user %s by super-admin user_id=%s: assigned=%d removed=%d total=%d",
+        request.operation,
+        id,
+        current_user.id,
+        assigned_count,
+        removed_count,
+        len(scholarships),
+        extra={
+            "target_user_id": id,
+            "operation": request.operation,
+            "requested_scholarship_ids": request.scholarship_ids,
+            "assigned_count": assigned_count,
+            "removed_count": removed_count,
+            "total_after": len(scholarships),
+            "actor_user_id": current_user.id,
+        },
     )
 
     return {

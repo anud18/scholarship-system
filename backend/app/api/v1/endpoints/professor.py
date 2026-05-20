@@ -63,11 +63,11 @@ async def get_professor_applications(
         }
 
     except Exception as e:
-        logger.error(f"Error fetching professor applications: {str(e)}")
+        logger.exception("Error fetching professor applications")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while fetching applications",
-        )
+        ) from e
 
 
 @router.get("/applications/{application_id}/review")
@@ -121,17 +121,14 @@ async def get_professor_review(
             "data": review_response.model_dump(),
         }
 
-    except NotFoundError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Professor review not found")
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Professor review not found") from exc
     except Exception as e:
-        logger.error(f"Error fetching professor review: {str(e)}")
-        import traceback
-
-        logger.error(f"Full traceback: {traceback.format_exc()}")
+        logger.exception("Error fetching professor review")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while fetching review",
-        )
+        ) from e
 
 
 @router.post("/applications/{application_id}/review")
@@ -202,19 +199,16 @@ async def submit_professor_review(
             "data": review_response.model_dump(),
         }
 
-    except NotFoundError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found") from exc
     except AuthorizationError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"Error submitting professor review: {str(e)}")
-        import traceback
-
-        logger.error(f"Full traceback: {traceback.format_exc()}")
+        logger.exception("Error submitting professor review")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while submitting review",
-        )
+        ) from e
 
 
 @router.put("/applications/{application_id}/review/{review_id}")
@@ -284,18 +278,15 @@ async def update_professor_review(
         }
 
     except AuthorizationError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
-    except NotFoundError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review not found")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review not found") from exc
     except Exception as e:
-        logger.error(f"Error updating professor review: {str(e)}")
-        import traceback
-
-        logger.error(f"Full traceback: {traceback.format_exc()}")
+        logger.exception("Error updating professor review")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while updating review",
-        )
+        ) from e
 
 
 @router.get("/applications/{application_id}/sub-types")
@@ -305,26 +296,19 @@ async def get_application_sub_types(
     current_user: User = Depends(require_professor),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get available sub-types for an application (config-driven)"""
-    logger.info("Professor {current_user.id} requesting sub-types for application {application_id}")
+    """Get available sub-types for an application (config-driven, role-filtered).
 
+    Implementation landed in ``ApplicationService.get_application_available_sub_types``;
+    closes issue #649 for the professor route. For professors this returns
+    every active sub-type configured on the scholarship.
+    """
+    service = ApplicationService(db)
     try:
-        service = ApplicationService(db)
-        sub_types = await service.get_application_available_sub_types(application_id)
+        sub_types = await service.get_application_available_sub_types(application_id, current_user)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found") from exc
 
-        logger.info("Found {len(sub_types)} sub-types for application {application_id}")
-        return {
-            "success": True,
-            "message": "查詢成功",
-            "data": sub_types,
-        }
-
-    except Exception as e:
-        logger.error(f"Error fetching application sub-types: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An internal error occurred while fetching sub-types",
-        )
+    return {"success": True, "message": "查詢成功", "data": sub_types}
 
 
 @router.get("/stats")
@@ -352,8 +336,8 @@ async def get_professor_review_stats(
         }
 
     except Exception as e:
-        logger.error(f"Error fetching professor stats: {str(e)}")
+        logger.exception("Error fetching professor stats")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while fetching statistics",
-        )
+        ) from e

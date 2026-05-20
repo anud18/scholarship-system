@@ -183,6 +183,22 @@ services:
     networks:
       - scholarship_staging_network
     restart: unless-stopped
+    # Stability hardening for issue #152. cadvisor on staging was
+    # restart-looping (136 alert cycles between 2026-05-08 and 2026-05-14
+    # — see issue comments) and dragging the staging ContainerDown alert
+    # with it, because when cadvisor goes down the scrape stops and every
+    # container in the env looks "down" to the alert rule. mem_limit lets
+    # Docker kill it cleanly before the host OOM-killer does, and the
+    # healthcheck makes the swarm-side restart trigger fire on first
+    # unhealthy probe (rather than waiting for a SIGSEGV). cadvisor's
+    # /healthz returns 200 once the scraper is responsive.
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     logging:
       driver: "json-file"
       options:

@@ -181,7 +181,7 @@ export function createBatchImportApi() {
     ): Promise<ApiResponse<BatchUpdateRecordResult>> => {
       const response = await typedClient.raw.PATCH('/api/v1/college-review/batch-import/{batch_id}/records', {
         params: { path: { batch_id: batchId } },
-        body: { record_index: recordIndex, updates } as any,
+        body: { record_index: recordIndex, updates } as never,
       });
       return toApiResponse<BatchUpdateRecordResult>(response);
     },

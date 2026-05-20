@@ -50,8 +50,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
         user_id: str = payload.get("sub")
         if user_id is None:
             raise credentials_exception
-    except jwt.PyJWTError:
-        raise credentials_exception
+    except jwt.PyJWTError as exc:
+        raise credentials_exception from exc
 
     stmt = select(User).options(selectinload(User.admin_scholarships)).where(User.id == int(user_id))
     result = await db.execute(stmt)

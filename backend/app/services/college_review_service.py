@@ -19,13 +19,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFoundError
+from app.core.metrics import scholarship_reviews_total
 from app.models.application import Application, ApplicationStatus
-from app.models.college_review import CollegeRanking, CollegeRankingItem, QuotaDistribution
+from app.models.college_review import CollegeRanking, CollegeRankingItem
 from app.models.enums import Semester
 from app.models.review import ApplicationReview  # Unified review system
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole
-from app.services.email_automation_service import email_automation_service
 
 func: Any = sa_func
 
@@ -797,12 +797,20 @@ class CollegeReviewService:
 
             await self.db.flush()  # Flush within transaction context
 
+            # Business metric: count college finalize actions to complete
+            # the reviewer_type dimension of scholarship_reviews_total
+            # (professor counterpart wired in PR #564, follow-up from #159).
+            scholarship_reviews_total.labels(
+                reviewer_type="college",
+                action="finalize",
+            ).inc()
+
             return ranking
 
         except (RankingNotFoundError, RankingModificationError):
             raise  # Re-raise specific exceptions
         except Exception as e:
-            raise BusinessLogicError(f"Failed to finalize ranking {ranking_id}: {str(e)}")
+            raise BusinessLogicError(f"Failed to finalize ranking {ranking_id}") from e
 
     async def unfinalize_ranking(self, ranking_id: int) -> CollegeRanking:
         """Unfinalize a ranking (makes it editable again)"""
@@ -833,7 +841,7 @@ class CollegeReviewService:
         except (RankingNotFoundError, RankingModificationError):
             raise  # Re-raise specific exceptions
         except Exception as e:
-            raise BusinessLogicError(f"Failed to unfinalize ranking {ranking_id}: {str(e)}")
+            raise BusinessLogicError(f"Failed to unfinalize ranking {ranking_id}") from e
 
     async def get_quota_status(
         self,
@@ -953,7 +961,9 @@ class CollegeReviewService:
                                 f"  Sub-type {sub_type_code}: {numeric_quota} quota for college {college_code}"
                             )
                     except (TypeError, ValueError) as e:
-                        logger.warning(f"Invalid quota value for {sub_type_code}/{college_code}: {quota_value} ({e})")
+                        logger.warning(
+                            f"Invalid quota value for {sub_type_code}/{college_code}: {quota_value} ()", exc_info=True
+                        )
                         pass
 
             if total_college_quota > 0:

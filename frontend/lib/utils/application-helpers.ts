@@ -1,5 +1,6 @@
 import { Locale } from "@/lib/validators";
 import { api } from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
 import {
   ApplicationStatus,
   ReviewStage,
@@ -8,6 +9,27 @@ import {
   getReviewStageLabel,
   getReviewStageBadgeVariant,
 } from "@/lib/enums";
+
+// Shape of document entries in `submitted_form_data.documents` from
+// the backend. All fields optional because the upstream JSON can come
+// from several sources (form_data, submitted_form_data, SIS upload).
+interface DocumentPayload {
+  file_id?: string | number;
+  id?: string | number;
+  filename?: string;
+  original_filename?: string;
+  file_size?: number;
+  mime_type?: string;
+  document_type?: string;
+  file_type?: string;
+  file_path?: string;
+  download_url?: string;
+  is_verified?: boolean;
+  upload_time?: string;
+  uploaded_at?: string;
+  document_id?: string;
+}
+
 
 export type BadgeVariant = "secondary" | "default" | "outline" | "destructive";
 
@@ -58,9 +80,26 @@ const hasReachedStage = (currentStage: string | undefined, targetStage: string):
   return currentOrder >= targetOrder;
 };
 
+// Structural shape consumed by the helpers below. Matches the canonical
+// Application interface plus the review-stage extensions surfaced by the
+// /applications/{id} backend response.
+type ApplicationTimelineInput = {
+  status: string;
+  review_stage?: string;
+  professor_reviews?: Array<{ reviewed_at?: string }>;
+  application_reviews?: Array<{ review_stage?: string; reviewed_at?: string }>;
+  professor?: { name?: string; nycu_id?: string };
+  requires_professor_recommendation?: boolean;
+  requires_college_review?: boolean;
+  submitted_at?: string;
+  created_at?: string;
+  approved_at?: string;
+  reviewed_at?: string;
+};
+
 // 獲取申請時間軸
 export const getApplicationTimeline = (
-  application: any,
+  application: ApplicationTimelineInput,
   locale: Locale
 ): TimelineStep[] => {
   const status = application.status as ApplicationStatus;
@@ -72,7 +111,8 @@ export const getApplicationTimeline = (
 
   // 獲取學院審核資訊
   const collegeReview = application.application_reviews?.find(
-    (r: any) => r.review_stage === "college_review"
+    (r: { review_stage?: string; reviewed_at?: string }) =>
+      r.review_stage === "college_review"
   );
   const hasCollegeReview = Boolean(collegeReview?.reviewed_at);
 
@@ -149,7 +189,7 @@ export const getApplicationTimeline = (
         id: "professor_submitted",
         title: locale === "zh" ? "教授已送出審核" : "Professor Review Submitted",
         status: getStepStatus("professor_reviewed", afterProfessorStage, hasProfessorReview),
-        date: hasProfessorReview ? formatDate(professorReview.reviewed_at, locale) : "",
+        date: hasProfessorReview ? formatDate(professorReview?.reviewed_at, locale) : "",
       },
     );
   }
@@ -173,7 +213,7 @@ export const getApplicationTimeline = (
         id: "college_submitted",
         title: locale === "zh" ? "學院已送出審核" : "College Review Submitted",
         status: getStepStatus("college_reviewed", "admin_review", hasCollegeReview),
-        date: hasCollegeReview ? formatDate(collegeReview.reviewed_at, locale) : "",
+        date: hasCollegeReview ? formatDate(collegeReview?.reviewed_at, locale) : "",
       },
     );
   }
@@ -223,7 +263,7 @@ export const shouldShowReviewStage = (
 
 // 獲取顯示狀態 - 返回狀態和階段的組合資訊
 export const getDisplayStatusInfo = (
-  application: any,
+  application: { status: string; review_stage?: string },
   locale: Locale
 ): {
   showStatus: boolean;
@@ -290,9 +330,45 @@ export const formatFieldName = (fieldName: string, locale: Locale) => {
 };
 
 // 格式化欄位值（從資料庫獲取獎學金類型名稱）
+/**
+ * Render a form-field value as a human-readable string. Used by the
+ * application-form-data-display component to show dynamic-form data
+ * collected from students.
+ *
+ * Why:
+ * - String/number/boolean: use `String(value)` (handles 0, false, etc.).
+ * - null/undefined: return empty string (caller decides placeholder).
+ * - Array: comma-separated stringified items (matches the array-test
+ *   contract from PR #244 and the eye-test of "hobbies: reading, coding").
+ * - Plain object: JSON.stringify so nested data renders as readable JSON
+ *   instead of the default `[object Object]`. (Replaces TODO at
+ *   `application-form-data-display.test.tsx:215`.)
+ *
+ * Truncation is the caller's responsibility — different render paths
+ * use different cap lengths.
+ */
+export const formatDisplayValue = (value: unknown): string => {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => formatDisplayValue(item)).join(", ");
+  }
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+};
+
 export const formatFieldValue = async (
   fieldName: string,
-  value: any,
+  value: unknown,
   locale: Locale
 ) => {
   if (fieldName === "scholarship_type") {
@@ -308,10 +384,10 @@ export const formatFieldValue = async (
         }
       }
     } catch (error) {
-      console.warn(
-        `Failed to fetch scholarship type for code: ${value}`,
-        error
-      );
+      logger.warn("Failed to fetch scholarship type for code", {
+        code: value,
+        error,
+      });
     }
     // API 失敗時直接顯示 code
     return value;
@@ -373,7 +449,7 @@ export const fetchApplicationFiles = async (applicationId: number) => {
       appResponse.data?.submitted_form_data?.documents
     ) {
       // 將 documents 轉換為 ApplicationFile 格式以保持向後兼容
-      return appResponse.data.submitted_form_data.documents.map((doc: any) => ({
+      return appResponse.data.submitted_form_data.documents.map((doc: DocumentPayload) => ({
         id: doc.file_id,
         filename: doc.filename,
         original_filename: doc.original_filename,
@@ -396,7 +472,7 @@ export const fetchApplicationFiles = async (applicationId: number) => {
 
     return [];
   } catch (error) {
-    console.error("Failed to fetch application files:", error);
+    logger.error("Failed to fetch application files", { error });
     return [];
   }
 };

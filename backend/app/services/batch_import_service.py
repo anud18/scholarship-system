@@ -453,8 +453,12 @@ class BatchImportService:
                         )
                         api_failed = True
                     break
-                except Exception as exc:  # pylint: disable=broad-except
-                    logger.warning("Student API unexpected error for %s: %s", student_id, exc)
+                except Exception:  # pylint: disable=broad-except
+                    logger.warning(
+                        "Student API unexpected error for %s",
+                        student_id,
+                        exc_info=True,
+                    )
                     add_warning(
                         student_id,
                         "student_api_error",
@@ -624,9 +628,10 @@ class BatchImportService:
                         logger.warning(
                             f"SIS API unavailable for student {student_id}. Creating user with batch import data."
                         )
-                    except Exception as e:
-                        logger.error(
-                            f"Error fetching SIS data for student {student_id}: {e}. Creating user with batch import data."
+                    except Exception:
+                        logger.exception(
+                            "Error fetching SIS data for student %s. Creating user with batch import data.",
+                            student_id,
                         )
 
                     new_user = User(
@@ -694,11 +699,11 @@ class BatchImportService:
         if semester:
             try:
                 semester_enum = Semester(semester)
-            except ValueError:
+            except ValueError as exc:
                 raise BatchImportError(
                     message=f"無效的學期值: {semester}",
                     batch_id=batch_import.id,
-                )
+                ) from exc
 
         # Find scholarship configuration for this academic period
         config_stmt = select(ScholarshipConfiguration).where(
@@ -795,15 +800,16 @@ class BatchImportService:
                     student_data = await self.student_service.get_student_snapshot(
                         student_id, academic_year=str(academic_year), semester=semester
                     )
-                except (NotFoundError, ServiceUnavailableError) as e:
+                except (NotFoundError, ServiceUnavailableError):
                     logger.warning(
-                        f"SIS API unavailable or student not found for {student_id}: {e}. "
-                        "Creating application without student snapshot."
+                        "SIS API unavailable or student not found for %s. Creating application without student snapshot.",
+                        student_id,
+                        exc_info=True,
                     )
-                except Exception as e:
-                    logger.error(
-                        f"Error fetching student snapshot for {student_id}: {e}. "
-                        "Creating application without student snapshot."
+                except Exception:
+                    logger.exception(
+                        "Error fetching student snapshot for %s. Creating application without student snapshot.",
+                        student_id,
                     )
 
                 # Construct submitted_form_data, primarily from batch import, but override dept_code if SIS has it
@@ -867,7 +873,7 @@ class BatchImportService:
             raise BatchImportError(
                 message=f"批次匯入失敗於第 {current_row} 行: {str(e)}",
                 batch_id=batch_import.id,
-            )
+            ) from e
 
         return created_ids, errors
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { logger } from "@/lib/utils/logger";
 import { AlertTriangle, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -35,7 +36,7 @@ export function EmailTestModeBanner() {
         }
       }
     } catch (error) {
-      console.error("Failed to load test mode status:", error);
+      logger.error("Failed to load test mode status", { error: error });
     } finally {
       setLoading(false);
     }

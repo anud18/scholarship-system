@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import {
   Dialog,
   DialogContent,
@@ -73,6 +74,95 @@ import {
 } from "@/lib/utils/application-helpers";
 import { getCurrentSemesterROC, toROCYear } from "@/src/utils/dateUtils";
 
+// Shape of document entries in `submitted_form_data.documents` from
+// the backend. All fields optional because the upstream JSON can come
+// from several sources (form_data, submitted_form_data, SIS upload).
+interface DocumentPayload {
+  file_id?: string | number;
+  id?: string | number;
+  filename?: string;
+  original_filename?: string;
+  file_size?: number;
+  mime_type?: string;
+  document_type?: string;
+  file_type?: string;
+  file_path?: string;
+  download_url?: string;
+  is_verified?: boolean;
+  upload_time?: string;
+  uploaded_at?: string;
+  document_id?: string;
+}
+
+// Sub-type option returned by GET /reviews/applications/{id}/sub-types and
+// /college/.../sub-types. `value` is the canonical sub-type code (e.g. "nstc",
+// "moe_1w"); `label` is the localized display name.
+interface SubTypeOption {
+  value: string;
+  label: string;
+  // Backend sometimes returns extras (locale strings, descriptions); we never
+  // read them, so allow them passthrough without widening to `any`.
+  [key: string]: unknown;
+}
+
+// One review decision attached to a sub-type. Mirrors ApplicationReview.items[].
+interface SubTypeReviewItem {
+  sub_type_code: string;
+  recommendation: "approve" | "reject" | "pending";
+  comments?: string;
+}
+
+// Existing review payload returned by GET /reviews/applications/{id}/review.
+// Only the fields read by this component are typed; rest are passthrough.
+interface ExistingReview {
+  id: number;
+  items?: SubTypeReviewItem[];
+  reviewed_at?: string;
+  [key: string]: unknown;
+}
+
+// Professor lookup payload — superset of both Application.professor (which
+// requires `id` + `nycu_id`) and the ProfessorAssignmentDropdown callback
+// (which requires `nycu_id` + `name` + `dept_code` + `dept_name`). All
+// fields are optional here because state is set independently of the
+// application reload; dropdown-provided fields are guaranteed by the
+// caller's contract.
+interface ProfessorInfo {
+  id?: number;
+  nycu_id?: string;
+  name?: string;
+  dept_code?: string;
+  dept_name?: string;
+  email?: string;
+}
+
+// Local file row used by the review-dialog UI. Sourced from either
+// submitted_form_data.documents (DocumentPayload-shaped) or the legacy
+// /applications/{id}/files endpoint, then normalized into this view-model.
+interface ReviewDialogFile {
+  id?: string | number;
+  filename?: string;
+  original_filename?: string;
+  file_size?: number;
+  mime_type?: string;
+  file_type?: string;
+  file_path?: string;
+  download_url?: string;
+  is_verified?: boolean;
+  uploaded_at?: string;
+}
+
+// Enrichment fields the backend attaches to /applications/{id} that aren't on
+// the base Application schema (resolved names + professor-review snapshot).
+// Optional so we degrade gracefully when an endpoint omits them.
+interface EnrichedApplicationExtras {
+  currency?: string;
+  academy_name?: string;
+  department_name?: string;
+  degree?: number;
+  professor_review_items?: SubTypeReviewItem[];
+}
+
 interface ApplicationReviewDialogProps {
   application: Application | HistoricalApplication | null;
   role: "college" | "admin" | "super_admin";
@@ -103,7 +193,7 @@ function FieldDisplay({
   locale = "zh",
 }: {
   label: string;
-  value: any;
+  value: unknown;
   locale?: "zh" | "en";
 }) {
   const displayValue = value !== null && value !== undefined ? String(value) : null;
@@ -544,7 +634,7 @@ export function ApplicationReviewDialog({
   onAdminReject,
   onReviewSubmitted,
 }: ApplicationReviewDialogProps) {
-  const [applicationFiles, setApplicationFiles] = useState<any[]>([]);
+  const [applicationFiles, setApplicationFiles] = useState<ReviewDialogFile[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [previewFile, setPreviewFile] = useState<{
     url: string;
@@ -568,13 +658,15 @@ export function ApplicationReviewDialog({
   const [detailedApplication, setDetailedApplication] = useState<Application | null>(null);
 
   // Sub-type review state (for unified review system)
-  const [subTypes, setSubTypes] = useState<any[]>([]);
+  const [subTypes, setSubTypes] = useState<SubTypeOption[]>([]);
   const [reviewItems, setReviewItems] = useState<Array<{
     sub_type_code: string;
     recommendation: 'approve' | 'reject' | 'pending';
     comments?: string;
   }>>([]);
-  const [existingReview, setExistingReview] = useState<any>(null);
+  const [existingReview, setExistingReview] = useState<ExistingReview | null>(
+    null
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingSubTypes, setIsLoadingSubTypes] = useState(false);
 
@@ -590,7 +682,9 @@ export function ApplicationReviewDialog({
   } = useReferenceData();
 
   // Admin management states
-  const [professorInfo, setProfessorInfo] = useState<any>(null);
+  const [professorInfo, setProfessorInfo] = useState<ProfessorInfo | null>(
+    null
+  );
   const [bankVerificationLoading, setBankVerificationLoading] = useState(false);
   const [adminComments, setAdminComments] = useState("");
   const [isSubmittingStatus, setIsSubmittingStatus] = useState(false);
@@ -623,7 +717,7 @@ export function ApplicationReviewDialog({
     user && ["admin", "super_admin", "college"].includes(user.role);
 
   // Handle professor assignment
-  const handleProfessorAssigned = (professor: any) => {
+  const handleProfessorAssigned = (professor: ProfessorInfo) => {
     setProfessorInfo(professor);
   };
 
@@ -658,7 +752,7 @@ export function ApplicationReviewDialog({
         );
       }
     } catch (error) {
-      console.error("Post office verification error:", error);
+      logger.error("Post office verification error", { error: error });
       toast.error(
         locale === "zh" ? "郵局驗證錯誤" : "Post Office Verification Error",
         {
@@ -820,11 +914,11 @@ export function ApplicationReviewDialog({
         ? await api.admin.getReviewableSubTypes(applicationId)
         : await api.college.getSubTypes(applicationId);
       if (subTypesResponse.success && subTypesResponse.data) {
-        const availableSubTypes = subTypesResponse.data;
+        const availableSubTypes = subTypesResponse.data as SubTypeOption[];
         setSubTypes(availableSubTypes);
 
         // Initialize items based on available sub-types
-        const initialItems = availableSubTypes.map((subType: any) => ({
+        const initialItems = availableSubTypes.map((subType: SubTypeOption) => ({
           sub_type_code: subType.value,
           recommendation: 'pending' as const,
           comments: "",
@@ -835,14 +929,15 @@ export function ApplicationReviewDialog({
           const reviewResponse = (role === "admin" || role === "super_admin")
             ? await api.admin.getApplicationReview(applicationId)
             : await api.college.getReview(applicationId);
-          if (reviewResponse.success && reviewResponse.data && reviewResponse.data.id > 0) {
-            setExistingReview(reviewResponse.data);
+          const reviewData = reviewResponse.data as ExistingReview | undefined;
+          if (reviewResponse.success && reviewData && reviewData.id > 0) {
+            setExistingReview(reviewData);
 
             // Merge existing review items with all available sub-types
-            const existingItems = reviewResponse.data.items || [];
-            const mergedItems = availableSubTypes.map((subType: any) => {
+            const existingItems = reviewData.items || [];
+            const mergedItems = availableSubTypes.map((subType: SubTypeOption) => {
               const existingItem = existingItems.find(
-                (item: any) => item.sub_type_code === subType.value
+                (item: SubTypeReviewItem) => item.sub_type_code === subType.value
               );
 
               if (existingItem) {
@@ -862,9 +957,9 @@ export function ApplicationReviewDialog({
             });
 
             // Debug logging
-            console.log('📋 Loaded existing review:', {
-              reviewId: reviewResponse.data.id,
-              reviewedAt: reviewResponse.data.reviewed_at,
+            logger.debug('📋 Loaded existing review:', {
+              reviewId: reviewData?.id,
+              reviewedAt: reviewData?.reviewed_at,
               existingItemsCount: existingItems.length,
               mergedItemsCount: mergedItems.length,
               mergedItems: mergedItems
@@ -883,7 +978,7 @@ export function ApplicationReviewDialog({
         }
       }
     } catch (err) {
-      console.error("Error loading sub-types and review:", err);
+      logger.error("Error loading sub-types and review", { err: err });
     } finally {
       setIsLoadingSubTypes(false);
     }
@@ -941,12 +1036,12 @@ export function ApplicationReviewDialog({
             scholarshipType = scholarshipResponse.data.code;
           }
         } catch (error) {
-          console.error("Failed to get scholarship type:", error);
+          logger.error("Failed to get scholarship type", { error: error });
         }
       }
 
       if (!scholarshipType) {
-        console.error("Cannot determine scholarship type");
+        logger.error("Cannot determine scholarship type");
         setDocumentLabels({});
         setFieldLabels({});
         setApplicationFields([]);
@@ -987,7 +1082,7 @@ export function ApplicationReviewDialog({
         }
       }
     } catch (error) {
-      console.error("Failed to load form config:", error);
+      logger.error("Failed to load form config", { error: error });
       setDocumentLabels({});
       setFieldLabels({});
       setApplicationFields([]);
@@ -1006,7 +1101,7 @@ export function ApplicationReviewDialog({
       const appData = detailedApplication;
       // Try to get files from submitted_form_data.documents
       if (appData.submitted_form_data?.documents) {
-        const files = appData.submitted_form_data.documents.map((doc: any) => ({
+        const files = appData.submitted_form_data.documents.map((doc: DocumentPayload) => ({
           id: doc.file_id || doc.id,
           filename: doc.filename,
           original_filename: doc.original_filename,
@@ -1025,7 +1120,7 @@ export function ApplicationReviewDialog({
         setApplicationFiles(files);
       }
     } catch (error) {
-      console.error("Failed to load application files:", error);
+      logger.error("Failed to load application files", { error: error });
       setApplicationFiles([]);
     } finally {
       setIsLoadingFiles(false);
@@ -1033,17 +1128,21 @@ export function ApplicationReviewDialog({
   };
 
   // Handle file preview
-  const handleFilePreview = (file: any) => {
+  const handleFilePreview = (file: DocumentPayload) => {
     const filename = file.filename || file.original_filename;
+    if (!filename) {
+      logger.error("No filename available for preview");
+      return;
+    }
 
     if (!file.file_path) {
-      console.error("No file path available for preview");
+      logger.error("No file path available for preview");
       return;
     }
 
     const urlParts = file.file_path.split("?");
     if (urlParts.length < 2) {
-      console.error("Invalid file URL format");
+      logger.error("Invalid file URL format");
       return;
     }
 
@@ -1051,11 +1150,11 @@ export function ApplicationReviewDialog({
     const token = urlParams.get("token");
 
     if (!token) {
-      console.error("No token found in file URL");
+      logger.error("No token found in file URL");
       return;
     }
 
-    const previewUrl = `/api/v1/preview?fileId=${file.id}&filename=${encodeURIComponent(filename)}&type=${encodeURIComponent(file.file_type)}&applicationId=${detailedApplication?.id}&token=${token}`;
+    const previewUrl = `/api/v1/preview?fileId=${file.id ?? ""}&filename=${encodeURIComponent(filename)}&type=${encodeURIComponent(file.file_type ?? "")}&applicationId=${detailedApplication?.id}&token=${token}`;
 
     let fileType = "other";
     if (filename.toLowerCase().endsWith(".pdf")) {
@@ -1080,7 +1179,11 @@ export function ApplicationReviewDialog({
   };
 
   // Update review item
-  const updateReviewItem = (subTypeCode: string, field: string, value: any) => {
+  const updateReviewItem = (
+    subTypeCode: string,
+    field: keyof SubTypeReviewItem,
+    value: SubTypeReviewItem[keyof SubTypeReviewItem]
+  ) => {
     setReviewItems(prev =>
       prev.map(item => {
         if (item.sub_type_code === subTypeCode) {
@@ -1093,27 +1196,28 @@ export function ApplicationReviewDialog({
 
   // Get sub-type label
   const getSubTypeLabel = (subTypeCode: string) => {
-    const subType = subTypes.find((st: any) => st.value === subTypeCode);
+    const subType = subTypes.find((st: SubTypeOption) => st.value === subTypeCode);
     return subType?.label || subTypeCode;
   };
 
   // Helper function to safely convert error messages to strings
-  const safeErrorMessage = (error: any): string => {
+  const safeErrorMessage = (error: unknown): string => {
     if (typeof error === 'string') {
       return error;
     }
     if (error && typeof error === 'object') {
+      const errObj = error as { message?: unknown; detail?: unknown };
       // Handle Error objects
-      if (error.message && typeof error.message === 'string') {
-        return error.message;
+      if (errObj.message && typeof errObj.message === 'string') {
+        return errObj.message;
       }
       // Handle arrays (e.g., validation errors)
       if (Array.isArray(error)) {
         return error.map(e => safeErrorMessage(e)).join(', ');
       }
       // Handle objects with detail field
-      if (error.detail) {
-        return safeErrorMessage(error.detail);
+      if (errObj.detail) {
+        return safeErrorMessage(errObj.detail);
       }
       // Fallback: stringify the object
       try {
@@ -1203,25 +1307,31 @@ export function ApplicationReviewDialog({
       } else {
         throw new Error(safeErrorMessage(response.message) || "Failed to submit review");
       }
-    } catch (err: any) {
-      console.error("Failed to submit review:", err);
+    } catch (err: unknown) {
+      logger.error("Failed to submit review", { err: err });
 
-      // Extract detailed error message from various possible locations
+      // Extract detailed error message from various possible locations.
+      // Use a focused axios+Error shape cast rather than `any` so each
+      // property access is documented and tsc can validate the chain.
+      const errShape = err as {
+        message?: string;
+        response?: { data?: { detail?: string | object; message?: string } };
+      };
       let errorMessage = "Failed to submit review";
 
       // Check for API response error details (FastAPI HTTPException)
-      if (err?.response?.data?.detail) {
-        errorMessage = typeof err.response.data.detail === 'string'
-          ? err.response.data.detail
-          : JSON.stringify(err.response.data.detail);
+      if (errShape.response?.data?.detail) {
+        errorMessage = typeof errShape.response.data.detail === 'string'
+          ? errShape.response.data.detail
+          : JSON.stringify(errShape.response.data.detail);
       }
       // Check for API response message (our ApiResponse format)
-      else if (err?.response?.data?.message) {
-        errorMessage = safeErrorMessage(err.response.data.message);
+      else if (errShape.response?.data?.message) {
+        errorMessage = safeErrorMessage(errShape.response.data.message);
       }
       // Check for standard Error message
-      else if (err?.message) {
-        errorMessage = safeErrorMessage(err.message);
+      else if (errShape.message) {
+        errorMessage = safeErrorMessage(errShape.message);
       }
       // Fallback to generic error extraction
       else {
@@ -1248,7 +1358,7 @@ export function ApplicationReviewDialog({
         // Close dialog after successful approval
         onOpenChange(false);
       } catch (error) {
-        console.error('Failed to approve application:', error);
+        logger.error('Failed to approve application:', error);
         // Error handling is done in the parent component (toast notification)
       } finally {
         setIsSubmitting(false);
@@ -1264,7 +1374,7 @@ export function ApplicationReviewDialog({
         // Close dialog after successful rejection
         onOpenChange(false);
       } catch (error) {
-        console.error('Failed to reject application:', error);
+        logger.error('Failed to reject application:', error);
         // Error handling is done in the parent component (toast notification)
       } finally {
         setIsSubmitting(false);
@@ -1322,7 +1432,7 @@ export function ApplicationReviewDialog({
     academic_year: detailedApplication?.academic_year ?? (application as Application).academic_year,
     semester: detailedApplication?.semester ?? (application as Application).semester,
     amount: detailedApplication?.amount ?? (application as Application).amount,
-    currency: (detailedApplication as any)?.currency ?? "TWD",
+    currency: (detailedApplication as Application & EnrichedApplicationExtras)?.currency ?? "TWD",
     is_renewal: detailedApplication?.is_renewal ?? (application as Application).is_renewal ?? false,
     created_at: detailedApplication?.created_at ?? application.created_at,
     submitted_at: detailedApplication?.submitted_at ?? (application as Application).submitted_at ?? (application as HistoricalApplication).submitted_at,
@@ -1332,14 +1442,14 @@ export function ApplicationReviewDialog({
     class_ranking_percent: detailedApplication?.class_ranking_percent ?? (application as Application).class_ranking_percent,
     dept_ranking_percent: detailedApplication?.dept_ranking_percent ?? (application as Application).dept_ranking_percent,
     student_termcount: detailedApplication?.student_data?.std_termcount ?? (application as Application).student_data?.std_termcount,
-    academy_name: (detailedApplication as any)?.academy_name ?? (application as Application).academy_code,
+    academy_name: (detailedApplication as Application & EnrichedApplicationExtras)?.academy_name ?? (application as Application).academy_code,
     academy_code: detailedApplication?.academy_code ?? (application as Application).academy_code,
     department: getDepartmentName(detailedApplication?.student_data?.std_depno, departments) ?? detailedApplication?.student_data?.std_depno,
-    department_name: (detailedApplication as any)?.department_name ?? getDepartmentName(detailedApplication?.student_data?.std_depno, departments) ?? (application as Application).department,
+    department_name: (detailedApplication as Application & EnrichedApplicationExtras)?.department_name ?? getDepartmentName(detailedApplication?.student_data?.std_depno, departments) ?? (application as Application).department,
     department_code: detailedApplication?.department_code ?? (application as Application).department_code,
-    degree: (detailedApplication as any)?.degree,
-    degree_name: (detailedApplication as any)?.degree ? getDegreeName((detailedApplication as any).degree, degrees) : undefined,
-    professor_review_items: (detailedApplication as any)?.professor_review_items ?? [],
+    degree: (detailedApplication as Application & EnrichedApplicationExtras)?.degree,
+    degree_name: (detailedApplication as Application & EnrichedApplicationExtras)?.degree ? getDegreeName((detailedApplication as Application & EnrichedApplicationExtras).degree, degrees) : undefined,
+    professor_review_items: (detailedApplication as Application & EnrichedApplicationExtras)?.professor_review_items ?? [],
   };
 
   return (
@@ -1602,7 +1712,7 @@ export function ApplicationReviewDialog({
                         <CardContent>
                           <div className="space-y-2">
                             {displayData.professor_review_items.map(
-                              (item: any, idx: number) => (
+                              (item: SubTypeReviewItem, idx: number) => (
                                 <div
                                   key={`${item.sub_type_code}-${idx}`}
                                   className={`p-3 rounded border ${
@@ -1698,15 +1808,15 @@ export function ApplicationReviewDialog({
                         <>
                           {/* Debug logging for form data */}
                           {(() => {
-                            console.log(
+                            logger.debug(
                               "🔍 Form Tab - detailedApplication:",
                               detailedApplication
                             );
-                            console.log(
+                            logger.debug(
                               "🔍 Form Tab - submitted_form_data:",
                               detailedApplication?.submitted_form_data
                             );
-                            console.log(
+                            logger.debug(
                               "🔍 Form Tab - fields:",
                               detailedApplication?.submitted_form_data?.fields
                             );
@@ -1742,7 +1852,7 @@ export function ApplicationReviewDialog({
                         </div>
                       ) : applicationFiles.length > 0 ? (
                         <div className="space-y-2">
-                          {applicationFiles.map((file: any, index: number) => (
+                          {applicationFiles.map((file: ReviewDialogFile, index: number) => (
                             <div
                               key={file.id || index}
                               className="flex items-center justify-between p-3 bg-muted/50 rounded-md border"
@@ -1824,7 +1934,7 @@ export function ApplicationReviewDialog({
                         <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                         <AlertDescription className="text-blue-800 dark:text-blue-300">
                           {locale === "zh"
-                            ? `您已於 ${new Date(existingReview.reviewed_at).toLocaleString('zh-TW', {
+                            ? `您已於 ${new Date(existingReview.reviewed_at ?? "").toLocaleString('zh-TW', {
                                 year: 'numeric',
                                 month: '2-digit',
                                 day: '2-digit',
@@ -1832,7 +1942,7 @@ export function ApplicationReviewDialog({
                                 minute: '2-digit',
                                 hour12: false
                               })} 提交過審核意見，以下為之前的審核內容`
-                            : `You submitted a review on ${new Date(existingReview.reviewed_at).toLocaleString('en-US', {
+                            : `You submitted a review on ${new Date(existingReview.reviewed_at ?? "").toLocaleString('en-US', {
                                 year: 'numeric',
                                 month: '2-digit',
                                 day: '2-digit',

@@ -3,7 +3,10 @@
 import { AdminScholarshipManagementInterface } from "@/components/admin-scholarship-management-interface";
 import { ApplicationReviewDialog } from "@/components/common/ApplicationReviewDialog";
 import { ApplicationAuditTrail } from "@/components/application-audit-trail";
-import { BankVerificationReviewDialog } from "@/components/bank-verification-review-dialog";
+import {
+  BankVerificationReviewDialog,
+  type BankVerificationData,
+} from "@/components/bank-verification-review-dialog";
 import { DeleteApplicationDialog } from "@/components/delete-application-dialog";
 import { ProfessorAssignmentDropdown } from "@/components/professor-assignment-dropdown";
 import { SemesterSelector } from "@/components/semester-selector";
@@ -39,6 +42,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useScholarshipSpecificApplications } from "@/hooks/use-admin";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
 import { Locale } from "@/lib/validators";
 import { getDisplayStatusInfo } from "@/lib/utils/application-helpers";
 import {
@@ -76,6 +80,40 @@ import { useScholarshipPermissions } from "@/hooks/use-scholarship-permissions";
 import { useScholarshipData } from "@/hooks/use-scholarship-data";
 import { Application } from "@/lib/api";
 import { User as UserType } from "@/types/user";
+
+// Shape of entries returned by GET /admin/applications/{id}/audit-logs.
+// Co-located here (not exported) because it's only consumed by the audit
+// modal in this component; the fields named are the ones the table renders.
+interface AuditLogEntry {
+  created_at?: string;
+  timestamp?: string;
+  user_name?: string;
+  user?: { name?: string };
+  app_id?: string;
+  student_name?: string;
+  action?: string;
+  description?: string;
+}
+
+// Shape of document entries in `submitted_form_data.documents` from
+// the backend. All fields optional because the upstream JSON can come
+// from several sources (form_data, submitted_form_data, SIS upload).
+interface DocumentPayload {
+  file_id?: string | number;
+  id?: string | number;
+  filename?: string;
+  original_filename?: string;
+  file_size?: number;
+  mime_type?: string;
+  document_type?: string;
+  file_type?: string;
+  file_path?: string;
+  download_url?: string;
+  is_verified?: boolean;
+  upload_time?: string;
+  uploaded_at?: string;
+  document_id?: string;
+}
 
 interface AdminScholarshipDashboardProps {
   user: UserType;
@@ -141,7 +179,7 @@ interface DashboardApplication {
   approved_at?: string;
   academic_year?: string;
   semester?: string;
-  meta_data?: any;
+  meta_data?: Record<string, unknown>;
   // Scholarship configuration for professor review requirements
   scholarship_configuration?: {
     requires_professor_recommendation: boolean;
@@ -150,13 +188,20 @@ interface DashboardApplication {
   };
   // Student data snapshot from SIS API (see backend/app/schemas/student_snapshot.py)
   // Fields follow pattern: std_* (basic), trm_* (term), com_* (contact)
-  student_data?: Record<string, any>;
+  student_data?: Record<string, unknown>;
 }
 
-// Data transformation function to map API response to expected format
+// Data transformation function to map API response to expected format.
+// Accepts the loose Application shape from useScholarshipSpecificApplications
+// (which mirrors the admin /applications endpoint) and normalises it into a
+// DashboardApplication. The upstream Application type has fields that diverge
+// from DashboardApplication (e.g. professor_id is string | number, while
+// DashboardApplication narrows it to number), so we keep this parameter
+// loose rather than re-declare the entire transform.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const transformApplicationData = (app: any): DashboardApplication => {
-  console.log("🔍 Transforming application data:", app.app_id);
-  console.log("📊 Professor data in raw API response:", app.professor);
+  logger.debug("🔍 Transforming application data:", app.app_id);
+  logger.debug("📊 Professor data in raw API response:", app.professor);
 
   // Ensure submitted_form_data has the correct structure for file preview
   let submittedFormData = app.submitted_form_data;
@@ -164,7 +209,7 @@ const transformApplicationData = (app: any): DashboardApplication => {
     // Transform documents to include necessary file properties for preview
     submittedFormData = {
       ...submittedFormData,
-      documents: submittedFormData.documents.map((doc: any) => ({
+      documents: submittedFormData.documents.map((doc: DocumentPayload) => ({
         ...doc,
         // Map API response fields to expected format for ApplicationDetailDialog
         id: doc.file_id || doc.id,
@@ -226,11 +271,11 @@ const transformApplicationData = (app: any): DashboardApplication => {
     scholarship_configuration: app.scholarship_configuration,
   };
 
-  console.log("✅ Transformed result:", transformed.app_id);
-  console.log("📋 Professor in transformed data:", transformed.professor);
-  console.log("🎯 Professor name in transformed:", transformed.professor?.name);
-  console.log("🔢 Professor ID in transformed:", transformed.professor_id);
-  console.log("⚙️ Scholarship configuration:", app.scholarship_configuration);
+  logger.debug("✅ Transformed result:", transformed.app_id);
+  logger.debug("📋 Professor in transformed data:", transformed.professor);
+  logger.debug("🎯 Professor name in transformed:", transformed.professor?.name);
+  logger.debug("🔢 Professor ID in transformed:", transformed.professor_id);
+  logger.debug("⚙️ Scholarship configuration:", app.scholarship_configuration);
   return transformed;
 };
 
@@ -262,7 +307,7 @@ export function AdminScholarshipDashboard({
   const { subTypeTranslations } = useScholarshipData();
 
   // Debug logging
-  console.log("ScholarshipSpecificDashboard render:", {
+  logger.debug("ScholarshipSpecificDashboard render:", {
     scholarshipTypes,
     scholarshipStats,
     applicationsByType,
@@ -289,7 +334,8 @@ export function AdminScholarshipDashboard({
   const [selectedApplicationsForBatch, setSelectedApplicationsForBatch] =
     useState<number[]>([]);
   const [bankReviewDialogOpen, setBankReviewDialogOpen] = useState(false);
-  const [currentBankVerification, setCurrentBankVerification] = useState<any | null>(null);
+  const [currentBankVerification, setCurrentBankVerification] =
+    useState<BankVerificationData | null>(null);
   // 學期選擇相關狀態
   const [selectedAcademicYear, setSelectedAcademicYear] = useState<number>();
   const [selectedSemester, setSelectedSemester] = useState<string>();
@@ -302,7 +348,7 @@ export function AdminScholarshipDashboard({
 
   // 操作紀錄相關狀態
   const [showAuditModal, setShowAuditModal] = useState(false);
-  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
 
   // 檢查用戶是否可以指派教授
@@ -310,7 +356,10 @@ export function AdminScholarshipDashboard({
     user && ["admin", "super_admin", "college"].includes(user.role);
 
   // 處理教授指派回調
-  const handleProfessorAssigned = (applicationId: number, professor: any) => {
+  const handleProfessorAssigned = (
+    _applicationId: number,
+    _professor: unknown
+  ) => {
     // 刷新相應的申請資料
     refetch();
   };
@@ -324,7 +373,7 @@ export function AdminScholarshipDashboard({
 
     // Debug logging
     if (transformedApplications.length > 0) {
-      console.log(
+      logger.debug(
         `Transformed applications for ${type}:`,
         transformedApplications[0]
       );
@@ -430,9 +479,9 @@ export function AdminScholarshipDashboard({
     newStatus: string
   ) => {
     try {
-      console.log("Status update request:", { applicationId, newStatus });
+      logger.debug("Status update request:", { applicationId, newStatus });
       const result = await updateApplicationStatus(applicationId, newStatus);
-      console.log("Status update result:", result);
+      logger.debug("Status update result:", result);
 
       // 檢查是否成功（即使拋出錯誤，實際上也可能成功了）
       toast.success(`申請狀態已更新為${newStatus === "approved" ? "已核准" : newStatus === "rejected" ? "已駁回" : newStatus}`);
@@ -440,7 +489,7 @@ export function AdminScholarshipDashboard({
       // 重新載入數據
       refetch();
     } catch (error) {
-      console.error("Failed to update application status:", error);
+      logger.error("Failed to update application status", { error: error });
       // 嘗試重新載入以檢查狀態是否實際上已更新
       await new Promise(resolve => setTimeout(resolve, 500));
       refetch();
@@ -461,7 +510,7 @@ export function AdminScholarshipDashboard({
         toast.error("無法載入申請詳情");
       }
     } catch (error) {
-      console.error("Failed to fetch application details:", error);
+      logger.error("Failed to fetch application details", { error: error });
       toast.error("載入申請詳情時發生錯誤");
     } finally {
       setLoadingApplicationDetail(false);
@@ -489,7 +538,7 @@ export function AdminScholarshipDashboard({
         toast.error(response.message || "無法完成郵局帳戶驗證");
       }
     } catch (error) {
-      console.error("Post office verification error:", error);
+      logger.error("Post office verification error", { error: error });
       toast.error("郵局帳戶驗證過程中發生錯誤");
     } finally {
       setBankVerificationLoading(prev => ({ ...prev, [applicationId]: false }));
@@ -510,7 +559,7 @@ export function AdminScholarshipDashboard({
         toast.error(response.message || "無法載入驗證資料");
       }
     } catch (error) {
-      console.error("Failed to load post office verification data:", error);
+      logger.error("Failed to load post office verification data", { error: error });
       toast.error("載入驗證資料時發生錯誤");
     } finally {
       setBankVerificationLoading(prev => ({ ...prev, [applicationId]: false }));
@@ -535,7 +584,7 @@ export function AdminScholarshipDashboard({
         toast.error(response.message || "無法執行郵局帳號驗證");
       }
     } catch (error) {
-      console.error("Failed to verify post office account:", error);
+      logger.error("Failed to verify post office account", { error: error });
       toast.error("執行驗證時發生錯誤");
     } finally {
       setBankVerificationLoading(prev => ({ ...prev, [applicationId]: false }));
@@ -562,7 +611,7 @@ export function AdminScholarshipDashboard({
         toast.error(response.message || "無法完成批量郵局帳戶驗證");
       }
     } catch (error) {
-      console.error("Batch post office verification error:", error);
+      logger.error("Batch post office verification error", { error: error });
       toast.error("批量郵局帳戶驗證過程中發生錯誤");
     } finally {
       setBatchVerificationLoading(false);
@@ -604,7 +653,9 @@ export function AdminScholarshipDashboard({
   // 獲取郵局驗證狀態的顯示組件（簡化版：僅顯示 icon）
   const getBankVerificationStatus = (app: DashboardApplication) => {
     // 新版：檢查 bank_verification 物件中的分開狀態
-    const bankVerification = app.meta_data?.bank_verification;
+    const bankVerification = app.meta_data?.bank_verification as
+      | { account_number_status?: string; account_holder_status?: string }
+      | undefined;
     const accountNumberStatus = bankVerification?.account_number_status;
     const accountHolderStatus = bankVerification?.account_holder_status;
 
@@ -669,13 +720,13 @@ export function AdminScholarshipDashboard({
       const response = await apiClient.admin.getScholarshipAuditTrail(activeTab);
 
       if (response.success && response.data) {
-        setAuditLogs(response.data);
+        setAuditLogs(response.data as AuditLogEntry[]);
         setShowAuditModal(true);
       } else {
         toast.error(response.message || "無法載入操作紀錄");
       }
     } catch (error) {
-      console.error("Failed to fetch audit logs:", error);
+      logger.error("Failed to fetch audit logs", { error: error });
       toast.error("無法載入操作紀錄，請稍後再試");
     } finally {
       setAuditLoading(false);
@@ -950,26 +1001,26 @@ export function AdminScholarshipDashboard({
                                   <CheckCircle className="h-4 w-4 text-green-600" />
                                     <span className="text-sm font-medium text-green-800 whitespace-nowrap">
                                     {(() => {
-                                      console.log(
+                                      logger.debug(
                                         "🎯 Display logic - App:",
                                         app.app_id
                                       );
-                                      console.log(
+                                      logger.debug(
                                         "📋 Professor object:",
                                         app.professor
                                       );
-                                      console.log(
+                                      logger.debug(
                                         "📝 Professor name:",
                                         app.professor?.name
                                       );
-                                      console.log(
+                                      logger.debug(
                                         "🔢 Professor ID:",
                                         app.professor_id
                                       );
                                       const displayName =
                                         app.professor?.name ||
                                         `教授 #${app.professor_id}`;
-                                      console.log(
+                                      logger.debug(
                                         "✨ Final display name:",
                                         displayName
                                       );
@@ -1037,26 +1088,26 @@ export function AdminScholarshipDashboard({
                             <div className="flex items-center gap-1">
                               <span className="text-sm font-medium text-green-800 whitespace-nowrap">
                                 {(() => {
-                                  console.log(
+                                  logger.debug(
                                     "🎯 Display logic (readonly) - App:",
                                     app.app_id
                                   );
-                                  console.log(
+                                  logger.debug(
                                     "📋 Professor object:",
                                     app.professor
                                   );
-                                  console.log(
+                                  logger.debug(
                                     "📝 Professor name:",
                                     app.professor?.name
                                   );
-                                  console.log(
+                                  logger.debug(
                                     "🔢 Professor ID:",
                                     app.professor_id
                                   );
                                   const displayName =
                                     app.professor?.name ||
                                     `教授 #${app.professor_id}`;
-                                  console.log(
+                                  logger.debug(
                                     "✨ Final display name:",
                                     displayName
                                   );
@@ -1643,7 +1694,7 @@ export function AdminScholarshipDashboard({
                   {auditLogs.map((log, index) => (
                     <TableRow key={index}>
                       <TableCell className="text-sm">
-                        {new Date(log.created_at || log.timestamp).toLocaleString("zh-TW")}
+                        {new Date(log.created_at || log.timestamp || Date.now()).toLocaleString("zh-TW")}
                       </TableCell>
                       <TableCell className="text-sm">
                         {log.user_name || log.user?.name || "系統"}
@@ -1699,7 +1750,10 @@ export function AdminScholarshipDashboard({
       {activeTab && (
         <div className="mt-8">
           <AdminScholarshipManagementInterface
-            type={activeTab as any}
+            // Cast is at the boundary: activeTab is typed as `string` from
+            // useState; the prop's `ScholarshipType` union is enforced by
+            // AdminScholarshipManagementInterface at the call site.
+            type={activeTab as "undergraduate_freshman" | "direct_phd" | "phd"}
             className="border-t pt-6"
           />
         </div>

@@ -43,22 +43,13 @@ import { useAuth } from "@/hooks/use-auth";
 import { DevLoginPage } from "@/components/dev-login-page";
 import { SSOLoginPage } from "@/components/sso-login-page";
 import { useAdminDashboard } from "@/hooks/use-admin";
-import { apiClient } from "@/lib/api";
 import { User } from "@/types/user";
 import { decodeJWT } from "@/lib/utils/jwt";
+import { logger } from "@/lib/utils/logger";
 
 export default function ScholarshipManagementSystem() {
   const [activeTab, setActiveTab] = useState("main");
   const [editingApplicationId, setEditingApplicationId] = useState<number | null>(null);
-
-  // Debug activeTab changes
-  useEffect(() => {
-    // console.log(" Active tab changed to:", activeTab);
-    console.log(
-      "🌐 Current URL after tab change:",
-      typeof window !== "undefined" ? window.location.href : "SSR"
-    );
-  }, [activeTab]);
 
   // Check if this is an SSO callback request
   useEffect(() => {
@@ -66,21 +57,15 @@ export default function ScholarshipManagementSystem() {
       const path = window.location.pathname;
       const searchParams = new URLSearchParams(window.location.search);
 
-    // console.log(" Checking current path:", path);
-      console.log(
-        "🔍 URL search params:",
-        Object.fromEntries(searchParams.entries())
-      );
+      logger.debug("Checking current path", { path });
 
       if (path === "/auth/sso-callback") {
-    // console.log(" Detected SSO callback request in main page!");
         const token = searchParams.get("token");
 
         if (token) {
-    // console.log(" Processing SSO callback with token in main page...");
           handleSSOCallbackInMainPage(token);
         } else {
-          console.error("❌ No token found in SSO callback URL");
+          logger.error("No token found in SSO callback URL");
         }
       }
     }
@@ -88,11 +73,8 @@ export default function ScholarshipManagementSystem() {
 
   const handleSSOCallbackInMainPage = async (token: string) => {
     try {
-    // console.log(" Decoding JWT token using utility module...");
-
       // Decode JWT using utility module (eliminates inline script for CSP compliance)
       const tokenData = decodeJWT(token);
-    // console.log(" Decoded token data in main page:", tokenData);
 
       // Validate and cast role to UserRole enum
       const validRoles: Array<UserRole> = [
@@ -117,12 +99,7 @@ export default function ScholarshipManagementSystem() {
         updated_at: new Date().toISOString(),
       };
 
-    // console.log(" Constructed user data in main page:", userData);
-    // console.log(" Calling login() from main page...");
-
       login(token, userData);
-
-    // console.log(" Login completed in main page, redirecting...");
 
       // Redirect based on user role
       let redirectPath = "/";
@@ -133,13 +110,13 @@ export default function ScholarshipManagementSystem() {
         redirectPath = "/#main";
       }
 
-      console.log("🚀 Redirecting to:", redirectPath);
+      logger.debug("SSO callback redirect resolved", { redirectPath });
 
       setTimeout(() => {
         window.location.href = redirectPath;
       }, 1000);
     } catch (error) {
-      console.error("💥 SSO callback processing failed in main page:", error);
+      logger.error("SSO callback processing failed in main page", { error });
     }
   };
 
@@ -171,93 +148,41 @@ export default function ScholarshipManagementSystem() {
     fetchDashboardStats,
   } = useAdminDashboard();
 
-  // 調試信息
-  useEffect(() => {
-    // console.log("🏠 ScholarshipManagementSystem mounted");
-    // console.log(" User:", user);
-    // console.log(" Is Authenticated:", isAuthenticated);
-    // console.log("⏳ Auth Loading:", authLoading);
-    console.log("❌ Auth Error:", authError);
-    // console.log("📄 Recent Applications:", recentApplications);
-    // console.log("🚨 Error:", error);
-
-    // 檢查 localStorage 中的認證信息
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("auth_token");
-      const userJson = localStorage.getItem("user");
-      console.log("LocalStorage token exists:", !!token);
-      console.log("LocalStorage user exists:", !!userJson);
-      try {
-        console.log("API client has token:", !!(apiClient as any).token);
-      } catch (e) {
-        console.log("Could not access apiClient token");
-      }
-
-      if (token) {
-        console.log("Token preview:", token.substring(0, 20) + "...");
-      }
-    }
-  }, [
-    user,
-    isAuthenticated,
-    authLoading,
-    authError,
-    recentApplications,
-    error,
-  ]);
-
   // Handle hash-based navigation
   useEffect(() => {
-    // console.log("🔗 Hash-based navigation effect triggered");
     if (typeof window !== "undefined") {
       const fullHash = window.location.hash;
       const hash = fullHash.replace("#", "");
-      // console.log("🌐 Current URL:", window.location.href);
-      // console.log("🔗 Full hash:", fullHash);
-      // console.log("🏷️ Processed hash:", hash);
 
       const validHashes = ["dashboard", "main", "admin"];
-    // console.log(" Valid hashes:", validHashes);
 
       if (hash && validHashes.includes(hash)) {
-    // console.log(" Hash is valid, setting active tab to:", hash);
         setActiveTab(hash);
-    // console.log(" Active tab updated from hash navigation");
       } else if (hash) {
-        console.log("❌ Hash is invalid:", hash);
-      } else {
-        // console.log("📝 No hash found in URL");
+        logger.debug("Hash is invalid", { hash });
       }
     } else {
-      console.log("❌ Window is not defined (SSR)");
+      logger.debug("Window is not defined (SSR)");
     }
   }, []);
 
   // Set initial active tab based on user role
   useEffect(() => {
-    // console.log(" Setting active tab based on user role...");
     if (user) {
-    // console.log(" User role detected:", user.role);
       // Set each role to their first available tab (index 0)
       if (user.role === "student") {
-        // console.log('🎒 Student role - setting tab to "scholarship-list"');
         setActiveTab("scholarship-list");
       } else if (user.role === "professor") {
-        // console.log('🎓 Professor role - setting tab to "main"');
         setActiveTab("main");
       } else if (user.role === "college") {
-        // console.log('🏫 College role - setting tab to "main"');
         setActiveTab("main");
       } else if (user.role === "admin") {
-        // console.log('👑 Admin role - setting tab to "dashboard"');
         setActiveTab("dashboard");
       } else if (user.role === "super_admin") {
-        // console.log('👑 Super Admin role - setting tab to "dashboard"');
         setActiveTab("dashboard");
       }
-    // console.log(" Active tab set based on user role");
     } else {
-      console.log("❌ No user found, cannot set active tab");
+      logger.debug("No user found, cannot set active tab");
     }
   }, [user]);
 
@@ -276,7 +201,6 @@ export default function ScholarshipManagementSystem() {
 
   // Show loading screen while checking authentication
   if (authLoading) {
-    // console.log("⏳ Showing loading screen - authLoading is true");
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-nycu-blue-50 flex items-center justify-center">
         <div className="text-center">
@@ -289,16 +213,12 @@ export default function ScholarshipManagementSystem() {
 
   // Show login interface if not authenticated
   if (!isAuthenticated) {
-    // console.log("🚫 User not authenticated, showing login page");
-    // console.log("🌍 NODE_ENV:", process.env.NODE_ENV);
     // Development mode: use DevLoginPage
     if (process.env.NODE_ENV === "development") {
-      // console.log("🛠️ Development mode - showing DevLoginPage");
       return <DevLoginPage />;
     }
 
     // Production mode: use SSO login
-    // console.log("🏭 Production mode - showing SSOLoginPage");
     return <SSOLoginPage />;
   }
 
@@ -471,21 +391,9 @@ export default function ScholarshipManagementSystem() {
   };
 
   if (!user) {
-    console.log(
-      "❌ User is null after authentication checks, showing loading..."
-    );
+    logger.debug("User is null after authentication checks, showing loading");
     return <div>Loading...</div>;
   }
-
-    // console.log(" Rendering main scholarship system interface");
-    // console.log(" Final user state:", {
-    //   id: user.id,
-    //   email: user.email,
-    //   role: user.role,
-    //   name: user.name,
-    // });
-    // console.log(" Current active tab:", activeTab);
-    // console.log(" Authentication state:", { isAuthenticated, authLoading });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-nycu-blue-50 flex flex-col">

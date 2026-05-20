@@ -10,6 +10,7 @@ import { ScheduledEmailsTable } from "@/components/scheduled-emails-table";
 import { ScholarshipWorkflowMermaid } from "@/components/ScholarshipWorkflowMermaid";
 import SystemConfigurationManagement from "@/components/system-configuration-management";
 import { Badge } from "@/components/ui/badge";
+import { logger } from "@/lib/utils/logger";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -49,6 +50,7 @@ import apiClient, {
   ScholarshipConfiguration,
   ScholarshipPermission,
   ScholarshipRule,
+  ScholarshipType,
   SystemStats,
   UserCreate,
   UserListResponse,
@@ -93,7 +95,7 @@ interface User {
   raw_data?: {
     chinese_name?: string;
     english_name?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
@@ -229,7 +231,7 @@ export function AdminManagementInterface({
   const [ruleTypeFilter, setRuleTypeFilter] = useState<
     "initial" | "renewal" | "all"
   >("all");
-  const [scholarshipTypes, setScholarshipTypes] = useState<any[]>([]);
+  const [scholarshipTypes, setScholarshipTypes] = useState<ScholarshipType[]>([]);
   const [loadingScholarshipTypes, setLoadingScholarshipTypes] = useState(false);
 
   // Scholarship Configurations for Workflow
@@ -241,8 +243,16 @@ export function AdminManagementInterface({
     number | undefined
   >();
 
-  // 系統統計狀態
+  // 系統統計狀態 — initialized with placeholder values for all DashboardStats
+  // fields (canonical snake_case + legacy camelCase aliases). See issue #642.
   const [systemStats, setSystemStats] = useState<SystemStats>({
+    // Canonical snake_case fields
+    total_applications: 0,
+    pending_review: 0,
+    approved: 0,
+    rejected: 0,
+    avg_processing_time: "0ms",
+    // Legacy camelCase aliases
     totalUsers: 0,
     activeApplications: 0,
     completedReviews: 0,
@@ -262,8 +272,16 @@ export function AdminManagementInterface({
 
   // Email Management states
   const [emailManagementTab, setEmailManagementTab] = useState("templates");
-  const [emailHistory, setEmailHistory] = useState<any[]>([]);
-  const [scheduledEmails, setScheduledEmails] = useState<any[]>([]);
+  // Email history / scheduled emails are managed as opaque records here;
+  // the consumer tabs read fields like `recipient`, `subject`, `status` lazily,
+  // so we keep them as Record<string, unknown> rather than reaching for a
+  // backend schema that itself is `any[]` on the OpenAPI side.
+  const [emailHistory, setEmailHistory] = useState<Record<string, unknown>[]>(
+    []
+  );
+  const [scheduledEmails, setScheduledEmails] = useState<
+    Record<string, unknown>[]
+  >([]);
   const [loadingEmailHistory, setLoadingEmailHistory] = useState(false);
   const [loadingScheduledEmails, setLoadingScheduledEmails] = useState(false);
   const [emailHistoryPagination, setEmailHistoryPagination] = useState({
@@ -305,13 +323,13 @@ export function AdminManagementInterface({
   // Scholarship Email Template states
   const [scholarshipEmailTab, setScholarshipEmailTab] = useState("system");
   const [scholarshipEmailTemplates, setScholarshipEmailTemplates] = useState<
-    any[]
+    Record<string, unknown>[]
   >([]);
   const [loadingScholarshipTemplates, setLoadingScholarshipTemplates] =
     useState(false);
   const [currentScholarshipTemplate, setCurrentScholarshipTemplate] =
-    useState<any>(null);
-  const [myScholarships, setMyScholarships] = useState<any[]>([]);
+    useState<Record<string, unknown> | null>(null);
+  const [myScholarships, setMyScholarships] = useState<ScholarshipType[]>([]);
 
   // 歷史申請相關狀態
   const [historicalApplications, setHistoricalApplications] = useState<
@@ -441,7 +459,7 @@ export function AdminManagementInterface({
 
   // 使用 useCallback 來確保 onPermissionChange 捕獲最新的狀態
   const handlePermissionChange = useCallback(
-    (permissions: any[]) => {
+    (permissions: ScholarshipPermission[]) => {
       // 更新該用戶的獎學金權限
       const userId = editingUser?.id;
       if (userId) {
@@ -495,7 +513,7 @@ export function AdminManagementInterface({
       try {
         const response = await apiClient.admin.getEmailTemplate(emailTab);
         if (response.success && response.data) {
-          setEmailTemplate(response.data);
+          setEmailTemplate(response.data as EmailTemplate);
         } else {
           // Initialize with empty template if none exists
           setEmailTemplate({
@@ -508,7 +526,7 @@ export function AdminManagementInterface({
           });
         }
       } catch (error) {
-        console.error("Failed to load email template:", error);
+        logger.error("Failed to load email template", { error: error });
         // Initialize with empty template on error
         setEmailTemplate({
           key: emailTab,
@@ -620,10 +638,10 @@ export function AdminManagementInterface({
     try {
       const response = await apiClient.admin.updateEmailTemplate(emailTemplate);
       if (response.success && response.data) {
-        setEmailTemplate(response.data);
+        setEmailTemplate(response.data as EmailTemplate);
       }
     } catch (error) {
-      console.error("Failed to save email template:", error);
+      logger.error("Failed to save email template", { error: error });
     } finally {
       setSaving(false);
     }
@@ -636,14 +654,18 @@ export function AdminManagementInterface({
       const response =
         await apiClient.admin.getScholarshipEmailTemplates(scholarshipTypeId);
       if (response.success && response.data) {
-        setScholarshipEmailTemplates(response.data.items);
+        setScholarshipEmailTemplates((response.data.items || []) as Record<string, unknown>[]);
       }
-    } catch (error: any) {
-      console.error("Failed to load scholarship email templates:", error);
-      // If it's a permission error, switch back to system mode
+    } catch (error: unknown) {
+      logger.error("Failed to load scholarship email templates", { error: error });
+      // If it's a permission error, switch back to system mode.
+      // Errors from axios-style clients carry `.response.status`; plain
+      // Error subclasses carry `.message`. Narrow to a focused shape rather
+      // than `any` so the access path is documented.
+      const errShape = error as { response?: { status?: number }; message?: string };
       if (
-        error?.response?.status === 400 ||
-        error?.message?.includes("permission")
+        errShape.response?.status === 400 ||
+        errShape.message?.includes("permission")
       ) {
         setScholarshipEmailTab("system");
         alert("您沒有權限存取此獎學金的郵件模板");
@@ -664,10 +686,10 @@ export function AdminManagementInterface({
         templateKey
       );
       if (response.success && response.data) {
-        setCurrentScholarshipTemplate(response.data);
+        setCurrentScholarshipTemplate(response.data as Record<string, unknown>);
       }
     } catch (error) {
-      console.error("Failed to load scholarship email template:", error);
+      logger.error("Failed to load scholarship email template", { error: error });
       setCurrentScholarshipTemplate(null);
     }
   };
@@ -681,20 +703,21 @@ export function AdminManagementInterface({
       const response =
         await apiClient.admin.getEmailTemplatesBySendingType(sendingType);
       if (response.success && response.data) {
-        setEmailTemplates(response.data);
+        const templates = response.data as EmailTemplate[];
+        setEmailTemplates(templates);
         // Set the first template as selected if no template is currently selected
         if (
-          response.data.length > 0 &&
-          (!emailTab || !response.data.find(t => t.key === emailTab))
+          templates.length > 0 &&
+          (!emailTab || !templates.find(t => t.key === emailTab))
         ) {
-          setEmailTab(response.data[0].key);
+          setEmailTab(templates[0].key);
         }
       } else {
         setEmailTemplates([]);
         setEmailTab(""); // Reset email tab if no templates found
       }
     } catch (error) {
-      console.error("Error loading email templates:", error);
+      logger.error("Error loading email templates", { error: error });
       setEmailTemplates([]);
       setEmailTab(""); // Reset email tab on error
     }
@@ -742,7 +765,7 @@ export function AdminManagementInterface({
         }));
       }
     } catch (error) {
-      console.error("Failed to load email history:", error);
+      logger.error("Failed to load email history", { error: error });
     } finally {
       setLoadingEmailHistory(false);
     }
@@ -770,7 +793,7 @@ export function AdminManagementInterface({
         }));
       }
     } catch (error) {
-      console.error("Failed to load scheduled emails:", error);
+      logger.error("Failed to load scheduled emails", { error: error });
     } finally {
       setLoadingScheduledEmails(false);
     }
@@ -787,7 +810,7 @@ export function AdminManagementInterface({
         await loadScheduledEmails();
       }
     } catch (error) {
-      console.error("Failed to approve email:", error);
+      logger.error("Failed to approve email", { error: error });
     }
   };
 
@@ -800,7 +823,7 @@ export function AdminManagementInterface({
         await loadScheduledEmails();
       }
     } catch (error) {
-      console.error("Failed to cancel email:", error);
+      logger.error("Failed to cancel email", { error: error });
     }
   };
 
@@ -843,23 +866,26 @@ export function AdminManagementInterface({
       const response = await apiClient.admin.getHistoricalApplications(filters);
 
       if (response.success && response.data) {
-        const applications = response.data.items || [];
+        const paginatedData = response.data;
+        const applications = (paginatedData.items || []) as HistoricalApplication[];
         setHistoricalApplications(applications);
 
         setHistoricalApplicationsPagination({
-          page: response.data.page,
-          size: response.data.size,
-          total: response.data.total,
-          pages: response.data.pages,
+          page: paginatedData.page,
+          size: paginatedData.size,
+          total: paginatedData.total,
+          pages: paginatedData.pages,
         });
         setHistoricalApplicationsError(null);
       } else {
         const errorMsg = response.message || "獲取歷史申請失敗";
         setHistoricalApplicationsError(errorMsg);
       }
-    } catch (error: any) {
-      console.error("獲取歷史申請資料失敗:", error);
-      const errorMsg = error?.message || error?.response?.data?.message || "網路錯誤或伺服器未回應";
+    } catch (error: unknown) {
+      logger.error("獲取歷史申請資料失敗", { error: error });
+      const errShape = error as { message?: string; response?: { data?: { message?: string } } };
+      const errorMsg =
+        errShape.message || errShape.response?.data?.message || "網路錯誤或伺服器未回應";
       setHistoricalApplicationsError(errorMsg);
     } finally {
       setLoadingHistoricalApplications(false);
@@ -884,7 +910,7 @@ export function AdminManagementInterface({
       );
 
       if (response.success && response.data) {
-        setAnnouncements(response.data.items || []);
+        setAnnouncements((response.data.items || []) as NotificationResponse[]);
         setAnnouncementPagination(prev => ({
           ...prev,
           total: response.data?.total || 0,
@@ -996,8 +1022,9 @@ export function AdminManagementInterface({
       title_en: announcement.title_en,
       message: announcement.message,
       message_en: announcement.message_en,
-      notification_type: announcement.notification_type as any,
-      priority: announcement.priority as any,
+      notification_type:
+        announcement.notification_type as AnnouncementCreate["notification_type"],
+      priority: announcement.priority as AnnouncementCreate["priority"],
       action_url: announcement.action_url,
       expires_at: announcement.expires_at,
       metadata: announcement.metadata,
@@ -1032,14 +1059,15 @@ export function AdminManagementInterface({
           const response =
             await apiClient.admin.getCurrentUserScholarshipPermissions();
           if (response.success && response.data) {
-            setCurrentUserScholarshipPermissions(response.data);
+            const perms = response.data as ScholarshipPermission[];
+            setCurrentUserScholarshipPermissions(perms);
             // Check if user has any scholarship permissions (needed for quota management)
-            setHasQuotaPermission(response.data.length > 0);
+            setHasQuotaPermission(perms.length > 0);
           } else {
             setHasQuotaPermission(false);
           }
         } catch (error) {
-          console.error("Failed to fetch user scholarship permissions:", error);
+          logger.error("Failed to fetch user scholarship permissions", { error: error });
           setHasQuotaPermission(false);
         }
       } else {
@@ -1101,7 +1129,7 @@ export function AdminManagementInterface({
         });
 
         if (response.success && response.data) {
-          const pageApplications = response.data.items || [];
+          const pageApplications = (response.data.items || []) as HistoricalApplication[];
           allApplications = [...allApplications, ...pageApplications];
 
           // 檢查是否還有更多數據
@@ -1132,7 +1160,7 @@ export function AdminManagementInterface({
         setActiveHistoricalTab("all"); // 保持全部為默認
       }
     } catch (error) {
-      console.error("獲取歷史申請 tab 資料失敗:", error);
+      logger.error("獲取歷史申請 tab 資料失敗", { error: error });
     }
   }, [user, activeHistoricalTab]);
 
@@ -1166,12 +1194,13 @@ export function AdminManagementInterface({
         try {
           const response = await apiClient.admin.getMyScholarships();
           if (response.success && response.data) {
-            setMyScholarships(response.data);
+            const scholarships = response.data as ScholarshipType[];
+            setMyScholarships(scholarships);
 
             // If user has scholarships and current tab is not valid, reset to first scholarship or system
-            if (response.data.length > 0 && scholarshipEmailTab !== "system") {
+            if (scholarships.length > 0 && scholarshipEmailTab !== "system") {
               const currentScholarshipId = parseInt(scholarshipEmailTab);
-              const hasPermission = response.data.some(
+              const hasPermission = scholarships.some(
                 s => s.id === currentScholarshipId
               );
               if (!hasPermission) {
@@ -1180,7 +1209,7 @@ export function AdminManagementInterface({
             }
           }
         } catch (error) {
-          console.error("Failed to fetch user scholarships:", error);
+          logger.error("Failed to fetch user scholarships", { error: error });
           setMyScholarships([]);
           setScholarshipEmailTab("system"); // Reset to system on error
         }
@@ -1211,7 +1240,13 @@ export function AdminManagementInterface({
         .split(",")
         .map(role => role.trim().toUpperCase())
         .join(",");
-      const params: any = {
+      const params: {
+        page: number;
+        size: number;
+        roles: string;
+        search?: string;
+        role?: string;
+      } = {
         page: userPagination.page,
         size: userPagination.size,
         roles: rolesParam,
@@ -1265,17 +1300,20 @@ export function AdminManagementInterface({
         setUserStats(response.data);
       }
     } catch (error) {
-      console.error("獲取使用者統計失敗:", error);
+      logger.error("獲取使用者統計失敗", { error: error });
     }
   };
 
-  const handleUserFormChange = (field: keyof UserCreate, value: any) => {
+  const handleUserFormChange = <K extends keyof UserCreate>(
+    field: K,
+    value: UserCreate[K]
+  ) => {
     setUserForm(prev => ({ ...prev, [field]: value }));
 
     // 當角色改變時，處理獎學金權限
     if (field === "role") {
       // 如果角色不是 college 或 admin，清除該用戶的所有獎學金權限
-      if (!["college", "admin"].includes(value)) {
+      if (!["college", "admin"].includes(value as string)) {
         if (editingUser) {
           // 編輯現有用戶時，清除該用戶的權限
           setScholarshipPermissions(prev =>
@@ -1319,10 +1357,7 @@ export function AdminManagementInterface({
                   comment: permission.comment || "",
                 });
               } catch (permError) {
-                console.error(
-                  "Failed to create scholarship permission:",
-                  permError
-                );
+                logger.error("Failed to create scholarship permission:", { permError: permError });
               }
             }
           }
@@ -1371,7 +1406,7 @@ export function AdminManagementInterface({
           const refreshResponse =
             await apiClient.admin.getScholarshipPermissions();
           if (refreshResponse.success && refreshResponse.data) {
-            const freshPermissions = refreshResponse.data;
+            const freshPermissions = refreshResponse.data as ScholarshipPermission[];
             const freshUserPermissions = freshPermissions.filter(
               p => p.user_id === Number(editingUser.id)
             );
@@ -1392,10 +1427,7 @@ export function AdminManagementInterface({
                   currentPerm.id
                 );
               } catch (permError) {
-                console.error(
-                  "Failed to delete scholarship permission:",
-                  permError
-                );
+                logger.error("Failed to delete scholarship permission:", { permError: permError });
                 alert(
                   `權限刪除失敗: ${permError instanceof Error ? permError.message : "未知錯誤"}`
                 );
@@ -1419,10 +1451,7 @@ export function AdminManagementInterface({
                   comment: permission.comment || "",
                 });
               } catch (permError) {
-                console.error(
-                  "Failed to create scholarship permission:",
-                  permError
-                );
+                logger.error("Failed to create scholarship permission:", { permError: permError });
                 alert(
                   `權限創建失敗: ${permError instanceof Error ? permError.message : "未知錯誤"}`
                 );
@@ -1438,10 +1467,7 @@ export function AdminManagementInterface({
             try {
               await apiClient.admin.deleteScholarshipPermission(permission.id);
             } catch (permError) {
-              console.error(
-                "Failed to delete scholarship permission:",
-                permError
-              );
+              logger.error("Failed to delete scholarship permission:", { permError: permError });
             }
           }
         }
@@ -1470,9 +1496,9 @@ export function AdminManagementInterface({
       nycu_id: user.nycu_id,
       email: user.email,
       name: user.name,
-      role: user.role as any,
-      user_type: user.user_type as any,
-      status: user.status as any,
+      role: user.role as UserCreate["role"],
+      user_type: user.user_type as UserCreate["user_type"],
+      status: user.status as UserCreate["status"],
       dept_code: user.dept_code || "",
       dept_name: user.dept_name || "",
       comment: user.comment || "",
@@ -1583,14 +1609,15 @@ export function AdminManagementInterface({
     try {
       const response = await apiClient.admin.getScholarshipConfigurations();
       if (response.success && response.data) {
-        setScholarshipConfigurations(response.data);
+        const configs = response.data as ScholarshipConfiguration[];
+        setScholarshipConfigurations(configs);
         // 預設選擇第一個配置
-        if (response.data.length > 0 && !selectedConfigurationId) {
-          setSelectedConfigurationId(response.data[0].id);
+        if (configs.length > 0 && !selectedConfigurationId) {
+          setSelectedConfigurationId(configs[0].id);
         }
       }
     } catch (error) {
-      console.error("Failed to load scholarship configurations:", error);
+      logger.error("Failed to load scholarship configurations", { error: error });
     } finally {
       setLoadingConfigurations(false);
     }
@@ -1604,7 +1631,7 @@ export function AdminManagementInterface({
     try {
       const response = await apiClient.admin.getWorkflows();
       if (response.success && response.data) {
-        setWorkflows(response.data);
+        setWorkflows(response.data as Workflow[]);
       } else {
         setWorkflowsError(response.message || "獲取工作流程失敗");
       }
@@ -1623,7 +1650,7 @@ export function AdminManagementInterface({
     try {
       const response = await apiClient.admin.getScholarshipRules();
       if (response.success && response.data) {
-        setScholarshipRules(response.data);
+        setScholarshipRules(response.data as ScholarshipRule[]);
       } else {
         setRulesError(response.message || "獲取獎學金規則失敗");
       }
@@ -1683,7 +1710,7 @@ export function AdminManagementInterface({
         }
       }
     } catch (error) {
-      console.error("規則操作失敗:", error);
+      logger.error("規則操作失敗", { error: error });
       alert(`操作失敗: ${error instanceof Error ? error.message : "未知錯誤"}`);
     } finally {
       setRuleFormLoading(false);
@@ -1709,7 +1736,7 @@ export function AdminManagementInterface({
         throw new Error(response.message || "刪除規則失敗");
       }
     } catch (error) {
-      console.error("刪除規則失敗:", error);
+      logger.error("刪除規則失敗", { error: error });
       alert(`刪除失敗: ${error instanceof Error ? error.message : "未知錯誤"}`);
     }
   };
@@ -1745,7 +1772,7 @@ export function AdminManagementInterface({
         await fetchScholarshipRules();
       }
     } catch (error) {
-      console.error("更新初領狀態失敗:", error);
+      logger.error("更新初領狀態失敗", { error: error });
     }
   };
 
@@ -1765,7 +1792,7 @@ export function AdminManagementInterface({
         await fetchScholarshipRules();
       }
     } catch (error) {
-      console.error("更新續領狀態失敗:", error);
+      logger.error("更新續領狀態失敗", { error: error });
     }
   };
 
@@ -1782,13 +1809,13 @@ export function AdminManagementInterface({
         await fetchScholarshipRules();
       }
     } catch (error) {
-      console.error("更新規則狀態失敗:", error);
+      logger.error("更新規則狀態失敗", { error: error });
     }
   };
 
   // 獲取獎學金類型列表
   const fetchScholarshipTypes = async () => {
-    console.log(
+    logger.debug(
       "🔍 Fetching scholarship types for user:",
       user?.role,
       user?.nycu_id
@@ -1797,21 +1824,21 @@ export function AdminManagementInterface({
     try {
       // Use the new API that returns only scholarships the user has permission to manage
       const response = await apiClient.admin.getMyScholarships();
-      console.log("📊 Scholarship types response:", response);
+      logger.debug("📊 Scholarship types response:", response);
 
       if (response.success && response.data) {
-        console.log(
+        logger.debug(
           "✅ Found scholarship types:",
           response.data.length,
           "types"
         );
-        setScholarshipTypes(response.data);
+        setScholarshipTypes(response.data as ScholarshipType[]);
       } else {
-        console.log("❌ Failed to get scholarship types:", response.message);
+        logger.debug("❌ Failed to get scholarship types:", response.message);
         setScholarshipTypes([]);
       }
     } catch (error) {
-      console.error("❌ Failed to fetch scholarship types:", error);
+      logger.error("❌ Failed to fetch scholarship types", { error: error });
       // Fallback to empty array so UI doesn't break
       setScholarshipTypes([]);
     } finally {
@@ -1820,7 +1847,10 @@ export function AdminManagementInterface({
   };
 
   // Update scholarship type when child component modifies it
-  const handleScholarshipTypeUpdate = (id: number, updates: Partial<any>) => {
+  const handleScholarshipTypeUpdate = (
+    id: number,
+    updates: Partial<ScholarshipType>
+  ) => {
     setScholarshipTypes(prev =>
       prev.map(type => (type.id === id ? { ...type, ...updates } : type))
     );
@@ -1908,12 +1938,12 @@ export function AdminManagementInterface({
       const response = await apiClient.admin.getScholarshipPermissions();
 
       if (response.success && response.data) {
-        setScholarshipPermissions(response.data);
+        setScholarshipPermissions(response.data as ScholarshipPermission[]);
       } else {
         setPermissionsError(response.message || "獲取獎學金權限失敗");
       }
     } catch (error) {
-      console.error("Error fetching permissions:", error);
+      logger.error("Error fetching permissions", { error: error });
       if (error instanceof Error) {
         setPermissionsError(error.message);
       } else {
@@ -1931,10 +1961,10 @@ export function AdminManagementInterface({
     try {
       const response = await apiClient.admin.getAllScholarshipsForPermissions();
       if (response.success && response.data) {
-        setAvailableScholarships(response.data);
+        setAvailableScholarships(response.data as Array<{ id: number; name: string; name_en?: string; code: string }>);
       }
     } catch (error) {
-      console.error("獲取獎學金列表失敗:", error);
+      logger.error("獲取獎學金列表失敗", { error: error });
     } finally {
       setLoadingScholarships(false);
     }

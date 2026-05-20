@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
 
 const SUPPLEMENTARY_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 const SUPPLEMENTARY_ACCEPT = ".xlsx,.xls";
@@ -335,8 +336,48 @@ export function RankingManagementPanel({
         const response = await apiClient.college.getRanking(rankingId);
         if (response.success && response.data) {
           // Transform the API response
-          const transformedApplications = (response.data.items || []).map(
-            (item: any) => ({
+          // Shape from GET /college-review/rankings/{id} — backend's
+          // CollegeRankingItemResponse. Inline because the API client doesn't
+          // export a named type for this nested payload.
+          interface RankingItemPayload {
+            id: number;
+            sub_type?: string;
+            rank_position?: number;
+            is_allocated?: boolean;
+            college_rejected?: boolean;
+            student_name?: string;
+            student_id?: string;
+            application?: {
+              id?: number;
+              app_id?: string;
+              academy_name?: string;
+              academy_code?: string;
+              department_name?: string;
+              department_code?: string;
+              scholarship_type?: string;
+              eligible_subtypes?: string[];
+              is_renewal?: boolean;
+              renewal_year?: number | null;
+              status?: string;
+              review_status?: string;
+              student_info?: { display_name?: string; student_id?: string };
+            };
+          }
+          const rankingPayload = response.data as {
+            items?: RankingItemPayload[];
+            total_quota?: number;
+            college_quota?: number;
+            college_quota_breakdown?: Record<string, unknown>;
+            sub_type_metadata?: Array<{ code?: string; [key: string]: unknown }>;
+            sub_type_code?: string;
+            academic_year?: number;
+            semester?: string | null;
+            is_finalized?: boolean;
+            college_review_end?: string | null;
+            allow_supplementary_import?: boolean;
+          };
+          const transformedApplications = (rankingPayload.items || []).map(
+            (item: RankingItemPayload) => ({
               id: item.application?.id || item.id,
               ranking_item_id: item.id,
               app_id:
@@ -368,31 +409,42 @@ export function RankingManagementPanel({
           );
 
           // #91: college_review_end is now returned directly by the ranking detail endpoint
-          setActiveConfigDeadline((response.data as any).college_review_end ?? null);
+          setActiveConfigDeadline(rankingPayload.college_review_end ?? null);
 
           setRankingData({
             applications: transformedApplications,
-            totalQuota: response.data.total_quota || 0,
-            collegeQuota: response.data.college_quota,
-            collegeQuotaBreakdown: response.data.college_quota_breakdown,
-            subTypeMetadata: Array.isArray(response.data.sub_type_metadata)
-              ? response.data.sub_type_metadata.reduce(
-                  (acc: any, meta: any) => {
-                    if (meta.code) acc[meta.code] = meta;
+            totalQuota: rankingPayload.total_quota || 0,
+            collegeQuota: rankingPayload.college_quota,
+            collegeQuotaBreakdown: rankingPayload.college_quota_breakdown as
+              | Record<string, { quota?: number; label?: string; label_en?: string }>
+              | undefined,
+            subTypeMetadata: Array.isArray(rankingPayload.sub_type_metadata)
+              ? (rankingPayload.sub_type_metadata.reduce(
+                  (
+                    acc: Record<string, { code: string; label: string; label_en: string }>,
+                    meta: { code?: string; [key: string]: unknown }
+                  ) => {
+                    if (meta.code) {
+                      acc[meta.code] = meta as {
+                        code: string;
+                        label: string;
+                        label_en: string;
+                      };
+                    }
                     return acc;
                   },
                   {}
-                )
-              : response.data.sub_type_metadata || {},
-            subTypeCode: response.data.sub_type_code || "default",
-            academicYear: response.data.academic_year || 0,
-            semester: response.data.semester,
-            isFinalized: response.data.is_finalized || false,
-            allowSupplementaryImport: (response.data as any).allow_supplementary_import ?? false,
+                ) as Record<string, { code: string; label: string; label_en: string }>)
+              : (rankingPayload.sub_type_metadata as Record<string, { code: string; label: string; label_en: string }> | undefined) || {},
+            subTypeCode: rankingPayload.sub_type_code || "default",
+            academicYear: rankingPayload.academic_year || 0,
+            semester: rankingPayload.semester,
+            isFinalized: rankingPayload.is_finalized || false,
+            allowSupplementaryImport: rankingPayload.allow_supplementary_import ?? false,
           });
         }
       } catch (error) {
-        console.error("Failed to fetch ranking details:", error);
+        logger.error("Failed to fetch ranking details", { error: error });
       } finally {
         setIsRankingLoading(false);
       }
@@ -406,7 +458,7 @@ export function RankingManagementPanel({
     // 1. Current tab is "ranking"
     // 2. Not currently loading
     if (activeTab === "ranking") {
-      console.log(
+      logger.debug(
         `[RankingManagementPanel] Auto-refreshing (dataVersion: ${dataVersion})`
       );
 
@@ -472,20 +524,21 @@ export function RankingManagementPanel({
           // Refresh rankings list
           await fetchRankings();
           // Select the newly created ranking
-          setSelectedRanking(response.data.id);
+          const newRanking = response.data as { id: number; ranking_name?: string };
+          setSelectedRanking(newRanking.id);
           // Load ranking details
-          await fetchRankingDetails(response.data.id);
+          await fetchRankingDetails(newRanking.id);
           // Increment data version
           incrementDataVersion();
 
           // Show success notification
           toast.success(
             locale === "zh"
-              ? `排名「${response.data.ranking_name || "新排名"}」已成功建立`
-              : `Ranking "${response.data.ranking_name || "New Ranking"}" has been created successfully`
+              ? `排名「${newRanking.ranking_name || "新排名"}」已成功建立`
+              : `Ranking "${newRanking.ranking_name || "New Ranking"}" has been created successfully`
           );
         } catch (fetchError) {
-          console.error("Failed to load ranking after creation:", fetchError);
+          logger.error("Failed to load ranking after creation", { fetchError: fetchError });
           toast.error(
             locale === "zh"
               ? "排名已建立，但無法自動載入。請手動重新整理頁面。"
@@ -500,7 +553,7 @@ export function RankingManagementPanel({
         );
       }
     } catch (error) {
-      console.error("Failed to create ranking:", error);
+      logger.error("Failed to create ranking", { error: error });
       toast.error(
         error instanceof Error
           ? error.message
@@ -527,6 +580,7 @@ export function RankingManagementPanel({
   ]);
 
   const handleRankingChange = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     async (newOrder: any[]) => {
       if (!rankingData || !selectedRanking) return;
 
@@ -563,7 +617,7 @@ export function RankingManagementPanel({
             setSaveStatus("error");
           }
         } catch (error) {
-          console.error("Failed to save ranking:", error);
+          logger.error("Failed to save ranking", { error: error });
           setSaveStatus("error");
         }
       }, 500);
@@ -594,7 +648,15 @@ export function RankingManagementPanel({
 
         // 檢查是否自動重新執行了分發
         if (response.success && response.data) {
-          const redistribution = response.data.redistribution_info;
+          const reviewResult = response.data as {
+            redistribution_info?: {
+              auto_redistributed?: boolean;
+              reason?: string;
+              total_allocated?: number;
+              roster_info?: { roster_code?: string };
+            };
+          };
+          const redistribution = reviewResult.redistribution_info;
 
           if (redistribution?.auto_redistributed) {
             toast.success(
@@ -629,11 +691,11 @@ export function RankingManagementPanel({
 
         // Increment data version to notify other panels to refresh
         incrementDataVersion();
-        console.log(
+        logger.debug(
           "[RankingManagementPanel] Data version incremented after review"
         );
       } catch (error) {
-        console.error("Failed to review application:", error);
+        logger.error("Failed to review application", { error: error });
         toast.error("審核提交失敗");
       }
     },
@@ -669,7 +731,7 @@ export function RankingManagementPanel({
           );
         }
       } catch (error) {
-        console.error("Failed to finalize ranking:", error);
+        logger.error("Failed to finalize ranking", { error: error });
       }
     },
     [
@@ -701,7 +763,7 @@ export function RankingManagementPanel({
           );
         }
       } catch (error) {
-        console.error("Failed to unfinalize ranking:", error);
+        logger.error("Failed to unfinalize ranking", { error: error });
       }
     },
     [
@@ -716,13 +778,28 @@ export function RankingManagementPanel({
   );
 
   const handleImportExcel = useCallback(
-    async (data: any[]) => {
+    async (
+      data: Array<{
+        student_id: string;
+        student_name: string;
+        rank_position: number | string;
+      }>
+    ) => {
       if (!selectedRanking) throw new Error("No ranking selected");
 
       try {
+        // The Excel parser produces rank_position as `number | string` (the
+        // "N" sentinel for unranked rows). The api.college.importRankingExcel
+        // type declares `number` only, but the backend handler accepts both
+        // shapes — cast here to preserve the runtime behavior. Tracked in
+        // college-ranking-table.tsx parser at lines 627-645.
         const response = await apiClient.college.importRankingExcel(
           selectedRanking,
-          data
+          data as Array<{
+            student_id: string;
+            student_name: string;
+            rank_position: number;
+          }>
         );
         if (response.success) {
           await fetchRankingDetails(selectedRanking);
@@ -731,7 +808,7 @@ export function RankingManagementPanel({
           throw new Error(response.message || "Failed to import");
         }
       } catch (error) {
-        console.error("Failed to import Excel:", error);
+        logger.error("Failed to import Excel", { error: error });
         throw error;
       }
     },
@@ -757,7 +834,7 @@ export function RankingManagementPanel({
         setRankingToDelete(null);
       }
     } catch (error) {
-      console.error("Failed to delete ranking:", error);
+      logger.error("Failed to delete ranking", { error: error });
     }
   }, [
     rankingToDelete,
@@ -771,7 +848,7 @@ export function RankingManagementPanel({
   ]);
 
   const handleEditRankingName = useCallback(
-    (ranking: any) => {
+    (ranking: { id: number; ranking_name: string }) => {
       setEditingRankingId(ranking.id);
       setEditingRankingName(ranking.ranking_name);
     },
@@ -800,7 +877,7 @@ export function RankingManagementPanel({
           );
         }
       } catch (error) {
-        console.error("Failed to update ranking name:", error);
+        logger.error("Failed to update ranking name", { error: error });
         toast.error(
           locale === "zh" ? "無法更新排名名稱" : "Failed to update ranking name"
         );
@@ -836,7 +913,7 @@ export function RankingManagementPanel({
   // after switching combinations.
   useEffect(() => {
     const activeConfig = scholarshipConfig.find(
-      (c: any) => c.code === scholarshipType.code
+      (c) => c.code === scholarshipType.code
     );
     if (!activeConfig?.id || typeof selectedAcademicYear !== "number") {
       setPanelDeadline(null);
@@ -883,7 +960,7 @@ export function RankingManagementPanel({
   // fetched ranking-detail value, while the active-config call is in flight.
   const deadlineISO = useMemo(() => {
     const fromList = filteredRankings.find(
-      (r: any) => r && r.college_review_end
+      r => r && r.college_review_end
     )?.college_review_end as string | undefined;
     return panelDeadline ?? fromList ?? activeConfigDeadline ?? null;
   }, [panelDeadline, filteredRankings, activeConfigDeadline]);

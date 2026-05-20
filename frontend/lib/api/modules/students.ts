@@ -60,7 +60,7 @@ export type StudentSISBasicInfo = {
   std_aca_cname?: string;
   com_cellphone?: string;
   com_email?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 };
 
 export type StudentSISTermData = {
@@ -72,7 +72,7 @@ export type StudentSISTermData = {
   trm_depname?: string;
   trm_ascore_gpa?: number;
   trm_totalcredits?: number;
-  [key: string]: any;
+  [key: string]: unknown;
 };
 
 export type StudentSISData = {

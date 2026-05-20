@@ -175,15 +175,15 @@ class NYCUEmpHttpClient(NYCUEmpClientBase):
                 )
 
         except httpx.TimeoutException as e:
-            logger.error(f"Request timeout: {e}")
-            raise NYCUEmpTimeoutError(f"Request timed out after {self.timeout}s")
+            logger.exception("Request timeout")
+            raise NYCUEmpTimeoutError(f"Request timed out after {self.timeout}s") from e
 
         except httpx.ConnectError as e:
-            logger.error(f"Connection error: {e}")
-            raise NYCUEmpConnectionError(f"Failed to connect to {self.endpoint}")
+            logger.exception("Connection error")
+            raise NYCUEmpConnectionError(f"Failed to connect to {self.endpoint}") from e
 
         except Exception as e:
             if isinstance(e, NYCUEmpError):
                 raise
-            logger.error(f"Unexpected error: {e}")
-            raise NYCUEmpError(f"Unexpected error: {str(e)}")
+            logger.exception("Unexpected error")
+            raise NYCUEmpError(f"Unexpected error: {str(e)}") from e

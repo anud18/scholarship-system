@@ -35,7 +35,6 @@ Notes for future maintainers:
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import random
@@ -152,24 +151,24 @@ def cached(key_fn: Callable[..., str], ttl: int, jitter: float = 0.1):
                     exc,
                 )
                 return await fn(*args, **kwargs)
-            except Exception as exc:  # noqa: BLE001
+            except Exception:  # noqa: BLE001
                 # Redis init failure: fail open, retry on next call.
-                logger.warning("cache: key build / redis init failed: %s", exc)
+                logger.warning("cache: key build / redis init failed", exc_info=True)
                 return await fn(*args, **kwargs)
 
             # Lookup
             try:
                 hit = await client.get(key)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("cache: GET failed (%s); falling through", exc)
+            except Exception:  # noqa: BLE001
+                logger.warning("cache: GET failed; falling through", exc_info=True)
                 return await fn(*args, **kwargs)
 
             if hit is not None:
                 try:
                     return _loads(hit)
-                except Exception as exc:  # noqa: BLE001
+                except Exception:  # noqa: BLE001
                     # Corrupt cache entry — drop it and recompute.
-                    logger.warning("cache: parse failed (%s); recomputing", exc)
+                    logger.warning("cache: parse failed; recomputing", exc_info=True)
                     try:
                         await client.delete(key)
                     except Exception:
@@ -188,8 +187,8 @@ def cached(key_fn: Callable[..., str], ttl: int, jitter: float = 0.1):
                     key,
                     exc,
                 )
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("cache: SET failed (%s); not cached", exc)
+            except Exception:  # noqa: BLE001
+                logger.warning("cache: SET failed; not cached", exc_info=True)
             return value
 
         return wrapper
@@ -205,8 +204,8 @@ async def invalidate(prefix: str) -> int:
     """
     try:
         client = get_cache()
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("invalidate: redis init failed (%s)", exc)
+    except Exception:  # noqa: BLE001
+        logger.warning("invalidate: redis init failed", exc_info=True)
         return 0
 
     pattern = (KEY_PREFIX + prefix + "*").encode("utf-8")
@@ -219,8 +218,8 @@ async def invalidate(prefix: str) -> int:
                 deleted += await client.delete(*keys)
             if cursor == 0:
                 break
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("invalidate: SCAN/DEL failed for %r: %s", pattern, exc)
+    except Exception:  # noqa: BLE001
+        logger.warning("invalidate: SCAN/DEL failed for %r", pattern, exc_info=True)
     return deleted
 
 
@@ -266,8 +265,8 @@ async def with_lock(key: str, ttl_seconds: int = 60):
     finally:
         try:
             await client.eval(_RELEASE_LUA, 1, full, token)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("with_lock: release failed for %s: %s", key, exc)
+        except Exception:  # noqa: BLE001
+            logger.warning("with_lock: release failed for %s", key, exc_info=True)
 
 
 @contextmanager
@@ -285,8 +284,8 @@ def with_lock_sync(key: str, ttl_seconds: int = 60):
     finally:
         try:
             client.eval(_RELEASE_LUA, 1, full, token)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("with_lock_sync: release failed for %s: %s", key, exc)
+        except Exception:  # noqa: BLE001
+            logger.warning("with_lock_sync: release failed for %s", key, exc_info=True)
 
 
 __all__ = [

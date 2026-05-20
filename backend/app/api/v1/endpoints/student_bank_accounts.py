@@ -39,7 +39,7 @@ async def get_my_verified_account(
             select(StudentBankAccount)
             .where(
                 StudentBankAccount.user_id == current_user.id,
-                StudentBankAccount.is_active == True,
+                StudentBankAccount.is_active.is_(True),
                 StudentBankAccount.verification_status == "verified",
             )
             .order_by(StudentBankAccount.verified_at.desc())
@@ -85,8 +85,8 @@ async def get_my_verified_account(
                 ),
             }
 
-    except Exception as e:
-        logger.error(f"Error getting verified account for user {current_user.id}: {str(e)}")
+    except Exception:
+        logger.exception(f"Error getting verified account for user {current_user.id}")
         return {
             "success": False,
             "message": "查詢已驗證帳號時發生錯誤",

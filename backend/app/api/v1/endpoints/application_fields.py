@@ -237,12 +237,12 @@ async def get_scholarship_form_config(
         logger.info(f"API: Form config retrieved successfully for {scholarship_type}")
         return ApiResponse(success=True, message=f"Form configuration retrieved for {scholarship_type}", data=config)
     except Exception as e:
-        logger.error(f"API: Error getting form config for {scholarship_type}: {str(e)}")
+        logger.exception(f"API: Error getting form config for {scholarship_type}")
         # Return 404 for invalid scholarship types (proper HTTP semantics)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Form configuration not found for scholarship type: {scholarship_type}",
-        )
+        ) from e
 
 
 @cached(
@@ -355,8 +355,8 @@ async def upload_document_example(
                 minio_service.client.remove_object(
                     bucket_name=minio_service.default_bucket, object_name=document.example_file_url
                 )
-            except Exception as e:
-                logger.warning(f"Failed to delete old example file: {str(e)}")
+            except Exception:
+                logger.warning("Failed to delete old example file", exc_info=True)
 
         # Update database with new object name
         document.example_file_url = object_name
@@ -366,9 +366,9 @@ async def upload_document_example(
         return ApiResponse(success=True, message="範例文件上傳成功", data={"example_file_url": object_name})
 
     except Exception as e:
-        logger.error(f"Failed to upload example file: {str(e)}")
+        logger.exception("Failed to upload example file")
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"範例文件上傳失敗: {str(e)}")
+        raise HTTPException(status_code=500, detail="範例文件上傳失敗") from e
 
 
 @router.get("/documents/{document_id}/example")
@@ -426,8 +426,8 @@ async def get_document_example(
         )
 
     except Exception as e:
-        logger.error(f"Failed to get example file: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"範例文件讀取失敗: {str(e)}")
+        logger.exception("Failed to get example file")
+        raise HTTPException(status_code=500, detail="範例文件讀取失敗") from e
 
 
 @router.delete("/documents/{document_id}/example")
@@ -472,6 +472,6 @@ async def delete_document_example(
         return ApiResponse(success=True, message="範例文件刪除成功", data=True)
 
     except Exception as e:
-        logger.error(f"Failed to delete example file: {str(e)}")
+        logger.exception("Failed to delete example file")
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"範例文件刪除失敗: {str(e)}")
+        raise HTTPException(status_code=500, detail="範例文件刪除失敗") from e

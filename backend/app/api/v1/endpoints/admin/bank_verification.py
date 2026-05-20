@@ -199,14 +199,14 @@ async def verify_bank_account(
     except ValueError as e:
         # SECURITY: Log exception type only, not details (prevent stack trace exposure)
         logger.warning(f"ValueError in bank verification: {type(e).__name__}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定的資源或資料不正確")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定的資源或資料不正確") from e
     except Exception as e:
         # SECURITY: Log exception type only, not details (prevent stack trace exposure)
         logger.error(f"Unexpected error in bank verification: {type(e).__name__}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="銀行帳戶驗證發生未預期的錯誤",
-        )
+        ) from e
 
 
 @router.post("/bank-verification/batch")
@@ -277,7 +277,7 @@ async def batch_verify_bank_accounts(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to perform batch verification due to an unexpected error.",
-        )
+        ) from e
 
 
 @router.get("/bank-verification/{application_id}/init")
@@ -353,7 +353,7 @@ async def get_bank_verification_init_data(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="無法載入銀行資料",
-        )
+        ) from e
 
 
 @router.post("/bank-verification/manual-review")
@@ -418,14 +418,14 @@ async def manual_review_bank_info(
     except ValueError as e:
         # SECURITY: Log exception details server-side only, return generic message to user
         logger.warning(f"ValueError in manual bank review: {type(e).__name__}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定的申請或資料格式不正確")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定的申請或資料格式不正確") from e
     except Exception as e:
         # SECURITY: Log exception type only (prevent stack trace exposure)
         logger.error(f"Unexpected error in manual bank review: {type(e).__name__}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="人工審核發生未預期的錯誤",
-        )
+        ) from e
 
 
 @router.post("/bank-verification/batch-async")
@@ -473,7 +473,7 @@ async def start_batch_verification_async(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="啟動批次驗證失敗",
-        )
+        ) from e
 
 
 @router.get("/bank-verification/tasks/{task_id}")
@@ -529,7 +529,7 @@ async def get_verification_task_status(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="查詢任務狀態失敗",
-        )
+        ) from e
 
 
 @router.get("/bank-verification/tasks")
@@ -553,11 +553,11 @@ async def list_verification_tasks(
         if status:
             try:
                 status_filter = BankVerificationTaskStatus(status)
-            except ValueError:
+            except ValueError as exc:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"無效的狀態值: {status}",
-                )
+                ) from exc
 
         tasks = await task_service.list_tasks(
             status=status_filter,
@@ -606,4 +606,4 @@ async def list_verification_tasks(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="查詢任務列表失敗",
-        )
+        ) from e

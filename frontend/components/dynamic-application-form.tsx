@@ -37,6 +37,7 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
 import { getTranslation } from "@/lib/i18n";
 import type {
   ApplicationField,
@@ -49,6 +50,7 @@ type Locale = "zh" | "en";
 interface DynamicApplicationFormProps {
   scholarshipType: string;
   locale?: Locale;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onFieldChange?: (fieldName: string, value: any) => void;
   onFileChange?: (documentType: string, files: File[]) => void;
   initialValues?: Record<string, any>;
@@ -59,6 +61,7 @@ interface DynamicApplicationFormProps {
 }
 
 interface FormData {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any;
 }
 
@@ -148,14 +151,14 @@ export function DynamicApplicationForm({
         setError(t("form_upload.load_form_config_failed"));
       }
     } catch (err) {
-      console.error("Failed to load form configuration:", err);
+      logger.error("Failed to load form configuration", { err });
       setError(t("form_upload.load_form_config_error"));
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleFieldChange = (fieldName: string, value: any) => {
+  const handleFieldChange = (fieldName: string, value: unknown) => {
     const newFormData = { ...formData, [fieldName]: value };
     setFormData(newFormData);
     onFieldChange?.(fieldName, value);
@@ -193,7 +196,7 @@ export function DynamicApplicationForm({
         "";
 
       if (!token) {
-        console.error("No authentication token available");
+        logger.error("No authentication token available");
         return null;
       }
     }
@@ -650,7 +653,7 @@ export function DynamicApplicationForm({
                   link.rel = "noopener noreferrer";
                   link.click();
                 } catch (error) {
-                  console.error("Failed to build preview URL:", error);
+                  logger.error("Failed to build preview URL", { error });
                   alert(t("form_upload.preview_open_failed"));
                 }
               }}

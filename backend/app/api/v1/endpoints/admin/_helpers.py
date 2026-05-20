@@ -15,7 +15,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import require_admin
-from app.db.deps import get_db
 from app.models.user import AdminScholarship, User, UserRole
 
 logger = logging.getLogger(__name__)

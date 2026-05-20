@@ -3,6 +3,7 @@ Scholarship Configuration Management API endpoints
 Clean, database-driven approach for dynamic scholarship configuration management
 """
 
+import logging
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
@@ -33,6 +34,8 @@ from app.schemas.scholarship_configuration import (
     WhitelistStudentInfo,
 )
 from app.services.whitelist_excel_service import whitelist_excel_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -179,17 +182,12 @@ async def get_available_semesters(
         )
 
     except Exception as e:
-        import logging
-        import traceback
-
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error in get_available_semesters: {type(e).__name__}: {str(e)}", exc_info=True)
-        logger.error(f"Full traceback: {traceback.format_exc()}")
+        logger.error("Error in get_available_semesters: %s: %s", type(e).__name__, e, exc_info=True)
 
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve available semesters: {str(e)}",
-        )
+            detail="Failed to retrieve available semesters",
+        ) from e
 
 
 @router.get("/matrix-quota-status/{period}")
@@ -366,17 +364,14 @@ async def get_matrix_quota_status(
 
         return ApiResponse(success=True, message="Matrix quota status retrieved successfully", data=response_data)
 
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid period format: {period}")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid period format: {period}") from exc
     except Exception as e:
-        import logging
-
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error in get_matrix_quota_status: {type(e).__name__}: {str(e)}", exc_info=True)
+        logger.error("Error in get_matrix_quota_status: %s: %s", type(e).__name__, e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve matrix quota status: {str(e)}",
-        )
+            detail="Failed to retrieve matrix quota status",
+        ) from e
 
 
 @router.put("/matrix-quota")
@@ -495,13 +490,10 @@ async def update_matrix_quota(
 
     except Exception as e:
         await db.rollback()
-        import logging
-
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error in update_matrix_quota: {type(e).__name__}: {str(e)}", exc_info=True)
+        logger.error("Error in update_matrix_quota: %s: %s", type(e).__name__, e, exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update matrix quota: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update matrix quota"
+        ) from e
 
 
 @router.get("/colleges")
@@ -517,9 +509,10 @@ async def get_colleges(current_user: User = Depends(require_admin), db: AsyncSes
         return ApiResponse(success=True, message=f"Retrieved {len(colleges)} colleges", data=colleges)
 
     except Exception as e:
+        logger.exception("Failed to retrieve colleges")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve colleges: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve colleges"
+        ) from e
 
 
 @router.get("/scholarship-types")
@@ -581,9 +574,10 @@ async def get_scholarship_types(current_user: User = Depends(require_staff), db:
         return ApiResponse(success=True, message=f"Retrieved {len(type_configs)} scholarship types", data=type_configs)
 
     except Exception as e:
+        logger.exception("Failed to retrieve scholarship types")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve scholarship types: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve scholarship types"
+        ) from e
 
 
 @router.get("/overview/{period}")
@@ -714,12 +708,13 @@ async def get_quota_overview(
 
         return ApiResponse(success=True, message="Quota overview retrieved successfully", data=overview_data)
 
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid period format: {period}")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid period format: {period}") from exc
     except Exception as e:
+        logger.exception("Failed to retrieve quota overview")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve quota overview: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve quota overview"
+        ) from e
 
 
 # CRUD Endpoints for ScholarshipConfiguration Management
@@ -809,9 +804,10 @@ async def create_scholarship_configuration(
         raise
     except Exception as e:
         await db.rollback()
+        logger.exception("Failed to create configuration")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create configuration: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create configuration"
+        ) from e
 
 
 @router.get("/configurations/{id}")
@@ -908,9 +904,10 @@ async def get_scholarship_configuration(
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("Failed to retrieve configuration")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve configuration: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve configuration"
+        ) from e
 
 
 @router.put("/configurations/{id}")
@@ -1063,13 +1060,10 @@ async def update_scholarship_configuration(
         raise
     except Exception as e:
         await db.rollback()
-        import logging
-
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error in update_scholarship_configuration: {type(e).__name__}: {str(e)}", exc_info=True)
+        logger.error("Error in update_scholarship_configuration: %s: %s", type(e).__name__, e, exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update configuration: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update configuration"
+        ) from e
 
 
 class SupplementaryImportToggle(BaseModel):
@@ -1157,9 +1151,10 @@ async def deactivate_scholarship_configuration(
         raise
     except Exception as e:
         await db.rollback()
+        logger.exception("Failed to deactivate configuration")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to deactivate configuration: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to deactivate configuration"
+        ) from e
 
 
 @router.post("/configurations/{id}/duplicate")
@@ -1244,9 +1239,10 @@ async def duplicate_scholarship_configuration(
         raise
     except Exception as e:
         await db.rollback()
+        logger.exception("Failed to duplicate configuration")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to duplicate configuration: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to duplicate configuration"
+        ) from e
 
 
 @router.get("/configurations")
@@ -1375,9 +1371,10 @@ async def list_scholarship_configurations(
         return ApiResponse(success=True, message=f"Retrieved {len(config_list)} configurations", data=config_list)
 
     except Exception as e:
+        logger.exception("Failed to list configurations")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to list configurations: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to list configurations"
+        ) from e
 
 
 # Whitelist Management Endpoints

@@ -22,7 +22,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.audit import AuditAction, AuditLog
+from app.models.audit_log import AuditAction, AuditLog
 from app.models.user import User, UserRole, UserType
 from app.services.application_audit_service import ApplicationAuditService
 
@@ -129,19 +129,19 @@ async def test_multiple_audits_for_same_application_are_distinct_rows(db: AsyncS
     admin = await _seed_user(db, nycu_id="audit_multi")
     service = ApplicationAuditService(db)
 
-    log1 = await service.log_application_operation(
+    await service.log_application_operation(
         application_id=15,
         action=AuditAction.submit,
         user=admin,
         description="first",
     )
-    log2 = await service.log_application_operation(
+    await service.log_application_operation(
         application_id=15,
         action=AuditAction.approve,
         user=admin,
         description="second",
     )
-    log3 = await service.log_application_operation(
+    await service.log_application_operation(
         application_id=15,
         action=AuditAction.update,
         user=admin,

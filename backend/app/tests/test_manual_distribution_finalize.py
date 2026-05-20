@@ -114,7 +114,7 @@ async def test_finalize_keeps_status_for_non_allocated_apps(db: AsyncSession):
 
     # Act
     service = ManualDistributionService(db)
-    summary = await service.finalize(sch.id, 114, Semester.first.value)
+    await service.finalize(sch.id, 114, Semester.first.value)
 
     # Assert — allocated path
     await db.refresh(app_a)
