@@ -1281,11 +1281,6 @@ export function ManualDistributionPanel({
                                 </td>
                                 <td className="px-3 py-2.5 border-r border-slate-100 font-medium whitespace-nowrap">
                                   {student.student_name}
-                                  {student.is_supplementary && (
-                                    <span className="ml-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">
-                                      補充
-                                    </span>
-                                  )}
                                 </td>
                                 <td className="px-3 py-2.5 border-r border-slate-100 text-slate-500 whitespace-nowrap">
                                   {student.nationality}
@@ -1500,11 +1495,6 @@ export function ManualDistributionPanel({
                                 </td>
                                 <td className="px-4 py-1.5 font-medium">
                                   {student.student_name}
-                                  {student.is_supplementary && (
-                                    <span className="ml-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">
-                                      補充
-                                    </span>
-                                  )}
                                 </td>
                                 <td className="px-4 py-1.5">
                                   {student.college_name || student.college_code}
