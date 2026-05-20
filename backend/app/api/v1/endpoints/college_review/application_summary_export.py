@@ -192,7 +192,7 @@ async def export_department_summary_single(
             "dept_name": dept_name,
             "row_count": len(export_rows),
             "size_bytes": len(payload),
-            "filename": base_filename,
+            "export_filename": base_filename,
         },
     )
 
@@ -378,7 +378,7 @@ async def export_department_summary_bulk(
             "departments_count": len(groups),
             "row_count": len(apps),
             "size_bytes": len(payload),
-            "filename": base_filename,
+            "export_filename": base_filename,
         },
     )
 
