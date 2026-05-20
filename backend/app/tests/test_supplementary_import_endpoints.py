@@ -13,6 +13,7 @@ from app.main import app
 from app.models.college_review import CollegeRanking
 from app.models.scholarship import (
     ScholarshipConfiguration,
+    ScholarshipSubTypeConfig,
     ScholarshipType,
     SubTypeSelectionMode,
 )
@@ -208,3 +209,67 @@ class TestSupplementaryImportEndpoint:
         finally:
             app.dependency_overrides.pop(require_college, None)
         assert resp.status_code == 404
+
+    async def test_rejects_student_from_other_college(
+        self,
+        client: AsyncClient,
+        db: AsyncSession,
+        college_user: User,  # college_code = "A"
+        ranking: CollegeRanking,
+        configuration: ScholarshipConfiguration,
+        scholarship: ScholarshipType,
+        monkeypatch,
+    ):
+        """Student whose SIS std_academyno doesn't match the ranking's college
+        must be rejected with 422 and the offending student ID listed."""
+        # Enable the supplementary-import flag for the configuration
+        configuration.allow_supplementary_import = True
+        # Seed sub-type config so parse_excel can resolve the Excel label
+        db.add(
+            ScholarshipSubTypeConfig(
+                scholarship_type_id=scholarship.id,
+                sub_type_code="nstc",
+                name="國科會博士生研究獎學金",
+                is_active=True,
+            )
+        )
+        await db.commit()
+
+        # Bypass SIS: return a student whose std_academyno is "EE" (not "A")
+        async def fake_fetch(self, student_ids, **kwargs):
+            return (
+                {
+                    sid: {"std_academyno": "EE", "std_cname": "他院學生"}
+                    for sid in student_ids
+                },
+                [],
+            )
+
+        from app.services.supplementary_import_service import SupplementaryImportService
+
+        monkeypatch.setattr(
+            SupplementaryImportService, "fetch_student_data_bulk", fake_fetch
+        )
+
+        app.dependency_overrides[require_college] = lambda: college_user
+        try:
+            resp = await client.post(
+                f"/api/v1/college-review/rankings/{ranking.id}/supplementary-import",
+                files={
+                    "file": (
+                        "test.xlsx",
+                        _build_xlsx_bytes(),
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
+                },
+            )
+        finally:
+            app.dependency_overrides.pop(require_college, None)
+
+        assert resp.status_code == 422, resp.text
+        body = resp.json()
+        # ApiResponse wrapper format
+        message = body.get("message") or body.get("detail") or ""
+        assert "不屬於本學院" in message
+        assert "310460099" in message  # student_id from _build_xlsx_bytes
+        assert "EE" in message  # surfaced mismatched college code
