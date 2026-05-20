@@ -154,15 +154,9 @@ def require_professor(current_user: User = Depends(get_current_user)) -> User:
 
 
 def require_college(current_user: User = Depends(get_current_user)) -> User:
-    """Require college role (admin and super_admin also allowed — endpoints
-    apply role-aware filtering internally, e.g. `created_by == user.id` for
-    college users, all-rankings for admin)."""
-    if not (
-        current_user.is_college()
-        or current_user.is_admin()
-        or current_user.is_super_admin()
-    ):
-        raise AuthorizationError("College or admin access required")
+    """Require college role"""
+    if not current_user.is_college():
+        raise AuthorizationError("College access required")
     return current_user
 
 

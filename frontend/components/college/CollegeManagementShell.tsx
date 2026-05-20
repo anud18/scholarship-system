@@ -36,6 +36,20 @@ const RankingManagementPanel = dynamic(
   }
 );
 
+const ManualDistributionPanel = dynamic(
+  () => import("@/components/admin/manual-distribution/ManualDistributionPanel").then(mod => ({ default: mod.ManualDistributionPanel })),
+  {
+    loading: () => (
+      <div className="flex items-center justify-center py-8">
+        <div className="flex items-center gap-3">
+          <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+          <span className="text-gray-600">載入分發面板中...</span>
+        </div>
+      </div>
+    )
+  }
+);
+
 interface CollegeDashboardProps {
   user: User;
   locale?: "zh" | "en";
@@ -304,43 +318,50 @@ function CollegeManagementContent({ user }: { user: User }) {
             value={scholarshipType.code}
             className="space-y-6"
           >
-            {/* 申請審核 + 學生排序 子 Tab (admin/super_admin 走相同流程
-                以取得「補充匯入」開關；獎學金分發面板由 top nav 進入) */}
-            <Tabs
-              value={activeTab}
-              onValueChange={setActiveTab}
-              className="w-full"
-            >
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="review" className="flex items-center gap-2">
-                  <GraduationCap className="h-4 w-4" />
-                  {locale === "zh" ? "申請審核" : "Application Review"}
-                </TabsTrigger>
-                <TabsTrigger
-                  value="ranking"
-                  className="flex items-center gap-2"
-                >
-                  <Trophy className="h-4 w-4" />
-                  {locale === "zh" ? "學生排序" : "Student Ranking"}
-                </TabsTrigger>
-              </TabsList>
+            {/* admin/super_admin: 直接顯示分發面板，無需子 Tab */}
+            {(user.role === "admin" || user.role === "super_admin") ? (
+              <ManualDistributionPanel
+                user={user}
+                scholarshipType={scholarshipType}
+              />
+            ) : (
+              /* college: 申請審核 + 學生排序 子 Tab */
+              <Tabs
+                value={activeTab}
+                onValueChange={setActiveTab}
+                className="w-full"
+              >
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="review" className="flex items-center gap-2">
+                    <GraduationCap className="h-4 w-4" />
+                    {locale === "zh" ? "申請審核" : "Application Review"}
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="ranking"
+                    className="flex items-center gap-2"
+                  >
+                    <Trophy className="h-4 w-4" />
+                    {locale === "zh" ? "學生排序" : "Student Ranking"}
+                  </TabsTrigger>
+                </TabsList>
 
-              {/* 申請審核標籤頁 */}
-              <TabsContent value="review" className="space-y-6">
-                <ApplicationReviewPanel
-                  user={user}
-                  scholarshipType={scholarshipType}
-                />
-              </TabsContent>
+                {/* 申請審核標籤頁 */}
+                <TabsContent value="review" className="space-y-6">
+                  <ApplicationReviewPanel
+                    user={user}
+                    scholarshipType={scholarshipType}
+                  />
+                </TabsContent>
 
-              {/* 學生排序標籤頁 */}
-              <TabsContent value="ranking" className="space-y-6">
-                <RankingManagementPanel
-                  user={user}
-                  scholarshipType={scholarshipType}
-                />
-              </TabsContent>
-            </Tabs>
+                {/* 學生排序標籤頁 */}
+                <TabsContent value="ranking" className="space-y-6">
+                  <RankingManagementPanel
+                    user={user}
+                    scholarshipType={scholarshipType}
+                  />
+                </TabsContent>
+              </Tabs>
+            )}
           </TabsContent>
         ))}
       </Tabs>
