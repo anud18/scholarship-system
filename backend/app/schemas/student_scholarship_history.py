@@ -48,9 +48,7 @@ class HistorySummary(BaseModel):
 
     total_records: int
     total_amount: Decimal
-    scholarship_type_count: int = Field(
-        ..., description="Number of distinct scholarship_name values"
-    )
+    scholarship_type_count: int = Field(..., description="Number of distinct scholarship_name values")
     snapshot_name: Optional[str] = Field(
         None,
         description="Student name from the most recent roster item; used when SIS fails",

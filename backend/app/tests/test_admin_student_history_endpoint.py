@@ -37,12 +37,8 @@ async def test_nonexistent_student_returns_404(authed_admin_client):
     """No SIS data + no roster records → 404."""
     from app.core.exceptions import NotFoundError
 
-    with patch(
-        "app.api.v1.endpoints.admin.student_history.StudentScholarshipHistoryService"
-    ) as MockSvc:
-        MockSvc.return_value.get_history = AsyncMock(
-            side_effect=NotFoundError("查無此學生資料: GHOST")
-        )
+    with patch("app.api.v1.endpoints.admin.student_history.StudentScholarshipHistoryService") as MockSvc:
+        MockSvc.return_value.get_history = AsyncMock(side_effect=NotFoundError("查無此學生資料: GHOST"))
         response = await authed_admin_client.get("/api/v1/admin/student-history/GHOST1")
     assert response.status_code == 404
 
@@ -81,9 +77,7 @@ async def test_valid_student_returns_wrapped_api_response(authed_admin_client):
         ],
     )
 
-    with patch(
-        "app.api.v1.endpoints.admin.student_history.StudentScholarshipHistoryService"
-    ) as MockSvc:
+    with patch("app.api.v1.endpoints.admin.student_history.StudentScholarshipHistoryService") as MockSvc:
         MockSvc.return_value.get_history = AsyncMock(return_value=fake_data)
         response = await authed_admin_client.get("/api/v1/admin/student-history/S001")
 

@@ -113,9 +113,7 @@ class StudentScholarshipHistoryService:
         try:
             sis_data = await StudentService().get_student_basic_info(student_number)
         except Exception as exc:  # noqa: BLE001 — tolerate any SIS failure
-            logger.warning(
-                "SIS lookup failed for student %s: %s", student_number, exc
-            )
+            logger.warning("SIS lookup failed for student %s: %s", student_number, exc)
             sis_error = str(exc)
 
         records, snapshot_name = await self._fetch_locked_payments(db, student_number)

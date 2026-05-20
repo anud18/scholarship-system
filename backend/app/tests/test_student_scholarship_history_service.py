@@ -1,15 +1,13 @@
 """Unit tests for StudentScholarshipHistoryService helpers."""
 
+from datetime import datetime, timezone
 from decimal import Decimal
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
-from datetime import datetime, timezone
 
-from app.schemas.student_scholarship_history import PaymentRecord
-from app.services.student_scholarship_history_service import (
-    StudentScholarshipHistoryService,
-)
+from app.core.exceptions import NotFoundError
 from app.models.payment_roster import (
     PaymentRoster,
     PaymentRosterItem,
@@ -20,6 +18,10 @@ from app.models.payment_roster import (
 )
 from app.models.scholarship import ScholarshipConfiguration
 from app.models.user import User, UserRole, UserType
+from app.schemas.student_scholarship_history import AcademicInfo, PaymentRecord
+from app.services.student_scholarship_history_service import (
+    StudentScholarshipHistoryService,
+)
 
 
 def _record(name: str, amount: str, period: str = "114-10") -> PaymentRecord:
@@ -57,9 +59,6 @@ class TestBuildSummary:
         records = [_record("國科會", "100"), _record("國科會", "100"), _record("國科會", "100")]
         result = svc._build_summary(records, snapshot_name=None)
         assert result.scholarship_type_count == 1
-
-
-from app.schemas.student_scholarship_history import AcademicInfo
 
 
 class TestBuildAcademicInfo:
@@ -191,23 +190,14 @@ async def test_fetch_locked_payments_returns_empty_for_unknown_student(db, seede
     assert snapshot_name is None
 
 
-from unittest.mock import AsyncMock, patch
-
-from app.core.exceptions import NotFoundError
-
-
 class TestGetHistory:
     @pytest.mark.asyncio
     async def test_raises_not_found_when_sis_fails_and_no_payments(self, db):
         """Both SIS error AND empty payment list → NotFoundError."""
         svc = StudentScholarshipHistoryService()
         with patch.object(svc, "_fetch_locked_payments", new=AsyncMock(return_value=([], None))):
-            with patch(
-                "app.services.student_scholarship_history_service.StudentService"
-            ) as MockStudent:
-                MockStudent.return_value.get_student_basic_info = AsyncMock(
-                    side_effect=Exception("SIS down")
-                )
+            with patch("app.services.student_scholarship_history_service.StudentService") as MockStudent:
+                MockStudent.return_value.get_student_basic_info = AsyncMock(side_effect=Exception("SIS down"))
                 with pytest.raises(NotFoundError):
                     await svc.get_history(db, "DOES_NOT_EXIST")
 
@@ -226,15 +216,9 @@ class TestGetHistory:
                 scholarship_amount=Decimal("1000"),
             )
         ]
-        with patch.object(
-            svc, "_fetch_locked_payments", new=AsyncMock(return_value=(sample_records, "王小明"))
-        ):
-            with patch(
-                "app.services.student_scholarship_history_service.StudentService"
-            ) as MockStudent:
-                MockStudent.return_value.get_student_basic_info = AsyncMock(
-                    side_effect=Exception("SIS down")
-                )
+        with patch.object(svc, "_fetch_locked_payments", new=AsyncMock(return_value=(sample_records, "王小明"))):
+            with patch("app.services.student_scholarship_history_service.StudentService") as MockStudent:
+                MockStudent.return_value.get_student_basic_info = AsyncMock(side_effect=Exception("SIS down"))
                 result = await svc.get_history(db, "S001")
         assert result.academic_info.available is False
         assert "SIS down" in (result.academic_info.error or "")
@@ -255,12 +239,8 @@ class TestGetHistory:
                 scholarship_amount=Decimal("1000"),
             )
         ]
-        with patch.object(
-            svc, "_fetch_locked_payments", new=AsyncMock(return_value=(sample_records, "王小明"))
-        ):
-            with patch(
-                "app.services.student_scholarship_history_service.StudentService"
-            ) as MockStudent:
+        with patch.object(svc, "_fetch_locked_payments", new=AsyncMock(return_value=(sample_records, "王小明"))):
+            with patch("app.services.student_scholarship_history_service.StudentService") as MockStudent:
                 MockStudent.return_value.get_student_basic_info = AsyncMock(
                     return_value={
                         "std_cname": "王小明",
