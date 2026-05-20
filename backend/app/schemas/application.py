@@ -731,3 +731,15 @@ class HistoricalApplicationResponse(BaseModel):
             "withdrawn": "bg-gray-100 text-gray-700",
         }
         return status_colors.get(status, "bg-gray-100 text-gray-700")
+
+
+class RevokeRequest(BaseModel):
+    """Body for POST /manual-distribution/applications/{id}/revoke"""
+
+    reason: str = Field(..., min_length=1, max_length=500)
+
+
+class SuspendRequest(BaseModel):
+    """Body for POST /manual-distribution/applications/{id}/suspend"""
+
+    reason: str = Field(..., min_length=1, max_length=500)
