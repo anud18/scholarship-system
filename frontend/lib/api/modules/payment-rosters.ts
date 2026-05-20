@@ -8,6 +8,20 @@ import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
 import type { ApiResponse } from '../types';
 
+export interface RevokedSuspendedEntry {
+  application_id: number;
+  student_name: string;
+  student_id_number: string;
+  event_at: string;
+  reason: string | null;
+  item_id: number | null;
+}
+
+export interface RevokedSuspendedList {
+  revoked: RevokedSuspendedEntry[];
+  suspended: RevokedSuspendedEntry[];
+}
+
 export function createPaymentRostersApi() {
   return {
     /**
@@ -96,6 +110,41 @@ export function createPaymentRostersApi() {
       const response = await typedClient.raw.GET('/api/v1/payment-rosters/{roster_id}', {
         params: { path: { roster_id: rosterId } },
       });
+      return toApiResponse(response);
+    },
+
+    /**
+     * 取得造冊中已撤銷/停發的學生清單
+     * Lists students still embedded in a locked roster whose allocation was later revoked or suspended.
+     */
+    getRevokedSuspended: async (
+      roster_id: number
+    ): Promise<ApiResponse<RevokedSuspendedList>> => {
+      const response = await typedClient.raw.GET(
+        '/api/v1/payment-rosters/{roster_id}/revoked-suspended',
+        {
+          params: { path: { roster_id } },
+        }
+      );
+      return toApiResponse(response) as ApiResponse<RevokedSuspendedList>;
+    },
+
+    /**
+     * 從已鎖定造冊中移除單一項目
+     * Hard-delete a single item from a LOCKED roster; sets excel_stale to true.
+     */
+    removeItemFromLockedRoster: async (
+      roster_id: number,
+      item_id: number,
+      reason?: string
+    ): Promise<ApiResponse<unknown>> => {
+      const response = await typedClient.raw.DELETE(
+        '/api/v1/payment-rosters/{roster_id}/items/{item_id}',
+        {
+          params: { path: { roster_id, item_id } },
+          body: { reason: reason ?? null },
+        }
+      );
       return toApiResponse(response);
     },
   };

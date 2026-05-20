@@ -6333,6 +6333,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/payment-rosters/{roster_id}/revoked-suspended": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Revoked Suspended
+         * @description List students still embedded in this roster whose allocation was
+         *     later revoked or suspended.
+         */
+        get: operations["get_revoked_suspended_api_v1_payment_rosters__roster_id__revoked_suspended_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payment-rosters/{roster_id}/items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Locked Roster Item
+         * @description Hard-delete a single item from a LOCKED roster. Roster stays LOCKED;
+         *     excel_stale is set to True; audit log written.
+         */
+        delete: operations["remove_locked_roster_item_api_v1_payment_rosters__roster_id__items__item_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/roster-schedules": {
         parameters: {
             query?: never;
@@ -6942,6 +6984,46 @@ export interface paths {
          * @description Import received months from Excel for students in a distribution.
          */
         post: operations["import_received_months_api_v1_manual_distribution_import_received_months_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/applications/{application_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke Application Allocation
+         * @description 撤銷已分發學生：從未鎖定造冊移除 + 標記 application 為 cancelled/revoked。
+         */
+        post: operations["revoke_application_allocation_api_v1_manual_distribution_applications__application_id__revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/applications/{application_id}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Suspend Application Allocation
+         * @description 停發已分發學生：從未鎖定造冊移除 + 標記 application 為 cancelled/suspended。
+         */
+        post: operations["suspend_application_allocation_api_v1_manual_distribution_applications__application_id__suspend_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8827,6 +8909,14 @@ export interface components {
              */
             roster_code?: string | null;
         };
+        /**
+         * RemoveLockedItemRequest
+         * @description Body for DELETE /payment-rosters/{roster_id}/items/{item_id}
+         */
+        RemoveLockedItemRequest: {
+            /** Reason */
+            reason?: string | null;
+        };
         /** RestoreRequest */
         RestoreRequest: {
             /** History Id */
@@ -8879,6 +8969,14 @@ export interface components {
              * @description 子項目審查列表
              */
             items: components["schemas"]["ReviewItemCreate"][];
+        };
+        /**
+         * RevokeRequest
+         * @description Body for POST /manual-distribution/applications/{id}/revoke
+         */
+        RevokeRequest: {
+            /** Reason */
+            reason: string;
         };
         /**
          * RosterCreateRequest
@@ -9731,6 +9829,14 @@ export interface components {
         SupplementaryImportToggle: {
             /** Allow */
             allow: boolean;
+        };
+        /**
+         * SuspendRequest
+         * @description Body for POST /manual-distribution/applications/{id}/suspend
+         */
+        SuspendRequest: {
+            /** Reason */
+            reason: string;
         };
         /**
          * SystemSettingCreate
@@ -20429,6 +20535,73 @@ export interface operations {
             };
         };
     };
+    get_revoked_suspended_api_v1_payment_rosters__roster_id__revoked_suspended_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roster_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_locked_roster_item_api_v1_payment_rosters__roster_id__items__item_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roster_id: number;
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoveLockedItemRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_roster_schedules_api_v1_roster_schedules_get: {
         parameters: {
             query?: {
@@ -21471,6 +21644,76 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": components["schemas"]["Body_import_received_months_api_v1_manual_distribution_import_received_months_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_application_allocation_api_v1_manual_distribution_applications__application_id__revoke_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevokeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suspend_application_allocation_api_v1_manual_distribution_applications__application_id__suspend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SuspendRequest"];
             };
         };
         responses: {

@@ -366,6 +366,62 @@ export function createManualDistributionApi() {
     /**
      * Import received months from Excel file.
      */
+    /**
+     * Revoke an application's allocation post-finalization.
+     * Removes the student from unlocked rosters and marks the application as cancelled/revoked.
+     */
+    revoke: async (
+      application_id: number,
+      reason: string
+    ): Promise<ApiResponse<{
+      application_id: number;
+      quota_allocation_status: "revoked";
+      event_at: string;
+      affected_unlocked_rosters: number[];
+    }>> => {
+      const response = await typedClient.raw.POST(
+        "/api/v1/manual-distribution/applications/{application_id}/revoke",
+        {
+          params: { path: { application_id } },
+          body: { reason },
+        }
+      );
+      return toApiResponse(response) as ApiResponse<{
+        application_id: number;
+        quota_allocation_status: "revoked";
+        event_at: string;
+        affected_unlocked_rosters: number[];
+      }>;
+    },
+
+    /**
+     * Suspend an application's allocation post-finalization.
+     * Removes the student from unlocked rosters and marks the application as cancelled/suspended.
+     */
+    suspend: async (
+      application_id: number,
+      reason: string
+    ): Promise<ApiResponse<{
+      application_id: number;
+      quota_allocation_status: "suspended";
+      event_at: string;
+      affected_unlocked_rosters: number[];
+    }>> => {
+      const response = await typedClient.raw.POST(
+        "/api/v1/manual-distribution/applications/{application_id}/suspend",
+        {
+          params: { path: { application_id } },
+          body: { reason },
+        }
+      );
+      return toApiResponse(response) as ApiResponse<{
+        application_id: number;
+        quota_allocation_status: "suspended";
+        event_at: string;
+        affected_unlocked_rosters: number[];
+      }>;
+    },
+
     importReceivedMonths: async (
       scholarshipTypeId: number,
       academicYear: number,
