@@ -1,7 +1,7 @@
 """Add supplementary import columns to scholarship_configurations and college_ranking_items
 
 Revision ID: add_supplementary_import_001
-Revises: 20260513_doc_req_deadline
+Revises: email_tpl_scholar_type_001
 Create Date: 2026-05-14
 
 Schema:
@@ -16,7 +16,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "add_supplementary_import_001"
-down_revision = "20260513_doc_req_deadline"
+down_revision = "email_tpl_scholar_type_001"
 branch_labels = None
 depends_on = None
 
