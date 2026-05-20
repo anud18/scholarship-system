@@ -60,9 +60,11 @@ class BulkApprovalService:
             for application in applications:
                 try:
                     # Validate application can be approved
-                    if application.status not in [
-                        ApplicationStatus.submitted,
-                        ApplicationStatus.under_review,
+                    # Normalize: SQLite returns strings, PostgreSQL returns enum members
+                    _status = getattr(application.status, "value", application.status)
+                    if _status not in [
+                        ApplicationStatus.submitted.value,
+                        ApplicationStatus.under_review.value,
                     ]:
                         results["failed_approvals"].append(
                             {
@@ -162,9 +164,11 @@ class BulkApprovalService:
             for application in applications:
                 try:
                     # Validate application can be rejected
-                    if application.status not in [
-                        ApplicationStatus.submitted,
-                        ApplicationStatus.under_review,
+                    # Normalize: SQLite returns strings, PostgreSQL returns enum members
+                    _status = getattr(application.status, "value", application.status)
+                    if _status not in [
+                        ApplicationStatus.submitted.value,
+                        ApplicationStatus.under_review.value,
                     ]:
                         results["failed_rejections"].append(
                             {
