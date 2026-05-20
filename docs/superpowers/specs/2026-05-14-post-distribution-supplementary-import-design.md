@@ -11,10 +11,11 @@ After admin completes distribution (`distribution_executed = True`), allow colle
 
 ## Feature Summary
 
-- Admin controls a per-ranking toggle (`allow_supplementary_import`) to open/close supplementary imports
+- Admin controls a per-configuration toggle (`ScholarshipConfiguration.allow_supplementary_import`) to open/close supplementary imports — one flag per (scholarship_type, academic_year, semester) applies to ALL colleges' rankings under that config
 - College users upload an Excel file in the same format as the ranking export (學生資料彙整表)
 - System calls NYCU SIS API to fetch `student_data` for each imported student
 - Imported students are appended to the existing ranking with `is_supplementary = True`
+- Each ranking belongs to one college (via `creator.college_code`); the upload endpoint rejects students whose SIS `std_academyno` doesn't match
 - Admin manually assigns `sub_type` / `allocation_year` to new students, then runs finalize again
 - Finalize logic is updated: unallocated supplementary students stay as `status = 'ranked'` (not rejected)
 
@@ -22,21 +23,24 @@ After admin completes distribution (`distribution_executed = True`), allow colle
 
 ## Schema Changes
 
-### `college_rankings` table
+### `scholarship_configurations` table
 
 ```python
+# Admin toggle, scoped to one (scholarship_type, academic_year, semester) configuration —
+# applies to all colleges' rankings under that config.
 allow_supplementary_import = Column(Boolean, default=False, nullable=False, server_default="false")
 ```
 
 ### `college_ranking_items` table
 
 ```python
+# Per-item flag set on rows appended via the supplementary import flow.
 is_supplementary = Column(Boolean, default=False, nullable=False, server_default="false")
 ```
 
 ### Migration
 
-One Alembic migration with two `ALTER TABLE ADD COLUMN` statements, both with existence checks.
+`add_supplementary_import_001` adds the two columns above with existence checks, and also drops a legacy `college_rankings.allow_supplementary_import` column if it exists (earlier prototype that stored the flag per-ranking).
 
 ---
 
@@ -120,29 +124,37 @@ All operations are batched: full rollback if any step fails.
 
 ## API Endpoints
 
-### Admin Toggle
+### Admin Toggle (per scholarship configuration)
 
 ```
-PATCH /college-review/rankings/{ranking_id}/supplementary-import
+PATCH /api/v1/scholarship-configurations/configurations/{configuration_id}/supplementary-import
 Auth: require_admin
 Body: { "allow": bool }
-Response: { "allow_supplementary_import": bool }
+Response: { "id": int, "allow_supplementary_import": bool }
 ```
 
-### College Supplementary Import
+Lives in `backend/app/api/v1/endpoints/scholarship_configurations.py`.
+
+### College Supplementary Import (per ranking)
 
 ```
-POST /college-review/rankings/{ranking_id}/supplementary-import
-Auth: require_college (same-college restriction)
-Content-Type: multipart/form-data (Excel file)
+POST /api/v1/college-review/rankings/{ranking_id}/supplementary-import
+Auth: require_college (rejects non-college roles)
+Content-Type: multipart/form-data (Excel .xlsx file, ≤10 MB)
+Guards:
+  - Configuration flag `allow_supplementary_import` must be true (403)
+  - Ranking creator's college_code must match current_user.college_code (403)
+  - Each student's SIS std_academyno must match the ranking's college (422)
+  - No duplicate (student × scholarship × academic_year × semester) (422)
 Response: {
+  "ranking_id": int,
   "imported_count": int,
-  "created_users": int,
-  "errors": []
+  "max_existing_rank": int,
+  "new_rank_range": str
 }
 ```
 
-Both endpoints are added to `backend/app/api/v1/endpoints/college_review/ranking_management.py`.
+Lives in `backend/app/api/v1/endpoints/college_review/ranking_management.py`.
 
 ---
 

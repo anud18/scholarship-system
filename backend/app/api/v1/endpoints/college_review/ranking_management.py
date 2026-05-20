@@ -1281,31 +1281,31 @@ async def supplementary_import(
     if not ranking:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
 
-    # Look up the matching scholarship configuration to read the flag
-    from app.models.enums import Semester as _Sem
-
+    # Look up the matching scholarship configuration to read the flag.
+    # Normalize semester via the canonical helper so "yearly" / Semester.yearly /
+    # NULL all resolve consistently (see CollegeReviewService.assert_ranking_within_deadline).
+    normalized_semester = CollegeReviewService._normalize_semester_value(ranking.semester)
     cfg_conditions = [
         ScholarshipConfiguration.scholarship_type_id == ranking.scholarship_type_id,
         ScholarshipConfiguration.academic_year == ranking.academic_year,
         ScholarshipConfiguration.is_active.is_(True),
     ]
-    if ranking.semester:
-        # match enum value (e.g. "first", "second", "yearly")
-        cfg_conditions.append(ScholarshipConfiguration.semester == _Sem(ranking.semester))
-    else:
+    if normalized_semester is None:
         cfg_conditions.append(ScholarshipConfiguration.semester.is_(None))
+    else:
+        cfg_conditions.append(ScholarshipConfiguration.semester == normalized_semester)
 
     cfg_stmt = select(ScholarshipConfiguration).where(and_(*cfg_conditions))
     cfg = (await db.execute(cfg_stmt)).scalar_one_or_none()
     if not cfg or not cfg.allow_supplementary_import:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="補充匯入功能尚未開放")
 
-    # College users may only import to rankings from their own college
-    if current_user.role not in (UserRole.admin, UserRole.super_admin):
-        creator_college = (getattr(ranking.creator, "college_code", None) or "").strip()
-        user_college = (current_user.college_code or "").strip()
-        if not creator_college or not user_college or creator_college != user_college:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限操作此學院之排名")
+    # College users may only import to rankings from their own college.
+    # (require_college rejects admin/super_admin upstream, so no role-branching needed here.)
+    creator_college = (getattr(ranking.creator, "college_code", None) or "").strip()
+    user_college = (current_user.college_code or "").strip()
+    if not creator_college or not user_college or creator_college != user_college:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限操作此學院之排名")
 
     # Build label→code map from scholarship sub_type_configs
     label_to_code = {

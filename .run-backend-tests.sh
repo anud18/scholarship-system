@@ -1,6 +1,7 @@
 #!/bin/bash
 # Test runner for backend tests inside an ephemeral container that mounts
-# THIS worktree (read-only) and uses pre-installed test deps at /tmp/wtree-deps.
+# THIS worktree (read-write — pytest writes __pycache__/.pytest_cache) and uses
+# pre-installed test deps at /tmp/wtree-deps.
 #
 # Why this instead of `docker compose exec backend pytest ...`?
 # The running scholarship_backend_dev container is mounted to a different

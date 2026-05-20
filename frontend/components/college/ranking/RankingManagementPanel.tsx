@@ -33,7 +33,9 @@ import { apiClient } from "@/lib/api";
 import { logger } from "@/lib/utils/logger";
 
 const SUPPLEMENTARY_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
-const SUPPLEMENTARY_ACCEPT = ".xlsx,.xls";
+// Backend uses openpyxl which only parses .xlsx (Office Open XML).
+// Keep client + server in sync — surface a clear extension error if user picks .xls.
+const SUPPLEMENTARY_ACCEPT = ".xlsx";
 
 // #63: surface the college-review deadline visibly on the ranking page
 // and warn / lock once the deadline approaches or passes.
@@ -113,9 +115,9 @@ function SupplementaryImportDropZone({
       if (uploading) return;
       setLastError(null);
       const lower = file.name.toLowerCase();
-      if (!lower.endsWith(".xlsx") && !lower.endsWith(".xls")) {
-        setLastError("僅接受 .xlsx 或 .xls 檔案");
-        toast.error("僅接受 .xlsx 或 .xls 檔案");
+      if (!lower.endsWith(".xlsx")) {
+        setLastError("僅接受 .xlsx 檔案");
+        toast.error("僅接受 .xlsx 檔案");
         return;
       }
       if (file.size > SUPPLEMENTARY_MAX_BYTES) {
@@ -239,7 +241,7 @@ function SupplementaryImportDropZone({
                       點擊或拖曳 Excel
                     </div>
                     <div className="text-[11px] text-muted-foreground">
-                      支援 .xlsx / .xls · 上限 10 MB
+                      僅接受 .xlsx · 上限 10 MB
                     </div>
                   </div>
                 </>
