@@ -1,7 +1,6 @@
 """Integration tests for supplementary import endpoints."""
 
 import io
-from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
@@ -9,12 +8,15 @@ from httpx import AsyncClient
 from openpyxl import Workbook
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_admin_user
-from app.core.security import require_college
+from app.core.security import require_admin, require_college
 from app.main import app
 from app.models.college_review import CollegeRanking
-from app.models.scholarship import ScholarshipType, SubTypeSelectionMode
-from app.models.user import User, UserRole, UserType
+from app.models.scholarship import (
+    ScholarshipConfiguration,
+    ScholarshipType,
+    SubTypeSelectionMode,
+)
+from app.models.user import AdminScholarship, User, UserRole, UserType
 
 
 def _build_xlsx_bytes() -> bytes:
@@ -83,7 +85,35 @@ async def scholarship(db: AsyncSession) -> ScholarshipType:
 
 
 @pytest_asyncio.fixture
-async def ranking(db: AsyncSession, college_user: User, scholarship: ScholarshipType) -> CollegeRanking:
+async def configuration(
+    db: AsyncSession, scholarship: ScholarshipType, admin_user: User
+) -> ScholarshipConfiguration:
+    cfg = ScholarshipConfiguration(
+        scholarship_type_id=scholarship.id,
+        academic_year=114,
+        semester=None,  # yearly
+        config_name="Test PhD 114",
+        config_code="test-phd-114",
+        amount=40000,
+        is_active=True,
+        allow_supplementary_import=False,
+    )
+    db.add(cfg)
+    await db.flush()
+
+    # Grant admin permission to manage this scholarship type
+    db.add(AdminScholarship(admin_id=admin_user.id, scholarship_id=scholarship.id))
+    await db.flush()
+    return cfg
+
+
+@pytest_asyncio.fixture
+async def ranking(
+    db: AsyncSession,
+    college_user: User,
+    scholarship: ScholarshipType,
+    configuration: ScholarshipConfiguration,
+) -> CollegeRanking:
     r = CollegeRanking(
         scholarship_type_id=scholarship.id,
         sub_type_code="nstc",
@@ -92,7 +122,6 @@ async def ranking(db: AsyncSession, college_user: User, scholarship: Scholarship
         created_by=college_user.id,
         is_finalized=True,
         distribution_executed=True,
-        allow_supplementary_import=False,
     )
     db.add(r)
     await db.flush()
@@ -100,40 +129,48 @@ async def ranking(db: AsyncSession, college_user: User, scholarship: Scholarship
 
 
 @pytest.mark.asyncio
-class TestAdminToggle:
+class TestAdminConfigToggle:
     async def test_admin_can_enable_supplementary_import(
-        self, client: AsyncClient, db: AsyncSession, admin_user: User, ranking: CollegeRanking
+        self,
+        client: AsyncClient,
+        db: AsyncSession,
+        admin_user: User,
+        configuration: ScholarshipConfiguration,
     ):
-        app.dependency_overrides[get_current_admin_user] = lambda: admin_user
+        app.dependency_overrides[require_admin] = lambda: admin_user
         try:
             resp = await client.patch(
-                f"/api/v1/college-review/rankings/{ranking.id}/supplementary-import",
+                f"/api/v1/scholarship-configurations/configurations/{configuration.id}/supplementary-import",
                 json={"allow": True},
             )
         finally:
-            app.dependency_overrides.pop(get_current_admin_user, None)
+            app.dependency_overrides.pop(require_admin, None)
         assert resp.status_code == 200, resp.text
         data = resp.json()
         assert data["data"]["allow_supplementary_import"] is True
 
-    async def test_returns_404_for_unknown_ranking(
+    async def test_returns_404_for_unknown_configuration(
         self, client: AsyncClient, db: AsyncSession, admin_user: User
     ):
-        app.dependency_overrides[get_current_admin_user] = lambda: admin_user
+        app.dependency_overrides[require_admin] = lambda: admin_user
         try:
             resp = await client.patch(
-                "/api/v1/college-review/rankings/999999/supplementary-import",
+                "/api/v1/scholarship-configurations/configurations/999999/supplementary-import",
                 json={"allow": True},
             )
         finally:
-            app.dependency_overrides.pop(get_current_admin_user, None)
+            app.dependency_overrides.pop(require_admin, None)
         assert resp.status_code == 404
 
 
 @pytest.mark.asyncio
 class TestSupplementaryImportEndpoint:
     async def test_returns_403_when_flag_is_off(
-        self, client: AsyncClient, db: AsyncSession, college_user: User, ranking: CollegeRanking
+        self,
+        client: AsyncClient,
+        db: AsyncSession,
+        college_user: User,
+        ranking: CollegeRanking,
     ):
         app.dependency_overrides[require_college] = lambda: college_user
         try:

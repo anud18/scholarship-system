@@ -869,87 +869,57 @@ export function RankingManagementPanel({
             </div>
           ) : (
             <>
-            {/* Post-distribution supplementary import */}
-            {rankingData && (
+            {/* Post-distribution supplementary import (college upload only —
+                admin toggle lives in 系統管理 → 獎學金配置) */}
+            {rankingData && rankingData.allowSupplementaryImport && !isAdmin && (
               <Card>
                 <CardContent className="flex items-center justify-between gap-4 py-4">
                   <div className="flex flex-col gap-1">
                     <span className="text-sm font-medium">補充匯入</span>
                     <span className="text-xs text-muted-foreground">
-                      {rankingData.allowSupplementaryImport
-                        ? "學院可上傳新學生 Excel；排名將接在現有名單之後"
-                        : "尚未開放補充匯入"}
+                      上傳新學生 Excel；排名將接在現有名單之後
                     </span>
                   </div>
-
-                  {isAdmin && (
-                    <Button
-                      variant={rankingData.allowSupplementaryImport ? "outline" : "default"}
-                      size="sm"
-                      onClick={async () => {
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="supplementary-file-input"
+                      type="file"
+                      accept=".xlsx,.xls"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
                         try {
-                          const next = !rankingData.allowSupplementaryImport;
-                          await apiClient.college.toggleSupplementaryImport(
+                          const result = await apiClient.college.uploadSupplementaryImport(
                             selectedRanking!,
-                            next
+                            file
                           );
-                          toast.success(
-                            next ? "已開放補充匯入" : "已關閉補充匯入"
-                          );
-                          await fetchRankingDetails(selectedRanking!);
+                          if (result.success && result.data) {
+                            toast.success(
+                              `已匯入 ${result.data.imported_count} 位學生（排名 ${result.data.new_rank_range}）`
+                            );
+                            await fetchRankingDetails(selectedRanking!);
+                          }
                         } catch (err) {
                           toast.error(
-                            err instanceof Error ? err.message : "操作失敗"
+                            err instanceof Error ? err.message : "匯入失敗"
                           );
+                        } finally {
+                          e.target.value = "";
                         }
                       }}
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() =>
+                        document
+                          .getElementById("supplementary-file-input")
+                          ?.click()
+                      }
                     >
-                      {rankingData.allowSupplementaryImport ? "關閉補充匯入" : "開放補充匯入"}
+                      上傳補充名單
                     </Button>
-                  )}
-
-                  {!isAdmin && rankingData.allowSupplementaryImport && (
-                    <div className="flex items-center gap-2">
-                      <input
-                        id="supplementary-file-input"
-                        type="file"
-                        accept=".xlsx,.xls"
-                        className="hidden"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          try {
-                            const result = await apiClient.college.uploadSupplementaryImport(
-                              selectedRanking!,
-                              file
-                            );
-                            if (result.success && result.data) {
-                              toast.success(
-                                `已匯入 ${result.data.imported_count} 位學生（排名 ${result.data.new_rank_range}）`
-                              );
-                              await fetchRankingDetails(selectedRanking!);
-                            }
-                          } catch (err) {
-                            toast.error(
-                              err instanceof Error ? err.message : "匯入失敗"
-                            );
-                          } finally {
-                            e.target.value = "";
-                          }
-                        }}
-                      />
-                      <Button
-                        size="sm"
-                        onClick={() =>
-                          document
-                            .getElementById("supplementary-file-input")
-                            ?.click()
-                        }
-                      >
-                        上傳補充名單
-                      </Button>
-                    </div>
-                  )}
+                  </div>
                 </CardContent>
               </Card>
             )}

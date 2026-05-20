@@ -634,6 +634,7 @@ export function AdminConfigurationManagement({
                           申請期間
                         </th>
                         <th className="text-left p-4 font-semibold">狀態</th>
+                        <th className="text-left p-4 font-semibold">補充匯入</th>
                         <th className="text-right p-4 font-semibold">操作</th>
                       </tr>
                     </thead>
@@ -731,6 +732,44 @@ export function AdminConfigurationManagement({
                               >
                                 {config.is_active ? "已啟用" : "已停用"}
                               </Badge>
+                            </td>
+                            <td className="p-4">
+                              <Button
+                                size="sm"
+                                variant={
+                                  config.allow_supplementary_import
+                                    ? "outline"
+                                    : "secondary"
+                                }
+                                className="text-xs whitespace-nowrap"
+                                onClick={async () => {
+                                  try {
+                                    const next = !config.allow_supplementary_import;
+                                    await api.college.toggleConfigSupplementaryImport(
+                                      config.id,
+                                      next
+                                    );
+                                    toast.success(
+                                      next ? "已開放補充匯入" : "已關閉補充匯入"
+                                    );
+                                    // Refresh the configurations list to reflect the change
+                                    if (selectedScholarshipType) {
+                                      await loadConfigurations(selectedScholarshipType);
+                                    }
+                                  } catch (err) {
+                                    toast.error(
+                                      err instanceof Error
+                                        ? err.message
+                                        : "操作失敗"
+                                    );
+                                  }
+                                }}
+                                title="開放/關閉學院補充匯入 (Excel)"
+                              >
+                                {config.allow_supplementary_import
+                                  ? "已開放"
+                                  : "未開放"}
+                              </Button>
                             </td>
                             <td className="p-4">
                               <div className="flex justify-end gap-1">

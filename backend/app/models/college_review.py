@@ -81,8 +81,9 @@ class CollegeRanking(Base):
     # Distribution information
     distribution_executed = Column(Boolean, default=False)
     distribution_date = Column(DateTime(timezone=True))
-    allow_supplementary_import = Column(Boolean, default=False, nullable=False, server_default="false")  # Admin-controlled flag that opens supplementary import after distribution
     github_issue_url = Column(String(500))  # Link to generated GitHub issue
+    # NOTE: supplementary-import flag lives on ScholarshipConfiguration.allow_supplementary_import
+    # (one flag per scholarship/year/semester, applies to all colleges' rankings under it)
 
     # Time tracking
     created_at = Column(DateTime(timezone=True), server_default=func.now())

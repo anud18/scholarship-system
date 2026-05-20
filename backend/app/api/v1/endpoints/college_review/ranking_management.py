@@ -15,12 +15,10 @@ from urllib.parse import quote as _url_quote
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.deps import get_current_admin_user
 from app.core.exceptions import AuthorizationError, NotFoundError
 from app.core.security import require_college, require_scholarship_manager
 from app.db.deps import get_db
@@ -176,7 +174,9 @@ async def get_rankings(
                     "college_quota": college_quota,
                     "allocated_count": ranking.allocated_count,
                     "is_finalized": ranking.is_finalized,
-                    "allow_supplementary_import": ranking.allow_supplementary_import,
+                    # Read flag from matching scholarship configuration (one flag per config,
+                    # applies to all colleges' rankings under it)
+                    "allow_supplementary_import": bool(config and config.allow_supplementary_import),
                     "ranking_status": ranking.ranking_status,
                     "distribution_executed": ranking.distribution_executed,
                     "created_at": ranking.created_at.isoformat(),
@@ -548,7 +548,9 @@ async def get_ranking(
                 "college_quota_breakdown": college_quota_breakdown,
                 "allocated_count": ranking.allocated_count,
                 "is_finalized": ranking.is_finalized,
-                "allow_supplementary_import": ranking.allow_supplementary_import,
+                # Read flag from matching scholarship configuration (one flag per config,
+                # applies to all colleges' rankings under it)
+                "allow_supplementary_import": bool(config and config.allow_supplementary_import),
                 "ranking_status": ranking.ranking_status,
                 "distribution_executed": ranking.distribution_executed,
                 "sub_type_metadata": list(sub_type_metadata_map.values()),
@@ -1242,33 +1244,6 @@ async def export_ranking_excel(
     )
 
 
-class SupplementaryImportToggle(BaseModel):
-    allow: bool
-
-
-@router.patch("/rankings/{ranking_id}/supplementary-import")
-async def toggle_supplementary_import(
-    ranking_id: int,
-    body: SupplementaryImportToggle,
-    current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Admin toggle: open or close supplementary import for a ranking."""
-    stmt = select(CollegeRanking).where(CollegeRanking.id == ranking_id)
-    result = await db.execute(stmt)
-    ranking = result.scalar_one_or_none()
-    if not ranking:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
-
-    ranking.allow_supplementary_import = body.allow
-    await db.commit()
-    return ApiResponse(
-        success=True,
-        message=f"Supplementary import {'enabled' if body.allow else 'disabled'}",
-        data={"ranking_id": ranking_id, "allow_supplementary_import": body.allow},
-    )
-
-
 @router.post("/rankings/{ranking_id}/supplementary-import")
 async def supplementary_import(
     ranking_id: int,
@@ -1276,7 +1251,12 @@ async def supplementary_import(
     current_user: User = Depends(require_college),
     db: AsyncSession = Depends(get_db),
 ):
-    """College upload: import new students via 學生資料彙整表 Excel after distribution."""
+    """College upload: import new students via 學生資料彙整表 Excel after distribution.
+
+    The supplementary-import flag is read from the matching ScholarshipConfiguration
+    (one flag per scholarship_type/academic_year/semester) — admin toggles it from
+    系統管理 → 獎學金配置.
+    """
     # Load ranking with items and scholarship_type
     stmt = (
         select(CollegeRanking)
@@ -1292,7 +1272,23 @@ async def supplementary_import(
     if not ranking:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
 
-    if not ranking.allow_supplementary_import:
+    # Look up the matching scholarship configuration to read the flag
+    from app.models.enums import Semester as _Sem
+
+    cfg_conditions = [
+        ScholarshipConfiguration.scholarship_type_id == ranking.scholarship_type_id,
+        ScholarshipConfiguration.academic_year == ranking.academic_year,
+        ScholarshipConfiguration.is_active.is_(True),
+    ]
+    if ranking.semester:
+        # match enum value (e.g. "first", "second", "yearly")
+        cfg_conditions.append(ScholarshipConfiguration.semester == _Sem(ranking.semester))
+    else:
+        cfg_conditions.append(ScholarshipConfiguration.semester.is_(None))
+
+    cfg_stmt = select(ScholarshipConfiguration).where(and_(*cfg_conditions))
+    cfg = (await db.execute(cfg_stmt)).scalar_one_or_none()
+    if not cfg or not cfg.allow_supplementary_import:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="補充匯入功能尚未開放")
 
     # College users may only import to rankings from their own college

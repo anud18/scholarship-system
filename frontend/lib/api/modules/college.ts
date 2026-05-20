@@ -480,16 +480,19 @@ export function createCollegeApi() {
     },
 
     /**
-     * Admin: toggle supplementary import open/close for a ranking.
-     * PATCH /api/v1/college-review/rankings/{ranking_id}/supplementary-import
+     * Admin: toggle supplementary import open/close for a scholarship configuration.
+     * PATCH /api/v1/scholarship-configurations/configurations/{id}/supplementary-import
+     *
+     * The flag applies to ALL colleges' rankings under that
+     * (scholarship_type, academic_year, semester) configuration.
      */
-    toggleSupplementaryImport: async (
-      rankingId: number,
+    toggleConfigSupplementaryImport: async (
+      configurationId: number,
       allow: boolean
-    ): Promise<ApiResponse<{ ranking_id: number; allow_supplementary_import: boolean }>> => {
+    ): Promise<ApiResponse<{ id: number; allow_supplementary_import: boolean }>> => {
       const token = typedClient.getToken();
       const resp = await fetch(
-        `/api/v1/college-review/rankings/${rankingId}/supplementary-import`,
+        `/api/v1/scholarship-configurations/configurations/${configurationId}/supplementary-import`,
         {
           method: "PATCH",
           headers: {
