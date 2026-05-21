@@ -406,7 +406,6 @@ class ManualDistributionService:
             raw = current_config.prior_quota_years
             # Handle case where JSON column stored as string instead of dict
             if isinstance(raw, str):
-
                 try:
                     raw = _json.loads(raw)
                 except (ValueError, TypeError):
@@ -1064,7 +1063,6 @@ class ManualDistributionService:
         if current_config and current_config.prior_quota_years:
             raw = current_config.prior_quota_years
             if isinstance(raw, str):
-
                 try:
                     raw = _json.loads(raw)
                 except (ValueError, TypeError):
@@ -1139,9 +1137,7 @@ class ManualDistributionService:
             rejected_map=rejected_map,
         )
 
-    async def revoke_allocation(
-        self, application_id: int, admin_user_id: int, reason: str
-    ) -> dict:
+    async def revoke_allocation(self, application_id: int, admin_user_id: int, reason: str) -> dict:
         """Revoke an allocated application: status -> cancelled,
         quota_allocation_status -> revoked, hard-delete its PaymentRosterItem
         rows in all non-LOCKED rosters, write audit log."""
@@ -1152,9 +1148,7 @@ class ManualDistributionService:
             mode="revoke",
         )
 
-    async def suspend_allocation(
-        self, application_id: int, admin_user_id: int, reason: str
-    ) -> dict:
+    async def suspend_allocation(self, application_id: int, admin_user_id: int, reason: str) -> dict:
         """Suspend an allocated application: status -> cancelled,
         quota_allocation_status -> suspended, hard-delete its PaymentRosterItem
         rows in all non-LOCKED rosters, write audit log."""
@@ -1173,18 +1167,14 @@ class ManualDistributionService:
         mode: Literal["revoke", "suspend"],
     ) -> dict:
         # 1. Row-lock the application
-        result = await self.db.execute(
-            select(Application).where(Application.id == application_id).with_for_update()
-        )
+        result = await self.db.execute(select(Application).where(Application.id == application_id).with_for_update())
         app = result.scalar_one_or_none()
         if app is None:
             raise ValueError(f"Application {application_id} not found")
 
         # 2. Conflict check
         if app.quota_allocation_status in ("revoked", "suspended"):
-            raise ValueError(
-                f"Application {application_id} already {app.quota_allocation_status}"
-            )
+            raise ValueError(f"Application {application_id} already {app.quota_allocation_status}")
 
         # 3. 400 check
         if app.quota_allocation_status != "allocated":
@@ -1197,9 +1187,7 @@ class ManualDistributionService:
         # allocation in the manual-distribution flow). The spec response includes
         # ranking_item_id so downstream consumers can reference it.
         ranking_item_result = await self.db.execute(
-            select(CollegeRankingItem.id).where(
-                CollegeRankingItem.application_id == application_id
-            ).limit(1)
+            select(CollegeRankingItem.id).where(CollegeRankingItem.application_id == application_id).limit(1)
         )
         ranking_item_id = ranking_item_result.scalar_one_or_none()
 
@@ -1285,8 +1273,7 @@ class ManualDistributionService:
                 func.coalesce(
                     func.sum(
                         sa_case(
-                            (PaymentRosterItem.is_included.is_(True),
-                             PaymentRosterItem.scholarship_amount),
+                            (PaymentRosterItem.is_included.is_(True), PaymentRosterItem.scholarship_amount),
                             else_=0,
                         )
                     ),
