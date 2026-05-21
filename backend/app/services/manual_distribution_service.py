@@ -1289,6 +1289,7 @@ class ManualDistributionService:
             roster.qualified_count = qualified_count
             roster.disqualified_count = total_count - qualified_count
             roster.total_amount = total_amount
+
     # ------------------------------------------------------------------ #
     # Phase 6 — General distribution with challenge release + fill-in
     # See docs/superpowers/specs/2026-05-13-renewal-application-design.md

@@ -179,7 +179,7 @@ async def get_distribution_state(
         state = await service.compute_distribution_state(scholarship_type_id, academic_year)
     except ValueError as e:
         # _get_active_config raises ValueError when no active config exists.
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     return {
         "success": True,
         "message": "OK",
@@ -237,7 +237,7 @@ async def preview_distribution(
             "data": preview,
         }
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post("/allocate")
