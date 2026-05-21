@@ -9,10 +9,10 @@ from unittest.mock import Mock
 
 from app.models.user import User, UserRole, UserType
 
-
 # ---------------------------------------------------------------------------
 # Helpers: build mock users for dependency injection
 # ---------------------------------------------------------------------------
+
 
 def _make_mock_admin() -> Mock:
     u = Mock(spec=User)
@@ -35,6 +35,7 @@ def _make_mock_student() -> Mock:
 # `client` is provided by conftest.py (wraps async DB session via get_db).
 # We add fixtures that override get_current_admin_user / get_current_user.
 # ---------------------------------------------------------------------------
+
 
 @pytest_asyncio.fixture
 async def client_admin(db, client: AsyncClient):
@@ -89,6 +90,7 @@ async def client_student(db, client: AsyncClient):
 # Fixtures: DB objects (same pattern as test_revoke_suspend_service.py,
 # duplicated here so this file is self-contained — DRY can come later)
 # ---------------------------------------------------------------------------
+
 
 @pytest_asyncio.fixture
 async def admin_db_user(db):
@@ -160,6 +162,7 @@ async def unallocated_application(db, admin_db_user):
 # ---------------------------------------------------------------------------
 # Tests (6 as required by Task 6)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_revoke_endpoint_success(client_admin: AsyncClient, allocated_application):
@@ -476,13 +479,10 @@ async def roster_client_student(client: AsyncClient, sync_db_for_roster):
 
 # Task 7 tests
 
+
 @pytest.mark.asyncio
-async def test_get_revoked_suspended_returns_split_lists(
-    roster_client_admin, locked_roster_two_items
-):
-    resp = await roster_client_admin.get(
-        f"/api/v1/payment-rosters/{locked_roster_two_items.id}/revoked-suspended"
-    )
+async def test_get_revoked_suspended_returns_split_lists(roster_client_admin, locked_roster_two_items):
+    resp = await roster_client_admin.get(f"/api/v1/payment-rosters/{locked_roster_two_items.id}/revoked-suspended")
     assert resp.status_code == 200
     data = resp.json()["data"]
     assert len(data["revoked"]) == 1
@@ -490,10 +490,9 @@ async def test_get_revoked_suspended_returns_split_lists(
 
 
 @pytest.mark.asyncio
-async def test_delete_locked_item_returns_200_and_sets_stale(
-    roster_client_admin, locked_roster_two_items
-):
+async def test_delete_locked_item_returns_200_and_sets_stale(roster_client_admin, locked_roster_two_items):
     import json as _json
+
     item_id = locked_roster_two_items.items[0].id
     resp = await roster_client_admin.request(
         "DELETE",
@@ -507,10 +506,9 @@ async def test_delete_locked_item_returns_200_and_sets_stale(
 
 
 @pytest.mark.asyncio
-async def test_delete_item_on_non_locked_returns_400(
-    roster_client_admin, draft_roster_with_item
-):
+async def test_delete_item_on_non_locked_returns_400(roster_client_admin, draft_roster_with_item):
     import json as _json
+
     item_id = draft_roster_with_item.items[0].id
     resp = await roster_client_admin.request(
         "DELETE",
@@ -522,10 +520,9 @@ async def test_delete_item_on_non_locked_returns_400(
 
 
 @pytest.mark.asyncio
-async def test_delete_item_requires_admin(
-    roster_client_student, locked_roster_two_items
-):
+async def test_delete_item_requires_admin(roster_client_student, locked_roster_two_items):
     import json as _json
+
     item_id = locked_roster_two_items.items[0].id
     resp = await roster_client_student.request(
         "DELETE",
