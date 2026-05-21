@@ -482,6 +482,12 @@ class ReviewService:
                 else str(latest_review.reviewer.role).lower()
             )
 
+        # Professor recommendations are purely advisory: never change application.status.
+        # Only advance review_stage so college/admin can see where the pipeline stands.
+        if latest_reviewer_role == "professor":
+            application.review_stage = ReviewStage.professor_reviewed.value
+            return application.status
+
         awaits_further = await self._awaits_further_required_review(application, latest_reviewer_role)
 
         if all_approved:
@@ -489,25 +495,15 @@ class ReviewService:
                 ApplicationStatus.under_review.value if awaits_further else ApplicationStatus.approved.value
             )
         elif all_rejected:
-            if latest_reviewer_role == "professor":
-                # Professor rejection is advisory only; a later college/admin review
-                # may still approve — keep the application in review rather than
-                # setting a terminal status that students cannot appeal.
-                application.status = ApplicationStatus.under_review.value
-            else:
-                application.status = ApplicationStatus.rejected.value
+            application.status = ApplicationStatus.rejected.value
         else:
-            # 部分同意 — also gated: if college hasn't weighed in yet, we
-            # shouldn't lock a partial outcome in (and the student should
-            # still be able to withdraw).
+            # 部分同意
             application.status = (
                 ApplicationStatus.under_review.value if awaits_further else ApplicationStatus.partial_approved.value
             )
 
         # 根據審查者角色更新階段
-        if latest_reviewer_role == "professor":
-            application.review_stage = ReviewStage.professor_reviewed.value
-        elif latest_reviewer_role == "college":
+        if latest_reviewer_role == "college":
             application.review_stage = ReviewStage.college_reviewed.value
         elif latest_reviewer_role in ("admin", "super_admin"):
             application.review_stage = ReviewStage.admin_reviewed.value
