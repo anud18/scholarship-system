@@ -56,43 +56,52 @@ def upgrade() -> None:
         )
 
     # 3. Drop old single UNIQUE (was previously "uq_user_scholarship_academic_term"),
-    # add three partial unique indexes
+    # add three partial unique indexes (idempotent — create_all() may have created them already)
     existing_constraints = [c["name"] for c in inspector.get_unique_constraints("applications")]
     if "uq_user_scholarship_academic_term" in existing_constraints:
         op.drop_constraint("uq_user_scholarship_academic_term", "applications", type_="unique")
 
-    op.create_index(
-        "uq_user_renewal_app",
-        "applications",
-        ["user_id", "scholarship_type_id", "academic_year", "semester"],
-        unique=True,
-        postgresql_where=sa.text("is_renewal = true AND deleted_at IS NULL"),
-    )
-    op.create_index(
-        "uq_user_challenge_app",
-        "applications",
-        ["user_id", "scholarship_type_id", "academic_year", "semester"],
-        unique=True,
-        postgresql_where=sa.text("is_renewal = false AND challenges_application_id IS NOT NULL AND deleted_at IS NULL"),
-    )
-    op.create_index(
-        "uq_user_pure_new_app",
-        "applications",
-        ["user_id", "scholarship_type_id", "academic_year", "semester"],
-        unique=True,
-        postgresql_where=sa.text("is_renewal = false AND challenges_application_id IS NULL AND deleted_at IS NULL"),
-    )
+    existing_indexes = [idx["name"] for idx in inspector.get_indexes("applications")]
+
+    if "uq_user_renewal_app" not in existing_indexes:
+        op.create_index(
+            "uq_user_renewal_app",
+            "applications",
+            ["user_id", "scholarship_type_id", "academic_year", "semester"],
+            unique=True,
+            postgresql_where=sa.text("is_renewal = true AND deleted_at IS NULL"),
+        )
+    if "uq_user_challenge_app" not in existing_indexes:
+        op.create_index(
+            "uq_user_challenge_app",
+            "applications",
+            ["user_id", "scholarship_type_id", "academic_year", "semester"],
+            unique=True,
+            postgresql_where=sa.text(
+                "is_renewal = false AND challenges_application_id IS NOT NULL AND deleted_at IS NULL"
+            ),
+        )
+    if "uq_user_pure_new_app" not in existing_indexes:
+        op.create_index(
+            "uq_user_pure_new_app",
+            "applications",
+            ["user_id", "scholarship_type_id", "academic_year", "semester"],
+            unique=True,
+            postgresql_where=sa.text("is_renewal = false AND challenges_application_id IS NULL AND deleted_at IS NULL"),
+        )
 
     # 4. Check constraint: cancelled_by_challenge requires cancelled_due_to_application_id
     # NOTE: status::text cast is required because PostgreSQL forbids referencing a
     # newly-added enum value (added in step 1 above) inside the same transaction
     # without explicit casting (psycopg2.errors.UnsafeNewEnumValueUsage).
     # The partial-index predicates above use deleted_at IS NULL (no cast needed).
-    op.create_check_constraint(
-        "chk_cancelled_by_challenge_link",
-        "applications",
-        "status::text != 'cancelled_by_challenge' OR cancelled_due_to_application_id IS NOT NULL",
-    )
+    existing_check_constraints = [c["name"] for c in inspector.get_check_constraints("applications")]
+    if "chk_cancelled_by_challenge_link" not in existing_check_constraints:
+        op.create_check_constraint(
+            "chk_cancelled_by_challenge_link",
+            "applications",
+            "status::text != 'cancelled_by_challenge' OR cancelled_due_to_application_id IS NOT NULL",
+        )
 
 
 def downgrade() -> None:
