@@ -30,7 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Loader2, X } from "lucide-react";
+import { Loader2, Lock, LockOpen, X } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import type { RevokedSuspendedList } from "@/lib/api/modules/payment-rosters";
@@ -64,6 +64,7 @@ interface RosterDetailDialogProps {
   onOpenChange: (open: boolean) => void;
   period: Period;
   configId: number;
+  onLockStateChange?: () => void;
 }
 
 interface RosterItem {
@@ -90,6 +91,7 @@ export function RosterDetailDialog({
   onOpenChange,
   period,
   configId,
+  onLockStateChange,
 }: RosterDetailDialogProps) {
   const [loading, setLoading] = useState(true);
   const [rosterItems, setRosterItems] = useState<RosterItem[]>([]);
@@ -102,6 +104,9 @@ export function RosterDetailDialog({
     suspended: [],
   });
   const [removingItemId, setRemovingItemId] = useState<number | null>(null);
+
+  const [isLocking, setIsLocking] = useState(false);
+  const [isUnlocking, setIsUnlocking] = useState(false);
 
   // #66: exclude-item dialog state
   const [excludeTarget, setExcludeTarget] = useState<RosterItem | null>(null);
@@ -160,6 +165,44 @@ export function RosterDetailDialog({
       }
     } finally {
       setRemovingItemId(null);
+    }
+  };
+
+  const handleLockRoster = async () => {
+    if (!period.roster_id) return;
+    if (!confirm("確認鎖定此造冊？鎖定後將無法重新產生，但可解鎖。")) return;
+    setIsLocking(true);
+    try {
+      const resp = await apiClient.paymentRosters.lockRoster(period.roster_id);
+      if (resp.success) {
+        toast.success("造冊已鎖定");
+        onLockStateChange?.();
+      } else {
+        toast.error(resp.message || "鎖定失敗");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "鎖定失敗");
+    } finally {
+      setIsLocking(false);
+    }
+  };
+
+  const handleUnlockRoster = async () => {
+    if (!period.roster_id) return;
+    if (!confirm("確認解鎖此造冊？解鎖後狀態將回到「已完成」。")) return;
+    setIsUnlocking(true);
+    try {
+      const resp = await apiClient.paymentRosters.unlockRoster(period.roster_id);
+      if (resp.success) {
+        toast.success("造冊已解鎖");
+        onLockStateChange?.();
+      } else {
+        toast.error(resp.message || "解鎖失敗");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "解鎖失敗");
+    } finally {
+      setIsUnlocking(false);
     }
   };
 
@@ -528,6 +571,40 @@ export function RosterDetailDialog({
               </span>
             </div>
           </div>
+
+          {period.roster_id && (
+            <div className="mt-3 flex gap-2 justify-end">
+              {period.roster_status !== "locked" ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleLockRoster}
+                  disabled={isLocking}
+                >
+                  {isLocking ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                  ) : (
+                    <Lock className="h-4 w-4 mr-1" />
+                  )}
+                  鎖定造冊
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleUnlockRoster}
+                  disabled={isUnlocking}
+                >
+                  {isUnlocking ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                  ) : (
+                    <LockOpen className="h-4 w-4 mr-1" />
+                  )}
+                  解鎖造冊
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </DialogContent>
 
