@@ -1203,8 +1203,8 @@ export function ApplicationReviewPanel({
           setShowDeleteDialog(open);
           if (!open) setApplicationToDelete(null);
         }}
-        applicationId={applicationToDelete!.id}
-        applicationName={applicationToDelete!.student_name ?? ""}
+        applicationId={applicationToDelete?.id ?? 0}
+        applicationName={applicationToDelete?.student_name ?? ""}
         onSuccess={() => {
           // Close the ApplicationReviewDialog
           setSelectedApplication(null);
@@ -1227,8 +1227,8 @@ export function ApplicationReviewPanel({
           setShowDocumentRequestDialog(open);
           if (!open) setApplicationToRequestDocs(null);
         }}
-        applicationId={applicationToRequestDocs!.id}
-        applicationName={applicationToRequestDocs!.student_name ?? ""}
+        applicationId={applicationToRequestDocs?.id ?? 0}
+        applicationName={applicationToRequestDocs?.student_name ?? ""}
       />
 
       <FilePreviewDialog
