@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, case as sa_case, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import RosterAlreadyExistsError, RosterGenerationError, RosterLockedError, RosterNotFoundError
@@ -23,9 +23,11 @@ from app.models.payment_roster import (
     RosterTriggerType,
     StudentVerificationStatus,
 )
+from app.models.audit_log import AuditLog
 from app.models.roster_audit import RosterAuditAction, RosterAuditLevel
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
 from app.models.user import User
+from app.schemas.payment_roster import RevokedSuspendedEntry
 from app.services.audit_service import audit_service
 from app.services.student_verification_service import StudentVerificationService
 
@@ -1753,3 +1755,115 @@ class RosterService:
         )
 
         return roster
+
+    # ------------------------------------------------------------------
+    # Post-lock roster item management
+    # ------------------------------------------------------------------
+
+    def get_revoked_suspended_for_roster(self, roster_id: int) -> dict:
+        """Return revoked / suspended entries for a roster — i.e. items still
+        present in this (LOCKED) roster whose linked Application has been
+        revoked or suspended after the lock."""
+        rows = (
+            self.db.query(PaymentRosterItem, Application)
+            .join(Application, PaymentRosterItem.application_id == Application.id)
+            .filter(
+                PaymentRosterItem.roster_id == roster_id,
+                Application.quota_allocation_status.in_(("revoked", "suspended")),
+            )
+            .all()
+        )
+        revoked, suspended = [], []
+        for item, app in rows:
+            entry = RevokedSuspendedEntry(
+                application_id=app.id,
+                student_name=item.student_name,
+                student_id_number=item.student_id_number,
+                event_at=(app.revoked_at if app.quota_allocation_status == "revoked" else app.suspended_at),
+                reason=(app.revoke_reason if app.quota_allocation_status == "revoked" else app.suspend_reason),
+                item_id=item.id,
+            )
+            (revoked if app.quota_allocation_status == "revoked" else suspended).append(entry)
+        return {"revoked": revoked, "suspended": suspended}
+
+    def remove_item_from_locked_roster(
+        self,
+        roster_id: int,
+        item_id: int,
+        admin_user_id: int,
+        reason: Optional[str],
+    ) -> dict:
+        """Hard-delete a PaymentRosterItem from a LOCKED roster. Recompute
+        roster totals, set excel_stale=True, write audit log. Roster stays
+        LOCKED."""
+        roster = self.db.get(PaymentRoster, roster_id)
+        if roster is None:
+            raise ValueError(f"Roster {roster_id} not found")
+        if roster.status != RosterStatus.LOCKED:
+            raise RosterLockedError(f"Roster {roster_id} is not LOCKED (status={roster.status.value})")
+
+        item = self.db.get(PaymentRosterItem, item_id)
+        if item is None or item.roster_id != roster_id:
+            raise ValueError(f"Item {item_id} not found in roster {roster_id}")
+
+        removed_amount = item.scholarship_amount
+        removed_app_id = item.application_id
+        self.db.delete(item)
+        self.db.flush()
+
+        # Recompute totals using CASE-based split to match _recompute_roster_totals
+        total_count, qualified, total_amount = (
+            self.db.query(
+                func.count(PaymentRosterItem.id),
+                func.coalesce(
+                    func.sum(
+                        sa_case(
+                            (PaymentRosterItem.is_included.is_(True), 1),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+                func.coalesce(
+                    func.sum(
+                        sa_case(
+                            (PaymentRosterItem.is_included.is_(True), PaymentRosterItem.scholarship_amount),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+            )
+            .filter(PaymentRosterItem.roster_id == roster_id)
+            .one()
+        )
+
+        roster.total_applications = total_count
+        roster.qualified_count = qualified
+        roster.disqualified_count = total_count - qualified
+        roster.total_amount = total_amount
+        roster.excel_stale = True
+
+        self.db.add(
+            AuditLog.create_log(
+                user_id=admin_user_id,
+                action="roster.item_removed_after_lock",
+                resource_type="payment_roster",
+                resource_id=str(roster_id),
+                description=(f"Removed item {item_id} (application {removed_app_id}) from LOCKED roster"),
+                new_values={
+                    "item_id": item_id,
+                    "application_id": removed_app_id,
+                    "reason": reason,
+                    "removed_amount": float(removed_amount) if removed_amount else 0,
+                },
+            )
+        )
+        self.db.commit()
+        return {
+            "roster_id": roster_id,
+            "removed_item_id": item_id,
+            "qualified_count": qualified,
+            "total_amount": float(total_amount),
+            "excel_stale": True,
+        }

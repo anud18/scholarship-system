@@ -189,6 +189,60 @@ export function ManualDistributionPanel({
   } | null>(null);
   const [previewApplied, setPreviewApplied] = useState(false);
 
+  const [revokeTarget, setRevokeTarget] = useState<DistributionStudent | null>(null);
+  const [suspendTarget, setSuspendTarget] = useState<DistributionStudent | null>(null);
+  const [actionReason, setActionReason] = useState("");
+  const [isActioning, setIsActioning] = useState(false);
+
+  const handleRevokeConfirm = async () => {
+    if (!revokeTarget || actionReason.trim().length === 0) return;
+    setIsActioning(true);
+    try {
+      const resp = await apiClient.manualDistribution.revoke(
+        revokeTarget.application_id,
+        actionReason.trim()
+      );
+      if (resp.success) {
+        setSaveMessage({ type: "success", text: `已撤銷 ${revokeTarget.student_name}` });
+        await fetchData();
+      } else {
+        setSaveMessage({ type: "error", text: resp.message || "撤銷失敗" });
+      }
+    } catch (err: unknown) {
+      setSaveMessage({ type: "error", text: (err as Error)?.message || "撤銷失敗" });
+    } finally {
+      setIsActioning(false);
+      setRevokeTarget(null);
+      setActionReason("");
+    }
+  };
+
+  const handleSuspendConfirm = async () => {
+    if (!suspendTarget || actionReason.trim().length === 0) return;
+    setIsActioning(true);
+    try {
+      const resp = await apiClient.manualDistribution.suspend(
+        suspendTarget.application_id,
+        actionReason.trim()
+      );
+      if (resp.success) {
+        setSaveMessage({ type: "success", text: `已停發 ${suspendTarget.student_name}` });
+        await fetchData();
+      } else {
+        setSaveMessage({ type: "error", text: resp.message || "停發失敗" });
+      }
+    } catch (err: unknown) {
+      setSaveMessage({ type: "error", text: (err as Error)?.message || "停發失敗" });
+    } finally {
+      setIsActioning(false);
+      setSuspendTarget(null);
+      setActionReason("");
+    }
+  };
+
+  const isFinalized = (student: DistributionStudent) =>
+    student.status === "allocated" || student.status === "approved";
+
   /**
    * Flatten quota status into (sub_type × year) columns, ordered by:
    * - sub_type (by appearance order in quotaStatus keys)
@@ -1028,9 +1082,9 @@ export function ManualDistributionPanel({
                     </th>
                     <th
                       rowSpan={2}
-                      className="px-1.5 py-1.5 border border-slate-200 text-center font-semibold text-[11px] w-8 bg-red-50"
+                      className="px-1.5 py-1.5 border border-slate-200 text-center font-semibold text-[11px] w-16 bg-red-50"
                     >
-                      取消
+                      動作
                     </th>
                     {subTypeCols.length > 0 && (
                       <th
@@ -1185,30 +1239,40 @@ export function ManualDistributionPanel({
                                     </span>
                                   )}
                                 </td>
-                                {/* Cancel allocation button */}
+                                {/* 撤銷 / 停發 buttons (post-roster generation actions) */}
                                 <td className="px-1 py-1.5 border-r border-slate-100 text-center">
-                                  {curAlloc ? (
+                                  <div className="flex justify-center gap-0.5">
                                     <button
                                       onClick={() => {
-                                        setLocalAllocations(prev => {
-                                          const next = new Map(prev);
-                                          next.set(
-                                            student.ranking_item_id,
-                                            null
-                                          );
-                                          return next;
-                                        });
+                                        setRevokeTarget(student);
+                                        setActionReason("");
                                       }}
-                                      className="px-2 py-1 text-xs bg-red-50 text-red-600 hover:bg-red-100 rounded border border-red-200 cursor-pointer transition-colors"
-                                      title="取消此學生的分配"
+                                      disabled={!isFinalized(student)}
+                                      className={`px-1.5 py-0.5 text-[10px] rounded border transition-colors ${
+                                        isFinalized(student)
+                                          ? "bg-red-100 text-red-700 border-red-300 hover:bg-red-200 cursor-pointer"
+                                          : "bg-slate-50 text-slate-300 border-slate-200 cursor-not-allowed"
+                                      }`}
+                                      title={isFinalized(student) ? "撤銷此學生獎學金（過往造冊需手動處理）" : "尚未分發，無法撤銷"}
                                     >
-                                      ✕
+                                      撤
                                     </button>
-                                  ) : (
-                                    <span className="text-[10px] text-slate-300">
-                                      —
-                                    </span>
-                                  )}
+                                    <button
+                                      onClick={() => {
+                                        setSuspendTarget(student);
+                                        setActionReason("");
+                                      }}
+                                      disabled={!isFinalized(student)}
+                                      className={`px-1.5 py-0.5 text-[10px] rounded border transition-colors ${
+                                        isFinalized(student)
+                                          ? "bg-orange-100 text-orange-700 border-orange-300 hover:bg-orange-200 cursor-pointer"
+                                          : "bg-slate-50 text-slate-300 border-slate-200 cursor-not-allowed"
+                                      }`}
+                                      title={isFinalized(student) ? "停發此學生（過往造冊保留）" : "尚未分發，無法停發"}
+                                    >
+                                      停
+                                    </button>
+                                  </div>
                                 </td>
                                 {subTypeCols.map(col => {
                                   const isApplied =
@@ -1606,6 +1670,92 @@ export function ManualDistributionPanel({
           </div>
         </div>
       )}
+
+      <AlertDialog open={!!revokeTarget} onOpenChange={(open) => !open && setRevokeTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              確認撤銷 {revokeTarget?.student_name} 的獎學金分配？
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="text-sm text-slate-600 space-y-2">
+                <p>撤銷後：</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>此學生將從目前所有未鎖定造冊中移除</li>
+                  <li>此學生申請狀態變更為「已取消」</li>
+                  <li>已鎖定的歷史造冊需手動清除（清單會列在受影響造冊頁面提示）</li>
+                </ul>
+                <div className="pt-2">
+                  <label className="block text-sm font-medium mb-1">
+                    撤銷原因（必填）
+                  </label>
+                  <textarea
+                    className="w-full border border-slate-300 rounded px-2 py-1 text-sm"
+                    rows={3}
+                    maxLength={500}
+                    value={actionReason}
+                    onChange={(e) => setActionReason(e.target.value)}
+                    placeholder="請說明撤銷原因…"
+                  />
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isActioning}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isActioning || actionReason.trim().length === 0}
+              onClick={handleRevokeConfirm}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {isActioning ? "處理中…" : "確認撤銷"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!suspendTarget} onOpenChange={(open) => !open && setSuspendTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              確認停發 {suspendTarget?.student_name} 的獎學金分配？
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="text-sm text-slate-600 space-y-2">
+                <p>停發後：</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>此學生將從目前所有未鎖定造冊中移除</li>
+                  <li>此學生申請狀態變更為「已取消」</li>
+                  <li>已鎖定的歷史造冊不受影響（金額已發放保留）</li>
+                </ul>
+                <div className="pt-2">
+                  <label className="block text-sm font-medium mb-1">
+                    停發原因（必填）
+                  </label>
+                  <textarea
+                    className="w-full border border-slate-300 rounded px-2 py-1 text-sm"
+                    rows={3}
+                    maxLength={500}
+                    value={actionReason}
+                    onChange={(e) => setActionReason(e.target.value)}
+                    placeholder="請說明停發原因…"
+                  />
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isActioning}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isActioning || actionReason.trim().length === 0}
+              onClick={handleSuspendConfirm}
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+            >
+              {isActioning ? "處理中…" : "確認停發"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

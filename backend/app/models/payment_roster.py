@@ -120,6 +120,10 @@ class PaymentRoster(Base):
     notes = Column(Text)
     processing_log = Column(JSON)  # 處理過程日誌
 
+    # Set True when an item is removed from a LOCKED roster — UI shows
+    # "請重新匯出 Excel" hint. Cleared after re-export.
+    excel_stale = Column(Boolean, default=False, nullable=False, server_default="false")
+
     # 時間戳記
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())

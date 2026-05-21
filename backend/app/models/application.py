@@ -154,6 +154,15 @@ class Application(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    # Revoke / Suspend metadata (spec 2026-05-21)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    revoked_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    revoke_reason = Column(Text, nullable=True)
+
+    suspended_at = Column(DateTime(timezone=True), nullable=True)
+    suspended_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    suspend_reason = Column(Text, nullable=True)
+
     # 刪除追蹤 (Deletion tracking for soft delete)
     deleted_at = Column(DateTime(timezone=True), nullable=True)
     deleted_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)

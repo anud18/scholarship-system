@@ -306,3 +306,39 @@ class RosterScheduleResponse(RosterScheduleBase):
     @property
     def is_active(self) -> bool:
         return self.is_enabled and bool(self.cron_expression)
+
+
+class RemoveLockedItemRequest(BaseModel):
+    """Body for DELETE /payment-rosters/{roster_id}/items/{item_id}"""
+
+    reason: Optional[str] = Field(None, max_length=500)
+
+
+class RevokedSuspendedEntry(BaseModel):
+    """A single revoked- or suspended-allocation entry returned by
+    GET /payment-rosters/{roster_id}/revoked-suspended.
+
+    Field unification (intentional divergence from the spec's per-action
+    column names):
+        - `event_at` is populated from `Application.revoked_at` for entries
+          appearing in `revoked`, and from `Application.suspended_at` for
+          entries in `suspended`.
+        - `reason` is populated from `revoke_reason` / `suspend_reason`
+          symmetrically.
+        - `item_id` is the PaymentRosterItem.id (used by the LOCKED-roster
+          DELETE button in the frontend).
+    """
+
+    application_id: int
+    student_name: str
+    student_id_number: str
+    event_at: datetime
+    reason: Optional[str] = None
+    item_id: Optional[int] = None
+
+
+class RevokedSuspendedListResponse(BaseModel):
+    """Response body for GET /payment-rosters/{roster_id}/revoked-suspended"""
+
+    revoked: List[RevokedSuspendedEntry]
+    suspended: List[RevokedSuspendedEntry]
