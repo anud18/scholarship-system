@@ -147,5 +147,27 @@ export function createPaymentRostersApi() {
       );
       return toApiResponse(response);
     },
+
+    /**
+     * 鎖定造冊 (admin only)
+     */
+    lockRoster: async (roster_id: number): Promise<ApiResponse<{ roster_code: string }>> => {
+      const response = await typedClient.raw.POST(
+        '/api/v1/payment-rosters/{roster_id}/lock',
+        { params: { path: { roster_id } } }
+      );
+      return toApiResponse(response) as ApiResponse<{ roster_code: string }>;
+    },
+
+    /**
+     * 解鎖造冊 (admin only)
+     */
+    unlockRoster: async (roster_id: number): Promise<ApiResponse<{ roster_code: string }>> => {
+      const response = await typedClient.raw.POST(
+        '/api/v1/payment-rosters/{roster_id}/unlock',
+        { params: { path: { roster_id } } }
+      );
+      return toApiResponse(response) as ApiResponse<{ roster_code: string }>;
+    },
   };
 }
