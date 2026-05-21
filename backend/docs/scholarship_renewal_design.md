@@ -1,5 +1,9 @@
 # 獎學金續領申請期間設計
 
+> **Note:** This document describes the timeline framework only. For the complete
+> end-to-end design including challenge applications, slot release, and waitlist
+> fill-in, see `docs/superpowers/specs/2026-05-13-renewal-application-design.md`.
+
 ## 概述
 
 本設計為獎學金系統添加了續領申請期間功能，允許系統優先處理續領申請，然後再處理一般申請。這樣的設計確保了續領申請的優先權，並提供了清晰的審查流程。

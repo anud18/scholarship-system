@@ -181,6 +181,82 @@ export interface AvailableCombinations {
   semesters: string[];
 }
 
+// ---------------------------------------------------------------------------
+// Renewal + challenge: distribution state and release-chain preview
+//
+// Backed by:
+//   GET  /api/v1/manual-distribution/state
+//   POST /api/v1/manual-distribution/preview-distribution
+// ---------------------------------------------------------------------------
+
+/** Approved renewal that is currently occupying a (sub_type × renewal_year) slot. */
+export interface DistributionStateRenewalApp {
+  application_id: number;
+  student_name: string | null;
+  /** True when a challenge application points at this renewal (Application_C). */
+  has_challenge: boolean;
+}
+
+/** Group of approved renewals sharing the same (sub_type, renewal_year). */
+export interface DistributionStateRenewalGroup {
+  sub_type: string | null;
+  renewal_year: number;
+  applications: DistributionStateRenewalApp[];
+}
+
+/** Available pool per (sub_type, allocation_year): total / used / remaining. */
+export interface DistributionStateAvailableQuota {
+  sub_type: string;
+  allocation_year: number;
+  total: number;
+  used: number;
+  remaining: number;
+}
+
+/** Minimal info about the renewal a challenge candidate is targeting. */
+export interface DistributionStateChallengedRenewal {
+  renewal_application_id: number;
+  sub_type: string | null;
+  renewal_year: number | null;
+}
+
+/** Ranked non-renewal candidate (pure-new or challenge). */
+export interface DistributionStateCandidate {
+  rank: number;
+  application_id: number;
+  student_name: string | null;
+  is_challenge: boolean;
+  challenged_renewal: DistributionStateChallengedRenewal | null;
+  applying_sub_type: string | null;
+}
+
+/** Combined panel-state payload returned by GET /state. */
+export interface DistributionState {
+  renewal_allocations: DistributionStateRenewalGroup[];
+  available_quotas: DistributionStateAvailableQuota[];
+  candidates: DistributionStateCandidate[];
+}
+
+/** Single entry in the release_chain returned by /preview-distribution. */
+export interface ReleaseChainItem {
+  /** The challenge application that would win and trigger the release. */
+  challenge_application_id?: number;
+  /** The renewal application that would be cancelled. */
+  cancelled_application_id: number;
+  /** The slot that would be freed. */
+  freed_slot: {
+    sub_type: string | null;
+    allocation_year: number | null;
+  };
+  /** Suggested waitlist candidate (pure-new) to fill the freed slot. */
+  suggested_fill_id: number | null;
+  suggested_fill_name: string | null;
+}
+
+export interface PreviewDistributionResult {
+  release_chain: ReleaseChainItem[];
+}
+
 export function createManualDistributionApi() {
   return {
     /**
@@ -219,6 +295,47 @@ export function createManualDistributionApi() {
         }
       );
       return toApiResponse(response) as ApiResponse<DistributionStudent[]>;
+    },
+
+    /**
+     * Get the full distribution-panel state for a scholarship_type + academic_year:
+     *   - renewal_allocations (approved renewals grouped by sub_type × renewal_year)
+     *   - available_quotas (per (sub_type, allocation_year))
+     *   - candidates (ranked non-renewal applicants, including challenges)
+     *
+     * Used by the admin Manual Distribution panel to render the renewal-aware UI.
+     * Read-only: never mutates state.
+     */
+    getState: async (
+      scholarship_type_id: number,
+      academic_year: number
+    ): Promise<ApiResponse<DistributionState>> => {
+      const response = await typedClient.raw.GET(
+        "/api/v1/manual-distribution/state" as any,
+        {
+          params: {
+            query: { scholarship_type_id, academic_year } as any,
+          },
+        }
+      );
+      return toApiResponse(response) as ApiResponse<DistributionState>;
+    },
+
+    /**
+     * Dry-run: compute the release_chain for the proposed allocations.
+     *
+     * For each proposed allocation whose application is a challenge, returns
+     * the renewal that would be cancelled and the next pure-new waitlist
+     * candidate who would inherit the freed slot. Nothing is persisted.
+     */
+    previewDistribution: async (
+      request: AllocateRequest
+    ): Promise<ApiResponse<PreviewDistributionResult>> => {
+      const response = await typedClient.raw.POST(
+        "/api/v1/manual-distribution/preview-distribution" as any,
+        { body: request as any }
+      );
+      return toApiResponse(response) as ApiResponse<PreviewDistributionResult>;
     },
 
     /**
@@ -366,62 +483,6 @@ export function createManualDistributionApi() {
     /**
      * Import received months from Excel file.
      */
-    /**
-     * Revoke an application's allocation post-finalization.
-     * Removes the student from unlocked rosters and marks the application as cancelled/revoked.
-     */
-    revoke: async (
-      application_id: number,
-      reason: string
-    ): Promise<ApiResponse<{
-      application_id: number;
-      quota_allocation_status: "revoked";
-      event_at: string;
-      affected_unlocked_rosters: number[];
-    }>> => {
-      const response = await typedClient.raw.POST(
-        "/api/v1/manual-distribution/applications/{application_id}/revoke",
-        {
-          params: { path: { application_id } },
-          body: { reason },
-        }
-      );
-      return toApiResponse(response) as ApiResponse<{
-        application_id: number;
-        quota_allocation_status: "revoked";
-        event_at: string;
-        affected_unlocked_rosters: number[];
-      }>;
-    },
-
-    /**
-     * Suspend an application's allocation post-finalization.
-     * Removes the student from unlocked rosters and marks the application as cancelled/suspended.
-     */
-    suspend: async (
-      application_id: number,
-      reason: string
-    ): Promise<ApiResponse<{
-      application_id: number;
-      quota_allocation_status: "suspended";
-      event_at: string;
-      affected_unlocked_rosters: number[];
-    }>> => {
-      const response = await typedClient.raw.POST(
-        "/api/v1/manual-distribution/applications/{application_id}/suspend",
-        {
-          params: { path: { application_id } },
-          body: { reason },
-        }
-      );
-      return toApiResponse(response) as ApiResponse<{
-        application_id: number;
-        quota_allocation_status: "suspended";
-        event_at: string;
-        affected_unlocked_rosters: number[];
-      }>;
-    },
-
     importReceivedMonths: async (
       scholarshipTypeId: number,
       academicYear: number,

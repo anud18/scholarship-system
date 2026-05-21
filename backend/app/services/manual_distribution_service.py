@@ -1289,3 +1289,512 @@ class ManualDistributionService:
             roster.qualified_count = qualified_count
             roster.disqualified_count = total_count - qualified_count
             roster.total_amount = total_amount
+    # ------------------------------------------------------------------ #
+    # Phase 6 — General distribution with challenge release + fill-in
+    # See docs/superpowers/specs/2026-05-13-renewal-application-design.md
+    # Section 9 (一般階段分發演算法).
+    # ------------------------------------------------------------------ #
+
+    async def _get_active_config(self, scholarship_type_id: int, academic_year: int) -> ScholarshipConfiguration:
+        """Load the active ScholarshipConfiguration for (type, year).
+
+        Phase 6 distribution operates on quotas at the (sub_type, year) level
+        rather than per-college; semester is unused here since renewal flows
+        target yearly scholarships (see spec Section 1).
+        """
+        stmt = (
+            select(ScholarshipConfiguration)
+            .where(
+                and_(
+                    ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+                    ScholarshipConfiguration.academic_year == academic_year,
+                    ScholarshipConfiguration.is_active == True,  # noqa: E712
+                )
+            )
+            .order_by(ScholarshipConfiguration.id.desc())
+        )
+        config = (await self.db.execute(stmt)).scalars().first()
+        if config is None:
+            raise ValueError(f"No active ScholarshipConfiguration for type {scholarship_type_id}, year {academic_year}")
+        return config
+
+    async def _count_approved_renewals_per_pool(
+        self, scholarship_type_id: int, academic_year: int
+    ) -> dict[tuple[str, int], int]:
+        """Count approved renewals grouped by (sub_scholarship_type, renewal_year).
+
+        Used to compute remaining quota = total - already-consumed-by-renewals.
+        Renewals without an explicit renewal_year fall back to academic_year
+        (they came from this year's pool).
+        """
+        stmt = (
+            select(
+                Application.sub_scholarship_type,
+                Application.renewal_year,
+                func.count(Application.id),
+            )
+            .where(
+                Application.scholarship_type_id == scholarship_type_id,
+                Application.academic_year == academic_year,
+                Application.is_renewal.is_(True),
+                Application.status == ApplicationStatus.approved,
+            )
+            .group_by(Application.sub_scholarship_type, Application.renewal_year)
+        )
+        rows = (await self.db.execute(stmt)).all()
+        result: dict[tuple[str, int], int] = {}
+        for sub_type, renewal_year, count in rows:
+            year = int(renewal_year) if renewal_year is not None else int(academic_year)
+            result[(sub_type, year)] = result.get((sub_type, year), 0) + int(count)
+        return result
+
+    async def _get_general_candidates(
+        self,
+        scholarship_type_id: int,
+        academic_year: int,
+        sub_type: str,
+    ) -> list[CollegeRankingItem]:
+        """Return ranked candidates for first-round distribution on `sub_type`.
+
+        Includes BOTH pure-new applicants and challenge applicants whose
+        target sub_type matches — challenges compete for slots within the
+        sub_type they're applying to.
+        """
+        stmt = (
+            select(CollegeRankingItem)
+            .options(selectinload(CollegeRankingItem.application))
+            .join(Application, CollegeRankingItem.application_id == Application.id)
+            .where(
+                Application.scholarship_type_id == scholarship_type_id,
+                Application.academic_year == academic_year,
+                Application.sub_scholarship_type == sub_type,
+                Application.is_renewal.is_(False),
+                Application.status.notin_(
+                    [
+                        ApplicationStatus.approved,
+                        ApplicationStatus.rejected,
+                        ApplicationStatus.withdrawn,
+                        ApplicationStatus.deleted,
+                        ApplicationStatus.cancelled,
+                        ApplicationStatus.cancelled_by_challenge,
+                    ]
+                ),
+                Application.deleted_at.is_(None),
+            )
+            .order_by(CollegeRankingItem.rank_position)
+        )
+        return list((await self.db.execute(stmt)).scalars().all())
+
+    async def _get_waitlist_candidates(
+        self,
+        scholarship_type_id: int,
+        academic_year: int,
+        sub_type: str,
+        limit: int,
+    ) -> list[CollegeRankingItem]:
+        """Return pure-new candidates eligible to fill released slots.
+
+        Filters challenges_application_id IS NULL — only pure-new applicants
+        can fill released slots (spec Section 9.2). This prevents release
+        chains: a challenge winner's freed slot only flows to a pure-new
+        applicant, so no further releases cascade.
+        """
+        stmt = (
+            select(CollegeRankingItem)
+            .options(selectinload(CollegeRankingItem.application))
+            .join(Application, CollegeRankingItem.application_id == Application.id)
+            .where(
+                Application.scholarship_type_id == scholarship_type_id,
+                Application.academic_year == academic_year,
+                Application.sub_scholarship_type == sub_type,
+                Application.is_renewal.is_(False),
+                Application.challenges_application_id.is_(None),
+                Application.status != ApplicationStatus.approved,
+                Application.status.notin_(
+                    [
+                        ApplicationStatus.rejected,
+                        ApplicationStatus.withdrawn,
+                        ApplicationStatus.deleted,
+                        ApplicationStatus.cancelled,
+                        ApplicationStatus.cancelled_by_challenge,
+                    ]
+                ),
+                Application.deleted_at.is_(None),
+            )
+            .order_by(CollegeRankingItem.rank_position)
+            .limit(limit)
+        )
+        return list((await self.db.execute(stmt)).scalars().all())
+
+    @staticmethod
+    def _pick_pool(
+        remaining: dict[tuple[str, int], int],
+        sub_type: str,
+        config: ScholarshipConfiguration,
+    ) -> Optional[int]:
+        """Pick the next allocation_year with available quota for `sub_type`.
+
+        Policy: prefer the current academic_year first, then prior years in
+        descending order. Returns None when no pool with positive remaining
+        quota exists for this sub_type.
+        """
+        candidate_years = sorted(
+            [y for (st, y), c in remaining.items() if st == sub_type and c > 0],
+            reverse=True,
+        )
+        if not candidate_years:
+            return None
+        # Prefer the configured current year if available; otherwise the
+        # highest-numbered prior year (already sorted descending).
+        if config.academic_year in candidate_years:
+            return config.academic_year
+        return candidate_years[0]
+
+    @staticmethod
+    def _build_remaining_quota(
+        quotas: dict,
+        used_by_renewal: dict[tuple[str, int], int],
+    ) -> dict[tuple[str, int], int]:
+        """Build {(sub_type, alloc_year): remaining} from config quotas.
+
+        The Phase 6 quotas dict is `{sub_type: {year_string: total_int}}` per
+        spec Section 9.1. Year keys are coerced to int so downstream code can
+        compare against renewal_year / academic_year (also ints).
+        """
+        remaining: dict[tuple[str, int], int] = {}
+        for sub_type, year_map in (quotas or {}).items():
+            if not isinstance(year_map, dict):
+                continue
+            for year_key, total in year_map.items():
+                try:
+                    year_int = int(year_key)
+                except (TypeError, ValueError):
+                    # Non-year keys (legacy college-code matrix) aren't used
+                    # by the Phase 6 algorithm; skip silently.
+                    continue
+                used = used_by_renewal.get((sub_type, year_int), 0)
+                remaining[(sub_type, year_int)] = int(total) - used
+        return remaining
+
+    async def execute_general_distribution(
+        self,
+        scholarship_type_id: int,
+        academic_year: int,
+    ) -> dict[str, Any]:
+        """Run general-phase distribution with challenge release and waitlist fill-in.
+
+        Spec Section 9.1 — algorithm:
+        1. Compute remaining quota = total - approved renewals per pool.
+        2. First-round: per sub_type, walk ranked candidates and assign each
+           to the next available (sub_type, allocation_year) pool.
+        3. For every approved challenge: cancel its renewal target with
+           status=cancelled_by_challenge, track the freed slot.
+        4. Fill released slots from the same-sub_type waitlist (pure-new
+           applicants only — preventing cascading releases).
+        5. Commit and return summary stats per spec Section 12.
+        """
+        config = await self._get_active_config(scholarship_type_id, academic_year)
+        quotas = config.quotas or {}
+
+        # 1. Remaining quota after subtracting approved renewals.
+        used_by_renewal = await self._count_approved_renewals_per_pool(scholarship_type_id, academic_year)
+        remaining = self._build_remaining_quota(quotas, used_by_renewal)
+
+        # 2. First-round distribution per sub_type.
+        approved_challenges: list[Application] = []
+        for sub_type in quotas.keys():
+            candidates = await self._get_general_candidates(scholarship_type_id, academic_year, sub_type)
+            for cand in candidates:
+                pool_year = self._pick_pool(remaining, sub_type, config)
+                if pool_year is None:
+                    break
+                app = cand.application
+                if app is None:
+                    continue
+                app.status = ApplicationStatus.approved
+                app.sub_scholarship_type = sub_type
+                app.quota_allocation_status = "allocated"
+                app.review_stage = ReviewStage.quota_distributed
+                app.approved_at = datetime.now(timezone.utc)
+                cand.is_allocated = True
+                cand.allocated_sub_type = sub_type
+                cand.allocation_year = pool_year
+                cand.status = "allocated"
+                cand.allocation_reason = "一般階段自動分發"
+                remaining[(sub_type, pool_year)] -= 1
+                if app.challenges_application_id is not None:
+                    approved_challenges.append(app)
+
+        # 3. Release handling — approved challenges cancel their renewal targets.
+        released: dict[tuple[str, int], int] = {}
+        for challenge_app in approved_challenges:
+            renewal_app = await self.db.scalar(
+                select(Application).where(Application.id == challenge_app.challenges_application_id)
+            )
+            if renewal_app is None:
+                logger.warning(
+                    "Challenge app %s references missing renewal id=%s — skipping release",
+                    challenge_app.id,
+                    challenge_app.challenges_application_id,
+                )
+                continue
+            renewal_app.status = ApplicationStatus.cancelled_by_challenge
+            renewal_app.cancelled_due_to_application_id = challenge_app.id
+            freed_year = int(renewal_app.renewal_year) if renewal_app.renewal_year is not None else int(academic_year)
+            key = (renewal_app.sub_scholarship_type, freed_year)
+            released[key] = released.get(key, 0) + 1
+
+        # 4. Fill released slots from waitlist of same sub_type.
+        fill_in_count = 0
+        for (sub_type, alloc_year), count in released.items():
+            waitlist = await self._get_waitlist_candidates(scholarship_type_id, academic_year, sub_type, limit=count)
+            for cand in waitlist:
+                app = cand.application
+                if app is None:
+                    continue
+                app.status = ApplicationStatus.approved
+                app.sub_scholarship_type = sub_type
+                app.quota_allocation_status = "allocated"
+                app.review_stage = ReviewStage.quota_distributed
+                app.approved_at = datetime.now(timezone.utc)
+                cand.is_allocated = True
+                cand.allocated_sub_type = sub_type
+                cand.allocation_year = alloc_year
+                cand.status = "allocated"
+                cand.allocation_reason = "釋出 slot 候補遞補"
+                fill_in_count += 1
+
+        await self.db.commit()
+
+        return {
+            "approved_renewals": sum(used_by_renewal.values()),
+            "approved_challenges": len(approved_challenges),
+            "released_slots": dict(released),
+            "filled_in": fill_in_count,
+            "unfilled": sum(released.values()) - fill_in_count,
+        }
+
+    async def compute_distribution_state(self, scholarship_type_id: int, academic_year: int) -> dict[str, Any]:
+        """Aggregate the state needed by the manual distribution panel UI.
+
+        Returns a single payload covering:
+
+          * ``renewal_allocations`` — approved renewals grouped by
+            ``(sub_type, renewal_year)``; each entry includes a
+            ``has_challenge`` flag if a downstream challenge application
+            points at the renewal (Application_C).
+          * ``available_quotas`` — per ``(sub_type, allocation_year)``:
+            ``total`` from config, ``used`` from approved renewals, and
+            ``remaining`` = total − used. Legacy non-year-keyed quota maps
+            (e.g. ``{college_code: int}``) are skipped silently — Phase 6
+            only operates on year-keyed quotas (spec Section 9.1).
+          * ``candidates`` — non-renewal applicants ranked via
+            ``CollegeRankingItem.rank_position``. For each candidate,
+            ``is_challenge`` is true when ``challenges_application_id`` is
+            set, and ``challenged_renewal`` carries minimal info about the
+            renewal that would be cancelled if the challenge wins.
+
+        This endpoint never mutates state — it's a read aggregator the
+        admin UI calls to render the panel.
+        """
+        config = await self._get_active_config(scholarship_type_id, academic_year)
+        quotas = config.quotas or {}
+
+        # --- 1. Renewal allocations grouped by (sub_type, renewal_year) --- #
+        renewal_apps_result = await self.db.execute(
+            select(Application)
+            .options(joinedload(Application.student))
+            .where(
+                Application.scholarship_type_id == scholarship_type_id,
+                Application.academic_year == academic_year,
+                Application.is_renewal.is_(True),
+                Application.status == ApplicationStatus.approved,
+            )
+        )
+        renewal_apps = renewal_apps_result.scalars().unique().all()
+
+        # Mark challenges. Use a sentinel (-1) so the IN clause is valid
+        # across dialects when no renewals exist.
+        renewal_ids = [a.id for a in renewal_apps]
+        challenge_rows = (
+            (
+                await self.db.execute(
+                    select(Application).where(Application.challenges_application_id.in_(renewal_ids or [-1]))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        challenged_renewal_ids = {ch.challenges_application_id for ch in challenge_rows}
+
+        renewal_grouped: dict[tuple[str, int], list[dict[str, Any]]] = {}
+        for app in renewal_apps:
+            # Fallback renewal_year → academic_year matches the rest of the
+            # Phase 6 code (see _count_approved_renewals_per_pool).
+            year_key = int(app.renewal_year) if app.renewal_year is not None else int(academic_year)
+            key = (app.sub_scholarship_type, year_key)
+            renewal_grouped.setdefault(key, []).append(
+                {
+                    "application_id": app.id,
+                    "student_name": app.student.name if app.student else None,
+                    "has_challenge": app.id in challenged_renewal_ids,
+                }
+            )
+
+        # --- 2. Available quotas per (sub_type, allocation_year) --- #
+        used = await self._count_approved_renewals_per_pool(scholarship_type_id, academic_year)
+        available_quotas: list[dict[str, Any]] = []
+        for sub_type, year_map in quotas.items():
+            # Skip legacy non-year-keyed entries (e.g. {college_code: int}).
+            if not isinstance(year_map, dict):
+                continue
+            for year_key, total in year_map.items():
+                try:
+                    year = int(year_key)
+                except (TypeError, ValueError):
+                    # Non-int keys (legacy college matrix) are not used by
+                    # the Phase 6 algorithm — skip silently.
+                    continue
+                try:
+                    total_int = int(total)
+                except (TypeError, ValueError):
+                    continue
+                used_count = used.get((sub_type, year), 0)
+                available_quotas.append(
+                    {
+                        "sub_type": sub_type,
+                        "allocation_year": year,
+                        "total": total_int,
+                        "used": used_count,
+                        "remaining": total_int - used_count,
+                    }
+                )
+
+        # --- 3. Candidates (general phase, non-renewal) --- #
+        candidates_result = await self.db.execute(
+            select(CollegeRankingItem, Application)
+            .options(joinedload(Application.student))
+            .join(Application, CollegeRankingItem.application_id == Application.id)
+            .where(
+                Application.scholarship_type_id == scholarship_type_id,
+                Application.academic_year == academic_year,
+                Application.is_renewal.is_(False),
+                Application.deleted_at.is_(None),
+            )
+            .order_by(CollegeRankingItem.rank_position)
+        )
+        cands = candidates_result.unique().all()
+
+        # Batch-load the renewal targets of any challenge candidates so we
+        # avoid N+1 lookups for the (typically small) challenge subset.
+        challenge_target_ids = {
+            app.challenges_application_id for _, app in cands if app.challenges_application_id is not None
+        }
+        renewal_by_id: dict[int, Application] = {}
+        if challenge_target_ids:
+            target_rows = (
+                (await self.db.execute(select(Application).where(Application.id.in_(challenge_target_ids))))
+                .scalars()
+                .all()
+            )
+            renewal_by_id = {r.id: r for r in target_rows}
+
+        candidates: list[dict[str, Any]] = []
+        for ri, app in cands:
+            challenged_renewal: Optional[dict[str, Any]] = None
+            if app.challenges_application_id:
+                renewal = renewal_by_id.get(app.challenges_application_id)
+                if renewal is not None:
+                    challenged_renewal = {
+                        "renewal_application_id": renewal.id,
+                        "sub_type": renewal.sub_scholarship_type,
+                        "renewal_year": renewal.renewal_year,
+                    }
+            candidates.append(
+                {
+                    "rank": ri.rank_position,
+                    "application_id": app.id,
+                    "student_name": app.student.name if app.student else None,
+                    "is_challenge": app.challenges_application_id is not None,
+                    "challenged_renewal": challenged_renewal,
+                    "applying_sub_type": app.sub_scholarship_type,
+                }
+            )
+
+        return {
+            "renewal_allocations": [
+                {"sub_type": sub_type, "renewal_year": year, "applications": items}
+                for (sub_type, year), items in renewal_grouped.items()
+            ],
+            "available_quotas": available_quotas,
+            "candidates": candidates,
+        }
+
+    async def preview_release_chain(self, proposed_allocations: list) -> dict[str, Any]:
+        """Dry-run preview: which renewals would be cancelled and who would fill in.
+
+        For each proposed allocation whose application is a challenge (i.e.
+        has challenges_application_id set), returns the renewal that would
+        be cancelled and the next waitlist candidate who would inherit the
+        freed slot. Does not persist anything.
+        """
+        chain: list[dict[str, Any]] = []
+        # Track per-sub_type fill-in suggestions so a single preview call
+        # never suggests the same waitlist candidate twice.
+        used_fill_ids: set[int] = set()
+
+        for alloc in proposed_allocations:
+            # Support both Pydantic schema objects and plain dicts.
+            ranking_item_id = getattr(alloc, "ranking_item_id", None)
+            if ranking_item_id is None and isinstance(alloc, dict):
+                ranking_item_id = alloc.get("ranking_item_id")
+            if ranking_item_id is None:
+                continue
+
+            item = await self.db.scalar(
+                select(CollegeRankingItem)
+                .options(selectinload(CollegeRankingItem.application))
+                .where(CollegeRankingItem.id == ranking_item_id)
+            )
+            if item is None or item.application is None:
+                continue
+            app = item.application
+            if not app.challenges_application_id:
+                continue
+
+            renewal = await self.db.scalar(select(Application).where(Application.id == app.challenges_application_id))
+            if renewal is None:
+                continue
+
+            waitlist = await self._get_waitlist_candidates(
+                renewal.scholarship_type_id,
+                app.academic_year,
+                renewal.sub_scholarship_type,
+                limit=len(used_fill_ids) + 1,
+            )
+            suggested_app: Optional[Application] = None
+            for cand in waitlist:
+                if cand.application and cand.application.id not in used_fill_ids:
+                    suggested_app = cand.application
+                    used_fill_ids.add(suggested_app.id)
+                    break
+
+            suggested_name: Optional[str] = None
+            if suggested_app is not None:
+                sd = suggested_app.student_data or {}
+                suggested_name = sd.get("std_cname") or sd.get("name")
+
+            chain.append(
+                {
+                    "challenge_application_id": app.id,
+                    "cancelled_application_id": renewal.id,
+                    "freed_slot": {
+                        "sub_type": renewal.sub_scholarship_type,
+                        "allocation_year": (int(renewal.renewal_year) if renewal.renewal_year is not None else None),
+                    },
+                    "suggested_fill_id": suggested_app.id if suggested_app else None,
+                    "suggested_fill_name": suggested_name,
+                }
+            )
+
+        return {"release_chain": chain}

@@ -37,6 +37,7 @@ class ApplicationStatus(enum.Enum):
     withdrawn = "withdrawn"  # 撤回
     cancelled = "cancelled"  # 取消
     manual_excluded = "manual_excluded"  # 手動排除
+    cancelled_by_challenge = "cancelled_by_challenge"  # 因挑戰申請成功被自動取消
     deleted = "deleted"  # 刪除
 
 

@@ -39,6 +39,7 @@ export enum ApplicationStatus {
   RETURNED = "returned",
   WITHDRAWN = "withdrawn",
   CANCELLED = "cancelled",
+  CANCELLED_BY_CHALLENGE = "cancelled_by_challenge",
   MANUAL_EXCLUDED = "manual_excluded",
   DELETED = "deleted",
 }
@@ -169,6 +170,7 @@ export const getApplicationStatusLabel = (
       [ApplicationStatus.RETURNED]: "已退回",
       [ApplicationStatus.WITHDRAWN]: "已撤回",
       [ApplicationStatus.CANCELLED]: "已取消",
+      [ApplicationStatus.CANCELLED_BY_CHALLENGE]: "已取消（因挑戰升級）",
       [ApplicationStatus.MANUAL_EXCLUDED]: "手動排除",
       [ApplicationStatus.DELETED]: "已刪除",
     },
@@ -183,6 +185,7 @@ export const getApplicationStatusLabel = (
       [ApplicationStatus.RETURNED]: "Returned",
       [ApplicationStatus.WITHDRAWN]: "Withdrawn",
       [ApplicationStatus.CANCELLED]: "Cancelled",
+      [ApplicationStatus.CANCELLED_BY_CHALLENGE]: "Cancelled (Replaced by Challenge)",
       [ApplicationStatus.MANUAL_EXCLUDED]: "Manually Excluded",
       [ApplicationStatus.DELETED]: "Deleted",
     },
@@ -218,6 +221,7 @@ export const getApplicationStatusBadgeVariant = (
     case ApplicationStatus.RETURNED:
     case ApplicationStatus.WITHDRAWN:
     case ApplicationStatus.CANCELLED:
+    case ApplicationStatus.CANCELLED_BY_CHALLENGE:
     case ApplicationStatus.MANUAL_EXCLUDED:
       return "secondary";
 

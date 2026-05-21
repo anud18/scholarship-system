@@ -18,7 +18,7 @@ from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFound
 from app.core.metrics import scholarship_applications_total, scholarship_reviews_total
 from app.core.schema_validation import serialize_value
 from app.models.application import Application, ApplicationStatus
-from app.models.enums import Semester
+from app.models.enums import ReviewStage, Semester
 from app.models.review import ApplicationReview, ApplicationReviewItem
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType, SubTypeSelectionMode
 from app.models.user import User, UserRole
@@ -36,6 +36,7 @@ from app.services.eligibility_service import EligibilityService
 from app.services.email_automation_service import email_automation_service
 from app.services.email_service import EmailService
 from app.services.minio_service import minio_service
+from app.services.review_phase_filter import apply_renewal_phase_filter
 from app.services.student_service import StudentService
 
 func: Any = sa_func
@@ -227,9 +228,14 @@ class ApplicationService:
             student_id=self._get_student_id_from_user(user) if user else None,
             scholarship_type_id=application.scholarship_type_id,
             scholarship_subtype_list=application.scholarship_subtype_list or [],
+            sub_scholarship_type=application.sub_scholarship_type,
             status=application.status,
             status_name=application.status_name,
             is_renewal=application.is_renewal,
+            renewal_year=application.renewal_year,
+            previous_application_id=application.previous_application_id,
+            challenges_application_id=application.challenges_application_id,
+            cancelled_due_to_application_id=application.cancelled_due_to_application_id,
             academic_year=application.academic_year,
             semester=self._convert_semester_to_string(application.semester),
             student_data=application.student_data or {},
@@ -680,10 +686,15 @@ class ApplicationService:
             scholarship_type_id=application.scholarship_type_id,
             scholarship_type_zh=application.scholarship.name if application.scholarship else None,
             scholarship_subtype_list=application.scholarship_subtype_list or [],
+            sub_scholarship_type=application.sub_scholarship_type,
             status=application.status,
             status_name=application.status_name,
             review_stage=serialize_value(application.review_stage),
             is_renewal=application.is_renewal,
+            renewal_year=application.renewal_year,
+            previous_application_id=application.previous_application_id,
+            challenges_application_id=application.challenges_application_id,
+            cancelled_due_to_application_id=application.cancelled_due_to_application_id,
             academic_year=application.academic_year,
             semester=self._convert_semester_to_string(application.semester),
             student_data=application.student_data,
@@ -823,8 +834,15 @@ class ApplicationService:
                 scholarship_type=application.scholarship.code if application.scholarship else None,
                 scholarship_type_id=application.scholarship_type_id,
                 scholarship_type_zh=application.scholarship.name if application.scholarship else "未知獎學金",
+                scholarship_subtype_list=application.scholarship_subtype_list or [],
+                sub_scholarship_type=application.sub_scholarship_type,
                 status=application.status,
                 status_name=application.status_name,
+                is_renewal=application.is_renewal,
+                renewal_year=application.renewal_year,
+                previous_application_id=application.previous_application_id,
+                challenges_application_id=application.challenges_application_id,
+                cancelled_due_to_application_id=application.cancelled_due_to_application_id,
                 academic_year=application.academic_year,
                 semester=self._convert_semester_to_string(application.semester),
                 student_data=application.student_data,
@@ -997,11 +1015,16 @@ class ApplicationService:
             "student_id": application.student.nycu_id if application.student else None,
             "scholarship_type_id": application.scholarship_type_id,
             "scholarship_subtype_list": application.scholarship_subtype_list or [],
+            "sub_scholarship_type": application.sub_scholarship_type,
             "sub_type_labels": sub_type_labels,
             "status": application.status,
             "status_name": application.status_name,
             "review_stage": serialize_value(application.review_stage),
             "is_renewal": application.is_renewal,
+            "renewal_year": application.renewal_year,
+            "previous_application_id": application.previous_application_id,
+            "challenges_application_id": application.challenges_application_id,
+            "cancelled_due_to_application_id": application.cancelled_due_to_application_id,
             "academic_year": application.academic_year,
             "semester": self._convert_semester_to_string(application.semester),
             "student_data": application.student_data or {},
@@ -1413,8 +1436,14 @@ class ApplicationService:
             "student_id": self._get_student_id_from_user(user),
             "scholarship_type_id": application.scholarship_type_id,
             "scholarship_subtype_list": application.scholarship_subtype_list,
+            "sub_scholarship_type": application.sub_scholarship_type,
             "status": application.status,
             "status_name": application.status_name,
+            "is_renewal": application.is_renewal,
+            "renewal_year": application.renewal_year,
+            "previous_application_id": application.previous_application_id,
+            "challenges_application_id": application.challenges_application_id,
+            "cancelled_due_to_application_id": application.cancelled_due_to_application_id,
             "academic_year": application.academic_year,
             "semester": application.semester,
             "student_data": application.student_data,
@@ -1552,8 +1581,15 @@ class ApplicationService:
                 scholarship_type=application.scholarship.code if application.scholarship else None,
                 scholarship_type_id=application.scholarship_type_id,
                 scholarship_type_zh=application.scholarship.name if application.scholarship else None,
+                scholarship_subtype_list=application.scholarship_subtype_list or [],
+                sub_scholarship_type=application.sub_scholarship_type,
                 status=application.status,
                 status_name=application.status_name,
+                is_renewal=application.is_renewal,
+                renewal_year=application.renewal_year,
+                previous_application_id=application.previous_application_id,
+                challenges_application_id=application.challenges_application_id,
+                cancelled_due_to_application_id=application.cancelled_due_to_application_id,
                 academic_year=application.academic_year,
                 semester=self._convert_semester_to_string(application.semester),
                 student_data=application.student_data,
@@ -1967,8 +2003,15 @@ class ApplicationService:
                 scholarship_type=application.scholarship.code if application.scholarship else None,
                 scholarship_type_id=application.scholarship_type_id,
                 scholarship_type_zh=application.scholarship.name if application.scholarship else None,
+                scholarship_subtype_list=application.scholarship_subtype_list or [],
+                sub_scholarship_type=application.sub_scholarship_type,
                 status=application.status,
                 status_name=application.status_name,
+                is_renewal=application.is_renewal,
+                renewal_year=application.renewal_year,
+                previous_application_id=application.previous_application_id,
+                challenges_application_id=application.challenges_application_id,
+                cancelled_due_to_application_id=application.cancelled_due_to_application_id,
                 academic_year=application.academic_year,
                 semester=self._convert_semester_to_string(application.semester),
                 student_data=application.student_data,
@@ -2418,6 +2461,11 @@ class ApplicationService:
                         ]
                     )
                 )
+                # Phase 4 (renewal routing): pending professor lists must only
+                # include applications matching the *current* review phase —
+                # renewal apps during the renewal_professor_review window,
+                # non-renewal apps during the general professor_review window.
+                base_query = apply_renewal_phase_filter(base_query, role="professor", alias_name="prof_phase_cfg")
             elif status_filter == "completed":
                 base_query = base_query.where(
                     Application.status.in_(
@@ -2939,3 +2987,79 @@ class ApplicationService:
             logger.exception("Error assigning professor")
             await self.db.rollback()
             raise
+
+    # ------------------------------------------------------------------ #
+    # Renewal & Challenge application factories
+    # ------------------------------------------------------------------ #
+
+    async def create_renewal_from_previous(
+        self,
+        previous: Application,
+        current_user: User,
+        target_academic_year: int,
+        renewal_year: int,
+    ) -> Application:
+        """Create a renewal Application copying sub_type & key fields from a
+        previous approved application.
+
+        Caller is responsible for committing the surrounding transaction.
+        """
+        app_id = await self._generate_app_id(
+            target_academic_year,
+            previous.semester.value if previous.semester else None,
+        )
+        new_app = Application(
+            app_id=app_id,
+            user_id=current_user.id,
+            scholarship_type_id=previous.scholarship_type_id,
+            scholarship_configuration_id=previous.scholarship_configuration_id,
+            scholarship_subtype_list=[previous.sub_scholarship_type] if previous.sub_scholarship_type else [],
+            sub_scholarship_type=previous.sub_scholarship_type,
+            sub_type_selection_mode=previous.sub_type_selection_mode,
+            is_renewal=True,
+            renewal_year=renewal_year,
+            previous_application_id=previous.id,
+            academic_year=target_academic_year,
+            semester=previous.semester,
+            status=ApplicationStatus.draft,
+            review_stage=ReviewStage.student_draft,
+            agree_terms=False,
+        )
+        self.db.add(new_app)
+        await self.db.flush()
+        return new_app
+
+    async def create_challenge_from_renewal(
+        self,
+        renewal: Application,
+        current_user: User,
+        target_sub_type: str,
+    ) -> Application:
+        """Create a challenge Application linked to an approved renewal.
+
+        The challenge targets a different sub_type than the renewal and
+        runs in the same academic_year + semester. Caller commits.
+        """
+        app_id = await self._generate_app_id(
+            renewal.academic_year,
+            renewal.semester.value if renewal.semester else None,
+        )
+        new_app = Application(
+            app_id=app_id,
+            user_id=current_user.id,
+            scholarship_type_id=renewal.scholarship_type_id,
+            scholarship_configuration_id=renewal.scholarship_configuration_id,
+            scholarship_subtype_list=[target_sub_type],
+            sub_scholarship_type=target_sub_type,
+            sub_type_selection_mode=renewal.sub_type_selection_mode,
+            is_renewal=False,
+            challenges_application_id=renewal.id,
+            academic_year=renewal.academic_year,
+            semester=renewal.semester,
+            status=ApplicationStatus.draft,
+            review_stage=ReviewStage.student_draft,
+            agree_terms=False,
+        )
+        self.db.add(new_app)
+        await self.db.flush()
+        return new_app

@@ -18,6 +18,8 @@ import type {
   DistributionSummaryResult,
   DistributionSummaryGroup,
   AllocationSuggestion,
+  DistributionState,
+  ReleaseChainItem,
 } from "@/lib/api/modules/manual-distribution";
 import { User } from "@/types/user";
 import { Button } from "@/components/ui/button";
@@ -31,6 +33,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,6 +53,10 @@ import {
   Download,
   Clock,
   Eye,
+  Shield,
+  AlertTriangle,
+  ArrowRight,
+  RefreshCw,
 } from "lucide-react";
 
 interface ManualDistributionPanelProps {
@@ -188,60 +195,13 @@ export function ManualDistributionPanel({
     }>;
   } | null>(null);
   const [previewApplied, setPreviewApplied] = useState(false);
-
-  const [revokeTarget, setRevokeTarget] = useState<DistributionStudent | null>(null);
-  const [suspendTarget, setSuspendTarget] = useState<DistributionStudent | null>(null);
-  const [actionReason, setActionReason] = useState("");
-  const [isActioning, setIsActioning] = useState(false);
-
-  const handleRevokeConfirm = async () => {
-    if (!revokeTarget || actionReason.trim().length === 0) return;
-    setIsActioning(true);
-    try {
-      const resp = await apiClient.manualDistribution.revoke(
-        revokeTarget.application_id,
-        actionReason.trim()
-      );
-      if (resp.success) {
-        setSaveMessage({ type: "success", text: `已撤銷 ${revokeTarget.student_name}` });
-        await fetchData();
-      } else {
-        setSaveMessage({ type: "error", text: resp.message || "撤銷失敗" });
-      }
-    } catch (err: unknown) {
-      setSaveMessage({ type: "error", text: (err as Error)?.message || "撤銷失敗" });
-    } finally {
-      setIsActioning(false);
-      setRevokeTarget(null);
-      setActionReason("");
-    }
-  };
-
-  const handleSuspendConfirm = async () => {
-    if (!suspendTarget || actionReason.trim().length === 0) return;
-    setIsActioning(true);
-    try {
-      const resp = await apiClient.manualDistribution.suspend(
-        suspendTarget.application_id,
-        actionReason.trim()
-      );
-      if (resp.success) {
-        setSaveMessage({ type: "success", text: `已停發 ${suspendTarget.student_name}` });
-        await fetchData();
-      } else {
-        setSaveMessage({ type: "error", text: resp.message || "停發失敗" });
-      }
-    } catch (err: unknown) {
-      setSaveMessage({ type: "error", text: (err as Error)?.message || "停發失敗" });
-    } finally {
-      setIsActioning(false);
-      setSuspendTarget(null);
-      setActionReason("");
-    }
-  };
-
-  const isFinalized = (student: DistributionStudent) =>
-    student.status === "allocated" || student.status === "approved";
+  // Renewal-aware panel state (Phase 8.2): approved renewals occupying slots,
+  // remaining quota per (sub_type × allocation_year), and ranked candidates
+  // with challenge metadata. Independent of `students` / `quotaStatus` —
+  // additive, never blocks the existing flow if the call fails.
+  const [distributionState, setDistributionState] =
+    useState<DistributionState | null>(null);
+  const [isLoadingState, setIsLoadingState] = useState(false);
 
   /**
    * Flatten quota status into (sub_type × year) columns, ordered by:
@@ -368,6 +328,135 @@ export function ManualDistributionPanel({
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Fetch renewal-aware panel state alongside the existing student/quota
+  // pipeline. Wrapped in its own effect so a state-endpoint failure cannot
+  // break the legacy table render.
+  useEffect(() => {
+    let cancelled = false;
+    const loadState = async () => {
+      if (!scholarshipTypeId || !selectedAcademicYear) {
+        setDistributionState(null);
+        return;
+      }
+      setIsLoadingState(true);
+      try {
+        const resp = await apiClient.manualDistribution.getState(
+          scholarshipTypeId,
+          selectedAcademicYear
+        );
+        if (cancelled) return;
+        if (resp.success && resp.data) {
+          setDistributionState(resp.data);
+        } else {
+          // Soft-fail: keep existing UI working even if state endpoint errors
+          setDistributionState(null);
+        }
+      } catch {
+        if (!cancelled) setDistributionState(null);
+      } finally {
+        if (!cancelled) setIsLoadingState(false);
+      }
+    };
+    loadState();
+    return () => {
+      cancelled = true;
+    };
+  }, [scholarshipTypeId, selectedAcademicYear]);
+
+  // Lookup: which `application_id`s are challenge applications. Used to
+  // surface the 🛡 marker and amber styling in the candidate table.
+  const challengeAppMap = useMemo(() => {
+    const map = new Map<
+      number,
+      {
+        applying_sub_type: string | null;
+        challenged_renewal: {
+          renewal_application_id: number;
+          sub_type: string | null;
+          renewal_year: number | null;
+        } | null;
+      }
+    >();
+    if (!distributionState) return map;
+    for (const c of distributionState.candidates) {
+      if (c.is_challenge) {
+        map.set(c.application_id, {
+          applying_sub_type: c.applying_sub_type,
+          challenged_renewal: c.challenged_renewal,
+        });
+      }
+    }
+    return map;
+  }, [distributionState]);
+
+  // Release preview: dry-run the proposed allocations so admins can see
+  // which renewals would be cancelled and the auto-fill suggestion. Only
+  // POSTs when at least one challenge is currently staged.
+  const [releasePreview, setReleasePreview] = useState<ReleaseChainItem[]>([]);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+
+  const hasStagedChallenge = useMemo(() => {
+    if (challengeAppMap.size === 0) return false;
+    // Cross-reference staged allocations with challenge application_ids.
+    for (const [rankingItemId, alloc] of localAllocations) {
+      if (!alloc) continue;
+      const student = students.find(s => s.ranking_item_id === rankingItemId);
+      if (student && challengeAppMap.has(student.application_id)) return true;
+    }
+    return false;
+  }, [localAllocations, challengeAppMap, students]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const runPreview = async () => {
+      if (
+        !scholarshipTypeId ||
+        !selectedAcademicYear ||
+        !selectedSemester ||
+        !hasStagedChallenge
+      ) {
+        setReleasePreview([]);
+        return;
+      }
+      const allocations = Array.from(localAllocations.entries())
+        .filter(([, alloc]) => alloc !== null)
+        .map(([ranking_item_id, alloc]) => ({
+          ranking_item_id,
+          sub_type_code: alloc?.sub_type ?? null,
+          allocation_year: alloc?.year ?? null,
+        }));
+      setIsLoadingPreview(true);
+      try {
+        const resp = await apiClient.manualDistribution.previewDistribution({
+          scholarship_type_id: scholarshipTypeId,
+          academic_year: selectedAcademicYear,
+          semester: selectedSemester,
+          allocations,
+        });
+        if (cancelled) return;
+        if (resp.success && resp.data) {
+          setReleasePreview(resp.data.release_chain || []);
+        } else {
+          setReleasePreview([]);
+        }
+      } catch {
+        if (!cancelled) setReleasePreview([]);
+      } finally {
+        if (!cancelled) setIsLoadingPreview(false);
+      }
+    };
+    runPreview();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    scholarshipTypeId,
+    selectedAcademicYear,
+    selectedSemester,
+    localAllocations,
+    hasStagedChallenge,
+  ]);
 
   const handleCheckbox = (
     rankingItemId: number,
@@ -1040,6 +1129,28 @@ export function ManualDistributionPanel({
           </div>
         )}
 
+        {/* ===========================================================
+            Renewal-aware section (Phase 8.2)
+            Three additive blocks:
+              1) 續領已佔用（不可改動）
+              2) 剩餘可分配配額
+              3) 釋出與遞補預覽（即時計算）
+            All blocks degrade gracefully when state endpoint is empty.
+            =========================================================== */}
+        <RenewalOccupiedBlock
+          state={distributionState}
+          isLoading={isLoadingState}
+        />
+        <AvailableQuotasBlock
+          state={distributionState}
+          isLoading={isLoadingState}
+        />
+        <ReleasePreviewSection
+          releaseChain={releasePreview}
+          isLoading={isLoadingPreview}
+          hasStaged={hasStagedChallenge}
+        />
+
         {/* Table */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="p-3 border-b border-slate-200 flex items-center justify-between">
@@ -1082,9 +1193,9 @@ export function ManualDistributionPanel({
                     </th>
                     <th
                       rowSpan={2}
-                      className="px-1.5 py-1.5 border border-slate-200 text-center font-semibold text-[11px] w-16 bg-red-50"
+                      className="px-1.5 py-1.5 border border-slate-200 text-center font-semibold text-[11px] w-8 bg-red-50"
                     >
-                      動作
+                      取消
                     </th>
                     {subTypeCols.length > 0 && (
                       <th
@@ -1205,10 +1316,18 @@ export function ManualDistributionPanel({
                             const curAlloc = localAllocations.get(
                               student.ranking_item_id
                             );
+                            // Phase 8.2: surface challenge metadata from the
+                            // /state payload (keyed by application_id).
+                            const challengeMeta = challengeAppMap.get(
+                              student.application_id
+                            );
+                            const isChallenge = !!challengeMeta;
                             return (
                               <tr
                                 key={student.ranking_item_id}
-                                className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
+                                className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${
+                                  isChallenge ? "bg-amber-50/60" : ""
+                                }`}
                               >
                                 <td className="px-1.5 py-1.5 border-r border-slate-100 text-center font-bold text-slate-700 text-[11px]">
                                   {student.college_rejected ? (
@@ -1239,40 +1358,30 @@ export function ManualDistributionPanel({
                                     </span>
                                   )}
                                 </td>
-                                {/* 撤銷 / 停發 buttons (post-roster generation actions) */}
+                                {/* Cancel allocation button */}
                                 <td className="px-1 py-1.5 border-r border-slate-100 text-center">
-                                  <div className="flex justify-center gap-0.5">
+                                  {curAlloc ? (
                                     <button
                                       onClick={() => {
-                                        setRevokeTarget(student);
-                                        setActionReason("");
+                                        setLocalAllocations(prev => {
+                                          const next = new Map(prev);
+                                          next.set(
+                                            student.ranking_item_id,
+                                            null
+                                          );
+                                          return next;
+                                        });
                                       }}
-                                      disabled={!isFinalized(student)}
-                                      className={`px-1.5 py-0.5 text-[10px] rounded border transition-colors ${
-                                        isFinalized(student)
-                                          ? "bg-red-100 text-red-700 border-red-300 hover:bg-red-200 cursor-pointer"
-                                          : "bg-slate-50 text-slate-300 border-slate-200 cursor-not-allowed"
-                                      }`}
-                                      title={isFinalized(student) ? "撤銷此學生獎學金（過往造冊需手動處理）" : "尚未分發，無法撤銷"}
+                                      className="px-2 py-1 text-xs bg-red-50 text-red-600 hover:bg-red-100 rounded border border-red-200 cursor-pointer transition-colors"
+                                      title="取消此學生的分配"
                                     >
-                                      撤
+                                      ✕
                                     </button>
-                                    <button
-                                      onClick={() => {
-                                        setSuspendTarget(student);
-                                        setActionReason("");
-                                      }}
-                                      disabled={!isFinalized(student)}
-                                      className={`px-1.5 py-0.5 text-[10px] rounded border transition-colors ${
-                                        isFinalized(student)
-                                          ? "bg-orange-100 text-orange-700 border-orange-300 hover:bg-orange-200 cursor-pointer"
-                                          : "bg-slate-50 text-slate-300 border-slate-200 cursor-not-allowed"
-                                      }`}
-                                      title={isFinalized(student) ? "停發此學生（過往造冊保留）" : "尚未分發，無法停發"}
-                                    >
-                                      停
-                                    </button>
-                                  </div>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-300">
+                                      —
+                                    </span>
+                                  )}
                                 </td>
                                 {subTypeCols.map(col => {
                                   const isApplied =
@@ -1291,8 +1400,19 @@ export function ManualDistributionPanel({
                                     col.total > 0 &&
                                     localUsed >= col.total &&
                                     !isChecked;
+                                  // Phase 8.2: for a challenge candidate the
+                                  // sub_type they already hold a renewal in is
+                                  // their "safety net" — they must not be
+                                  // re-allocated there via the new path.
+                                  const isFallbackColumn =
+                                    isChallenge &&
+                                    challengeMeta?.challenged_renewal
+                                      ?.sub_type === col.sub_type;
                                   const disabled =
-                                    !isApplied || isRejected || atCapacity;
+                                    !isApplied ||
+                                    isRejected ||
+                                    atCapacity ||
+                                    isFallbackColumn;
                                   return (
                                     <td
                                       key={col.key}
@@ -1301,7 +1421,9 @@ export function ManualDistributionPanel({
                                           ? "opacity-40 bg-red-50"
                                           : !isApplied
                                             ? "opacity-40"
-                                            : ""
+                                            : isFallbackColumn
+                                              ? "opacity-40 bg-amber-100/40"
+                                              : ""
                                       }`}
                                     >
                                       <input
@@ -1310,15 +1432,17 @@ export function ManualDistributionPanel({
                                         checked={isChecked}
                                         disabled={disabled}
                                         title={
-                                          !isApplied
-                                            ? `未申請 ${col.display_name}`
-                                            : isRejected
-                                              ? `教授不推薦 ${col.display_name}`
-                                              : atCapacity
-                                                ? `${col.display_name} 名額已滿`
-                                                : isChecked
-                                                  ? "點擊取消分配"
-                                                  : `分配至 ${col.display_name}`
+                                          isFallbackColumn
+                                            ? `保底欄位：此考生已持有 ${col.sub_type} 的續領資格，不可改配於此`
+                                            : !isApplied
+                                              ? `未申請 ${col.display_name}`
+                                              : isRejected
+                                                ? `教授不推薦 ${col.display_name}`
+                                                : atCapacity
+                                                  ? `${col.display_name} 名額已滿`
+                                                  : isChecked
+                                                    ? "點擊取消分配"
+                                                    : `分配至 ${col.display_name}`
                                         }
                                         onChange={() =>
                                           handleCheckbox(
@@ -1362,18 +1486,45 @@ export function ManualDistributionPanel({
                                       {student.renewal_year || ""} 續領
                                       {student.renewal_sub_type || ""}
                                     </span>
+                                  ) : isChallenge ? (
+                                    // Phase 8.2: challenge applicant — show
+                                    // 挑戰 chip + 🛡 fallback annotation
+                                    <div className="flex flex-col gap-0.5">
+                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 w-fit">
+                                        <AlertTriangle className="h-3 w-3" />
+                                        挑戰
+                                      </span>
+                                      {challengeMeta?.challenged_renewal && (
+                                        <span className="inline-flex items-center gap-1 text-[10px] text-amber-700">
+                                          <Shield className="h-3 w-3" />
+                                          保底{" "}
+                                          {challengeMeta.challenged_renewal
+                                            .sub_type || "-"}
+                                          -
+                                          {challengeMeta.challenged_renewal
+                                            .renewal_year ?? "-"}
+                                        </span>
+                                      )}
+                                    </div>
                                   ) : (
-                                    <span
-                                      className={
-                                        student.application_identity.includes(
-                                          "新申請"
-                                        )
-                                          ? "text-amber-600"
-                                          : "text-blue-600"
-                                      }
-                                    >
-                                      {student.application_identity}
-                                    </span>
+                                    <div className="flex flex-col gap-0.5">
+                                      <span
+                                        className={
+                                          student.application_identity.includes(
+                                            "新申請"
+                                          )
+                                            ? "text-amber-600"
+                                            : "text-blue-600"
+                                        }
+                                      >
+                                        {student.application_identity}
+                                      </span>
+                                      {distributionState && (
+                                        <span className="text-[10px] text-slate-500 font-normal">
+                                          純新
+                                        </span>
+                                      )}
+                                    </div>
                                   )}
                                 </td>
                               </tr>
@@ -1670,92 +1821,277 @@ export function ManualDistributionPanel({
           </div>
         </div>
       )}
+    </div>
+  );
+}
 
-      <AlertDialog open={!!revokeTarget} onOpenChange={(open) => !open && setRevokeTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              確認撤銷 {revokeTarget?.student_name} 的獎學金分配？
-            </AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="text-sm text-slate-600 space-y-2">
-                <p>撤銷後：</p>
-                <ul className="list-disc pl-5 space-y-1">
-                  <li>此學生將從目前所有未鎖定造冊中移除</li>
-                  <li>此學生申請狀態變更為「已取消」</li>
-                  <li>已鎖定的歷史造冊需手動清除（清單會列在受影響造冊頁面提示）</li>
-                </ul>
-                <div className="pt-2">
-                  <label className="block text-sm font-medium mb-1">
-                    撤銷原因（必填）
-                  </label>
-                  <textarea
-                    className="w-full border border-slate-300 rounded px-2 py-1 text-sm"
-                    rows={3}
-                    maxLength={500}
-                    value={actionReason}
-                    onChange={(e) => setActionReason(e.target.value)}
-                    placeholder="請說明撤銷原因…"
-                  />
+// ===========================================================================
+// Phase 8.2 — Renewal-aware sub-components
+//
+// Three additive blocks shown above the existing candidate list:
+//   1. RenewalOccupiedBlock     — read-only, shows approved renewals per
+//                                 (sub_type, renewal_year). Marked with *
+//                                 when a downstream challenge exists.
+//   2. AvailableQuotasBlock     — remaining quota per (sub_type,
+//                                 allocation_year).
+//   3. ReleasePreviewSection    — dry-run release_chain when challenges are
+//                                 staged. Surfaces who would be displaced
+//                                 and the suggested fill-in candidate.
+// ===========================================================================
+
+/** Render label like "nstc · 計畫年度 114"; falls back gracefully on nulls. */
+function formatSubTypeYear(sub_type: string | null, year: number | null) {
+  const sub = sub_type ?? "—";
+  const y = year ?? "—";
+  return `${sub} · 計畫年度 ${y}`;
+}
+
+function RenewalOccupiedBlock({
+  state,
+  isLoading,
+}: {
+  state: DistributionState | null;
+  isLoading: boolean;
+}) {
+  if (isLoading) {
+    return (
+      <div className="bg-white rounded-xl border border-blue-200 shadow-sm p-4 mb-3">
+        <div className="flex items-center gap-2 text-slate-500">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span className="text-sm">載入續領佔用資料中…</span>
+        </div>
+      </div>
+    );
+  }
+  if (!state) return null;
+  const groups = state.renewal_allocations || [];
+  const hasChallenge = groups.some(g =>
+    g.applications.some(a => a.has_challenge)
+  );
+
+  return (
+    <div className="bg-white rounded-xl border-2 border-[#003d7a]/30 shadow-sm mb-3">
+      <div className="flex items-center justify-between px-4 py-2 bg-[#003d7a] text-white rounded-t-lg">
+        <h3 className="font-bold text-sm flex items-center gap-2">
+          <Shield className="h-4 w-4" />
+          續領已佔用（不可改動）
+        </h3>
+        <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full">
+          唯讀
+        </span>
+      </div>
+      <div className="p-3 space-y-1.5">
+        {groups.length === 0 ? (
+          <p className="text-xs text-slate-400 py-2 text-center">
+            尚無已核定的續領申請
+          </p>
+        ) : (
+          groups.map(g => {
+            const total = g.applications.length;
+            const names = g.applications.map(a => (
+              <span key={a.application_id} className="whitespace-nowrap">
+                {a.student_name || `#${a.application_id}`}
+                {a.has_challenge && (
+                  <span
+                    className="text-amber-600 font-bold"
+                    title="此續領已被挑戰申請"
+                  >
+                    *
+                  </span>
+                )}
+              </span>
+            ));
+            return (
+              <div
+                key={`${g.sub_type}-${g.renewal_year}`}
+                className="text-xs text-slate-700 px-3 py-2 rounded-md bg-blue-50/40 border border-blue-100"
+              >
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <span className="font-semibold text-[#003d7a]">
+                    {formatSubTypeYear(g.sub_type, g.renewal_year)}
+                  </span>
+                  <span className="text-[11px] font-mono text-slate-500">
+                    {total}/{total}
+                  </span>
+                </div>
+                <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-slate-600">
+                  {names.length > 0 ? (
+                    names.reduce<React.ReactNode[]>((acc, el, i) => {
+                      if (i > 0)
+                        acc.push(
+                          <span key={`sep-${i}`} className="text-slate-300">
+                            、
+                          </span>
+                        );
+                      acc.push(el);
+                      return acc;
+                    }, [])
+                  ) : (
+                    <span className="text-slate-400">—</span>
+                  )}
                 </div>
               </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isActioning}>取消</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={isActioning || actionReason.trim().length === 0}
-              onClick={handleRevokeConfirm}
-              className="bg-red-600 hover:bg-red-700 text-white"
-            >
-              {isActioning ? "處理中…" : "確認撤銷"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            );
+          })
+        )}
+        {hasChallenge && (
+          <p className="text-[11px] text-amber-700 px-1 pt-1">
+            <span className="font-bold">*</span> 標記者已被挑戰申請
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
 
-      <AlertDialog open={!!suspendTarget} onOpenChange={(open) => !open && setSuspendTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              確認停發 {suspendTarget?.student_name} 的獎學金分配？
-            </AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="text-sm text-slate-600 space-y-2">
-                <p>停發後：</p>
-                <ul className="list-disc pl-5 space-y-1">
-                  <li>此學生將從目前所有未鎖定造冊中移除</li>
-                  <li>此學生申請狀態變更為「已取消」</li>
-                  <li>已鎖定的歷史造冊不受影響（金額已發放保留）</li>
-                </ul>
-                <div className="pt-2">
-                  <label className="block text-sm font-medium mb-1">
-                    停發原因（必填）
-                  </label>
-                  <textarea
-                    className="w-full border border-slate-300 rounded px-2 py-1 text-sm"
-                    rows={3}
-                    maxLength={500}
-                    value={actionReason}
-                    onChange={(e) => setActionReason(e.target.value)}
-                    placeholder="請說明停發原因…"
-                  />
+function AvailableQuotasBlock({
+  state,
+  isLoading,
+}: {
+  state: DistributionState | null;
+  isLoading: boolean;
+}) {
+  if (isLoading || !state) return null;
+  const quotas = state.available_quotas || [];
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm mb-3">
+      <div className="px-4 py-2 border-b border-slate-100 flex items-center justify-between">
+        <h3 className="font-bold text-sm text-slate-800 flex items-center gap-2">
+          <RefreshCw className="h-4 w-4 text-[#003d7a]" />
+          剩餘可分配配額
+        </h3>
+        <span className="text-[10px] text-slate-400">
+          扣除續領後可用於一般 / 挑戰分配
+        </span>
+      </div>
+      <div className="p-3">
+        {quotas.length === 0 ? (
+          <p className="text-xs text-slate-400 py-2 text-center">
+            尚無配額設定
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {quotas.map(q => {
+              const isFull = q.remaining <= 0 && q.total > 0;
+              return (
+                <div
+                  key={`${q.sub_type}-${q.allocation_year}`}
+                  className={`px-3 py-2 rounded-md border text-xs ${
+                    isFull
+                      ? "bg-slate-100 border-slate-200 text-slate-500"
+                      : "bg-slate-50 border-slate-200"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-slate-700">
+                      {formatSubTypeYear(q.sub_type, q.allocation_year)}
+                    </span>
+                    <span
+                      className={`font-mono text-sm tabular-nums font-bold ${
+                        isFull ? "text-slate-400" : "text-[#003d7a]"
+                      }`}
+                    >
+                      {q.used}/{q.total}
+                    </span>
+                  </div>
+                  {q.remaining > 0 && (
+                    <div className="mt-0.5 text-[10px] text-slate-500">
+                      剩餘 {q.remaining} 個名額
+                    </div>
+                  )}
                 </div>
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isActioning}>取消</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={isActioning || actionReason.trim().length === 0}
-              onClick={handleSuspendConfirm}
-              className="bg-orange-600 hover:bg-orange-700 text-white"
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ReleasePreviewSection({
+  releaseChain,
+  isLoading,
+  hasStaged,
+}: {
+  releaseChain: ReleaseChainItem[];
+  isLoading: boolean;
+  hasStaged: boolean;
+}) {
+  // Only render if there's something challenge-related staged or in flight
+  if (!hasStaged && !isLoading && releaseChain.length === 0) return null;
+
+  return (
+    <div className="bg-white rounded-xl border-2 border-amber-200 shadow-sm mb-3">
+      <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 flex items-center justify-between">
+        <h3 className="font-bold text-sm text-amber-800 flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4" />
+          釋出與遞補預覽（即時計算）
+        </h3>
+        {isLoading && (
+          <span className="text-[11px] text-amber-700 flex items-center gap-1">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            計算中…
+          </span>
+        )}
+      </div>
+      <div className="p-3 space-y-2">
+        {releaseChain.length === 0 ? (
+          <p className="text-xs text-slate-500 py-1">
+            目前的勾選不會觸發任何續領被釋出。
+          </p>
+        ) : (
+          releaseChain.map((item, idx) => (
+            <div
+              key={`${item.cancelled_application_id}-${idx}`}
+              className="rounded-md border border-amber-200 bg-amber-50/40 px-3 py-2 text-xs text-slate-700"
             >
-              {isActioning ? "處理中…" : "確認停發"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+              <div className="flex items-center gap-1 font-semibold text-amber-800">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                挑戰申請 #
+                {item.challenge_application_id ?? "—"} 成功
+              </div>
+              <div className="mt-1 flex items-center gap-1.5 text-slate-600 pl-4">
+                <ArrowRight className="h-3 w-3 text-amber-600" />
+                釋出{" "}
+                <span className="font-mono text-[#003d7a]">
+                  {formatSubTypeYear(
+                    item.freed_slot.sub_type,
+                    item.freed_slot.allocation_year
+                  )}
+                </span>{" "}
+                slot（取消續領 #{item.cancelled_application_id}）
+              </div>
+              <div className="mt-1 flex items-center gap-1.5 text-slate-600 pl-4">
+                <ArrowRight className="h-3 w-3 text-amber-600" />
+                自動遞補：
+                {item.suggested_fill_id ? (
+                  <>
+                    <span className="font-medium text-slate-800">
+                      {item.suggested_fill_name ||
+                        `#${item.suggested_fill_id}`}
+                    </span>
+                    <span className="text-slate-500">（純新申請）</span>
+                    <ArrowRight className="h-3 w-3 text-amber-600" />
+                    分配至{" "}
+                    <span className="font-mono text-[#003d7a]">
+                      {formatSubTypeYear(
+                        item.freed_slot.sub_type,
+                        item.freed_slot.allocation_year
+                      )}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-slate-500">
+                    無可用候補者（waitlist 為空）
+                  </span>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }

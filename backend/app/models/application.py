@@ -6,6 +6,7 @@ import enum
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
+import sqlalchemy as sa
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -13,11 +14,11 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     Text,
-    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -102,6 +103,8 @@ class Application(Base):
     is_renewal = Column(Boolean, default=False, nullable=False)  # 是否為續領申請
     renewal_year = Column(Integer, nullable=True)  # 續領年份 (e.g. 113)，用於批次匯入時直接指定
     previous_application_id = Column(Integer, ForeignKey("applications.id"))
+    challenges_application_id = Column(Integer, ForeignKey("applications.id"), nullable=True, index=True)
+    cancelled_due_to_application_id = Column(Integer, ForeignKey("applications.id"), nullable=True, index=True)
     review_deadline = Column(DateTime(timezone=True))
     decision_date = Column(DateTime(timezone=True))
 
@@ -154,15 +157,6 @@ class Application(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
-    # Revoke / Suspend metadata (spec 2026-05-21)
-    revoked_at = Column(DateTime(timezone=True), nullable=True)
-    revoked_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    revoke_reason = Column(Text, nullable=True)
-
-    suspended_at = Column(DateTime(timezone=True), nullable=True)
-    suspended_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    suspend_reason = Column(Text, nullable=True)
-
     # 刪除追蹤 (Deletion tracking for soft delete)
     deleted_at = Column(DateTime(timezone=True), nullable=True)
     deleted_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -199,7 +193,9 @@ class Application(Base):
         overlaps="applications,scholarship_type_ref",
     )
     scholarship_configuration = relationship("ScholarshipConfiguration", foreign_keys=[scholarship_configuration_id])
-    previous_application = relationship("Application", remote_side=[id])
+    previous_application = relationship("Application", remote_side=[id], foreign_keys=[previous_application_id])
+    challenged_renewal = relationship("Application", remote_side=[id], foreign_keys=[challenges_application_id])
+    cancelled_due_to = relationship("Application", remote_side=[id], foreign_keys=[cancelled_due_to_application_id])
 
     files = relationship("ApplicationFile", back_populates="application", cascade="all, delete-orphan")
     reviews = relationship("ApplicationReview", back_populates="application", cascade="all, delete-orphan")
@@ -210,15 +206,41 @@ class Application(Base):
     imported_by = relationship("User", foreign_keys=[imported_by_id])
     batch_import = relationship("BatchImport", back_populates="applications", foreign_keys=[batch_import_id])
 
-    # 唯一約束：確保每個用戶在每個學年、學期、獎學金組合下只能有一個申請
-    # Use user_id instead of student_id since students are now from external API
+    # 唯一約束：拆成三個 partial unique indexes，允許同一學期內並存三種申請：
+    # 1. 續領申請 (is_renewal = true)
+    # 2. 挑戰申請 (is_renewal = false, challenges_application_id IS NOT NULL)
+    # 3. 一般新申請 (is_renewal = false, challenges_application_id IS NULL)
     __table_args__ = (
-        UniqueConstraint(
+        Index(
+            "uq_user_renewal_app",
             "user_id",
             "scholarship_type_id",
             "academic_year",
             "semester",
-            name="uq_user_scholarship_academic_term",
+            unique=True,
+            postgresql_where=sa.text("is_renewal = true AND status != 'deleted'"),
+        ),
+        Index(
+            "uq_user_challenge_app",
+            "user_id",
+            "scholarship_type_id",
+            "academic_year",
+            "semester",
+            unique=True,
+            postgresql_where=sa.text(
+                "is_renewal = false AND challenges_application_id IS NOT NULL " "AND status != 'deleted'"
+            ),
+        ),
+        Index(
+            "uq_user_pure_new_app",
+            "user_id",
+            "scholarship_type_id",
+            "academic_year",
+            "semester",
+            unique=True,
+            postgresql_where=sa.text(
+                "is_renewal = false AND challenges_application_id IS NULL " "AND status != 'deleted'"
+            ),
         ),
     )
 
