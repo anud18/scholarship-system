@@ -23,6 +23,7 @@ from app.services.manual_distribution_service import ManualDistributionService
 async def admin_db_user(db):
     """Create a real DB-backed admin user for service tests."""
     from app.models.user import User, UserRole, UserType
+
     u = User(
         nycu_id="admin_svc_test",
         email="admin_svc@nycu.edu.tw",
@@ -46,6 +47,7 @@ async def allocated_application(db, admin_db_user):
     """
     from app.models.scholarship import SubTypeSelectionMode
     from app.models.enums import ReviewStage
+
     app = Application(
         user_id=admin_db_user.id,
         app_id="APP-TEST-REVOKE-001",
@@ -69,6 +71,7 @@ async def unallocated_application(db, admin_db_user):
     """An application without quota_allocation_status='allocated'."""
     from app.models.scholarship import SubTypeSelectionMode
     from app.models.enums import ReviewStage
+
     app = Application(
         user_id=admin_db_user.id,
         app_id="APP-TEST-REVOKE-002",
@@ -93,6 +96,7 @@ async def draft_roster_with_item(db, allocated_application, admin_db_user):
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
     from app.models.payment_roster import RosterCycle, RosterTriggerType
+
     r = PaymentRoster(
         roster_code="ROSTER-TEST-DRAFT-SVC",
         scholarship_configuration_id=1,
@@ -115,9 +119,7 @@ async def draft_roster_with_item(db, allocated_application, admin_db_user):
     await db.commit()
     # Reload with items eagerly loaded so tests can access r.items[0] outside async context
     result = await db.execute(
-        select(PaymentRoster)
-        .options(selectinload(PaymentRoster.items))
-        .where(PaymentRoster.id == r.id)
+        select(PaymentRoster).options(selectinload(PaymentRoster.items)).where(PaymentRoster.id == r.id)
     )
     return result.scalar_one()
 
@@ -128,6 +130,7 @@ async def locked_roster_with_item(db, allocated_application, admin_db_user):
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
     from app.models.payment_roster import RosterCycle, RosterTriggerType
+
     r = PaymentRoster(
         roster_code="ROSTER-TEST-LOCKED-SVC",
         scholarship_configuration_id=1,
@@ -150,9 +153,7 @@ async def locked_roster_with_item(db, allocated_application, admin_db_user):
     await db.commit()
     # Reload with items eagerly loaded so tests can access r.items[0] outside async context
     result = await db.execute(
-        select(PaymentRoster)
-        .options(selectinload(PaymentRoster.items))
-        .where(PaymentRoster.id == r.id)
+        select(PaymentRoster).options(selectinload(PaymentRoster.items)).where(PaymentRoster.id == r.id)
     )
     return result.scalar_one()
 
@@ -234,12 +235,11 @@ async def test_revoke_non_allocated_raises(db, unallocated_application, admin_db
 @pytest.mark.asyncio
 async def test_revoke_writes_audit_log(db, allocated_application, admin_db_user):
     from sqlalchemy import select
+
     svc = ManualDistributionService(db)
     await svc.revoke_allocation(allocated_application.id, admin_db_user.id, "reason text")
     await db.commit()
-    rows = (await db.execute(
-        select(AuditLog).where(AuditLog.action == "application.revoke")
-    )).scalars().all()
+    rows = (await db.execute(select(AuditLog).where(AuditLog.action == "application.revoke"))).scalars().all()
     assert len(rows) == 1
     log = rows[0]
     assert log.resource_id == str(allocated_application.id)
@@ -277,10 +277,9 @@ async def test_suspend_then_revoke_raises_conflict(db, allocated_application, ad
 @pytest.mark.asyncio
 async def test_suspend_writes_audit_log_with_suspend_action(db, allocated_application, admin_db_user):
     from sqlalchemy import select
+
     svc = ManualDistributionService(db)
     await svc.suspend_allocation(allocated_application.id, admin_db_user.id, "x")
     await db.commit()
-    log = (await db.execute(
-        select(AuditLog).where(AuditLog.action == "application.suspend")
-    )).scalar_one()
+    log = (await db.execute(select(AuditLog).where(AuditLog.action == "application.suspend"))).scalar_one()
     assert log.resource_id == str(allocated_application.id)

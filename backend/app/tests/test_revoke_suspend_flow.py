@@ -31,16 +31,15 @@ from app.models.audit_log import AuditLog
 from app.models.payment_roster import PaymentRoster, PaymentRosterItem, RosterStatus
 from app.services.manual_distribution_service import ManualDistributionService
 
-
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
 
 
-def _make_application(user_id, app_id, status=ApplicationStatus.approved,
-                      quota_allocation_status="allocated"):
+def _make_application(user_id, app_id, status=ApplicationStatus.approved, quota_allocation_status="allocated"):
     from app.models.enums import ReviewStage
     from app.models.scholarship import SubTypeSelectionMode
+
     return Application(
         user_id=user_id,
         app_id=app_id,
@@ -57,6 +56,7 @@ def _make_application(user_id, app_id, status=ApplicationStatus.approved,
 
 def _make_roster(status, roster_code, period_label, created_by):
     from app.models.payment_roster import RosterCycle, RosterTriggerType
+
     return PaymentRoster(
         roster_code=roster_code,
         scholarship_configuration_id=1,
@@ -93,6 +93,7 @@ def _make_item(roster_id, application_id):
 @pytest_asyncio.fixture
 async def flow_admin(db):
     from app.models.user import User, UserRole, UserType
+
     u = User(
         nycu_id="admin_flow_test",
         email="admin_flow@nycu.edu.tw",
@@ -124,9 +125,7 @@ async def flow_locked_roster(db, flow_admin, flow_application):
     db.add(_make_item(r.id, flow_application.id))
     await db.commit()
     result = await db.execute(
-        select(PaymentRoster)
-        .options(selectinload(PaymentRoster.items))
-        .where(PaymentRoster.id == r.id)
+        select(PaymentRoster).options(selectinload(PaymentRoster.items)).where(PaymentRoster.id == r.id)
     )
     return result.scalar_one()
 
@@ -140,9 +139,7 @@ async def flow_draft_roster(db, flow_admin, flow_application):
     db.add(_make_item(r.id, flow_application.id))
     await db.commit()
     result = await db.execute(
-        select(PaymentRoster)
-        .options(selectinload(PaymentRoster.items))
-        .where(PaymentRoster.id == r.id)
+        select(PaymentRoster).options(selectinload(PaymentRoster.items)).where(PaymentRoster.id == r.id)
     )
     return result.scalar_one()
 
@@ -208,14 +205,8 @@ async def test_revoke_spans_locked_and_draft_rosters(
             )
         )
     ).all()
-    revoked_entries = [
-        (item, app) for item, app in rows
-        if app.quota_allocation_status == "revoked"
-    ]
-    suspended_entries = [
-        (item, app) for item, app in rows
-        if app.quota_allocation_status == "suspended"
-    ]
+    revoked_entries = [(item, app) for item, app in rows if app.quota_allocation_status == "revoked"]
+    suspended_entries = [(item, app) for item, app in rows if app.quota_allocation_status == "suspended"]
     assert len(revoked_entries) == 1
     assert len(suspended_entries) == 0
     _item, _app = revoked_entries[0]
@@ -233,6 +224,7 @@ async def test_revoke_spans_locked_and_draft_rosters(
 @pytest.fixture
 def remove_flow_admin(db_sync):
     from app.models.user import User, UserRole, UserType
+
     u = User(
         nycu_id="admin_rm_flow",
         email="admin_rm_flow@nycu.edu.tw",
@@ -285,23 +277,23 @@ def remove_flow_locked_roster(db_sync, remove_flow_admin):
     )
     db_sync.add(r)
     db_sync.flush()
-    db_sync.add(PaymentRosterItem(
-        roster_id=r.id,
-        application_id=app.id,
-        student_id_number="B99002",
-        student_name="移除測試生",
-        scholarship_name="NSTC",
-        scholarship_amount=40000,
-        is_included=True,
-    ))
+    db_sync.add(
+        PaymentRosterItem(
+            roster_id=r.id,
+            application_id=app.id,
+            student_id_number="B99002",
+            student_name="移除測試生",
+            scholarship_name="NSTC",
+            scholarship_amount=40000,
+            is_included=True,
+        )
+    )
     db_sync.commit()
     db_sync.refresh(r)
     return r, app
 
 
-def test_remove_locked_item_sets_stale_and_status_stays_locked(
-    db_sync, remove_flow_locked_roster, remove_flow_admin
-):
+def test_remove_locked_item_sets_stale_and_status_stays_locked(db_sync, remove_flow_locked_roster, remove_flow_admin):
     """Admin removes an item from a LOCKED roster.
 
     After removal:

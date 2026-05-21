@@ -94,9 +94,7 @@ def downgrade() -> None:
         if fk:
             # Best-effort: drop constraint by predictable name
             try:
-                op.drop_constraint(
-                    f"fk_applications_{name}_users", "applications", type_="foreignkey"
-                )
+                op.drop_constraint(f"fk_applications_{name}_users", "applications", type_="foreignkey")
             except Exception:
                 pass
         op.drop_column("applications", name)

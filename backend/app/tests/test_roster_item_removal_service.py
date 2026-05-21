@@ -11,7 +11,6 @@ from app.models.audit_log import AuditLog
 from app.models.payment_roster import PaymentRoster, PaymentRosterItem, RosterStatus
 from app.services.roster_service import RosterService
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # The conftest provides `db_sync` as a sync Session.
@@ -104,26 +103,28 @@ def locked_roster_two_items(db_sync, admin_db_user_sync):
     )
     db_sync.add(r)
     db_sync.flush()
-    db_sync.add_all([
-        PaymentRosterItem(
-            roster_id=r.id,
-            application_id=a1.id,
-            student_id_number="B1",
-            student_name="W",
-            scholarship_name="NSTC",
-            scholarship_amount=40000,
-            is_included=True,
-        ),
-        PaymentRosterItem(
-            roster_id=r.id,
-            application_id=a2.id,
-            student_id_number="B2",
-            student_name="L",
-            scholarship_name="NSTC",
-            scholarship_amount=40000,
-            is_included=True,
-        ),
-    ])
+    db_sync.add_all(
+        [
+            PaymentRosterItem(
+                roster_id=r.id,
+                application_id=a1.id,
+                student_id_number="B1",
+                student_name="W",
+                scholarship_name="NSTC",
+                scholarship_amount=40000,
+                is_included=True,
+            ),
+            PaymentRosterItem(
+                roster_id=r.id,
+                application_id=a2.id,
+                student_id_number="B2",
+                student_name="L",
+                scholarship_name="NSTC",
+                scholarship_amount=40000,
+                is_included=True,
+            ),
+        ]
+    )
     db_sync.commit()
     db_sync.refresh(r)
     return r
@@ -193,13 +194,9 @@ def test_remove_item_writes_audit_log(db_sync, locked_roster_two_items, admin_db
     item = locked_roster_two_items.items[0]
     item_id = item.id  # capture before deletion expunges the object
     svc = RosterService(db_sync)
-    svc.remove_item_from_locked_roster(
-        locked_roster_two_items.id, item_id, admin_db_user_sync.id, "cleanup"
-    )
+    svc.remove_item_from_locked_roster(locked_roster_two_items.id, item_id, admin_db_user_sync.id, "cleanup")
     db_sync.commit()
-    log = db_sync.query(AuditLog).filter(
-        AuditLog.action == "roster.item_removed_after_lock"
-    ).one()
+    log = db_sync.query(AuditLog).filter(AuditLog.action == "roster.item_removed_after_lock").one()
     assert log.resource_id == str(locked_roster_two_items.id)
     assert log.new_values["item_id"] == item_id
     assert log.new_values["reason"] == "cleanup"
