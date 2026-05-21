@@ -1779,14 +1779,8 @@ class RosterService:
                 application_id=app.id,
                 student_name=item.student_name,
                 student_id_number=item.student_id_number,
-                event_at=(
-                    app.revoked_at if app.quota_allocation_status == "revoked"
-                    else app.suspended_at
-                ),
-                reason=(
-                    app.revoke_reason if app.quota_allocation_status == "revoked"
-                    else app.suspend_reason
-                ),
+                event_at=(app.revoked_at if app.quota_allocation_status == "revoked" else app.suspended_at),
+                reason=(app.revoke_reason if app.quota_allocation_status == "revoked" else app.suspend_reason),
                 item_id=item.id,
             )
             (revoked if app.quota_allocation_status == "revoked" else suspended).append(entry)
@@ -1806,9 +1800,7 @@ class RosterService:
         if roster is None:
             raise ValueError(f"Roster {roster_id} not found")
         if roster.status != RosterStatus.LOCKED:
-            raise RosterLockedError(
-                f"Roster {roster_id} is not LOCKED (status={roster.status.value})"
-            )
+            raise RosterLockedError(f"Roster {roster_id} is not LOCKED (status={roster.status.value})")
 
         item = self.db.get(PaymentRosterItem, item_id)
         if item is None or item.roster_id != roster_id:
@@ -1820,27 +1812,31 @@ class RosterService:
         self.db.flush()
 
         # Recompute totals using CASE-based split to match _recompute_roster_totals
-        total_count, qualified, total_amount = self.db.query(
-            func.count(PaymentRosterItem.id),
-            func.coalesce(
-                func.sum(
-                    sa_case(
-                        (PaymentRosterItem.is_included.is_(True), 1),
-                        else_=0,
-                    )
+        total_count, qualified, total_amount = (
+            self.db.query(
+                func.count(PaymentRosterItem.id),
+                func.coalesce(
+                    func.sum(
+                        sa_case(
+                            (PaymentRosterItem.is_included.is_(True), 1),
+                            else_=0,
+                        )
+                    ),
+                    0,
                 ),
-                0,
-            ),
-            func.coalesce(
-                func.sum(
-                    sa_case(
-                        (PaymentRosterItem.is_included.is_(True), PaymentRosterItem.scholarship_amount),
-                        else_=0,
-                    )
+                func.coalesce(
+                    func.sum(
+                        sa_case(
+                            (PaymentRosterItem.is_included.is_(True), PaymentRosterItem.scholarship_amount),
+                            else_=0,
+                        )
+                    ),
+                    0,
                 ),
-                0,
-            ),
-        ).filter(PaymentRosterItem.roster_id == roster_id).one()
+            )
+            .filter(PaymentRosterItem.roster_id == roster_id)
+            .one()
+        )
 
         roster.total_applications = total_count
         roster.qualified_count = qualified
@@ -1848,21 +1844,21 @@ class RosterService:
         roster.total_amount = total_amount
         roster.excel_stale = True
 
-        self.db.add(AuditLog.create_log(
-            user_id=admin_user_id,
-            action="roster.item_removed_after_lock",
-            resource_type="payment_roster",
-            resource_id=str(roster_id),
-            description=(
-                f"Removed item {item_id} (application {removed_app_id}) from LOCKED roster"
-            ),
-            new_values={
-                "item_id": item_id,
-                "application_id": removed_app_id,
-                "reason": reason,
-                "removed_amount": float(removed_amount) if removed_amount else 0,
-            },
-        ))
+        self.db.add(
+            AuditLog.create_log(
+                user_id=admin_user_id,
+                action="roster.item_removed_after_lock",
+                resource_type="payment_roster",
+                resource_id=str(roster_id),
+                description=(f"Removed item {item_id} (application {removed_app_id}) from LOCKED roster"),
+                new_values={
+                    "item_id": item_id,
+                    "application_id": removed_app_id,
+                    "reason": reason,
+                    "removed_amount": float(removed_amount) if removed_amount else 0,
+                },
+            )
+        )
         self.db.commit()
         return {
             "roster_id": roster_id,
