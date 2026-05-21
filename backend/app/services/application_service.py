@@ -1249,7 +1249,7 @@ class ApplicationService:
             select(Application)
             .options(
                 selectinload(Application.files),
-                selectinload(Application.reviews),
+                selectinload(Application.reviews).selectinload(ApplicationReview.reviewer),
                 selectinload(Application.scholarship),
             )
             .where(Application.id == application_id)
@@ -1316,7 +1316,7 @@ class ApplicationService:
             select(Application)
             .options(
                 selectinload(Application.files),
-                selectinload(Application.reviews),
+                selectinload(Application.reviews).selectinload(ApplicationReview.reviewer),
                 selectinload(Application.scholarship),
             )
             .where(Application.id == application.id)
@@ -1464,11 +1464,14 @@ class ApplicationService:
             "reviews": [
                 {
                     "id": review.id,
+                    "application_id": review.application_id,
                     "reviewer_id": review.reviewer_id,
-                    "reviewer_name": review.reviewer_name,
-                    "score": review.score,
+                    "recommendation": review.recommendation,
                     "comments": review.comments,
                     "reviewed_at": review.reviewed_at,
+                    "created_at": review.created_at,
+                    "reviewer_name": review.reviewer.name if review.reviewer else None,
+                    "reviewer_role": review.reviewer.role if review.reviewer else None,
                 }
                 for review in application.reviews
             ],

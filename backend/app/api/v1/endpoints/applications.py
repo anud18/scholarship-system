@@ -12,7 +12,7 @@ from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import AuthorizationError, NotFoundError
+from app.core.exceptions import AuthorizationError, NotFoundError, ScholarshipException
 from app.core.security import get_current_user, require_staff, require_student
 from app.db.deps import get_db
 from app.models.audit_log import AuditAction
@@ -269,6 +269,10 @@ async def create_application(
         ) from e
     except HTTPException:
         # Re-raise HTTPException directly as they are already properly formatted
+        raise
+    except ScholarshipException:
+        # Let custom business exceptions bubble to the global scholarship_exception_handler
+        # which maps each subclass (ValidationError→422, NotFoundError→404, etc.) correctly.
         raise
     except IntegrityError as e:
         logger.exception("Database integrity error during application creation")
