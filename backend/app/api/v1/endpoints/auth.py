@@ -226,7 +226,7 @@ async def get_mock_users(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/mock-sso/login")
-@rate_limit(requests=30, window_seconds=300)  # dev path; still rate-limited so prod misconfigs don't open it wide
+@rate_limit(requests=200, window_seconds=300)  # dev path; 200/5min — high enough for nightly E2E suites (~40 logins)
 async def mock_sso_login(request: Request, request_data: PortalSSORequest, db: AsyncSession = Depends(get_db)):
     """Login as mock user for development"""
     if not settings.enable_mock_sso:
