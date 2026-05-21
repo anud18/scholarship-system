@@ -17,7 +17,7 @@ from app.core.cache import invalidate as cache_invalidate
 from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFoundError, ValidationError
 from app.core.metrics import scholarship_applications_total, scholarship_reviews_total
 from app.core.schema_validation import serialize_value
-from app.models.application import Application, ApplicationStatus, ReviewStatus
+from app.models.application import Application, ApplicationStatus
 from app.models.enums import Semester
 from app.models.review import ApplicationReview, ApplicationReviewItem
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType, SubTypeSelectionMode
@@ -1607,25 +1607,32 @@ class ApplicationService:
         elif status_update.status == ApplicationStatus.rejected.value:
             application.status_name = ScholarshipI18n.get_application_status_text(ApplicationStatus.rejected.value)
 
-        # Create/update ApplicationReview record for comments and rejection reason
-        # instead of storing directly on Application
-        if hasattr(status_update, "comments") or hasattr(status_update, "rejection_reason"):
-            #             from app.models.application import ApplicationReview, ReviewStatus
-
-            review = ApplicationReview(
-                application_id=application.id,
-                reviewer_id=user.id,
-                review_stage="status_update",
-                review_status=(
-                    ReviewStatus.APPROVED.value
-                    if status_update.status == ApplicationStatus.approved.value
-                    else ReviewStatus.REJECTED.value
-                ),
-                comments=getattr(status_update, "comments", None),
-                decision_reason=getattr(status_update, "rejection_reason", None),
-                reviewed_at=datetime.now(timezone.utc),
+        # Persist admin comments / rejection reason as an ApplicationReview row
+        if getattr(status_update, "comments", None) or getattr(status_update, "rejection_reason", None):
+            combined_comments = getattr(status_update, "comments", None) or getattr(
+                status_update, "rejection_reason", None
             )
-            self.db.add(review)
+            recommendation = "approve" if status_update.status == ApplicationStatus.approved.value else "reject"
+            # Upsert: admin may set status multiple times on the same application
+            existing_stmt = select(ApplicationReview).where(
+                ApplicationReview.application_id == application.id,
+                ApplicationReview.reviewer_id == user.id,
+            )
+            existing_result = await self.db.execute(existing_stmt)
+            existing_admin_review = existing_result.scalar_one_or_none()
+            if existing_admin_review:
+                existing_admin_review.recommendation = recommendation
+                existing_admin_review.comments = combined_comments
+                existing_admin_review.reviewed_at = datetime.now(timezone.utc)
+            else:
+                review = ApplicationReview(
+                    application_id=application.id,
+                    reviewer_id=user.id,
+                    recommendation=recommendation,
+                    comments=combined_comments,
+                    reviewed_at=datetime.now(timezone.utc),
+                )
+                self.db.add(review)
 
         application.reviewed_at = datetime.now(timezone.utc)
 
