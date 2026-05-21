@@ -6333,6 +6333,88 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/payment-rosters/{roster_id}/revoked-suspended": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roster_id: number;
+            };
+            cookie?: never;
+        };
+        /** Get Revoked Suspended */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    roster_id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                200: {
+                    headers: Record<string, unknown>;
+                    content: {
+                        "application/json": unknown;
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payment-rosters/{roster_id}/items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roster_id: number;
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Item From Locked Roster */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    roster_id: number;
+                    item_id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": {
+                        reason?: string | null;
+                    };
+                };
+            };
+            responses: {
+                200: {
+                    headers: Record<string, unknown>;
+                    content: {
+                        "application/json": unknown;
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/roster-schedules": {
         parameters: {
             query?: never;
