@@ -10,17 +10,23 @@
  *    rather than treating it as an HTTP error.
  *    Source: applications.py:210-220
  *
- * 2. WITHDRAWAL enables reapplication:
- *    Status `withdrawn` is in the excluded_statuses list for the duplicate check
- *    (applications.py:155-160: withdrawn, rejected, cancelled, deleted are excluded).
- *    So after a student withdraws, they MAY submit a new application.
+ * 2. WITHDRAWAL returns the application to `draft` (NOT `withdrawn`):
+ *    POST /applications/{id}/withdraw sets status = "draft" so the student can
+ *    re-edit and resubmit the same application. `withdrawn` is a separate terminal
+ *    state used by other flows.
+ *    Source: application_service.py:withdraw_application (pinned in student-withdraw.spec.ts)
+ *
+ * 3. CLEARING enables reapplication:
+ *    After the withdrawn-draft is fully deleted via cascade, the duplicate check
+ *    finds no blocking application and the student can submit a brand-new one.
  *
  * Spec flow:
  *   1. stuphd001 submits a phd application → status = submitted.
  *   2. stuphd001 tries to POST /applications again (same scholarship/year/semester)
  *      → HTTP 200, success=false, error_code=DUPLICATE_APPLICATION.
- *   3. stuphd001 calls POST /applications/{id}/withdraw → status = withdrawn.
- *   4. stuphd001 submits a new phd application → HTTP 200, success=true (allowed).
+ *   3. stuphd001 calls POST /applications/{id}/withdraw → status = draft (not withdrawn).
+ *   4. Cascade-delete the draft to clear the blocking application.
+ *   5. stuphd001 submits a new phd application → HTTP 200/201, success=true (allowed).
  */
 import { test, expect } from "@playwright/test";
 import { loginAs } from "../helpers/auth";
@@ -159,8 +165,8 @@ test.describe("Duplicate-application prevention + post-withdrawal reapplication"
     expect(afterDupeCheck!.status).toBe("submitted");
 
     // 3. Student withdraws the first application.
-    //    After withdrawal, status='withdrawn', which is in the excluded_statuses
-    //    list for the duplicate check — so a new application is then allowed.
+    //    PINNED: withdraw sets status to 'draft' (NOT 'withdrawn').
+    //    Source: application_service.py:withdraw_application, pinned in student-withdraw.spec.ts.
     const withdrawRes = await apiAs<{ success: boolean; message: string }>(
       studentLogin.token,
       "POST",
@@ -176,11 +182,16 @@ test.describe("Duplicate-application prevention + post-withdrawal reapplication"
     const afterWithdraw = await getApplication(firstAppId);
     expect(
       afterWithdraw!.status,
-      "status must be withdrawn after withdrawal",
-    ).toBe("withdrawn");
+      "withdraw returns application to draft (not withdrawn) — pinned invariant",
+    ).toBe("draft");
 
-    // 4. Student submits a new application — must succeed because 'withdrawn'
-    //    is excluded from the duplicate check.
+    // 4. Cascade-delete the draft to fully clear the blocking application.
+    //    After deletion, the duplicate check finds no active application for this
+    //    scholarship/year/semester, allowing a fresh submission.
+    await deleteApplicationCascade(firstAppId);
+
+    // 5. Student submits a new application — must succeed because no blocking
+    //    application exists any more.
     const secondRes = await apiAs<{
       success: boolean;
       message: string;
@@ -190,11 +201,11 @@ test.describe("Duplicate-application prevention + post-withdrawal reapplication"
 
     expect(
       secondRes.ok,
-      `reapplication after withdrawal failed: HTTP ${secondRes.status} body=${JSON.stringify(secondRes.body)}`,
+      `reapplication after clearing failed: HTTP ${secondRes.status} body=${JSON.stringify(secondRes.body)}`,
     ).toBe(true);
     expect(
       secondRes.body.success,
-      "reapplication after withdrawal must succeed (success=true)",
+      "reapplication after clearing must succeed (success=true)",
     ).toBe(true);
 
     const secondAppId = secondRes.body.data.app_id;
@@ -202,7 +213,7 @@ test.describe("Duplicate-application prevention + post-withdrawal reapplication"
 
     const secondRow = await getApplication(secondAppId);
     expect(secondRow!.status).toBe("submitted");
-    // The two applications must be distinct records.
+    // The new application must be a distinct record from the deleted one.
     expect(secondAppId).not.toBe(firstAppId);
   });
 });
