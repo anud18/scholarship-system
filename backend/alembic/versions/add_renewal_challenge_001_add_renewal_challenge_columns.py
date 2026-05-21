@@ -66,7 +66,7 @@ def upgrade() -> None:
         "applications",
         ["user_id", "scholarship_type_id", "academic_year", "semester"],
         unique=True,
-        postgresql_where=sa.text("is_renewal = true AND status != 'deleted'"),
+        postgresql_where=sa.text("is_renewal = true AND status::text != 'deleted'"),
     )
     op.create_index(
         "uq_user_challenge_app",
@@ -74,7 +74,7 @@ def upgrade() -> None:
         ["user_id", "scholarship_type_id", "academic_year", "semester"],
         unique=True,
         postgresql_where=sa.text(
-            "is_renewal = false AND challenges_application_id IS NOT NULL " "AND status != 'deleted'"
+            "is_renewal = false AND challenges_application_id IS NOT NULL AND status::text != 'deleted'"
         ),
     )
     op.create_index(
@@ -82,7 +82,9 @@ def upgrade() -> None:
         "applications",
         ["user_id", "scholarship_type_id", "academic_year", "semester"],
         unique=True,
-        postgresql_where=sa.text("is_renewal = false AND challenges_application_id IS NULL " "AND status != 'deleted'"),
+        postgresql_where=sa.text(
+            "is_renewal = false AND challenges_application_id IS NULL AND status::text != 'deleted'"
+        ),
     )
 
     # 4. Check constraint: cancelled_by_challenge requires cancelled_due_to_application_id
