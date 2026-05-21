@@ -207,6 +207,8 @@ async def create_application(
                 f"existing_app_id={existing_application.app_id}, "
                 f"status={existing_status}"
             )
+            if response:
+                response.status_code = 200
             return {
                 "success": False,
                 "message": f"您已有此獎學金的申請記錄（{existing_application.app_id}），無法重複申請",
