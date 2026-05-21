@@ -66,33 +66,28 @@ def upgrade() -> None:
         "applications",
         ["user_id", "scholarship_type_id", "academic_year", "semester"],
         unique=True,
-        postgresql_where=sa.text("is_renewal = true AND status::text != 'deleted'"),
+        postgresql_where=sa.text("is_renewal = true AND deleted_at IS NULL"),
     )
     op.create_index(
         "uq_user_challenge_app",
         "applications",
         ["user_id", "scholarship_type_id", "academic_year", "semester"],
         unique=True,
-        postgresql_where=sa.text(
-            "is_renewal = false AND challenges_application_id IS NOT NULL AND status::text != 'deleted'"
-        ),
+        postgresql_where=sa.text("is_renewal = false AND challenges_application_id IS NOT NULL AND deleted_at IS NULL"),
     )
     op.create_index(
         "uq_user_pure_new_app",
         "applications",
         ["user_id", "scholarship_type_id", "academic_year", "semester"],
         unique=True,
-        postgresql_where=sa.text(
-            "is_renewal = false AND challenges_application_id IS NULL AND status::text != 'deleted'"
-        ),
+        postgresql_where=sa.text("is_renewal = false AND challenges_application_id IS NULL AND deleted_at IS NULL"),
     )
 
     # 4. Check constraint: cancelled_by_challenge requires cancelled_due_to_application_id
     # NOTE: status::text cast is required because PostgreSQL forbids referencing a
     # newly-added enum value (added in step 1 above) inside the same transaction
-    # without explicit casting (psycopg2.errors.UnsafeNewEnumValueUsage). The
-    # partial-index predicates above reference the pre-existing 'deleted' value and
-    # therefore do not require the cast.
+    # without explicit casting (psycopg2.errors.UnsafeNewEnumValueUsage).
+    # The partial-index predicates above use deleted_at IS NULL (no cast needed).
     op.create_check_constraint(
         "chk_cancelled_by_challenge_link",
         "applications",
