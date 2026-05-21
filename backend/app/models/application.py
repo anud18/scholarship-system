@@ -218,7 +218,7 @@ class Application(Base):
             "academic_year",
             "semester",
             unique=True,
-            postgresql_where=sa.text("is_renewal = true AND status != 'deleted'"),
+            postgresql_where=sa.text("is_renewal = true AND status::text != 'deleted'"),
         ),
         Index(
             "uq_user_challenge_app",
@@ -228,7 +228,7 @@ class Application(Base):
             "semester",
             unique=True,
             postgresql_where=sa.text(
-                "is_renewal = false AND challenges_application_id IS NOT NULL " "AND status != 'deleted'"
+                "is_renewal = false AND challenges_application_id IS NOT NULL AND status::text != 'deleted'"
             ),
         ),
         Index(
@@ -239,7 +239,7 @@ class Application(Base):
             "semester",
             unique=True,
             postgresql_where=sa.text(
-                "is_renewal = false AND challenges_application_id IS NULL " "AND status != 'deleted'"
+                "is_renewal = false AND challenges_application_id IS NULL AND status::text != 'deleted'"
             ),
         ),
     )
