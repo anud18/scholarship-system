@@ -386,8 +386,8 @@ describe("createManualDistributionApi", () => {
 
   // ─── 11-method invariant ──────────────────────────────────────────
 
-  it("module exposes exactly 11 methods", async () => {
-    // Pin: 11 methods. Pin so refactor adding/removing methods
+  it("module exposes exactly 13 methods", async () => {
+    // Pin: 13 methods. Pin so refactor adding/removing methods
     // requires explicit review (each one drives a SECURITY-
     // critical allocation operation).
     const api = createManualDistributionApi();
@@ -403,6 +403,8 @@ describe("createManualDistributionApi", () => {
       "getStudents",
       "importReceivedMonths",
       "restoreFromHistory",
+      "revoke",
+      "suspend",
     ]);
   });
 });
