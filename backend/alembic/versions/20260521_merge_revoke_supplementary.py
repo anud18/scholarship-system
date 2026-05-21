@@ -6,7 +6,7 @@ is irrelevant for correctness.
 
 No-op upgrade/downgrade — alembic just collapses the DAG.
 
-Revision ID: merge_20260521_revoke_supplementary
+Revision ID: merge_20260521_dual
 Revises: add_supplementary_import_001, revoke_suspend_001
 Create Date: 2026-05-21
 """
@@ -14,7 +14,7 @@ Create Date: 2026-05-21
 from typing import Sequence, Union
 
 # revision identifiers, used by Alembic.
-revision: str = "merge_20260521_revoke_supplementary"
+revision: str = "merge_20260521_dual"
 down_revision: Union[str, Sequence[str], None] = (
     "add_supplementary_import_001",
     "revoke_suspend_001",
