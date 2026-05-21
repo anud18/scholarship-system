@@ -6337,31 +6337,15 @@ export interface paths {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                roster_id: number;
-            };
+            path?: never;
             cookie?: never;
         };
-        /** Get Revoked Suspended */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    roster_id: number;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                200: {
-                    headers: Record<string, unknown>;
-                    content: {
-                        "application/json": unknown;
-                    };
-                };
-            };
-        };
+        /**
+         * Get Revoked Suspended
+         * @description List students still embedded in this roster whose allocation was
+         *     later revoked or suspended.
+         */
+        get: operations["get_revoked_suspended_api_v1_payment_rosters__roster_id__revoked_suspended_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6374,42 +6358,18 @@ export interface paths {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                roster_id: number;
-                item_id: number;
-            };
+            path?: never;
             cookie?: never;
         };
         get?: never;
         put?: never;
         post?: never;
-        /** Remove Item From Locked Roster */
-        delete: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    roster_id: number;
-                    item_id: number;
-                };
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": {
-                        reason?: string | null;
-                    };
-                };
-            };
-            responses: {
-                200: {
-                    headers: Record<string, unknown>;
-                    content: {
-                        "application/json": unknown;
-                    };
-                };
-            };
-        };
+        /**
+         * Remove Locked Roster Item
+         * @description Hard-delete a single item from a LOCKED roster. Roster stays LOCKED;
+         *     excel_stale is set to True; audit log written.
+         */
+        delete: operations["remove_locked_roster_item_api_v1_payment_rosters__roster_id__items__item_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -8763,11 +8723,6 @@ export interface components {
             subtype_eligibility: {
                 [key: string]: components["schemas"]["SubtypeEligibilityInfo"];
             };
-            /**
-             * Is Renewal Application
-             * @default false
-             */
-            is_renewal_application: boolean;
         };
         /** EmailAutomationRuleCreate */
         EmailAutomationRuleCreate: {
@@ -9188,6 +9143,14 @@ export interface components {
              * @description Roster code (if roster exists)
              */
             roster_code?: string | null;
+        };
+        /**
+         * RemoveLockedItemRequest
+         * @description Body for DELETE /payment-rosters/{roster_id}/items/{item_id}
+         */
+        RemoveLockedItemRequest: {
+            /** Reason */
+            reason?: string | null;
         };
         /** RestoreRequest */
         RestoreRequest: {
@@ -20770,6 +20733,73 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_revoked_suspended_api_v1_payment_rosters__roster_id__revoked_suspended_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roster_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_locked_roster_item_api_v1_payment_rosters__roster_id__items__item_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roster_id: number;
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoveLockedItemRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
