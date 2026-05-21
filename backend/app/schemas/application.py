@@ -699,6 +699,18 @@ class BulkApproveRequest(BaseModel):
     send_notifications: bool = Field(True, description="Whether to notify applicants")
 
 
+class RevokeRequest(BaseModel):
+    """Request body for revoking a scholarship allocation."""
+
+    reason: str = Field(..., min_length=1, max_length=500, description="Reason for revocation")
+
+
+class SuspendRequest(BaseModel):
+    """Request body for suspending a scholarship allocation."""
+
+    reason: str = Field(..., min_length=1, max_length=500, description="Reason for suspension")
+
+
 class HistoricalApplicationResponse(BaseModel):
     """Historical application response schema for admin view"""
 
