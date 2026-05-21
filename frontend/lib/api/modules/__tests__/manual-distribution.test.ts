@@ -400,11 +400,11 @@ describe("createManualDistributionApi", () => {
       "getDistributionSummary",
       "getHistory",
       "getQuotaStatus",
+      "getState",
       "getStudents",
       "importReceivedMonths",
+      "previewDistribution",
       "restoreFromHistory",
-      "revoke",
-      "suspend",
     ]);
   });
 });

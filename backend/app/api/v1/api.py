@@ -23,6 +23,7 @@ from app.api.v1.endpoints import (
     professor_student,
     quota_dashboard,
     reference_data,
+    renewal,
     reviews,
     roster_schedules,
     scholarship_configurations,
@@ -75,4 +76,5 @@ api_router.include_router(roster_schedules.router, prefix="/roster-schedules", t
 api_router.include_router(system_settings.router, prefix="/system-settings", tags=["System Settings"])
 api_router.include_router(student_bank_accounts.router, prefix="/student-bank-accounts", tags=["Student Bank Accounts"])
 api_router.include_router(csp_report.router, prefix="", tags=["Security"])
+api_router.include_router(renewal.router, prefix="/renewals", tags=["Renewals"])
 api_router.include_router(manual_distribution_router)

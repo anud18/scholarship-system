@@ -107,6 +107,7 @@ export type ApplicationStatus =
   | "returned"
   | "withdrawn"
   | "cancelled"
+  | "cancelled_by_challenge"
   | "pending"
   | "completed"
   | "deleted";
@@ -122,6 +123,14 @@ export interface Application {
   scholarship_type_zh?: string;
   status: ApplicationStatus;
   is_renewal?: boolean;
+  /** 續領年份 (民國年，如 113)；批次匯入指定或承接自前一申請 */
+  renewal_year?: number | null;
+  /** 承接的前一份核可申請 ID（續領申請填） */
+  previous_application_id?: number | null;
+  /** 挑戰的目標續領申請 ID（挑戰申請填） */
+  challenges_application_id?: number | null;
+  /** 因哪份挑戰申請而被取消（被取代之續領申請填） */
+  cancelled_due_to_application_id?: number | null;
   personal_statement?: string;
   gpa_requirement_met: boolean;
   submitted_at?: string;
@@ -152,6 +161,8 @@ export interface Application {
   dept_ranking_percent?: number;
   days_waiting?: number;
   scholarship_subtype_list?: string[];
+  /** 本申請的代表性 sub_type（單一字串；若為續領則承襲自前一申請） */
+  sub_scholarship_type?: string | null;
   sub_type_labels?: Record<string, { zh: string; en: string }>;
   agree_terms?: boolean;
   academy_code?: string;

@@ -26,6 +26,8 @@ from app.models.enums import Semester
 from app.models.review import ApplicationReview  # Unified review system
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole
+from app.services.email_automation_service import email_automation_service
+from app.services.review_phase_filter import apply_renewal_phase_filter
 
 func: Any = sa_func
 
@@ -292,6 +294,20 @@ class CollegeReviewService:
         )
 
         # Base query for applications in reviewable state with comprehensive eager loading
+        # Phase 4 (renewal routing): for *pending* (under_review) applications we
+        # must restrict to those matching the current college review phase
+        # — renewal apps during renewal_college_review, general apps during
+        # college_review. Historical statuses (approved / partial_approved /
+        # rejected) remain visible unconditionally so reviewers can audit past
+        # decisions.
+        pending_phase_subquery = (
+            apply_renewal_phase_filter(
+                select(Application.id).where(Application.status == ApplicationStatus.under_review.value),
+                role="college",
+                alias_name="college_phase_cfg",
+            )
+        ).subquery()
+
         stmt = (
             select(Application)
             .options(
@@ -303,7 +319,11 @@ class CollegeReviewService:
             )
             .where(
                 or_(
-                    Application.status == ApplicationStatus.under_review.value,
+                    # Under-review rows must match the current renewal/general phase
+                    and_(
+                        Application.status == ApplicationStatus.under_review.value,
+                        Application.id.in_(select(pending_phase_subquery.c.id)),
+                    ),
                     Application.status == ApplicationStatus.approved.value,  # 包含已核准的申請
                     Application.status == ApplicationStatus.partial_approved.value,  # 包含部分同意的申請
                     Application.status == ApplicationStatus.rejected.value,  # 包含已駁回的申請

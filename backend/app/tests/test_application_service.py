@@ -440,6 +440,11 @@ class TestApplicationService:
         mock_application.scholarship = None
         mock_application.student = None
         mock_application.scholarship_subtype_list = []
+        mock_application.sub_scholarship_type = "general"
+        mock_application.renewal_year = None
+        mock_application.previous_application_id = None
+        mock_application.challenges_application_id = None
+        mock_application.cancelled_due_to_application_id = None
 
         with patch.object(service, "_get_application_model", new_callable=AsyncMock) as mock_get_model:
             mock_get_model.return_value = mock_application
