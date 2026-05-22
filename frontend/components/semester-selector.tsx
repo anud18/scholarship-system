@@ -124,17 +124,12 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
 
       if (activePeriodsOnly) {
         // 獲取有實際申請資料的學期
-        const url = `/api/v1/reference-data/active-academic-periods`;
-        const response = await fetch(url);
-        if (!response.ok)
-          throw new Error("Failed to fetch active academic periods");
-
-        const data = await response.json();
-        setCombinations(data.active_periods || []);
+        const response = await apiClient.request("/reference-data/active-academic-periods");
+        setCombinations(response.data?.active_periods || []);
         setDetectedCycle("semester");
         setActualMode("combined");
         setCurrentInfo({
-          current_period: data.current_period,
+          current_period: response.data?.current_period,
           cycle: "semester",
         });
       } else {
@@ -232,17 +227,12 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
   const loadBasicData = async () => {
     try {
       setLoading(true);
-      const response = await fetch(
-        `/api/v1/reference-data/semesters`
-      );
-      if (!response.ok) throw new Error("Failed to fetch semester data");
-
-      const data = await response.json();
-      setAcademicYears(data.academic_years || []);
-      setSemesters(data.semesters || []);
+      const response = await apiClient.request("/reference-data/semesters");
+      setAcademicYears(response.data?.academic_years || []);
+      setSemesters(response.data?.semesters || []);
       setCurrentInfo({
-        current_academic_year: data.current_academic_year,
-        current_semester: data.current_semester,
+        current_academic_year: response.data?.current_academic_year,
+        current_semester: response.data?.current_semester,
       });
       setActualMode("separate");
     } catch (error) {
