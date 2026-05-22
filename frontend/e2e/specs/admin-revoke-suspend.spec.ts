@@ -3,11 +3,9 @@
  * added in the revoke-suspend-distribution feature branch.
  *
  * Test 1 — "撤 button opens dialog with disabled confirm until reason filled"
- *   Requires: a finalized (distribution_executed=True) scholarship where at
- *   least one student row has status "allocated" or "approved".  The seeded
- *   data from reset_database.sh → seed flow satisfies this after the
- *   admin-manual-distribution spec runs (or after a manual allocate+finalize).
- *   If no such row exists the test is skipped via test.skip().
+ *   Self-contained: beforeAll creates the full allocate+finalize fixture
+ *   (csphd0001 → professor → cs_college rank+finalize → admin allocate+finalize).
+ *   afterAll cleans up. No dependency on admin-manual-distribution.spec.ts.
  *
  * Test 2 — "locked roster dialog shows revoked student panel and 從本造冊移除 works"
  *   Requires: a payment_roster with status "locked" that contains at least one
@@ -25,7 +23,7 @@
 import { test, expect } from "@playwright/test";
 import { loginAs } from "../helpers/auth";
 import { apiAs } from "../helpers/api";
-import { pool } from "../helpers/db";
+import { deleteApplicationCascade, getActiveConfig, pool } from "../helpers/db";
 import {
   attachRunState,
   newRunState,
@@ -37,11 +35,201 @@ import { captureDiagnostics } from "../helpers/diagnose";
 test.describe.configure({ mode: "serial" });
 
 // ---------------------------------------------------------------------------
+// Shared fixture setup helpers
+// ---------------------------------------------------------------------------
+
+const SETUP_STUDENT = "csphd0001";
+const SETUP_PROFESSOR = "professor";
+const SETUP_COLLEGE = "cs_college";
+const SETUP_SUB_TYPE = "nstc";
+const SETUP_SCHOLARSHIP = "phd";
+const SETUP_SCHOLARSHIP_NAME = "博士生獎學金"; // display name of "phd" in seed data
+
+async function getApiToken(nycuId: string): Promise<string> {
+  const r = await fetch("http://localhost:8000/api/v1/auth/mock-sso/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nycu_id: nycuId }),
+  });
+  const body = (await r.json()) as {
+    success?: boolean;
+    message?: string;
+    data?: { access_token?: string };
+  };
+  if (!r.ok || !body.data?.access_token) {
+    throw new Error(`setup login failed for ${nycuId}: HTTP ${r.status} ${body.message ?? ""}`);
+  }
+  return body.data.access_token;
+}
+
+// ---------------------------------------------------------------------------
 // Test 1: 撤 button → dialog → disabled confirm until reason filled
 // ---------------------------------------------------------------------------
 
 test.describe("admin revoke dialog — confirm disabled until reason filled", () => {
   let runState: RunState;
+  let fixtureAppId: string | undefined;
+  let fixtureRankingId: number | undefined;
+  let fixtureScholarshipTypeId: number;
+  let fixtureAcademicYear: number;
+  let fixtureSemester: string | null;
+
+  test.beforeAll(async () => {
+    // Purge any existing csphd0001 phd apps to avoid conflicts
+    const { rows: existing } = await pool.query<{ app_id: string }>(
+      `SELECT a.app_id FROM applications a
+       JOIN users u ON u.id = a.user_id
+       JOIN scholarship_types st ON st.id = a.scholarship_type_id
+       WHERE u.nycu_id = $1 AND st.code = $2`,
+      [SETUP_STUDENT, SETUP_SCHOLARSHIP],
+    );
+    for (const { app_id } of existing) {
+      await deleteApplicationCascade(app_id).catch(() => undefined);
+    }
+
+    const config = await getActiveConfig(SETUP_SCHOLARSHIP);
+    fixtureScholarshipTypeId = config.scholarship_type_id;
+    fixtureAcademicYear = config.academic_year;
+    fixtureSemester = config.semester;
+    const semForReq = config.semester ?? "yearly";
+
+    const studentToken = await getApiToken(SETUP_STUDENT);
+    const professorToken = await getApiToken(SETUP_PROFESSOR);
+    const collegeToken = await getApiToken(SETUP_COLLEGE);
+    const adminToken = await getApiToken("admin");
+
+    // 1. Student submits application
+    const createRes = await apiAs<{
+      success: boolean;
+      data: { id: number; app_id: string };
+    }>(studentToken, "POST", "/applications?is_draft=false", {
+      scholarship_type: SETUP_SCHOLARSHIP,
+      configuration_id: config.id,
+      scholarship_subtype_list: [SETUP_SUB_TYPE],
+      sub_type_preferences: [SETUP_SUB_TYPE],
+      form_data: { fields: {}, documents: [] },
+      agree_terms: true,
+    });
+    if (!createRes.ok || !createRes.body.success) {
+      throw new Error(`revoke fixture: create application failed HTTP ${createRes.status}`);
+    }
+    const appDbId = createRes.body.data.id;
+    fixtureAppId = createRes.body.data.app_id;
+
+    // 2. Assign professor via DB (seed has no advisor_nycu_id set)
+    const { rows: profRows } = await pool.query<{ id: number }>(
+      "SELECT id FROM users WHERE nycu_id = $1",
+      [SETUP_PROFESSOR],
+    );
+    await pool.query("UPDATE applications SET professor_id = $1 WHERE id = $2", [
+      profRows[0].id,
+      appDbId,
+    ]);
+
+    // 3. Professor approves
+    const reviewRes = await apiAs<{ success: boolean }>(
+      professorToken,
+      "POST",
+      `/professor/applications/${appDbId}/review`,
+      {
+        items: [
+          {
+            sub_type_code: SETUP_SUB_TYPE,
+            recommendation: "approve",
+            comments: "E2E revoke dialog fixture",
+          },
+        ],
+      },
+    );
+    if (!reviewRes.ok) {
+      throw new Error(`revoke fixture: professor review failed HTTP ${reviewRes.status}`);
+    }
+
+    // 4. College creates ranking (force_new avoids reusing leftover unfinalized ranking)
+    const rankRes = await apiAs<{ success: boolean; data: { id: number } }>(
+      collegeToken,
+      "POST",
+      "/college-review/rankings",
+      {
+        scholarship_type_id: config.scholarship_type_id,
+        sub_type_code: SETUP_SUB_TYPE,
+        academic_year: config.academic_year,
+        semester: config.semester,
+        force_new: true,
+      },
+    );
+    if (!rankRes.ok || !rankRes.body.success) {
+      throw new Error(`revoke fixture: create ranking failed HTTP ${rankRes.status}`);
+    }
+    fixtureRankingId = rankRes.body.data.id;
+
+    const { rows: itemRows } = await pool.query<{ id: number }>(
+      "SELECT id FROM college_ranking_items WHERE ranking_id = $1 AND application_id = $2",
+      [fixtureRankingId, appDbId],
+    );
+    if (!itemRows[0]) {
+      throw new Error(`revoke fixture: ranking item not found for app ${appDbId}`);
+    }
+    const rankingItemId = itemRows[0].id;
+
+    // 5. College finalizes ranking
+    const finalizeRankRes = await apiAs<{ success: boolean }>(
+      collegeToken,
+      "POST",
+      `/college-review/rankings/${fixtureRankingId}/finalize`,
+    );
+    if (!finalizeRankRes.ok) {
+      throw new Error(`revoke fixture: finalize ranking failed HTTP ${finalizeRankRes.status}`);
+    }
+
+    // 6. Admin allocates
+    const allocRes = await apiAs<{ success: boolean }>(
+      adminToken,
+      "POST",
+      "/manual-distribution/allocate",
+      {
+        scholarship_type_id: config.scholarship_type_id,
+        academic_year: config.academic_year,
+        semester: semForReq,
+        allocations: [
+          {
+            ranking_item_id: rankingItemId,
+            sub_type_code: SETUP_SUB_TYPE,
+            allocation_year: config.academic_year,
+          },
+        ],
+      },
+    );
+    if (!allocRes.ok) {
+      throw new Error(`revoke fixture: allocate failed HTTP ${allocRes.status}`);
+    }
+
+    // 7. Admin finalizes distribution (application → approved, is_allocated = true)
+    const finalDistRes = await apiAs<{ success: boolean }>(
+      adminToken,
+      "POST",
+      "/manual-distribution/finalize",
+      {
+        scholarship_type_id: config.scholarship_type_id,
+        academic_year: config.academic_year,
+        semester: semForReq,
+      },
+    );
+    if (!finalDistRes.ok) {
+      throw new Error(`revoke fixture: finalize distribution failed HTTP ${finalDistRes.status}`);
+    }
+  });
+
+  test.afterAll(async () => {
+    if (fixtureRankingId) {
+      await pool
+        .query("DELETE FROM college_rankings WHERE id = $1", [fixtureRankingId])
+        .catch(() => undefined);
+    }
+    if (fixtureAppId) {
+      await deleteApplicationCascade(fixtureAppId).catch(() => undefined);
+    }
+  });
 
   test.beforeEach(() => {
     runState = newRunState();
@@ -56,71 +244,52 @@ test.describe("admin revoke dialog — confirm disabled until reason filled", ()
     "撤 button opens dialog; confirm stays disabled until reason entered",
     async ({ browser }) => {
       // ------------------------------------------------------------------
-      // Pre-check: find a finalized distribution with at least one
-      // allocated/approved student.  If the DB has none, skip gracefully.
-      // ------------------------------------------------------------------
-      const { rows: candidateRows } = await pool.query<{
-        scholarship_type_id: number;
-        academic_year: number;
-        semester: string | null;
-      }>(
-        `SELECT DISTINCT cr.scholarship_type_id,
-                         cr.academic_year,
-                         cr.semester
-           FROM college_ranking_items cri
-           JOIN college_rankings cr ON cr.id = cri.ranking_id
-          WHERE cri.is_allocated = TRUE
-            AND cri.allocated_sub_type IS NOT NULL
-          LIMIT 1`,
-      );
-
-      if (candidateRows.length === 0) {
-        test.skip(
-          true,
-          "No allocated ranking items in DB — run allocate+finalize first, or run admin-manual-distribution.spec.ts",
-        );
-        return;
-      }
-
-      const { scholarship_type_id, academic_year, semester } = candidateRows[0];
-
-      // ------------------------------------------------------------------
       // Admin logs in and navigates to the Manual Distribution Panel.
+      // The beforeAll guarantees an allocated student exists.
+      //
+      // The panel lives at root "/" under the "獎學金分發" tab → scholarship
+      // type tab → ManualDistributionPanel.  There is no standalone route
+      // like "/admin/manual-distribution".
       // ------------------------------------------------------------------
       const adminLogin = await loginAs(browser, "admin");
       pushTrace(runState, adminLogin.traceId);
       const page = await adminLogin.context.newPage();
 
-      // Open the manual distribution panel for this scholarship + year.
-      // The URL pattern follows the frontend routing for the admin panel.
-      const semParam = semester ?? "yearly";
-      await page.goto(
-        `http://localhost:3000/admin/manual-distribution` +
-          `?scholarship_type_id=${scholarship_type_id}` +
-          `&academic_year=${academic_year}` +
-          `&semester=${semParam}`,
-      );
+      // loginAs injects auth_token + user into localStorage; navigate root.
+      await page.goto("http://localhost:3000/");
 
-      // Wait for the table to render — the 動作 column header is the
-      // reliable signal that the distribution panel is in finalized view.
-      await page.waitForSelector('th:has-text("動作")', { timeout: 15_000 });
+      // Admin defaults to the "dashboard" tab.  Click "獎學金分發".
+      await page.getByRole("tab", { name: "獎學金分發" }).click();
 
-      // Find the first enabled 撤 button (title contains "撤銷此學生獎學金").
+      // Wait for scholarship-type tabs AND the panel selects to appear.
+      // The first scholarship tab auto-selects on mount; we use this opportunity
+      // to set semester="yearly" before switching to the phd tab.  This
+      // eliminates a race condition where the phd panel's first fetch fires with
+      // semester="first" and its empty response could overwrite the subsequent
+      // "yearly" response if the two round-trips interleave.
+      await page
+        .getByRole("tab", { name: SETUP_SCHOLARSHIP_NAME })
+        .waitFor({ timeout: 10_000 });
+
+      // The first scholarship tab is now active and the panel is rendered.
+      // Switch semester to "yearly" while still on that tab so the phd panel
+      // inherits the correct semester from the start.
+      await page.locator('label:has-text("學期")').waitFor({ timeout: 10_000 });
+      await page
+        .locator("select")
+        .filter({ has: page.locator('option[value="yearly"]') })
+        .selectOption("yearly");
+
+      // Now switch to the phd scholarship tab.  selectedSemester is already
+      // "yearly", so fetchData fires exactly once with the correct semester.
+      await page.getByRole("tab", { name: SETUP_SCHOLARSHIP_NAME }).click();
+
+      // Wait for the revoke button — the initial fetch with semester="yearly"
+      // returns the allocated fixture student.
       const revokeBtn = page
         .locator('button[title*="撤銷此學生獎學金"]')
         .first();
-
-      // If no enabled revoke button exists (all students disabled / none
-      // finalized) skip rather than fail — this is a seed-state gap, not a
-      // code defect.
-      const btnCount = await revokeBtn.count();
-      if (btnCount === 0) {
-        test.skip(
-          true,
-          "No enabled 撤 button found — students may all be in un-finalized state",
-        );
-        return;
-      }
+      await revokeBtn.waitFor({ timeout: 15_000 });
 
       await revokeBtn.click();
 
