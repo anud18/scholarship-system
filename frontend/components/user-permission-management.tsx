@@ -301,17 +301,21 @@ export function UserPermissionManagement() {
           );
           if (tempPermissions.length > 0) {
             // Use bulk API to assign permissions
-            await fetch(`/api/v1/users/${newUserId}/scholarships/bulk`, {
+            const bulkResp = await fetch(`/api/v1/users/${newUserId}/scholarships/bulk`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+                Authorization: `Bearer ${apiClient.getToken() || ""}`,
               },
               body: JSON.stringify({
                 scholarship_ids: tempPermissions.map((p) => p.scholarship_id),
                 operation: "set",
               }),
             });
+            if (!bulkResp.ok) {
+              const err = await bulkResp.json().catch(() => null);
+              throw new Error(err?.message || err?.detail || "獎學金權限批次分配失敗");
+            }
           }
         }
 
