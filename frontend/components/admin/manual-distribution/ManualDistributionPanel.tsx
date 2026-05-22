@@ -202,6 +202,12 @@ export function ManualDistributionPanel({
   const [distributionState, setDistributionState] =
     useState<DistributionState | null>(null);
   const [isLoadingState, setIsLoadingState] = useState(false);
+  const [revokeTarget, setRevokeTarget] = useState<{
+    applicationId: number;
+    studentName: string;
+  } | null>(null);
+  const [revokeReason, setRevokeReason] = useState("");
+  const [isRevoking, setIsRevoking] = useState(false);
 
   /**
    * Flatten quota status into (sub_type × year) columns, ordered by:
@@ -574,6 +580,33 @@ export function ManualDistributionPanel({
     }
   };
 
+  const handleRevoke = async () => {
+    if (!revokeTarget || !revokeReason.trim()) return;
+    setIsRevoking(true);
+    try {
+      const resp = await apiClient.manualDistribution.revokeAllocation(
+        revokeTarget.applicationId,
+        revokeReason.trim()
+      );
+      if (resp.success) {
+        setSaveMessage({
+          type: "success",
+          text: `已撤銷 ${revokeTarget.studentName} 的獎學金分發`,
+        });
+        setRevokeTarget(null);
+        setRevokeReason("");
+        await fetchData();
+      } else {
+        setSaveMessage({ type: "error", text: resp.message || "撤銷失敗" });
+      }
+    } catch (err) {
+      logger.error("Revoke error", { err });
+      setSaveMessage({ type: "error", text: "撤銷時發生錯誤" });
+    } finally {
+      setIsRevoking(false);
+    }
+  };
+
   const handleGenerateRosters = async () => {
     if (!scholarshipTypeId || !selectedAcademicYear || !selectedSemester)
       return;
@@ -784,6 +817,7 @@ export function ManualDistributionPanel({
   }
 
   return (
+    <>
     <div className="flex gap-4">
       {/* Main table area */}
       <div className="flex-1 min-w-0 space-y-3">
@@ -1259,6 +1293,12 @@ export function ManualDistributionPanel({
                     >
                       身份
                     </th>
+                    <th
+                      rowSpan={2}
+                      className="px-1.5 py-1.5 border border-slate-200 text-center font-semibold text-[11px] w-12"
+                    >
+                      動作
+                    </th>
                   </tr>
                   {/* Row 2 — (year × sub_type) column names */}
                   {subTypeCols.length > 0 && (
@@ -1282,7 +1322,7 @@ export function ManualDistributionPanel({
                   {filteredStudents.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={10 + subTypeCols.length}
+                        colSpan={11 + subTypeCols.length}
                         className="px-4 py-10 text-center text-slate-500"
                       >
                         {students.length === 0
@@ -1304,7 +1344,7 @@ export function ManualDistributionPanel({
                             className="bg-slate-100"
                           >
                             <td
-                              colSpan={10 + subTypeCols.length}
+                              colSpan={11 + subTypeCols.length}
                               className="px-4 py-1.5 text-xs font-bold text-slate-600 border-y border-slate-300"
                             >
                               {collegeName || collegeCode}
@@ -1525,6 +1565,27 @@ export function ManualDistributionPanel({
                                         </span>
                                       )}
                                     </div>
+                                  )}
+                                </td>
+                                <td className="px-1 py-1.5 border-r border-slate-100 text-center">
+                                  {student.allocated_sub_type ? (
+                                    <button
+                                      title="撤銷此學生獎學金"
+                                      onClick={() => {
+                                        setRevokeTarget({
+                                          applicationId: student.application_id,
+                                          studentName: student.student_name,
+                                        });
+                                        setRevokeReason("");
+                                      }}
+                                      className="px-2 py-0.5 text-[11px] bg-red-50 text-red-600 hover:bg-red-100 rounded border border-red-200 cursor-pointer transition-colors"
+                                    >
+                                      撤
+                                    </button>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-300">
+                                      —
+                                    </span>
                                   )}
                                 </td>
                               </tr>
@@ -1822,6 +1883,42 @@ export function ManualDistributionPanel({
         </div>
       )}
     </div>
+
+    {/* Revoke allocation dialog */}
+    <AlertDialog
+      open={revokeTarget !== null}
+      onOpenChange={open => !open && setRevokeTarget(null)}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>撤銷獎學金分發</AlertDialogTitle>
+          <AlertDialogDescription>
+            確定要撤銷 {revokeTarget?.studentName}{" "}
+            的獎學金分發嗎？此操作將從未鎖定造冊中移除該學生，並標記申請為已撤銷。
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <textarea
+          placeholder="請說明撤銷原因"
+          value={revokeReason}
+          onChange={e => setRevokeReason(e.target.value)}
+          className="w-full border border-slate-300 rounded-md p-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+          rows={3}
+        />
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={() => setRevokeTarget(null)}>
+            取消
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleRevoke}
+            disabled={!revokeReason.trim() || isRevoking}
+            className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
+          >
+            {isRevoking ? "撤銷中…" : "確認撤銷"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 
