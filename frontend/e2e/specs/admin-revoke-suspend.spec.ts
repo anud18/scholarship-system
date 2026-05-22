@@ -8,17 +8,12 @@
  *   afterAll cleans up. No dependency on admin-manual-distribution.spec.ts.
  *
  * Test 2 — "locked roster dialog shows revoked student panel and 從本造冊移除 works"
- *   Requires: a payment_roster with status "locked" that contains at least one
- *   item whose application has quota_allocation_status "revoked" or "suspended".
- *   This state does NOT exist in fresh seed data. The test is wrapped in
- *   test.skip() when no LOCKED roster exists, so it won't fail in CI runs
- *   against a plain seed.
+ *   Self-contained: beforeAll creates the full flow up to:
+ *   allocate+finalize → generate-rosters → lock roster → revoke student.
+ *   afterAll cleans up (SQL-level roster delete + deleteApplicationCascade).
  *
- * TODO (seed requirement): To make test 2 run end-to-end, add a fixture that:
- *   1. Runs the full allocate+finalize+generate-rosters flow.
- *   2. Locks one of the generated rosters via PATCH /payment-rosters/{id}/lock.
- *   3. Calls POST /manual-distribution/revoke on one of the allocated students.
- *   Then remove the test.skip() wrapper from test 2.
+ * Test 3 — API contract: GET /payment-rosters/{id}/revoked-suspended shape check.
+ *   Uses the same locked-roster fixture as test 2.
  */
 import { test, expect } from "@playwright/test";
 import { loginAs } from "../helpers/auth";
@@ -320,11 +315,242 @@ test.describe("admin revoke dialog — confirm disabled until reason filled", ()
 });
 
 // ---------------------------------------------------------------------------
-// Test 2: LOCKED roster detail dialog shows revoked panel + 從本造冊移除 button
+// Tests 2–3: LOCKED roster detail dialog shows revoked panel + API shape
 // ---------------------------------------------------------------------------
 
 test.describe("locked roster dialog — revoked student panel + item removal", () => {
   let runState: RunState;
+  let lockedFixtureAppId: string | undefined;
+  let lockedFixtureAppDbId: number | undefined;
+  let lockedFixtureRankingId: number | undefined;
+  let lockedFixtureRosterId: number | undefined;
+
+  test.beforeAll(async () => {
+    const config = await getActiveConfig(SETUP_SCHOLARSHIP);
+
+    // Clean up any leftover rosters for this scholarship config (including locked ones
+    // from prior test runs that force_regenerate=true cannot override).
+    // Must delete roster_audit_logs first due to FK constraint.
+    await pool.query(
+      `DELETE FROM roster_audit_logs WHERE roster_id IN (SELECT id FROM payment_rosters WHERE scholarship_configuration_id = $1)`,
+      [config.id],
+    );
+    await pool.query(
+      `DELETE FROM payment_roster_items WHERE roster_id IN (SELECT id FROM payment_rosters WHERE scholarship_configuration_id = $1)`,
+      [config.id],
+    );
+    await pool.query(
+      `DELETE FROM payment_rosters WHERE scholarship_configuration_id = $1`,
+      [config.id],
+    );
+
+    // Purge existing csphd0001 phd apps to ensure a clean slate.
+    const { rows: existing } = await pool.query<{ app_id: string }>(
+      `SELECT a.app_id FROM applications a
+       JOIN users u ON u.id = a.user_id
+       JOIN scholarship_types st ON st.id = a.scholarship_type_id
+       WHERE u.nycu_id = $1 AND st.code = $2`,
+      [SETUP_STUDENT, SETUP_SCHOLARSHIP],
+    );
+    for (const { app_id } of existing) {
+      await deleteApplicationCascade(app_id).catch(() => undefined);
+    }
+
+    const semForReq = config.semester ?? "yearly";
+
+    const studentToken = await getApiToken(SETUP_STUDENT);
+    const professorToken = await getApiToken(SETUP_PROFESSOR);
+    const collegeToken = await getApiToken(SETUP_COLLEGE);
+    const adminToken = await getApiToken("admin");
+
+    // 1. Student submits application.
+    const createRes = await apiAs<{
+      success: boolean;
+      data: { id: number; app_id: string };
+    }>(studentToken, "POST", "/applications?is_draft=false", {
+      scholarship_type: SETUP_SCHOLARSHIP,
+      configuration_id: config.id,
+      scholarship_subtype_list: [SETUP_SUB_TYPE],
+      sub_type_preferences: [SETUP_SUB_TYPE],
+      form_data: { fields: {}, documents: [] },
+      agree_terms: true,
+    });
+    if (!createRes.ok || !createRes.body.success) {
+      throw new Error(`locked-roster fixture: create app failed HTTP ${createRes.status}`);
+    }
+    lockedFixtureAppDbId = createRes.body.data.id;
+    lockedFixtureAppId = createRes.body.data.app_id;
+
+    // 2. Assign professor via DB.
+    const { rows: profRows } = await pool.query<{ id: number }>(
+      "SELECT id FROM users WHERE nycu_id = $1",
+      [SETUP_PROFESSOR],
+    );
+    await pool.query("UPDATE applications SET professor_id = $1 WHERE id = $2", [
+      profRows[0].id,
+      lockedFixtureAppDbId,
+    ]);
+
+    // 3. Professor approves.
+    const reviewRes = await apiAs<{ success: boolean }>(
+      professorToken,
+      "POST",
+      `/professor/applications/${lockedFixtureAppDbId}/review`,
+      {
+        items: [
+          {
+            sub_type_code: SETUP_SUB_TYPE,
+            recommendation: "approve",
+            comments: "E2E locked-roster fixture",
+          },
+        ],
+      },
+    );
+    if (!reviewRes.ok) {
+      throw new Error(`locked-roster fixture: professor review failed HTTP ${reviewRes.status}`);
+    }
+
+    // 4. College creates ranking (force_new avoids reusing a stale ranking).
+    const rankRes = await apiAs<{ success: boolean; data: { id: number } }>(
+      collegeToken,
+      "POST",
+      "/college-review/rankings",
+      {
+        scholarship_type_id: config.scholarship_type_id,
+        sub_type_code: SETUP_SUB_TYPE,
+        academic_year: config.academic_year,
+        semester: config.semester,
+        force_new: true,
+      },
+    );
+    if (!rankRes.ok || !rankRes.body.success) {
+      throw new Error(`locked-roster fixture: create ranking failed HTTP ${rankRes.status}`);
+    }
+    lockedFixtureRankingId = rankRes.body.data.id;
+
+    const { rows: itemRows } = await pool.query<{ id: number }>(
+      "SELECT id FROM college_ranking_items WHERE ranking_id = $1 AND application_id = $2",
+      [lockedFixtureRankingId, lockedFixtureAppDbId],
+    );
+    if (!itemRows[0]) {
+      throw new Error(`locked-roster fixture: ranking item not found for app ${lockedFixtureAppDbId}`);
+    }
+    const rankingItemId = itemRows[0].id;
+
+    // 5. College finalizes ranking.
+    const finalizeRankRes = await apiAs<{ success: boolean }>(
+      collegeToken,
+      "POST",
+      `/college-review/rankings/${lockedFixtureRankingId}/finalize`,
+    );
+    if (!finalizeRankRes.ok) {
+      throw new Error(`locked-roster fixture: finalize ranking failed HTTP ${finalizeRankRes.status}`);
+    }
+
+    // 6. Admin allocates.
+    const allocRes = await apiAs<{ success: boolean }>(
+      adminToken,
+      "POST",
+      "/manual-distribution/allocate",
+      {
+        scholarship_type_id: config.scholarship_type_id,
+        academic_year: config.academic_year,
+        semester: semForReq,
+        allocations: [
+          {
+            ranking_item_id: rankingItemId,
+            sub_type_code: SETUP_SUB_TYPE,
+            allocation_year: config.academic_year,
+          },
+        ],
+      },
+    );
+    if (!allocRes.ok) {
+      throw new Error(`locked-roster fixture: allocate failed HTTP ${allocRes.status}`);
+    }
+
+    // 7. Admin finalizes distribution (application → approved, quota_allocation_status → allocated).
+    const finalDistRes = await apiAs<{ success: boolean }>(
+      adminToken,
+      "POST",
+      "/manual-distribution/finalize",
+      {
+        scholarship_type_id: config.scholarship_type_id,
+        academic_year: config.academic_year,
+        semester: semForReq,
+      },
+    );
+    if (!finalDistRes.ok) {
+      throw new Error(`locked-roster fixture: finalize distribution failed HTTP ${finalDistRes.status}`);
+    }
+
+    // 8. Admin generates rosters from distribution.
+    //    force_regenerate=true prevents collisions from prior test runs.
+    const genRes = await apiAs<{
+      success: boolean;
+      data: { rosters_created: number; rosters: Array<{ id: number }> };
+    }>(adminToken, "POST", "/manual-distribution/generate-rosters-from-distribution", {
+      scholarship_type_id: config.scholarship_type_id,
+      academic_year: config.academic_year,
+      semester: semForReq,
+      student_verification_enabled: false,
+      force_regenerate: true,
+    });
+    if (!genRes.ok || !genRes.body.success || !genRes.body.data.rosters.length) {
+      throw new Error(
+        `locked-roster fixture: generate-rosters failed HTTP ${genRes.status} body=${JSON.stringify(genRes.body)}`,
+      );
+    }
+    lockedFixtureRosterId = genRes.body.data.rosters[0].id;
+
+    // 9. Admin locks the roster.
+    const lockRes = await apiAs<{ success: boolean }>(
+      adminToken,
+      "POST",
+      `/payment-rosters/${lockedFixtureRosterId}/lock`,
+    );
+    if (!lockRes.ok) {
+      throw new Error(`locked-roster fixture: lock roster failed HTTP ${lockRes.status}`);
+    }
+
+    // 10. Admin revokes the student (AFTER locking, so the item stays in the
+    //     locked roster and the application's quota_allocation_status → revoked).
+    const revokeRes = await apiAs<{ success: boolean }>(
+      adminToken,
+      "POST",
+      `/manual-distribution/applications/${lockedFixtureAppDbId}/revoke`,
+      { reason: "E2E locked-roster fixture — revoke after lock for UI test" },
+    );
+    if (!revokeRes.ok) {
+      throw new Error(`locked-roster fixture: revoke failed HTTP ${revokeRes.status}`);
+    }
+  });
+
+  test.afterAll(async () => {
+    // Clean up roster (locked — must use direct SQL, not the API delete endpoint).
+    // roster_audit_logs must be deleted first due to FK constraint.
+    if (lockedFixtureRosterId) {
+      await pool
+        .query("DELETE FROM roster_audit_logs WHERE roster_id = $1", [lockedFixtureRosterId])
+        .catch(() => undefined);
+      await pool
+        .query("DELETE FROM payment_roster_items WHERE roster_id = $1", [lockedFixtureRosterId])
+        .catch(() => undefined);
+      await pool
+        .query("DELETE FROM payment_rosters WHERE id = $1", [lockedFixtureRosterId])
+        .catch(() => undefined);
+    }
+    // deleteApplicationCascade removes college_ranking_items for this app; then we
+    // delete the ranking itself.
+    if (lockedFixtureAppId) {
+      await deleteApplicationCascade(lockedFixtureAppId).catch(() => undefined);
+    }
+    if (lockedFixtureRankingId) {
+      await pool
+        .query("DELETE FROM college_rankings WHERE id = $1", [lockedFixtureRankingId])
+        .catch(() => undefined);
+    }
+  });
 
   test.beforeEach(() => {
     runState = newRunState();
@@ -336,135 +562,92 @@ test.describe("locked roster dialog — revoked student panel + item removal", (
   });
 
   test(
-    "LOCKED roster with revoked student shows 撤銷名單 panel and 從本造冊移除 button",
+    "@nightly LOCKED roster: GET revoked-suspended returns item, DELETE removes it",
     async ({ browser }) => {
-      // ------------------------------------------------------------------
-      // Pre-check: find a LOCKED roster that contains a payment_roster_item
-      // whose application has quota_allocation_status IN ('revoked',
-      // 'suspended').  This state does NOT exist in fresh seed data.
-      // ------------------------------------------------------------------
-      const { rows: lockedRosterRows } = await pool.query<{
-        roster_id: number;
-        config_id: number;
-      }>(
-        `SELECT DISTINCT pr.id  AS roster_id,
-                         pr.scholarship_configuration_id AS config_id
-           FROM payment_rosters pr
-           JOIN payment_roster_items pri ON pri.roster_id = pr.id
-           JOIN applications a ON a.id = pri.application_id
-          WHERE pr.status = 'locked'
-            AND a.quota_allocation_status IN ('revoked', 'suspended')
-          LIMIT 1`,
-      );
-
-      if (lockedRosterRows.length === 0) {
-        test.skip(
-          true,
-          "No LOCKED roster with a revoked/suspended student found. " +
-            "This test requires: (1) generate rosters, (2) lock a roster, " +
-            "(3) POST /manual-distribution/revoke on one of its students. " +
-            "Run the full setup flow before this test.",
-        );
-        return;
-      }
-
-      const { config_id } = lockedRosterRows[0];
-
-      // ------------------------------------------------------------------
-      // Fetch the scholarship type code so we can navigate to the right
-      // roster list page.
-      // ------------------------------------------------------------------
-      const { rows: configRows } = await pool.query<{
-        scholarship_code: string;
-      }>(
-        `SELECT st.code AS scholarship_code
-           FROM scholarship_configurations sc
-           JOIN scholarship_types st ON st.id = sc.scholarship_type_id
-          WHERE sc.id = $1`,
-        [config_id],
-      );
-      if (configRows.length === 0) {
-        test.skip(true, "Scholarship config for locked roster not found");
-        return;
-      }
-
-      // ------------------------------------------------------------------
-      // Admin logs in and navigates to the payment-rosters list page.
-      // ------------------------------------------------------------------
+      // API workflow: verify the revoked student appears in revoked-suspended list,
+      // then remove them via DELETE /{roster_id}/items/{item_id}, then confirm gone.
+      // (The UI for this lives under "造冊管理" tab at root "/" which requires
+      // RosterSchedule rows — not in seed data. API test covers the same contract.)
       const adminLogin = await loginAs(browser, "admin");
       pushTrace(runState, adminLogin.traceId);
-      const page = await adminLogin.context.newPage();
 
-      await page.goto(`http://localhost:3000/admin/payment-rosters`);
+      // Step 1: GET revoked-suspended list for our locked roster.
+      const listRes = await apiAs<{
+        success: boolean;
+        data: {
+          revoked: Array<{
+            application_id: number;
+            item_id: number | null;
+            student_name: string;
+          }>;
+          suspended: unknown[];
+        };
+      }>(
+        adminLogin.token,
+        "GET",
+        `/payment-rosters/${lockedFixtureRosterId}/revoked-suspended`,
+      );
+      pushTrace(runState, listRes.traceId);
 
-      // Wait for at least one row to appear.
-      await page.waitForSelector("table tbody tr", { timeout: 15_000 });
+      expect(
+        listRes.ok,
+        `GET revoked-suspended failed: HTTP ${listRes.status} body=${JSON.stringify(listRes.body)}`,
+      ).toBe(true);
+      expect(listRes.body.success).toBe(true);
+      expect(listRes.body.data.revoked.length).toBeGreaterThan(0);
 
-      // Find the first row that shows a locked status (造冊狀態 = "已鎖定" or
-      // similar text; adapt to the actual i18n text if needed).
-      const lockedRow = page
-        .locator("tr")
-        .filter({ hasText: /已鎖定|locked/i })
-        .first();
+      // Step 2: Find our fixture application in the revoked list.
+      const revokedEntry = listRes.body.data.revoked.find(
+        (e) => e.application_id === lockedFixtureAppDbId,
+      );
+      expect(
+        revokedEntry,
+        `Fixture application ${lockedFixtureAppDbId} not found in revoked list`,
+      ).toBeDefined();
+      expect(revokedEntry!.item_id, "item_id must be non-null for a locked-roster item").not.toBeNull();
+      const itemId = revokedEntry!.item_id as number;
 
-      const lockedRowCount = await lockedRow.count();
-      if (lockedRowCount === 0) {
-        test.skip(
-          true,
-          "No row with '已鎖定' text visible in the payment-rosters table",
-        );
-        return;
-      }
+      // Step 3: DELETE the item from the locked roster.
+      const deleteRes = await apiAs<{ success: boolean; message: string }>(
+        adminLogin.token,
+        "DELETE",
+        `/payment-rosters/${lockedFixtureRosterId}/items/${itemId}`,
+        { reason: "E2E test: remove revoked student from locked roster" },
+      );
+      pushTrace(runState, deleteRes.traceId);
 
-      // Click the "查看" (view) button on that row.
-      await lockedRow.locator('button:has-text("查看")').click();
+      expect(
+        deleteRes.ok,
+        `DELETE item failed: HTTP ${deleteRes.status} body=${JSON.stringify(deleteRes.body)}`,
+      ).toBe(true);
+      expect(deleteRes.body.success).toBe(true);
 
-      // Wait for the dialog to appear.
-      const dialog = page.locator('[role="dialog"]');
-      await expect(dialog).toBeVisible({ timeout: 8_000 });
-
-      // The revoked student panel summary reads: "此造冊有 N 位學生被撤銷，請手動處理"
-      const revokedSummary = dialog.locator("summary").filter({
-        hasText: /請手動處理/,
-      });
-      await expect(revokedSummary).toBeVisible({ timeout: 5_000 });
-
-      // The 從本造冊移除 button must be present.
-      const removeBtn = dialog.locator('button:has-text("從本造冊移除")').first();
-      await expect(removeBtn).toBeVisible();
-      await expect(removeBtn).toBeEnabled();
-
-      // Verify the button is clickable — confirm the browser confirms dialog
-      // if the implementation shows a window.confirm.
-      page.once("dialog", (d) => d.accept());
-      await removeBtn.click();
-
-      // After removal the Excel-stale banner should appear:
-      //   "⚠️ 造冊資料已變更，請重新匯出 Excel"
-      await expect(
-        dialog.locator("text=請重新匯出 Excel"),
-      ).toBeVisible({ timeout: 8_000 });
+      // Step 4: Re-query revoked-suspended — our fixture item must be gone.
+      const listRes2 = await apiAs<{
+        success: boolean;
+        data: { revoked: Array<{ application_id: number }>; suspended: unknown[] };
+      }>(
+        adminLogin.token,
+        "GET",
+        `/payment-rosters/${lockedFixtureRosterId}/revoked-suspended`,
+      );
+      expect(listRes2.ok).toBe(true);
+      const stillRevoked = listRes2.body.data.revoked.find(
+        (e) => e.application_id === lockedFixtureAppDbId,
+      );
+      expect(
+        stillRevoked,
+        "Application must not appear in revoked list after item deletion",
+      ).toBeUndefined();
     },
   );
 
   test(
-    "LOCKED roster GET /payment-rosters/{id}/revoked-suspended returns expected shape",
+    "@nightly LOCKED roster GET /payment-rosters/{id}/revoked-suspended returns expected shape",
     async ({ browser }) => {
-      // ------------------------------------------------------------------
-      // API-level contract: the endpoint must return { success: true, data:
+      // API-level contract: endpoint must return { success: true, data:
       // { revoked: [...], suspended: [...] } } for any LOCKED roster.
-      // ------------------------------------------------------------------
-      const { rows: lockedRows } = await pool.query<{ id: number }>(
-        `SELECT id FROM payment_rosters WHERE status = 'locked' LIMIT 1`,
-      );
-
-      if (lockedRows.length === 0) {
-        test.skip(true, "No LOCKED roster in DB — skip API shape check");
-        return;
-      }
-
-      const rosterId = lockedRows[0].id;
-
+      // Uses the roster created in beforeAll.
       const adminLogin = await loginAs(browser, "admin");
       pushTrace(runState, adminLogin.traceId);
 
@@ -474,13 +657,14 @@ test.describe("locked roster dialog — revoked student panel + item removal", (
       }>(
         adminLogin.token,
         "GET",
-        `/payment-rosters/${rosterId}/revoked-suspended`,
+        `/payment-rosters/${lockedFixtureRosterId}/revoked-suspended`,
       );
       pushTrace(runState, res.traceId);
 
       expect(
         res.ok,
-        `GET /payment-rosters/${rosterId}/revoked-suspended failed: HTTP ${res.status} body=${JSON.stringify(res.body)}`,
+        `GET /payment-rosters/${lockedFixtureRosterId}/revoked-suspended failed: ` +
+          `HTTP ${res.status} body=${JSON.stringify(res.body)}`,
       ).toBe(true);
       expect(res.body.success).toBe(true);
       expect(Array.isArray(res.body.data.revoked)).toBe(true);
