@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { toast } from "sonner";
 import { logger } from "@/lib/utils/logger";
 import { Calendar } from "lucide-react"
+import { apiClient } from "@/lib/api"
 
 interface RosterSchedule {
   id: number
@@ -65,9 +66,8 @@ export function EditScheduleDialog({
 
   const fetchScholarshipConfigurations = async () => {
     try {
-      const response = await fetch("/api/v1/scholarship-configurations")
-      const data = await response.json()
-      setScholarshipConfigs(data.configurations || [])
+      const response = await apiClient.request("/scholarship-configurations/configurations")
+      setScholarshipConfigs(response.data || [])
     } catch (error) {
       logger.error("獲取獎學金設定失敗", { error: error })
       toast.error("無法載入獎學金設定")
@@ -100,17 +100,13 @@ export function EditScheduleDialog({
         scholarship_configuration_id: parseInt(formData.scholarship_configuration_id),
       }
 
-      const response = await fetch(`/api/v1/roster-schedules/${schedule.id}`, {
+      const response = await apiClient.request(`/roster-schedules/${schedule.id}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify(submitData),
       })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || "更新排程失敗")
+      if (!response.success) {
+        throw new Error(response.message || "更新排程失敗")
       }
 
       toast.success("排程已更新")
