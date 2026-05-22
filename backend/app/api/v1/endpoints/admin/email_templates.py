@@ -136,7 +136,11 @@ async def get_email_templates(
     result = await db.execute(stmt)
     templates = result.scalars().all()
 
-    return [EmailTemplateSchema.model_validate(template) for template in templates]
+    return {
+        "success": True,
+        "message": "Email templates retrieved successfully",
+        "data": [EmailTemplateSchema.model_validate(template).model_dump() for template in templates],
+    }
 
 
 # Per-scholarship email templates (closes issue #647)

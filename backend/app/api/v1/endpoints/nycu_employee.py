@@ -159,7 +159,11 @@ async def get_all_employees(status: str = Query("01", description="Employee stat
                 )
             )
 
-        return response_pages
+        return {
+            "success": True,
+            "message": "All employee pages retrieved successfully",
+            "data": response_pages,
+        }
 
     except NYCUEmpAuthenticationError as e:
         raise HTTPException(status_code=401, detail="Authentication failed") from e
