@@ -150,6 +150,14 @@ class Application(Base):
     final_ranking_position = Column(Integer)  # 最終排名位置
     quota_allocation_status = Column(String(20))  # 'allocated', 'rejected', 'waitlisted'
 
+    # 撤銷/暫停追蹤 (columns exist in DB via revoke_suspend_001 migration)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    revoked_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    revoke_reason = Column(Text, nullable=True)
+    suspended_at = Column(DateTime(timezone=True), nullable=True)
+    suspended_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    suspend_reason = Column(Text, nullable=True)
+
     # 時間戳記
     submitted_at = Column(DateTime(timezone=True))
     reviewed_at = Column(DateTime(timezone=True))
