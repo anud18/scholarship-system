@@ -7222,6 +7222,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/manual-distribution/applications/{application_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke Application Allocation
+         * @description 撤銷已分發學生：從未鎖定造冊移除 + 標記 application 為 cancelled/revoked。
+         */
+        post: operations["revoke_application_allocation_api_v1_manual_distribution_applications__application_id__revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/applications/{application_id}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Suspend Application Allocation
+         * @description 停發已分發學生：從未鎖定造冊移除 + 標記 application 為 cancelled/suspended。
+         */
+        post: operations["suspend_application_allocation_api_v1_manual_distribution_applications__application_id__suspend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -9206,6 +9246,17 @@ export interface components {
             items: components["schemas"]["ReviewItemCreate"][];
         };
         /**
+         * RevokeRequest
+         * @description Request body for revoking a scholarship allocation.
+         */
+        RevokeRequest: {
+            /**
+             * Reason
+             * @description Reason for revocation
+             */
+            reason: string;
+        };
+        /**
          * RosterCreateRequest
          * @description 造冊建立請求
          */
@@ -10056,6 +10107,17 @@ export interface components {
         SupplementaryImportToggle: {
             /** Allow */
             allow: boolean;
+        };
+        /**
+         * SuspendRequest
+         * @description Request body for suspending a scholarship allocation.
+         */
+        SuspendRequest: {
+            /**
+             * Reason
+             * @description Reason for suspension
+             */
+            reason: string;
         };
         /**
          * SystemSettingCreate
@@ -22099,6 +22161,76 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": components["schemas"]["Body_import_received_months_api_v1_manual_distribution_import_received_months_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_application_allocation_api_v1_manual_distribution_applications__application_id__revoke_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevokeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suspend_application_allocation_api_v1_manual_distribution_applications__application_id__suspend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SuspendRequest"];
             };
         };
         responses: {
