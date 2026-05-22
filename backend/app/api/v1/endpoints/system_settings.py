@@ -550,7 +550,7 @@ async def delete_configuration(
             },
         )
 
-        return {"message": "Configuration deleted successfully"}
+        return {"success": True, "message": "Configuration deleted successfully", "data": None}
     except HTTPException:
         raise
     except Exception as e:
