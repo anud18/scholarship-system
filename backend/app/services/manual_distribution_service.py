@@ -14,7 +14,7 @@ from typing import Any, Literal, Optional
 
 from sqlalchemy import and_, case as sa_case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.models.application import Application
 from app.models.audit_log import AuditLog
