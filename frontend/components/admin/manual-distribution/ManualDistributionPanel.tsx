@@ -589,13 +589,16 @@ export function ManualDistributionPanel({
         revokeReason.trim()
       );
       if (resp.success) {
-        setSaveMessage({
-          type: "success",
-          text: `已撤銷 ${revokeTarget.studentName} 的獎學金分發`,
-        });
+        const studentName = revokeTarget.studentName;
         setRevokeTarget(null);
         setRevokeReason("");
         await fetchData();
+        // Set success message after fetchData so it isn't cleared by
+        // fetchData's own setSaveMessage(null) at the top of that function.
+        setSaveMessage({
+          type: "success",
+          text: `已撤銷 ${studentName} 的獎學金分發`,
+        });
       } else {
         setSaveMessage({ type: "error", text: resp.message || "撤銷失敗" });
       }
