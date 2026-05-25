@@ -2383,6 +2383,9 @@ export interface paths {
         /**
          * Get Student Scholarship History
          * @description Single-student scholarship history lookup. See spec for response shape.
+         *
+         *     NotFoundError (and any ScholarshipException) is mapped to its HTTP status by
+         *     the global handler in app.main; no per-endpoint try/except needed.
          */
         get: operations["get_student_scholarship_history_api_v1_admin_student_history__student_number__get"];
         put?: never;
