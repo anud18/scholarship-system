@@ -87,13 +87,7 @@ export function CreateScheduleDialog({
         scholarship_configuration_id: parseInt(formData.scholarship_configuration_id),
       }
 
-      await apiClient.request("/roster-schedules", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(submitData),
-      })
+      await apiClient.rosterSchedules.createSchedule(submitData)
 
       toast.success("排程已建立")
 

@@ -161,20 +161,14 @@ export function RosterListTable({
   ) => {
     setGenerating(period.label);
     try {
-      const response = await apiClient.request("/payment-rosters/generate", {
-        method: "POST",
-        body: JSON.stringify({
-          scholarship_configuration_id: configId,
-          period_label: period.label,
-          roster_cycle: rosterCycle,
-          academic_year: parseInt(period.label.split("-")[0]),
-          student_verification_enabled: true,
-          auto_export_excel: true,
-          force_regenerate: isRegeneration,
-        }),
-        headers: {
-          "Content-Type": "application/json",
-        },
+      const response = await apiClient.paymentRosters.generateRoster({
+        scholarship_configuration_id: configId,
+        period_label: period.label,
+        roster_cycle: rosterCycle as never,
+        academic_year: parseInt(period.label.split("-")[0]),
+        student_verification_enabled: true,
+        auto_export_excel: true,
+        force_regenerate: isRegeneration,
       });
 
       if (response.success) {

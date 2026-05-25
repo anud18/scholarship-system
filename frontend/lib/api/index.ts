@@ -35,6 +35,7 @@ import { createEmailManagementApi } from './modules/email-management';
 import { createAdminApi } from './modules/admin';
 import { createDocumentRequestsApi } from './modules/document-requests';
 import { createPaymentRostersApi } from './modules/payment-rosters';
+import { createRosterSchedulesApi } from './modules/roster-schedules';
 import { createStudentsApi } from './modules/students';
 import { createManualDistributionApi } from './modules/manual-distribution';
 import { createRenewalApi } from './modules/renewal';
@@ -159,6 +160,7 @@ class ExtendedApiClient extends ApiClient {
   private _admin?: ReturnType<typeof createAdminApi>;
   private _documentRequests?: ReturnType<typeof createDocumentRequestsApi>;
   private _paymentRosters?: ReturnType<typeof createPaymentRostersApi>;
+  private _rosterSchedules?: ReturnType<typeof createRosterSchedulesApi>;
   private _students?: ReturnType<typeof createStudentsApi>;
   private _manualDistribution?: ReturnType<typeof createManualDistributionApi>;
   private _renewal?: ReturnType<typeof createRenewalApi>;
@@ -267,6 +269,11 @@ class ExtendedApiClient extends ApiClient {
   get paymentRosters(): ReturnType<typeof createPaymentRostersApi> {
     if (!this._paymentRosters) this._paymentRosters = createPaymentRostersApi();
     return this._paymentRosters;
+  }
+
+  get rosterSchedules(): ReturnType<typeof createRosterSchedulesApi> {
+    if (!this._rosterSchedules) this._rosterSchedules = createRosterSchedulesApi();
+    return this._rosterSchedules;
   }
 
   get students(): ReturnType<typeof createStudentsApi> {

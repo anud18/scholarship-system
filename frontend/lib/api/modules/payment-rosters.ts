@@ -303,6 +303,32 @@ export function createPaymentRostersApi() {
     },
 
     /**
+     * 重新產生造冊
+     * Note: POST /payment-rosters/{roster_id}/regenerate is not in the OpenAPI schema
+     * (orphan endpoint, see issue #665). Using `as any` to bypass typed routing.
+     */
+    regenerateRoster: async (roster_id: number): Promise<ApiResponse<unknown>> => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await (typedClient.raw.POST as any)(
+        '/api/v1/payment-rosters/{roster_id}/regenerate',
+        { params: { path: { roster_id } } }
+      );
+      return toApiResponse(response);
+    },
+
+    /**
+     * 刪除造冊（僅限未鎖定的造冊）
+     * DELETE /api/v1/payment-rosters/{roster_id}
+     */
+    deleteRoster: async (roster_id: number): Promise<ApiResponse<unknown>> => {
+      const response = await typedClient.raw.DELETE(
+        '/api/v1/payment-rosters/{roster_id}',
+        { params: { path: { roster_id } } }
+      );
+      return toApiResponse(response);
+    },
+
+    /**
      * 預覽造冊學生名單（包含完整驗證）
      * GET /api/v1/payment-rosters/preview-students
      */

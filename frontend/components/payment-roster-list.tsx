@@ -65,8 +65,9 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
       if (search) params.set("search", search)
       if (statusFilter !== "all") params.set("status", statusFilter)
 
-      const response = await apiClient.request("/payment-rosters", { params: Object.fromEntries(params) })
-      const data = response.data || response
+      const response = await apiClient.paymentRosters.getRosters(Object.fromEntries(params) as never)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (response.data || response) as any
 
       if (data.items) {
         setRosters(data.items)
@@ -84,8 +85,9 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
     try {
       setActionLoading(prev => ({ ...prev, [rosterId]: true }))
 
-      const response = await apiClient.request(`/payment-rosters/${rosterId}/download`)
-      const data = response.data || response
+      const response = await apiClient.paymentRosters.downloadRoster(rosterId)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (response.data || response) as any
 
       // For file downloads, the API should return download_url
       if (data.download_url) {
@@ -107,9 +109,7 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
     try {
       setActionLoading(prev => ({ ...prev, [rosterId]: true }))
 
-      await apiClient.request(`/payment-rosters/${rosterId}/regenerate`, {
-        method: "POST",
-      })
+      await apiClient.paymentRosters.regenerateRoster(rosterId)
 
       toast.success("造冊已重新產生")
 
@@ -127,9 +127,7 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
     if (!selectedRoster) return
 
     try {
-      await apiClient.request(`/payment-rosters/${selectedRoster.id}`, {
-        method: "DELETE",
-      })
+      await apiClient.paymentRosters.deleteRoster(selectedRoster.id)
 
       toast.success("造冊已刪除")
 

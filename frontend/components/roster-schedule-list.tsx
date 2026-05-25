@@ -76,8 +76,9 @@ export function RosterScheduleList({ onScheduleChange, onRosterGenerated }: Rost
       if (search) params.search = search
       if (statusFilter !== "all") params.status = statusFilter
 
-      const response = await apiClient.request("/roster-schedules", { params })
-      const data = response.data || response
+      const response = await apiClient.rosterSchedules.listSchedules(params)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (response.data || response) as any
 
       if (data.items) {
         setSchedules(data.items)
@@ -95,10 +96,7 @@ export function RosterScheduleList({ onScheduleChange, onRosterGenerated }: Rost
     try {
       setActionLoading(prev => ({ ...prev, [scheduleId]: true }))
 
-      await apiClient.request(`/roster-schedules/${scheduleId}/status`, {
-        method: "PATCH",
-        body: JSON.stringify({ status: newStatus }),
-      })
+      await apiClient.rosterSchedules.updateScheduleStatus(scheduleId, { status: newStatus as never })
 
       toast.success(`排程狀態已更新為 ${getStatusLabel(newStatus)}`)
 
@@ -116,9 +114,7 @@ export function RosterScheduleList({ onScheduleChange, onRosterGenerated }: Rost
     try {
       setActionLoading(prev => ({ ...prev, [scheduleId]: true }))
 
-      await apiClient.request(`/roster-schedules/${scheduleId}/execute`, {
-        method: "POST",
-      })
+      await apiClient.rosterSchedules.executeSchedule(scheduleId)
 
       toast.success("排程已觸發執行")
 
@@ -137,9 +133,7 @@ export function RosterScheduleList({ onScheduleChange, onRosterGenerated }: Rost
     if (!selectedSchedule) return
 
     try {
-      await apiClient.request(`/roster-schedules/${selectedSchedule.id}`, {
-        method: "DELETE",
-      })
+      await apiClient.rosterSchedules.deleteSchedule(selectedSchedule.id)
 
       toast.success("排程已刪除")
 

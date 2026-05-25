@@ -59,10 +59,7 @@ export function RosterCycleTimeline({ configId }: RosterCycleTimelineProps) {
     setError(null)
 
     try {
-      const response = await apiClient.request("/payment-rosters/cycle-status", {
-        method: "GET",
-        params: { config_id: configId },
-      })
+      const response = await apiClient.paymentRosters.getCycleStatus(configId)
 
       if (response.success && response.data) {
         setData(response.data)
