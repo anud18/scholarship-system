@@ -39,6 +39,7 @@ import { createRosterSchedulesApi } from './modules/roster-schedules';
 import { createStudentsApi } from './modules/students';
 import { createManualDistributionApi } from './modules/manual-distribution';
 import { createRenewalApi } from './modules/renewal';
+import { createStudentHistoryApi } from './modules/student-history';
 // import { createReviewApi } from './modules/reviews'; // Not used - professor reviews use professor endpoints with adapter
 
 // Re-export ALL types from modular types file
@@ -164,6 +165,7 @@ class ExtendedApiClient extends ApiClient {
   private _students?: ReturnType<typeof createStudentsApi>;
   private _manualDistribution?: ReturnType<typeof createManualDistributionApi>;
   private _renewal?: ReturnType<typeof createRenewalApi>;
+  private _studentHistory?: ReturnType<typeof createStudentHistoryApi>;
 
   // Lazy-loaded getters
   get auth(): ReturnType<typeof createAuthApi> {
@@ -289,6 +291,11 @@ class ExtendedApiClient extends ApiClient {
   get renewal(): ReturnType<typeof createRenewalApi> {
     if (!this._renewal) this._renewal = createRenewalApi();
     return this._renewal;
+  }
+
+  get studentHistory(): ReturnType<typeof createStudentHistoryApi> {
+    if (!this._studentHistory) this._studentHistory = createStudentHistoryApi();
+    return this._studentHistory;
   }
 
   // Backward compatibility alias

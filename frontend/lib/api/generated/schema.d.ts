@@ -2373,6 +2373,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/student-history/{student_number}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Student Scholarship History
+         * @description Single-student scholarship history lookup. See spec for response shape.
+         *
+         *     NotFoundError (and any ScholarshipException) is mapped to its HTTP status by
+         *     the global handler in app.main; no per-endpoint try/except needed.
+         */
+        get: operations["get_student_scholarship_history_api_v1_admin_student_history__student_number__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/cache/nycu-employees/refresh": {
         parameters: {
             query?: never;
@@ -14623,6 +14646,37 @@ export interface operations {
             header?: never;
             path: {
                 user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_student_scholarship_history_api_v1_admin_student_history__student_number__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                student_number: string;
             };
             cookie?: never;
         };
