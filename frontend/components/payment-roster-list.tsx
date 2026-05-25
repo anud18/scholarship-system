@@ -154,7 +154,7 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
   const getPeriodLabel = (period: string) => {
     const labels: { [key: string]: string } = {
       monthly: "月度",
-      half_yearly: "半年度",
+      semi_yearly: "半年度",
       yearly: "年度"
     }
     return labels[period] || period

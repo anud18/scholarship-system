@@ -160,7 +160,7 @@ export function RosterScheduleList({ onScheduleChange, onRosterGenerated }: Rost
   const getCycleLabel = (cycle: string) => {
     const labels: { [key: string]: string } = {
       monthly: "月度",
-      half_yearly: "半年度",
+      semi_yearly: "半年度",
       yearly: "年度"
     }
     return labels[cycle] || cycle
