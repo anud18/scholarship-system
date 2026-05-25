@@ -62,7 +62,7 @@ export function RosterCycleTimeline({ configId }: RosterCycleTimelineProps) {
       const response = await apiClient.paymentRosters.getCycleStatus(configId)
 
       if (response.success && response.data) {
-        setData(response.data)
+        setData(response.data as CycleStatusData)
       } else {
         setError("無法載入造冊週期資料")
       }
