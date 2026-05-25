@@ -52,16 +52,19 @@ export function RosterManagementDashboard() {
       setLoading(true)
 
       // Fetch schedule stats
-      const scheduleResponse = await apiClient.request("/roster-schedules")
-      const scheduleData = scheduleResponse.data || scheduleResponse
+      const scheduleResponse = await apiClient.rosterSchedules.listSchedules()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const scheduleData = (scheduleResponse.data || scheduleResponse) as any
 
       // Fetch roster stats
-      const rosterResponse = await apiClient.request("/payment-rosters")
-      const rosterData = rosterResponse.data || rosterResponse
+      const rosterResponse = await apiClient.paymentRosters.getRosters()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rosterData = (rosterResponse.data || rosterResponse) as any
 
       // Fetch scheduler status
-      const schedulerResponse = await apiClient.request("/roster-schedules/scheduler/status")
-      const schedulerData = schedulerResponse.data || schedulerResponse
+      const schedulerResponse = await apiClient.rosterSchedules.getSchedulerStatus()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const schedulerData = (schedulerResponse.data || schedulerResponse) as any
 
       setStats({
         totalSchedules: scheduleData.total || 0,
@@ -84,7 +87,7 @@ export function RosterManagementDashboard() {
 
     try {
       // Load schedule for this config
-      const scheduleResponse = await apiClient.request(`/roster-schedules/by-config/${configId}`)
+      const scheduleResponse = await apiClient.rosterSchedules.getScheduleByConfig(configId)
 
       if (scheduleResponse.success && scheduleResponse.data) {
         setSelectedSchedule(scheduleResponse.data)
@@ -100,10 +103,7 @@ export function RosterManagementDashboard() {
 
     // Load cycle status
     try {
-      const cycleResponse = await apiClient.request("/payment-rosters/cycle-status", {
-        method: "GET",
-        params: { config_id: configId },
-      })
+      const cycleResponse = await apiClient.paymentRosters.getCycleStatus(configId)
 
       if (cycleResponse.success && cycleResponse.data) {
         setCycleData(cycleResponse.data)
@@ -123,10 +123,7 @@ export function RosterManagementDashboard() {
 
     setLoadingCycle(true)
     try {
-      const cycleResponse = await apiClient.request("/payment-rosters/cycle-status", {
-        method: "GET",
-        params: { config_id: selectedConfig.id },
-      })
+      const cycleResponse = await apiClient.paymentRosters.getCycleStatus(selectedConfig.id)
 
       if (cycleResponse.success && cycleResponse.data) {
         setCycleData(cycleResponse.data)

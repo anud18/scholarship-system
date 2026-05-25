@@ -85,13 +85,7 @@ export function ScheduleSettingDialog({
         notification_emails: formData.notification_emails || [],
       }
 
-      const response = await apiClient.request(`/roster-schedules/${schedule.id}`, {
-        method: "PUT",
-        body: JSON.stringify(updateData),
-        headers: {
-          "Content-Type": "application/json",
-        },
-      })
+      const response = await apiClient.rosterSchedules.updateSchedule(schedule.id, updateData as never)
 
       if (response.success) {
         toast.success("排程設定已更新")

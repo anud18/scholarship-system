@@ -116,20 +116,16 @@ export function StudentRosterPreview({
         params.ranking_id = rankingId;
       }
 
-      const response = await apiClient.request(
-        "/payment-rosters/preview-students",
-        {
-          method: "GET",
-          params,
-        }
-      );
+      const response = await apiClient.paymentRosters.previewStudents(params);
 
       if (response.success && response.data) {
-        setData(response.data);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const responseData = response.data as any;
+        setData(responseData);
 
         // Set default selected college
-        if (response.data.has_matrix_distribution) {
-          const colleges = Object.keys(response.data.summary.by_college);
+        if (responseData.has_matrix_distribution) {
+          const colleges = Object.keys(responseData.summary.by_college);
           if (colleges.length > 0) {
             setSelectedCollege(colleges[0]);
           }

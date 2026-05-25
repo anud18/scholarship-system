@@ -96,14 +96,13 @@ export function EditScheduleDialog({
       setLoading(true)
 
       const submitData = {
-        ...formData,
-        scholarship_configuration_id: parseInt(formData.scholarship_configuration_id),
+        schedule_name: formData.schedule_name,
+        description: formData.description,
+        roster_cycle: formData.roster_cycle as "monthly" | "semi_yearly" | "yearly",
+        cron_expression: formData.cron_expression,
       }
 
-      const response = await apiClient.request(`/roster-schedules/${schedule.id}`, {
-        method: "PUT",
-        body: JSON.stringify(submitData),
-      })
+      const response = await apiClient.rosterSchedules.updateSchedule(schedule.id, submitData)
 
       if (!response.success) {
         throw new Error(response.message || "更新排程失敗")
@@ -176,7 +175,7 @@ export function EditScheduleDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="monthly">月度</SelectItem>
-                  <SelectItem value="half_yearly">半年度</SelectItem>
+                  <SelectItem value="semi_yearly">半年度</SelectItem>
                   <SelectItem value="yearly">年度</SelectItem>
                 </SelectContent>
               </Select>

@@ -63,8 +63,9 @@ export function SchedulerStatus() {
       setLoading(true)
 
       // Fetch scheduler status (includes jobs)
-      const statusResponse = await apiClient.request("/roster-schedules/scheduler/status")
-      const statusData = statusResponse.data || statusResponse
+      const statusResponse = await apiClient.rosterSchedules.getSchedulerStatus()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const statusData = (statusResponse.data || statusResponse) as any
 
       setSchedulerInfo(statusData)
       setJobs(statusData.jobs || [])

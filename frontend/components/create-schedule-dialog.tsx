@@ -83,17 +83,16 @@ export function CreateScheduleDialog({
       setLoading(true)
 
       const submitData = {
-        ...formData,
+        description: formData.description || null,
         scholarship_configuration_id: parseInt(formData.scholarship_configuration_id),
+        roster_cycle: formData.roster_cycle as "monthly" | "semi_yearly" | "yearly",
+        cron_expression: formData.cron_expression || null,
+        auto_lock: false,
+        student_verification_enabled: true,
+        notification_enabled: true,
       }
 
-      await apiClient.request("/roster-schedules", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(submitData),
-      })
+      await apiClient.rosterSchedules.createSchedule(submitData)
 
       toast.success("排程已建立")
 
@@ -167,7 +166,7 @@ export function CreateScheduleDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="monthly">月度</SelectItem>
-                <SelectItem value="half_yearly">半年度</SelectItem>
+                <SelectItem value="semi_yearly">半年度</SelectItem>
                 <SelectItem value="yearly">年度</SelectItem>
               </SelectContent>
             </Select>
