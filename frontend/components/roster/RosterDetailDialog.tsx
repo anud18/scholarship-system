@@ -214,16 +214,11 @@ export function RosterDetailDialog({
     }
     setExcludeSubmitting(true);
     try {
-      const response = await apiClient.request(
-        `/payment-rosters/${period.roster_id}/items/${excludeTarget.id}/exclude`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            reason_category: excludeCategory,
-            reason_note: excludeNote.trim() || undefined,
-          }),
-        }
+      const response = await apiClient.paymentRosters.excludeRosterItem(
+        period.roster_id,
+        excludeTarget.id,
+        excludeCategory,
+        excludeNote.trim() || undefined
       );
       if (response.success) {
         toast.success(`已排除 ${excludeTarget.student_name} 的造冊明細`);
@@ -251,13 +246,13 @@ export function RosterDetailDialog({
 
     setLoading(true);
     try {
-      const response = await apiClient.request(
-        `/payment-rosters/${period.roster_id}/items`,
-        { method: "GET" }
-      );
+      const response = await apiClient.paymentRosters.getRosterItems(period.roster_id);
 
       if (response.success && response.data) {
-        const items = response.data.items || response.data;
+        // バックエンドは { items: [...] } または [...] を返す可能性がある
+        // Backend may return { items: [...] } or a bare array
+        const raw = response.data as { items?: RosterItem[] } | RosterItem[];
+        const items: RosterItem[] = Array.isArray(raw) ? raw : (raw.items ?? []);
         setRosterItems(items);
 
         // Check if has matrix (multiple colleges)
