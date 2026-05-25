@@ -10,16 +10,18 @@ remaining quotas can be allocated to current-year students.
 import json as _json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, case as sa_case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.application import Application
+from app.models.audit_log import AuditLog
 from app.models.college_review import CollegeRanking, CollegeRankingItem, ManualDistributionHistory
 from app.models.enums import ApplicationStatus, ReviewStage
 from app.models.review import ApplicationReview, ApplicationReviewItem
+from app.models.payment_roster import PaymentRoster, PaymentRosterItem, RosterStatus
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipSubTypeConfig
 from app.services.received_months_service import calculate_received_months_bulk_async
 
@@ -346,7 +348,6 @@ class ManualDistributionService:
                     "allocation_year": item.allocation_year,
                     "status": item.status,
                     "college_rejected": item.college_rejected,
-                    "is_supplementary": item.is_supplementary,
                     "college_code": student_college,
                     "college_name": student_data.get("trm_academyname", ""),
                     "department_name": student_data.get("trm_depname", ""),
@@ -737,10 +738,6 @@ class ManualDistributionService:
                 app.approved_at = datetime.now(timezone.utc)
                 app.review_stage = ReviewStage.quota_distributed
                 approved_count += 1
-            elif item.is_supplementary and not item.is_allocated:
-                # Supplementary students pending a second distribution pass —
-                # leave status as 'ranked' so they appear in the next allocation.
-                pass
             else:
                 # Non-allocated: keep the user-facing app.status as-is
                 # (e.g. an approved-but-not-funded app stays "approved"). Only
@@ -1136,3 +1133,156 @@ class ManualDistributionService:
             academic_year=academic_year,
             rejected_map=rejected_map,
         )
+
+    async def revoke_allocation(
+        self, application_id: int, admin_user_id: int, reason: str
+    ) -> dict:
+        """Revoke an allocated application: status -> cancelled,
+        quota_allocation_status -> revoked, hard-delete its PaymentRosterItem
+        rows in all non-LOCKED rosters, write audit log."""
+        return await self._cancel_allocation(
+            application_id=application_id,
+            admin_user_id=admin_user_id,
+            reason=reason,
+            mode="revoke",
+        )
+
+    async def suspend_allocation(
+        self, application_id: int, admin_user_id: int, reason: str
+    ) -> dict:
+        """Suspend an allocated application: status -> cancelled,
+        quota_allocation_status -> suspended, hard-delete its PaymentRosterItem
+        rows in all non-LOCKED rosters, write audit log."""
+        return await self._cancel_allocation(
+            application_id=application_id,
+            admin_user_id=admin_user_id,
+            reason=reason,
+            mode="suspend",
+        )
+
+    async def _cancel_allocation(
+        self,
+        application_id: int,
+        admin_user_id: int,
+        reason: str,
+        mode: Literal["revoke", "suspend"],
+    ) -> dict:
+        # 1. Row-lock the application
+        result = await self.db.execute(
+            select(Application).where(Application.id == application_id).with_for_update()
+        )
+        app = result.scalar_one_or_none()
+        if app is None:
+            raise ValueError(f"Application {application_id} not found")
+
+        # 2. Conflict check
+        if app.quota_allocation_status in ("revoked", "suspended"):
+            raise ValueError(
+                f"Application {application_id} already {app.quota_allocation_status}"
+            )
+
+        # 3. 400 check
+        if app.quota_allocation_status != "allocated":
+            raise ValueError(
+                f"Application {application_id} is not allocated "
+                f"(quota_allocation_status={app.quota_allocation_status})"
+            )
+
+        now = datetime.now(timezone.utc)
+
+        # 4. Update application columns
+        app.status = ApplicationStatus.cancelled
+        if mode == "revoke":
+            app.quota_allocation_status = "revoked"
+            app.revoked_at = now
+            app.revoked_by = admin_user_id
+            app.revoke_reason = reason
+        else:
+            app.quota_allocation_status = "suspended"
+            app.suspended_at = now
+            app.suspended_by = admin_user_id
+            app.suspend_reason = reason
+
+        # 5. Hard-delete items in non-LOCKED rosters
+        items_result = await self.db.execute(
+            select(PaymentRosterItem)
+            .join(PaymentRoster, PaymentRosterItem.roster_id == PaymentRoster.id)
+            .where(
+                PaymentRosterItem.application_id == application_id,
+                PaymentRoster.status != RosterStatus.LOCKED,
+            )
+        )
+        items_to_delete = items_result.scalars().all()
+        affected_roster_ids = sorted({i.roster_id for i in items_to_delete})
+
+        for item in items_to_delete:
+            await self.db.delete(item)
+        await self.db.flush()  # make deletes visible to the subsequent recompute query
+
+        # 6. Recompute roster totals for affected rosters
+        for roster_id in affected_roster_ids:
+            await self._recompute_roster_totals(roster_id)
+
+        # 7. Audit log
+        action = "application.revoke" if mode == "revoke" else "application.suspend"
+        log = AuditLog.create_log(
+            user_id=admin_user_id,
+            action=action,
+            resource_type="application",
+            resource_id=str(application_id),
+            description=f"{mode} application {application_id}",
+            new_values={"reason": reason, "affected_unlocked_rosters": affected_roster_ids},
+        )
+        self.db.add(log)
+
+        await self.db.flush()
+
+        timestamp_key = "revoked_at" if mode == "revoke" else "suspended_at"
+        return {
+            "application_id": application_id,
+            "quota_allocation_status": app.quota_allocation_status,
+            timestamp_key: now.isoformat(),
+            "affected_unlocked_rosters": affected_roster_ids,
+        }
+
+    async def _recompute_roster_totals(self, roster_id: int) -> None:
+        """Recompute total_applications, qualified_count, disqualified_count,
+        total_amount for a roster after items have been added/removed.
+
+        - total_applications = all rows
+        - qualified_count = is_included=True rows
+        - disqualified_count = is_included=False rows
+        - total_amount = sum(scholarship_amount) over is_included=True rows
+        """
+        agg = await self.db.execute(
+            select(
+                func.count(PaymentRosterItem.id),
+                func.coalesce(
+                    func.sum(
+                        sa_case(
+                            (PaymentRosterItem.is_included.is_(True), 1),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+                func.coalesce(
+                    func.sum(
+                        sa_case(
+                            (PaymentRosterItem.is_included.is_(True),
+                             PaymentRosterItem.scholarship_amount),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+            ).where(PaymentRosterItem.roster_id == roster_id)
+        )
+        total_count, qualified_count, total_amount = agg.one()
+
+        roster = await self.db.get(PaymentRoster, roster_id)
+        if roster:
+            roster.total_applications = total_count
+            roster.qualified_count = qualified_count
+            roster.disqualified_count = total_count - qualified_count
+            roster.total_amount = total_amount
