@@ -69,6 +69,10 @@ describe("NoticeAgreementStep", () => {
         screen.getByText(/系統管理員尚未上傳獎學金要點/),
       ).toBeInTheDocument(),
     );
+    // Loud failure if the mock isn't wired — otherwise this test would pass
+    // for the wrong reason (real fetch returns {data: []} from the setup
+    // file's global mock, which also has no `regulations_url`).
+    expect(mockGetPublicDocs).toHaveBeenCalled();
     expect(screen.queryByTestId("inline-pdf-viewer")).not.toBeInTheDocument();
 
     const agreeCheckbox = screen.getByRole("checkbox", {
@@ -96,6 +100,7 @@ describe("NoticeAgreementStep", () => {
     );
 
     const viewer = await screen.findByTestId("inline-pdf-viewer");
+    expect(mockGetPublicDocs).toHaveBeenCalled();
     expect(viewer.getAttribute("data-url")).toMatch(
       /\/api\/v1\/system-settings\/file-proxy\?key=regulations_url/,
     );
@@ -127,6 +132,7 @@ describe("NoticeAgreementStep", () => {
     await waitFor(() =>
       expect(screen.getByText("申請資格")).toBeInTheDocument(),
     );
+    expect(mockGetPublicDocs).toHaveBeenCalled();
     expect(screen.getByText("申請期限")).toBeInTheDocument();
     expect(screen.getByText("獎金撥款")).toBeInTheDocument();
   });

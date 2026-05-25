@@ -137,6 +137,21 @@ class TestRegulationsUploadValidation:
         assert res.status_code == 200
         fake_minio.client.put_object.assert_called_once()
 
+    async def test_rejects_non_pdf_bytes_even_when_extension_and_mime_say_pdf(
+        self, admin_client: AsyncClient, fake_minio
+    ):
+        # Defense in depth: a malicious admin can spoof Content-Type and
+        # filename. Magic-byte sniff catches the content itself.
+        res = await _post_upload(
+            admin_client,
+            "regulations_url",
+            filename="rules.pdf",
+            content_type="application/pdf",
+            body=b"PK\x03\x04 docx bytes pretending to be PDF",
+        )
+        assert res.status_code == 400
+        fake_minio.client.put_object.assert_not_called()
+
 
 @pytest.mark.asyncio
 class TestSampleDocumentUploadStillAcceptsDocx:

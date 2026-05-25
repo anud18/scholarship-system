@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Card,
   CardContent,
@@ -81,7 +81,7 @@ export function NoticeAgreementStep({
     setShowPreview(true);
   };
 
-  const regulationsViewerUrl = (() => {
+  const regulationsViewerUrl = useMemo(() => {
     const objectName = publicDocs.regulations_url;
     if (!objectName) return null;
     const token =
@@ -92,7 +92,7 @@ export function NoticeAgreementStep({
     return `/api/v1/system-settings/file-proxy?key=regulations_url&token=${encodeURIComponent(
       token,
     )}&v=${cacheBuster}`;
-  })();
+  }, [publicDocs.regulations_url]);
 
   const notices = {
     zh: {

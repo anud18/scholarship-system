@@ -31,6 +31,7 @@ export function InlinePdfViewer({
 }: InlinePdfViewerProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [numPages, setNumPages] = useState<number | null>(null);
+  const [renderedCount, setRenderedCount] = useState(0);
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
 
@@ -56,20 +57,34 @@ export function InlinePdfViewer({
   const handleLoadSuccess = useCallback(
     ({ numPages: n }: { numPages: number }) => {
       setNumPages(n);
+      setRenderedCount(0);
       setLoadError(null);
-      // After pages mount, if the document fits without overflowing the
-      // container, treat it as already read. Schedule on the next frame so
-      // layout has settled.
-      requestAnimationFrame(() => {
-        const el = scrollRef.current;
-        if (!el) return;
-        if (el.scrollHeight <= el.clientHeight + SLACK_PX) {
-          fireReached();
-        }
-      });
     },
-    [fireReached],
+    [],
   );
+
+  const handlePageRenderSuccess = useCallback(() => {
+    setRenderedCount((c) => c + 1);
+  }, []);
+
+  // Pdf.js renders each <Page> to canvas asynchronously after onLoadSuccess
+  // fires. Checking the fits-without-scrolling condition immediately would
+  // race against canvas painting and could auto-latch on an empty container.
+  // Wait until every page has reported render success, then check on the
+  // next frame so layout has settled.
+  useEffect(() => {
+    if (numPages === null || renderedCount < numPages) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    const id = requestAnimationFrame(() => {
+      const cur = scrollRef.current;
+      if (!cur) return;
+      if (cur.scrollHeight <= cur.clientHeight + SLACK_PX) {
+        fireReached();
+      }
+    });
+    return () => cancelAnimationFrame(id);
+  }, [numPages, renderedCount, fireReached]);
 
   const handleLoadError = useCallback(
     (err: Error) => {
@@ -134,6 +149,7 @@ export function InlinePdfViewer({
                   pageNumber={i + 1}
                   renderAnnotationLayer
                   renderTextLayer
+                  onRenderSuccess={handlePageRenderSuccess}
                   className="mx-auto mb-2"
                 />
               ))
