@@ -83,9 +83,13 @@ export function CreateScheduleDialog({
       setLoading(true)
 
       const submitData = {
-        ...formData,
+        description: formData.description || null,
         scholarship_configuration_id: parseInt(formData.scholarship_configuration_id),
         roster_cycle: formData.roster_cycle as "monthly" | "semi_yearly" | "yearly",
+        cron_expression: formData.cron_expression || null,
+        auto_lock: false,
+        student_verification_enabled: true,
+        notification_enabled: true,
       }
 
       await apiClient.rosterSchedules.createSchedule(submitData)
