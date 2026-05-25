@@ -44,9 +44,9 @@ export function createScholarshipsApi() {
       academic_year?: number | null;
       semester?: string | null;
     }): Promise<ApiResponse<ScholarshipType[]>> => {
-      const response = await typedClient.raw.GET('/api/v1/scholarships', {
-        params: params ? { query: params } : undefined,
-      });
+      const response = params
+        ? await typedClient.raw.GET('/api/v1/scholarships', { params: { query: params } })
+        : await typedClient.raw.GET('/api/v1/scholarships');
       return toApiResponse<ScholarshipType[]>(response);
     },
 
