@@ -100,10 +100,7 @@ export function EditScheduleDialog({
         scholarship_configuration_id: parseInt(formData.scholarship_configuration_id),
       }
 
-      const response = await apiClient.request(`/roster-schedules/${schedule.id}`, {
-        method: "PUT",
-        body: JSON.stringify(submitData),
-      })
+      const response = await apiClient.rosterSchedules.updateSchedule(schedule.id, submitData)
 
       if (!response.success) {
         throw new Error(response.message || "更新排程失敗")
