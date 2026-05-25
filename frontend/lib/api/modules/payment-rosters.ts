@@ -269,7 +269,8 @@ export function createPaymentRostersApi() {
         include_header: request?.include_header ?? true,
         include_statistics: request?.include_statistics ?? true,
         max_preview_rows: request?.max_preview_rows ?? null,
-        ...request,
+        async_mode: request?.async_mode ?? false,
+        include_excluded: request?.include_excluded ?? false,
       };
       const response = await typedClient.raw.POST(
         '/api/v1/payment-rosters/{roster_id}/export',
