@@ -1,7 +1,8 @@
 /**
  * Admin Student Scholarship History API Module
  *
- * Single-student lookup by 學號 — returns academic info + locked-roster payment records.
+ * Single-student lookup by 學號 — returns academic info + paid-roster payment
+ * records (rosters in COMPLETED or LOCKED state).
  */
 
 import { typedClient } from "../typed-client";

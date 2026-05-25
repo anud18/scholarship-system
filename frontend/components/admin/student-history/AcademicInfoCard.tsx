@@ -37,7 +37,7 @@ export function AcademicInfoCard({
             <p className="font-medium text-yellow-700">無即時學籍資料</p>
             <p className="text-sm text-muted-foreground mt-1">
               {academicInfo.error ??
-                "無法取得 SIS 即時學籍資料,以下顯示造冊時的姓名快照。"}
+                "無法取得 SIS 即時學籍資料，以下顯示造冊時的姓名快照。"}
             </p>
             {snapshotName && (
               <p className="text-sm mt-2">

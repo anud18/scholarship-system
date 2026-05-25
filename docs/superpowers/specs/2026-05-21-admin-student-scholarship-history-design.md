@@ -14,7 +14,7 @@ Give admins a single-student lookup tool that answers: *"What scholarships has t
 - New tab "學生領取歷史" inside the existing `AdminManagementShell` (matches the existing admin UI pattern of one shell + tabs, not separate Next.js routes)
 - New backend endpoint that returns combined academic info + payment history in one response
 - Read-only — no edits, no batch operations
-- Data source for payments: **`payment_rosters.status = LOCKED`** items only (no in-flight applications, no draft rosters)
+- Data source for payments: **`payment_rosters.status IN (COMPLETED, LOCKED)`** items only (i.e. the roster has been finalised and an Excel file produced; in-flight applications and DRAFT/PROCESSING/FAILED rosters are excluded). COMPLETED rosters that have not yet been LOCKED are still treated as paid out — the distinction between COMPLETED and LOCKED is whether the roster can still be edited, not whether the student has received the money.
 - "幾個月" semantics: **count of payment records** (no monthly/yearly conversion)
 - SIS-unavailable fallback: render payment history with a warning card
 
@@ -36,12 +36,12 @@ admin browser → AdminManagementShell, tab "student-history" (StudentHistoryPan
                               ├─ StudentService.get_student_basic_info(stdcode)   → SIS API (HMAC)
                               │   (failure tolerated; surfaced as warning)
                               │
-                              └─ StudentScholarshipHistoryService.get_locked_payments(stdcode)
+                              └─ StudentScholarshipHistoryService._fetch_paid_payments(stdcode)
                                   → SELECT FROM payment_roster_items pri
                                        JOIN payment_rosters pr ON pri.roster_id = pr.id
                                      WHERE pri.student_id_number = :stdcode
                                        AND pri.is_included = TRUE
-                                       AND pr.status = 'locked'
+                                       AND pr.status IN ('completed', 'locked')
                                      ORDER BY pr.academic_year DESC, pr.period_label DESC
                               │
                               ▼
@@ -50,7 +50,7 @@ admin browser → AdminManagementShell, tab "student-history" (StudentHistoryPan
 
 **Why one endpoint:** the page is a single cohesive view; SIS-failure handling is cleaner inside one response than coordinating two parallel queries on the frontend.
 
-**Why `status='locked'`:** locked is the canonical "money was actually paid out, Excel exported, do not modify" state. `is_included=TRUE` removes verification-failed rows that the finalize step kept on the roster only for audit purposes.
+**Why `status IN (COMPLETED, LOCKED)`:** these two statuses mark rosters whose Excel file has been produced and that have been finalised. LOCKED additionally means "do not modify", but the money is already considered paid out at COMPLETED. Excluding COMPLETED would hide rosters that haven't been manually locked yet, which is not the intent. `is_included=TRUE` removes verification-failed rows that the finalize step kept on the roster only for audit purposes.
 
 ## 4. API Contract
 
@@ -133,7 +133,7 @@ admin browser → AdminManagementShell, tab "student-history" (StudentHistoryPan
 - `backend/app/services/student_scholarship_history_service.py`:
   - `class StudentScholarshipHistoryService`
   - `async def get_history(self, db: AsyncSession, stdcode: str) -> StudentScholarshipHistoryData`
-  - Internal helpers: `_fetch_academic_info()`, `_fetch_locked_payments()`, `_build_summary()`
+  - Internal helpers: `_fetch_academic_info()`, `_fetch_paid_payments()`, `_build_summary()`
 - `backend/app/api/v1/endpoints/admin/student_history.py`:
   - Single `GET /{student_number}` endpoint
   - Validates path param against regex
@@ -150,7 +150,7 @@ async def get_history(self, db, stdcode):
     # Run in parallel where it makes sense
     sis_data, payments = await asyncio.gather(
         self._fetch_academic_info(stdcode),
-        self._fetch_locked_payments(db, stdcode),
+        self._fetch_paid_payments(db, stdcode),
         return_exceptions=True,
     )
 
@@ -234,7 +234,7 @@ Per CLAUDE.md §8, after adding the endpoint run `cd frontend && npm run api:gen
 | SIS ok, zero payments | 200 with empty `payment_records`; "尚無領取記錄" empty state |
 | SIS fails AND zero payments | 404 "查無此學生資料" |
 | DB error | Bubble up — no fallback or mock data (CLAUDE.md §1) |
-| Concurrent locked rosters with same student | All returned; sorted newest first |
+| Concurrent paid rosters (COMPLETED or LOCKED) with same student | All returned; sorted newest first |
 | Non-admin caller | 403 from `require_admin` |
 | Long-running SIS call | Inherits existing `student_api_timeout` (default 10s); query continues |
 
@@ -269,8 +269,8 @@ Per CLAUDE.md §8, after adding the endpoint run `cd frontend && npm run api:gen
 ## 9. Migration / Data Considerations
 
 - No DB migrations required — all reads use existing `payment_rosters` and `payment_roster_items` tables
-- No seed-data changes — existing locked rosters in the dev DB will populate the page
-- If dev DB has no locked rosters, the manual-distribution flow needs to be exercised once to produce test data (or a fixture can be added in the backend test setup)
+- No seed-data changes — existing COMPLETED or LOCKED rosters in the dev DB will populate the page
+- If dev DB has no paid rosters, the manual-distribution flow needs to be exercised once to produce test data (or a fixture can be added in the backend test setup)
 
 ## 10. Open Questions
 

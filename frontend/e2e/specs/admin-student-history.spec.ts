@@ -38,10 +38,10 @@ test.describe("Admin student scholarship history", () => {
   });
 
   // NOTE: This test uses seeded `stuphd001` (see backend/app/seed.py). The
-  // dev DB may or may not have locked rosters for them by default. If not, the
-  // table will show the "尚無領取記錄" empty state — both outcomes are valid
-  // for "the page renders without error". A stronger assertion needs roster
-  // seeding which is out of scope for this plan.
+  // dev DB may or may not have paid (COMPLETED or LOCKED) rosters for them
+  // by default. If not, the table will show the "尚無領取記錄" empty state —
+  // both outcomes are valid for "the page renders without error". A stronger
+  // assertion needs roster seeding which is out of scope for this plan.
   test("renders page for seeded student (table OR empty state)", async ({
     browser,
   }) => {

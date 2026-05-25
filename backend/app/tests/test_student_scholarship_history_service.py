@@ -177,10 +177,10 @@ async def seeded_rosters(db):
 
 
 @pytest.mark.asyncio
-async def test_fetch_locked_payments_returns_only_locked_and_included(db, seeded_rosters):
-    """Service must filter status=LOCKED AND is_included=TRUE AND matching student_id_number."""
+async def test_fetch_paid_payments_filters_drafts_and_excluded(db, seeded_rosters):
+    """Service must filter status IN (COMPLETED, LOCKED) AND is_included=TRUE AND matching student_id_number."""
     svc = StudentScholarshipHistoryService()
-    records, snapshot_name = await svc._fetch_locked_payments(db, "S001")
+    records, snapshot_name = await svc._fetch_paid_payments(db, "S001")
 
     assert len(records) == 2
     # Sort: most-recent first — both items live on roster_a (114-10)
@@ -192,15 +192,15 @@ async def test_fetch_locked_payments_returns_only_locked_and_included(db, seeded
 
 
 @pytest.mark.asyncio
-async def test_fetch_locked_payments_returns_empty_for_unknown_student(db, seeded_rosters):
+async def test_fetch_paid_payments_returns_empty_for_unknown_student(db, seeded_rosters):
     svc = StudentScholarshipHistoryService()
-    records, snapshot_name = await svc._fetch_locked_payments(db, "NOBODY")
+    records, snapshot_name = await svc._fetch_paid_payments(db, "NOBODY")
     assert records == []
     assert snapshot_name is None
 
 
 @pytest.mark.asyncio
-async def test_fetch_locked_payments_includes_completed_rosters(db):
+async def test_fetch_paid_payments_includes_completed_rosters(db):
     """COMPLETED (finalized + Excel produced) rosters count toward 'received', not just LOCKED."""
     from app.models.scholarship import ScholarshipType
 
@@ -256,7 +256,7 @@ async def test_fetch_locked_payments_includes_completed_rosters(db):
     await db.commit()
 
     svc = StudentScholarshipHistoryService()
-    records, snapshot_name = await svc._fetch_locked_payments(db, "S999")
+    records, snapshot_name = await svc._fetch_paid_payments(db, "S999")
 
     assert len(records) == 1
     assert records[0].scholarship_amount == Decimal("7500")
@@ -269,7 +269,7 @@ class TestGetHistory:
     async def test_raises_not_found_when_sis_fails_and_no_payments(self, db):
         """Both SIS error AND empty payment list → 404 ScholarshipException."""
         svc = StudentScholarshipHistoryService()
-        with patch.object(svc, "_fetch_locked_payments", new=AsyncMock(return_value=([], None))):
+        with patch.object(svc, "_fetch_paid_payments", new=AsyncMock(return_value=([], None))):
             with patch("app.services.student_scholarship_history_service.StudentService") as MockStudent:
                 MockStudent.return_value.get_student_basic_info = AsyncMock(side_effect=Exception("SIS down"))
                 with pytest.raises(ScholarshipException) as exc_info:
@@ -292,7 +292,7 @@ class TestGetHistory:
                 scholarship_amount=Decimal("1000"),
             )
         ]
-        with patch.object(svc, "_fetch_locked_payments", new=AsyncMock(return_value=(sample_records, "王小明"))):
+        with patch.object(svc, "_fetch_paid_payments", new=AsyncMock(return_value=(sample_records, "王小明"))):
             with patch("app.services.student_scholarship_history_service.StudentService") as MockStudent:
                 MockStudent.return_value.get_student_basic_info = AsyncMock(side_effect=Exception("SIS down"))
                 result = await svc.get_history(db, "S001")
@@ -315,7 +315,7 @@ class TestGetHistory:
                 scholarship_amount=Decimal("1000"),
             )
         ]
-        with patch.object(svc, "_fetch_locked_payments", new=AsyncMock(return_value=(sample_records, "王小明"))):
+        with patch.object(svc, "_fetch_paid_payments", new=AsyncMock(return_value=(sample_records, "王小明"))):
             with patch("app.services.student_scholarship_history_service.StudentService") as MockStudent:
                 MockStudent.return_value.get_student_basic_info = AsyncMock(
                     return_value={

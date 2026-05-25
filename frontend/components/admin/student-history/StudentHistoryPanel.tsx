@@ -73,6 +73,11 @@ export function StudentHistoryPanel() {
     const trimmed = input.trim();
     if (!STUDENT_NUMBER_REGEX.test(trimmed)) {
       setInputError("請輸入有效的學號 (4-15 位英數字)");
+      // Clear previous result so it doesn't render under the validation error.
+      setSubmitted(null);
+      setData(null);
+      setNotFound(false);
+      setError(null);
       return;
     }
     setInputError(null);

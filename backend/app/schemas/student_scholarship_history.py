@@ -35,7 +35,12 @@ class AcademicInfo(BaseModel):
 
 
 class PaymentRecord(BaseModel):
-    """One locked roster item belonging to the student."""
+    """One paid roster item belonging to the student.
+
+    "Paid" = the parent roster's status is COMPLETED or LOCKED (Excel produced,
+    distribution finalised). In-flight statuses (DRAFT/PROCESSING/FAILED) are
+    excluded by the service layer.
+    """
 
     roster_id: int
     roster_code: str

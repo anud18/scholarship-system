@@ -1,5 +1,6 @@
 """Service: assemble admin student scholarship history (academic + payments)."""
 
+import asyncio
 import logging
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
@@ -22,7 +23,12 @@ logger = logging.getLogger(__name__)
 
 
 class StudentScholarshipHistoryService:
-    """Orchestrates SIS lookup and locked-roster payment retrieval."""
+    """Orchestrates SIS lookup and paid-roster payment retrieval.
+
+    A roster counts as paid out once it has reached either COMPLETED or LOCKED
+    status (the Excel file has been produced; the distribution is final). Earlier
+    states (DRAFT/PROCESSING/FAILED) are considered in-flight and excluded.
+    """
 
     _BASIC_INFO_FIELDS = {
         "std_cname",
@@ -52,14 +58,14 @@ class StudentScholarshipHistoryService:
             basic_info=AcademicBasicInfo(**subset),
         )
 
-    async def _fetch_locked_payments(
+    async def _fetch_paid_payments(
         self,
         db: AsyncSession,
         student_number: str,
     ) -> Tuple[List[PaymentRecord], Optional[str]]:
-        # "Received" = COMPLETED or LOCKED: the roster has been finalized and an
-        # Excel file produced. DRAFT/PROCESSING/FAILED rosters represent in-flight
-        # or aborted work and are excluded.
+        """Return roster items for the student from rosters in a paid state
+        (COMPLETED or LOCKED). Also returns the student_name snapshot from the
+        most-recent matching item, for SIS-fallback display."""
         stmt = (
             select(PaymentRosterItem, PaymentRoster)
             .join(PaymentRoster, PaymentRosterItem.roster_id == PaymentRoster.id)
@@ -112,17 +118,31 @@ class StudentScholarshipHistoryService:
         db: AsyncSession,
         student_number: str,
     ) -> StudentScholarshipHistoryData:
-        """Orchestrate SIS lookup + locked-payment retrieval. Raises NotFoundError
-        when both sources are empty."""
+        """Orchestrate SIS lookup + paid-payment retrieval. Raises
+        ScholarshipException(404) when both sources are empty.
+
+        SIS and DB are queried concurrently: SIS calls can take up to
+        ``student_api_timeout`` seconds, while the DB query is local — running
+        them in parallel keeps the worst-case latency at max(sis, db) rather
+        than sis + db."""
+        sis_task = asyncio.create_task(StudentService().get_student_basic_info(student_number))
+        db_task = asyncio.create_task(self._fetch_paid_payments(db, student_number))
+
+        sis_result, db_result = await asyncio.gather(sis_task, db_task, return_exceptions=True)
+
         sis_error: Optional[str] = None
         sis_data: Optional[Dict[str, Any]] = None
-        try:
-            sis_data = await StudentService().get_student_basic_info(student_number)
-        except Exception as exc:  # noqa: BLE001 — tolerate any SIS failure
-            logger.warning("SIS lookup failed for student %s: %s", student_number, exc)
-            sis_error = str(exc)
+        if isinstance(sis_result, BaseException):
+            logger.warning("SIS lookup failed for student %s: %s", student_number, sis_result)
+            sis_error = str(sis_result)
+        else:
+            sis_data = sis_result
 
-        records, snapshot_name = await self._fetch_locked_payments(db, student_number)
+        if isinstance(db_result, BaseException):
+            # DB failures are not user-recoverable — re-raise so the global
+            # handler can produce a 500 with trace_id.
+            raise db_result
+        records, snapshot_name = db_result
 
         academic_info = self._build_academic_info(sis_data, error_message=sis_error)
 
