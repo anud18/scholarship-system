@@ -199,6 +199,71 @@ async def test_fetch_locked_payments_returns_empty_for_unknown_student(db, seede
     assert snapshot_name is None
 
 
+@pytest.mark.asyncio
+async def test_fetch_locked_payments_includes_completed_rosters(db):
+    """COMPLETED (finalized + Excel produced) rosters count toward 'received', not just LOCKED."""
+    from app.models.scholarship import ScholarshipType
+
+    admin = User(
+        nycu_id="adminseed2",
+        name="Admin Seed 2",
+        email="adminseed2@nycu.edu.tw",
+        user_type=UserType.employee,
+        role=UserRole.admin,
+    )
+    db.add(admin)
+    await db.flush()
+
+    stype = ScholarshipType(code="TEST2", name="Test Scholarship 2")
+    db.add(stype)
+    await db.flush()
+
+    cfg = ScholarshipConfiguration(
+        config_code="TEST-002",
+        config_name="Test Config 2",
+        is_active=True,
+        scholarship_type_id=stype.id,
+        academic_year=114,
+        amount=10000,
+    )
+    db.add(cfg)
+    await db.flush()
+
+    completed_roster = PaymentRoster(
+        roster_code="ROSTER-COMPLETED-1",
+        scholarship_configuration_id=cfg.id,
+        period_label="114-11",
+        academic_year=114,
+        roster_cycle=RosterCycle.MONTHLY,
+        status=RosterStatus.COMPLETED,
+        trigger_type=RosterTriggerType.MANUAL,
+        created_by=admin.id,
+    )
+    db.add(completed_roster)
+    await db.flush()
+
+    item = PaymentRosterItem(
+        roster_id=completed_roster.id,
+        application_id=1,
+        student_id_number="S999",
+        student_name="陳完成",
+        scholarship_name="教育部",
+        scholarship_amount="7500",
+        verification_status=StudentVerificationStatus.VERIFIED,
+        is_included=True,
+    )
+    db.add(item)
+    await db.commit()
+
+    svc = StudentScholarshipHistoryService()
+    records, snapshot_name = await svc._fetch_locked_payments(db, "S999")
+
+    assert len(records) == 1
+    assert records[0].scholarship_amount == Decimal("7500")
+    assert records[0].roster_cycle == "monthly"
+    assert snapshot_name == "陳完成"
+
+
 class TestGetHistory:
     @pytest.mark.asyncio
     async def test_raises_not_found_when_sis_fails_and_no_payments(self, db):

@@ -29,6 +29,7 @@ class StudentScholarshipHistoryService:
         "std_ename",
         "std_degree",
         "std_studingstatus",
+        "std_academyno",
         "std_aca_cname",
         "std_depname",
         "std_depno",
@@ -56,13 +57,16 @@ class StudentScholarshipHistoryService:
         db: AsyncSession,
         student_number: str,
     ) -> Tuple[List[PaymentRecord], Optional[str]]:
+        # "Received" = COMPLETED or LOCKED: the roster has been finalized and an
+        # Excel file produced. DRAFT/PROCESSING/FAILED rosters represent in-flight
+        # or aborted work and are excluded.
         stmt = (
             select(PaymentRosterItem, PaymentRoster)
             .join(PaymentRoster, PaymentRosterItem.roster_id == PaymentRoster.id)
             .where(
                 PaymentRosterItem.student_id_number == student_number,
                 PaymentRosterItem.is_included.is_(True),
-                PaymentRoster.status == RosterStatus.LOCKED,
+                PaymentRoster.status.in_([RosterStatus.COMPLETED, RosterStatus.LOCKED]),
             )
             .order_by(
                 PaymentRoster.academic_year.desc(),

@@ -8,12 +8,18 @@ from pydantic import BaseModel, Field
 
 
 class AcademicBasicInfo(BaseModel):
-    """SIS basic info subset rendered on the page."""
+    """SIS basic info subset rendered on the page.
+
+    Numeric reference fields (std_degree, std_studingstatus) and code fields
+    (std_academyno) are forwarded as strings; the frontend resolves them to
+    display labels via the reference-data hooks.
+    """
 
     std_cname: Optional[str] = None
     std_ename: Optional[str] = None
-    std_degree: Optional[str] = None  # "1"=博士, "2"=碩士, "3"=學士
+    std_degree: Optional[str] = None
     std_studingstatus: Optional[str] = None
+    std_academyno: Optional[str] = None
     std_aca_cname: Optional[str] = None
     std_depname: Optional[str] = None
     std_depno: Optional[str] = None

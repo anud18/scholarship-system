@@ -2,13 +2,14 @@
 
 import { AlertCircle, GraduationCap } from "lucide-react";
 
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import {
+  getAcademyName,
+  getDegreeName,
+  getStudyingStatusName,
+  useReferenceData,
+} from "@/hooks/use-reference-data";
 import type { AcademicInfo } from "@/lib/api/modules/student-history";
 
 interface AcademicInfoCardProps {
@@ -16,16 +17,18 @@ interface AcademicInfoCardProps {
   snapshotName: string | null;
 }
 
-const DEGREE_LABEL: Record<string, string> = {
-  "1": "博士",
-  "2": "碩士",
-  "3": "學士",
-};
+function parseRefId(value: string | null | undefined): number | undefined {
+  if (value === null || value === undefined || value === "") return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
 
 export function AcademicInfoCard({
   academicInfo,
   snapshotName,
 }: AcademicInfoCardProps) {
+  const { degrees, studyingStatuses, academies } = useReferenceData();
+
   if (!academicInfo.available) {
     return (
       <Card className="border-yellow-500">
@@ -54,6 +57,10 @@ export function AcademicInfoCard({
     return null;
   }
 
+  const degreeLabel = getDegreeName(parseRefId(info.std_degree), degrees);
+  const statusLabel = getStudyingStatusName(parseRefId(info.std_studingstatus), studyingStatuses);
+  const academyLabel = info.std_aca_cname || getAcademyName(info.std_academyno, academies);
+
   return (
     <Card>
       <CardHeader>
@@ -74,15 +81,15 @@ export function AcademicInfoCard({
           </div>
           <div>
             <p className="text-sm font-medium text-muted-foreground">學位</p>
-            <p>{info.std_degree ? DEGREE_LABEL[info.std_degree] ?? info.std_degree : "N/A"}</p>
+            <p>{degreeLabel}</p>
           </div>
           <div>
             <p className="text-sm font-medium text-muted-foreground">在學狀態</p>
-            <p>{info.std_studingstatus ?? "N/A"}</p>
+            <p>{statusLabel}</p>
           </div>
           <div>
             <p className="text-sm font-medium text-muted-foreground">學院</p>
-            <p>{info.std_aca_cname ?? "N/A"}</p>
+            <p>{academyLabel}</p>
           </div>
           <div>
             <p className="text-sm font-medium text-muted-foreground">系所</p>
