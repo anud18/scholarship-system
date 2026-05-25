@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ScholarshipException
 from app.models.payment_roster import PaymentRoster, PaymentRosterItem, RosterStatus
 from app.schemas.student_scholarship_history import (
     AcademicBasicInfo,
@@ -127,7 +127,11 @@ class StudentScholarshipHistoryService:
         academic_info = self._build_academic_info(sis_data, error_message=sis_error)
 
         if not academic_info.available and not records:
-            raise NotFoundError(f"查無此學生資料: {student_number}")
+            raise ScholarshipException(
+                message=f"查無此學生資料: {student_number}",
+                status_code=404,
+                error_code="NOT_FOUND",
+            )
 
         summary = self._build_summary(records, snapshot_name=snapshot_name)
         return StudentScholarshipHistoryData(

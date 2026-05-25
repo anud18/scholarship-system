@@ -6,7 +6,6 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError
 from app.core.security import require_admin
 from app.db.deps import get_db
 from app.models.user import User
@@ -27,7 +26,11 @@ async def get_student_scholarship_history(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Single-student scholarship history lookup. See spec for response shape."""
+    """Single-student scholarship history lookup. See spec for response shape.
+
+    NotFoundError (and any ScholarshipException) is mapped to its HTTP status by
+    the global handler in app.main; no per-endpoint try/except needed.
+    """
     if not _STUDENT_NUMBER_PATTERN.match(student_number):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -35,11 +38,7 @@ async def get_student_scholarship_history(
         )
 
     service = StudentScholarshipHistoryService()
-    try:
-        data = await service.get_history(db, student_number)
-    except NotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-
+    data = await service.get_history(db, student_number)
     return {
         "success": True,
         "message": "Student history retrieved",

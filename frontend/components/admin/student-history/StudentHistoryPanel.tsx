@@ -19,6 +19,7 @@ const STUDENT_NUMBER_REGEX = /^[A-Za-z0-9]{4,15}$/;
 export function StudentHistoryPanel() {
   const [input, setInput] = useState("");
   const [submitted, setSubmitted] = useState<string | null>(null);
+  const [fetchToken, setFetchToken] = useState(0);
   const [inputError, setInputError] = useState<string | null>(null);
   const [data, setData] = useState<StudentScholarshipHistoryData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -65,7 +66,8 @@ export function StudentHistoryPanel() {
     return () => {
       cancelled = true;
     };
-  }, [submitted]);
+    // fetchToken forces refetch when the user retries with the same student number
+  }, [submitted, fetchToken]);
 
   const handleSubmit = () => {
     const trimmed = input.trim();
@@ -75,6 +77,7 @@ export function StudentHistoryPanel() {
     }
     setInputError(null);
     setSubmitted(trimmed);
+    setFetchToken((n) => n + 1);
   };
 
   return (

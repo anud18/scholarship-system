@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 import pytest_asyncio
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ScholarshipException
 from app.models.payment_roster import (
     PaymentRoster,
     PaymentRosterItem,
@@ -267,13 +267,15 @@ async def test_fetch_locked_payments_includes_completed_rosters(db):
 class TestGetHistory:
     @pytest.mark.asyncio
     async def test_raises_not_found_when_sis_fails_and_no_payments(self, db):
-        """Both SIS error AND empty payment list → NotFoundError."""
+        """Both SIS error AND empty payment list → 404 ScholarshipException."""
         svc = StudentScholarshipHistoryService()
         with patch.object(svc, "_fetch_locked_payments", new=AsyncMock(return_value=([], None))):
             with patch("app.services.student_scholarship_history_service.StudentService") as MockStudent:
                 MockStudent.return_value.get_student_basic_info = AsyncMock(side_effect=Exception("SIS down"))
-                with pytest.raises(NotFoundError):
+                with pytest.raises(ScholarshipException) as exc_info:
                     await svc.get_history(db, "DOES_NOT_EXIST")
+                assert exc_info.value.status_code == 404
+                assert "DOES_NOT_EXIST" in exc_info.value.message
 
     @pytest.mark.asyncio
     async def test_returns_data_when_sis_fails_but_payments_exist(self, db):

@@ -58,8 +58,8 @@ export function PaymentHistoryTable({ records }: PaymentHistoryTableProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {records.map((r) => (
-              <TableRow key={`${r.roster_id}-${r.scholarship_name}`}>
+            {records.map((r, idx) => (
+              <TableRow key={`${r.roster_id}-${idx}`}>
                 <TableCell className="font-mono">{r.period_label}</TableCell>
                 <TableCell>{r.scholarship_name}</TableCell>
                 <TableCell>{r.scholarship_subtype ?? "—"}</TableCell>

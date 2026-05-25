@@ -13,6 +13,7 @@ export interface AcademicBasicInfo {
   std_ename: string | null;
   std_degree: string | null;
   std_studingstatus: string | null;
+  std_academyno: string | null;
   std_aca_cname: string | null;
   std_depname: string | null;
   std_depno: string | null;

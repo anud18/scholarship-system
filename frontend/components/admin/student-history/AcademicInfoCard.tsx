@@ -3,7 +3,6 @@
 import { AlertCircle, GraduationCap } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import {
   getAcademyName,
   getDegreeName,
@@ -104,7 +103,6 @@ export function AcademicInfoCard({
             <p className="text-sm">{info.com_email ?? "N/A"}</p>
           </div>
         </div>
-        <Separator className="my-3" />
       </CardContent>
     </Card>
   );
