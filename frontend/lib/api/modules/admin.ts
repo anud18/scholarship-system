@@ -1059,7 +1059,7 @@ export function createAdminApi() {
         body: {
           application_ids: applicationIds,
           ...(options?.comments !== undefined && { comments: options.comments }),
-          ...(options?.sendNotifications !== undefined && { send_notifications: options.sendNotifications }),
+          send_notifications: options?.sendNotifications ?? true,
         },
       });
       return toApiResponse(response) as ApiResponse<{
