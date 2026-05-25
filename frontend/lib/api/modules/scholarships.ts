@@ -40,8 +40,13 @@ export function createScholarshipsApi() {
      * Get all scholarships
      * Type-safe: Response array inferred from OpenAPI
      */
-    getAll: async (): Promise<ApiResponse<ScholarshipType[]>> => {
-      const response = await typedClient.raw.GET('/api/v1/scholarships');
+    getAll: async (params?: {
+      academic_year?: number | null;
+      semester?: string | null;
+    }): Promise<ApiResponse<ScholarshipType[]>> => {
+      const response = await typedClient.raw.GET('/api/v1/scholarships', {
+        params: params ? { query: params } : undefined,
+      });
       return toApiResponse<ScholarshipType[]>(response);
     },
 

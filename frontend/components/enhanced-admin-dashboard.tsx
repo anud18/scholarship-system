@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import {
   api,
+  apiClient,
   Application,
   DashboardStats,
   NotificationResponse,
@@ -102,33 +103,17 @@ export function EnhancedAdminDashboard({
     semester: string | null
   ) => {
     try {
-      const statsResponse = await api.request<DashboardStats>("/admin/dashboard/stats", {
-        method: "GET",
-        params: {
-          academic_year: academicYear,
-          semester: semester ?? undefined,
-        },
-      });
+      const statsResponse = await apiClient.admin.getDashboardStats();
       if (statsResponse.success) {
         setFilteredStats(statsResponse.data ?? null);
       }
 
-      const applicationsResponse = await api.request<Application[]>(
-        "/admin/recent-applications",
-        {
-          method: "GET",
-          params: {
-            academic_year: academicYear,
-            semester: semester ?? undefined,
-            limit: 10,
-          },
-        }
-      );
+      const applicationsResponse = await apiClient.admin.getRecentApplications(10);
       if (
         applicationsResponse.success &&
         Array.isArray(applicationsResponse.data)
       ) {
-        setFilteredApplications(applicationsResponse.data);
+        setFilteredApplications(applicationsResponse.data as Application[]);
       }
     } catch (error) {
       logger.error("Error fetching filtered data", { error: error });
