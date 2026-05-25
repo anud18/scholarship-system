@@ -85,6 +85,7 @@ export function CreateScheduleDialog({
       const submitData = {
         ...formData,
         scholarship_configuration_id: parseInt(formData.scholarship_configuration_id),
+        roster_cycle: formData.roster_cycle as "monthly" | "semi_yearly" | "yearly",
       }
 
       await apiClient.rosterSchedules.createSchedule(submitData)
@@ -161,7 +162,7 @@ export function CreateScheduleDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="monthly">月度</SelectItem>
-                <SelectItem value="half_yearly">半年度</SelectItem>
+                <SelectItem value="semi_yearly">半年度</SelectItem>
                 <SelectItem value="yearly">年度</SelectItem>
               </SelectContent>
             </Select>
