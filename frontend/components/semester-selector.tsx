@@ -124,12 +124,13 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
 
       if (activePeriodsOnly) {
         // 獲取有實際申請資料的學期
-        const response = await apiClient.request("/reference-data/active-academic-periods");
-        setCombinations(response.data?.active_periods || []);
+        const response = await apiClient.referenceData.getActiveAcademicPeriods();
+        const activeData = response.data as { active_periods?: CombinationOption[]; current_period?: string } | undefined;
+        setCombinations(activeData?.active_periods || []);
         setDetectedCycle("semester");
         setActualMode("combined");
         setCurrentInfo({
-          current_period: response.data?.current_period,
+          current_period: activeData?.current_period,
           cycle: "semester",
         });
       } else {
@@ -227,12 +228,13 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
   const loadBasicData = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.request("/reference-data/semesters");
-      setAcademicYears(response.data?.academic_years || []);
-      setSemesters(response.data?.semesters || []);
+      const response = await apiClient.referenceData.getSemesters();
+      const semesterData = response.data as { academic_years?: AcademicYearOption[]; semesters?: SemesterOption[]; current_academic_year?: number; current_semester?: string } | undefined;
+      setAcademicYears(semesterData?.academic_years || []);
+      setSemesters(semesterData?.semesters || []);
       setCurrentInfo({
-        current_academic_year: response.data?.current_academic_year,
-        current_semester: response.data?.current_semester,
+        current_academic_year: semesterData?.current_academic_year,
+        current_semester: semesterData?.current_semester,
       });
       setActualMode("separate");
     } catch (error) {

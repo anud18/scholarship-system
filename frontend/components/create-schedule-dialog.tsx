@@ -57,10 +57,9 @@ export function CreateScheduleDialog({
 
   const fetchScholarshipConfigurations = async () => {
     try {
-      const response = await apiClient.request("/scholarship-configurations/configurations")
-      // apiClient already extracts response.data, so response.data is the actual array
-      const configs = Array.isArray(response.data) ? response.data : (response.data?.data || [])
-      setScholarshipConfigs(configs)
+      const response = await apiClient.admin.getScholarshipConfigurations()
+      const configs = Array.isArray(response.data) ? response.data : []
+      setScholarshipConfigs(configs as ScholarshipConfiguration[])
     } catch (error) {
       logger.error("獲取獎學金設定失敗", { error: error })
       toast.error("無法載入獎學金設定")
