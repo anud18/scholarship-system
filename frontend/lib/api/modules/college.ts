@@ -274,10 +274,34 @@ export function createCollegeApi() {
     },
 
     /**
-     * NOTE: Statistics endpoint was removed from backend
-     * TODO: Reimplement using ApplicationReview + ApplicationReviewItem
-     * See backend/app/api/v1/endpoints/college_review/utilities.py
+     * 取得學院審核統計資料
+     * Scoped to scholarship types the calling college user has permission for.
      */
+    getReviewStatistics: async (): Promise<
+      ApiResponse<{
+        per_scholarship: Array<{
+          scholarship_type_id: number;
+          code: string | null;
+          name: string | null;
+          name_en: string | null;
+          applications: number;
+          reviews_by_recommendation: Record<string, number>;
+          items_by_sub_type_and_recommendation: Record<string, Record<string, number>>;
+        }>;
+        totals: {
+          applications: number;
+          reviews: number;
+          reviews_by_recommendation: Record<string, number>;
+          items_by_recommendation: Record<string, number>;
+        };
+      }>
+    > => {
+      const response = await typedClient.raw.GET(
+        "/api/v1/college-review/statistics",
+        {}
+      );
+      return toApiResponse(response);
+    },
 
     /**
      * Get available combinations of scholarship types, years, and semesters
