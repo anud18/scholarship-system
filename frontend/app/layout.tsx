@@ -42,10 +42,7 @@ export default async function RootLayout({
 
   return (
     <html lang="zh-TW" className="scroll-smooth">
-      <head nonce={nonce}>
-        {/* Next.js will automatically apply nonce to all injected scripts */}
-      </head>
-      <body className="antialiased" nonce={nonce}>
+      <body className="antialiased" nonce={nonce} suppressHydrationWarning>
         <AppProvider>
           <SessionExpiredProvider>
             {children}

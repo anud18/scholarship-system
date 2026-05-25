@@ -1197,39 +1197,38 @@ export function ApplicationReviewPanel({
       />
 
       {/* Dialogs */}
-      <DeleteApplicationDialog
-        open={showDeleteDialog}
-        onOpenChange={open => {
-          setShowDeleteDialog(open);
-          if (!open) setApplicationToDelete(null);
-        }}
-        applicationId={applicationToDelete?.id ?? 0}
-        applicationName={applicationToDelete?.student_name ?? ""}
-        onSuccess={() => {
-          // Close the ApplicationReviewDialog
-          setSelectedApplication(null);
+      {applicationToDelete && (
+        <DeleteApplicationDialog
+          open={showDeleteDialog}
+          onOpenChange={open => {
+            setShowDeleteDialog(open);
+            if (!open) setApplicationToDelete(null);
+          }}
+          applicationId={applicationToDelete.id}
+          applicationName={applicationToDelete.student_name ?? ""}
+          onSuccess={() => {
+            setSelectedApplication(null);
+            setApplicationToDelete(null);
+            fetchCollegeApplications(
+              selectedAcademicYear,
+              selectedSemester,
+              activeScholarshipTab
+            );
+          }}
+        />
+      )}
 
-          // Clear delete state
-          setApplicationToDelete(null);
-
-          // Refresh the applications list
-          fetchCollegeApplications(
-            selectedAcademicYear,
-            selectedSemester,
-            activeScholarshipTab
-          );
-        }}
-      />
-
-      <DocumentRequestForm
-        open={showDocumentRequestDialog}
-        onOpenChange={open => {
-          setShowDocumentRequestDialog(open);
-          if (!open) setApplicationToRequestDocs(null);
-        }}
-        applicationId={applicationToRequestDocs?.id ?? 0}
-        applicationName={applicationToRequestDocs?.student_name ?? ""}
-      />
+      {applicationToRequestDocs && (
+        <DocumentRequestForm
+          open={showDocumentRequestDialog}
+          onOpenChange={open => {
+            setShowDocumentRequestDialog(open);
+            if (!open) setApplicationToRequestDocs(null);
+          }}
+          applicationId={applicationToRequestDocs.id}
+          applicationName={applicationToRequestDocs.student_name ?? ""}
+        />
+      )}
 
       <FilePreviewDialog
         isOpen={showRegulations}
