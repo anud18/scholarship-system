@@ -5593,32 +5593,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/email-management/send-test": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Send Test Email
-         * @description 手動發送測試郵件
-         *
-         *     Args:
-         *         request: 測試郵件請求，包含模板鍵名、收件人和測試數據
-         *
-         *     Returns:
-         *         測試郵件發送結果，包含渲染後的主旨和內容
-         */
-        post: operations["send_test_email_api_v1_email_management_send_test_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/email-management/send-simple-test": {
         parameters: {
             query?: never;
@@ -9877,37 +9851,6 @@ export interface components {
          * @enum {string}
          */
         Semester: "first" | "second" | "yearly";
-        /**
-         * SendTestEmailRequest
-         * @description Schema for sending test email
-         */
-        SendTestEmailRequest: {
-            /**
-             * Template Key
-             * @description 郵件模板鍵名
-             */
-            template_key: string;
-            /**
-             * Recipient Email
-             * @description 測試收件人信箱
-             */
-            recipient_email: string;
-            /**
-             * Test Data
-             * @description 測試數據（用於模板變數替換）
-             */
-            test_data?: Record<string, never>;
-            /**
-             * Subject Override
-             * @description 覆蓋主旨（可選）
-             */
-            subject_override?: string | null;
-            /**
-             * Body Override
-             * @description 覆蓋內容（可選）
-             */
-            body_override?: string | null;
-        };
         /**
          * SendingType
          * @enum {string}
@@ -19725,39 +19668,6 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    send_test_email_api_v1_email_management_send_test_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SendTestEmailRequest"];
-            };
-        };
         responses: {
             /** @description Successful Response */
             200: {
