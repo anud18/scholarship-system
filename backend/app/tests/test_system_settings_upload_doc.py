@@ -38,9 +38,7 @@ async def admin_user(db: AsyncSession) -> User:
 
 
 @pytest_asyncio.fixture
-async def admin_client(
-    db: AsyncSession, admin_user: User
-) -> AsyncGenerator[AsyncClient, None]:
+async def admin_client(db: AsyncSession, admin_user: User) -> AsyncGenerator[AsyncClient, None]:
     async def override_get_db():
         yield db
 
@@ -55,9 +53,7 @@ async def admin_client(
     app.dependency_overrides[require_admin] = override_require_admin
 
     try:
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             yield ac
     finally:
         app.dependency_overrides.clear()
@@ -66,9 +62,7 @@ async def admin_client(
 @pytest.fixture
 def fake_minio():
     """Patch minio_service so the test never touches MinIO."""
-    with patch(
-        "app.services.minio_service.minio_service"
-    ) as mock_service:
+    with patch("app.services.minio_service.minio_service") as mock_service:
         mock_service.default_bucket = "test-bucket"
         mock_service.client = MagicMock()
         mock_service.client.put_object = MagicMock()
@@ -92,17 +86,12 @@ async def _post_upload(
 
 @pytest.mark.asyncio
 class TestRegulationsUploadValidation:
-    async def test_rejects_docx_for_regulations_url(
-        self, admin_client: AsyncClient, fake_minio
-    ):
+    async def test_rejects_docx_for_regulations_url(self, admin_client: AsyncClient, fake_minio):
         res = await _post_upload(
             admin_client,
             "regulations_url",
             filename="rules.docx",
-            content_type=(
-                "application/vnd.openxmlformats-"
-                "officedocument.wordprocessingml.document"
-            ),
+            content_type=("application/vnd.openxmlformats-" "officedocument.wordprocessingml.document"),
         )
         assert res.status_code == 400
         body = res.json()
@@ -113,9 +102,7 @@ class TestRegulationsUploadValidation:
         assert "PDF" in error_text
         fake_minio.client.put_object.assert_not_called()
 
-    async def test_rejects_pdf_extension_with_mismatched_mime(
-        self, admin_client: AsyncClient, fake_minio
-    ):
+    async def test_rejects_pdf_extension_with_mismatched_mime(self, admin_client: AsyncClient, fake_minio):
         res = await _post_upload(
             admin_client,
             "regulations_url",
@@ -125,9 +112,7 @@ class TestRegulationsUploadValidation:
         assert res.status_code == 400
         fake_minio.client.put_object.assert_not_called()
 
-    async def test_accepts_pdf_with_pdf_mime(
-        self, admin_client: AsyncClient, fake_minio
-    ):
+    async def test_accepts_pdf_with_pdf_mime(self, admin_client: AsyncClient, fake_minio):
         res = await _post_upload(
             admin_client,
             "regulations_url",
@@ -155,17 +140,12 @@ class TestRegulationsUploadValidation:
 
 @pytest.mark.asyncio
 class TestSampleDocumentUploadStillAcceptsDocx:
-    async def test_accepts_docx_for_sample_document_url(
-        self, admin_client: AsyncClient, fake_minio
-    ):
+    async def test_accepts_docx_for_sample_document_url(self, admin_client: AsyncClient, fake_minio):
         res = await _post_upload(
             admin_client,
             "sample_document_url",
             filename="sample.docx",
-            content_type=(
-                "application/vnd.openxmlformats-"
-                "officedocument.wordprocessingml.document"
-            ),
+            content_type=("application/vnd.openxmlformats-" "officedocument.wordprocessingml.document"),
         )
         assert res.status_code == 200
         fake_minio.client.put_object.assert_called_once()
