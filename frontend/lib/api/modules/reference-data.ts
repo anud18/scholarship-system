@@ -112,5 +112,23 @@ export function createReferenceDataApi() {
       });
       return toApiResponse(response);
     },
+
+    /**
+     * 取得可用學期選項 (學期 + 學年)
+     * GET /api/v1/reference-data/semesters
+     */
+    getSemesters: async (): Promise<ApiResponse<unknown>> => {
+      const response = await typedClient.raw.GET('/api/v1/reference-data/semesters', {});
+      return toApiResponse(response);
+    },
+
+    /**
+     * 取得有實際申請資料的學年度期間
+     * GET /api/v1/reference-data/active-academic-periods
+     */
+    getActiveAcademicPeriods: async (): Promise<ApiResponse<unknown>> => {
+      const response = await typedClient.raw.GET('/api/v1/reference-data/active-academic-periods', {});
+      return toApiResponse(response);
+    },
   };
 }

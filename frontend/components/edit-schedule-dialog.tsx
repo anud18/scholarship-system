@@ -66,8 +66,8 @@ export function EditScheduleDialog({
 
   const fetchScholarshipConfigurations = async () => {
     try {
-      const response = await apiClient.request("/scholarship-configurations/configurations")
-      setScholarshipConfigs(response.data || [])
+      const response = await apiClient.admin.getScholarshipConfigurations()
+      setScholarshipConfigs((response.data || []) as ScholarshipConfiguration[])
     } catch (error) {
       logger.error("獲取獎學金設定失敗", { error: error })
       toast.error("無法載入獎學金設定")
