@@ -167,39 +167,25 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
         user.id
       );
 
-      // 建構查詢參數
-      const queryParams = new URLSearchParams();
-      if (academicYear)
-        queryParams.append("academic_year", academicYear.toString());
-      if (semester && semester !== "null")
-        queryParams.append("semester", semester);
+      const queryFilter = {
+        academic_year: academicYear ?? undefined,
+        semester: (semester && semester !== "null") ? semester : undefined,
+      };
 
       // 根據用戶角色獲取不同的獎學金列表
       let response;
       if (user.role === "super_admin") {
-        // Super admin 可以看到所有獎學金
         logger.debug(
           "ScholarshipTimeline: Fetching all scholarships for super_admin",
           { academicYear, semester }
         );
-
-        // 構建帶參數的 URL
-        const url = queryParams.toString()
-          ? `/scholarships?${queryParams.toString()}`
-          : "/scholarships";
-        response = await apiClient.request(url);
+        response = await apiClient.scholarships.getAll(queryFilter);
       } else if (user.role === "admin" || user.role === "college") {
-        // Admin 和 College 可以看到他們有權限的獎學金
         logger.debug(
           "ScholarshipTimeline: Fetching scholarships for admin/college user",
           { academicYear, semester }
         );
-
-        // 構建帶參數的 URL
-        const url = queryParams.toString()
-          ? `/scholarships?${queryParams.toString()}`
-          : "/scholarships";
-        response = await apiClient.request(url);
+        response = await apiClient.scholarships.getAll(queryFilter);
       } else {
         // 其他角色不顯示此功能
         logger.debug(

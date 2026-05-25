@@ -64,13 +64,22 @@ describe("createScholarshipsApi", () => {
 
   // ─── getAll ────────────────────────────────────────────────────────
 
-  it("getAll GETs base /api/v1/scholarships path", async () => {
+  it("getAll GETs base /api/v1/scholarships path without params", async () => {
     // Pin: admin-facing list — NO /eligible suffix, NO filter
     // params. Backend already gates with require_admin.
     mockedRaw.GET.mockResolvedValueOnce(_ok([]));
     const api = createScholarshipsApi();
     await api.getAll();
     expect(mockedRaw.GET).toHaveBeenCalledWith("/api/v1/scholarships");
+  });
+
+  it("getAll passes academic_year+semester query params when provided", async () => {
+    mockedRaw.GET.mockResolvedValueOnce(_ok([]));
+    const api = createScholarshipsApi();
+    await api.getAll({ academic_year: 113, semester: "first" });
+    expect(mockedRaw.GET).toHaveBeenCalledWith("/api/v1/scholarships", {
+      params: { query: { academic_year: 113, semester: "first" } },
+    });
   });
 
   // ─── getCombined ───────────────────────────────────────────────────
