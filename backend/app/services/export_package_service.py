@@ -203,9 +203,10 @@ class ExportPackageService:
         base_path = f"{dept_folder}/{student_folder}"
 
         # Generate summary PDF
+        student_prefix = f"{std_code}_{std_name}"
         try:
             pdf_bytes = self._generate_summary_pdf(app, scholarship_name, academic_year, semester)
-            zf.writestr(f"{base_path}/學生資料彙整.pdf", pdf_bytes)
+            zf.writestr(f"{base_path}/{student_prefix}_學生資料彙整.pdf", pdf_bytes)
         except Exception as e:
             logger.exception(f"Failed to generate summary PDF for app {app.id}")
             zf.writestr(
@@ -232,9 +233,9 @@ class ExportPackageService:
 
             # Add sequence number only if multiple files of same type
             if type_totals[ft] > 1:
-                filename = f"{label}_{count}{ext}"
+                filename = f"{student_prefix}_{label}_{count}{ext}"
             else:
-                filename = f"{label}{ext}"
+                filename = f"{student_prefix}_{label}{ext}"
 
             try:
                 response = await asyncio.to_thread(self.minio.get_file_stream, af.object_name)
