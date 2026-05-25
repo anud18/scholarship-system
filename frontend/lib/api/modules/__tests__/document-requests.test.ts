@@ -132,6 +132,6 @@ describe("createDocumentRequestsApi", () => {
     const api = createDocumentRequestsApi();
     expect(api.getMyDocumentRequests).toBeDefined();
     expect(api.fulfillDocumentRequest).toBeDefined();
-    expect(Object.keys(api).length).toBe(2);
+    expect(Object.keys(api).length).toBe(3);
   });
 });

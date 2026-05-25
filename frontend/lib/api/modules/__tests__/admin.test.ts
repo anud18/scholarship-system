@@ -496,6 +496,6 @@ describe("createAdminApi", () => {
     // refactor adding/removing methods requires explicit review.
     // SECURITY-critical surface — every change should be deliberate.
     const api = createAdminApi();
-    expect(Object.keys(api).length).toBe(77);
+    expect(Object.keys(api).length).toBe(78);
   });
 });

@@ -1031,5 +1031,44 @@ export function createAdminApi() {
       });
       return toApiResponse(response) as ApiResponse<{ id: number; app_id: string; reason: string }>;
     },
+
+    /**
+     * Bulk-approve multiple applications (admin only).
+     *
+     * Transitions each application from submitted/under_review → approved.
+     * Individual failures are collected in data.failed_approvals (HTTP 200
+     * is always returned — the endpoint never raises 4xx for per-item failures).
+     *
+     * POST /api/v1/admin/applications/bulk-approve
+     * See issue #665 for endpoint wiring context.
+     */
+    bulkApproveApplications: async (
+      applicationIds: number[],
+      options?: {
+        comments?: string;
+        sendNotifications?: boolean;
+      }
+    ): Promise<ApiResponse<{
+      total_requested: number;
+      successful_approvals: Array<{ application_id: number; app_id: string }>;
+      failed_approvals: Array<{ application_id: number; reason: string; current_status?: string }>;
+      notifications_sent: number;
+      notifications_failed: number;
+    }>> => {
+      const response = await typedClient.raw.POST('/api/v1/admin/applications/bulk-approve', {
+        body: {
+          application_ids: applicationIds,
+          ...(options?.comments !== undefined && { comments: options.comments }),
+          send_notifications: options?.sendNotifications ?? true,
+        },
+      });
+      return toApiResponse(response) as ApiResponse<{
+        total_requested: number;
+        successful_approvals: Array<{ application_id: number; app_id: string }>;
+        failed_approvals: Array<{ application_id: number; reason: string; current_status?: string }>;
+        notifications_sent: number;
+        notifications_failed: number;
+      }>;
+    },
   };
 }
