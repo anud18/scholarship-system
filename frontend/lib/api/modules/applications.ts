@@ -425,5 +425,47 @@ export function createApplicationsApi() {
       const json = await res.json();
       return json;
     },
+
+    /**
+     * 取得學生儀表板統計資料 (學生專用)
+     * GET /api/v1/applications/dashboard/stats
+     */
+    getStudentDashboardStats: async (): Promise<ApiResponse<unknown>> => {
+      const response = await typedClient.raw.GET(
+        '/api/v1/applications/dashboard/stats',
+        {}
+      );
+      return toApiResponse(response);
+    },
+
+    /**
+     * 取得申請的學生相關資料
+     * GET /api/v1/applications/{id}/student-data
+     */
+    getStudentData: async (id: number): Promise<ApiResponse<unknown>> => {
+      const response = await typedClient.raw.GET(
+        '/api/v1/applications/{id}/student-data',
+        { params: { path: { id } } }
+      );
+      return toApiResponse(response);
+    },
+
+    /**
+     * 更新申請的學生相關資料 (銀行帳號、指導教授資訊等)
+     * PUT /api/v1/applications/{id}/student-data
+     */
+    updateStudentData: async (
+      id: number,
+      data: Record<string, unknown>
+    ): Promise<ApiResponse<unknown>> => {
+      const response = await typedClient.raw.PUT(
+        '/api/v1/applications/{id}/student-data',
+        {
+          params: { path: { id } },
+          body: data as never,
+        }
+      );
+      return toApiResponse(response);
+    },
   };
 }
