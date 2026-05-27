@@ -438,6 +438,43 @@ async def update_supplementary_doc(
     }
 
 
+@router.delete("/supplementary-docs/{doc_id}")
+async def delete_supplementary_doc(
+    doc_id: int,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy import select
+
+    from app.models.supplementary_doc import SupplementaryDoc
+    from app.services.minio_service import minio_service
+
+    stmt = select(SupplementaryDoc).where(SupplementaryDoc.id == doc_id)
+    result = await db.execute(stmt)
+    doc = result.scalar_one_or_none()
+    if doc is None:
+        raise HTTPException(status_code=404, detail="not found")
+
+    object_name = doc.object_name
+    await db.delete(doc)
+    await db.commit()
+
+    try:
+        minio_service.client.remove_object(minio_service.default_bucket, object_name)
+    except Exception:
+        logger.warning(
+            "Failed to remove supplementary doc object %s from MinIO",
+            object_name,
+            exc_info=True,
+        )
+
+    return {
+        "success": True,
+        "message": "已刪除",
+        "data": {"deleted": True},
+    }
+
+
 @router.get("/{id}")
 async def get_configuration(
     id: str,

@@ -260,3 +260,62 @@ class TestUpdateSupplementaryDocTitle:
             json={"title": "   "},
         )
         assert response.status_code == 422
+
+
+class TestDeleteSupplementaryDoc:
+    @pytest.mark.asyncio
+    async def test_admin_deletes(
+        self, admin_client: AsyncClient, fake_minio, db: AsyncSession
+    ):
+        doc = SupplementaryDoc(
+            title="X", object_name="system-docs/x.pdf", original_filename="x.pdf",
+            content_type="application/pdf", file_size=10, sort_order=0,
+        )
+        db.add(doc)
+        await db.commit()
+        await db.refresh(doc)
+        doc_id = doc.id
+
+        response = await admin_client.delete(
+            f"/api/v1/system-settings/supplementary-docs/{doc_id}"
+        )
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+
+        fake_minio.client.remove_object.assert_called_once_with(
+            "scholarship-system", "system-docs/x.pdf"
+        )
+
+        from sqlalchemy import select
+        rows = (
+            await db.execute(select(SupplementaryDoc).where(SupplementaryDoc.id == doc_id))
+        ).scalars().all()
+        assert rows == []
+
+    @pytest.mark.asyncio
+    async def test_delete_missing_returns_404(self, admin_client: AsyncClient, fake_minio):
+        response = await admin_client.delete(
+            "/api/v1/system-settings/supplementary-docs/99999"
+        )
+        assert response.status_code == 404
+        fake_minio.client.remove_object.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_delete_succeeds_even_when_minio_fails(
+        self, admin_client: AsyncClient, fake_minio, db: AsyncSession
+    ):
+        doc = SupplementaryDoc(
+            title="X", object_name="system-docs/x.pdf", original_filename="x.pdf",
+            content_type="application/pdf", file_size=10, sort_order=0,
+        )
+        db.add(doc)
+        await db.commit()
+        await db.refresh(doc)
+
+        fake_minio.client.remove_object.side_effect = RuntimeError("boom")
+
+        response = await admin_client.delete(
+            f"/api/v1/system-settings/supplementary-docs/{doc.id}"
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["success"] is True
