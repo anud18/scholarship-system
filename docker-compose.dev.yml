@@ -133,7 +133,11 @@ services:
       target: builder
     image: ghcr.io/anud18/scholarship-system-frontend:${TAG:-latest}
     container_name: scholarship_frontend_dev
-    command: sh -c "node /app/node_modules/.bin/next dev --turbo"
+    # Copies pdf.js worker into the bind-mounted public/ on every start.
+    # The image's postinstall already runs the copy, but `./frontend:/app`
+    # bind-mount shadows /app/public so we have to redo it against the host
+    # public/ dir.
+    command: sh -c "node scripts/copy-pdf-worker.mjs && node /app/node_modules/.bin/next dev --turbo"
     ports:
       - "3000:3000"
     environment:

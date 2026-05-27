@@ -6,11 +6,17 @@
 // Runs from package.json on postinstall, predev, and prebuild. Idempotent.
 import { copyFileSync, mkdirSync, existsSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const require = createRequire(import.meta.url);
+const here = dirname(fileURLToPath(import.meta.url));
+// Anchor require.resolve to the frontend package root so it finds
+// node_modules even when invoked from a different cwd.
+const require = createRequire(resolve(here, "..", "package.json"));
 const src = require.resolve("pdfjs-dist/build/pdf.worker.min.mjs");
-const dest = "public/pdf.worker.min.mjs";
+// Resolve dest relative to the script's own location (frontend/scripts/),
+// so the script works no matter what cwd it was invoked from.
+const dest = resolve(here, "..", "public", "pdf.worker.min.mjs");
 
 mkdirSync(dirname(dest), { recursive: true });
 copyFileSync(src, dest);

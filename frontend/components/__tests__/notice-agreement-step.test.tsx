@@ -127,6 +127,52 @@ describe("NoticeAgreementStep", () => {
     await waitFor(() => expect(agreeCheckbox).not.toBeDisabled());
   });
 
+  it("latched state survives dialog close + reopen", async () => {
+    mockGetPublicDocs.mockResolvedValue({
+      success: true,
+      data: { regulations_url: "system-docs/x.pdf" },
+    });
+
+    render(
+      <NoticeAgreementStep
+        agreedToTerms={false}
+        onAgree={noop}
+        onNext={noop}
+        locale="zh"
+      />,
+    );
+
+    const openBtn = await screen.findByRole("button", {
+      name: /閱讀獎學金要點/,
+    });
+    const agreeCheckbox = screen.getByRole("checkbox", {
+      name: /同意遵守相關規定/,
+    });
+
+    // Open → scroll bottom → close dialog.
+    fireEvent.click(openBtn);
+    await screen.findByTestId("inline-pdf-viewer");
+    fireEvent.click(screen.getByTestId("simulate-reached-bottom"));
+    await waitFor(() => expect(agreeCheckbox).not.toBeDisabled());
+
+    // Close via the dialog's close control (the small "關閉" button is
+    // inside DialogContent's footer).
+    fireEvent.click(screen.getByRole("button", { name: /^關閉$/ }));
+
+    // Viewer unmounts (Radix removes DialogContent from DOM on close).
+    await waitFor(() =>
+      expect(screen.queryByTestId("inline-pdf-viewer")).not.toBeInTheDocument(),
+    );
+
+    // Agree must STILL be unlocked — the latch lives on the parent.
+    expect(agreeCheckbox).not.toBeDisabled();
+
+    // Reopening must not lock it back.
+    fireEvent.click(openBtn);
+    await screen.findByTestId("inline-pdf-viewer");
+    expect(agreeCheckbox).not.toBeDisabled();
+  });
+
   it("keeps the 8 hardcoded notice items visible as a static summary", async () => {
     mockGetPublicDocs.mockResolvedValue({
       success: true,

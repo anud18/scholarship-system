@@ -463,7 +463,7 @@ export function NoticeAgreementStep({
           {regulationsViewerUrl && (
             <InlinePdfViewer
               url={regulationsViewerUrl}
-              height={Math.min(typeof window !== "undefined" ? window.innerHeight - 220 : 600, 700)}
+              className="h-[min(700px,calc(90vh-200px))]"
               locale={locale}
               onReachedBottom={() => setHasReadNotice(true)}
             />

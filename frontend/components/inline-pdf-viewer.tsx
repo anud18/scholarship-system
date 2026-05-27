@@ -14,7 +14,10 @@ import "react-pdf/dist/Page/TextLayer.css";
 
 interface InlinePdfViewerProps {
   url: string;
+  // Fixed pixel height. Use `className` instead for responsive sizing
+  // (e.g. `h-[min(700px,calc(90vh-200px))]`).
   height?: number;
+  className?: string;
   onReachedBottom?: () => void;
   onLoadError?: (err: Error) => void;
   locale?: "zh" | "en";
@@ -24,7 +27,8 @@ const SLACK_PX = 8;
 
 export function InlinePdfViewer({
   url,
-  height = 500,
+  height,
+  className,
   onReachedBottom,
   onLoadError,
   locale = "zh",
@@ -104,8 +108,8 @@ export function InlinePdfViewer({
       ref={scrollRef}
       data-testid="pdf-scroll-container"
       onScroll={handleScroll}
-      className="overflow-y-auto rounded-lg border bg-white"
-      style={{ height }}
+      className={`overflow-y-auto rounded-lg border bg-white ${className ?? ""}`}
+      style={height !== undefined ? { height } : undefined}
     >
       {loadError ? (
         <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
