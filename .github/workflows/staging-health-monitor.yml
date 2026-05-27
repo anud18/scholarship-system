@@ -8,18 +8,32 @@ on:
 jobs:
   health-check:
     name: Check Staging Health
-    runs-on: ubuntu-latest
+    # Must run on the self-hosted staging runner — ss.test.nycu.edu.tw is
+    # only reachable via WireGuard VPN, which github-hosted runners don't
+    # have. The self-hosted runner is on the staging server itself, so
+    # localhost checks are the most direct signal of service availability.
+    runs-on: [self-hosted, scholarship, test]
     permissions:
       issues: write
       contents: read
 
     steps:
-      - name: Check staging health endpoint
+      - name: Check staging health endpoints
         id: health
         run: |
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 https://ss.test.nycu.edu.tw/health || echo "000")
-          echo "status=$HTTP_STATUS" >> $GITHUB_OUTPUT
-          echo "Staging health check: HTTP $HTTP_STATUS"
+          # Check backend directly (avoids nginx routing issues)
+          BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 http://localhost:8000/health || echo "000")
+          # Check frontend
+          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 http://localhost:3000 || echo "000")
+          echo "backend=$BACKEND_STATUS" >> $GITHUB_OUTPUT
+          echo "frontend=$FRONTEND_STATUS" >> $GITHUB_OUTPUT
+          # Overall: healthy only if both return 200
+          if [ "$BACKEND_STATUS" = "200" ] && [ "$FRONTEND_STATUS" = "200" ]; then
+            echo "status=200" >> $GITHUB_OUTPUT
+          else
+            echo "status=down" >> $GITHUB_OUTPUT
+          fi
+          echo "Backend: $BACKEND_STATUS, Frontend: $FRONTEND_STATUS"
 
       - name: Open issue on downtime
         if: steps.health.outputs.status != '200'
@@ -27,7 +41,8 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const status = '${{ steps.health.outputs.status }}';
+            const backend = '${{ steps.health.outputs.backend }}';
+            const frontend = '${{ steps.health.outputs.frontend }}';
             // Check if there's already an open staging-down issue
             const issues = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
@@ -39,8 +54,8 @@ jobs:
               await github.rest.issues.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                title: `Staging down: health check returned HTTP ${status}`,
-                body: `## Staging is down\n\nThe health check at https://ss.test.nycu.edu.tw/health returned HTTP ${status}.\n\n**Detected at**: ${new Date().toISOString()}\n\nThis issue was auto-filed by the staging health monitor. Close when staging is back online.`,
+                title: `Staging down: backend=${backend} frontend=${frontend}`,
+                body: `## Staging is down\n\nHealth check failed:\n- Backend (localhost:8000/health): HTTP ${backend}\n- Frontend (localhost:3000): HTTP ${frontend}\n\n**Detected at**: ${new Date().toISOString()}\n\nThis issue was auto-filed by the staging health monitor. Close when staging is back online.`,
                 labels: ['staging-down'],
               });
             }
