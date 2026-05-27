@@ -1590,7 +1590,7 @@ async def download_roster_excel(
     Download roster Excel file (supports MinIO and local files)
     """
     try:
-        stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)
+        stmt = select(PaymentRoster).options(selectinload(PaymentRoster.items)).where(PaymentRoster.id == roster_id)
 
         result = await db.execute(stmt)
 
@@ -1682,11 +1682,30 @@ async def download_roster_excel(
 
                 logger.info(f"Roster {roster.roster_code} re-generated and downloaded by user {current_user.id}")
 
-                return FileResponse(
-                    path=export_result["file_path"],
-                    filename=f"{roster.roster_code}.xlsx",
-                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                )
+                regen_file_path = export_result["file_path"]
+                if os.path.exists(regen_file_path):
+                    return FileResponse(
+                        path=regen_file_path,
+                        filename=f"{roster.roster_code}.xlsx",
+                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
+
+                # Local file was cleaned up after MinIO upload — serve from MinIO.
+                minio_obj = export_result.get("minio_object_name")
+                if minio_obj:
+                    from fastapi.responses import Response
+
+                    file_content, _ = minio_service.download_roster_file(minio_obj)
+                    return Response(
+                        content=file_content,
+                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        headers={
+                            "Content-Disposition": f'attachment; filename="{roster.roster_code}.xlsx"',
+                            "Content-Length": str(len(file_content)),
+                        },
+                    )
+
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="下載造冊失敗")
 
     except HTTPException:
         raise
