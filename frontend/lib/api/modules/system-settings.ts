@@ -41,6 +41,39 @@ export function buildFileProxyUrl(
   )}&v=${cacheBuster}`;
 }
 
+/** Supplementary doc payload returned by the backend. */
+export type SupplementaryDoc = {
+  id: number;
+  title: string;
+  object_name: string;
+  original_filename: string;
+  content_type: string;
+  file_size: number;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * Build the file-proxy URL for a supplementary doc. Mirrors buildFileProxyUrl
+ * but routes via /api/v1/system-settings/supp-file-proxy?id=...
+ */
+export function buildSuppDocFileProxyUrl(
+  id: number,
+  objectName?: string | null
+): string {
+  const token =
+    typeof window !== 'undefined'
+      ? localStorage.getItem('auth_token') || ''
+      : '';
+  const cacheBuster = encodeURIComponent(
+    (objectName || '').split('/').pop() || String(id)
+  );
+  return `/api/v1/system-settings/supp-file-proxy?id=${id}&token=${encodeURIComponent(
+    token
+  )}&v=${cacheBuster}`;
+}
+
 // System configuration types
 type SystemConfiguration = {
   key: string;
@@ -283,6 +316,102 @@ export function createSystemSettingsApi() {
       );
       const json = await res.json();
       return json;
+    },
+
+    supplementaryDocs: {
+      list: async (): Promise<ApiResponse<SupplementaryDoc[]>> => {
+        const token =
+          typeof localStorage !== "undefined"
+            ? localStorage.getItem("auth_token") || ""
+            : "";
+        const res = await fetch(
+          "/api/v1/system-settings/supplementary-docs",
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        return (await res.json()) as ApiResponse<SupplementaryDoc[]>;
+      },
+
+      upload: async (
+        file: File,
+        title: string
+      ): Promise<ApiResponse<SupplementaryDoc>> => {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("title", title);
+        const token =
+          typeof localStorage !== "undefined"
+            ? localStorage.getItem("auth_token") || ""
+            : "";
+        const res = await fetch(
+          "/api/v1/system-settings/supp-upload-proxy",
+          {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: formData,
+          }
+        );
+        return (await res.json()) as ApiResponse<SupplementaryDoc>;
+      },
+
+      updateTitle: async (
+        id: number,
+        title: string
+      ): Promise<ApiResponse<SupplementaryDoc>> => {
+        const token =
+          typeof localStorage !== "undefined"
+            ? localStorage.getItem("auth_token") || ""
+            : "";
+        const res = await fetch(
+          `/api/v1/system-settings/supplementary-docs/${id}`,
+          {
+            method: "PATCH",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ title }),
+          }
+        );
+        return (await res.json()) as ApiResponse<SupplementaryDoc>;
+      },
+
+      delete: async (
+        id: number
+      ): Promise<ApiResponse<{ deleted: boolean }>> => {
+        const token =
+          typeof localStorage !== "undefined"
+            ? localStorage.getItem("auth_token") || ""
+            : "";
+        const res = await fetch(
+          `/api/v1/system-settings/supplementary-docs/${id}`,
+          {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        return (await res.json()) as ApiResponse<{ deleted: boolean }>;
+      },
+
+      reorder: async (
+        items: Array<{ id: number; sort_order: number }>
+      ): Promise<ApiResponse<{ updated: number }>> => {
+        const token =
+          typeof localStorage !== "undefined"
+            ? localStorage.getItem("auth_token") || ""
+            : "";
+        const res = await fetch(
+          "/api/v1/system-settings/supplementary-docs/reorder",
+          {
+            method: "PATCH",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ items }),
+          }
+        );
+        return (await res.json()) as ApiResponse<{ updated: number }>;
+      },
     },
   };
 }
