@@ -13,11 +13,19 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   AlertCircle,
   CheckCircle,
   FileText,
   AlertTriangle,
   ChevronRight,
+  BookOpen,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
@@ -37,6 +45,7 @@ export function NoticeAgreementStep({
   locale,
 }: NoticeAgreementStepProps) {
   const [hasReadNotice, setHasReadNotice] = useState(false);
+  const [showRegulationsDialog, setShowRegulationsDialog] = useState(false);
 
   const [publicDocs, setPublicDocs] = useState<{
     regulations_url?: string;
@@ -98,7 +107,7 @@ export function NoticeAgreementStep({
     zh: {
       title: "獎學金申請注意事項",
       subtitle:
-        "請詳細閱讀以下內容，並滑完下方的「獎學金要點」後勾選同意方可繼續申請",
+        "請詳細閱讀以下內容，點擊「閱讀獎學金要點」並滑至底部後方可勾選同意繼續申請",
       items: [
         {
           title: "申請資格",
@@ -145,18 +154,22 @@ export function NoticeAgreementStep({
       importantContent:
         "請務必詳細閱讀各獎學金的申請條款與相關規定。每位學生每學期限申請一項獎學金，請謹慎選擇。",
       agreementText: "我已詳細閱讀並了解獎學金要點，同意遵守相關規定",
-      readNoticeText: "已詳閱獎學金要點",
-      readNoticeHint:
-        "請將下方獎學金要點滑到底端，閱讀完成後才能勾選同意",
+      readNoticeText: "尚未閱讀獎學金要點",
+      readNoticeHint: "請點擊上方按鈕開啟獎學金要點並滑至底端",
       readNoticeDone: "已閱讀完成",
       nextButton: "同意並繼續",
-      readFirst: "請先滑到獎學金要點底部完成閱讀",
+      readFirst: "請先點擊「閱讀獎學金要點」並滑至底端",
       sampleDocumentLabel: "申請文件範例檔",
       sampleDocumentRow: "需要參考申請文件格式？",
       sampleDocumentNotProvided: "尚未提供",
       regulationsHeader: "獎學金要點",
+      regulationsOpenButton: "閱讀獎學金要點",
+      regulationsRow: "請開啟並閱讀獎學金要點全文",
+      regulationsDialogTitle: "獎學金要點",
+      regulationsDialogSubtitle: "請滑動至文件底端以完成閱讀",
       regulationsMissing:
         "系統管理員尚未上傳獎學金要點，目前無法進行申請。請聯絡承辦單位。",
+      regulationsLoading: "正在檢查獎學金要點…",
     },
     en: {
       title: "Scholarship Application Notice",
@@ -209,18 +222,23 @@ export function NoticeAgreementStep({
         "Please read the terms and conditions of each scholarship carefully. Each student may only apply for one scholarship per semester. Choose wisely.",
       agreementText:
         "I have read and understand the scholarship regulations and agree to comply",
-      readNoticeText: "I have read the scholarship regulations",
+      readNoticeText: "Regulations not yet read",
       readNoticeHint:
-        "Scroll the regulations document to the bottom to enable the agree checkbox",
+        "Click the button above to open the regulations and scroll to the bottom",
       readNoticeDone: "Reading complete",
       nextButton: "Agree and Continue",
-      readFirst: "Please scroll to the bottom of the regulations first",
+      readFirst: "Open the regulations and scroll to the bottom first",
       sampleDocumentLabel: "Sample Application Documents",
       sampleDocumentRow: "Need to see the application document format?",
       sampleDocumentNotProvided: "Not available",
       regulationsHeader: "Scholarship Regulations",
+      regulationsOpenButton: "Open Scholarship Regulations",
+      regulationsRow: "Open and read the full scholarship regulations",
+      regulationsDialogTitle: "Scholarship Regulations",
+      regulationsDialogSubtitle: "Scroll to the bottom of the document to complete reading",
       regulationsMissing:
         "The system administrator has not uploaded the scholarship regulations. Applications cannot proceed. Please contact the administrative office.",
+      regulationsLoading: "Checking scholarship regulations…",
     },
   };
 
@@ -301,37 +319,57 @@ export function NoticeAgreementStep({
             </Button>
           </div>
 
-          {/* Inline regulations viewer (the gated content) */}
-          <div>
-            <h3 className="font-semibold text-nycu-navy-800 mb-2">
-              {t.regulationsHeader}
-            </h3>
-            {!docsLoaded ? (
-              <div className="h-[500px] rounded-lg border bg-gray-50" />
-            ) : regulationsViewerUrl ? (
-              <>
-                <InlinePdfViewer
-                  url={regulationsViewerUrl}
-                  height={500}
-                  locale={locale}
-                  onReachedBottom={() => setHasReadNotice(true)}
-                />
+          {/* Regulations dialog trigger (the gated content) */}
+          {!docsLoaded ? (
+            <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-sm text-gray-500">
+              {t.regulationsLoading}
+            </div>
+          ) : regulationsViewerUrl ? (
+            <div
+              className={`p-4 rounded-lg border flex items-center justify-between gap-3 transition-colors ${
+                hasReadNotice
+                  ? "bg-emerald-50 border-emerald-200"
+                  : "bg-nycu-blue-50 border-nycu-blue-200"
+              }`}
+            >
+              <div className="flex-1">
+                <p
+                  className={`text-sm font-medium ${
+                    hasReadNotice ? "text-emerald-900" : "text-nycu-blue-900"
+                  }`}
+                >
+                  {t.regulationsRow}
+                </p>
                 {!hasReadNotice && (
-                  <p className="text-xs text-amber-700 mt-2 flex items-center gap-1">
+                  <p className="text-xs text-nycu-blue-700 mt-1 flex items-center gap-1">
                     <AlertCircle className="h-3 w-3" />
                     {t.readNoticeHint}
                   </p>
                 )}
-              </>
-            ) : (
-              <Alert className="border-amber-300 bg-amber-50">
-                <AlertCircle className="h-5 w-5 text-amber-700" />
-                <AlertDescription className="text-amber-900">
-                  {t.regulationsMissing}
-                </AlertDescription>
-              </Alert>
-            )}
-          </div>
+              </div>
+              <Button
+                variant={hasReadNotice ? "outline" : "default"}
+                size="sm"
+                onClick={() => setShowRegulationsDialog(true)}
+                className={`flex items-center gap-2 ${
+                  !hasReadNotice ? "nycu-gradient text-white" : ""
+                }`}
+              >
+                <BookOpen className="h-4 w-4" />
+                {t.regulationsOpenButton}
+                {hasReadNotice && (
+                  <CheckCircle className="h-4 w-4 text-emerald-600 ml-1" />
+                )}
+              </Button>
+            </div>
+          ) : (
+            <Alert className="border-amber-300 bg-amber-50">
+              <AlertCircle className="h-5 w-5 text-amber-700" />
+              <AlertDescription className="text-amber-900">
+                {t.regulationsMissing}
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Read confirmation — auto-checked when viewer reports bottom reached */}
           <div
@@ -409,6 +447,56 @@ export function NoticeAgreementStep({
         file={previewFile}
         locale={locale}
       />
+
+      <Dialog
+        open={showRegulationsDialog}
+        onOpenChange={setShowRegulationsDialog}
+      >
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-nycu-blue-600" />
+              {t.regulationsDialogTitle}
+            </DialogTitle>
+            <DialogDescription>{t.regulationsDialogSubtitle}</DialogDescription>
+          </DialogHeader>
+          {regulationsViewerUrl && (
+            <InlinePdfViewer
+              url={regulationsViewerUrl}
+              height={Math.min(typeof window !== "undefined" ? window.innerHeight - 220 : 600, 700)}
+              locale={locale}
+              onReachedBottom={() => setHasReadNotice(true)}
+            />
+          )}
+          <div className="flex items-center justify-between pt-3 border-t mt-2">
+            <p
+              className={`text-sm font-medium flex items-center gap-2 ${
+                hasReadNotice ? "text-emerald-700" : "text-amber-700"
+              }`}
+            >
+              {hasReadNotice ? (
+                <>
+                  <CheckCircle className="h-4 w-4" />
+                  {t.readNoticeDone}
+                </>
+              ) : (
+                <>
+                  <AlertCircle className="h-4 w-4" />
+                  {t.readNoticeHint}
+                </>
+              )}
+            </p>
+            <Button
+              variant={hasReadNotice ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowRegulationsDialog(false)}
+              className={hasReadNotice ? "nycu-gradient text-white" : ""}
+            >
+              {locale === "zh" ? "關閉" : "Close"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

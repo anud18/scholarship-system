@@ -81,7 +81,7 @@ describe("NoticeAgreementStep", () => {
     expect(agreeCheckbox).toBeDisabled();
   });
 
-  it("renders the InlinePdfViewer and enables the agree checkbox after scroll-to-bottom", async () => {
+  it("opens regulations in a dialog and enables agree after scroll-to-bottom", async () => {
     mockGetPublicDocs.mockResolvedValue({
       success: true,
       data: {
@@ -99,19 +99,31 @@ describe("NoticeAgreementStep", () => {
       />,
     );
 
-    const viewer = await screen.findByTestId("inline-pdf-viewer");
+    // Trigger button should appear once docs are loaded.
+    const openBtn = await screen.findByRole("button", {
+      name: /閱讀獎學金要點/,
+    });
     expect(mockGetPublicDocs).toHaveBeenCalled();
-    expect(viewer.getAttribute("data-url")).toMatch(
-      /\/api\/v1\/system-settings\/file-proxy\?key=regulations_url/,
-    );
+
+    // Viewer not mounted before button click (dialog closed).
+    expect(screen.queryByTestId("inline-pdf-viewer")).not.toBeInTheDocument();
 
     const agreeCheckbox = screen.getByRole("checkbox", {
       name: /同意遵守相關規定/,
     });
     expect(agreeCheckbox).toBeDisabled();
 
+    // Open dialog → viewer mounts inside.
+    fireEvent.click(openBtn);
+    const viewer = await screen.findByTestId("inline-pdf-viewer");
+    expect(viewer.getAttribute("data-url")).toMatch(
+      /\/api\/v1\/system-settings\/file-proxy\?key=regulations_url/,
+    );
+
+    // Simulate scroll-to-bottom inside the dialog viewer.
     fireEvent.click(screen.getByTestId("simulate-reached-bottom"));
 
+    // Agree checkbox unlocks (latched state survives dialog close).
     await waitFor(() => expect(agreeCheckbox).not.toBeDisabled());
   });
 
