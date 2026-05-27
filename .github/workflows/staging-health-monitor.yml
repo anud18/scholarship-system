@@ -1,0 +1,73 @@
+name: Staging Health Monitor
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'  # Every 10 minutes
+  workflow_dispatch:
+
+jobs:
+  health-check:
+    name: Check Staging Health
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+
+    steps:
+      - name: Check staging health endpoint
+        id: health
+        run: |
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 https://ss.test.nycu.edu.tw/health || echo "000")
+          echo "status=$HTTP_STATUS" >> $GITHUB_OUTPUT
+          echo "Staging health check: HTTP $HTTP_STATUS"
+
+      - name: Open issue on downtime
+        if: steps.health.outputs.status != '200'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const status = '${{ steps.health.outputs.status }}';
+            // Check if there's already an open staging-down issue
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'staging-down',
+              state: 'open',
+            });
+            if (issues.data.length === 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `Staging down: health check returned HTTP ${status}`,
+                body: `## Staging is down\n\nThe health check at https://ss.test.nycu.edu.tw/health returned HTTP ${status}.\n\n**Detected at**: ${new Date().toISOString()}\n\nThis issue was auto-filed by the staging health monitor. Close when staging is back online.`,
+                labels: ['staging-down'],
+              });
+            }
+
+      - name: Close resolved downtime issue
+        if: steps.health.outputs.status == '200'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'staging-down',
+              state: 'open',
+            });
+            for (const issue of issues.data) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `✅ Staging health check is now passing (HTTP 200). Auto-closing.`,
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed',
+              });
+            }
