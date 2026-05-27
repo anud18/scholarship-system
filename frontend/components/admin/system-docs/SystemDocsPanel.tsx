@@ -27,6 +27,7 @@ import { buildFileProxyUrl, type DocKey } from "@/lib/api/modules/system-setting
 import { previewMimeType } from "@/lib/utils";
 import { toast } from "sonner";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
+import { SupplementaryDocsList } from "./SupplementaryDocsList";
 
 interface DocSlot {
   key: DocKey;
@@ -447,6 +448,8 @@ export function SystemDocsPanel() {
           })}
         </CardContent>
       </Card>
+
+      <SupplementaryDocsList />
 
       <FilePreviewDialog
         isOpen={preview !== null}
