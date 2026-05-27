@@ -37,6 +37,7 @@ from app.models.student import (  # 查詢表模型 (Reference data only); Helpe
     get_student_type_from_degree,
 )
 from app.models.student_bank_account import StudentBankAccount
+from app.models.supplementary_doc import SupplementaryDoc
 from app.models.system_setting import SystemSetting
 from app.models.user import User, UserRole
 from app.models.user_profile import UserProfile, UserProfileHistory
@@ -119,4 +120,6 @@ __all__ = [
     "StudentBankAccount",
     "BankVerificationTask",
     "BankVerificationTaskStatus",
+    # Supplementary doc models
+    "SupplementaryDoc",
 ]
