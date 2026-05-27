@@ -403,11 +403,31 @@ async def reorder_supplementary_docs(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    # Placeholder body — implementation lands in Task 9. We register the
-    # literal "/reorder" route here so it is matched BEFORE the parametric
-    # "/{doc_id}" routes added below. Returning 501 keeps the tests for the
-    # other endpoints honest until Task 9.
-    raise HTTPException(status_code=501, detail="not implemented")
+    from sqlalchemy import select
+
+    from app.models.supplementary_doc import SupplementaryDoc
+
+    requested_ids = [item.id for item in payload.items]
+    stmt = select(SupplementaryDoc).where(SupplementaryDoc.id.in_(requested_ids))
+    result = await db.execute(stmt)
+    docs = {doc.id: doc for doc in result.scalars().all()}
+
+    missing = [doc_id for doc_id in requested_ids if doc_id not in docs]
+    if missing:
+        raise HTTPException(
+            status_code=400, detail=f"ids not found: {missing}"
+        )
+
+    for item in payload.items:
+        docs[item.id].sort_order = item.sort_order
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": "已重新排序",
+        "data": {"updated": len(payload.items)},
+    }
 
 
 @router.patch("/supplementary-docs/{doc_id}")

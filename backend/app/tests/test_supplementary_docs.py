@@ -319,3 +319,94 @@ class TestDeleteSupplementaryDoc:
         )
         assert response.status_code == 200, response.text
         assert response.json()["success"] is True
+
+
+class TestReorderSupplementaryDocs:
+    @pytest.mark.asyncio
+    async def test_admin_reorders(self, admin_client: AsyncClient, db: AsyncSession):
+        a = SupplementaryDoc(
+            title="A", object_name="system-docs/a.pdf", original_filename="a.pdf",
+            content_type="application/pdf", file_size=10, sort_order=0,
+        )
+        b = SupplementaryDoc(
+            title="B", object_name="system-docs/b.pdf", original_filename="b.pdf",
+            content_type="application/pdf", file_size=10, sort_order=1,
+        )
+        db.add_all([a, b])
+        await db.commit()
+        await db.refresh(a)
+        await db.refresh(b)
+
+        response = await admin_client.patch(
+            "/api/v1/system-settings/supplementary-docs/reorder",
+            json={"items": [
+                {"id": a.id, "sort_order": 1},
+                {"id": b.id, "sort_order": 0},
+            ]},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["updated"] == 2
+
+        list_response = await admin_client.get(
+            "/api/v1/system-settings/supplementary-docs"
+        )
+        titles = [item["title"] for item in list_response.json()["data"]]
+        assert titles == ["B", "A"]
+
+    @pytest.mark.asyncio
+    async def test_reorder_with_missing_id_400_and_no_changes(
+        self, admin_client: AsyncClient, db: AsyncSession
+    ):
+        a = SupplementaryDoc(
+            title="A", object_name="system-docs/a.pdf", original_filename="a.pdf",
+            content_type="application/pdf", file_size=10, sort_order=0,
+        )
+        db.add(a)
+        await db.commit()
+        await db.refresh(a)
+
+        response = await admin_client.patch(
+            "/api/v1/system-settings/supplementary-docs/reorder",
+            json={"items": [
+                {"id": a.id, "sort_order": 5},
+                {"id": 99999, "sort_order": 6},
+            ]},
+        )
+        assert response.status_code == 400
+
+        await db.refresh(a)
+        assert a.sort_order == 0  # unchanged
+
+    @pytest.mark.asyncio
+    async def test_reorder_duplicate_sort_orders_422(
+        self, admin_client: AsyncClient, db: AsyncSession
+    ):
+        a = SupplementaryDoc(
+            title="A", object_name="system-docs/a.pdf", original_filename="a.pdf",
+            content_type="application/pdf", file_size=10, sort_order=0,
+        )
+        b = SupplementaryDoc(
+            title="B", object_name="system-docs/b.pdf", original_filename="b.pdf",
+            content_type="application/pdf", file_size=10, sort_order=1,
+        )
+        db.add_all([a, b])
+        await db.commit()
+        await db.refresh(a)
+        await db.refresh(b)
+
+        response = await admin_client.patch(
+            "/api/v1/system-settings/supplementary-docs/reorder",
+            json={"items": [
+                {"id": a.id, "sort_order": 0},
+                {"id": b.id, "sort_order": 0},
+            ]},
+        )
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_reorder_empty_payload_422(self, admin_client: AsyncClient):
+        response = await admin_client.patch(
+            "/api/v1/system-settings/supplementary-docs/reorder",
+            json={"items": []},
+        )
+        assert response.status_code == 422
