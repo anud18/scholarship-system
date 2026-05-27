@@ -3,17 +3,30 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { NoticeAgreementStep } from "../student-wizard/steps/NoticeAgreementStep";
 
 jest.mock("../../lib/api", () => {
-  const fn = jest.fn();
+  const getPublicDocs = jest.fn();
+  const list = jest.fn();
   return {
     __esModule: true,
-    default: { systemSettings: { getPublicDocs: fn } },
-    api: { systemSettings: { getPublicDocs: fn } },
+    default: {
+      systemSettings: { getPublicDocs, supplementaryDocs: { list } },
+    },
+    api: {
+      systemSettings: { getPublicDocs, supplementaryDocs: { list } },
+    },
   };
 });
 
-const mockGetPublicDocs = (
-  jest.requireMock("../../lib/api") as { api: { systemSettings: { getPublicDocs: jest.Mock } } }
-).api.systemSettings.getPublicDocs;
+const apiMock = jest.requireMock("../../lib/api") as {
+  api: {
+    systemSettings: {
+      getPublicDocs: jest.Mock;
+      supplementaryDocs: { list: jest.Mock };
+    };
+  };
+};
+
+const mockGetPublicDocs = apiMock.api.systemSettings.getPublicDocs;
+const mockSuppList = apiMock.api.systemSettings.supplementaryDocs.list;
 
 jest.mock("../inline-pdf-viewer", () => ({
   InlinePdfViewer: (props: {
@@ -41,6 +54,7 @@ describe("NoticeAgreementStep", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSuppList.mockResolvedValue({ success: true, message: "OK", data: [] });
     Object.defineProperty(window, "localStorage", {
       value: {
         getItem: jest.fn(() => "test-token"),
@@ -193,5 +207,117 @@ describe("NoticeAgreementStep", () => {
     expect(mockGetPublicDocs).toHaveBeenCalled();
     expect(screen.getByText("申請期限")).toBeInTheDocument();
     expect(screen.getByText("獎金撥款")).toBeInTheDocument();
+  });
+});
+
+describe("NoticeAgreementStep — 參考文件 list", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSuppList.mockResolvedValue({ success: true, message: "OK", data: [] });
+    Object.defineProperty(window, "localStorage", {
+      value: { getItem: jest.fn(() => "test-token") },
+      configurable: true,
+    });
+  });
+
+  it("hides the 參考文件 section when sample doc and supp docs are both empty", async () => {
+    mockGetPublicDocs.mockResolvedValue({
+      success: true,
+      message: "OK",
+      data: { regulations_url: "system-docs/x.pdf" },
+    });
+    mockSuppList.mockResolvedValue({ success: true, message: "OK", data: [] });
+
+    render(
+      <NoticeAgreementStep
+        agreedToTerms={false}
+        onAgree={() => {}}
+        onNext={() => {}}
+        locale="zh"
+      />
+    );
+
+    await waitFor(() => expect(mockGetPublicDocs).toHaveBeenCalled());
+    expect(screen.queryByText("參考文件")).not.toBeInTheDocument();
+  });
+
+  it("shows supplementary docs alongside the fixed sample doc row", async () => {
+    mockGetPublicDocs.mockResolvedValue({
+      success: true,
+      message: "OK",
+      data: {
+        regulations_url: "system-docs/r.pdf",
+        sample_document_url: "system-docs/s.pdf",
+        sample_document_url_filename: "sample.pdf",
+      },
+    });
+    mockSuppList.mockResolvedValue({
+      success: true,
+      message: "OK",
+      data: [
+        {
+          id: 1,
+          title: "FAQ",
+          object_name: "system-docs/supp_a.pdf",
+          original_filename: "faq.pdf",
+          content_type: "application/pdf",
+          file_size: 10,
+          sort_order: 0,
+          created_at: "2026-05-27T00:00:00Z",
+          updated_at: "2026-05-27T00:00:00Z",
+        },
+      ],
+    });
+
+    render(
+      <NoticeAgreementStep
+        agreedToTerms={false}
+        onAgree={() => {}}
+        onNext={() => {}}
+        locale="zh"
+      />
+    );
+
+    expect(await screen.findByText("參考文件")).toBeInTheDocument();
+    expect(screen.getByText("申請文件範例檔")).toBeInTheDocument();
+    expect(screen.getByText("FAQ")).toBeInTheDocument();
+  });
+
+  it("renders only supplementary docs when sample doc is missing", async () => {
+    mockGetPublicDocs.mockResolvedValue({
+      success: true,
+      message: "OK",
+      data: { regulations_url: "system-docs/r.pdf" },
+    });
+    mockSuppList.mockResolvedValue({
+      success: true,
+      message: "OK",
+      data: [
+        {
+          id: 9,
+          title: "範本",
+          object_name: "system-docs/supp_x.pdf",
+          original_filename: "x.pdf",
+          content_type: "application/pdf",
+          file_size: 1,
+          sort_order: 0,
+          created_at: "2026-05-27T00:00:00Z",
+          updated_at: "2026-05-27T00:00:00Z",
+        },
+      ],
+    });
+
+    render(
+      <NoticeAgreementStep
+        agreedToTerms={false}
+        onAgree={() => {}}
+        onNext={() => {}}
+        locale="zh"
+      />
+    );
+
+    expect(await screen.findByText("參考文件")).toBeInTheDocument();
+    expect(screen.queryByText("申請文件範例檔")).not.toBeInTheDocument();
+    expect(screen.getByText("範本")).toBeInTheDocument();
   });
 });
