@@ -14,9 +14,9 @@ import "react-pdf/dist/Page/TextLayer.css";
 
 interface InlinePdfViewerProps {
   url: string;
-  // Fixed pixel height. Use `className` instead for responsive sizing
-  // (e.g. `h-[min(700px,calc(90vh-200px))]`).
-  height?: number;
+  // Tailwind classes for sizing the scroll container, e.g.
+  // `h-[min(700px,calc(90vh-200px))]`. Required in practice — the
+  // container has no intrinsic height without one.
   className?: string;
   onReachedBottom?: () => void;
   onLoadError?: (err: Error) => void;
@@ -25,9 +25,13 @@ interface InlinePdfViewerProps {
 
 const SLACK_PX = 8;
 
+const LABELS = {
+  zh: { loading: "載入中…", error: "無法載入文件", reload: "重新載入" },
+  en: { loading: "Loading…", error: "Failed to load document", reload: "Reload" },
+} as const;
+
 export function InlinePdfViewer({
   url,
-  height,
   className,
   onReachedBottom,
   onLoadError,
@@ -51,6 +55,7 @@ export function InlinePdfViewer({
   }, [onReachedBottom]);
 
   const handleScroll = useCallback(() => {
+    if (latched.current) return;
     const el = scrollRef.current;
     if (!el) return;
     if (el.scrollHeight - el.scrollTop - el.clientHeight <= SLACK_PX) {
@@ -98,10 +103,7 @@ export function InlinePdfViewer({
     [onLoadError],
   );
 
-  const labels =
-    locale === "zh"
-      ? { loading: "載入中…", error: "無法載入文件", reload: "重新載入" }
-      : { loading: "Loading…", error: "Failed to load document", reload: "Reload" };
+  const labels = LABELS[locale];
 
   return (
     <div
@@ -109,7 +111,6 @@ export function InlinePdfViewer({
       data-testid="pdf-scroll-container"
       onScroll={handleScroll}
       className={`overflow-y-auto rounded-lg border bg-white ${className ?? ""}`}
-      style={height !== undefined ? { height } : undefined}
     >
       {loadError ? (
         <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">

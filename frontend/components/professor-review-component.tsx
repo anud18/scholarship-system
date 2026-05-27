@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { logger } from "@/lib/utils/logger";
+import { buildFileProxyUrl } from "@/lib/api/modules/system-settings";
+import { previewMimeType } from "@/lib/utils";
 import { ErrorBoundary, useErrorHandler } from "@/components/error-boundary";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -169,18 +171,12 @@ function ProfessorReviewComponentInner({
   }, []);
 
   const handleViewRegulations = () => {
-    const token = localStorage.getItem("auth_token") || "";
-    const url = `/api/v1/system-settings/file-proxy?key=regulations_url&token=${encodeURIComponent(token)}`;
-    const lower = regulationsFilename.toLowerCase();
-    let type = "application/pdf";
-    if (lower.endsWith(".doc")) type = "application/msword";
-    else if (lower.endsWith(".docx"))
-      type =
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    const url = buildFileProxyUrl("regulations_url", regulationsUrl);
+    if (!url) return;
     setRegulationsFile({
       url,
       filename: regulationsFilename || "獎學金要點",
-      type,
+      type: previewMimeType(regulationsFilename),
     });
     setShowRegulations(true);
   };

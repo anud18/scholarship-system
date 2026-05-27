@@ -23,10 +23,10 @@ import {
   X,
 } from "lucide-react";
 import apiClient from "@/lib/api";
+import { buildFileProxyUrl, type DocKey } from "@/lib/api/modules/system-settings";
+import { previewMimeType } from "@/lib/utils";
 import { toast } from "sonner";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
-
-type DocKey = "regulations_url" | "sample_document_url";
 
 interface DocSlot {
   key: DocKey;
@@ -95,15 +95,6 @@ function fileTypeBadge(name: string): string {
   if (ext === "docx") return "DOCX";
   if (ext === "doc") return "DOC";
   return ext.toUpperCase() || "檔案";
-}
-
-function previewMimeType(name: string): string {
-  const lower = name.toLowerCase();
-  if (lower.endsWith(".pdf")) return "application/pdf";
-  if (lower.endsWith(".doc")) return "application/msword";
-  if (lower.endsWith(".docx"))
-    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-  return "application/octet-stream";
 }
 
 export function SystemDocsPanel() {
@@ -214,16 +205,8 @@ export function SystemDocsPanel() {
   const openPreview = (key: DocKey) => {
     const current = currentFiles[key];
     if (!current) return;
-    const token =
-      typeof window !== "undefined"
-        ? localStorage.getItem("auth_token") || ""
-        : "";
-    const cacheBuster = encodeURIComponent(
-      current.objectName.split("/").pop() || ""
-    );
-    const url = `/api/v1/system-settings/file-proxy?key=${key}&token=${encodeURIComponent(
-      token
-    )}&v=${cacheBuster}`;
+    const url = buildFileProxyUrl(key, current.objectName);
+    if (!url) return;
     setPreview({
       url,
       filename: current.displayName,

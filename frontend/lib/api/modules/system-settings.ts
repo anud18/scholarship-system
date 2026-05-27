@@ -14,6 +14,33 @@ import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
 import type { ApiResponse } from '../types';
 
+/** Keys for system-managed documents served via /system-settings/file-proxy. */
+export type DocKey = 'regulations_url' | 'sample_document_url';
+
+/**
+ * Build the file-proxy URL used by FilePreviewDialog and InlinePdfViewer.
+ *
+ * Reads `auth_token` from localStorage at call time (so a refreshed token
+ * is picked up). Appends a cache-buster derived from the stored object
+ * name's filename so a fresh upload bypasses the browser cache.
+ *
+ * Returns `null` when `objectName` is falsy.
+ */
+export function buildFileProxyUrl(
+  key: DocKey,
+  objectName?: string | null
+): string | null {
+  if (!objectName) return null;
+  const token =
+    typeof window !== 'undefined'
+      ? localStorage.getItem('auth_token') || ''
+      : '';
+  const cacheBuster = encodeURIComponent(objectName.split('/').pop() || '');
+  return `/api/v1/system-settings/file-proxy?key=${key}&token=${encodeURIComponent(
+    token
+  )}&v=${cacheBuster}`;
+}
+
 // System configuration types
 type SystemConfiguration = {
   key: string;

@@ -39,9 +39,11 @@ jest.mock("react-pdf", () => {
   }) => {
     // Register the page's render callback so tests can fire them all at once.
     useEffect(() => {
-      if (onRenderSuccess) pageRenderCallbacks.push(onRenderSuccess);
+      const cb = onRenderSuccess;
+      if (!cb) return;
+      pageRenderCallbacks.push(cb);
       return () => {
-        const i = pageRenderCallbacks.indexOf(onRenderSuccess!);
+        const i = pageRenderCallbacks.indexOf(cb);
         if (i >= 0) pageRenderCallbacks.splice(i, 1);
       };
     }, [onRenderSuccess]);
