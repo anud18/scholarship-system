@@ -9,6 +9,11 @@ from app.core.security import get_current_user, require_admin
 from app.db.deps import get_db
 from app.models.system_setting import ConfigCategory, ConfigDataType
 from app.models.user import User
+from app.schemas.supplementary_doc import (
+    ReorderRequest,
+    SupplementaryDocResponse,
+    SupplementaryDocUpdate,
+)
 from app.schemas.system_setting import (
     ConfigValidationRequest,
     ConfigValidationResponse,
@@ -388,6 +393,47 @@ async def create_supplementary_doc(
     return {
         "success": True,
         "message": "上傳成功",
+        "data": SupplementaryDocResponse.model_validate(doc).model_dump(mode="json"),
+    }
+
+
+@router.patch("/supplementary-docs/reorder")
+async def reorder_supplementary_docs(
+    payload: ReorderRequest,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    # Placeholder body — implementation lands in Task 9. We register the
+    # literal "/reorder" route here so it is matched BEFORE the parametric
+    # "/{doc_id}" routes added below. Returning 501 keeps the tests for the
+    # other endpoints honest until Task 9.
+    raise HTTPException(status_code=501, detail="not implemented")
+
+
+@router.patch("/supplementary-docs/{doc_id}")
+async def update_supplementary_doc(
+    doc_id: int,
+    payload: SupplementaryDocUpdate,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy import select
+
+    from app.models.supplementary_doc import SupplementaryDoc
+
+    stmt = select(SupplementaryDoc).where(SupplementaryDoc.id == doc_id)
+    result = await db.execute(stmt)
+    doc = result.scalar_one_or_none()
+    if doc is None:
+        raise HTTPException(status_code=404, detail="not found")
+
+    doc.title = payload.title
+    await db.commit()
+    await db.refresh(doc)
+
+    return {
+        "success": True,
+        "message": "已更新",
         "data": SupplementaryDocResponse.model_validate(doc).model_dump(mode="json"),
     }
 

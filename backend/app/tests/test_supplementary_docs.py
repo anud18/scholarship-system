@@ -212,3 +212,51 @@ class TestUploadSupplementaryDoc:
         )
         assert response.status_code == 400
         fake_minio.client.put_object.assert_not_called()
+
+
+class TestUpdateSupplementaryDocTitle:
+    @pytest.mark.asyncio
+    async def test_admin_updates_title(self, admin_client: AsyncClient, db: AsyncSession):
+        doc = SupplementaryDoc(
+            title="Old", object_name="system-docs/x.pdf", original_filename="x.pdf",
+            content_type="application/pdf", file_size=10, sort_order=0,
+        )
+        db.add(doc)
+        await db.commit()
+        await db.refresh(doc)
+
+        response = await admin_client.patch(
+            f"/api/v1/system-settings/supplementary-docs/{doc.id}",
+            json={"title": "New Title"},
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["data"]["title"] == "New Title"
+
+        await db.refresh(doc)
+        assert doc.title == "New Title"
+        assert doc.object_name == "system-docs/x.pdf"  # unchanged
+
+    @pytest.mark.asyncio
+    async def test_update_nonexistent_returns_404(self, admin_client: AsyncClient):
+        response = await admin_client.patch(
+            "/api/v1/system-settings/supplementary-docs/9999",
+            json={"title": "x"},
+        )
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_update_empty_title_rejected(self, admin_client: AsyncClient, db: AsyncSession):
+        doc = SupplementaryDoc(
+            title="Old", object_name="system-docs/x.pdf", original_filename="x.pdf",
+            content_type="application/pdf", file_size=10, sort_order=0,
+        )
+        db.add(doc)
+        await db.commit()
+        await db.refresh(doc)
+
+        response = await admin_client.patch(
+            f"/api/v1/system-settings/supplementary-docs/{doc.id}",
+            json={"title": "   "},
+        )
+        assert response.status_code == 422
