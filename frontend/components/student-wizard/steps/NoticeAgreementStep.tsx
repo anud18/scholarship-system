@@ -28,7 +28,11 @@ import {
   BookOpen,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import { buildFileProxyUrl } from "@/lib/api/modules/system-settings";
+import {
+  buildFileProxyUrl,
+  buildSuppDocFileProxyUrl,
+  type SupplementaryDoc,
+} from "@/lib/api/modules/system-settings";
 import { previewMimeType } from "@/lib/utils";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { InlinePdfViewer } from "@/components/inline-pdf-viewer";
@@ -99,8 +103,8 @@ const NOTICES = {
     nextButton: "同意並繼續",
     readFirst: "請先點擊「閱讀獎學金要點」並滑至底端",
     sampleDocumentLabel: "申請文件範例檔",
-    sampleDocumentRow: "需要參考申請文件格式？",
-    sampleDocumentNotProvided: "尚未提供",
+    referenceDocsHeader: "參考文件",
+    referenceDocsEmpty: "目前無參考文件",
     regulationsHeader: "獎學金要點",
     regulationsOpenButton: "閱讀獎學金要點",
     regulationsRow: "請開啟並閱讀獎學金要點全文",
@@ -169,8 +173,8 @@ const NOTICES = {
     nextButton: "Agree and Continue",
     readFirst: "Open the regulations and scroll to the bottom first",
     sampleDocumentLabel: "Sample Application Documents",
-    sampleDocumentRow: "Need to see the application document format?",
-    sampleDocumentNotProvided: "Not available",
+    referenceDocsHeader: "Reference Documents",
+    referenceDocsEmpty: "No reference documents available",
     regulationsHeader: "Scholarship Regulations",
     regulationsOpenButton: "Open Scholarship Regulations",
     regulationsRow: "Open and read the full scholarship regulations",
@@ -200,6 +204,9 @@ export function NoticeAgreementStep({
     sample_document_url_filename?: string;
   }>({});
   const [docsLoaded, setDocsLoaded] = useState(false);
+  const [supplementaryDocs, setSupplementaryDocs] = useState<SupplementaryDoc[]>(
+    []
+  );
   const [previewFile, setPreviewFile] = useState<{
     url: string;
     filename: string;
@@ -207,17 +214,17 @@ export function NoticeAgreementStep({
   } | null>(null);
 
   useEffect(() => {
-    api.systemSettings
-      .getPublicDocs()
-      .then((res) => {
-        if (res.success && res.data) setPublicDocs(res.data);
+    Promise.all([
+      api.systemSettings.getPublicDocs(),
+      api.systemSettings.supplementaryDocs.list(),
+    ])
+      .then(([docsRes, suppRes]) => {
+        if (docsRes.success && docsRes.data) setPublicDocs(docsRes.data);
+        if (suppRes.success && suppRes.data) setSupplementaryDocs(suppRes.data);
       })
       .catch((err) => {
-        // Network failure / unexpected throw. Surface the same "no
-        // regulations" blocking alert (publicDocs stays empty) so the
-        // student isn't stuck on a loading skeleton. Logged for ops.
         // eslint-disable-next-line no-console
-        console.error("[NoticeAgreementStep] getPublicDocs failed", err);
+        console.error("[NoticeAgreementStep] doc fetch failed", err);
       })
       .finally(() => {
         setDocsLoaded(true);
@@ -301,24 +308,72 @@ export function NoticeAgreementStep({
             </div>
           </Card>
 
-          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 flex items-center justify-between gap-3">
-            <p className="text-sm text-blue-900">{t.sampleDocumentRow}</p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleOpenSampleDoc(t.sampleDocumentLabel)}
-              disabled={!publicDocs.sample_document_url}
-              className="flex items-center gap-2"
-            >
-              <FileText className="h-4 w-4" />
-              {t.sampleDocumentLabel}
-              {!publicDocs.sample_document_url && (
-                <span className="text-xs text-gray-400 ml-1">
-                  ({t.sampleDocumentNotProvided})
-                </span>
-              )}
-            </Button>
-          </div>
+          {(() => {
+            const sampleAvailable = Boolean(publicDocs.sample_document_url);
+            const hasAnyReferenceDoc =
+              sampleAvailable || supplementaryDocs.length > 0;
+            if (!hasAnyReferenceDoc) return null;
+
+            const rows: Array<{
+              key: string;
+              label: string;
+              onClick: () => void;
+            }> = [];
+
+            if (sampleAvailable) {
+              rows.push({
+                key: "fixed-sample",
+                label: t.sampleDocumentLabel,
+                onClick: () => handleOpenSampleDoc(t.sampleDocumentLabel),
+              });
+            }
+
+            for (const doc of supplementaryDocs) {
+              rows.push({
+                key: `supp-${doc.id}`,
+                label: doc.title,
+                onClick: () => {
+                  const url = buildSuppDocFileProxyUrl(doc.id, doc.object_name);
+                  setPreviewFile({
+                    url,
+                    filename: doc.original_filename,
+                    type: previewMimeType(doc.original_filename),
+                  });
+                },
+              });
+            }
+
+            return (
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <h4 className="text-sm font-semibold text-blue-900 mb-3">
+                  {t.referenceDocsHeader}
+                </h4>
+                <ul className="space-y-2">
+                  {rows.map((row) => (
+                    <li
+                      key={row.key}
+                      className="flex items-center justify-between gap-3 rounded-md bg-white px-3 py-2"
+                    >
+                      <span
+                        className="text-sm text-nycu-navy-800 truncate"
+                        title={row.label}
+                      >
+                        {row.label}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={row.onClick}
+                        className="flex items-center gap-2"
+                      >
+                        <FileText className="h-4 w-4" /> 預覽
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })()}
 
           {!docsLoaded ? (
             <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-sm text-gray-500">
