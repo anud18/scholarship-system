@@ -7,6 +7,10 @@
     "npm": ">=10"
   },
   "scripts": {
+    "copy-pdf-worker": "node scripts/copy-pdf-worker.mjs",
+    "postinstall": "node scripts/copy-pdf-worker.mjs",
+    "predev": "node scripts/copy-pdf-worker.mjs",
+    "prebuild": "node scripts/copy-pdf-worker.mjs",
     "dev": "next dev --turbo",
     "build": "next build",
     "start": "next start",
