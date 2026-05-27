@@ -207,10 +207,21 @@ export function NoticeAgreementStep({
   } | null>(null);
 
   useEffect(() => {
-    api.systemSettings.getPublicDocs().then((res) => {
-      if (res.success && res.data) setPublicDocs(res.data);
-      setDocsLoaded(true);
-    });
+    api.systemSettings
+      .getPublicDocs()
+      .then((res) => {
+        if (res.success && res.data) setPublicDocs(res.data);
+      })
+      .catch((err) => {
+        // Network failure / unexpected throw. Surface the same "no
+        // regulations" blocking alert (publicDocs stays empty) so the
+        // student isn't stuck on a loading skeleton. Logged for ops.
+        // eslint-disable-next-line no-console
+        console.error("[NoticeAgreementStep] getPublicDocs failed", err);
+      })
+      .finally(() => {
+        setDocsLoaded(true);
+      });
   }, []);
 
   const handleOpenSampleDoc = useCallback(
