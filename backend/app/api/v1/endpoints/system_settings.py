@@ -131,8 +131,28 @@ async def upload_system_doc(
     if doc_key not in _ALLOWED_DOC_KEYS:
         raise HTTPException(status_code=400, detail=f"Invalid doc_key. Allowed: {_ALLOWED_DOC_KEYS}")
 
-    allowed_extensions = [".pdf", ".doc", ".docx"]
+    # The student-facing wizard renders 獎學金要點 inline via react-pdf, which
+    # only supports PDF. Enforce extension AND MIME AND magic-bytes so a
+    # determined admin can't disguise a non-PDF (the first two signals are
+    # client-supplied and trivially spoofable; the magic-byte check inspects
+    # the actual content).
+    if doc_key == "regulations_url":
+        allowed_extensions = [".pdf"]
+        if (file.content_type or "").lower() != "application/pdf":
+            raise HTTPException(
+                status_code=400,
+                detail="獎學金要點僅接受 PDF 檔案",
+            )
+    else:
+        allowed_extensions = [".pdf", ".doc", ".docx"]
+
     file_content = await file.read()
+
+    if doc_key == "regulations_url" and not file_content.startswith(b"%PDF-"):
+        raise HTTPException(
+            status_code=400,
+            detail="獎學金要點僅接受 PDF 檔案",
+        )
     validate_upload_file(
         filename=file.filename,
         allowed_extensions=allowed_extensions,

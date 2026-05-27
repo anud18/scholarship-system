@@ -32,6 +32,21 @@ export function formatDateTime(dateString: string | null | undefined): string {
 }
 
 /**
+ * Map a filename's extension to a preview MIME type used by FilePreviewDialog
+ * and similar viewers. Falls back to `application/octet-stream`.
+ */
+export function previewMimeType(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower.endsWith(".pdf")) return "application/pdf";
+  if (lower.endsWith(".doc")) return "application/msword";
+  if (lower.endsWith(".docx"))
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  if (lower.endsWith(".png")) return "image/png";
+  return "application/octet-stream";
+}
+
+/**
  * Get badge variant based on status
  */
 export function getStatusBadgeVariant(status: string): "default" | "secondary" | "destructive" | "outline" {

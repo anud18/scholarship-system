@@ -23,15 +23,17 @@ import {
   X,
 } from "lucide-react";
 import apiClient from "@/lib/api";
+import { buildFileProxyUrl, type DocKey } from "@/lib/api/modules/system-settings";
+import { previewMimeType } from "@/lib/utils";
 import { toast } from "sonner";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
-
-type DocKey = "regulations_url" | "sample_document_url";
 
 interface DocSlot {
   key: DocKey;
   title: string;
   subtitle: string;
+  accepted: string;
+  acceptedLabel: string;
   Icon: React.ComponentType<{ className?: string }>;
   accent: {
     ring: string;
@@ -48,6 +50,8 @@ const SLOTS: DocSlot[] = [
     key: "regulations_url",
     title: "獎學金要點",
     subtitle: "提供學生、教授與學院審核時參閱的法規文件",
+    accepted: ".pdf",
+    acceptedLabel: "PDF",
     Icon: BookOpen,
     accent: {
       ring: "ring-nycu-blue-200",
@@ -63,6 +67,8 @@ const SLOTS: DocSlot[] = [
     key: "sample_document_url",
     title: "申請文件範例檔",
     subtitle: "提供學生填寫申請文件時的參考範例",
+    accepted: ".pdf,.doc,.docx",
+    acceptedLabel: "PDF · DOC · DOCX",
     Icon: FileArchive,
     accent: {
       ring: "ring-amber-200",
@@ -75,7 +81,6 @@ const SLOTS: DocSlot[] = [
   },
 ];
 
-const ACCEPTED = ".pdf,.doc,.docx";
 const MAX_SIZE_MB = 10;
 
 function formatBytes(bytes: number): string {
@@ -90,15 +95,6 @@ function fileTypeBadge(name: string): string {
   if (ext === "docx") return "DOCX";
   if (ext === "doc") return "DOC";
   return ext.toUpperCase() || "檔案";
-}
-
-function previewMimeType(name: string): string {
-  const lower = name.toLowerCase();
-  if (lower.endsWith(".pdf")) return "application/pdf";
-  if (lower.endsWith(".doc")) return "application/msword";
-  if (lower.endsWith(".docx"))
-    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-  return "application/octet-stream";
 }
 
 export function SystemDocsPanel() {
@@ -160,9 +156,12 @@ export function SystemDocsPanel() {
 
   const validateAndSet = (key: DocKey, file: File | null) => {
     if (!file) return;
+    const slot = SLOTS.find((s) => s.key === key);
+    if (!slot) return;
+    const allowed = slot.accepted.split(",").map((s) => s.trim());
     const ext = "." + (file.name.toLowerCase().split(".").pop() || "");
-    if (!ACCEPTED.split(",").includes(ext)) {
-      toast.error("僅接受 PDF / DOC / DOCX");
+    if (!allowed.includes(ext)) {
+      toast.error(`僅接受 ${slot.acceptedLabel}`);
       return;
     }
     if (file.size > MAX_SIZE_MB * 1024 * 1024) {
@@ -206,16 +205,8 @@ export function SystemDocsPanel() {
   const openPreview = (key: DocKey) => {
     const current = currentFiles[key];
     if (!current) return;
-    const token =
-      typeof window !== "undefined"
-        ? localStorage.getItem("auth_token") || ""
-        : "";
-    const cacheBuster = encodeURIComponent(
-      current.objectName.split("/").pop() || ""
-    );
-    const url = `/api/v1/system-settings/file-proxy?key=${key}&token=${encodeURIComponent(
-      token
-    )}&v=${cacheBuster}`;
+    const url = buildFileProxyUrl(key, current.objectName);
+    if (!url) return;
     setPreview({
       url,
       filename: current.displayName,
@@ -427,7 +418,7 @@ export function SystemDocsPanel() {
                       <input
                         ref={inputRefs[slot.key]}
                         type="file"
-                        accept={ACCEPTED}
+                        accept={slot.accepted}
                         onChange={(e) =>
                           validateAndSet(slot.key, e.target.files?.[0] || null)
                         }
@@ -446,7 +437,7 @@ export function SystemDocsPanel() {
                           : "拖曳檔案至此或點擊選擇"}
                       </p>
                       <p className="text-xs text-gray-500 mt-1.5">
-                        支援 PDF · DOC · DOCX · 上限 {MAX_SIZE_MB} MB
+                        支援 {slot.acceptedLabel} · 上限 {MAX_SIZE_MB} MB
                       </p>
                     </label>
                   )}
