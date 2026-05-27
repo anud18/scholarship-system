@@ -6602,6 +6602,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/system-settings/supplementary-docs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Supplementary Docs
+         * @description List all supplementary docs sorted by sort_order then id.
+         *     Accessible by any authenticated user.
+         */
+        get: operations["list_supplementary_docs_api_v1_system_settings_supplementary_docs_get"];
+        put?: never;
+        /** Create Supplementary Doc */
+        post: operations["create_supplementary_doc_api_v1_system_settings_supplementary_docs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system-settings/supplementary-docs/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Reorder Supplementary Docs */
+        patch: operations["reorder_supplementary_docs_api_v1_system_settings_supplementary_docs_reorder_patch"];
+        trace?: never;
+    };
+    "/api/v1/system-settings/supplementary-docs/{doc_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Supplementary Doc */
+        delete: operations["delete_supplementary_doc_api_v1_system_settings_supplementary_docs__doc_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Supplementary Doc */
+        patch: operations["update_supplementary_doc_api_v1_system_settings_supplementary_docs__doc_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/system-settings/supplementary-docs/{doc_id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stream Supplementary Doc File */
+        get: operations["stream_supplementary_doc_file_api_v1_system_settings_supplementary_docs__doc_id__file_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/system-settings/{id}": {
         parameters: {
             query?: never;
@@ -8149,6 +8223,16 @@ export interface components {
              */
             force_new: boolean;
         };
+        /** Body_create_supplementary_doc_api_v1_system_settings_supplementary_docs_post */
+        Body_create_supplementary_doc_api_v1_system_settings_supplementary_docs_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+            /** Title */
+            title: string;
+        };
         /** Body_exclude_roster_item_api_v1_payment_rosters__roster_id__items__item_id__exclude_post */
         Body_exclude_roster_item_api_v1_payment_rosters__roster_id__items__item_id__exclude_post: {
             /**
@@ -9189,6 +9273,18 @@ export interface components {
             /** Reason */
             reason?: string | null;
         };
+        /** ReorderItem */
+        ReorderItem: {
+            /** Id */
+            id: number;
+            /** Sort Order */
+            sort_order: number;
+        };
+        /** ReorderRequest */
+        ReorderRequest: {
+            /** Items */
+            items: components["schemas"]["ReorderItem"][];
+        };
         /** RestoreRequest */
         RestoreRequest: {
             /** History Id */
@@ -10068,6 +10164,11 @@ export interface components {
              * @description 指導教授所屬系所
              */
             supervisor_department?: string | null;
+        };
+        /** SupplementaryDocUpdate */
+        SupplementaryDocUpdate: {
+            /** Title */
+            title: string;
         };
         /** SupplementaryImportToggle */
         SupplementaryImportToggle: {
@@ -21263,6 +21364,189 @@ export interface operations {
             header?: never;
             path: {
                 doc_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_supplementary_docs_api_v1_system_settings_supplementary_docs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    create_supplementary_doc_api_v1_system_settings_supplementary_docs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_create_supplementary_doc_api_v1_system_settings_supplementary_docs_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reorder_supplementary_docs_api_v1_system_settings_supplementary_docs_reorder_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_supplementary_doc_api_v1_system_settings_supplementary_docs__doc_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_supplementary_doc_api_v1_system_settings_supplementary_docs__doc_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupplementaryDocUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_supplementary_doc_file_api_v1_system_settings_supplementary_docs__doc_id__file_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
             };
             cookie?: never;
         };
