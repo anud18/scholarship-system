@@ -3,12 +3,19 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_current_user, require_admin
 from app.db.deps import get_db
+from app.models.supplementary_doc import SupplementaryDoc
 from app.models.system_setting import ConfigCategory, ConfigDataType
 from app.models.user import User
+from app.schemas.supplementary_doc import (
+    ReorderRequest,
+    SupplementaryDocResponse,
+    SupplementaryDocUpdate,
+)
 from app.schemas.system_setting import (
     ConfigValidationRequest,
     ConfigValidationResponse,
@@ -292,6 +299,31 @@ async def get_system_doc_file(
             "X-Content-Type-Options": "nosniff",
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Supplementary documents (admin-managed, arbitrary count)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/supplementary-docs")
+async def list_supplementary_docs(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all supplementary docs sorted by sort_order then id.
+    Accessible by any authenticated user."""
+    stmt = select(SupplementaryDoc).order_by(
+        SupplementaryDoc.sort_order.asc(),
+        SupplementaryDoc.id.asc(),
+    )
+    result = await db.execute(stmt)
+    docs = result.scalars().all()
+    return {
+        "success": True,
+        "message": "OK",
+        "data": [SupplementaryDocResponse.model_validate(d).model_dump(mode="json") for d in docs],
+    }
 
 
 @router.get("/{id}")

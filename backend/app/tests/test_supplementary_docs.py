@@ -96,3 +96,40 @@ def fake_minio():
         mock_service.client = MagicMock()
         mock_service.default_bucket = "scholarship-system"
         yield mock_service
+
+
+class TestListSupplementaryDocs:
+    @pytest.mark.asyncio
+    async def test_list_empty(self, admin_client: AsyncClient):
+        response = await admin_client.get("/api/v1/system-settings/supplementary-docs")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is True
+        assert body["data"] == []
+
+    @pytest.mark.asyncio
+    async def test_list_sorted_by_sort_order_then_id(
+        self, admin_client: AsyncClient, db: AsyncSession
+    ):
+        from app.models.supplementary_doc import SupplementaryDoc
+
+        db.add_all([
+            SupplementaryDoc(
+                title="C", object_name="system-docs/c.pdf", original_filename="c.pdf",
+                content_type="application/pdf", file_size=10, sort_order=2,
+            ),
+            SupplementaryDoc(
+                title="A", object_name="system-docs/a.pdf", original_filename="a.pdf",
+                content_type="application/pdf", file_size=10, sort_order=0,
+            ),
+            SupplementaryDoc(
+                title="B", object_name="system-docs/b.pdf", original_filename="b.pdf",
+                content_type="application/pdf", file_size=10, sort_order=1,
+            ),
+        ])
+        await db.commit()
+
+        response = await admin_client.get("/api/v1/system-settings/supplementary-docs")
+        body = response.json()
+        titles = [item["title"] for item in body["data"]]
+        assert titles == ["A", "B", "C"]
