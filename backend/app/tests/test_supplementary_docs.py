@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import get_current_user, require_admin
 from app.db.deps import get_db
 from app.main import app
+from app.models.supplementary_doc import SupplementaryDoc
 from app.models.user import User, UserRole, UserType
 
 
@@ -133,3 +134,81 @@ class TestListSupplementaryDocs:
         body = response.json()
         titles = [item["title"] for item in body["data"]]
         assert titles == ["A", "B", "C"]
+
+
+class TestUploadSupplementaryDoc:
+    @pytest.mark.asyncio
+    async def test_admin_uploads_pdf(self, admin_client: AsyncClient, fake_minio, db: AsyncSession):
+        file_bytes = b"%PDF-1.4 test"
+        response = await admin_client.post(
+            "/api/v1/system-settings/supplementary-docs",
+            data={"title": "FAQ"},
+            files={"file": ("faq.pdf", BytesIO(file_bytes), "application/pdf")},
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["success"] is True
+        assert body["data"]["title"] == "FAQ"
+        assert body["data"]["original_filename"] == "faq.pdf"
+        assert body["data"]["content_type"] == "application/pdf"
+        assert body["data"]["file_size"] == len(file_bytes)
+        assert body["data"]["object_name"].startswith("system-docs/supp_")
+        fake_minio.client.put_object.assert_called_once()
+
+        from sqlalchemy import select
+        rows = (await db.execute(select(SupplementaryDoc))).scalars().all()
+        assert len(rows) == 1
+        assert rows[0].title == "FAQ"
+
+    @pytest.mark.asyncio
+    async def test_non_admin_forbidden(self, student_client: AsyncClient, fake_minio):
+        response = await student_client.post(
+            "/api/v1/system-settings/supplementary-docs",
+            data={"title": "FAQ"},
+            files={"file": ("faq.pdf", BytesIO(b"%PDF"), "application/pdf")},
+        )
+        assert response.status_code == 403
+        fake_minio.client.put_object.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_rejects_disallowed_extension(
+        self, admin_client: AsyncClient, fake_minio
+    ):
+        response = await admin_client.post(
+            "/api/v1/system-settings/supplementary-docs",
+            data={"title": "EXE"},
+            files={"file": ("evil.exe", BytesIO(b"MZ"), "application/octet-stream")},
+        )
+        assert response.status_code in (400, 415)
+        fake_minio.client.put_object.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_rejects_oversize(self, admin_client: AsyncClient, fake_minio):
+        big = b"%PDF" + b"\x00" * (11 * 1024 * 1024)
+        response = await admin_client.post(
+            "/api/v1/system-settings/supplementary-docs",
+            data={"title": "Big"},
+            files={"file": ("big.pdf", BytesIO(big), "application/pdf")},
+        )
+        assert response.status_code in (400, 413)
+        fake_minio.client.put_object.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_rejects_empty_title(self, admin_client: AsyncClient, fake_minio):
+        response = await admin_client.post(
+            "/api/v1/system-settings/supplementary-docs",
+            data={"title": "   "},
+            files={"file": ("ok.pdf", BytesIO(b"%PDF"), "application/pdf")},
+        )
+        assert response.status_code == 400
+        fake_minio.client.put_object.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_rejects_too_long_title(self, admin_client: AsyncClient, fake_minio):
+        response = await admin_client.post(
+            "/api/v1/system-settings/supplementary-docs",
+            data={"title": "x" * 201},
+            files={"file": ("ok.pdf", BytesIO(b"%PDF"), "application/pdf")},
+        )
+        assert response.status_code == 400
+        fake_minio.client.put_object.assert_not_called()

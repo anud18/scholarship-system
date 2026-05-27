@@ -1,21 +1,14 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_current_user, require_admin
 from app.db.deps import get_db
-from app.models.supplementary_doc import SupplementaryDoc
 from app.models.system_setting import ConfigCategory, ConfigDataType
 from app.models.user import User
-from app.schemas.supplementary_doc import (
-    ReorderRequest,
-    SupplementaryDocResponse,
-    SupplementaryDocUpdate,
-)
 from app.schemas.system_setting import (
     ConfigValidationRequest,
     ConfigValidationResponse,
@@ -313,6 +306,11 @@ async def list_supplementary_docs(
 ):
     """List all supplementary docs sorted by sort_order then id.
     Accessible by any authenticated user."""
+    from sqlalchemy import select
+
+    from app.models.supplementary_doc import SupplementaryDoc
+    from app.schemas.supplementary_doc import SupplementaryDocResponse
+
     stmt = select(SupplementaryDoc).order_by(
         SupplementaryDoc.sort_order.asc(),
         SupplementaryDoc.id.asc(),
@@ -323,6 +321,74 @@ async def list_supplementary_docs(
         "success": True,
         "message": "OK",
         "data": [SupplementaryDocResponse.model_validate(d).model_dump(mode="json") for d in docs],
+    }
+
+
+@router.post("/supplementary-docs")
+async def create_supplementary_doc(
+    file: UploadFile = File(...),
+    title: str = Form(...),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    import io
+    import uuid
+
+    from app.core.path_security import validate_upload_file
+    from app.models.supplementary_doc import SupplementaryDoc
+    from app.schemas.supplementary_doc import SupplementaryDocResponse
+    from app.services.minio_service import minio_service
+
+    stripped_title = (title or "").strip()
+    if not stripped_title:
+        raise HTTPException(status_code=400, detail="title cannot be empty")
+    if len(stripped_title) > 200:
+        raise HTTPException(status_code=400, detail="title must be <= 200 chars")
+
+    allowed_extensions = [".pdf", ".doc", ".docx"]
+    file_content = await file.read()
+    validate_upload_file(
+        filename=file.filename,
+        allowed_extensions=allowed_extensions,
+        max_size_mb=10,
+        file_size=len(file_content),
+        allow_unicode=True,
+    )
+
+    ext = ""
+    if file.filename:
+        for e in allowed_extensions:
+            if file.filename.lower().endswith(e):
+                ext = e
+                break
+
+    object_name = f"system-docs/supp_{uuid.uuid4().hex}{ext}"
+
+    minio_service.client.put_object(
+        bucket_name=minio_service.default_bucket,
+        object_name=object_name,
+        data=io.BytesIO(file_content),
+        length=len(file_content),
+        content_type=file.content_type or "application/octet-stream",
+    )
+
+    doc = SupplementaryDoc(
+        title=stripped_title,
+        object_name=object_name,
+        original_filename=file.filename or "",
+        content_type=file.content_type or "application/octet-stream",
+        file_size=len(file_content),
+        sort_order=0,
+        created_by=current_user.id,
+    )
+    db.add(doc)
+    await db.commit()
+    await db.refresh(doc)
+
+    return {
+        "success": True,
+        "message": "上傳成功",
+        "data": SupplementaryDocResponse.model_validate(doc).model_dump(mode="json"),
     }
 
 
