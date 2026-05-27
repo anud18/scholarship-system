@@ -410,3 +410,41 @@ class TestReorderSupplementaryDocs:
             json={"items": []},
         )
         assert response.status_code == 422
+
+
+class TestStreamSupplementaryDocFile:
+    @pytest.mark.asyncio
+    async def test_streams_file_for_authenticated_user(
+        self, student_client: AsyncClient, fake_minio, db: AsyncSession
+    ):
+        doc = SupplementaryDoc(
+            title="X", object_name="system-docs/x.pdf",
+            original_filename="說明.pdf",
+            content_type="application/pdf", file_size=10, sort_order=0,
+        )
+        db.add(doc)
+        await db.commit()
+        await db.refresh(doc)
+
+        fake_response = MagicMock()
+        fake_response.read.return_value = b"%PDF-1.4 data"
+        fake_minio.client.get_object.return_value = fake_response
+
+        response = await student_client.get(
+            f"/api/v1/system-settings/supplementary-docs/{doc.id}/file"
+        )
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/pdf"
+        # filename* must be encoded per RFC 5987
+        assert "filename*=UTF-8''" in response.headers["content-disposition"]
+        assert response.content == b"%PDF-1.4 data"
+
+    @pytest.mark.asyncio
+    async def test_file_404_for_missing_id(
+        self, student_client: AsyncClient, fake_minio
+    ):
+        response = await student_client.get(
+            "/api/v1/system-settings/supplementary-docs/9999/file"
+        )
+        assert response.status_code == 404
+        fake_minio.client.get_object.assert_not_called()

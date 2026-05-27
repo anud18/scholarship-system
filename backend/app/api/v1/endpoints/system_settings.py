@@ -495,6 +495,51 @@ async def delete_supplementary_doc(
     }
 
 
+@router.get("/supplementary-docs/{doc_id}/file")
+async def stream_supplementary_doc_file(
+    doc_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    import io
+    from urllib.parse import quote
+
+    from sqlalchemy import select
+
+    from app.models.supplementary_doc import SupplementaryDoc
+    from app.services.minio_service import minio_service
+
+    stmt = select(SupplementaryDoc).where(SupplementaryDoc.id == doc_id)
+    result = await db.execute(stmt)
+    doc = result.scalar_one_or_none()
+    if doc is None:
+        raise HTTPException(status_code=404, detail="not found")
+
+    try:
+        response = minio_service.client.get_object(
+            bucket_name=minio_service.default_bucket,
+            object_name=doc.object_name,
+        )
+        file_content = response.read()
+    except Exception as e:
+        logger.exception("Failed to fetch supplementary doc")
+        raise HTTPException(status_code=500, detail="無法取得文件") from e
+
+    download_name = doc.original_filename or doc.object_name.split("/")[-1]
+    encoded_name = quote(download_name, safe="")
+
+    return StreamingResponse(
+        io.BytesIO(file_content),
+        media_type=doc.content_type or "application/octet-stream",
+        headers={
+            "Content-Disposition": f"inline; filename*=UTF-8''{encoded_name}",
+            "Content-Length": str(len(file_content)),
+            "Accept-Ranges": "bytes",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
 @router.get("/{id}")
 async def get_configuration(
     id: str,
