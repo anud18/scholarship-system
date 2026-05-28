@@ -60,5 +60,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("idx_supp_docs_sort", table_name="supplementary_docs", if_exists=True)
-    op.drop_table("supplementary_docs")
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if "supplementary_docs" in inspector.get_table_names():
+        op.drop_index(
+            "idx_supp_docs_sort",
+            table_name="supplementary_docs",
+            if_exists=True,
+        )
+        op.drop_table("supplementary_docs")

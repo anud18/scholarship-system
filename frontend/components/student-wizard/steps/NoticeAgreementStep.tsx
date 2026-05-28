@@ -104,6 +104,7 @@ const NOTICES = {
     readFirst: "請先點擊「閱讀獎學金要點」並滑至底端",
     sampleDocumentLabel: "申請文件範例檔",
     referenceDocsHeader: "參考文件",
+    previewLabel: "預覽",
     regulationsHeader: "獎學金要點",
     regulationsOpenButton: "閱讀獎學金要點",
     regulationsRow: "請開啟並閱讀獎學金要點全文",
@@ -173,6 +174,7 @@ const NOTICES = {
     readFirst: "Open the regulations and scroll to the bottom first",
     sampleDocumentLabel: "Sample Application Documents",
     referenceDocsHeader: "Reference Documents",
+    previewLabel: "Preview",
     regulationsHeader: "Scholarship Regulations",
     regulationsOpenButton: "Open Scholarship Regulations",
     regulationsRow: "Open and read the full scholarship regulations",
@@ -382,7 +384,7 @@ export function NoticeAgreementStep({
                         onClick={row.onClick}
                         className="flex items-center gap-2"
                       >
-                        <FileText className="h-4 w-4" /> 預覽
+                        <FileText className="h-4 w-4" /> {t.previewLabel}
                       </Button>
                     </li>
                   ))}

@@ -217,18 +217,22 @@ export function SupplementaryDocsList() {
       toast.error("標題不得超過 200 字");
       return;
     }
-    const res = await apiClient.systemSettings.supplementaryDocs.updateTitle(
-      editingDoc.id,
-      trimmed
-    );
-    if (res.success && res.data) {
-      setDocs((prev) =>
-        prev.map((d) => (d.id === editingDoc.id ? res.data! : d))
+    try {
+      const res = await apiClient.systemSettings.supplementaryDocs.updateTitle(
+        editingDoc.id,
+        trimmed
       );
-      setEditingDoc(null);
-      toast.success("已更新");
-    } else {
-      toast.error(res.message || "更新失敗");
+      if (res.success && res.data) {
+        setDocs((prev) =>
+          prev.map((d) => (d.id === editingDoc.id ? res.data! : d))
+        );
+        setEditingDoc(null);
+        toast.success("已更新");
+      } else {
+        toast.error(res.message || "更新失敗");
+      }
+    } catch {
+      toast.error("更新失敗");
     }
   };
 
