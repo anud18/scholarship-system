@@ -384,7 +384,9 @@ class TestApplicationService:
         mock_application.user_id = other_user_id  # Different user owns this application
 
         with patch.object(service.db, "execute") as mock_execute:
-            mock_execute.return_value.scalar_one_or_none.return_value = mock_application
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.return_value = mock_application
+            mock_execute.return_value = mock_result
 
             result = await service.get_application_by_id(application_id, mock_user)
 
@@ -465,6 +467,8 @@ class TestApplicationService:
         mock_application.is_editable = True
         mock_application.submitted_form_data = {}
         mock_application.files = []
+        mock_application.scholarship_subtype_list = []
+        mock_application.app_id = "APP-2024-001"
 
         update_data = ApplicationUpdate(
             form_data=ApplicationFormData(fields={}, documents=[]),
@@ -473,7 +477,8 @@ class TestApplicationService:
         )
 
         with (
-            patch.object(service, "get_application_by_id", return_value=mock_application),
+            patch.object(service, "_get_application_model", new_callable=AsyncMock, return_value=mock_application),
+            patch.object(service, "_clone_user_profile_documents", new_callable=AsyncMock),
             patch.object(service.db, "commit") as mock_commit,
             patch.object(service.db, "refresh") as mock_refresh,
         ):
@@ -502,7 +507,7 @@ class TestApplicationService:
 
         update_data = ApplicationUpdate(form_data=ApplicationFormData(fields={}))
 
-        with patch.object(service, "get_application_by_id", return_value=mock_application):
+        with patch.object(service, "_get_application_model", new_callable=AsyncMock, return_value=mock_application):
             with pytest.raises(ValidationError, match="Application cannot be edited"):
                 await service.update_application(application_id, update_data, mock_user)
 
@@ -519,7 +524,7 @@ class TestApplicationService:
         mock_application = Mock(spec=Application)
         mock_application.id = application_id
         mock_application.user_id = user_id
-        mock_application.status = ApplicationStatus.draft.value
+        mock_application.status = ApplicationStatus.draft
         mock_application.submitted_form_data = {}
 
         with (
@@ -527,11 +532,13 @@ class TestApplicationService:
             patch.object(service.db, "delete") as mock_delete,
             patch.object(service.db, "commit") as mock_commit,
         ):
-            mock_execute.return_value.scalar_one_or_none.return_value = mock_application
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.return_value = mock_application
+            mock_execute.return_value = mock_result
 
             result = await service.delete_application(application_id, mock_user)
 
-            assert result is True
+            assert result == mock_application
             mock_delete.assert_called_once_with(mock_application)
             mock_commit.assert_called_once()
 
@@ -548,10 +555,12 @@ class TestApplicationService:
         mock_application = Mock(spec=Application)
         mock_application.id = application_id
         mock_application.user_id = user_id
-        mock_application.status = ApplicationStatus.submitted.value  # Not draft
+        mock_application.status = ApplicationStatus.submitted  # Not draft
 
         with patch.object(service.db, "execute") as mock_execute:
-            mock_execute.return_value.scalar_one_or_none.return_value = mock_application
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.return_value = mock_application
+            mock_execute.return_value = mock_result
 
             with pytest.raises(ValidationError, match="Only draft applications can be deleted"):
                 await service.delete_application(application_id, mock_user)

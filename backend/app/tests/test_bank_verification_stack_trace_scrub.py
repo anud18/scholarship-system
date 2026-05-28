@@ -30,6 +30,7 @@ def _minimal_payload(**overrides):
     payload = {
         "application_id": 1,
         "verification_status": "verified",  # default; tests override
+        "success": True,
     }
     payload.update(overrides)
     return payload
