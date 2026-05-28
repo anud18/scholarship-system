@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger("alembic.runtime.migration")
 
-revision: str = "20260529_backfill_roster_national_id"
+revision: str = "backfill_roster_nat_id_001"
 down_revision: Union[str, None] = "merge_renewal_main_001"
 branch_labels = None
 depends_on = None
