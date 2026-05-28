@@ -318,6 +318,7 @@ export const formatFieldName = (fieldName: string, locale: Locale) => {
     contact_email: locale === "zh" ? "聯絡信箱" : "Contact Email",
     contact_address: locale === "zh" ? "通訊地址" : "Contact Address",
     bank_account: locale === "zh" ? "銀行帳戶" : "Bank Account",
+    account_number: locale === "zh" ? "郵局帳號" : "Post Office Account",
     research_proposal: locale === "zh" ? "研究計畫" : "Research Proposal",
     budget_plan: locale === "zh" ? "預算規劃" : "Budget Plan",
     milestone_plan: locale === "zh" ? "里程碑規劃" : "Milestone Plan",
@@ -475,4 +476,52 @@ export const fetchApplicationFiles = async (applicationId: number) => {
     logger.error("Failed to fetch application files", { error });
     return [];
   }
+};
+
+// Shape of a single entry inside `submitted_form_data.fields`.
+export interface SubmittedFormFieldValue {
+  field_id: string;
+  field_type: string;
+  value: string;
+  required: boolean;
+}
+
+/**
+ * Build the `submitted_form_data.fields` map sent when a student submits an
+ * application.
+ *
+ * Why: the applicant's post-office account (郵局帳號, 限本人) is collected in a
+ * dedicated wizard section and persisted to the user profile, but the admin
+ * review dialog and the backend bank-verification service both read the
+ * account number from the application's `submitted_form_data.fields`
+ * (see backend `extract_bank_fields_from_application`, which looks up the
+ * `account_number` key). If it is omitted here the account never reaches the
+ * admin side, so we always fold it into the form fields.
+ */
+export const buildApplicationFormFields = (
+  dynamicFormData: Record<string, unknown>,
+  accountNumber?: string | null
+): Record<string, SubmittedFormFieldValue> => {
+  const fields: Record<string, SubmittedFormFieldValue> = {};
+
+  Object.entries(dynamicFormData).forEach(([fieldName, value]) => {
+    fields[fieldName] = {
+      field_id: fieldName,
+      field_type: "text",
+      value: String(value),
+      required: true,
+    };
+  });
+
+  const trimmedAccount = accountNumber?.trim();
+  if (trimmedAccount) {
+    fields.account_number = {
+      field_id: "account_number",
+      field_type: "text",
+      value: trimmedAccount,
+      required: true,
+    };
+  }
+
+  return fields;
 };
