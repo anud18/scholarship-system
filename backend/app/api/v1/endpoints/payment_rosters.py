@@ -1581,6 +1581,7 @@ def export_roster_to_excel(
 @router.get("/{roster_id}/download")
 async def download_roster_excel(
     roster_id: int,
+    request: Request,
     use_minio: bool = Query(True, description="是否使用MinIO下載"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -1589,6 +1590,11 @@ async def download_roster_excel(
     下載造冊Excel檔案 (支援MinIO和本地檔案)
     Download roster Excel file (supports MinIO and local files)
     """
+    # trace_id is injected by add_trace_id_middleware (see backend/app/main.py).
+    # We thread it into every download-path log line so the e2e diagnose helper
+    # (frontend/e2e/helpers/logs.ts) can correlate failures via grep — without
+    # it, the 500's traceback gets stranded in the docker log tail.
+    trace_id = getattr(request.state, "trace_id", "unknown")
     try:
         stmt = select(PaymentRoster).options(selectinload(PaymentRoster.items)).where(PaymentRoster.id == roster_id)
 
@@ -1607,7 +1613,7 @@ async def download_roster_excel(
             try:
                 validate_object_name_minio(roster.minio_object_name)
             except HTTPException as exc:
-                logger.error(f"Invalid minio_object_name from database: {roster.minio_object_name}")
+                logger.error(f"Invalid minio_object_name from database: {roster.minio_object_name} trace_id={trace_id}")
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="MinIO object name驗證失敗"
                 ) from exc
@@ -1626,7 +1632,9 @@ async def download_roster_excel(
                     db=db,
                 )
 
-                logger.info(f"Roster {roster.roster_code} downloaded from MinIO by user {current_user.id}")
+                logger.info(
+                    f"Roster {roster.roster_code} downloaded from MinIO by user {current_user.id} trace_id={trace_id}"
+                )
 
                 # 直接返回二進制檔案內容
                 from fastapi.responses import Response
@@ -1646,7 +1654,10 @@ async def download_roster_excel(
                 )
 
             except Exception:
-                logger.warning("MinIO download failed, falling back to local file", exc_info=True)
+                logger.warning(
+                    f"MinIO download failed, falling back to local file trace_id={trace_id}",
+                    exc_info=True,
+                )
                 use_minio = False
 
         if not use_minio or not (hasattr(roster, "minio_object_name") and roster.minio_object_name):
@@ -1662,7 +1673,9 @@ async def download_roster_excel(
                     db=db,
                 )
 
-                logger.info(f"Roster {roster.roster_code} downloaded locally by user {current_user.id}")
+                logger.info(
+                    f"Roster {roster.roster_code} downloaded locally by user {current_user.id} trace_id={trace_id}"
+                )
 
                 return FileResponse(
                     path=roster.excel_file_path,
@@ -1672,20 +1685,36 @@ async def download_roster_excel(
             else:
                 # 沒有可用的檔案，重新產生
                 # 當 use_minio=False 時跳過 MinIO 上傳/清理，確保本地檔案存在供 FileResponse 直接回傳
+                logger.info(
+                    f"Roster {roster.roster_code} has no excel_file_path nor minio_object_name; "
+                    f"regenerating (skip_minio_upload={not use_minio}) trace_id={trace_id}"
+                )
                 export_service = ExcelExportService()
-                export_result = export_service.export_roster_to_excel(
-                    roster=roster,
-                    template_name="STD_UP_MIXLISTA",
-                    include_header=True,
-                    include_statistics=True,
-                    include_excluded=False,
-                    skip_minio_upload=not use_minio,
+                try:
+                    export_result = export_service.export_roster_to_excel(
+                        roster=roster,
+                        template_name="STD_UP_MIXLISTA",
+                        include_header=True,
+                        include_statistics=True,
+                        include_excluded=False,
+                        skip_minio_upload=not use_minio,
+                    )
+                except Exception:
+                    logger.exception(
+                        f"export_roster_to_excel raised during download "
+                        f"(roster_id={roster_id}, skip_minio_upload={not use_minio}) trace_id={trace_id}"
+                    )
+                    raise
+
+                regen_file_path = export_result.get("file_path")
+                regen_exists = bool(regen_file_path) and os.path.exists(regen_file_path)
+                logger.info(
+                    f"Roster {roster.roster_code} regenerated: file_path={regen_file_path}, "
+                    f"exists={regen_exists}, minio_object_name={export_result.get('minio_object_name')} "
+                    f"trace_id={trace_id}"
                 )
 
-                logger.info(f"Roster {roster.roster_code} re-generated and downloaded by user {current_user.id}")
-
-                regen_file_path = export_result["file_path"]
-                if os.path.exists(regen_file_path):
+                if regen_exists:
                     return FileResponse(
                         path=regen_file_path,
                         filename=f"{roster.roster_code}.xlsx",
@@ -1707,12 +1736,16 @@ async def download_roster_excel(
                         },
                     )
 
+                logger.error(
+                    f"Download fell through: regen produced no usable file_path "
+                    f"({regen_file_path!r}) and no minio_object_name trace_id={trace_id}"
+                )
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="下載造冊失敗")
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f"Failed to download roster {roster_id}")
+        logger.exception(f"Failed to download roster {roster_id} trace_id={trace_id}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="下載造冊失敗") from e
 
 
