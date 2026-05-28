@@ -152,7 +152,7 @@ def test_all_action_values_are_unique_strings():
 
 
 def test_known_action_count_for_change_review():
-    """Pin: 23 actions defined. A refactor adding an action without
+    """Pin: 24 actions defined. A refactor adding an action without
     updating the audit dashboard's allowlist would silently hide the
     new events. This test forces a code review when count changes."""
-    assert len(list(AuditAction)) == 23
+    assert len(list(AuditAction)) == 24

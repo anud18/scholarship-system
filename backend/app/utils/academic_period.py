@@ -159,24 +159,10 @@ def get_roster_period_dates(
     """
     western_year = academic_year + 1911
 
-    # Yearly scholarships (學年制)
-    if roster_cycle == "yearly" or semester is None or semester == "annual":
-        start_date = datetime(western_year, 9, 1)
-        end_date = datetime(western_year + 1, 8, 31)
-
-    # Semester-based scholarships (學期制)
-    elif semester == "first":
-        # First semester: August to January
-        start_date = datetime(western_year, 8, 1)
-        end_date = datetime(western_year + 1, 1, 31)
-
-    elif semester == "second":
-        # Second semester: February to July
-        start_date = datetime(western_year + 1, 2, 1)
-        end_date = datetime(western_year + 1, 7, 31)
-
     # Monthly cycle (extract month from period_label like "113-01")
-    elif roster_cycle == "monthly":
+    # Check specific cycles BEFORE the semester-is-None catch-all so that
+    # monthly/semi_yearly with semester=None hit the correct branch.
+    if roster_cycle == "monthly":
         try:
             # Extract month from label like "113-01"
             month = int(period_label.split("-")[1])
@@ -216,6 +202,22 @@ def get_roster_period_dates(
         else:  # H2
             start_date = datetime(western_year + 1, 3, 1)
             end_date = datetime(western_year + 1, 8, 31)
+
+    # Semester-based scholarships (學期制)
+    elif semester == "first":
+        # First semester: August to January
+        start_date = datetime(western_year, 8, 1)
+        end_date = datetime(western_year + 1, 1, 31)
+
+    elif semester == "second":
+        # Second semester: February to July
+        start_date = datetime(western_year + 1, 2, 1)
+        end_date = datetime(western_year + 1, 7, 31)
+
+    # Yearly scholarships (學年制) - catch-all for yearly/None/annual
+    elif roster_cycle == "yearly" or semester is None or semester == "annual":
+        start_date = datetime(western_year, 9, 1)
+        end_date = datetime(western_year + 1, 8, 31)
 
     else:
         # Default fallback

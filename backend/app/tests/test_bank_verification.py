@@ -221,7 +221,7 @@ class TestBankVerificationService:
     def test_generate_recommendations(self, verification_service):
         """Test generation of verification recommendations"""
         # Test verified status
-        recommendations = verification_service.generate_recommendations("verified", {})
+        recommendations = verification_service.generate_recommendations("verified", {}, "verified", "verified")
         assert any("驗證通過" in rec for rec in recommendations)
 
         # Test failed verification with mismatched fields
@@ -235,13 +235,17 @@ class TestBankVerificationService:
             },
         }
 
-        recommendations = verification_service.generate_recommendations("verification_failed", comparisons)
+        recommendations = verification_service.generate_recommendations(
+            "verification_failed", comparisons, "needs_review", "needs_review"
+        )
         assert any("不一致" in rec for rec in recommendations) or len(recommendations) > 0
 
         # Test low confidence scenario
         comparisons_low_confidence = {"account_number": {"confidence": "low", "is_match": True}}
 
-        recommendations = verification_service.generate_recommendations("verified", comparisons_low_confidence)
+        recommendations = verification_service.generate_recommendations(
+            "verified", comparisons_low_confidence, "verified", "verified"
+        )
         assert any("信心度較低" in rec for rec in recommendations)
 
     @pytest.mark.asyncio

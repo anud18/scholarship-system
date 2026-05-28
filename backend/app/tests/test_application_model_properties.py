@@ -21,7 +21,7 @@ etc. SimpleNamespace duck-types the Application.
 """
 
 from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -29,10 +29,29 @@ from app.models.application import Application
 from app.models.enums import ApplicationStatus, Semester
 
 
-def _make(application_obj_class=Application, **overrides) -> Application:
-    """Construct an Application without invoking SQLAlchemy ORM init.
-    We bind attributes directly so properties read them."""
-    app = object.__new__(application_obj_class)
+def _make(**overrides):
+    """Return a duck-typed proxy that borrows Application's @property
+    descriptors without SQLAlchemy ORM instrumentation.
+
+    In SQLAlchemy 2.x, object.__setattr__ on a real ORM instance still
+    routes through the data-descriptor's __set__, which requires a live
+    _sa_instance_state.  Borrowing the descriptor objects onto a plain
+    Python class sidesteps the instrumentation entirely.
+    """
+
+    class _AppProxy:
+        is_editable = Application.is_editable
+        is_submitted = Application.is_submitted
+        can_be_reviewed = Application.can_be_reviewed
+        is_overdue = Application.is_overdue
+        academic_term_label = Application.academic_term_label
+        application_type_label = Application.application_type_label
+        is_renewal_application = Application.is_renewal_application
+        is_general_application = Application.is_general_application
+        get_review_stage = Application.get_review_stage
+        get_semester_label = Application.get_semester_label
+
+    app = _AppProxy()
     defaults = {
         "id": 1,
         "app_id": "APP-114-1-00001",
@@ -44,7 +63,7 @@ def _make(application_obj_class=Application, **overrides) -> Application:
     }
     defaults.update(overrides)
     for k, v in defaults.items():
-        object.__setattr__(app, k, v)
+        setattr(app, k, v)
     return app
 
 
