@@ -1671,6 +1671,7 @@ async def download_roster_excel(
                 )
             else:
                 # 沒有可用的檔案，重新產生
+                # 當 use_minio=False 時跳過 MinIO 上傳/清理，確保本地檔案存在供 FileResponse 直接回傳
                 export_service = ExcelExportService()
                 export_result = export_service.export_roster_to_excel(
                     roster=roster,
@@ -1678,6 +1679,7 @@ async def download_roster_excel(
                     include_header=True,
                     include_statistics=True,
                     include_excluded=False,
+                    skip_minio_upload=not use_minio,
                 )
 
                 logger.info(f"Roster {roster.roster_code} re-generated and downloaded by user {current_user.id}")
