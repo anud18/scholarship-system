@@ -485,12 +485,8 @@ async def seed_admin_scholarships(session: AsyncSession):
     # College reviewer cs_college needs explicit permission for the doctoral
     # (phd / 博士生獎學金) scholarship so it can review doctoral applications out
     # of the box — _check_scholarship_permission gates college users on this row.
-    cs_college_id = (
-        await session.execute(text("SELECT id FROM users WHERE nycu_id = 'cs_college'"))
-    ).scalar()
-    phd_scholarship_id = (
-        await session.execute(text("SELECT id FROM scholarship_types WHERE code = 'phd'"))
-    ).scalar()
+    cs_college_id = (await session.execute(text("SELECT id FROM users WHERE nycu_id = 'cs_college'"))).scalar()
+    phd_scholarship_id = (await session.execute(text("SELECT id FROM scholarship_types WHERE code = 'phd'"))).scalar()
     if cs_college_id and phd_scholarship_id:
         await session.execute(
             text("""
