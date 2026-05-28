@@ -22,7 +22,7 @@ from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFound
 from app.core.metrics import scholarship_reviews_total
 from app.models.application import Application, ApplicationStatus
 from app.models.college_review import CollegeRanking, CollegeRankingItem
-from app.models.enums import Semester
+from app.models.enums import REVIEWABLE_APPLICATION_STATUSES, Semester
 from app.models.review import ApplicationReview  # Unified review system
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole
@@ -308,14 +308,6 @@ class CollegeReviewService:
         # partial_approved / rejected) rows are all shown, scoped to the college
         # by the ``college_code`` filter below. The professor listing keeps its
         # own renewal-phase filter — only college visibility is broadened.
-        visible_statuses = [
-            ApplicationStatus.submitted.value,
-            ApplicationStatus.under_review.value,
-            ApplicationStatus.approved.value,  # 包含已核准的申請
-            ApplicationStatus.partial_approved.value,  # 包含部分同意的申請
-            ApplicationStatus.rejected.value,  # 包含已駁回的申請
-        ]
-
         stmt = (
             select(Application)
             .options(
@@ -325,9 +317,9 @@ class CollegeReviewService:
                 selectinload(Application.files),
                 selectinload(Application.student),  # Load student information
             )
-            .where(Application.status.in_(visible_statuses))
+            .where(Application.status.in_(REVIEWABLE_APPLICATION_STATUSES))
         )
-        logger.info("Base query created, looking for status in %s", visible_statuses)
+        logger.debug("Base query created, looking for status in %s", REVIEWABLE_APPLICATION_STATUSES)
 
         # Apply filters
         if scholarship_type_id:
@@ -375,10 +367,11 @@ class CollegeReviewService:
         result = await self.db.execute(stmt)
         applications = result.scalars().all()
         logger.info(f"Query executed, found {len(applications)} applications")
-        for app in applications:
-            logger.info(
-                f"  App {app.id}: status={app.status}, type_id={app.scholarship_type_id}, year={app.academic_year}, semester={app.semester}"
-            )
+        if logger.isEnabledFor(logging.DEBUG):
+            for app in applications:
+                logger.debug(
+                    f"  App {app.id}: status={app.status}, type_id={app.scholarship_type_id}, year={app.academic_year}, semester={app.semester}"
+                )
 
         # Note: CollegeReview removed - use Application.final_ranking_position instead
         # college_review_lookup logic removed - data now in Application model

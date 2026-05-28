@@ -18,7 +18,7 @@ from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFound
 from app.core.metrics import scholarship_applications_total, scholarship_reviews_total
 from app.core.schema_validation import serialize_value
 from app.models.application import Application, ApplicationStatus
-from app.models.enums import ReviewStage, Semester
+from app.models.enums import REVIEWABLE_APPLICATION_STATUSES, ReviewStage, Semester
 from app.models.review import ApplicationReview, ApplicationReviewItem
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType, SubTypeSelectionMode
 from app.models.user import User, UserRole
@@ -2447,15 +2447,7 @@ class ApplicationService:
                     # Only applications assigned to this specific professor
                     Application.professor_id == professor_id,
                     # Only applications in valid statuses for professor viewing
-                    Application.status.in_(
-                        [
-                            ApplicationStatus.submitted.value,
-                            ApplicationStatus.under_review.value,
-                            ApplicationStatus.approved.value,
-                            ApplicationStatus.partial_approved.value,
-                            ApplicationStatus.rejected.value,
-                        ]
-                    ),
+                    Application.status.in_(REVIEWABLE_APPLICATION_STATUSES),
                 )
             )
 

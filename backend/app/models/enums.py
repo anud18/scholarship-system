@@ -41,6 +41,20 @@ class ApplicationStatus(enum.Enum):
     deleted = "deleted"  # 刪除
 
 
+# Statuses an application holds once it has entered the review pipeline — the
+# set surfaced in reviewer-facing listings (professor and college). Excludes
+# pre-submission (draft) and administrative/terminal states (withdrawn,
+# cancelled, deleted, ...). Shared so the professor and college listings stay
+# in sync instead of re-declaring the same five values.
+REVIEWABLE_APPLICATION_STATUSES = [
+    ApplicationStatus.submitted.value,  # 已送出
+    ApplicationStatus.under_review.value,  # 審批中
+    ApplicationStatus.approved.value,  # 核准
+    ApplicationStatus.partial_approved.value,  # 部分同意
+    ApplicationStatus.rejected.value,  # 駁回
+]
+
+
 class ReviewStage(enum.Enum):
     """
     Review stage - Internal workflow position
