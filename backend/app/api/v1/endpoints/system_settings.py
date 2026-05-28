@@ -339,6 +339,8 @@ async def create_supplementary_doc(
     import io
     import uuid
 
+    from sqlalchemy import func, select
+
     from app.core.path_security import validate_upload_file
     from app.models.supplementary_doc import SupplementaryDoc
     from app.schemas.supplementary_doc import SupplementaryDocResponse
@@ -377,13 +379,18 @@ async def create_supplementary_doc(
         content_type=file.content_type or "application/octet-stream",
     )
 
+    max_order = (
+        await db.execute(select(func.max(SupplementaryDoc.sort_order)))
+    ).scalar()
+    next_order = (max_order + 1) if max_order is not None else 0
+
     doc = SupplementaryDoc(
         title=stripped_title,
         object_name=object_name,
         original_filename=file.filename or "",
         content_type=file.content_type or "application/octet-stream",
         file_size=len(file_content),
-        sort_order=0,
+        sort_order=next_order,
         created_by=current_user.id,
     )
     db.add(doc)
@@ -515,6 +522,7 @@ async def stream_supplementary_doc_file(
     if doc is None:
         raise HTTPException(status_code=404, detail="not found")
 
+    response = None
     try:
         response = minio_service.client.get_object(
             bucket_name=minio_service.default_bucket,
@@ -524,6 +532,10 @@ async def stream_supplementary_doc_file(
     except Exception as e:
         logger.exception("Failed to fetch supplementary doc")
         raise HTTPException(status_code=500, detail="無法取得文件") from e
+    finally:
+        if response is not None:
+            response.close()
+            response.release_conn()
 
     download_name = doc.original_filename or doc.object_name.split("/")[-1]
     encoded_name = quote(download_name, safe="")

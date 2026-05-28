@@ -154,6 +154,7 @@ export function SupplementaryDocsList() {
       .then((res) => {
         if (res.success && res.data) setDocs(res.data);
       })
+      .catch(() => toast.error("載入補充參考文件失敗"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -237,14 +238,19 @@ export function SupplementaryDocsList() {
     setDeletingDoc(null);
     const previous = docs;
     setDocs((prev) => prev.filter((d) => d.id !== target.id));
-    const res = await apiClient.systemSettings.supplementaryDocs.delete(
-      target.id
-    );
-    if (!res.success) {
+    try {
+      const res = await apiClient.systemSettings.supplementaryDocs.delete(
+        target.id
+      );
+      if (!res.success) {
+        setDocs(previous);
+        toast.error(res.message || "刪除失敗");
+      } else {
+        toast.success("已刪除");
+      }
+    } catch {
       setDocs(previous);
-      toast.error(res.message || "刪除失敗");
-    } else {
-      toast.success("已刪除");
+      toast.error("刪除失敗");
     }
   };
 

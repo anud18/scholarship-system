@@ -321,7 +321,7 @@ export function createSystemSettingsApi() {
     supplementaryDocs: {
       list: async (): Promise<ApiResponse<SupplementaryDoc[]>> => {
         const token =
-          typeof localStorage !== "undefined"
+          typeof window !== "undefined"
             ? localStorage.getItem("auth_token") || ""
             : "";
         const res = await fetch(
@@ -339,7 +339,7 @@ export function createSystemSettingsApi() {
         formData.append("file", file);
         formData.append("title", title);
         const token =
-          typeof localStorage !== "undefined"
+          typeof window !== "undefined"
             ? localStorage.getItem("auth_token") || ""
             : "";
         const res = await fetch(
@@ -358,7 +358,7 @@ export function createSystemSettingsApi() {
         title: string
       ): Promise<ApiResponse<SupplementaryDoc>> => {
         const token =
-          typeof localStorage !== "undefined"
+          typeof window !== "undefined"
             ? localStorage.getItem("auth_token") || ""
             : "";
         const res = await fetch(
@@ -379,7 +379,7 @@ export function createSystemSettingsApi() {
         id: number
       ): Promise<ApiResponse<{ deleted: boolean }>> => {
         const token =
-          typeof localStorage !== "undefined"
+          typeof window !== "undefined"
             ? localStorage.getItem("auth_token") || ""
             : "";
         const res = await fetch(
@@ -396,7 +396,7 @@ export function createSystemSettingsApi() {
         items: Array<{ id: number; sort_order: number }>
       ): Promise<ApiResponse<{ updated: number }>> => {
         const token =
-          typeof localStorage !== "undefined"
+          typeof window !== "undefined"
             ? localStorage.getItem("auth_token") || ""
             : "";
         const res = await fetch(

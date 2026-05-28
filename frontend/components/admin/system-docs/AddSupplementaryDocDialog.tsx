@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { CloudUpload, FileType2, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -42,7 +42,6 @@ export function AddSupplementaryDocDialog({
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [dragActive, setDragActive] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const reset = () => {
     setTitle("");
@@ -152,7 +151,6 @@ export function AddSupplementaryDocDialog({
               }`}
             >
               <input
-                ref={inputRef}
                 type="file"
                 accept={ACCEPTED}
                 className="sr-only"

@@ -5,7 +5,10 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const idParam = searchParams.get("id");
-    const id = idParam ? Number.parseInt(idParam, 10) : NaN;
+    if (!idParam || !/^\d+$/.test(idParam)) {
+      return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+    }
+    const id = Number.parseInt(idParam, 10);
     if (!Number.isInteger(id) || id <= 0) {
       return NextResponse.json({ error: "Invalid id" }, { status: 400 });
     }

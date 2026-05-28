@@ -104,7 +104,6 @@ const NOTICES = {
     readFirst: "請先點擊「閱讀獎學金要點」並滑至底端",
     sampleDocumentLabel: "申請文件範例檔",
     referenceDocsHeader: "參考文件",
-    referenceDocsEmpty: "目前無參考文件",
     regulationsHeader: "獎學金要點",
     regulationsOpenButton: "閱讀獎學金要點",
     regulationsRow: "請開啟並閱讀獎學金要點全文",
@@ -174,7 +173,6 @@ const NOTICES = {
     readFirst: "Open the regulations and scroll to the bottom first",
     sampleDocumentLabel: "Sample Application Documents",
     referenceDocsHeader: "Reference Documents",
-    referenceDocsEmpty: "No reference documents available",
     regulationsHeader: "Scholarship Regulations",
     regulationsOpenButton: "Open Scholarship Regulations",
     regulationsRow: "Open and read the full scholarship regulations",
@@ -214,17 +212,35 @@ export function NoticeAgreementStep({
   } | null>(null);
 
   useEffect(() => {
-    Promise.all([
+    // allSettled (not all): a supplementary-docs fetch failure must not drop
+    // publicDocs, which gates the regulations scroll-and-agree flow.
+    Promise.allSettled([
       api.systemSettings.getPublicDocs(),
       api.systemSettings.supplementaryDocs.list(),
     ])
-      .then(([docsRes, suppRes]) => {
-        if (docsRes.success && docsRes.data) setPublicDocs(docsRes.data);
-        if (suppRes.success && suppRes.data) setSupplementaryDocs(suppRes.data);
-      })
-      .catch((err) => {
-        // eslint-disable-next-line no-console
-        console.error("[NoticeAgreementStep] doc fetch failed", err);
+      .then(([docsResult, suppResult]) => {
+        if (docsResult.status === "fulfilled") {
+          const docsRes = docsResult.value;
+          if (docsRes.success && docsRes.data) setPublicDocs(docsRes.data);
+        } else {
+          // eslint-disable-next-line no-console
+          console.error(
+            "[NoticeAgreementStep] getPublicDocs failed",
+            docsResult.reason
+          );
+        }
+        if (suppResult.status === "fulfilled") {
+          const suppRes = suppResult.value;
+          if (suppRes.success && suppRes.data) {
+            setSupplementaryDocs(suppRes.data);
+          }
+        } else {
+          // eslint-disable-next-line no-console
+          console.error(
+            "[NoticeAgreementStep] supplementaryDocs.list failed",
+            suppResult.reason
+          );
+        }
       })
       .finally(() => {
         setDocsLoaded(true);
