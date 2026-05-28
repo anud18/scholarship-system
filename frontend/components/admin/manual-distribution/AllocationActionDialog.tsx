@@ -48,7 +48,8 @@ export function AllocationActionDialog({
 }: AllocationActionDialogProps) {
   const isRevoke = mode === "revoke";
   const [revokeReason, setRevokeReason] = useState("");
-  const [suspendOption, setSuspendOption] = useState<string>("休學");
+  const [suspendOption, setSuspendOption] =
+    useState<(typeof SUSPEND_OPTIONS)[number]>("休學");
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -142,7 +143,7 @@ export function AllocationActionDialog({
                 <Label htmlFor="suspend-option">停發原因</Label>
                 <Select
                   value={suspendOption}
-                  onValueChange={setSuspendOption}
+                  onValueChange={v => setSuspendOption(v as (typeof SUSPEND_OPTIONS)[number])}
                   disabled={submitting}
                 >
                   <SelectTrigger id="suspend-option">
@@ -164,6 +165,9 @@ export function AllocationActionDialog({
                     <span className="text-red-500 ml-1">*</span>
                   )}
                 </Label>
+                {/* maxLength=400: the composed reason "label：note" must stay within
+                    the backend SuspendRequest.reason max_length=500, leaving
+                    100 chars for the longest label prefix "其他：". */}
                 <Textarea
                   id="suspend-note"
                   value={note}

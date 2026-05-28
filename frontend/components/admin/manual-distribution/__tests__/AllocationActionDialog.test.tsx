@@ -143,4 +143,32 @@ describe("AllocationActionDialog", () => {
     );
     expect(onConfirmed).toHaveBeenCalledWith("王小明");
   });
+
+  it("suspend mode: 其他 selected + empty note → confirm button disabled; typing note enables it", async () => {
+    render(
+      <AllocationActionDialog
+        mode="suspend"
+        target={target}
+        onClose={() => {}}
+        onConfirmed={() => {}}
+      />
+    );
+    // Switch to 其他 via the mocked <select data-testid="suspend-select">
+    await act(async () => {
+      fireEvent.change(screen.getByTestId("suspend-select"), {
+        target: { value: "其他" },
+      });
+    });
+    // Note is still empty → confirm must be disabled
+    expect(screen.getByRole("button", { name: "確認停發" })).toBeDisabled();
+
+    // Type a note → confirm becomes enabled
+    await act(async () => {
+      fireEvent.change(
+        screen.getByPlaceholderText("選擇「其他」時必填，請說明原因"),
+        { target: { value: "因故停發" } }
+      );
+    });
+    expect(screen.getByRole("button", { name: "確認停發" })).not.toBeDisabled();
+  });
 });
