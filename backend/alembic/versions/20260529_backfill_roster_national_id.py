@@ -8,7 +8,7 @@ This migration iterates existing rows, loads the decrypted std_pid from
 applications.student_data (StudentDataJSON ORM TypeDecorator handles
 decryption), and writes it into student_id_number.
 
-Revision ID: 20260529_backfill_roster_national_id
+Revision ID: backfill_roster_nat_id_001
 Revises: merge_renewal_main_001
 """
 
@@ -18,7 +18,8 @@ import logging
 from typing import Union
 
 from alembic import op
-from sqlalchemy.orm import Session
+from sqlalchemy import text
+from sqlalchemy.orm import Session, joinedload
 
 logger = logging.getLogger("alembic.runtime.migration")
 
@@ -37,20 +38,16 @@ def upgrade() -> None:
         from app.models.payment_roster import PaymentRosterItem
         from app.models.application import Application
 
-        inspector = session.execute(__import__("sqlalchemy").text("SELECT COUNT(*) FROM payment_roster_items")).scalar()
-        logger.info(f"Backfilling national ID for {inspector} payment_roster_items")
+        row_count = session.execute(text("SELECT COUNT(*) FROM payment_roster_items")).scalar()
+        logger.info(f"Backfilling national ID for {row_count} payment_roster_items")
 
-        items = session.query(PaymentRosterItem).all()
+        items = session.query(PaymentRosterItem).options(joinedload(PaymentRosterItem.application)).all()
         updated = 0
         skipped_no_app = 0
         skipped_no_pid = 0
 
         for item in items:
-            if not item.application_id:
-                skipped_no_app += 1
-                continue
-
-            app = session.get(Application, item.application_id)
+            app = item.application
             if not app or not app.student_data:
                 skipped_no_app += 1
                 continue
