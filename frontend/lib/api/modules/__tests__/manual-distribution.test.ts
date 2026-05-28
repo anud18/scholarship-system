@@ -384,8 +384,6 @@ describe("createManualDistributionApi", () => {
     expect(result.message).toBe("Upload failed (HTTP 502)");
   });
 
-  // ─── 11-method invariant ──────────────────────────────────────────
-
   // ─── revokeAllocation ────────────────────────────────────────────
 
   it("revokeAllocation POSTs reason to the revoke endpoint", async () => {
