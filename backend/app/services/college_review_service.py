@@ -27,7 +27,6 @@ from app.models.review import ApplicationReview  # Unified review system
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole
 from app.services.email_automation_service import email_automation_service
-from app.services.review_phase_filter import apply_renewal_phase_filter
 
 func: Any = sa_func
 
@@ -293,29 +292,29 @@ class CollegeReviewService:
             f"Getting applications for college review with filters: type_id={scholarship_type_id}, type={scholarship_type}, sub_type={sub_type}, year={academic_year}, semester={semester}"
         )
 
-        # Base query for applications in reviewable state with comprehensive eager loading
-        # Phase 4 (renewal routing): for *pending* applications we must restrict to
-        # those matching the current college review phase — renewal apps during
-        # renewal_college_review, general apps during college_review. Historical
-        # statuses (approved / partial_approved / rejected) remain visible
-        # unconditionally so reviewers can audit past decisions.
+        # Base query for applications in reviewable state with comprehensive eager loading.
         #
-        # Pending = submitted OR under_review. Professor review is advisory (issue
-        # #182): it advances review_stage to professor_reviewed but leaves status at
-        # ``submitted``, so a professor-reviewed app awaiting college sign-off is
-        # still ``submitted``. The professor listing already treats submitted as
-        # pending; the college listing must too, or these apps never surface here.
-        pending_statuses = [
+        # College reviewers must see EVERY application belonging to their college,
+        # including ones still awaiting professor sign-off:
+        # 「學院端應該要可以看到隸屬於該學院的所有申請，即使還卡在教授審核的階段」.
+        #
+        # Professor review is advisory (issue #182): it advances review_stage to
+        # professor_reviewed but leaves status at ``submitted``. Previously this
+        # pending listing was time-gated by apply_renewal_phase_filter(role=
+        # "college"), so while a configuration was still inside its *professor*
+        # review window (college window not yet open), a professor-stage
+        # application was invisible to the college. We intentionally drop that
+        # gate here: pending (submitted / under_review) and historical (approved /
+        # partial_approved / rejected) rows are all shown, scoped to the college
+        # by the ``college_code`` filter below. The professor listing keeps its
+        # own renewal-phase filter — only college visibility is broadened.
+        visible_statuses = [
             ApplicationStatus.submitted.value,
             ApplicationStatus.under_review.value,
+            ApplicationStatus.approved.value,  # 包含已核准的申請
+            ApplicationStatus.partial_approved.value,  # 包含部分同意的申請
+            ApplicationStatus.rejected.value,  # 包含已駁回的申請
         ]
-        pending_phase_subquery = (
-            apply_renewal_phase_filter(
-                select(Application.id).where(Application.status.in_(pending_statuses)),
-                role="college",
-                alias_name="college_phase_cfg",
-            )
-        ).subquery()
 
         stmt = (
             select(Application)
@@ -326,21 +325,9 @@ class CollegeReviewService:
                 selectinload(Application.files),
                 selectinload(Application.student),  # Load student information
             )
-            .where(
-                or_(
-                    # Pending rows (submitted / under_review) must match the current
-                    # renewal/general college review phase.
-                    and_(
-                        Application.status.in_(pending_statuses),
-                        Application.id.in_(select(pending_phase_subquery.c.id)),
-                    ),
-                    Application.status == ApplicationStatus.approved.value,  # 包含已核准的申請
-                    Application.status == ApplicationStatus.partial_approved.value,  # 包含部分同意的申請
-                    Application.status == ApplicationStatus.rejected.value,  # 包含已駁回的申請
-                )
-            )
+            .where(Application.status.in_(visible_statuses))
         )
-        logger.info("Base query created, looking for status in [under_review, approved, partial_approved, rejected]")
+        logger.info("Base query created, looking for status in %s", visible_statuses)
 
         # Apply filters
         if scholarship_type_id:
