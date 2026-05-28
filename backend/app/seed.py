@@ -482,6 +482,28 @@ async def seed_admin_scholarships(session: AsyncSession):
             {"admin_id": admin_id, "scholarship_id": sid},
         )
 
+    # College reviewer cs_college needs explicit permission for the doctoral
+    # (phd / 博士生獎學金) scholarship so it can review doctoral applications out
+    # of the box — _check_scholarship_permission gates college users on this row.
+    cs_college_id = (
+        await session.execute(text("SELECT id FROM users WHERE nycu_id = 'cs_college'"))
+    ).scalar()
+    phd_scholarship_id = (
+        await session.execute(text("SELECT id FROM scholarship_types WHERE code = 'phd'"))
+    ).scalar()
+    if cs_college_id and phd_scholarship_id:
+        await session.execute(
+            text("""
+                INSERT INTO admin_scholarships (admin_id, scholarship_id, assigned_at)
+                VALUES (:admin_id, :scholarship_id, NOW())
+                ON CONFLICT ON CONSTRAINT uq_admin_scholarship DO NOTHING
+            """),
+            {"admin_id": cs_college_id, "scholarship_id": phd_scholarship_id},
+        )
+        print("  ✓ cs_college linked to doctoral (phd) scholarship")
+    else:
+        print("  ⚠ cs_college or phd scholarship not found — skipping cs_college link")
+
     await session.commit()
     print(f"  ✓ admin linked to {len(scholarship_ids)} scholarship types")
 
