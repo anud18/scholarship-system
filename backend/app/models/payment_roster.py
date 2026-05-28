@@ -184,10 +184,7 @@ class PaymentRosterItem(Base):
     application_id = Column(Integer, ForeignKey("applications.id"), nullable=False, index=True)
 
     # 學生基本資料（造冊當時快照）
-    # NOTE: Despite the column name, this stores the student number (std_stdcode /
-    # nycu_id) — NOT the national ID (std_pid). The latter is encrypted at rest
-    # inside applications.student_data via StudentDataJSON (see issue #73).
-    student_id_number = Column(String(20), nullable=False)  # 學號 (student number)
+    student_id_number = Column(String(20), nullable=False)  # 身分證字號 (national ID / std_pid)
     student_name = Column(String(100), nullable=False)  # 姓名
     student_email = Column(String(255))  # Email
 

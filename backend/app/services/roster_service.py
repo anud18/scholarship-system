@@ -857,7 +857,7 @@ class RosterService:
         roster_item = PaymentRosterItem(
             roster_id=roster.id,
             application_id=application.id,
-            student_id_number=student_data.get("std_stdcode", ""),
+            student_id_number=student_data.get("std_pid", ""),
             student_name=student_data.get("std_cname", ""),
             student_email=student_data.get("com_email", ""),
             bank_account=bank_account,  # From submitted_form_data, not student_data
