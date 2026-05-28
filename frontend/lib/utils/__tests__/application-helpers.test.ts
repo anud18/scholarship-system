@@ -526,6 +526,16 @@ describe("buildApplicationFormFields", () => {
     const fields = buildApplicationFormFields({ completed_terms: 4 }, "");
     expect(fields.completed_terms.value).toBe("4");
   });
+
+  it("lets the dedicated account state win over a stale dynamic account_number key", () => {
+    // Editing a draft can surface a previously folded account_number as a
+    // dynamic key; the dedicated state must take precedence on re-save.
+    const fields = buildApplicationFormFields(
+      { account_number: "OLD" },
+      "70000121234567"
+    );
+    expect(fields.account_number.value).toBe("70000121234567");
+  });
 });
 
 describe("formatFieldName - postal account label", () => {

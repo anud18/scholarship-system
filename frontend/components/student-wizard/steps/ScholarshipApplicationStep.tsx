@@ -621,6 +621,10 @@ export function ScholarshipApplicationStep({
         const existingFormData: Record<string, any> = {};
         Object.entries(formData.fields).forEach(
           ([fieldId, fieldData]: [string, any]) => {
+            // The postal account is sourced only from the dedicated
+            // `accountNumber` state (hydrated from the profile); skip the
+            // folded-in copy so it can't drift into dynamicFormData.
+            if (fieldId === "account_number") return;
             if (
               fieldData &&
               typeof fieldData === "object" &&
