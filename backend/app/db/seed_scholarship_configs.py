@@ -236,7 +236,10 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             "professor_review_start": now,
             "professor_review_end": now + timedelta(days=30),
             "requires_college_review": True,
-            "college_review_start": now + timedelta(days=35),
+            # College review overlaps the professor window so a professor-reviewed
+            # application is immediately visible to college reviewers — the previous
+            # `now + 35d` start left a gap where prof review was open but college was not.
+            "college_review_start": now - timedelta(days=5),
             "college_review_end": now + timedelta(days=60),
             "review_deadline": now + timedelta(days=65),
             "is_active": True,
