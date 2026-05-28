@@ -1296,11 +1296,11 @@ class RosterService:
             for application in eligible_applications:
                 try:
                     # 模擬規則驗證
-                    eligibility_result = self._validate_eligibility_rules(application, scholarship_config)
+                    eligibility_result = self._validate_student_eligibility(application, academic_year, period_label)
                     is_rule_passed = eligibility_result.get("is_eligible", False)
 
                     # 模擬學籍驗證
-                    verification_status = StudentVerificationStatus.NOT_VERIFIED
+                    verification_status = StudentVerificationStatus.VERIFIED
                     verification_passed = True
 
                     if student_verification_enabled:
@@ -1309,7 +1309,7 @@ class RosterService:
                             verification_status = StudentVerificationStatus.VERIFIED
                             verification_summary["verified"] += 1
                         else:
-                            verification_status = StudentVerificationStatus.FAILED
+                            verification_status = StudentVerificationStatus.NOT_FOUND
                             verification_passed = False
                             verification_summary["failed"] += 1
                             potential_issues.append(
