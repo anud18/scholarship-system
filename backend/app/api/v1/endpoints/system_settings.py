@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,6 +9,11 @@ from app.core.security import get_current_user, require_admin
 from app.db.deps import get_db
 from app.models.system_setting import ConfigCategory, ConfigDataType
 from app.models.user import User
+from app.schemas.supplementary_doc import (
+    ReorderRequest,
+    SupplementaryDocResponse,
+    SupplementaryDocUpdate,
+)
 from app.schemas.system_setting import (
     ConfigValidationRequest,
     ConfigValidationResponse,
@@ -285,6 +290,255 @@ async def get_system_doc_file(
     return StreamingResponse(
         io.BytesIO(file_content),
         media_type=content_type,
+        headers={
+            "Content-Disposition": f"inline; filename*=UTF-8''{encoded_name}",
+            "Content-Length": str(len(file_content)),
+            "Accept-Ranges": "bytes",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Supplementary documents (admin-managed, arbitrary count)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/supplementary-docs")
+async def list_supplementary_docs(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all supplementary docs sorted by sort_order then id.
+    Accessible by any authenticated user."""
+    from sqlalchemy import select
+
+    from app.models.supplementary_doc import SupplementaryDoc
+    from app.schemas.supplementary_doc import SupplementaryDocResponse
+
+    stmt = select(SupplementaryDoc).order_by(
+        SupplementaryDoc.sort_order.asc(),
+        SupplementaryDoc.id.asc(),
+    )
+    result = await db.execute(stmt)
+    docs = result.scalars().all()
+    return {
+        "success": True,
+        "message": "OK",
+        "data": [SupplementaryDocResponse.model_validate(d).model_dump(mode="json") for d in docs],
+    }
+
+
+@router.post("/supplementary-docs")
+async def create_supplementary_doc(
+    file: UploadFile = File(...),
+    title: str = Form(...),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    import io
+    import uuid
+
+    from sqlalchemy import func, select
+
+    from app.core.path_security import validate_upload_file
+    from app.models.supplementary_doc import SupplementaryDoc
+    from app.schemas.supplementary_doc import SupplementaryDocResponse
+    from app.services.minio_service import minio_service
+
+    stripped_title = (title or "").strip()
+    if not stripped_title:
+        raise HTTPException(status_code=400, detail="title cannot be empty")
+    if len(stripped_title) > 200:
+        raise HTTPException(status_code=400, detail="title must be <= 200 chars")
+
+    allowed_extensions = [".pdf", ".doc", ".docx"]
+    file_content = await file.read()
+    validate_upload_file(
+        filename=file.filename,
+        allowed_extensions=allowed_extensions,
+        max_size_mb=10,
+        file_size=len(file_content),
+        allow_unicode=True,
+    )
+
+    ext = ""
+    if file.filename:
+        for e in allowed_extensions:
+            if file.filename.lower().endswith(e):
+                ext = e
+                break
+
+    object_name = f"system-docs/supp_{uuid.uuid4().hex}{ext}"
+
+    minio_service.client.put_object(
+        bucket_name=minio_service.default_bucket,
+        object_name=object_name,
+        data=io.BytesIO(file_content),
+        length=len(file_content),
+        content_type=file.content_type or "application/octet-stream",
+    )
+
+    max_order = (await db.execute(select(func.max(SupplementaryDoc.sort_order)))).scalar()
+    next_order = (max_order + 1) if max_order is not None else 0
+
+    doc = SupplementaryDoc(
+        title=stripped_title,
+        object_name=object_name,
+        original_filename=file.filename or "",
+        content_type=file.content_type or "application/octet-stream",
+        file_size=len(file_content),
+        sort_order=next_order,
+        created_by=current_user.id,
+    )
+    db.add(doc)
+    await db.commit()
+    await db.refresh(doc)
+
+    return {
+        "success": True,
+        "message": "上傳成功",
+        "data": SupplementaryDocResponse.model_validate(doc).model_dump(mode="json"),
+    }
+
+
+@router.patch("/supplementary-docs/reorder")
+async def reorder_supplementary_docs(
+    payload: ReorderRequest,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy import select
+
+    from app.models.supplementary_doc import SupplementaryDoc
+
+    requested_ids = [item.id for item in payload.items]
+    stmt = select(SupplementaryDoc).where(SupplementaryDoc.id.in_(requested_ids))
+    result = await db.execute(stmt)
+    docs = {doc.id: doc for doc in result.scalars().all()}
+
+    missing = [doc_id for doc_id in requested_ids if doc_id not in docs]
+    if missing:
+        raise HTTPException(status_code=400, detail=f"ids not found: {missing}")
+
+    for item in payload.items:
+        docs[item.id].sort_order = item.sort_order
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": "已重新排序",
+        "data": {"updated": len(payload.items)},
+    }
+
+
+@router.patch("/supplementary-docs/{doc_id}")
+async def update_supplementary_doc(
+    doc_id: int,
+    payload: SupplementaryDocUpdate,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy import select
+
+    from app.models.supplementary_doc import SupplementaryDoc
+
+    stmt = select(SupplementaryDoc).where(SupplementaryDoc.id == doc_id)
+    result = await db.execute(stmt)
+    doc = result.scalar_one_or_none()
+    if doc is None:
+        raise HTTPException(status_code=404, detail="not found")
+
+    doc.title = payload.title
+    await db.commit()
+    await db.refresh(doc)
+
+    return {
+        "success": True,
+        "message": "已更新",
+        "data": SupplementaryDocResponse.model_validate(doc).model_dump(mode="json"),
+    }
+
+
+@router.delete("/supplementary-docs/{doc_id}")
+async def delete_supplementary_doc(
+    doc_id: int,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy import select
+
+    from app.models.supplementary_doc import SupplementaryDoc
+    from app.services.minio_service import minio_service
+
+    stmt = select(SupplementaryDoc).where(SupplementaryDoc.id == doc_id)
+    result = await db.execute(stmt)
+    doc = result.scalar_one_or_none()
+    if doc is None:
+        raise HTTPException(status_code=404, detail="not found")
+
+    object_name = doc.object_name
+    await db.delete(doc)
+    await db.commit()
+
+    try:
+        minio_service.client.remove_object(minio_service.default_bucket, object_name)
+    except Exception:
+        logger.warning(
+            "Failed to remove supplementary doc object %s from MinIO",
+            object_name,
+            exc_info=True,
+        )
+
+    return {
+        "success": True,
+        "message": "已刪除",
+        "data": {"deleted": True},
+    }
+
+
+@router.get("/supplementary-docs/{doc_id}/file")
+async def stream_supplementary_doc_file(
+    doc_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    import io
+    from urllib.parse import quote
+
+    from sqlalchemy import select
+
+    from app.models.supplementary_doc import SupplementaryDoc
+    from app.services.minio_service import minio_service
+
+    stmt = select(SupplementaryDoc).where(SupplementaryDoc.id == doc_id)
+    result = await db.execute(stmt)
+    doc = result.scalar_one_or_none()
+    if doc is None:
+        raise HTTPException(status_code=404, detail="not found")
+
+    response = None
+    try:
+        response = minio_service.client.get_object(
+            bucket_name=minio_service.default_bucket,
+            object_name=doc.object_name,
+        )
+        file_content = response.read()
+    except Exception as e:
+        logger.exception("Failed to fetch supplementary doc")
+        raise HTTPException(status_code=500, detail="無法取得文件") from e
+    finally:
+        if response is not None:
+            response.close()
+            response.release_conn()
+
+    download_name = doc.original_filename or doc.object_name.split("/")[-1]
+    encoded_name = quote(download_name, safe="")
+
+    return StreamingResponse(
+        io.BytesIO(file_content),
+        media_type=doc.content_type or "application/octet-stream",
         headers={
             "Content-Disposition": f"inline; filename*=UTF-8''{encoded_name}",
             "Content-Length": str(len(file_content)),

@@ -294,15 +294,24 @@ class CollegeReviewService:
         )
 
         # Base query for applications in reviewable state with comprehensive eager loading
-        # Phase 4 (renewal routing): for *pending* (under_review) applications we
-        # must restrict to those matching the current college review phase
-        # — renewal apps during renewal_college_review, general apps during
-        # college_review. Historical statuses (approved / partial_approved /
-        # rejected) remain visible unconditionally so reviewers can audit past
-        # decisions.
+        # Phase 4 (renewal routing): for *pending* applications we must restrict to
+        # those matching the current college review phase — renewal apps during
+        # renewal_college_review, general apps during college_review. Historical
+        # statuses (approved / partial_approved / rejected) remain visible
+        # unconditionally so reviewers can audit past decisions.
+        #
+        # Pending = submitted OR under_review. Professor review is advisory (issue
+        # #182): it advances review_stage to professor_reviewed but leaves status at
+        # ``submitted``, so a professor-reviewed app awaiting college sign-off is
+        # still ``submitted``. The professor listing already treats submitted as
+        # pending; the college listing must too, or these apps never surface here.
+        pending_statuses = [
+            ApplicationStatus.submitted.value,
+            ApplicationStatus.under_review.value,
+        ]
         pending_phase_subquery = (
             apply_renewal_phase_filter(
-                select(Application.id).where(Application.status == ApplicationStatus.under_review.value),
+                select(Application.id).where(Application.status.in_(pending_statuses)),
                 role="college",
                 alias_name="college_phase_cfg",
             )
@@ -319,9 +328,10 @@ class CollegeReviewService:
             )
             .where(
                 or_(
-                    # Under-review rows must match the current renewal/general phase
+                    # Pending rows (submitted / under_review) must match the current
+                    # renewal/general college review phase.
                     and_(
-                        Application.status == ApplicationStatus.under_review.value,
+                        Application.status.in_(pending_statuses),
                         Application.id.in_(select(pending_phase_subquery.c.id)),
                     ),
                     Application.status == ApplicationStatus.approved.value,  # 包含已核准的申請

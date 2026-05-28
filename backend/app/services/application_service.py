@@ -502,6 +502,8 @@ class ApplicationService:
 
         if not is_draft:
             application.submitted_at = datetime.now(timezone.utc)
+            # Keep review_stage consistent with the submitted status (mirrors submit_application).
+            application.review_stage = ReviewStage.student_submitted.value
 
         return application
 
@@ -1278,6 +1280,9 @@ class ApplicationService:
 
         application.status = ApplicationStatus.submitted
         application.status_name = ScholarshipI18n.get_application_status_text(ApplicationStatus.submitted.value)
+        # Advance the workflow stage off student_draft so reviewers no longer
+        # see "學生編輯中" on a submitted application (it now awaits professor review).
+        application.review_stage = ReviewStage.student_submitted.value
         application.submitted_at = datetime.now(timezone.utc)
         application.updated_at = datetime.now(timezone.utc)
 

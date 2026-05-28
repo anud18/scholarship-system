@@ -84,6 +84,7 @@
     "react-dom": "^18.3.1",
     "react-email": "4.3.0",
     "react-hook-form": "^7.54.1",
+    "pdfjs-dist": "^4.8.69",
     "react-pdf": "^9.2.1",
     "react-resizable-panels": "^2.1.7",
     "recharts": "2.15.0",

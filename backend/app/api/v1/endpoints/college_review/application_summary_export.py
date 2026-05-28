@@ -58,9 +58,10 @@ def _sanitise_filename_part(value: str) -> str:
 
 
 def _sort_key(a: "Application"):
-    """Sort key that places applications with a missing std_stdcode last."""
+    """Sort key: renewal applications first, then by student code (blanks last)."""
     code = ((a.student_data or {}).get("std_stdcode") or "").strip()
-    return (not code, code, a.id)  # False(=0) for real codes → first; True(=1) for blanks → last
+    renewal_group = 0 if getattr(a, "is_renewal", False) else 1  # 0=renewal first, 1=new
+    return (renewal_group, not code, code, a.id)
 
 
 @router.get("/applications/department-summary-export")
