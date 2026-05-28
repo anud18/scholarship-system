@@ -386,8 +386,54 @@ describe("createManualDistributionApi", () => {
 
   // ─── 11-method invariant ──────────────────────────────────────────
 
-  it("module exposes exactly 14 methods", async () => {
-    // Pin: 14 methods. Pin so refactor adding/removing methods
+  // ─── revokeAllocation ────────────────────────────────────────────
+
+  it("revokeAllocation POSTs reason to the revoke endpoint", async () => {
+    const mockFetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, message: "已撤銷", data: {} }),
+    });
+    global.fetch = mockFetch as unknown as typeof fetch;
+    const api = createManualDistributionApi();
+
+    const res = await api.revokeAllocation(42, "申請人撤回");
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/api/v1/manual-distribution/applications/42/revoke",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ reason: "申請人撤回" }),
+      })
+    );
+    expect(res.success).toBe(true);
+  });
+
+  // ─── suspendAllocation ────────────────────────────────────────────
+
+  it("suspendAllocation POSTs reason to the suspend endpoint", async () => {
+    const mockFetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, message: "已停發", data: {} }),
+    });
+    global.fetch = mockFetch as unknown as typeof fetch;
+    const api = createManualDistributionApi();
+
+    const res = await api.suspendAllocation(42, "休學：已辦理 114-2 休學");
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/api/v1/manual-distribution/applications/42/suspend",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ reason: "休學：已辦理 114-2 休學" }),
+      })
+    );
+    expect(res.success).toBe(true);
+  });
+
+  // ─── 15-method invariant ──────────────────────────────────────────
+
+  it("module exposes exactly 15 methods", async () => {
+    // Pin: 15 methods. Pin so refactor adding/removing methods
     // requires explicit review (each one drives a SECURITY-
     // critical allocation operation).
     const api = createManualDistributionApi();
@@ -406,6 +452,7 @@ describe("createManualDistributionApi", () => {
       "previewDistribution",
       "restoreFromHistory",
       "revokeAllocation",
+      "suspendAllocation",
     ]);
   });
 });

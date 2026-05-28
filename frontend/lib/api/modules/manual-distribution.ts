@@ -582,5 +582,42 @@ export function createManualDistributionApi() {
       }
       return body as ApiResponse<unknown>;
     },
+
+    /**
+     * Suspend an allocated student's scholarship distribution.
+     * Removes from unlocked rosters and marks application as cancelled/suspended.
+     */
+    suspendAllocation: async (
+      application_id: number,
+      reason: string
+    ): Promise<ApiResponse<unknown>> => {
+      const token = typedClient.getToken();
+      const response = await fetch(
+        `/api/v1/manual-distribution/applications/${application_id}/suspend`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ reason }),
+        }
+      );
+      let body: unknown = null;
+      try {
+        body = await response.json();
+      } catch {
+        // ignore parse error
+      }
+      if (!response.ok) {
+        const b = body as { detail?: string; message?: string } | null;
+        return {
+          success: false,
+          message: b?.detail || b?.message || "停發失敗",
+          data: undefined,
+        };
+      }
+      return body as ApiResponse<unknown>;
+    },
   };
 }
