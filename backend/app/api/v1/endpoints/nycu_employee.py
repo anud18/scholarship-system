@@ -104,7 +104,7 @@ async def get_employees(
         else:
             result = await client.get_employee_page(page_row=str(page), status=status)
 
-        return EmployeeListResponse(
+        response = EmployeeListResponse(
             status=result.status,
             message=result.message,
             total_page=result.total_page,
@@ -112,6 +112,11 @@ async def get_employees(
             employees=result.empDataList,
             page=page,
         )
+        return {
+            "success": True,
+            "message": "Employees retrieved successfully",
+            "data": response.model_dump(),
+        }
 
     except NYCUEmpAuthenticationError as e:
         raise HTTPException(status_code=401, detail="Authentication failed") from e
@@ -235,9 +240,14 @@ async def search_employees(
             position_lower = position_name.lower()
             filtered_employees = [emp for emp in filtered_employees if position_lower in emp.position_name.lower()]
 
-        return EmployeeSearchResponse(
+        response = EmployeeSearchResponse(
             employees=filtered_employees, total_count=total_count, filtered_count=len(filtered_employees)
         )
+        return {
+            "success": True,
+            "message": "Employee search completed",
+            "data": response.model_dump(),
+        }
 
     except NYCUEmpAuthenticationError as e:
         raise HTTPException(status_code=401, detail="Authentication failed") from e
@@ -278,7 +288,11 @@ async def get_employee_by_no(
         for page in pages:
             for employee in page.empDataList:
                 if employee.employee_no == employee_no:
-                    return employee
+                    return {
+                        "success": True,
+                        "message": "Employee found",
+                        "data": employee.model_dump(),
+                    }
 
         # Employee not found
         raise HTTPException(status_code=404, detail=f"Employee {employee_no} not found")
