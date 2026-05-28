@@ -233,7 +233,7 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             "renewal_college_review_start": now - timedelta(days=35),
             "renewal_college_review_end": now - timedelta(days=20),
             "requires_professor_recommendation": True,
-            "professor_review_start": now,
+            "professor_review_start": now - timedelta(days=5),
             "professor_review_end": now + timedelta(days=30),
             "requires_college_review": True,
             # College review overlaps the professor window so a professor-reviewed
