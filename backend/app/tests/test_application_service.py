@@ -44,7 +44,6 @@ class TestApplicationService:
             id=1,
             code="undergraduate_freshman",
             name="Undergraduate Freshman Scholarship",
-            category="undergraduate",
             status="active",  # is_active is a computed property from status
             whitelist_enabled=False,
         )

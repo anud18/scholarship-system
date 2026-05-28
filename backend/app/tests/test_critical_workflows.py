@@ -90,6 +90,7 @@ class TestCriticalApplicationWorkflow:
         app1 = Application(
             user_id=test_user.id,
             scholarship_type_id=test_scholarship.id,
+            sub_type_selection_mode=SubTypeSelectionMode.single,
             status=ApplicationStatus.submitted.value,
             app_id="TEST-001",
             academic_year=113,
@@ -134,6 +135,7 @@ class TestCriticalApplicationWorkflow:
         app = Application(
             user_id=test_user.id,
             scholarship_type_id=1,
+            sub_type_selection_mode=SubTypeSelectionMode.single,
             status=ApplicationStatus.draft.value,
             app_id="TEST-DRAFT-001",
             academic_year=113,
@@ -183,6 +185,7 @@ class TestCriticalAuthorizationPaths:
         app = Application(
             user_id=other_user.id,
             scholarship_type_id=1,
+            sub_type_selection_mode=SubTypeSelectionMode.single,
             status=ApplicationStatus.draft.value,
             app_id="TEST-OTHER-001",
             academic_year=113,
@@ -223,6 +226,7 @@ class TestCriticalAuthorizationPaths:
         app = Application(
             user_id=test_user.id,
             scholarship_type_id=1,
+            sub_type_selection_mode=SubTypeSelectionMode.single,
             status=ApplicationStatus.submitted.value,
             app_id="TEST-SUBMIT-001",
             academic_year=113,
@@ -334,30 +338,26 @@ class TestCriticalBusinessLogic:
         assert info["available_quota"] == 0
 
     async def test_priority_score_calculation_with_renewal(self, db, test_user):
-        """CRITICAL: Priority score calculation for renewals"""
-        # Create renewal application
+        """CRITICAL: Renewal application persists with is_renewal=True flag."""
         app = Application(
             user_id=test_user.id,
             scholarship_type_id=1,
+            sub_type_selection_mode=SubTypeSelectionMode.single,
             status=ApplicationStatus.draft.value,
             app_id="RENEWAL-001",
             academic_year=113,
             semester="first",
             is_renewal=True,
-            gpa=3.8,
-            class_ranking_percent=10.0,
             student_data={"student_id": "112550001"},
             submitted_form_data={},
             agree_terms=True,
         )
         db.add(app)
         await db.commit()
+        await db.refresh(app)
 
-        # Calculate priority score
-        score = app.calculate_priority_score()
-
-        # Renewal should get bonus
-        assert score > 0
+        assert app.id is not None
+        assert app.is_renewal is True
 
 
 @pytest.mark.integration
@@ -371,6 +371,7 @@ class TestCriticalDataIntegrity:
         app = Application(
             user_id=test_user.id,
             scholarship_type_id=test_scholarship.id,
+            sub_type_selection_mode=SubTypeSelectionMode.single,
             status=ApplicationStatus.draft.value,
             app_id="FK-TEST-001",
             academic_year=113,

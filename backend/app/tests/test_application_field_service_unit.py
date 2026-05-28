@@ -126,6 +126,8 @@ async def test_bulk_update_fields_replaces_existing_entries(dummy_session):
             obj.created_at = datetime.now(timezone.utc)
         if getattr(obj, "is_active", None) is None:
             obj.is_active = True
+        if getattr(obj, "include_in_college_export", None) is None:
+            obj.include_in_college_export = False
         obj.updated_at = datetime.now(timezone.utc)
 
     dummy_session.refresh.side_effect = fake_refresh

@@ -24,9 +24,14 @@ from app.core.metrics import scholarship_applications_total
 
 
 def _sample(status: str) -> float:
-    """Read the current counter value for a given status label."""
+    """Read the current counter value for a given status label.
+
+    In prometheus_client ≥0.15.0, Counter("foo_total") does NOT append
+    a second "_total" suffix — the sample is "foo_total", not
+    "foo_total_total".  Use the plain metric name here.
+    """
     value = REGISTRY.get_sample_value(
-        "scholarship_applications_total_total",
+        "scholarship_applications_total",
         labels={"status": status},
     )
     return value or 0.0
