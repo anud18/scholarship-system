@@ -56,7 +56,7 @@ test.describe("Admin student scholarship history", () => {
     await page.getByLabel("學號").fill("stuphd001");
     await page.getByRole("button", { name: "查詢" }).click();
     await expect(
-      page.getByText(/領取明細|查無此學生資料|尚無領取記錄/),
+      page.getByText(/領取明細|查無此學生資料|尚無領取記錄/).first(),
     ).toBeVisible({ timeout: 10000 });
     await context.close();
   });

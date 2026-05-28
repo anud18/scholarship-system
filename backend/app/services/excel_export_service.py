@@ -155,6 +155,7 @@ class ExcelExportService:
         include_header: bool = True,
         include_statistics: bool = True,
         async_mode: bool = False,
+        skip_minio_upload: bool = False,
     ) -> Dict[str, Any]:
         """
         匯出造冊至Excel檔案
@@ -166,6 +167,7 @@ class ExcelExportService:
             include_header: 是否在檔案中包含表頭
             include_statistics: 是否加入統計資訊工作表
             async_mode: 是否以非同步模式回傳背景任務資訊
+            skip_minio_upload: 是否跳過 MinIO 上傳並保留本地檔案 (用於 use_minio=False 的下載路徑)
 
         Returns:
             Dict[str, Any]: 匯出結果
@@ -250,8 +252,13 @@ class ExcelExportService:
             roster.excel_file_size = file_size
             roster.excel_file_hash = file_hash
 
-            # Upload to MinIO automatically (if roster has valid ID)
-            if roster.id is None:
+            # Upload to MinIO automatically (if roster has valid ID and not explicitly skipped)
+            if skip_minio_upload:
+                logger.info(
+                    f"Skipping MinIO upload for roster {roster.id} (skip_minio_upload=True); "
+                    f"local file retained at: {file_path}"
+                )
+            elif roster.id is None:
                 logger.warning(
                     "Roster ID is None, cannot upload to MinIO. " "Roster must be persisted to database before export."
                 )
