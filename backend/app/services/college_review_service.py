@@ -20,7 +20,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFoundError
 from app.core.metrics import scholarship_reviews_total
-from app.models.application import Application, ApplicationStatus
+from app.models.application import Application
 from app.models.college_review import CollegeRanking, CollegeRankingItem
 from app.models.enums import REVIEWABLE_APPLICATION_STATUSES, Semester
 from app.models.review import ApplicationReview  # Unified review system
@@ -502,14 +502,9 @@ class CollegeReviewService:
             f"Building query for sub_type_code={sub_type_code}, semester_filter type={type(semester_filter)}, semester_filter={semester_filter}, creator_college={creator_college}"
         )
 
-        # Valid statuses for ranking: include all reviewed/approved states
-        valid_ranking_statuses = [
-            ApplicationStatus.submitted.value,
-            ApplicationStatus.under_review.value,
-            ApplicationStatus.approved.value,
-            ApplicationStatus.partial_approved.value,
-            ApplicationStatus.rejected.value,
-        ]
+        # Valid statuses for ranking: the same reviewed/approved states the
+        # review listings surface (shared constant keeps the three sites in sync).
+        valid_ranking_statuses = REVIEWABLE_APPLICATION_STATUSES
 
         if sub_type_code == "default":
             # Include all applications for this scholarship type, regardless of sub-type
