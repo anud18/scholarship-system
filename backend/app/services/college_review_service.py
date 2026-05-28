@@ -312,6 +312,7 @@ class CollegeReviewService:
             select(Application)
             .options(
                 selectinload(Application.scholarship_type_ref),
+                selectinload(Application.scholarship_configuration),  # for requires_professor_recommendation
                 selectinload(Application.reviews).selectinload(ApplicationReview.reviewer),
                 selectinload(Application.reviews).selectinload(ApplicationReview.items),
                 selectinload(Application.files),
@@ -405,6 +406,12 @@ class CollegeReviewService:
                 "created_at": app.created_at,
                 "student_data": student_payload,
                 "is_renewal": app.is_renewal,
+                # Whether this scholarship requires a professor recommendation step.
+                # Lets the college UI distinguish "professor hasn't recommended yet"
+                # (show 教授審核中) from "no professor step at all" (show —).
+                "requires_professor_recommendation": bool(
+                    app.scholarship_configuration and app.scholarship_configuration.requires_professor_recommendation
+                ),
                 # Professor review details
                 "professor_review_completed": any(
                     self._role_matches(review.reviewer.role, "professor") for review in app.reviews if review.reviewer

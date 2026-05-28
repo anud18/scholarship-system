@@ -1114,6 +1114,16 @@ export function ApplicationReviewPanel({
                               </TooltipProvider>
                             ))}
                           </div>
+                        ) : app.requires_professor_recommendation ? (
+                          // Professor step required but no recommendation yet —
+                          // show "教授審核中" instead of a blank cell so college
+                          // reviewers know the app is still awaiting the professor.
+                          <Badge
+                            variant="outline"
+                            className="text-xs cursor-default border-amber-500 text-amber-700 bg-amber-50"
+                          >
+                            {locale === "zh" ? "教授審核中" : "Under prof. review"}
+                          </Badge>
                         ) : (
                           <span className="text-sm text-muted-foreground">—</span>
                         )}
