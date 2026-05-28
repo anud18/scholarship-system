@@ -251,15 +251,13 @@ class TestCollegeReviewServiceIntegration:
     """Integration tests for CollegeReviewService with real database operations"""
 
     @pytest.mark.integration
-    async def test_full_review_workflow(self, db_session):
+    async def test_full_review_workflow(self, db):
         """Test complete review workflow from creation to finalization"""
-        # This would test the full workflow with real database operations
-        # Requires proper test database setup
+        # Placeholder — full DB-backed workflow test not yet implemented
         pass
 
     @pytest.mark.integration
-    async def test_concurrent_ranking_modifications(self, db_session):
+    async def test_concurrent_ranking_modifications(self, db):
         """Test concurrent access protection in real database scenario"""
-        # This would test actual concurrent access scenarios
-        # Requires multi-threading test setup
+        # Placeholder — concurrent access test not yet implemented
         pass
