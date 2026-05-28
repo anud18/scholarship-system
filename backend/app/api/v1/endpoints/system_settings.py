@@ -379,9 +379,7 @@ async def create_supplementary_doc(
         content_type=file.content_type or "application/octet-stream",
     )
 
-    max_order = (
-        await db.execute(select(func.max(SupplementaryDoc.sort_order)))
-    ).scalar()
+    max_order = (await db.execute(select(func.max(SupplementaryDoc.sort_order)))).scalar()
     next_order = (max_order + 1) if max_order is not None else 0
 
     doc = SupplementaryDoc(
@@ -421,9 +419,7 @@ async def reorder_supplementary_docs(
 
     missing = [doc_id for doc_id in requested_ids if doc_id not in docs]
     if missing:
-        raise HTTPException(
-            status_code=400, detail=f"ids not found: {missing}"
-        )
+        raise HTTPException(status_code=400, detail=f"ids not found: {missing}")
 
     for item in payload.items:
         docs[item.id].sort_order = item.sort_order
