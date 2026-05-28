@@ -1854,6 +1854,8 @@ export function ManualDistributionPanel({
       }
       onClose={() => setAction(null)}
       onConfirmed={async studentName => {
+        // Snapshot mode BEFORE setAction(null) — the success text below
+        // depends on it, and the reset would otherwise null it out.
         const mode = action?.mode;
         setAction(null);
         await fetchData();
