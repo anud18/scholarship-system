@@ -667,6 +667,12 @@ async def seed_development():
 
             await _seed_system_settings(session, system_user_id=1)
 
+            # 7. 獎學金要點 system document (uploaded to MinIO + registered)
+            print("\n📄 Initializing 獎學金要點 system document...")
+            from app.db.seed_regulations_doc import seed_regulations_doc
+
+            await seed_regulations_doc(session, system_user_id=1)
+
             print("\n📋 Test User Accounts:")
             print("- Admin: admin@nycu.edu.tw")
             print("- Super Admin: super_admin@nycu.edu.tw")
@@ -737,6 +743,12 @@ async def seed_production():
             from app.db.seed_system_settings import seed_system_settings as _seed_system_settings_prod
 
             await _seed_system_settings_prod(session, system_user_id=1)
+
+            # 獎學金要點 system document (uploaded to MinIO + registered)
+            print("\n📄 Initializing 獎學金要點 system document...")
+            from app.db.seed_regulations_doc import seed_regulations_doc
+
+            await seed_regulations_doc(session, system_user_id=1)
 
             print("\n⚠️ Production mode: Only admin user configured")
             print("  Please set initial password through admin panel")
