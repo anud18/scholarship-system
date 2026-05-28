@@ -18,6 +18,8 @@ from sqlalchemy.pool import StaticPool
 # Override settings BEFORE importing models (models use settings to determine JSON type)
 os.environ["TESTING"] = "true"
 os.environ["PYTEST_CURRENT_TEST"] = "true"
+# Enable dev-key fallback in pii_crypto so tests that write std_pid don't need PII_ENCRYPTION_KEYS
+os.environ.setdefault("ENVIRONMENT", "test")
 
 # MinIO mocking is now handled automatically in the service based on testing environment
 
