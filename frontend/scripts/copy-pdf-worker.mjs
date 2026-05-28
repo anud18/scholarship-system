@@ -4,7 +4,7 @@
 // static asset pipeline instead.
 //
 // Runs from package.json on postinstall, predev, and prebuild. Idempotent.
-import { copyFileSync, mkdirSync, existsSync } from "node:fs";
+import { copyFileSync, mkdirSync, existsSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,6 +19,13 @@ const src = require.resolve("pdfjs-dist/build/pdf.worker.min.mjs");
 const dest = resolve(here, "..", "public", "pdf.worker.min.mjs");
 
 mkdirSync(dirname(dest), { recursive: true });
+// Remove any pre-existing copy before writing. On self-hosted CI runners the
+// dev docker container (running as root) can create this file via its predev
+// hook, leaving a root-owned file that a later host-side `npm install`
+// postinstall (running as the runner user) cannot overwrite -> EPERM on
+// copyFileSync. Unlinking only needs write permission on public/ (owned by the
+// checkout), so it succeeds regardless of the stale file's owner.
+rmSync(dest, { force: true });
 copyFileSync(src, dest);
 
 if (!existsSync(dest)) {
