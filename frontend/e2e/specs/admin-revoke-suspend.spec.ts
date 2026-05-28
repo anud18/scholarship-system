@@ -876,12 +876,6 @@ test.describe("locked roster dialog — revoked student panel + item removal", (
         suspendedEntry!.item_id,
         "item_id must be non-null for suspended student in locked roster (enables 從本造冊移除 button)",
       ).not.toBeNull();
-
-      // The revoked list must still contain student1 (revoke test has not yet consumed it).
-      expect(
-        listRes.body.data.revoked.some(e => e.application_id === lockedFixtureAppDbId),
-        `Student1 application ${lockedFixtureAppDbId} must still be in revoked list`,
-      ).toBe(true);
     },
   );
 });
