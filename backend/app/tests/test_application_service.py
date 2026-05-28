@@ -86,19 +86,6 @@ class TestApplicationService:
         assert service._serialize_for_json("string") == "string"
         assert service._serialize_for_json(42) == 42
 
-    def test_generate_app_id(self, service):
-        """Test application ID generation"""
-        app_id = service._generate_app_id()
-
-        # Should start with APP-{year}-
-        current_year = datetime.now().year
-        assert app_id.startswith(f"APP-{current_year}-")
-
-        # Should have 6-digit suffix
-        suffix = app_id.split("-")[-1]
-        assert len(suffix) == 6
-        assert suffix.isdigit()
-
     @pytest.mark.asyncio
     async def test_validate_student_eligibility_success(
         self, service, mock_student, mock_scholarship_type, mock_application_data

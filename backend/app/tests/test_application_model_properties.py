@@ -49,6 +49,7 @@ def _make(**overrides):
         is_renewal_application = Application.is_renewal_application
         is_general_application = Application.is_general_application
         get_review_stage = Application.get_review_stage
+        get_semester_label = Application.get_semester_label
 
     app = _AppProxy()
     defaults = {
