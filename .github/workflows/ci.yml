@@ -249,15 +249,15 @@ jobs:
           - test-suite: unit
             test-path: app/tests/test_*.py
             test-mark: "not integration and not asyncio"
-            continue-on-error: true
+            continue-on-error: false
           - test-suite: integration
             test-path: app/tests/test_*_service*.py
             test-mark: "integration or asyncio"
-            continue-on-error: true
+            continue-on-error: false
           - test-suite: critical-workflows
             test-path: app/tests/test_critical_workflows.py
             test-mark: "integration"
-            continue-on-error: true
+            continue-on-error: false
 
     steps:
       - name: Checkout
