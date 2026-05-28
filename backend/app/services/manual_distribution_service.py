@@ -1527,11 +1527,22 @@ class ManualDistributionService:
                     approved_challenges.append(app)
 
         # 3. Release handling — approved challenges cancel their renewal targets.
+        # Batch-load all referenced renewal applications to avoid N+1 queries.
+        challenge_renewal_ids = [
+            app.challenges_application_id for app in approved_challenges if app.challenges_application_id is not None
+        ]
+        renewal_apps_by_id: dict[int, Application] = {}
+        if challenge_renewal_ids:
+            renewal_apps_by_id = {
+                app.id: app
+                for app in (
+                    await self.db.scalars(select(Application).where(Application.id.in_(challenge_renewal_ids)))
+                ).all()
+            }
+
         released: dict[tuple[str, int], int] = {}
         for challenge_app in approved_challenges:
-            renewal_app = await self.db.scalar(
-                select(Application).where(Application.id == challenge_app.challenges_application_id)
-            )
+            renewal_app = renewal_apps_by_id.get(challenge_app.challenges_application_id)
             if renewal_app is None:
                 logger.warning(
                     "Challenge app %s references missing renewal id=%s — skipping release",
