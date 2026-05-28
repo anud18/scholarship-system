@@ -93,3 +93,40 @@ def test_semesters_returns_api_response():
     assert "academic_years" in data
     assert "semesters" in data
     assert "current_academic_year" in data
+
+
+def test_all_reference_data_returns_api_response():
+    """GET /api/v1/reference-data/all returns wrapped ApiResponse[dict].
+
+    Wave-1 closeout: this aggregate endpoint historically returned a bare dict
+    (degrees, identities, academies, departments, ...). It is now wrapped in
+    ApiResponse so frontend auto-detection in ``frontend/lib/api.ts`` continues
+    to work uniformly.
+    """
+    client = TestClient(app)
+    response = client.get("/api/v1/reference-data/all")
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    _assert_api_response_shape(payload, expected_data_type=dict)
+    # Original dict keys are now under .data
+    data = payload["data"]
+    for key in ("degrees", "identities", "academies", "departments", "genders"):
+        assert key in data, f"missing '{key}' in /reference-data/all .data payload"
+
+
+def test_scholarship_types_with_cycles_returns_api_response():
+    """GET /api/v1/reference-data/scholarship-types-with-cycles returns wrapped ApiResponse[dict].
+
+    Wave-1 closeout: this endpoint historically returned a bare dict
+    (scholarships, cycle_counts, total_scholarships). It is now wrapped in
+    ApiResponse for parity with the rest of the reference-data module.
+    """
+    client = TestClient(app)
+    response = client.get("/api/v1/reference-data/scholarship-types-with-cycles")
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    _assert_api_response_shape(payload, expected_data_type=dict)
+    data = payload["data"]
+    assert "scholarships" in data
+    assert "cycle_counts" in data
+    assert "total_scholarships" in data

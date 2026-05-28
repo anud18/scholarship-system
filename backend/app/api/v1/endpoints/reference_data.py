@@ -153,7 +153,7 @@ async def get_enroll_types(
 async def get_all_reference_data(
     response: Response,
     session: AsyncSession = Depends(get_db),
-) -> dict:
+) -> ApiResponse[dict]:
     """
     Get all reference data in a single request.
 
@@ -168,7 +168,8 @@ async def get_all_reference_data(
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
 
-    return await _get_all_reference_data_cached(session)
+    data = await _get_all_reference_data_cached(session)
+    return ApiResponse(success=True, message="Reference data retrieved successfully", data=data)
 
 
 @cached(key_fn=lambda *_, **__: "refdata:all", ttl=86400)  # 24 h
@@ -516,9 +517,10 @@ async def get_scholarship_periods(
 @router.get("/scholarship-types-with-cycles")
 async def get_scholarship_types_with_cycles(
     session: AsyncSession = Depends(get_db),
-) -> dict:
+) -> ApiResponse[dict]:
     """Get all scholarship types with their application cycles"""
-    return await _get_scholarship_types_with_cycles_cached(session)
+    data = await _get_scholarship_types_with_cycles_cached(session)
+    return ApiResponse(success=True, message="Scholarship types retrieved successfully", data=data)
 
 
 @cached(key_fn=lambda *_, **__: "refdata:scholarships:active", ttl=43200)  # 12 h
