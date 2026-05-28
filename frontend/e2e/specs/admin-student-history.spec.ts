@@ -17,6 +17,8 @@ test.describe("Admin student scholarship history", () => {
     const { context } = await loginAs(browser, "admin");
     const page = await context.newPage();
     await page.goto("/");
+    // AdminManagementShell renders inside the top-level "系統管理" (value="admin") tab.
+    await page.getByRole("tab", { name: "系統管理" }).click();
     await page.getByRole("tab", { name: "學生領取歷史" }).click();
     await page.getByLabel("學號").fill("@@");
     await page.getByRole("button", { name: "查詢" }).click();
@@ -28,6 +30,7 @@ test.describe("Admin student scholarship history", () => {
     const { context } = await loginAs(browser, "admin");
     const page = await context.newPage();
     await page.goto("/");
+    await page.getByRole("tab", { name: "系統管理" }).click();
     await page.getByRole("tab", { name: "學生領取歷史" }).click();
     await page.getByLabel("學號").fill("GHOST00000");
     await page.getByRole("button", { name: "查詢" }).click();
@@ -48,6 +51,7 @@ test.describe("Admin student scholarship history", () => {
     const { context } = await loginAs(browser, "admin");
     const page = await context.newPage();
     await page.goto("/");
+    await page.getByRole("tab", { name: "系統管理" }).click();
     await page.getByRole("tab", { name: "學生領取歷史" }).click();
     await page.getByLabel("學號").fill("stuphd001");
     await page.getByRole("button", { name: "查詢" }).click();

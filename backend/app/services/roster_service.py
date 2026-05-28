@@ -729,7 +729,7 @@ class RosterService:
                 f"not applying semester filter for period {period_label}"
             )
 
-        return query.all()
+        return query.order_by(Application.is_renewal.desc(), Application.submitted_at).all()
 
     def _extract_semester_from_period(self, period_label: str) -> Optional[str]:
         """從期間標記提取學期資訊"""

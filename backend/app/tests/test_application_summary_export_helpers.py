@@ -15,12 +15,12 @@ constants are critical:
     entry filename. A regression allowing `\\/:*?"<>|` would
     break ZIP creation on Windows extraction.
 
-  - **_sort_key(a)**: sorts applications by std_stdcode, with
-    missing/blank student codes pushed to the END. Critical for
-    the report's pedagogical order — admins read the list as
-    "real students first, anomalies later".
+  - **_sort_key(a)**: sorts applications with renewal applications
+    first, then by std_stdcode, with missing/blank student codes
+    pushed to the END within each group. Renewal-first order
+    matches the college ranking screen and roster list (issue #71).
 
-12 cases.
+13 cases.
 """
 
 from types import SimpleNamespace
@@ -94,11 +94,12 @@ def test_sanitise_whitespace_only_returns_untitled():
 # ─── _sort_key ──────────────────────────────────────────────────────
 
 
-def _app(std_stdcode, app_id):
+def _app(std_stdcode, app_id, is_renewal=False):
     """Build a duck-typed Application stand-in."""
     return SimpleNamespace(
         student_data={"std_stdcode": std_stdcode} if std_stdcode is not None else None,
         id=app_id,
+        is_renewal=is_renewal,
     )
 
 
@@ -144,3 +145,21 @@ def test_sort_handles_none_student_data_as_blank():
     sorted_apps = sorted(apps, key=_sort_key)
     assert sorted_apps[0].id == 2
     assert sorted_apps[1].id == 1
+
+
+def test_sort_renewal_apps_come_before_new_apps():
+    # Pin: renewal applications (is_renewal=True) sort FIRST,
+    # regardless of student code. Required by issue #71 — the
+    # 申請總表 Excel must match the college ranking screen order
+    # where renewal applications appear above new applications.
+    apps = [
+        _app("310460001", 1, is_renewal=False),  # new app, real code
+        _app("310460002", 2, is_renewal=True),  # renewal, real code
+        _app("", 3, is_renewal=False),  # new app, blank code
+    ]
+    sorted_apps = sorted(apps, key=_sort_key)
+    # Renewal (id=2) must come first
+    assert sorted_apps[0].id == 2
+    # New apps follow, real code before blank
+    assert sorted_apps[1].id == 1
+    assert sorted_apps[2].id == 3

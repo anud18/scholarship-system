@@ -207,6 +207,7 @@ class ExcelExportService:
                 "estimated_completion": estimated_completion,
             }
 
+        file_name: Optional[str] = None
         try:
             # 取得造冊明細
             roster_items = self._get_roster_items(roster, include_excluded)
@@ -489,8 +490,7 @@ class ExcelExportService:
         }
 
         if not excel_data:
-            validation_result["errors"].append("No data to export")
-            validation_result["is_valid"] = False
+            validation_result["warnings"].append("No roster items to export — generating header-only file")
             return validation_result
 
         # 統計資料
