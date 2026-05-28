@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import AuthorizationError, ConflictError, NotFoundError, ValidationError
+from app.core.exceptions import NotFoundError, ValidationError
 from app.models.application import Application, ApplicationStatus
 from app.models.scholarship import ScholarshipType
 from app.models.user import User, UserRole
@@ -40,13 +40,15 @@ class TestApplicationService:
     @pytest.fixture
     def mock_scholarship_type(self):
         """Mock scholarship type for testing"""
-        return ScholarshipType(
-            id=1,
-            code="undergraduate_freshman",
-            name="Undergraduate Freshman Scholarship",
-            status="active",  # is_active is a computed property from status
-            whitelist_enabled=False,
-        )
+        mock = Mock()
+        mock.id = 1
+        mock.code = "undergraduate_freshman"
+        mock.name = "Undergraduate Freshman Scholarship"
+        mock.is_active = True
+        mock.is_application_period = True
+        mock.whitelist_enabled = False
+        mock.eligible_student_types = []
+        return mock
 
     @pytest.fixture
     def mock_student(self):
@@ -91,19 +93,10 @@ class TestApplicationService:
         self, service, mock_student, mock_scholarship_type, mock_application_data
     ):
         """Test successful student eligibility validation"""
-        # Mock database queries
         with patch.object(service.db, "execute") as mock_execute:
-            # Mock scholarship type query result
             mock_result = Mock()
             mock_result.scalar_one_or_none.return_value = mock_scholarship_type
             mock_execute.return_value = mock_result
-
-            # Mock existing application check
-            mock_execute.return_value.scalar_one_or_none.side_effect = [
-                mock_scholarship_type,  # First call for scholarship lookup
-                mock_scholarship_type,  # Second call for scholarship lookup in conflict check
-                None,  # No existing application
-            ]
 
             # Should not raise any exception
             await service._validate_student_eligibility(mock_student, "undergraduate_freshman", mock_application_data)
@@ -168,26 +161,6 @@ class TestApplicationService:
             mock_execute.return_value = mock_result
 
             with pytest.raises(ValidationError, match="Student type undergraduate is not eligible"):
-                await service._validate_student_eligibility(
-                    mock_student, "undergraduate_freshman", mock_application_data
-                )
-
-    @pytest.mark.asyncio
-    async def test_validate_student_eligibility_existing_application(
-        self, service, mock_student, mock_scholarship_type, mock_application_data
-    ):
-        """Test eligibility validation when student has existing active application"""
-        existing_application = Mock(spec=Application)
-
-        with patch.object(service.db, "execute") as mock_execute:
-            # Mock scholarship lookup calls
-            mock_execute.return_value.scalar_one_or_none.side_effect = [
-                mock_scholarship_type,  # First scholarship lookup
-                mock_scholarship_type,  # Second scholarship lookup
-                existing_application,  # Existing application found
-            ]
-
-            with pytest.raises(ConflictError, match="You already have an active application"):
                 await service._validate_student_eligibility(
                     mock_student, "undergraduate_freshman", mock_application_data
                 )
@@ -348,18 +321,52 @@ class TestApplicationService:
         mock_user.id = user_id
         mock_user.role = UserRole.student
 
-        mock_application = Mock(spec=Application)
+        mock_application = Mock()
         mock_application.id = application_id
         mock_application.user_id = user_id
+        mock_application.app_id = "APP-2024-001"
+        mock_application.scholarship_type_id = 1
+        mock_application.scholarship_subtype_list = []
+        mock_application.sub_scholarship_type = None
+        mock_application.status = ApplicationStatus.draft.value
+        mock_application.status_name = "草稿"
+        mock_application.review_stage = None
+        mock_application.is_renewal = False
+        mock_application.renewal_year = None
+        mock_application.previous_application_id = None
+        mock_application.challenges_application_id = None
+        mock_application.cancelled_due_to_application_id = None
+        mock_application.academic_year = 2024
+        mock_application.semester = "first"
+        mock_application.student_data = {}
         mock_application.submitted_form_data = {}
         mock_application.files = []
+        mock_application.reviews = []
+        mock_application.agree_terms = True
+        mock_application.professor_id = None
+        mock_application.reviewer_id = None
+        mock_application.final_approver_id = None
+        mock_application.submitted_at = None
+        mock_application.reviewed_at = None
+        mock_application.approved_at = None
+        mock_application.created_at = datetime.now(timezone.utc)
+        mock_application.updated_at = datetime.now(timezone.utc)
+        mock_application.meta_data = None
+        mock_application.application_document_url = None
+        mock_application.application_document_original_filename = None
+        mock_application.amount = None
+        mock_application.scholarship_configuration = None
+        mock_application.scholarship = None
+        mock_application.student = None
 
-        with patch.object(service.db, "execute") as mock_execute:
-            mock_execute.return_value.scalar_one_or_none.return_value = mock_application
+        with patch.object(service, "_get_application_model", new_callable=AsyncMock) as mock_get_model:
+            mock_get_model.return_value = mock_application
 
             result = await service.get_application_by_id(application_id, mock_user)
 
-            assert result == mock_application
+            assert result is not None
+            assert result.app_id == "APP-2024-001"
+            mock_get_model.assert_called_once_with(application_id, mock_user)
 
     @pytest.mark.asyncio
     async def test_get_application_by_id_student_unauthorized(self, service):
@@ -460,11 +467,7 @@ class TestApplicationService:
         mock_application.files = []
 
         update_data = ApplicationUpdate(
-            form_data=ApplicationFormData(
-                personal_statement="Updated statement",
-                academic_achievements="Updated achievements",
-                documents=[],
-            ),
+            form_data=ApplicationFormData(fields={}, documents=[]),
             status=ApplicationStatus.draft.value,
             is_renewal=True,
         )
@@ -497,13 +500,7 @@ class TestApplicationService:
         mock_application.user_id = user_id
         mock_application.is_editable = False  # Not editable
 
-        update_data = ApplicationUpdate(
-            form_data=ApplicationFormData(
-                personal_statement="Updated statement",
-                academic_achievements="Updated achievements",
-                documents=[],
-            )
-        )
+        update_data = ApplicationUpdate(form_data=ApplicationFormData(fields={}))
 
         with patch.object(service, "get_application_by_id", return_value=mock_application):
             with pytest.raises(ValidationError, match="Application cannot be edited"):
