@@ -307,6 +307,18 @@ class NotificationService:
                 processed += 1
 
             except Exception as e:
+                # Surface the failure in logs (with full traceback) before mutating
+                # the row — operators should not have to query notification_queue
+                # to discover that background processing is failing.
+                logger.exception(
+                    "Notification queue item failed",
+                    extra={
+                        "queue_item_id": item.id,
+                        "attempts": item.attempts,
+                        "max_attempts": item.max_attempts,
+                        "notification_type": item.notification_type,
+                    },
+                )
                 item.status = "failed"
                 item.error_message = str(e)
                 failed += 1
