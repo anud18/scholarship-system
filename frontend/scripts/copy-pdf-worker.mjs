@@ -4,7 +4,7 @@
 // static asset pipeline instead.
 //
 // Runs from package.json on postinstall, predev, and prebuild. Idempotent.
-import { copyFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,7 +19,10 @@ const src = require.resolve("pdfjs-dist/build/pdf.worker.min.mjs");
 const dest = resolve(here, "..", "public", "pdf.worker.min.mjs");
 
 mkdirSync(dirname(dest), { recursive: true });
-copyFileSync(src, dest);
+// Read-then-write instead of copyFileSync: the latter uses copy_file_range/
+// fcopyfile, which returns EPERM when src and dest straddle a reflink/overlay
+// boundary (e.g. cache-restored node_modules in CI). A userspace copy avoids it.
+writeFileSync(dest, readFileSync(src));
 
 if (!existsSync(dest)) {
   console.error(`copy-pdf-worker: dest ${dest} missing after copy`);
