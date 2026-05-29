@@ -79,14 +79,29 @@ def sample_page(sample_employee):
     )
 
 
+def _mock_client(**kwargs):
+    """Create an AsyncMock client with properly configured context manager.
+
+    In Python 3.13, AsyncMock.__aenter__ no longer returns self by default —
+    it returns a new AsyncMock instance — so callers that rely on the
+    context-manager path (``async with client as c:``) need __aenter__
+    explicitly wired to return the same mock object.
+    """
+    mc = AsyncMock()
+    mc.__aenter__ = AsyncMock(return_value=mc)
+    mc.__aexit__ = AsyncMock(return_value=None)
+    for attr, value in kwargs.items():
+        setattr(mc, attr, value)
+    return mc
+
+
 class TestNYCUEmployeeEndpoints:
     """Test NYCU Employee API endpoints."""
 
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_get_employees_success(self, mock_factory, client, sample_page):
         """Test successful employee list retrieval."""
-        # Mock client
-        mock_client = AsyncMock()
+        mock_client = _mock_client()
         mock_client.get_employee_page.return_value = sample_page
         mock_factory.return_value = mock_client
 
@@ -108,7 +123,7 @@ class TestNYCUEmployeeEndpoints:
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_get_employees_with_parameters(self, mock_factory, client, sample_page):
         """Test employee list with custom parameters."""
-        mock_client = AsyncMock()
+        mock_client = _mock_client()
         mock_client.get_employee_page.return_value = sample_page
         mock_factory.return_value = mock_client
 
@@ -122,10 +137,7 @@ class TestNYCUEmployeeEndpoints:
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_get_employees_with_context_manager(self, mock_factory, client, sample_page):
         """Test employee list with HTTP client that uses context manager."""
-        # Mock client with context manager support
-        mock_client = AsyncMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client = _mock_client()
         mock_client.get_employee_page.return_value = sample_page
         mock_factory.return_value = mock_client
 
@@ -140,7 +152,7 @@ class TestNYCUEmployeeEndpoints:
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_get_employees_authentication_error(self, mock_factory, client):
         """Test authentication error handling."""
-        mock_client = AsyncMock()
+        mock_client = _mock_client()
         mock_client.get_employee_page.side_effect = NYCUEmpAuthenticationError("Auth failed")
         mock_factory.return_value = mock_client
 
@@ -152,7 +164,7 @@ class TestNYCUEmployeeEndpoints:
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_get_employees_validation_error(self, mock_factory, client):
         """Test validation error handling."""
-        mock_client = AsyncMock()
+        mock_client = _mock_client()
         mock_client.get_employee_page.side_effect = NYCUEmpValidationError("Invalid request")
         mock_factory.return_value = mock_client
 
@@ -164,7 +176,7 @@ class TestNYCUEmployeeEndpoints:
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_get_employees_connection_error(self, mock_factory, client):
         """Test connection error handling."""
-        mock_client = AsyncMock()
+        mock_client = _mock_client()
         mock_client.get_employee_page.side_effect = NYCUEmpConnectionError("Connection failed")
         mock_factory.return_value = mock_client
 
@@ -176,7 +188,7 @@ class TestNYCUEmployeeEndpoints:
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_get_employees_timeout_error(self, mock_factory, client):
         """Test timeout error handling."""
-        mock_client = AsyncMock()
+        mock_client = _mock_client()
         mock_client.get_employee_page.side_effect = NYCUEmpTimeoutError("Timeout")
         mock_factory.return_value = mock_client
 
@@ -188,7 +200,7 @@ class TestNYCUEmployeeEndpoints:
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_get_employees_generic_error(self, mock_factory, client):
         """Test generic API error handling."""
-        mock_client = AsyncMock()
+        mock_client = _mock_client()
         mock_client.get_employee_page.side_effect = NYCUEmpError("Generic error")
         mock_factory.return_value = mock_client
 
@@ -200,7 +212,7 @@ class TestNYCUEmployeeEndpoints:
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_get_employees_unexpected_error(self, mock_factory, client):
         """Test unexpected error handling."""
-        mock_client = AsyncMock()
+        mock_client = _mock_client()
         mock_client.get_employee_page.side_effect = Exception("Unexpected error")
         mock_factory.return_value = mock_client
 
@@ -221,7 +233,7 @@ class TestNYCUEmployeeEndpoints:
             empDataList=[sample_employee],
         )
 
-        mock_client = AsyncMock()
+        mock_client = _mock_client()
         mock_client.get_all_employees.return_value = [sample_page, page2]
         mock_factory.return_value = mock_client
 
@@ -238,7 +250,7 @@ class TestNYCUEmployeeEndpoints:
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_search_employees_success(self, mock_factory, client, sample_page):
         """Test successful employee search."""
-        mock_client = AsyncMock()
+        mock_client = _mock_client()
         mock_client.get_all_employees.return_value = [sample_page]
         mock_factory.return_value = mock_client
 
@@ -256,7 +268,7 @@ class TestNYCUEmployeeEndpoints:
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_search_employees_no_matches(self, mock_factory, client, sample_page):
         """Test employee search with no matches."""
-        mock_client = AsyncMock()
+        mock_client = _mock_client()
         mock_client.get_all_employees.return_value = [sample_page]
         mock_factory.return_value = mock_client
 
@@ -272,7 +284,7 @@ class TestNYCUEmployeeEndpoints:
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_search_employees_department_filter(self, mock_factory, client, sample_page):
         """Test employee search with department filter."""
-        mock_client = AsyncMock()
+        mock_client = _mock_client()
         mock_client.get_all_employees.return_value = [sample_page]
         mock_factory.return_value = mock_client
 
@@ -288,7 +300,7 @@ class TestNYCUEmployeeEndpoints:
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_search_employees_position_filter(self, mock_factory, client, sample_page):
         """Test employee search with position filter."""
-        mock_client = AsyncMock()
+        mock_client = _mock_client()
         mock_client.get_all_employees.return_value = [sample_page]
         mock_factory.return_value = mock_client
 
@@ -303,7 +315,7 @@ class TestNYCUEmployeeEndpoints:
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_get_employee_by_no_success(self, mock_factory, client, sample_page):
         """Test successful employee retrieval by number."""
-        mock_client = AsyncMock()
+        mock_client = _mock_client()
         mock_client.get_all_employees.return_value = [sample_page]
         mock_factory.return_value = mock_client
 
@@ -318,7 +330,7 @@ class TestNYCUEmployeeEndpoints:
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_get_employee_by_no_not_found(self, mock_factory, client, sample_page):
         """Test employee not found by number."""
-        mock_client = AsyncMock()
+        mock_client = _mock_client()
         mock_client.get_all_employees.return_value = [sample_page]
         mock_factory.return_value = mock_client
 
@@ -337,7 +349,7 @@ class TestNYCUEmployeeEndpoints:
         """Test parameter validation."""
         # Valid request
         with patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env") as mock_factory:
-            mock_client = AsyncMock()
+            mock_client = _mock_client()
             mock_client.get_employee_page.return_value = NYCUEmpPage(
                 status="0000", message="", total_page=1, total_count=0, empDataList=[]
             )
