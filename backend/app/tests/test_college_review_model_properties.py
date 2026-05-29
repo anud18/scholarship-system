@@ -25,8 +25,33 @@ import pytest
 from app.models.college_review import CollegeRanking, CollegeRankingItem, QuotaDistribution
 
 
-def _ranking(**overrides) -> CollegeRanking:
-    r = object.__new__(CollegeRanking)
+# SA-free helper classes — bypass SQLAlchemy column instrumentation so pure
+# Python @property methods can be exercised without needing _sa_instance_state.
+class _FakeRanking:
+    def __init__(self, **attrs):
+        self.__dict__.update(attrs)
+
+    remaining_quota = property(CollegeRanking.remaining_quota.fget)
+    allocation_rate = property(CollegeRanking.allocation_rate.fget)
+    can_allocate_more = CollegeRanking.can_allocate_more
+
+
+class _FakeRankingItem:
+    def __init__(self, **attrs):
+        self.__dict__.update(attrs)
+
+    is_within_quota = property(CollegeRankingItem.is_within_quota.fget)
+
+
+class _FakeDistribution:
+    def __init__(self, **attrs):
+        self.__dict__.update(attrs)
+
+    success_rate = property(QuotaDistribution.success_rate.fget)
+    get_sub_type_summary = QuotaDistribution.get_sub_type_summary
+
+
+def _ranking(**overrides) -> _FakeRanking:
     defaults = {
         "id": 1,
         "total_quota": 10,
@@ -35,26 +60,19 @@ def _ranking(**overrides) -> CollegeRanking:
         "distribution_executed": False,
     }
     defaults.update(overrides)
-    for k, v in defaults.items():
-        object.__setattr__(r, k, v)
-    return r
+    return _FakeRanking(**defaults)
 
 
-def _item(**overrides) -> CollegeRankingItem:
-    item = object.__new__(CollegeRankingItem)
+def _item(**overrides) -> _FakeRankingItem:
     defaults = {
         "id": 1,
         "rank_position": 1,
-        # ranking attribute set below; SimpleNamespace duck-types
     }
     defaults.update(overrides)
-    for k, v in defaults.items():
-        object.__setattr__(item, k, v)
-    return item
+    return _FakeRankingItem(**defaults)
 
 
-def _distribution(**overrides) -> QuotaDistribution:
-    d = object.__new__(QuotaDistribution)
+def _distribution(**overrides) -> _FakeDistribution:
     defaults = {
         "id": 1,
         "total_applications": 0,
@@ -62,9 +80,7 @@ def _distribution(**overrides) -> QuotaDistribution:
         "distribution_summary": None,
     }
     defaults.update(overrides)
-    for k, v in defaults.items():
-        object.__setattr__(d, k, v)
-    return d
+    return _FakeDistribution(**defaults)
 
 
 # ─── CollegeRanking ──────────────────────────────────────────────────
