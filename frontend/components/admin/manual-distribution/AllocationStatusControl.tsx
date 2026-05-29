@@ -7,9 +7,9 @@
  * to it, so an admin can tell at a glance who has already been revoked or
  * suspended while scanning a dense table.
  *
- * Transitions are one-way and terminal (no un-revoke / un-suspend in this
- * iteration — the backend 409s on a second action), so once a student is
- * 撤銷 / 停發 the control becomes a read-only status indicator.
+ * Reversible: from 正常 you can revoke/suspend; from a terminal state the
+ * 正常 segment restores back to allocated. To switch directly between 撤銷 and
+ * 停發, restore to 正常 first (the other action segment is inert while terminal).
  */
 
 export type AllocationStatus = "normal" | "revoked" | "suspended";
@@ -20,6 +20,8 @@ interface AllocationStatusControlProps {
   reason?: string | null;
   onRevoke: () => void;
   onSuspend: () => void;
+  /** Restore a revoked/suspended student back to 正常. */
+  onRestore: () => void;
 }
 
 const SEGMENTS: { key: AllocationStatus; label: string }[] = [
@@ -46,6 +48,7 @@ export function AllocationStatusControl({
   reason,
   onRevoke,
   onSuspend,
+  onRestore,
 }: AllocationStatusControlProps) {
   const isTerminal = status !== "normal";
   const activeIndex = ACTIVE_INDEX[status];
@@ -59,8 +62,11 @@ export function AllocationStatusControl({
         : "text-white font-semibold";
     }
     if (isTerminal) {
-      // Terminal: inactive segments are inert, just dimmed context.
-      return "text-slate-300";
+      // Terminal: only 正常 is live (restore); the other action is inert
+      // (switch type by restoring to 正常 first).
+      return seg === "normal"
+        ? "text-slate-500 hover:text-slate-800"
+        : "text-slate-300";
     }
     // Normal state → the two inactive segments are the live actions.
     return seg === "revoked"
@@ -68,9 +74,14 @@ export function AllocationStatusControl({
       : "text-orange-500 hover:text-orange-700";
   };
 
+  // Normal → 撤銷/停發 actionable. Terminal → only 正常 (restore) actionable.
+  const isActionable = (seg: AllocationStatus): boolean =>
+    isTerminal ? seg === "normal" : seg !== "normal";
+
   const handleSegment = (seg: AllocationStatus) => {
-    if (isTerminal || seg === "normal") return; // read-only / no-op
-    if (seg === "revoked") onRevoke();
+    if (!isActionable(seg)) return;
+    if (seg === "normal") onRestore();
+    else if (seg === "revoked") onRevoke();
     else onSuspend();
   };
 
@@ -89,7 +100,7 @@ export function AllocationStatusControl({
       />
       {SEGMENTS.map(seg => {
         const isActive = seg.key === status;
-        const actionable = !isTerminal && seg.key !== "normal";
+        const actionable = isActionable(seg.key);
         return (
           <button
             key={seg.key}
@@ -99,9 +110,11 @@ export function AllocationStatusControl({
             aria-pressed={isActive}
             title={
               actionable
-                ? seg.key === "revoked"
-                  ? "撤銷此學生獎學金（違反獎學金要點）"
-                  : "停發此學生獎學金（休學/退學/畢業）"
+                ? seg.key === "normal"
+                  ? "恢復為正常分發"
+                  : seg.key === "revoked"
+                    ? "撤銷此學生獎學金（違反獎學金要點）"
+                    : "停發此學生獎學金（休學/退學/畢業）"
                 : undefined
             }
             className={`relative z-10 py-1 text-[11px] leading-none rounded-full transition-colors ${

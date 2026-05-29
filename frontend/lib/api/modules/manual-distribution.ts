@@ -623,5 +623,40 @@ export function createManualDistributionApi() {
       }
       return body as ApiResponse<unknown>;
     },
+
+    /**
+     * Restore a revoked/suspended student back to the allocated state.
+     * Does not touch rosters — regenerate rosters to re-include the student.
+     */
+    restoreAllocation: async (
+      application_id: number
+    ): Promise<ApiResponse<unknown>> => {
+      const token = typedClient.getToken();
+      const response = await fetch(
+        `/api/v1/manual-distribution/applications/${application_id}/restore`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
+      );
+      let body: unknown = null;
+      try {
+        body = await response.json();
+      } catch {
+        // ignore parse error
+      }
+      if (!response.ok) {
+        const b = body as { detail?: string; message?: string } | null;
+        return {
+          success: false,
+          message: b?.detail || b?.message || "恢復失敗",
+          data: undefined,
+        };
+      }
+      return body as ApiResponse<unknown>;
+    },
   };
 }

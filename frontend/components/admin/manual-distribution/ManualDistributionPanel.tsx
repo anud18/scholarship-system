@@ -1561,6 +1561,13 @@ export function ManualDistributionPanel({
                                           studentName: student.student_name,
                                         })
                                       }
+                                      onRestore={() =>
+                                        setAction({
+                                          mode: "restore",
+                                          applicationId: student.application_id,
+                                          studentName: student.student_name,
+                                        })
+                                      }
                                     />
                                   ) : (
                                     <span className="text-[10px] text-slate-300">
@@ -1884,7 +1891,10 @@ export function ManualDistributionPanel({
         // from commit 2dd0f611).
         setSaveMessage({
           type: "success",
-          text: `已${mode === "suspend" ? "停發" : "撤銷"} ${studentName} 的獎學金分發`,
+          text:
+            mode === "restore"
+              ? `已恢復 ${studentName} 為正常分發`
+              : `已${mode === "suspend" ? "停發" : "撤銷"} ${studentName} 的獎學金分發`,
         });
       }}
     />

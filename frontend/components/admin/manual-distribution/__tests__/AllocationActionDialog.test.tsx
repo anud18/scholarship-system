@@ -9,6 +9,7 @@ jest.mock("@/lib/utils/logger", () => ({
 
 const mockRevokeAllocation = jest.fn().mockResolvedValue({ success: true });
 const mockSuspendAllocation = jest.fn().mockResolvedValue({ success: true });
+const mockRestoreAllocation = jest.fn().mockResolvedValue({ success: true });
 
 // Mock Radix Dialog to render inline (no portal / focus-trap issues in jsdom)
 jest.mock("@/components/ui/dialog", () => ({
@@ -75,8 +76,10 @@ describe("AllocationActionDialog", () => {
   beforeEach(() => {
     jest.spyOn(apiClient.manualDistribution, "revokeAllocation").mockImplementation(mockRevokeAllocation);
     jest.spyOn(apiClient.manualDistribution, "suspendAllocation").mockImplementation(mockSuspendAllocation);
+    jest.spyOn(apiClient.manualDistribution, "restoreAllocation").mockImplementation(mockRestoreAllocation);
     mockRevokeAllocation.mockClear();
     mockSuspendAllocation.mockClear();
+    mockRestoreAllocation.mockClear();
   });
   afterEach(() => {
     jest.restoreAllMocks();
@@ -170,5 +173,28 @@ describe("AllocationActionDialog", () => {
       );
     });
     expect(screen.getByRole("button", { name: "確認停發" })).not.toBeDisabled();
+  });
+
+  it("restore mode: no reason input, confirm calls restoreAllocation", async () => {
+    const onConfirmed = jest.fn();
+    render(
+      <AllocationActionDialog
+        mode="restore"
+        target={target}
+        onClose={() => {}}
+        onConfirmed={onConfirmed}
+      />
+    );
+    // No reason/dropdown input rendered in restore mode.
+    expect(screen.queryByTestId("suspend-select")).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("違反獎學金要點")).not.toBeInTheDocument();
+
+    const confirm = screen.getByRole("button", { name: "確認恢復" });
+    expect(confirm).toBeEnabled();
+    await act(async () => {
+      fireEvent.click(confirm);
+    });
+    await waitFor(() => expect(mockRestoreAllocation).toHaveBeenCalledWith(7));
+    expect(onConfirmed).toHaveBeenCalledWith("王小明");
   });
 });

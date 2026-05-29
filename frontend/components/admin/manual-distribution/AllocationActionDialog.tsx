@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 
-export type AllocationMode = "revoke" | "suspend";
+export type AllocationMode = "revoke" | "suspend" | "restore";
 
 export interface AllocationActionTarget {
   applicationId: number;
@@ -47,6 +47,7 @@ export function AllocationActionDialog({
   onConfirmed,
 }: AllocationActionDialogProps) {
   const isRevoke = mode === "revoke";
+  const isRestore = mode === "restore";
   const [revokeReason, setRevokeReason] = useState("");
   const [suspendOption, setSuspendOption] =
     useState<(typeof SUSPEND_OPTIONS)[number]>("休學");
@@ -75,7 +76,9 @@ export function AllocationActionDialog({
     submitting ||
     (isRevoke
       ? revokeReason.trim().length === 0
-      : suspendOption === "其他" && note.trim().length === 0);
+      : isRestore
+        ? false
+        : suspendOption === "其他" && note.trim().length === 0);
 
   const handleConfirm = async () => {
     if (!target || confirmDisabled) return;
@@ -86,21 +89,34 @@ export function AllocationActionDialog({
             target.applicationId,
             composedReason
           )
-        : await apiClient.manualDistribution.suspendAllocation(
-            target.applicationId,
-            composedReason
-          );
+        : isRestore
+          ? await apiClient.manualDistribution.restoreAllocation(
+              target.applicationId
+            )
+          : await apiClient.manualDistribution.suspendAllocation(
+              target.applicationId,
+              composedReason
+            );
       if (resp.success) {
         const name = target.studentName;
         reset();
         onConfirmed(name);
       } else {
         logger.error(`${mode} failed`, { message: resp.message });
-        alert(resp.message || (isRevoke ? "撤銷失敗" : "停發失敗"));
+        alert(
+          resp.message ||
+            (isRevoke ? "撤銷失敗" : isRestore ? "恢復失敗" : "停發失敗")
+        );
       }
     } catch (err) {
       logger.error(`${mode} error`, { err });
-      alert(isRevoke ? "撤銷時發生錯誤" : "停發時發生錯誤");
+      alert(
+        isRevoke
+          ? "撤銷時發生錯誤"
+          : isRestore
+            ? "恢復時發生錯誤"
+            : "停發時發生錯誤"
+      );
     } finally {
       setSubmitting(false);
     }
@@ -110,19 +126,32 @@ export function AllocationActionDialog({
     <Dialog open={target !== null} onOpenChange={open => !open && handleClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{isRevoke ? "撤銷獎學金分發" : "停發獎學金分發"}</DialogTitle>
+          <DialogTitle>
+            {isRevoke
+              ? "撤銷獎學金分發"
+              : isRestore
+                ? "恢復為正常分發"
+                : "停發獎學金分發"}
+          </DialogTitle>
           <DialogDescription>
-            {target && (
-              <>
-                {isRevoke ? "確定要撤銷 " : "確定要停發 "}
-                <strong>{target.studentName}</strong>
-                {" 的獎學金分發嗎？此操作將從未鎖定造冊中移除該學生，並標記申請為"}
-                {isRevoke ? "已撤銷。" : "已停發。"}
-              </>
-            )}
+            {target &&
+              (isRestore ? (
+                <>
+                  確定要將 <strong>{target.studentName}</strong>{" "}
+                  恢復為正常分發嗎？申請狀態將改回「核准（已分配）」。已從鎖定造冊移除的項目不會自動還原，請重新生成造冊。
+                </>
+              ) : (
+                <>
+                  {isRevoke ? "確定要撤銷 " : "確定要停發 "}
+                  <strong>{target.studentName}</strong>
+                  {" 的獎學金分發嗎？此操作將從未鎖定造冊中移除該學生，並標記申請為"}
+                  {isRevoke ? "已撤銷。" : "已停發。"}
+                </>
+              ))}
           </DialogDescription>
         </DialogHeader>
 
+        {!isRestore && (
         <div className="space-y-4">
           {isRevoke ? (
             <div className="space-y-2">
@@ -185,18 +214,19 @@ export function AllocationActionDialog({
             </>
           )}
         </div>
+        )}
 
         <DialogFooter>
           <Button variant="outline" onClick={handleClose} disabled={submitting}>
             取消
           </Button>
           <Button
-            variant="destructive"
+            variant={isRestore ? "default" : "destructive"}
             onClick={handleConfirm}
             disabled={confirmDisabled}
           >
             {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            {isRevoke ? "確認撤銷" : "確認停發"}
+            {isRevoke ? "確認撤銷" : isRestore ? "確認恢復" : "確認停發"}
           </Button>
         </DialogFooter>
       </DialogContent>

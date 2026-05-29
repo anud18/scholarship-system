@@ -428,10 +428,10 @@ describe("createManualDistributionApi", () => {
     expect(res.success).toBe(true);
   });
 
-  // ─── 15-method invariant ──────────────────────────────────────────
+  // ─── 16-method invariant ──────────────────────────────────────────
 
-  it("module exposes exactly 15 methods", async () => {
-    // Pin: 15 methods. Pin so refactor adding/removing methods
+  it("module exposes exactly 16 methods", async () => {
+    // Pin: 16 methods. Pin so refactor adding/removing methods
     // requires explicit review (each one drives a SECURITY-
     // critical allocation operation).
     const api = createManualDistributionApi();
@@ -448,9 +448,27 @@ describe("createManualDistributionApi", () => {
       "getStudents",
       "importReceivedMonths",
       "previewDistribution",
+      "restoreAllocation",
       "restoreFromHistory",
       "revokeAllocation",
       "suspendAllocation",
     ]);
+  });
+
+  it("restoreAllocation POSTs to the restore endpoint", async () => {
+    const mockFetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, message: "已恢復", data: {} }),
+    });
+    global.fetch = mockFetch as unknown as typeof fetch;
+    const api = createManualDistributionApi();
+
+    const res = await api.restoreAllocation(42);
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/api/v1/manual-distribution/applications/42/restore",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(res.success).toBe(true);
   });
 });

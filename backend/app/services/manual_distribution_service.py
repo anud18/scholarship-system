@@ -1165,6 +1165,64 @@ class ManualDistributionService:
             mode="suspend",
         )
 
+    async def restore_allocation(self, application_id: int, admin_user_id: int) -> dict:
+        """Restore a revoked/suspended application back to the allocated state:
+        status -> approved, quota_allocation_status -> allocated, clear the
+        revoke/suspend metadata, write an audit log.
+
+        Rosters are intentionally NOT touched: items removed from non-LOCKED
+        rosters are re-created on the next roster generation, and items manually
+        removed from a LOCKED roster stay removed (its Excel was already
+        re-exported — we never silently un-delete a locked roster line)."""
+        result = await self.db.execute(
+            select(Application).where(Application.id == application_id).with_for_update()
+        )
+        app = result.scalar_one_or_none()
+        if app is None:
+            raise ValueError(f"Application {application_id} not found")
+
+        prior_status = app.quota_allocation_status
+        if prior_status not in ("revoked", "suspended"):
+            raise ValueError(
+                f"Application {application_id} is not revoked/suspended "
+                f"(quota_allocation_status={prior_status})"
+            )
+
+        ranking_item_result = await self.db.execute(
+            select(CollegeRankingItem.id).where(CollegeRankingItem.application_id == application_id).limit(1)
+        )
+        ranking_item_id = ranking_item_result.scalar_one_or_none()
+
+        now = datetime.now(timezone.utc)
+        app.status = ApplicationStatus.approved
+        app.quota_allocation_status = "allocated"
+        # Clear both metadata sets regardless of which one applied.
+        app.revoked_at = None
+        app.revoked_by = None
+        app.revoke_reason = None
+        app.suspended_at = None
+        app.suspended_by = None
+        app.suspend_reason = None
+
+        log = AuditLog.create_log(
+            user_id=admin_user_id,
+            action="application.restore",
+            resource_type="application",
+            resource_id=str(application_id),
+            description=f"restore application {application_id} from {prior_status}",
+            new_values={"from": prior_status, "to": "allocated"},
+        )
+        self.db.add(log)
+        await self.db.flush()
+
+        return {
+            "application_id": application_id,
+            "ranking_item_id": ranking_item_id,
+            "quota_allocation_status": app.quota_allocation_status,
+            "restored_from": prior_status,
+            "restored_at": now.isoformat(),
+        }
+
     async def _cancel_allocation(
         self,
         application_id: int,
