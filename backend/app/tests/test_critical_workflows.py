@@ -20,7 +20,6 @@ from app.services.application_service import ApplicationService
 from app.services.bulk_approval_service import BulkApprovalService
 
 
-
 @pytest.mark.integration
 @pytest.mark.asyncio
 class TestCriticalApplicationWorkflow:
