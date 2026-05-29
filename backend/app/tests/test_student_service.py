@@ -1,428 +1,177 @@
 """
-Unit tests for StudentService
+Unit tests for StudentService (external-API-backed, no database dependency).
+
+StudentService proxies student data from the university's SIS API.
+It is stateless — no `db` session in __init__.
+
+Covered:
+- `get_student_type_from_data` : pure degree-code → type mapping
+- `determine_student_api_type` : constant "student" for now
+- `is_api_available`           : reflects api_enabled flag
+- `get_student_snapshot`       : raises ServiceUnavailableError when API disabled
+- `validate_student_exists`    : returns False when API disabled
+- `get_student_basic_info`     : happy + error paths with mocked httpx
 """
 
-from datetime import date
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
 
-# Student model removed - student data from external API
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ServiceUnavailableError
 from app.services.student_service import StudentService
 
 
-class Student:  # pragma: no cover - runtime spec used for mocks only
-    """Lightweight placeholder representing the legacy Student model."""
-
-    pass
-
-
-class TestStudentService:
-    """Test cases for StudentService"""
-
-    @pytest.fixture
-    def service(self, db: AsyncSession):
-        """Create StudentService instance for testing"""
-        return StudentService(db)
-
-    @pytest.fixture
-    def mock_student(self):
-        """Mock student object for testing"""
-        student = Mock(spec=Student)
-        student.id = 1
-        student.std_stdno = "112550001"
-        student.std_stdcode = "112550001"
-        student.std_pid = "A123456789"
-        student.std_cname = "王小明"
-        student.std_ename = "Wang, Xiao Ming"
-        student.std_degree = "學士"
-        student.std_studingstatus = "就學中"
-        student.std_sex = "M"
-        student.std_enrollyear = 112
-        student.std_enrollterm = 1
-        student.std_termcount = 4
-        student.std_nation = "中華民國"
-        student.std_schoolid = "NYCU"
-        student.std_identity = "本國生"
-        student.std_depno = "CS"
-        student.std_depname = "資訊工程學系"
-        student.std_aca_no = "EE"
-        student.std_aca_cname = "電機學院"
-        student.std_highestschname = "陽明交通大學"
-        student.com_cellphone = "0912345678"
-        student.com_email = "test@nycu.edu.tw"
-        student.com_commzip = "30010"
-        student.com_commadd = "新竹市大學路1001號"
-        student.std_enrolled_date = date(2023, 9, 1)
-        student.std_bank_account = "1234567890123456"
-        student.notes = "Test notes"
-        student.get_student_type.return_value = "undergraduate"
-        return student
-
-    @pytest.fixture
-    def mock_student_data(self):
-        """Mock student data for creation"""
-        return {
-            "std_stdno": "112550002",
-            "std_stdcode": "112550002",
-            "std_pid": "B987654321",
-            "std_cname": "李小華",
-            "std_ename": "Lee, Xiao Hua",
-            "std_degree": "學士",
-            "std_studingstatus": "就學中",
-            "std_sex": "F",
-            "std_enrollyear": 112,
-            "std_enrollterm": 1,
-            "std_termcount": 2,
-            "std_nation": "中華民國",
-            "std_schoolid": "NYCU",
-            "std_identity": "本國生",
-            "std_depno": "EE",
-            "std_depname": "電機工程學系",
-            "std_aca_no": "EE",
-            "std_aca_cname": "電機學院",
-            "com_cellphone": "0987654321",
-            "com_email": "test2@nycu.edu.tw",
-        }
-
-    @pytest.mark.asyncio
-    async def test_get_student_snapshot_with_student_object(self, service, mock_student):
-        """Test getting student snapshot with Student object"""
-        result = await service.get_student_snapshot(mock_student)
-
-        # Verify all expected fields are present
-        expected_fields = [
-            "id",
-            "std_stdno",
-            "std_stdcode",
-            "std_pid",
-            "std_cname",
-            "std_ename",
-            "std_degree",
-            "std_studingstatus",
-            "std_sex",
-            "std_enrollyear",
-            "std_enrollterm",
-            "std_termcount",
-            "std_nation",
-            "std_schoolid",
-            "std_identity",
-            "std_depno",
-            "std_depname",
-            "std_aca_no",
-            "std_aca_cname",
-            "std_highestschname",
-            "com_cellphone",
-            "com_email",
-            "com_commzip",
-            "com_commadd",
-            "std_enrolled_date",
-            "std_bank_account",
-            "notes",
-            "student_type",
-        ]
-
-        for field in expected_fields:
-            assert field in result
-
-        # Verify specific values
-        assert result["id"] == mock_student.id
-        assert result["std_stdcode"] == mock_student.std_stdcode
-        assert result["std_cname"] == mock_student.std_cname
-        assert result["student_type"] == "undergraduate"
-        assert result["std_enrolled_date"] == mock_student.std_enrolled_date.isoformat()
-
-    @pytest.mark.asyncio
-    async def test_get_student_snapshot_with_student_id(self, service, mock_student):
-        """Test getting student snapshot with student ID"""
-        student_id = 1
-
-        with patch.object(service.db, "execute") as mock_execute:
-            mock_result = Mock()
-            mock_result.scalar_one.return_value = mock_student
-            mock_execute.return_value = mock_result
-
-            result = await service.get_student_snapshot(student_id)
-
-            # Verify database was queried
-            mock_execute.assert_called_once()
-
-            # Verify result structure
-            assert result["id"] == mock_student.id
-            assert result["std_stdcode"] == mock_student.std_stdcode
-            assert result["student_type"] == "undergraduate"
-
-    @pytest.mark.asyncio
-    async def test_get_student_snapshot_handles_none_date(self, service, mock_student):
-        """Test student snapshot handling when enrolled_date is None"""
-        mock_student.std_enrolled_date = None
-
-        result = await service.get_student_snapshot(mock_student)
-
-        assert result["std_enrolled_date"] is None
-
-    @pytest.mark.asyncio
-    async def test_get_student_by_id_success(self, service, mock_student):
-        """Test successfully getting student by ID"""
-        student_id = 1
-
-        with patch.object(service.db, "execute") as mock_execute:
-            mock_result = Mock()
-            mock_result.scalar_one_or_none.return_value = mock_student
-            mock_execute.return_value = mock_result
-
-            result = await service.get_student_by_id(student_id)
-
-            assert result == mock_student
-            mock_execute.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_get_student_by_id_not_found(self, service):
-        """Test getting student by ID when student not found"""
-        student_id = 999
-
-        with patch.object(service.db, "execute") as mock_execute:
-            mock_result = Mock()
-            mock_result.scalar_one_or_none.return_value = None
-            mock_execute.return_value = mock_result
-
-            result = await service.get_student_by_id(student_id)
-
-            assert result is None
-            mock_execute.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_get_student_by_stdcode_success(self, service, mock_student):
-        """Test successfully getting student by student code"""
-        stdcode = "112550001"
-
-        with patch.object(service.db, "execute") as mock_execute:
-            mock_result = Mock()
-            mock_result.scalar_one_or_none.return_value = mock_student
-            mock_execute.return_value = mock_result
-
-            result = await service.get_student_by_stdcode(stdcode)
-
-            assert result == mock_student
-            mock_execute.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_get_student_by_stdcode_not_found(self, service):
-        """Test getting student by student code when student not found"""
-        stdcode = "999999999"
-
-        with patch.object(service.db, "execute") as mock_execute:
-            mock_result = Mock()
-            mock_result.scalar_one_or_none.return_value = None
-            mock_execute.return_value = mock_result
-
-            result = await service.get_student_by_stdcode(stdcode)
-
-            assert result is None
-            mock_execute.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_update_student_info_success(self, service, mock_student):
-        """Test successfully updating student information"""
-        student_id = 1
-        update_info = {
-            "com_cellphone": "0911111111",
-            "com_email": "newemail@nycu.edu.tw",
-            "notes": "Updated notes",
-        }
-
-        with (
-            patch.object(service, "get_student_by_id", return_value=mock_student),
-            patch.object(service.db, "commit") as mock_commit,
-            patch.object(service.db, "refresh") as mock_refresh,
-        ):
-            result = await service.update_student_info(student_id, update_info)
-
-            # Verify student attributes were updated
-            assert mock_student.com_cellphone == "0911111111"
-            assert mock_student.com_email == "newemail@nycu.edu.tw"
-            assert mock_student.notes == "Updated notes"
-
-            # Verify database operations
-            mock_commit.assert_called_once()
-            mock_refresh.assert_called_once_with(mock_student)
-            assert result == mock_student
-
-    @pytest.mark.asyncio
-    async def test_update_student_info_student_not_found(self, service):
-        """Test updating student information when student not found"""
-        student_id = 999
-        update_info = {"com_cellphone": "0911111111"}
-
-        with patch.object(service, "get_student_by_id", return_value=None):
-            with pytest.raises(NotFoundError, match="Student 999 not found"):
-                await service.update_student_info(student_id, update_info)
-
-    @pytest.mark.asyncio
-    async def test_update_student_info_ignores_invalid_fields(self, service, mock_student):
-        """Test that updating student info ignores fields that don't exist on model"""
-        student_id = 1
-        update_info = {
-            "com_cellphone": "0911111111",  # Valid field
-            "invalid_field": "should_be_ignored",  # Invalid field
-            "another_invalid": "also_ignored",  # Invalid field
-        }
-
-        # Mock hasattr to return False for invalid fields
-        original_hasattr = hasattr
-
-        def mock_hasattr(obj, attr):
-            if attr in ["invalid_field", "another_invalid"]:
-                return False
-            return original_hasattr(obj, attr)
-
-        with (
-            patch.object(service, "get_student_by_id", return_value=mock_student),
-            patch.object(service.db, "commit"),
-            patch.object(service.db, "refresh"),
-            patch("builtins.hasattr", side_effect=mock_hasattr),
-        ):
-            await service.update_student_info(student_id, update_info)
-
-            # Verify valid field was updated
-            assert mock_student.com_cellphone == "0911111111"
-
-            # Verify invalid fields were not set
-            assert not hasattr(mock_student, "invalid_field")
-            assert not hasattr(mock_student, "another_invalid")
-
-    @pytest.mark.asyncio
-    async def test_create_student_success(self, service, mock_student_data):
-        """Test successfully creating a new student"""
-        with (
-            patch.object(service.db, "add") as mock_add,
-            patch.object(service.db, "commit") as mock_commit,
-            patch.object(service.db, "refresh") as mock_refresh,
-        ):
-            # Mock the created student
-            created_student = Mock(spec=Student)
-            created_student.id = 2
-            created_student.std_stdcode = mock_student_data["std_stdcode"]
-
-            with patch("app.models.student.Student", return_value=created_student):
-                result = await service.create_student(mock_student_data)
-
-                # Verify database operations
-                mock_add.assert_called_once_with(created_student)
-                mock_commit.assert_called_once()
-                mock_refresh.assert_called_once_with(created_student)
-
-                # Verify result
-                assert result == created_student
-
-    @pytest.mark.asyncio
-    async def test_get_students_by_department_success(self, service):
-        """Test successfully getting students by department"""
-        depno = "CS"
-        mock_students = [Mock(spec=Student) for _ in range(3)]
-
-        with patch.object(service.db, "execute") as mock_execute:
-            mock_result = Mock()
-            mock_result.scalars.return_value.all.return_value = mock_students
-            mock_execute.return_value = mock_result
-
-            result = await service.get_students_by_department(depno)
-
-            assert result == mock_students
-            mock_execute.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_get_students_by_department_empty_result(self, service):
-        """Test getting students by department when no students found"""
-        depno = "NONEXISTENT"
-
-        with patch.object(service.db, "execute") as mock_execute:
-            mock_result = Mock()
-            mock_result.scalars.return_value.all.return_value = []
-            mock_execute.return_value = mock_result
-
-            result = await service.get_students_by_department(depno)
-
-            assert result == []
-            mock_execute.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_get_students_by_academy_success(self, service):
-        """Test successfully getting students by academy"""
-        aca_no = "EE"
-        mock_students = [Mock(spec=Student) for _ in range(5)]
-
-        with patch.object(service.db, "execute") as mock_execute:
-            mock_result = Mock()
-            mock_result.scalars.return_value.all.return_value = mock_students
-            mock_execute.return_value = mock_result
-
-            result = await service.get_students_by_academy(aca_no)
-
-            assert result == mock_students
-            mock_execute.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_get_students_by_academy_empty_result(self, service):
-        """Test getting students by academy when no students found"""
-        aca_no = "NONEXISTENT"
-
-        with patch.object(service.db, "execute") as mock_execute:
-            mock_result = Mock()
-            mock_result.scalars.return_value.all.return_value = []
-            mock_execute.return_value = mock_result
-
-            result = await service.get_students_by_academy(aca_no)
-
-            assert result == []
-            mock_execute.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_get_student_snapshot_all_field_types(self, service):
-        """Test student snapshot handles different field types correctly"""
-        # Create a student with various field types including None values
-        student = Mock(spec=Student)
-        student.id = 1
-        student.std_stdcode = "112550001"
-        student.std_cname = "測試學生"
-        student.std_enrollyear = 112
-        student.std_termcount = None  # None integer
-        student.std_enrolled_date = None  # None date
-        student.notes = ""  # Empty string
-        student.com_cellphone = "0912345678"
-        student.get_student_type.return_value = "master"
-
-        # Set all other required fields to avoid AttributeError
-        for field in [
-            "std_stdno",
-            "std_pid",
-            "std_ename",
-            "std_degree",
-            "std_studingstatus",
-            "std_sex",
-            "std_enrollterm",
-            "std_nation",
-            "std_schoolid",
-            "std_identity",
-            "std_depno",
-            "std_depname",
-            "std_aca_no",
-            "std_aca_cname",
-            "std_highestschname",
-            "com_email",
-            "com_commzip",
-            "com_commadd",
-            "std_bank_account",
-        ]:
-            setattr(student, field, f"test_{field}")
-
-        result = await service.get_student_snapshot(student)
-
-        # Verify None values are handled correctly
-        assert result["std_termcount"] is None
-        assert result["std_enrolled_date"] is None
-        assert result["notes"] == ""
-        assert result["student_type"] == "master"
-        assert result["std_cname"] == "測試學生"  # Unicode support
+@pytest.fixture
+def service():
+    """StudentService with API disabled (no env vars in test env)."""
+    return StudentService()
+
+
+@pytest.fixture
+def api_service():
+    """StudentService with API enabled via direct attribute injection."""
+    svc = StudentService()
+    svc.api_enabled = True
+    svc.api_base_url = "http://fake-sis-api"
+    svc.api_account = "test_account"
+    svc.hmac_key = bytes.fromhex("deadbeef" * 8)
+    svc.api_timeout = 5.0
+    return svc
+
+
+# ─── is_api_available ────────────────────────────────────────────────────────
+
+
+def test_is_api_available_false_when_not_configured(service):
+    """API disabled in CI (no env vars) → is_api_available() is False."""
+    assert service.is_api_available() is False
+
+
+def test_is_api_available_true_when_enabled(api_service):
+    assert api_service.is_api_available() is True
+
+
+# ─── get_student_type_from_data ──────────────────────────────────────────────
+
+
+def test_get_student_type_phd(service):
+    assert service.get_student_type_from_data({"std_degree": "1"}) == "phd"
+
+
+def test_get_student_type_master(service):
+    assert service.get_student_type_from_data({"std_degree": "2"}) == "master"
+
+
+def test_get_student_type_undergraduate(service):
+    assert service.get_student_type_from_data({"std_degree": "3"}) == "undergraduate"
+
+
+def test_get_student_type_unknown_defaults_to_undergraduate(service):
+    """Missing or unknown degree code → undergraduate (safe default)."""
+    assert service.get_student_type_from_data({}) == "undergraduate"
+    assert service.get_student_type_from_data({"std_degree": "99"}) == "undergraduate"
+
+
+# ─── determine_student_api_type ──────────────────────────────────────────────
+
+
+def test_determine_student_api_type_defaults_to_student(service):
+    assert service.determine_student_api_type() == "student"
+    assert service.determine_student_api_type(scholarship_config=None) == "student"
+
+
+# ─── get_student_snapshot (API disabled) ─────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_student_snapshot_raises_when_api_disabled(service):
+    """No API configured → ServiceUnavailableError, not silent None."""
+    with pytest.raises(ServiceUnavailableError):
+        await service.get_student_snapshot("any_code")
+
+
+# ─── validate_student_exists (API disabled) ──────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_validate_student_exists_returns_false_when_api_disabled(service):
+    """API disabled → False (not an exception; caller can handle gracefully)."""
+    result = await service.validate_student_exists("any_code")
+    assert result is False
+
+
+# ─── get_student_basic_info (mocked httpx) ───────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_student_basic_info_returns_none_when_disabled(service):
+    """API not enabled → returns None immediately, no HTTP call."""
+    result = await service.get_student_basic_info("114550001")
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_student_basic_info_happy_path(api_service):
+    """API returns student record → service returns the first data element."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "code": 200,
+        "data": [{"std_stdcode": "114550001", "std_cname": "王小明"}],
+    }
+    with patch("httpx.AsyncClient") as mock_cls:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_resp
+        mock_cls.return_value.__aenter__.return_value = mock_client
+
+        result = await api_service.get_student_basic_info("114550001")
+
+    assert result == {"std_stdcode": "114550001", "std_cname": "王小明"}
+
+
+@pytest.mark.asyncio
+async def test_get_student_basic_info_not_found_returns_none(api_service):
+    """API returns 404 code → None (student not found, not an error)."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"code": 404, "data": None}
+    with patch("httpx.AsyncClient") as mock_cls:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_resp
+        mock_cls.return_value.__aenter__.return_value = mock_client
+
+        result = await api_service.get_student_basic_info("999999")
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_student_basic_info_raises_on_5xx(api_service):
+    """HTTP 500 from SIS API → ServiceUnavailableError."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 500
+    with patch("httpx.AsyncClient") as mock_cls:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_resp
+        mock_cls.return_value.__aenter__.return_value = mock_client
+
+        with pytest.raises(ServiceUnavailableError):
+            await api_service.get_student_basic_info("114550001")
+
+
+# ─── get_student_data_by_type ────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_student_data_by_type_student_calls_basic_info(service):
+    """api_type='student' delegates to get_student_basic_info."""
+    with patch.object(service, "get_student_basic_info", return_value=None) as mock_method:
+        await service.get_student_data_by_type("114550001", api_type="student")
+    mock_method.assert_called_once_with("114550001")
+
+
+@pytest.mark.asyncio
+async def test_get_student_data_by_type_missing_year_returns_none(service):
+    """api_type='student_term' without year/term → None (guard check)."""
+    result = await service.get_student_data_by_type("114550001", api_type="student_term")
+    assert result is None
