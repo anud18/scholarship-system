@@ -2,7 +2,7 @@
 Unit tests for NotificationService
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 
 import pytest
@@ -312,7 +312,7 @@ class TestNotificationService:
         user_id = 1
         title = "獎學金申請"
         title_en = "Scholarship Application"
-        deadline = datetime.now(timezone.utc) + timedelta(days=5)
+        deadline = datetime.now(timezone.utc) + timedelta(days=6)
         action_url = "/applications/123"
 
         with patch.object(service, "createUserNotification") as mock_create:
@@ -331,8 +331,8 @@ class TestNotificationService:
             call_args = mock_create.call_args[1]
 
             assert "5 天後到期" in call_args["message"]
-            assert call_args["priority"] == NotificationPriority.high.value
-            assert call_args["notification_type"] == NotificationType.reminder.value
+            assert call_args["priority"] == NotificationPriority.high
+            assert call_args["notification_type"] == NotificationType.reminder
 
             assert result == mock_notification
 
@@ -343,7 +343,7 @@ class TestNotificationService:
 
         user_id = 1
         title = "獎學金申請"
-        deadline = datetime.now(timezone.utc) + timedelta(days=1)
+        deadline = datetime.now(timezone.utc) + timedelta(days=2)
 
         with patch.object(service, "createUserNotification") as mock_create:
             mock_notification = Mock(spec=Notification)
@@ -364,7 +364,7 @@ class TestNotificationService:
         """Test deadline reminder when deadline has passed"""
         user_id = 1
         title = "獎學金申請"
-        deadline = datetime.now() - timedelta(days=1)  # Yesterday
+        deadline = datetime.now(timezone.utc) - timedelta(days=1)  # Yesterday
 
         with patch.object(service, "createUserNotification") as mock_create:
             mock_notification = Mock(spec=Notification)
@@ -399,7 +399,7 @@ class TestNotificationService:
                 notification.user_id = user_ids[i]
 
             with patch(
-                "app.models.notification.Notification",
+                "app.services.notification_service.Notification",
                 side_effect=created_notifications,
             ):
                 result = await service.bulkNotifyUsers(
