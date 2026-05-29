@@ -479,8 +479,28 @@ export function EnhancedStudentPortal({
   const selectionMode =
     selectedScholarship?.sub_type_selection_mode ?? "multiple";
 
+  // Real (non-synthetic) eligible sub-types. "general"/null is the fallback
+  // category used only for scholarships that define no sub-types — it must
+  // never be silently submitted for a scholarship that has real ones.
+  const eligibleRealSubTypes = eligibleSubTypes.filter(
+    st => st.value && st.value !== "general"
+  );
+  const requiresSubTypeSelection = eligibleRealSubTypes.length > 0;
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formProgress, setFormProgress] = useState(0);
+
+  // Auto-select the sole eligible sub-type so the student can't accidentally
+  // submit with the "general" fallback when exactly one real choice exists.
+  useEffect(() => {
+    const code = newApplicationData.scholarship_type;
+    if (!code || eligibleRealSubTypes.length !== 1) return;
+    const onlyValue = eligibleRealSubTypes[0].value as string;
+    setSelectedSubTypes(prev =>
+      prev[code]?.length ? prev : { ...prev, [code]: [onlyValue] }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newApplicationData.scholarship_type, eligibleRealSubTypes.length]);
 
   // Calculate form completion progress (based on dynamic form configuration)
   useEffect(() => {
@@ -620,6 +640,16 @@ export function EnhancedStudentPortal({
       return;
     }
 
+    // Block submission with the "general" fallback when the scholarship
+    // defines real sub-types — that category matches no quota slot.
+    if (
+      requiresSubTypeSelection &&
+      !selectedSubTypes[newApplicationData.scholarship_type]?.length
+    ) {
+      alert(t("applications.please_select_subtype"));
+      return;
+    }
+
     try {
       setIsSubmitting(true);
 
@@ -681,7 +711,9 @@ export function EnhancedStudentPortal({
           newApplicationData.scholarship_type
         ]?.length
           ? selectedSubTypes[newApplicationData.scholarship_type]
-          : ["general"],
+          : requiresSubTypeSelection
+            ? []
+            : ["general"],
         agree_terms: agreeTerms,
         form_data: {
           fields: formFields,
@@ -824,7 +856,9 @@ export function EnhancedStudentPortal({
           newApplicationData.scholarship_type
         ]?.length
           ? selectedSubTypes[newApplicationData.scholarship_type]
-          : ["general"],
+          : requiresSubTypeSelection
+            ? []
+            : ["general"],
         agree_terms: agreeTerms,
         form_data: {
           fields: formFields,

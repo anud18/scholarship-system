@@ -443,6 +443,20 @@ class ApplicationService:
 
         return scholarship, config
 
+    @staticmethod
+    def _validate_sub_type_for_submission(scholarship: ScholarshipType, sub_scholarship_type: Optional[str]) -> None:
+        """Reject the synthetic "general" category on submission for scholarships
+        that define real sub-types.
+
+        "general" is only a valid category for scholarships with no sub-types.
+        For a scholarship that defines real ones (e.g. PhD: nstc / moe_1w), a
+        "general" application matches no quota slot during distribution, so it
+        must carry a concrete sub-type before it can be submitted.
+        """
+        real_sub_types = [st for st in (scholarship.sub_type_list or []) if st and st != "general"]
+        if real_sub_types and (sub_scholarship_type or "general") not in real_sub_types:
+            raise ValidationError("此獎學金需選擇申請類別（" + "、".join(real_sub_types) + "），不可使用通用類別")
+
     async def _create_application_instance(
         self,
         user: User,
@@ -471,6 +485,11 @@ class ApplicationService:
         sub_scholarship_type = "general"  # Default (lowercase, configuration-driven)
         if scholarship_subtype_list:
             sub_scholarship_type = scholarship_subtype_list[0].lower()  # Normalize to lowercase
+
+        # Submitting (not a draft) requires a concrete sub-type when the
+        # scholarship defines real ones — drafts may stay incomplete.
+        if not is_draft:
+            self._validate_sub_type_for_submission(scholarship, sub_scholarship_type)
 
         # Determine status based on is_draft flag
         from app.models.enums import ApplicationStatus
@@ -1271,6 +1290,11 @@ class ApplicationService:
 
         # 驗證所有必填欄位
         _ = ApplicationFormData(**application.submitted_form_data)
+
+        # A draft can only be submitted once it carries a concrete sub-type
+        # for scholarships that define real ones (the "general" fallback maps
+        # to no quota slot at distribution time).
+        self._validate_sub_type_for_submission(application.scholarship, application.sub_scholarship_type)
 
         # 處理銀行帳戶證明文件 clone（從個人資料複製到申請）
         await self._clone_user_profile_documents(application, user)
