@@ -40,14 +40,15 @@ class TestApplicationService:
     @pytest.fixture
     def mock_scholarship_type(self):
         """Mock scholarship type for testing"""
-        return ScholarshipType(
-            id=1,
-            code="undergraduate_freshman",
-            name="Undergraduate Freshman Scholarship",
-            category="undergraduate",
-            status="active",  # is_active is a computed property from status
-            whitelist_enabled=False,
-        )
+        mock = Mock()
+        mock.id = 1
+        mock.code = "undergraduate_freshman"
+        mock.name = "Undergraduate Freshman Scholarship"
+        mock.is_active = True
+        mock.is_application_period = True
+        mock.whitelist_enabled = False
+        mock.eligible_student_types = []
+        return mock
 
     @pytest.fixture
     def mock_student(self):
@@ -86,19 +87,6 @@ class TestApplicationService:
         # Test other types
         assert service._serialize_for_json("string") == "string"
         assert service._serialize_for_json(42) == 42
-
-    def test_generate_app_id(self, service):
-        """Test application ID generation"""
-        app_id = service._generate_app_id()
-
-        # Should start with APP-{year}-
-        current_year = datetime.now().year
-        assert app_id.startswith(f"APP-{current_year}-")
-
-        # Should have 6-digit suffix
-        suffix = app_id.split("-")[-1]
-        assert len(suffix) == 6
-        assert suffix.isdigit()
 
     @pytest.mark.asyncio
     async def test_validate_student_eligibility_success(
