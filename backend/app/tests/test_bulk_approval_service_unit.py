@@ -217,7 +217,7 @@ async def test_bulk_reject_applications_success():
     assert result["notifications_sent"] == 1
     # Note: rejection_reason moved to ApplicationReview model
     assert len(session.added_objects) == 1  # ApplicationReview record created
-    assert session.added_objects[0].decision_reason == "missing docs"
+    assert session.added_objects[0].comments == "missing docs"
 
 
 @pytest.mark.asyncio

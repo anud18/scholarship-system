@@ -138,7 +138,9 @@ class TestBulkApprovalServiceReject:
         assert results["total_requested"] == 1
         assert len(results["successful_rejections"]) == 1
         assert mock_application.status == ApplicationStatus.rejected.value
-        assert mock_application.rejection_reason == "Does not meet criteria"
+        service.db.add.assert_called_once()
+        added_review = service.db.add.call_args[0][0]
+        assert added_review.comments == "Does not meet criteria"
 
     async def test_bulk_reject_invalid_status(self, service, mock_application):
         """Test bulk rejection with invalid status"""

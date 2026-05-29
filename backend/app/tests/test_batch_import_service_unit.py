@@ -4,7 +4,7 @@ Unit tests for BatchImportService
 Tests file parsing, validation, bulk operations, and transaction rollback.
 """
 
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -428,7 +428,9 @@ class TestBatchImportService:
         from app.models.student import Department
 
         db_mock = AsyncMock()
-        service = BatchImportService(db_mock)
+        mock_student_service = MagicMock()
+        mock_student_service.api_enabled = False
+        service = BatchImportService(db_mock, student_service=mock_student_service)
 
         student = Mock(spec=User)
         student.nycu_id = "111111111"
