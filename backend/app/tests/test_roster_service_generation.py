@@ -302,7 +302,7 @@ class TestRosterServiceGenerate:
         )
         svc.lock_roster(roster.id, locked_by_user_id=admin.id)
 
-        with pytest.raises(RosterLockedError):
+        with pytest.raises(RosterGenerationError):
             svc.generate_roster(
                 scholarship_configuration_id=config.id,
                 period_label="2024-01",

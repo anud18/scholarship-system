@@ -35,6 +35,7 @@ settings.database_url = TEST_DATABASE_URL_ASYNC  # Set async URL early too
 # Now import models (they will use SQLite-compatible JSON type)
 # Note: Password functions removed since system uses SSO authentication
 # from app.core.security import get_password_hash
+from app.core.deps import get_db as core_get_db  # noqa: E402
 from app.db.base_class import Base  # Use the correct Base class that models use  # noqa: E402
 from app.db.deps import get_db  # noqa: E402
 from app.main import app  # noqa: E402
@@ -115,6 +116,7 @@ async def client(db: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         yield db
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[core_get_db] = override_get_db
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
