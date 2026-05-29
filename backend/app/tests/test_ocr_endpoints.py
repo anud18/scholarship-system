@@ -142,10 +142,7 @@ class TestOCREndpoints:
 
         assert response.status_code == 422
         data = response.json()
-        # The inner `else: raise HTTPException("無法辨識銀行資訊")` is caught by
-        # the surrounding `except Exception` and rewrapped as the generic
-        # "無法處理圖片" message — see user_profiles.py:619-633.
-        assert "無法處理圖片" in data["message"]
+        assert "無法辨識銀行資訊" in data["message"]
 
     @patch("app.api.v1.endpoints.user_profiles.get_current_user")
     def test_bank_passbook_ocr_invalid_file_type(self, mock_get_current_user, client, mock_current_user):
