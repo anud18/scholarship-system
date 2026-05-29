@@ -392,14 +392,15 @@ class TestDuplicateApplicationAPIGuard:
 
     The duplicate check lives at POST /api/v1/applications (applications.py lines 151-202),
     NOT in ApplicationService.  These tests exercise the endpoint behaviour directly.
+
+    Auth is mocked via app.dependency_overrides[get_current_user] so tests don't
+    need real JWT tokens.  The client fixture (from conftest) already wires get_db
+    to the in-process SQLite session, so we only add get_current_user on top.
     """
 
-    async def test_duplicate_submitted_returns_error_code(self, db, test_user, test_scholarship):
+    async def test_duplicate_submitted_returns_error_code(self, client, db, test_user, test_scholarship):
         """POST /api/v1/applications returns DUPLICATE_APPLICATION when a non-draft exists."""
-        from httpx import ASGITransport, AsyncClient
-
-        from app.core.security import require_student
-        from app.db.deps import get_db as _get_db
+        from app.core.security import get_current_user as _get_current_user
         from app.main import app as fastapi_app
 
         config = ScholarshipConfiguration(
@@ -438,44 +439,35 @@ class TestDuplicateApplicationAPIGuard:
 
         mock_student = {"std_stdcode": test_user.nycu_id, "std_cname": test_user.name}
 
-        async def override_require_student():
+        async def override_get_current_user():
             return test_user
 
-        async def override_get_db():
-            yield db
-
-        fastapi_app.dependency_overrides[require_student] = override_require_student
-        fastapi_app.dependency_overrides[_get_db] = override_get_db
+        fastapi_app.dependency_overrides[_get_current_user] = override_get_current_user
         try:
             with patch(
                 "app.services.application_service.get_student_data_from_user",
                 new=AsyncMock(return_value=mock_student),
             ):
-                async with AsyncClient(transport=ASGITransport(app=fastapi_app), base_url="http://test") as ac:
-                    response = await ac.post(
-                        "/api/v1/applications",
-                        json={
-                            "scholarship_type": test_scholarship.code,
-                            "configuration_id": config.id,
-                            "scholarship_subtype_list": [],
-                            "form_data": {"configuration_id": config.id, "fields": {}},
-                        },
-                    )
+                response = await client.post(
+                    "/api/v1/applications",
+                    json={
+                        "scholarship_type": test_scholarship.code,
+                        "configuration_id": config.id,
+                        "scholarship_subtype_list": [],
+                        "form_data": {"fields": {}},
+                    },
+                )
         finally:
-            fastapi_app.dependency_overrides.clear()
+            fastapi_app.dependency_overrides.pop(_get_current_user, None)
 
-        assert response.status_code == 200
         body = response.json()
         assert body["success"] is False
         assert body["data"]["error_code"] == "DUPLICATE_APPLICATION"
         assert body["data"]["existing_app_id"] == "DUP-API-EXISTING-001"
 
-    async def test_existing_draft_is_returned(self, db, test_user, test_scholarship):
+    async def test_existing_draft_is_returned(self, client, db, test_user, test_scholarship):
         """POST /api/v1/applications with an existing draft returns that draft (success=True)."""
-        from httpx import ASGITransport, AsyncClient
-
-        from app.core.security import require_student
-        from app.db.deps import get_db as _get_db
+        from app.core.security import get_current_user as _get_current_user
         from app.main import app as fastapi_app
 
         config = ScholarshipConfiguration(
@@ -514,33 +506,27 @@ class TestDuplicateApplicationAPIGuard:
 
         mock_student = {"std_stdcode": test_user.nycu_id, "std_cname": test_user.name}
 
-        async def override_require_student():
+        async def override_get_current_user():
             return test_user
 
-        async def override_get_db():
-            yield db
-
-        fastapi_app.dependency_overrides[require_student] = override_require_student
-        fastapi_app.dependency_overrides[_get_db] = override_get_db
+        fastapi_app.dependency_overrides[_get_current_user] = override_get_current_user
         try:
             with patch(
                 "app.services.application_service.get_student_data_from_user",
                 new=AsyncMock(return_value=mock_student),
             ):
-                async with AsyncClient(transport=ASGITransport(app=fastapi_app), base_url="http://test") as ac:
-                    response = await ac.post(
-                        "/api/v1/applications",
-                        json={
-                            "scholarship_type": test_scholarship.code,
-                            "configuration_id": config.id,
-                            "scholarship_subtype_list": [],
-                            "form_data": {"configuration_id": config.id, "fields": {}},
-                        },
-                    )
+                response = await client.post(
+                    "/api/v1/applications",
+                    json={
+                        "scholarship_type": test_scholarship.code,
+                        "configuration_id": config.id,
+                        "scholarship_subtype_list": [],
+                        "form_data": {"fields": {}},
+                    },
+                )
         finally:
-            fastapi_app.dependency_overrides.clear()
+            fastapi_app.dependency_overrides.pop(_get_current_user, None)
 
-        assert response.status_code == 200
         body = response.json()
         assert body["success"] is True
         assert body["data"]["app_id"] == "DRAFT-RET-EXISTING-001"
