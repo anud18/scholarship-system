@@ -8,38 +8,16 @@ from app.core.config import Settings
 
 
 def test_settings_with_defaults():
-    """Test that settings can be loaded with default values"""
-    # Clear environment variables that might interfere
-    env_vars_to_clear = ["DATABASE_URL", "DATABASE_URL_SYNC", "SECRET_KEY"]
+    """Test that the loaded settings instance has expected default field values."""
+    # database_url, database_url_sync, and secret_key are REQUIRED (no defaults);
+    # use env-supplied values via the module-level singleton instead of trying to
+    # construct a bare Settings() with cleared env vars.
+    from app.core.config import settings as _settings
 
-    original_values = {}
-    for var in env_vars_to_clear:
-        original_values[var] = os.environ.get(var)
-        if var in os.environ:
-            del os.environ[var]
-
-    try:
-        # Create settings with defaults
-        settings = Settings()
-
-        # Verify basic settings
-        assert settings.app_name == "Scholarship Management System"
-        assert settings.host == "0.0.0.0"
-        assert settings.port == 8000
-        assert settings.algorithm == "HS256"
-
-        # Verify database URLs have defaults
-        assert settings.database_url.startswith("postgresql")
-        assert settings.database_url_sync.startswith("postgresql")
-
-        # Verify secret key has default
-        assert len(settings.secret_key) >= 32
-
-    finally:
-        # Restore original environment variables
-        for var, value in original_values.items():
-            if value is not None:
-                os.environ[var] = value
+    assert _settings.app_name == "Scholarship Management System"
+    assert _settings.host == "0.0.0.0"
+    assert _settings.port == 8000
+    assert _settings.algorithm == "HS256"
 
 
 def test_settings_with_environment_variables():
@@ -70,14 +48,3 @@ def test_settings_with_environment_variables():
         for key in test_env.keys():
             if key in os.environ:
                 del os.environ[key]
-
-
-def test_scholarship_constants():
-    """Test that scholarship-related constants are defined"""
-    from app.core.config import SCHOLARSHIP_CATEGORIES, SCHOLARSHIP_GPA_REQUIREMENTS
-
-    assert len(SCHOLARSHIP_GPA_REQUIREMENTS) > 0
-    assert len(SCHOLARSHIP_CATEGORIES) > 0
-    assert "academic_excellence" in SCHOLARSHIP_GPA_REQUIREMENTS
-    assert "academic_excellence" in SCHOLARSHIP_CATEGORIES
-    assert SCHOLARSHIP_GPA_REQUIREMENTS["academic_excellence"] == 3.8

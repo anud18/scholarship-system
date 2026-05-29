@@ -194,7 +194,7 @@ class TestDeveloperProfileManager:
         profile = DeveloperProfileManager.create_custom_profile(
             developer_id="testdev",
             role=UserRole.student,
-            full_name="Custom Student",
+            name="Custom Student",
             chinese_name="自定義學生",
             gpa=3.9,
             major="Computer Science",
@@ -202,7 +202,7 @@ class TestDeveloperProfileManager:
 
         assert profile.developer_id == "testdev"
         assert profile.role == UserRole.student
-        assert profile.full_name == "Custom Student"
+        assert profile.name == "Custom Student"
         assert profile.chinese_name == "自定義學生"
         assert profile.custom_attributes["gpa"] == 3.9
         assert profile.custom_attributes["major"] == "Computer Science"
