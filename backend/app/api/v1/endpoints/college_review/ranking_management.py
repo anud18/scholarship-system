@@ -1433,7 +1433,7 @@ async def supplementary_import(
         db.add(audit_log)
         await db.commit()
     except Exception as exc:  # audit failure must not block the import
-        logger.warning("Failed to record supplementary import audit log: %s", exc)
+        logger.warning("Failed to record supplementary import audit log: %s", exc, exc_info=True)
         await db.rollback()
 
     return ApiResponse(

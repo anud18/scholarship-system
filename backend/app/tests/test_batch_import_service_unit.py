@@ -32,6 +32,7 @@ class TestBatchImportService:
         scholarship = Mock(spec=ScholarshipType)
         scholarship.id = 1
         scholarship.name = "Test Scholarship"
+        scholarship.code = "test_scholarship"
         scholarship.amount = 10000
         scholarship.main_type = "general"
         scholarship.sub_type_selection_mode = "single"
@@ -325,6 +326,7 @@ class TestBatchImportService:
             assert "找不到獎學金配置" in str(exc_info.value)
             assert "113學年度" in str(exc_info.value)
 
+    @pytest.mark.skip(reason="validate_college_permission removed from BatchImportService")
     @pytest.mark.asyncio
     async def test_validate_college_permission_success(self, service):
         """Test successful college permission validation"""
@@ -358,6 +360,7 @@ class TestBatchImportService:
             assert is_valid is True
             assert error_msg is None
 
+    @pytest.mark.skip(reason="validate_college_permission removed from BatchImportService")
     @pytest.mark.asyncio
     async def test_validate_college_permission_mismatch(self, service):
         """Test college permission validation with mismatch"""

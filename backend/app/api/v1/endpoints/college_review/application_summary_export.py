@@ -376,6 +376,7 @@ async def export_department_summary_bulk(
         len(apps),
         len(payload),
         extra={
+            "actor_user_id": current_user.id,
             **log_extra,
             "departments_count": len(groups),
             "row_count": len(apps),

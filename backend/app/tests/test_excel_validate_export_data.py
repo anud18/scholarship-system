@@ -48,13 +48,14 @@ def _ok_row(**overrides):
 # ---------------------------------------------------------------------------
 
 
-def test_empty_data_is_invalid(service):
-    """Pin SECURITY: empty data list is NOT a vacuous-pass. The validator
-    must mark is_valid=False so a refactor accidentally calling validate
-    with empty data doesn't ship an empty Excel."""
+def test_empty_data_is_header_only(service):
+    """Pin: empty data list produces a header-only file (is_valid=True, no errors,
+    warning present). A zero-qualified roster cycle is valid — it still ships
+    a header-only Excel so finance can acknowledge the cycle ran to completion."""
     result = service._validate_export_data([])
-    assert result["is_valid"] is False
-    assert "No data to export" in result["errors"]
+    assert result["is_valid"] is True
+    assert result["errors"] == []
+    assert any("No roster items to export" in w for w in result["warnings"])
 
 
 # ---------------------------------------------------------------------------

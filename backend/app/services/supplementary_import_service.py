@@ -249,7 +249,7 @@ class SupplementaryImportService:
                 missing.append(student_id)
                 continue
             except Exception as exc:
-                logger.warning("SIS API error for %s: %s", student_id, exc)
+                logger.warning("SIS API error for %s: %s", student_id, exc, exc_info=True)
                 missing.append(student_id)
                 continue
 
