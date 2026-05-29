@@ -4,19 +4,13 @@ Focus: High-risk paths with real database operations
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import AsyncGenerator
 from unittest.mock import AsyncMock, patch
 
 import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.endpoints.applications import create_application as create_application_endpoint
 from app.core.exceptions import ValidationError
-from app.core.security import get_current_user
-from app.db.deps import get_db
-from app.main import app as fastapi_app
 from app.models.application import Application, ApplicationStatus
 from app.models.enums import QuotaManagementMode, Semester
 from app.models.scholarship import ScholarshipConfiguration, SubTypeSelectionMode
@@ -25,30 +19,6 @@ from app.schemas.application import ApplicationCreate, ApplicationFormData
 from app.services.application_service import ApplicationService
 from app.services.bulk_approval_service import BulkApprovalService
 
-
-@pytest_asyncio.fixture
-async def student_api_client(db: AsyncSession, test_user: User) -> AsyncGenerator[AsyncClient, None]:
-    """AsyncClient with get_db and get_current_user wired to test_user (student role).
-
-    Mirrors the pattern from test_supplementary_docs.py — creates its own
-    AsyncClient rather than building on the conftest client fixture, so all
-    dependency overrides are self-contained and cleaned up in finally.
-    """
-
-    async def override_get_db():
-        yield db
-
-    async def override_get_current_user():
-        return test_user
-
-    fastapi_app.dependency_overrides[get_db] = override_get_db
-    fastapi_app.dependency_overrides[get_current_user] = override_get_current_user
-    transport = ASGITransport(app=fastapi_app)
-    try:
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            yield client
-    finally:
-        fastapi_app.dependency_overrides.clear()
 
 
 @pytest.mark.integration
@@ -421,13 +391,15 @@ class TestCriticalDataIntegrity:
 class TestDuplicateApplicationAPIGuard:
     """Test duplicate application guard at the API endpoint layer.
 
-    The duplicate check lives at POST /api/v1/applications (applications.py lines 151-202),
-    NOT in ApplicationService.  These tests exercise the endpoint behaviour directly
-    using the student_api_client fixture (mirrors test_supplementary_docs.py pattern).
+    The duplicate check lives inside create_application() in applications.py
+    (lines ~151-222), NOT in ApplicationService.  We call the endpoint function
+    directly (bypassing ASGI transport) so that FastAPI's DI, HTTP headers, and
+    event-loop interactions don't interfere with the patch on
+    get_student_data_from_user.
     """
 
-    async def test_duplicate_submitted_returns_error_code(self, student_api_client, db, test_user, test_scholarship):
-        """POST /api/v1/applications returns DUPLICATE_APPLICATION when a non-draft exists."""
+    async def test_duplicate_submitted_returns_error_code(self, db, test_user, test_scholarship):
+        """create_application() returns DUPLICATE_APPLICATION when a non-draft already exists."""
         config = ScholarshipConfiguration(
             scholarship_type_id=test_scholarship.id,
             config_code="DUP_API_TEST_001",
@@ -462,29 +434,33 @@ class TestDuplicateApplicationAPIGuard:
         db.add(existing)
         await db.commit()
 
+        app_data = ApplicationCreate(
+            scholarship_type=test_scholarship.code,
+            configuration_id=config.id,
+            scholarship_subtype_list=[],
+            form_data=ApplicationFormData(fields={}),
+        )
         mock_student = {"std_stdcode": test_user.nycu_id, "std_cname": test_user.name}
 
         with patch(
             "app.services.application_service.get_student_data_from_user",
             new=AsyncMock(return_value=mock_student),
         ):
-            response = await student_api_client.post(
-                "/api/v1/applications",
-                json={
-                    "scholarship_type": test_scholarship.code,
-                    "configuration_id": config.id,
-                    "scholarship_subtype_list": [],
-                    "form_data": {"fields": {}},
-                },
+            result = await create_application_endpoint(
+                application_data=app_data,
+                is_draft=False,
+                current_user=test_user,
+                db=db,
+                request=None,
+                response=None,
             )
 
-        body = response.json()
-        assert body["success"] is False
-        assert body["data"]["error_code"] == "DUPLICATE_APPLICATION"
-        assert body["data"]["existing_app_id"] == "DUP-API-EXISTING-001"
+        assert result["success"] is False
+        assert result["data"]["error_code"] == "DUPLICATE_APPLICATION"
+        assert result["data"]["existing_app_id"] == "DUP-API-EXISTING-001"
 
-    async def test_existing_draft_is_returned(self, student_api_client, db, test_user, test_scholarship):
-        """POST /api/v1/applications with an existing draft returns that draft (success=True)."""
+    async def test_existing_draft_is_returned(self, db, test_user, test_scholarship):
+        """create_application() returns the existing draft (success=True) when one already exists."""
         config = ScholarshipConfiguration(
             scholarship_type_id=test_scholarship.id,
             config_code="DRAFT_RET_TEST_001",
@@ -519,23 +495,27 @@ class TestDuplicateApplicationAPIGuard:
         db.add(draft)
         await db.commit()
 
+        app_data = ApplicationCreate(
+            scholarship_type=test_scholarship.code,
+            configuration_id=config.id,
+            scholarship_subtype_list=[],
+            form_data=ApplicationFormData(fields={}),
+        )
         mock_student = {"std_stdcode": test_user.nycu_id, "std_cname": test_user.name}
 
         with patch(
             "app.services.application_service.get_student_data_from_user",
             new=AsyncMock(return_value=mock_student),
         ):
-            response = await student_api_client.post(
-                "/api/v1/applications",
-                json={
-                    "scholarship_type": test_scholarship.code,
-                    "configuration_id": config.id,
-                    "scholarship_subtype_list": [],
-                    "form_data": {"fields": {}},
-                },
+            result = await create_application_endpoint(
+                application_data=app_data,
+                is_draft=False,
+                current_user=test_user,
+                db=db,
+                request=None,
+                response=None,
             )
 
-        body = response.json()
-        assert body["success"] is True
-        assert body["data"]["app_id"] == "DRAFT-RET-EXISTING-001"
-        assert body["data"]["status"] == "draft"
+        assert result["success"] is True
+        assert result["data"]["app_id"] == "DRAFT-RET-EXISTING-001"
+        assert result["data"]["status"] == "draft"
