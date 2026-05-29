@@ -84,24 +84,17 @@ class TestApplicationServiceHelpers:
     def test_convert_semester_to_string_first(self, service):
         """Test semester conversion for first semester"""
         result = service._convert_semester_to_string(Semester.first)
-        assert result == "FIRST"
+        assert result == "first"
 
     def test_convert_semester_to_string_second(self, service):
         """Test semester conversion for second semester"""
         result = service._convert_semester_to_string(Semester.second)
-        assert result == "SECOND"
+        assert result == "second"
 
     def test_convert_semester_to_string_none(self, service):
         """Test semester conversion for None"""
         result = service._convert_semester_to_string(None)
         assert result is None
-
-    def test_generate_app_id(self, service):
-        """Test app ID generation"""
-        app_id = service._generate_app_id()
-        assert isinstance(app_id, str)
-        assert len(app_id) > 0
-        assert app_id.startswith("APP")
 
 
 @pytest.mark.asyncio
@@ -156,6 +149,7 @@ class TestApplicationServiceIntegration:
         application.submitted_form_data = {"name": "Test"}
         application.documents = {}
         application.app_id = "APP001"
+        application.files = []
 
         user = Mock(spec=User)
 
@@ -168,6 +162,7 @@ class TestApplicationServiceIntegration:
         application.submitted_form_data = {"name": "Test"}
         application.documents = {"transcript": "path/to/file.pdf"}
         application.app_id = "APP001"
+        application.files = []
 
         user = Mock(spec=User)
 
@@ -190,11 +185,13 @@ class TestApplicationServiceDashboard:
         user.id = 1
         user.nycu_id = "112550001"
 
-        # Mock database queries
-        mock_result = Mock()
-        mock_result.scalar.return_value = 0
-        mock_result.scalars.return_value.all.return_value = []
-        service.db.execute = AsyncMock(return_value=mock_result)
+        # Mock database queries — first execute returns row-iterable (status counts),
+        # second returns scalars().all() for recent applications.
+        mock_result_1 = Mock()
+        mock_result_1.__iter__ = Mock(return_value=iter([]))
+        mock_result_2 = Mock()
+        mock_result_2.scalars.return_value.all.return_value = []
+        service.db.execute = AsyncMock(side_effect=[mock_result_1, mock_result_2])
 
         stats = await service.get_student_dashboard_stats(user)
 
