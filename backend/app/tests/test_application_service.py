@@ -536,7 +536,7 @@ class TestApplicationService:
         mock_application = Mock(spec=Application)
         mock_application.id = application_id
         mock_application.user_id = user_id
-        mock_application.status = ApplicationStatus.draft.value
+        mock_application.status = ApplicationStatus.draft
         mock_application.submitted_form_data = {}
         mock_application.files = []
 
@@ -545,11 +545,13 @@ class TestApplicationService:
             patch.object(service.db, "delete") as mock_delete,
             patch.object(service.db, "commit") as mock_commit,
         ):
-            mock_execute.return_value.scalar_one_or_none.return_value = mock_application
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.return_value = mock_application
+            mock_execute.return_value = mock_result
 
             result = await service.delete_application(application_id, mock_user)
 
-            assert result is True
+            assert result == mock_application
             mock_delete.assert_called_once_with(mock_application)
             mock_commit.assert_called_once()
 
@@ -566,10 +568,12 @@ class TestApplicationService:
         mock_application = Mock(spec=Application)
         mock_application.id = application_id
         mock_application.user_id = user_id
-        mock_application.status = ApplicationStatus.submitted.value  # Not draft
+        mock_application.status = ApplicationStatus.submitted  # Not draft
 
         with patch.object(service.db, "execute") as mock_execute:
-            mock_execute.return_value.scalar_one_or_none.return_value = mock_application
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.return_value = mock_application
+            mock_execute.return_value = mock_result
 
             with pytest.raises(ValidationError, match="Only draft applications can be deleted"):
                 await service.delete_application(application_id, mock_user)
