@@ -23,13 +23,13 @@ def _sample(metric_name: str, **labels: str) -> float:
 class TestScholarshipReviewsCounter:
     def test_increment_for_professor_approve(self):
         before = _sample(
-            "scholarship_reviews_total_total",
+            "scholarship_reviews_total",
             reviewer_type="professor",
             action="approve",
         )
         scholarship_reviews_total.labels(reviewer_type="professor", action="approve").inc()
         after = _sample(
-            "scholarship_reviews_total_total",
+            "scholarship_reviews_total",
             reviewer_type="professor",
             action="approve",
         )
@@ -37,19 +37,19 @@ class TestScholarshipReviewsCounter:
 
     def test_increment_for_professor_reject_is_independent(self):
         before_approve = _sample(
-            "scholarship_reviews_total_total",
+            "scholarship_reviews_total",
             reviewer_type="professor",
             action="approve",
         )
         before_reject = _sample(
-            "scholarship_reviews_total_total",
+            "scholarship_reviews_total",
             reviewer_type="professor",
             action="reject",
         )
         scholarship_reviews_total.labels(reviewer_type="professor", action="reject").inc()
         assert (
             _sample(
-                "scholarship_reviews_total_total",
+                "scholarship_reviews_total",
                 reviewer_type="professor",
                 action="approve",
             )
@@ -58,7 +58,7 @@ class TestScholarshipReviewsCounter:
         )
         assert (
             _sample(
-                "scholarship_reviews_total_total",
+                "scholarship_reviews_total",
                 reviewer_type="professor",
                 action="reject",
             )
@@ -68,13 +68,13 @@ class TestScholarshipReviewsCounter:
 
     def test_increment_for_college_reviewer_type(self):
         before = _sample(
-            "scholarship_reviews_total_total",
+            "scholarship_reviews_total",
             reviewer_type="college",
             action="approve",
         )
         scholarship_reviews_total.labels(reviewer_type="college", action="approve").inc()
         after = _sample(
-            "scholarship_reviews_total_total",
+            "scholarship_reviews_total",
             reviewer_type="college",
             action="approve",
         )
@@ -84,13 +84,13 @@ class TestScholarshipReviewsCounter:
 class TestEmailSentCounter:
     def test_increment_for_success_path(self):
         before = _sample(
-            "email_sent_total_total",
+            "email_sent_total",
             category="notification",
             status="sent",
         )
         email_sent_total.labels(category="notification", status="sent").inc()
         after = _sample(
-            "email_sent_total_total",
+            "email_sent_total",
             category="notification",
             status="sent",
         )
@@ -98,13 +98,13 @@ class TestEmailSentCounter:
 
     def test_increment_for_failed_path(self):
         before = _sample(
-            "email_sent_total_total",
+            "email_sent_total",
             category="notification",
             status="failed",
         )
         email_sent_total.labels(category="notification", status="failed").inc()
         after = _sample(
-            "email_sent_total_total",
+            "email_sent_total",
             category="notification",
             status="failed",
         )
@@ -116,13 +116,13 @@ class TestEmailSentCounter:
         # works on the counter so the dashboard isn't surprised by a
         # validation error at runtime.
         before = _sample(
-            "email_sent_total_total",
+            "email_sent_total",
             category="uncategorized",
             status="sent",
         )
         email_sent_total.labels(category="uncategorized", status="sent").inc()
         after = _sample(
-            "email_sent_total_total",
+            "email_sent_total",
             category="uncategorized",
             status="sent",
         )
