@@ -29,9 +29,9 @@ class TestCollegeReviewService:
     """Test suite for CollegeReviewService"""
 
     @pytest.fixture
-    async def service(self, db_session):
+    async def service(self, db):
         """Create service instance with mocked database session"""
-        return CollegeReviewService(db_session)
+        return CollegeReviewService(db)
 
     @pytest.fixture
     def sample_application(self):
