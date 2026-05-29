@@ -23,10 +23,12 @@ from app.models.roster_schedule import RosterSchedule, RosterScheduleStatus
 
 
 def _rel(**overrides) -> ProfessorStudentRelationship:
-    """Build a ProfessorStudentRelationship without invoking ORM init."""
-    r = object.__new__(ProfessorStudentRelationship)
+    """Build a ProfessorStudentRelationship for pure-property tests.
+
+    Uses SA __init__ (not object.__new__) so instrumented attribute descriptors
+    have a valid _sa_instance_state and property reads don't raise AttributeError.
+    """
     defaults = {
-        "id": 1,
         "professor_id": 10,
         "student_id": 20,
         "relationship_type": "advisor",
@@ -36,9 +38,7 @@ def _rel(**overrides) -> ProfessorStudentRelationship:
         "can_review_applications": True,
     }
     defaults.update(overrides)
-    for k, v in defaults.items():
-        object.__setattr__(r, k, v)
-    return r
+    return ProfessorStudentRelationship(**defaults)
 
 
 def _schedule(**overrides) -> RosterSchedule:

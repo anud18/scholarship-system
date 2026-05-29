@@ -331,9 +331,10 @@ class TestRosterServiceGenerate:
             quota_mode=QuotaManagementMode.matrix_based,
         )
         ranking = CollegeRanking(
-            scholarship_configuration_id=config.id,
+            scholarship_type_id=scholarship.id,
+            sub_type_code="default",
             academic_year=113,
-            semester=Semester.first,
+            semester=Semester.first.value,
             distribution_executed=False,
         )
         db_sync.add(ranking)

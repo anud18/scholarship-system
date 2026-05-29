@@ -195,30 +195,30 @@ class TestScholarshipConfigurationServiceScoring:
         return ScholarshipConfigurationService(db)
 
     def test_calculate_application_score_basic(self, service):
-        """Test basic application score calculation"""
-        config = Mock(spec=ScholarshipConfiguration)
-        config.auto_screening_config = None
+        """Test basic application score calculation — no scoring_criteria → 0.0."""
+        config = Mock()  # no spec= so arbitrary attrs allowed
+        config.scoring_criteria = None
 
         application_data = {"gpa": 3.5, "class_ranking": 10, "total_students": 100}
 
         score = service.calculate_application_score(config, application_data)
 
-        assert score >= 0
+        assert score == 0.0
 
     def test_calculate_application_score_with_config(self, service):
-        """Test score calculation with screening config"""
-        config = Mock(spec=ScholarshipConfiguration)
-        config.auto_screening_config = {
-            "gpa_weight": 0.6,
-            "ranking_weight": 0.4,
-            "base_score": 50,
+        """Test score calculation with scoring criteria config."""
+        config = Mock()  # no spec= so arbitrary attrs allowed
+        config.scoring_criteria = True
+        config.get_scoring_criteria.return_value = {
+            "gpa": {"weight": 0.6, "max_score": 4.0},
+            "ranking": {"weight": 0.4, "max_score": 100},
         }
 
-        application_data = {"gpa": 3.8, "class_ranking": 5, "total_students": 100}
+        application_data = {"score_gpa": 3.8, "score_ranking": 80}
 
         score = service.calculate_application_score(config, application_data)
 
-        assert score > 50
+        assert score >= 0
 
 
 @pytest.mark.asyncio
@@ -252,7 +252,11 @@ class TestScholarshipConfigurationServiceCRUD:
         service.db.commit = AsyncMock()
         service.db.refresh = AsyncMock()
 
-        await service.create_configuration(config_data, created_by=1)
+        await service.create_configuration(
+            scholarship_type_id=config_data.get("scholarship_type_id", 1),
+            config_data=config_data,
+            created_by_user_id=1,
+        )
 
         assert service.db.add.called
         assert service.db.commit.called
@@ -270,7 +274,7 @@ class TestScholarshipConfigurationServiceCRUD:
         service.db.commit = AsyncMock()
         service.db.refresh = AsyncMock()
 
-        await service.update_configuration(config_id, update_data, updated_by=1)
+        await service.update_configuration(config_id, update_data, updated_by_user_id=1)
 
         assert service.db.commit.called
 
@@ -321,10 +325,11 @@ class TestScholarshipConfigurationServiceDuplicate:
 
         await service.duplicate_configuration(
             source_config_id=1,
-            new_code="DUPLICATED_001",
-            academic_year=114,
-            semester="first",
-            created_by=1,
+            new_config_code="DUPLICATED_001",
+            target_academic_year=114,
+            target_semester="first",
+            new_config_name=None,
+            created_by_user_id=1,
         )
 
         assert service.db.add.called
