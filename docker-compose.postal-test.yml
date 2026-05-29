@@ -1,0 +1,43 @@
+# Isolated stack for testing the fix/postal-account-visible-to-admin branch.
+# Use with a dedicated project name so volumes/networks never touch the
+# running scholarship_*_dev stack:
+#   docker compose -p schol_postal -f docker-compose.dev.yml -f docker-compose.postal-test.yml up -d
+# Container names are renamed and host ports remapped to avoid collisions.
+# `!override` replaces the base `ports` list instead of appending to it
+# (default compose merge concatenates sequences, which re-binds the base port).
+services:
+  postgres:
+    container_name: scholarship_postgres_postal
+    ports: !override
+      - "5532:5432"
+
+  redis:
+    container_name: scholarship_redis_postal
+    ports: !override
+      - "6479:6379"
+
+  minio:
+    container_name: scholarship_minio_postal
+    ports: !override
+      - "9100:9000"
+      - "9101:9001"
+
+  backend:
+    container_name: scholarship_backend_postal
+    ports: !override
+      - "8100:8000"
+    environment:
+      CORS_ORIGINS: "http://localhost:3100,http://localhost:8100"
+      FRONTEND_URL: http://localhost:3100
+
+  frontend:
+    container_name: scholarship_frontend_postal
+    ports: !override
+      - "3100:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8100
+
+  mock-student-api:
+    container_name: scholarship_mock_student_api_postal
+    ports: !override
+      - "8180:8080"
