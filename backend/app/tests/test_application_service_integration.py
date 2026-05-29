@@ -149,6 +149,7 @@ class TestApplicationServiceIntegration:
         application.submitted_form_data = {"name": "Test"}
         application.documents = {}
         application.app_id = "APP001"
+        application.files = []
 
         user = Mock(spec=User)
 
@@ -161,6 +162,7 @@ class TestApplicationServiceIntegration:
         application.submitted_form_data = {"name": "Test"}
         application.documents = {"transcript": "path/to/file.pdf"}
         application.app_id = "APP001"
+        application.files = []
 
         user = Mock(spec=User)
 
@@ -183,11 +185,13 @@ class TestApplicationServiceDashboard:
         user.id = 1
         user.nycu_id = "112550001"
 
-        # Mock database queries
-        mock_result = Mock()
-        mock_result.scalar.return_value = 0
-        mock_result.scalars.return_value.all.return_value = []
-        service.db.execute = AsyncMock(return_value=mock_result)
+        # Mock database queries — first execute returns row-iterable (status counts),
+        # second returns scalars().all() for recent applications.
+        mock_result_1 = Mock()
+        mock_result_1.__iter__ = Mock(return_value=iter([]))
+        mock_result_2 = Mock()
+        mock_result_2.scalars.return_value.all.return_value = []
+        service.db.execute = AsyncMock(side_effect=[mock_result_1, mock_result_2])
 
         stats = await service.get_student_dashboard_stats(user)
 
