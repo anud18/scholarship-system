@@ -145,7 +145,7 @@ class TestBatchImportEndpoints:
             )
 
         assert response.status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
-        assert "超過限制" in response.json()["detail"]
+        assert "超過限制" in response.json()["message"]
 
     @pytest.mark.asyncio
     async def test_upload_batch_import_invalid_file_type(
@@ -166,7 +166,7 @@ class TestBatchImportEndpoints:
             )
 
         assert response.status_code == status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
-        assert "不支援的檔案格式" in response.json()["detail"]
+        assert "不支援的檔案格式" in response.json()["message"]
 
     @pytest.mark.asyncio
     async def test_upload_batch_import_no_college_code(
@@ -200,7 +200,7 @@ class TestBatchImportEndpoints:
             )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "未設定學院代碼" in response.json()["detail"]
+        assert "未設定學院代碼" in response.json()["message"]
 
     @pytest.mark.asyncio
     async def test_confirm_batch_import_success(self, client: AsyncClient, db: AsyncSession, college_user: User):
@@ -303,7 +303,7 @@ class TestBatchImportEndpoints:
             )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "無法再次確認" in response.json()["detail"]
+        assert "無法再次確認" in response.json()["message"]
 
     @pytest.mark.asyncio
     async def test_get_batch_import_history_college(self, client: AsyncClient, db: AsyncSession, college_user: User):

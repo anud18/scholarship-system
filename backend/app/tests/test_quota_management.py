@@ -223,7 +223,7 @@ class TestMatrixQuotaOperations:
 
         assert response.status_code == 400
         data = response.json()
-        assert "Quota cannot be negative" in data["detail"]
+        assert "Quota cannot be negative" in data["message"]
 
 
 class TestQuotaUsageCalculation:
