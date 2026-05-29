@@ -7,10 +7,10 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from sqlalchemy.exc import IntegrityError
 
-from app.core.exceptions import ConflictError, ValidationError
+from app.api.v1.endpoints.applications import create_application as create_application_endpoint
+from app.core.exceptions import ValidationError
 from app.models.application import Application, ApplicationStatus
 from app.models.enums import QuotaManagementMode, Semester
 from app.models.scholarship import ScholarshipConfiguration, SubTypeSelectionMode
@@ -83,54 +83,6 @@ class TestCriticalApplicationWorkflow:
 
             assert result.status == ApplicationStatus.draft.value
             assert result.user_id == test_user.id
-
-    @pytest.mark.skip(
-        reason="Duplicate check moved to API layer; service raises ValidationError via EligibilityService, not ConflictError — tracked in GitHub issue"
-    )
-    async def test_prevent_duplicate_applications(self, db, test_user, test_scholarship):
-        """CRITICAL: Prevent duplicate applications for same scholarship"""
-        # Create first application
-        app1 = Application(
-            user_id=test_user.id,
-            scholarship_type_id=test_scholarship.id,
-            sub_type_selection_mode=SubTypeSelectionMode.single,
-            status=ApplicationStatus.submitted.value,
-            app_id="TEST-001",
-            academic_year=113,
-            semester="first",
-            student_data={"student_id": "112550001"},
-            submitted_form_data={},
-            agree_terms=True,
-        )
-        db.add(app1)
-        await db.commit()
-
-        service = ApplicationService(db)
-
-        # Mock student service
-        with patch("app.services.application_service.StudentService") as mock_student:
-            mock_instance = AsyncMock()
-            mock_student.return_value = mock_instance
-            mock_instance.get_student_basic_info.return_value = {
-                "student_id": "112550001",
-                "std_stdcode": "112550001",
-            }
-
-            # Try to create duplicate - should fail
-            with pytest.raises(ConflictError, match="already have an active application"):
-                app_data = ApplicationCreate(
-                    scholarship_type="test_scholarship",
-                    configuration_id=1,
-                    scholarship_subtype_list=[],
-                    form_data=ApplicationFormData(configuration_id=1, fields={}),
-                )
-
-                await service.create_application(
-                    user_id=test_user.id,
-                    student_code="112550001",
-                    application_data=app_data,
-                    is_draft=False,
-                )
 
     async def test_submit_application_state_transition(self, db, test_user):
         """CRITICAL: Test application submission and state validation"""
@@ -278,7 +230,7 @@ class TestCriticalBusinessLogic:
             effective_start_date=datetime.now(timezone.utc),
             effective_end_date=datetime.now(timezone.utc) + timedelta(days=30),
             has_quota_limit=True,
-            total_quota=2,  # Only 2 spots
+            total_quota=2,
             quota_management_mode=QuotaManagementMode.simple,
         )
         db.add(config)
@@ -417,7 +369,7 @@ class TestCriticalDataIntegrity:
         # Try to create duplicate config code
         config2 = ScholarshipConfiguration(
             scholarship_type_id=test_scholarship.id,
-            config_code="UNIQUE_TEST",  # Same code
+            config_code="UNIQUE_TEST",
             config_name="Unique Test Config 2",
             academic_year=113,
             semester=Semester.second,
@@ -431,3 +383,138 @@ class TestCriticalDataIntegrity:
         # Should raise integrity error
         with pytest.raises(IntegrityError):
             await db.commit()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+class TestDuplicateApplicationAPIGuard:
+    """Test duplicate application guard at the API endpoint layer.
+
+    The duplicate check lives inside create_application() in applications.py
+    (lines ~151-222), NOT in ApplicationService.  We call the endpoint function
+    directly (bypassing ASGI transport) so that FastAPI's DI, HTTP headers, and
+    event-loop interactions don't interfere with the patch on
+    get_student_data_from_user.
+    """
+
+    async def test_duplicate_submitted_returns_error_code(self, db, test_user, test_scholarship):
+        """create_application() returns DUPLICATE_APPLICATION when a non-draft already exists."""
+        config = ScholarshipConfiguration(
+            scholarship_type_id=test_scholarship.id,
+            config_code="DUP_API_TEST_001",
+            config_name="Dup API Test Config",
+            academic_year=113,
+            semester=Semester.first,
+            amount=50000,
+            is_active=True,
+            effective_start_date=datetime.now(timezone.utc) - timedelta(days=1),
+            effective_end_date=datetime.now(timezone.utc) + timedelta(days=30),
+            application_start_date=datetime.now(timezone.utc) - timedelta(days=1),
+            application_end_date=datetime.now(timezone.utc) + timedelta(days=30),
+            has_quota_limit=False,
+            quota_management_mode=QuotaManagementMode.simple,
+        )
+        db.add(config)
+        await db.commit()
+        await db.refresh(config)
+
+        existing = Application(
+            user_id=test_user.id,
+            scholarship_type_id=test_scholarship.id,
+            sub_type_selection_mode=SubTypeSelectionMode.single,
+            status=ApplicationStatus.submitted,
+            app_id="DUP-API-EXISTING-001",
+            academic_year=113,
+            semester="first",
+            student_data={"std_stdcode": "112550001"},
+            submitted_form_data={},
+            agree_terms=True,
+        )
+        db.add(existing)
+        await db.commit()
+
+        app_data = ApplicationCreate(
+            scholarship_type=test_scholarship.code,
+            configuration_id=config.id,
+            scholarship_subtype_list=[],
+            form_data=ApplicationFormData(fields={}),
+        )
+        mock_student = {"std_stdcode": test_user.nycu_id, "std_cname": test_user.name}
+
+        with patch(
+            "app.services.application_service.get_student_data_from_user",
+            new=AsyncMock(return_value=mock_student),
+        ):
+            result = await create_application_endpoint(
+                application_data=app_data,
+                is_draft=False,
+                current_user=test_user,
+                db=db,
+                request=None,
+                response=None,
+            )
+
+        assert result["success"] is False
+        assert result["data"]["error_code"] == "DUPLICATE_APPLICATION"
+        assert result["data"]["existing_app_id"] == "DUP-API-EXISTING-001"
+
+    async def test_existing_draft_is_returned(self, db, test_user, test_scholarship):
+        """create_application() returns the existing draft (success=True) when one already exists."""
+        config = ScholarshipConfiguration(
+            scholarship_type_id=test_scholarship.id,
+            config_code="DRAFT_RET_TEST_001",
+            config_name="Draft Return Test Config",
+            academic_year=113,
+            semester=Semester.first,
+            amount=50000,
+            is_active=True,
+            effective_start_date=datetime.now(timezone.utc) - timedelta(days=1),
+            effective_end_date=datetime.now(timezone.utc) + timedelta(days=30),
+            application_start_date=datetime.now(timezone.utc) - timedelta(days=1),
+            application_end_date=datetime.now(timezone.utc) + timedelta(days=30),
+            has_quota_limit=False,
+            quota_management_mode=QuotaManagementMode.simple,
+        )
+        db.add(config)
+        await db.commit()
+        await db.refresh(config)
+
+        draft = Application(
+            user_id=test_user.id,
+            scholarship_type_id=test_scholarship.id,
+            sub_type_selection_mode=SubTypeSelectionMode.single,
+            status=ApplicationStatus.draft,
+            app_id="DRAFT-RET-EXISTING-001",
+            academic_year=113,
+            semester="first",
+            student_data={"std_stdcode": "112550001"},
+            submitted_form_data={},
+            agree_terms=True,
+        )
+        db.add(draft)
+        await db.commit()
+
+        app_data = ApplicationCreate(
+            scholarship_type=test_scholarship.code,
+            configuration_id=config.id,
+            scholarship_subtype_list=[],
+            form_data=ApplicationFormData(fields={}),
+        )
+        mock_student = {"std_stdcode": test_user.nycu_id, "std_cname": test_user.name}
+
+        with patch(
+            "app.services.application_service.get_student_data_from_user",
+            new=AsyncMock(return_value=mock_student),
+        ):
+            result = await create_application_endpoint(
+                application_data=app_data,
+                is_draft=False,
+                current_user=test_user,
+                db=db,
+                request=None,
+                response=None,
+            )
+
+        assert result["success"] is True
+        assert result["data"]["app_id"] == "DRAFT-RET-EXISTING-001"
+        assert result["data"]["status"] == "draft"

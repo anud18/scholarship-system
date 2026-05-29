@@ -144,7 +144,7 @@ class TestApplicationServiceIntegration:
         return ApplicationService(db)
 
     def test_integrate_application_file_data_basic(self, service):
-        """Test file data integration - service normalises to {fields, documents} shape"""
+        """Test file data integration"""
         application = Mock(spec=Application)
         application.submitted_form_data = {"name": "Test"}
         application.documents = {}
@@ -159,13 +159,10 @@ class TestApplicationServiceIntegration:
         assert result["fields"]["name"]["value"] == "Test"
 
     def test_integrate_application_file_data_with_documents(self, service):
-        """Test file data integration - documents key is preserved"""
+        """Test file data integration with documents"""
         application = Mock(spec=Application)
-        application.submitted_form_data = {
-            "name": "Test",
-            "documents": [{"document_id": "transcript", "file_path": "path/to/file.pdf"}],
-        }
-        application.documents = {}
+        application.submitted_form_data = {"name": "Test"}
+        application.documents = {"transcript": "path/to/file.pdf"}
         application.app_id = "APP001"
         application.files = []
 
@@ -190,8 +187,7 @@ class TestApplicationServiceDashboard:
         user.id = 1
         user.nycu_id = "112550001"
 
-        # Mock database queries — first execute returns row-iterable (status counts),
-        # second returns scalars().all() for recent applications.
+        # First execute: status counts (iterable rows); second: recent applications list
         mock_result_1 = Mock()
         mock_result_1.__iter__ = Mock(return_value=iter([]))
         mock_result_2 = Mock()
@@ -222,11 +218,10 @@ class TestApplicationServiceListResponse:
         application.id = 1
         application.app_id = "APP001"
         application.user_id = 1
-        application.scholarship = None
-        application.scholarship_configuration = None
         application.scholarship_type_id = 1
         application.scholarship_subtype_list = ["type_a"]
-        application.sub_scholarship_type = None
+        application.scholarship = None
+        application.scholarship_configuration = None
         application.status = ApplicationStatus.draft.value
         application.status_name = "草稿"
         application.review_stage = None
@@ -238,7 +233,8 @@ class TestApplicationServiceListResponse:
         application.academic_year = 113
         application.semester = Semester.first
         application.student_data = {}
-        application.agree_terms = False
+        application.agree_terms = True
+        application.sub_scholarship_type = None
         application.professor_id = None
         application.reviewer_id = None
         application.final_approver_id = None
@@ -254,7 +250,7 @@ class TestApplicationServiceListResponse:
         user = Mock(spec=User)
         user.nycu_id = "112550001"
 
-        integrated_data = {"fields": {}, "documents": []}
+        integrated_data = {"name": "Test"}
 
         response = service._create_application_list_response(application, user, integrated_data)
 
