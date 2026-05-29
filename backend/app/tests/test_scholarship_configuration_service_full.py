@@ -238,6 +238,7 @@ class TestScholarshipConfigurationServiceCRUD:
             "scholarship_type_id": 1,
             "academic_year": 113,
             "semester": "first",
+            "amount": 50000,
         }
 
         # Service does ONE execute: check if config already exists for this period.
