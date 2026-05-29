@@ -114,8 +114,10 @@ class TestAuthService:
         existing_user.email = mock_user_create_data.email
 
         with patch.object(service.db, "execute", new_callable=AsyncMock) as mock_execute:
-            # Mock existing user with same email
-            mock_execute.return_value.scalar_one_or_none.return_value = existing_user
+            # Email check finds existing user (first execute call)
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.return_value = existing_user
+            mock_execute.return_value = mock_result
 
             with pytest.raises(ConflictError, match="Email already registered"):
                 await service.register_user(mock_user_create_data)
@@ -156,8 +158,10 @@ class TestAuthService:
             patch.object(service.db, "commit", new_callable=AsyncMock) as mock_commit,
             patch.object(service.db, "rollback", new_callable=AsyncMock) as mock_rollback,
         ):
-            # Both upfront checks find no existing user
-            mock_execute.return_value.scalar_one_or_none.return_value = None
+            # Both upfront checks find no existing user (email + nycu_id checks)
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.return_value = None
+            mock_execute.side_effect = [mock_result, mock_result]
             # Commit trips on the DB unique constraint at the last moment
             mock_commit.side_effect = IntegrityError(
                 "INSERT INTO users ...", None, Exception("UNIQUE constraint failed: users.nycu_id")
@@ -178,7 +182,9 @@ class TestAuthService:
             patch.object(service.db, "commit", new_callable=AsyncMock) as mock_commit,
             patch.object(service.db, "rollback", new_callable=AsyncMock) as mock_rollback,
         ):
-            mock_execute.return_value.scalar_one_or_none.return_value = None
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.return_value = None
+            mock_execute.side_effect = [mock_result, mock_result]
             mock_commit.side_effect = IntegrityError(
                 "INSERT INTO users ...", None, Exception("UNIQUE constraint failed: users.email")
             )
@@ -210,7 +216,9 @@ class TestAuthService:
     async def test_authenticate_user_not_found(self, service, mock_user_login_data):
         """Test user authentication when user not found"""
         with patch.object(service.db, "execute", new_callable=AsyncMock) as mock_execute:
-            mock_execute.return_value.scalar_one_or_none.return_value = None
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.return_value = None
+            mock_execute.return_value = mock_result
 
             with pytest.raises(AuthenticationError, match="Invalid nycu_id or email"):
                 await service.authenticate_user(mock_user_login_data)
@@ -354,7 +362,9 @@ class TestAuthService:
         nycu_id = "112550001"
 
         with patch.object(service.db, "execute", new_callable=AsyncMock) as mock_execute:
-            mock_execute.return_value.scalar_one_or_none.return_value = mock_user
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.return_value = mock_user
+            mock_execute.return_value = mock_result
 
             result = await service.get_user_by_nycu_id(nycu_id)
 
@@ -366,7 +376,9 @@ class TestAuthService:
         nycu_id = "999999999"
 
         with patch.object(service.db, "execute", new_callable=AsyncMock) as mock_execute:
-            mock_execute.return_value.scalar_one_or_none.return_value = None
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.return_value = None
+            mock_execute.return_value = mock_result
 
             result = await service.get_user_by_nycu_id(nycu_id)
 
@@ -378,7 +390,9 @@ class TestAuthService:
         email = "test@nycu.edu.tw"
 
         with patch.object(service.db, "execute", new_callable=AsyncMock) as mock_execute:
-            mock_execute.return_value.scalar_one_or_none.return_value = mock_user
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.return_value = mock_user
+            mock_execute.return_value = mock_result
 
             result = await service.get_user_by_email(email)
 
@@ -390,7 +404,9 @@ class TestAuthService:
         email = "nonexistent@nycu.edu.tw"
 
         with patch.object(service.db, "execute", new_callable=AsyncMock) as mock_execute:
-            mock_execute.return_value.scalar_one_or_none.return_value = None
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.return_value = None
+            mock_execute.return_value = mock_result
 
             result = await service.get_user_by_email(email)
 
@@ -425,7 +441,9 @@ class TestAuthService:
             patch.object(service.db, "execute", new_callable=AsyncMock) as mock_execute,
             patch.object(service.db, "commit", new_callable=AsyncMock) as mock_commit,
         ):
-            mock_execute.return_value.scalar_one_or_none.return_value = mock_user
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.return_value = mock_user
+            mock_execute.return_value = mock_result
 
             await service.authenticate_user(mock_user_login_data)
 

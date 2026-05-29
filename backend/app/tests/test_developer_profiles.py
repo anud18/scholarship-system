@@ -220,23 +220,24 @@ class TestDeveloperProfileManager:
         # Verify all are students
         for profile in profiles:
             assert profile.role == UserRole.student
-            assert "testdev" in profile.full_name.lower()
+            assert "testdev" in profile.name.lower()
 
     def test_create_staff_profiles(self):
         """Test creating staff profile suite"""
         profiles = DeveloperProfileManager.create_staff_profiles("testdev")
 
-        assert len(profiles) == 3  # Professor, College, Admin
+        assert len(profiles) == 4  # two professors, one college reviewer, one super_admin
 
         roles = {p.role for p in profiles}
-        expected_roles = {UserRole.professor, UserRole.college, UserRole.admin}
+        expected_roles = {UserRole.professor, UserRole.college, UserRole.super_admin}
         assert roles == expected_roles
 
         # Verify all have testdev in name
         for profile in profiles:
-            assert "testdev" in profile.full_name.lower()
+            assert "testdev" in profile.name.lower()
 
 
+@pytest.mark.integration
 class TestDeveloperProfileAPI:
     """Test the developer profile API endpoints"""
 
