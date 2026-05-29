@@ -328,8 +328,7 @@ class ScholarshipConfigurationService:
         # Check if there are active applications using this configuration
         active_applications_query = select(func.count(Application.id)).where(
             and_(
-                Application.config_code == config.config_code,
-                Application.scholarship_type_id == config.scholarship_type_id,
+                Application.scholarship_configuration_id == config.id,
                 Application.status.not_in(
                     [ApplicationStatus.rejected, ApplicationStatus.withdrawn, ApplicationStatus.cancelled]
                 ),

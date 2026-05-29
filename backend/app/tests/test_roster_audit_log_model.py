@@ -23,9 +23,8 @@ from app.models.roster_audit import RosterAuditAction, RosterAuditLevel, RosterA
 
 
 def _log(**overrides) -> RosterAuditLog:
-    log = object.__new__(RosterAuditLog)
+    """Build a RosterAuditLog using SA __init__ so _sa_instance_state is set."""
     defaults = {
-        "id": 1,
         "roster_id": 1,
         "title": "Test action",
         "description": None,
@@ -34,9 +33,7 @@ def _log(**overrides) -> RosterAuditLog:
         "warning_message": None,
     }
     defaults.update(overrides)
-    for k, v in defaults.items():
-        object.__setattr__(log, k, v)
-    return log
+    return RosterAuditLog(**defaults)
 
 
 # ─── is_error ────────────────────────────────────────────────────────

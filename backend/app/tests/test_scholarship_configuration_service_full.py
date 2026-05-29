@@ -234,6 +234,7 @@ class TestScholarshipConfigurationServiceCRUD:
         """Test configuration creation"""
         config_data = {
             "config_code": "NEW_CONFIG",
+            "config_name": "New Test Config",
             "scholarship_type_id": 1,
             "academic_year": 113,
             "semester": "first",
@@ -279,12 +280,18 @@ class TestScholarshipConfigurationServiceCRUD:
         """Test configuration deactivation"""
         mock_config = Mock(spec=ScholarshipConfiguration)
         mock_config.is_active = True
+        mock_config.id = 1
 
-        mock_result = Mock()
-        mock_result.scalar_one_or_none.return_value = mock_config
+        mock_config_result = Mock()
+        mock_config_result.scalar_one_or_none.return_value = mock_config
 
-        service.db.execute = AsyncMock(return_value=mock_result)
+        # Second execute: count active applications → 0 (safe to deactivate)
+        mock_count_result = Mock()
+        mock_count_result.scalar.return_value = 0
+
+        service.db.execute = AsyncMock(side_effect=[mock_config_result, mock_count_result])
         service.db.commit = AsyncMock()
+        service.db.refresh = AsyncMock()
 
         await service.deactivate_configuration(1, updated_by_user_id=1)
 
