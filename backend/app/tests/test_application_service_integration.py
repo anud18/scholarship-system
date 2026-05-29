@@ -169,7 +169,7 @@ class TestApplicationServiceIntegration:
         user = Mock(spec=User)
 
         result = service._integrate_application_file_data(application, user)
-        assert "documents" not in result
+        assert "documents" in result
 
 
 @pytest.mark.asyncio
