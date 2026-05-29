@@ -160,6 +160,31 @@ def test_remove_item_from_locked_roster_deletes_item_and_marks_stale(
     assert locked_roster_two_items.total_applications == 1
 
 
+def test_remove_suspended_item_from_locked_roster_deletes_item_and_marks_stale(
+    db_sync, locked_roster_two_items, admin_db_user_sync
+):
+    """C2: a SUSPENDED student (not only revoked) can be removed from a LOCKED
+    roster. remove_item_from_locked_roster is status-agnostic (deletes by
+    item_id), so the suspend remove-path the new UI exposes behaves identically
+    to the revoked one — recompute totals, set excel_stale, stay LOCKED."""
+    suspended_item = next(i for i in locked_roster_two_items.items if i.student_id_number == "B2")
+    item_id = suspended_item.id
+    svc = RosterService(db_sync)
+    svc.remove_item_from_locked_roster(
+        roster_id=locked_roster_two_items.id,
+        item_id=item_id,
+        admin_user_id=admin_db_user_sync.id,
+        reason="suspended cleanup",
+    )
+    db_sync.commit()
+    db_sync.refresh(locked_roster_two_items)
+    assert db_sync.get(PaymentRosterItem, item_id) is None
+    assert locked_roster_two_items.excel_stale is True
+    assert locked_roster_two_items.status == RosterStatus.LOCKED
+    assert locked_roster_two_items.qualified_count == 1
+    assert locked_roster_two_items.total_applications == 1
+
+
 def test_remove_item_on_non_locked_roster_raises(db_sync, admin_db_user_sync):
     from app.models.payment_roster import RosterCycle, RosterTriggerType
 

@@ -46,6 +46,14 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
+  AllocationActionDialog,
+  type AllocationMode,
+} from "@/components/admin/manual-distribution/AllocationActionDialog";
+import {
+  AllocationStatusControl,
+  type AllocationStatus,
+} from "@/components/admin/manual-distribution/AllocationStatusControl";
+import {
   Loader2,
   Save,
   CheckCircle2,
@@ -202,12 +210,11 @@ export function ManualDistributionPanel({
   const [distributionState, setDistributionState] =
     useState<DistributionState | null>(null);
   const [isLoadingState, setIsLoadingState] = useState(false);
-  const [revokeTarget, setRevokeTarget] = useState<{
+  const [action, setAction] = useState<{
+    mode: AllocationMode;
     applicationId: number;
     studentName: string;
   } | null>(null);
-  const [revokeReason, setRevokeReason] = useState("");
-  const [isRevoking, setIsRevoking] = useState(false);
 
   /**
    * Flatten quota status into (sub_type × year) columns, ordered by:
@@ -278,7 +285,7 @@ export function ManualDistributionPanel({
         setStudents(studentsResp.data);
         const allocMap = new Map<number, LocalAlloc | null>();
         for (const s of studentsResp.data) {
-          if (s.allocated_sub_type) {
+          if (s.is_allocated && s.allocated_sub_type) {
             allocMap.set(s.ranking_item_id, {
               sub_type: s.allocated_sub_type,
               year: s.allocation_year ?? selectedAcademicYear!,
@@ -555,7 +562,7 @@ export function ManualDistributionPanel({
           setStudents(studentsResp.data);
           const initial = new Map<number, LocalAlloc | null>();
           for (const s of studentsResp.data) {
-            if (s.allocated_sub_type) {
+            if (s.is_allocated && s.allocated_sub_type) {
               initial.set(s.ranking_item_id, {
                 sub_type: s.allocated_sub_type,
                 year: s.allocation_year ?? selectedAcademicYear!,
@@ -577,36 +584,6 @@ export function ManualDistributionPanel({
       setSaveMessage({ type: "error", text: "確認分發時發生錯誤" });
     } finally {
       setIsFinalizing(false);
-    }
-  };
-
-  const handleRevoke = async () => {
-    if (!revokeTarget || !revokeReason.trim()) return;
-    setIsRevoking(true);
-    try {
-      const resp = await apiClient.manualDistribution.revokeAllocation(
-        revokeTarget.applicationId,
-        revokeReason.trim()
-      );
-      if (resp.success) {
-        const studentName = revokeTarget.studentName;
-        setRevokeTarget(null);
-        setRevokeReason("");
-        await fetchData();
-        // Set success message after fetchData so it isn't cleared by
-        // fetchData's own setSaveMessage(null) at the top of that function.
-        setSaveMessage({
-          type: "success",
-          text: `已撤銷 ${studentName} 的獎學金分發`,
-        });
-      } else {
-        setSaveMessage({ type: "error", text: resp.message || "撤銷失敗" });
-      }
-    } catch (err) {
-      logger.error("Revoke error", { err });
-      setSaveMessage({ type: "error", text: "撤銷時發生錯誤" });
-    } finally {
-      setIsRevoking(false);
     }
   };
 
@@ -727,7 +704,7 @@ export function ManualDistributionPanel({
           setStudents(studentsResp.data);
           const initial = new Map<number, LocalAlloc | null>();
           for (const s of studentsResp.data) {
-            if (s.allocated_sub_type) {
+            if (s.is_allocated && s.allocated_sub_type) {
               initial.set(s.ranking_item_id, {
                 sub_type: s.allocated_sub_type,
                 year: s.allocation_year ?? selectedAcademicYear!,
@@ -1228,12 +1205,6 @@ export function ManualDistributionPanel({
                     >
                       申請類別
                     </th>
-                    <th
-                      rowSpan={2}
-                      className="px-1.5 py-1.5 border border-slate-200 text-center font-semibold text-[11px] w-8 bg-red-50"
-                    >
-                      取消
-                    </th>
                     {subTypeCols.length > 0 && (
                       <th
                         colSpan={subTypeCols.length}
@@ -1325,7 +1296,7 @@ export function ManualDistributionPanel({
                   {filteredStudents.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={11 + subTypeCols.length}
+                        colSpan={12 + subTypeCols.length}
                         className="px-4 py-10 text-center text-slate-500"
                       >
                         {students.length === 0
@@ -1347,7 +1318,7 @@ export function ManualDistributionPanel({
                             className="bg-slate-100"
                           >
                             <td
-                              colSpan={11 + subTypeCols.length}
+                              colSpan={12 + subTypeCols.length}
                               className="px-4 py-1.5 text-xs font-bold text-slate-600 border-y border-slate-300"
                             >
                               {collegeName || collegeCode}
@@ -1365,11 +1336,26 @@ export function ManualDistributionPanel({
                               student.application_id
                             );
                             const isChallenge = !!challengeMeta;
+                            // Application-level allocation status drives the
+                            // row status control + disables 核配 checkboxes.
+                            const cancelStatus: AllocationStatus =
+                              student.quota_allocation_status === "revoked"
+                                ? "revoked"
+                                : student.quota_allocation_status === "suspended"
+                                  ? "suspended"
+                                  : "normal";
+                            const isCancelled = cancelStatus !== "normal";
                             return (
                               <tr
                                 key={student.ranking_item_id}
-                                className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${
-                                  isChallenge ? "bg-amber-50/60" : ""
+                                className={`border-b border-slate-100 transition-colors ${
+                                  cancelStatus === "revoked"
+                                    ? "bg-red-50/60 hover:bg-red-50"
+                                    : cancelStatus === "suspended"
+                                      ? "bg-orange-50/50 hover:bg-orange-50"
+                                      : isChallenge
+                                        ? "bg-amber-50/60 hover:bg-amber-100/60"
+                                        : "hover:bg-slate-50"
                                 }`}
                               >
                                 <td className="px-1.5 py-1.5 border-r border-slate-100 text-center font-bold text-slate-700 text-[11px]">
@@ -1397,31 +1383,6 @@ export function ManualDistributionPanel({
                                     })
                                   ) : (
                                     <span className="text-[11px] text-slate-400">
-                                      —
-                                    </span>
-                                  )}
-                                </td>
-                                {/* Cancel allocation button */}
-                                <td className="px-1 py-1.5 border-r border-slate-100 text-center">
-                                  {curAlloc ? (
-                                    <button
-                                      onClick={() => {
-                                        setLocalAllocations(prev => {
-                                          const next = new Map(prev);
-                                          next.set(
-                                            student.ranking_item_id,
-                                            null
-                                          );
-                                          return next;
-                                        });
-                                      }}
-                                      className="px-2 py-1 text-xs bg-red-50 text-red-600 hover:bg-red-100 rounded border border-red-200 cursor-pointer transition-colors"
-                                      title="取消此學生的分配"
-                                    >
-                                      ✕
-                                    </button>
-                                  ) : (
-                                    <span className="text-[10px] text-slate-300">
                                       —
                                     </span>
                                   )}
@@ -1455,18 +1416,21 @@ export function ManualDistributionPanel({
                                     !isApplied ||
                                     isRejected ||
                                     atCapacity ||
-                                    isFallbackColumn;
+                                    isFallbackColumn ||
+                                    isCancelled;
                                   return (
                                     <td
                                       key={col.key}
                                       className={`px-0.5 py-1.5 border-r border-slate-100 text-center ${
-                                        isRejected
-                                          ? "opacity-40 bg-red-50"
-                                          : !isApplied
-                                            ? "opacity-40"
-                                            : isFallbackColumn
-                                              ? "opacity-40 bg-amber-100/40"
-                                              : ""
+                                        isCancelled
+                                          ? "opacity-40"
+                                          : isRejected
+                                            ? "opacity-40 bg-red-50"
+                                            : !isApplied
+                                              ? "opacity-40"
+                                              : isFallbackColumn
+                                                ? "opacity-40 bg-amber-100/40"
+                                                : ""
                                       }`}
                                     >
                                       <input
@@ -1475,7 +1439,9 @@ export function ManualDistributionPanel({
                                         checked={isChecked}
                                         disabled={disabled}
                                         title={
-                                          isFallbackColumn
+                                          isCancelled
+                                            ? "此學生已撤銷／停發，無法核配獎學金類別"
+                                            : isFallbackColumn
                                             ? `保底欄位：此考生已持有 ${col.sub_type} 的續領資格，不可改配於此`
                                             : !isApplied
                                               ? `未申請 ${col.display_name}`
@@ -1570,21 +1536,39 @@ export function ManualDistributionPanel({
                                     </div>
                                   )}
                                 </td>
-                                <td className="px-1 py-1.5 border-r border-slate-100 text-center">
-                                  {student.allocated_sub_type ? (
-                                    <button
-                                      title="撤銷此學生獎學金"
-                                      onClick={() => {
-                                        setRevokeTarget({
+                                <td className="px-1.5 py-1.5 border-r border-slate-100 text-center">
+                                  {student.allocated_sub_type || isCancelled ? (
+                                    <AllocationStatusControl
+                                      status={cancelStatus}
+                                      reason={
+                                        cancelStatus === "revoked"
+                                          ? student.revoke_reason
+                                          : cancelStatus === "suspended"
+                                            ? student.suspend_reason
+                                            : null
+                                      }
+                                      onRevoke={() =>
+                                        setAction({
+                                          mode: "revoke",
                                           applicationId: student.application_id,
                                           studentName: student.student_name,
-                                        });
-                                        setRevokeReason("");
-                                      }}
-                                      className="px-2 py-0.5 text-[11px] bg-red-50 text-red-600 hover:bg-red-100 rounded border border-red-200 cursor-pointer transition-colors"
-                                    >
-                                      撤
-                                    </button>
+                                        })
+                                      }
+                                      onSuspend={() =>
+                                        setAction({
+                                          mode: "suspend",
+                                          applicationId: student.application_id,
+                                          studentName: student.student_name,
+                                        })
+                                      }
+                                      onRestore={() =>
+                                        setAction({
+                                          mode: "restore",
+                                          applicationId: student.application_id,
+                                          studentName: student.student_name,
+                                        })
+                                      }
+                                    />
                                   ) : (
                                     <span className="text-[10px] text-slate-300">
                                       —
@@ -1887,40 +1871,33 @@ export function ManualDistributionPanel({
       )}
     </div>
 
-    {/* Revoke allocation dialog */}
-    <AlertDialog
-      open={revokeTarget !== null}
-      onOpenChange={open => !open && setRevokeTarget(null)}
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>撤銷獎學金分發</AlertDialogTitle>
-          <AlertDialogDescription>
-            確定要撤銷 {revokeTarget?.studentName}{" "}
-            的獎學金分發嗎？此操作將從未鎖定造冊中移除該學生，並標記申請為已撤銷。
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <textarea
-          placeholder="請說明撤銷原因"
-          value={revokeReason}
-          onChange={e => setRevokeReason(e.target.value)}
-          className="w-full border border-slate-300 rounded-md p-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-          rows={3}
-        />
-        <AlertDialogFooter>
-          <AlertDialogCancel onClick={() => setRevokeTarget(null)}>
-            取消
-          </AlertDialogCancel>
-          <AlertDialogAction
-            onClick={handleRevoke}
-            disabled={!revokeReason.trim() || isRevoking}
-            className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
-          >
-            {isRevoking ? "撤銷中…" : "確認撤銷"}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    {/* Revoke / Suspend allocation dialog */}
+    <AllocationActionDialog
+      mode={action?.mode ?? "revoke"}
+      target={
+        action
+          ? { applicationId: action.applicationId, studentName: action.studentName }
+          : null
+      }
+      onClose={() => setAction(null)}
+      onConfirmed={async studentName => {
+        // Snapshot mode BEFORE setAction(null) — the success text below
+        // depends on it, and the reset would otherwise null it out.
+        const mode = action?.mode;
+        setAction(null);
+        await fetchData();
+        // Set success message AFTER fetchData so it isn't cleared by
+        // fetchData's own setSaveMessage(null) (preserves the race fix
+        // from commit 2dd0f611).
+        setSaveMessage({
+          type: "success",
+          text:
+            mode === "restore"
+              ? `已恢復 ${studentName} 為正常分發`
+              : `已${mode === "suspend" ? "停發" : "撤銷"} ${studentName} 的獎學金分發`,
+        });
+      }}
+    />
     </>
   );
 }

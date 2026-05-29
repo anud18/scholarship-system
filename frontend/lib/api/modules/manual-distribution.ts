@@ -17,7 +17,13 @@ export interface DistributionStudent {
   rejected_sub_types: string[];
   allocated_sub_type: string | null;
   allocation_year: number | null;
+  /** Live funding flag. Cancel (revoke/suspend) sets this false to free the quota slot; restore sets it true. Seed the 核配 checkbox from this, NOT from allocated_sub_type (preserved across cancel). */
+  is_allocated: boolean;
   status: string;
+  /** Application-level allocation status: "allocated" | "revoked" | "suspended" | "rejected" | null. Drives the row status control + checkbox disabling. */
+  quota_allocation_status: string | null;
+  revoke_reason: string | null;
+  suspend_reason: string | null;
   college_rejected: boolean;
   college_code: string;
   college_name: string;
@@ -577,6 +583,78 @@ export function createManualDistributionApi() {
         return {
           success: false,
           message: b?.detail || b?.message || "撤銷失敗",
+          data: undefined,
+        };
+      }
+      return body as ApiResponse<unknown>;
+    },
+
+    /**
+     * Suspend an allocated student's scholarship distribution.
+     * Removes from unlocked rosters and marks application as cancelled/suspended.
+     */
+    suspendAllocation: async (
+      application_id: number,
+      reason: string
+    ): Promise<ApiResponse<unknown>> => {
+      const token = typedClient.getToken();
+      const response = await fetch(
+        `/api/v1/manual-distribution/applications/${application_id}/suspend`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ reason }),
+        }
+      );
+      let body: unknown = null;
+      try {
+        body = await response.json();
+      } catch {
+        // ignore parse error
+      }
+      if (!response.ok) {
+        const b = body as { detail?: string; message?: string } | null;
+        return {
+          success: false,
+          message: b?.detail || b?.message || "停發失敗",
+          data: undefined,
+        };
+      }
+      return body as ApiResponse<unknown>;
+    },
+
+    /**
+     * Restore a revoked/suspended student back to the allocated state.
+     * Does not touch rosters — regenerate rosters to re-include the student.
+     */
+    restoreAllocation: async (
+      application_id: number
+    ): Promise<ApiResponse<unknown>> => {
+      const token = typedClient.getToken();
+      const response = await fetch(
+        `/api/v1/manual-distribution/applications/${application_id}/restore`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
+      );
+      let body: unknown = null;
+      try {
+        body = await response.json();
+      } catch {
+        // ignore parse error
+      }
+      if (!response.ok) {
+        const b = body as { detail?: string; message?: string } | null;
+        return {
+          success: false,
+          message: b?.detail || b?.message || "恢復失敗",
           data: undefined,
         };
       }

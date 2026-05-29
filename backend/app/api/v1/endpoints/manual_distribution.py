@@ -732,3 +732,28 @@ async def suspend_application_allocation(
         if "already" in msg:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg) from e
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg) from e
+
+
+@router.post("/applications/{application_id}/restore")
+async def restore_application_allocation(
+    application_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_admin_user),
+):
+    """恢復已撤銷/停發學生為正常分發（quota_allocation_status -> allocated）。
+    不會自動還原造冊項目，需重新生成造冊。"""
+    service = ManualDistributionService(db)
+    try:
+        result = await service.restore_allocation(
+            application_id=application_id,
+            admin_user_id=current_user.id,
+        )
+        await db.commit()
+        return {"success": True, "message": "已恢復", "data": result}
+    except ValueError as e:
+        msg = str(e)
+        # "not revoked/suspended" is a state conflict (the app isn't in a
+        # restorable state) — surface it as 409, consistent with revoke/suspend.
+        if "not revoked/suspended" in msg:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg) from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg) from e
