@@ -50,6 +50,10 @@ import {
   type AllocationMode,
 } from "@/components/admin/manual-distribution/AllocationActionDialog";
 import {
+  AllocationStatusControl,
+  type AllocationStatus,
+} from "@/components/admin/manual-distribution/AllocationStatusControl";
+import {
   Loader2,
   Save,
   CheckCircle2,
@@ -1332,11 +1336,26 @@ export function ManualDistributionPanel({
                               student.application_id
                             );
                             const isChallenge = !!challengeMeta;
+                            // Application-level allocation status drives the
+                            // row status control + disables 核配 checkboxes.
+                            const cancelStatus: AllocationStatus =
+                              student.quota_allocation_status === "revoked"
+                                ? "revoked"
+                                : student.quota_allocation_status === "suspended"
+                                  ? "suspended"
+                                  : "normal";
+                            const isCancelled = cancelStatus !== "normal";
                             return (
                               <tr
                                 key={student.ranking_item_id}
-                                className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${
-                                  isChallenge ? "bg-amber-50/60" : ""
+                                className={`border-b border-slate-100 transition-colors ${
+                                  cancelStatus === "revoked"
+                                    ? "bg-red-50/60 hover:bg-red-50"
+                                    : cancelStatus === "suspended"
+                                      ? "bg-orange-50/50 hover:bg-orange-50"
+                                      : isChallenge
+                                        ? "bg-amber-50/60 hover:bg-amber-100/60"
+                                        : "hover:bg-slate-50"
                                 }`}
                               >
                                 <td className="px-1.5 py-1.5 border-r border-slate-100 text-center font-bold text-slate-700 text-[11px]">
@@ -1397,18 +1416,21 @@ export function ManualDistributionPanel({
                                     !isApplied ||
                                     isRejected ||
                                     atCapacity ||
-                                    isFallbackColumn;
+                                    isFallbackColumn ||
+                                    isCancelled;
                                   return (
                                     <td
                                       key={col.key}
                                       className={`px-0.5 py-1.5 border-r border-slate-100 text-center ${
-                                        isRejected
-                                          ? "opacity-40 bg-red-50"
-                                          : !isApplied
-                                            ? "opacity-40"
-                                            : isFallbackColumn
-                                              ? "opacity-40 bg-amber-100/40"
-                                              : ""
+                                        isCancelled
+                                          ? "opacity-40"
+                                          : isRejected
+                                            ? "opacity-40 bg-red-50"
+                                            : !isApplied
+                                              ? "opacity-40"
+                                              : isFallbackColumn
+                                                ? "opacity-40 bg-amber-100/40"
+                                                : ""
                                       }`}
                                     >
                                       <input
@@ -1417,7 +1439,9 @@ export function ManualDistributionPanel({
                                         checked={isChecked}
                                         disabled={disabled}
                                         title={
-                                          isFallbackColumn
+                                          isCancelled
+                                            ? "此學生已撤銷／停發，無法核配獎學金類別"
+                                            : isFallbackColumn
                                             ? `保底欄位：此考生已持有 ${col.sub_type} 的續領資格，不可改配於此`
                                             : !isApplied
                                               ? `未申請 ${col.display_name}`
@@ -1512,36 +1536,32 @@ export function ManualDistributionPanel({
                                     </div>
                                   )}
                                 </td>
-                                <td className="px-1 py-1.5 border-r border-slate-100 text-center">
-                                  {student.allocated_sub_type ? (
-                                    <div className="flex items-center justify-center gap-1">
-                                      <button
-                                        title="撤銷此學生獎學金"
-                                        onClick={() =>
-                                          setAction({
-                                            mode: "revoke",
-                                            applicationId: student.application_id,
-                                            studentName: student.student_name,
-                                          })
-                                        }
-                                        className="px-2 py-0.5 text-[11px] bg-red-50 text-red-600 hover:bg-red-100 rounded border border-red-200 cursor-pointer transition-colors"
-                                      >
-                                        撤
-                                      </button>
-                                      <button
-                                        title="停發此學生獎學金"
-                                        onClick={() =>
-                                          setAction({
-                                            mode: "suspend",
-                                            applicationId: student.application_id,
-                                            studentName: student.student_name,
-                                          })
-                                        }
-                                        className="px-2 py-0.5 text-[11px] bg-orange-50 text-orange-600 hover:bg-orange-100 rounded border border-orange-200 cursor-pointer transition-colors"
-                                      >
-                                        停
-                                      </button>
-                                    </div>
+                                <td className="px-1.5 py-1.5 border-r border-slate-100 text-center">
+                                  {student.allocated_sub_type || isCancelled ? (
+                                    <AllocationStatusControl
+                                      status={cancelStatus}
+                                      reason={
+                                        cancelStatus === "revoked"
+                                          ? student.revoke_reason
+                                          : cancelStatus === "suspended"
+                                            ? student.suspend_reason
+                                            : null
+                                      }
+                                      onRevoke={() =>
+                                        setAction({
+                                          mode: "revoke",
+                                          applicationId: student.application_id,
+                                          studentName: student.student_name,
+                                        })
+                                      }
+                                      onSuspend={() =>
+                                        setAction({
+                                          mode: "suspend",
+                                          applicationId: student.application_id,
+                                          studentName: student.student_name,
+                                        })
+                                      }
+                                    />
                                   ) : (
                                     <span className="text-[10px] text-slate-300">
                                       —

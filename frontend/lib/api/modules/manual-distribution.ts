@@ -18,6 +18,10 @@ export interface DistributionStudent {
   allocated_sub_type: string | null;
   allocation_year: number | null;
   status: string;
+  /** Application-level allocation status: "allocated" | "revoked" | "suspended" | "rejected" | null. Drives the row status control + checkbox disabling. */
+  quota_allocation_status: string | null;
+  revoke_reason: string | null;
+  suspend_reason: string | null;
   college_rejected: boolean;
   college_code: string;
   college_name: string;

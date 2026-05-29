@@ -347,6 +347,12 @@ class ManualDistributionService:
                     "allocated_sub_type": item.allocated_sub_type,
                     "allocation_year": item.allocation_year,
                     "status": item.status,
+                    # Application-level allocation status — drives the
+                    # distribution-row status control (正常/撤銷/停發) and
+                    # disables the 核配 checkboxes once revoked/suspended.
+                    "quota_allocation_status": app.quota_allocation_status,
+                    "revoke_reason": app.revoke_reason,
+                    "suspend_reason": app.suspend_reason,
                     "college_rejected": item.college_rejected,
                     "is_supplementary": item.is_supplementary,
                     "college_code": student_college,
