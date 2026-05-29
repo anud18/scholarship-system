@@ -511,10 +511,12 @@ class TestNotificationService:
             patch.object(service.db, "commit") as mock_commit,
         ):
             # Mock notification query
-            mock_execute.return_value.scalar_one_or_none.side_effect = [
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.side_effect = [
                 mock_notification,  # Notification found
                 None,  # No existing read record
             ]
+            mock_execute.return_value = mock_result
 
             result = await service.markNotificationAsRead(notification_id, user_id)
 
