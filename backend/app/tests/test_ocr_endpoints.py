@@ -153,7 +153,7 @@ class TestOCREndpoints:
         )
 
         assert response.status_code == 400
-        assert "File must be an image" in response.json()["detail"]
+        assert "File must be an image" in response.json()["message"]
 
     @patch("app.api.v1.endpoints.user_profiles.get_current_user")
     def test_bank_passbook_ocr_file_too_large(self, mock_get_current_user, client, mock_current_user):
@@ -169,7 +169,7 @@ class TestOCREndpoints:
         )
 
         assert response.status_code == 400
-        assert "File size must be less than 10MB" in response.json()["detail"]
+        assert "File size must be less than 10MB" in response.json()["message"]
 
     @patch("app.api.v1.endpoints.user_profiles.get_current_user")
     @patch("app.api.v1.endpoints.user_profiles.get_ocr_service")
@@ -185,7 +185,7 @@ class TestOCREndpoints:
         )
 
         assert response.status_code == 503
-        assert "OCR service is not available" in response.json()["detail"]
+        assert "OCR service is not available" in response.json()["message"]
 
     @patch("app.api.v1.endpoints.user_profiles.get_current_user")
     @patch("app.api.v1.endpoints.user_profiles.get_ocr_service")
@@ -205,7 +205,7 @@ class TestOCREndpoints:
         )
 
         assert response.status_code == 422
-        assert "Failed to process image" in response.json()["detail"]
+        assert "Failed to process image" in response.json()["message"]
 
     @patch("app.api.v1.endpoints.user_profiles.get_current_user")
     @patch("app.api.v1.endpoints.user_profiles.get_ocr_service")
@@ -273,7 +273,7 @@ class TestOCREndpoints:
         )
 
         assert response.status_code == 400
-        assert "File must be an image" in response.json()["detail"]
+        assert "File must be an image" in response.json()["message"]
 
     @patch("app.api.v1.endpoints.user_profiles.get_current_user")
     @patch("app.api.v1.endpoints.user_profiles.get_ocr_service")
@@ -293,7 +293,7 @@ class TestOCREndpoints:
         )
 
         assert response.status_code == 500
-        assert "An unexpected error occurred" in response.json()["detail"]
+        assert "An unexpected error occurred" in response.json()["message"]
 
     def test_bank_passbook_ocr_no_auth(self, client, sample_image_file):
         """Test bank passbook OCR without authentication"""
@@ -362,4 +362,4 @@ class TestOCRIntegration:
         )
 
         assert response.status_code == 503
-        assert "OCR service is not available" in response.json()["detail"]
+        assert "OCR service is not available" in response.json()["message"]

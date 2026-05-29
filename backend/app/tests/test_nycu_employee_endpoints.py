@@ -132,7 +132,7 @@ class TestNYCUEmployeeEndpoints:
         response = client.get("/api/v1/nycu-employee/employees")
 
         assert response.status_code == 401
-        assert "Authentication failed" in response.json()["detail"]
+        assert "Authentication failed" in response.json()["message"]
 
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_get_employees_validation_error(self, mock_factory, client):
@@ -144,7 +144,7 @@ class TestNYCUEmployeeEndpoints:
         response = client.get("/api/v1/nycu-employee/employees")
 
         assert response.status_code == 400
-        assert "Invalid request" in response.json()["detail"]
+        assert "Invalid request" in response.json()["message"]
 
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_get_employees_connection_error(self, mock_factory, client):
@@ -156,7 +156,7 @@ class TestNYCUEmployeeEndpoints:
         response = client.get("/api/v1/nycu-employee/employees")
 
         assert response.status_code == 503
-        assert "Service unavailable" in response.json()["detail"]
+        assert "Service unavailable" in response.json()["message"]
 
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_get_employees_timeout_error(self, mock_factory, client):
@@ -168,7 +168,7 @@ class TestNYCUEmployeeEndpoints:
         response = client.get("/api/v1/nycu-employee/employees")
 
         assert response.status_code == 504
-        assert "Request timeout" in response.json()["detail"]
+        assert "Request timeout" in response.json()["message"]
 
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_get_employees_generic_error(self, mock_factory, client):
@@ -180,7 +180,7 @@ class TestNYCUEmployeeEndpoints:
         response = client.get("/api/v1/nycu-employee/employees")
 
         assert response.status_code == 500
-        assert "API error" in response.json()["detail"]
+        assert "API error" in response.json()["message"]
 
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_get_employees_unexpected_error(self, mock_factory, client):
@@ -192,7 +192,7 @@ class TestNYCUEmployeeEndpoints:
         response = client.get("/api/v1/nycu-employee/employees")
 
         assert response.status_code == 500
-        assert "Unexpected error" in response.json()["detail"]
+        assert "Unexpected error" in response.json()["message"]
 
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_get_all_employees_success(self, mock_factory, client, sample_page, sample_employee):
@@ -310,7 +310,7 @@ class TestNYCUEmployeeEndpoints:
         response = client.get("/api/v1/nycu-employee/employees/NOT_FOUND")
 
         assert response.status_code == 404
-        assert "Employee NOT_FOUND not found" in response.json()["detail"]
+        assert "Employee NOT_FOUND not found" in response.json()["message"]
 
     def test_get_employees_invalid_page(self, client):
         """Test invalid page parameter."""
