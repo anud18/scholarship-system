@@ -167,9 +167,7 @@ def test_remove_suspended_item_from_locked_roster_deletes_item_and_marks_stale(
     roster. remove_item_from_locked_roster is status-agnostic (deletes by
     item_id), so the suspend remove-path the new UI exposes behaves identically
     to the revoked one — recompute totals, set excel_stale, stay LOCKED."""
-    suspended_item = next(
-        i for i in locked_roster_two_items.items if i.student_id_number == "B2"
-    )
+    suspended_item = next(i for i in locked_roster_two_items.items if i.student_id_number == "B2")
     item_id = suspended_item.id
     svc = RosterService(db_sync)
     svc.remove_item_from_locked_roster(
