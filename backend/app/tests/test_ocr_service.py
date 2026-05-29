@@ -306,35 +306,41 @@ class TestOCRService:
         with pytest.raises(OCRError, match="Failed to extract bank information"):
             await service.extract_bank_info_from_image(sample_image_bytes)
 
+    @pytest.mark.asyncio
     @patch("app.services.ocr_service.settings")
-    def test_is_enabled_true(self, mock_settings):
+    async def test_is_enabled_true(self, mock_settings):
         """Test is_enabled returns True when properly configured"""
         mock_settings.ocr_service_enabled = True
         mock_settings.gemini_api_key = "test-key"
 
         with patch("app.services.ocr_service.genai"):
             service = OCRService()
-            assert service.is_enabled() is True
+            result = await service.is_enabled()
+            assert result is True
 
+    @pytest.mark.asyncio
     @patch("app.services.ocr_service.settings")
-    def test_is_enabled_false_disabled(self, mock_settings):
+    async def test_is_enabled_false_disabled(self, mock_settings):
         """Test is_enabled returns False when service is disabled"""
         mock_settings.ocr_service_enabled = False
         mock_settings.gemini_api_key = "test-key"
 
         with patch("app.services.ocr_service.genai"):
-            with pytest.raises(OCRError):
-                OCRService()
+            service = OCRService()
+            result = await service.is_enabled()
+            assert result is False
 
+    @pytest.mark.asyncio
     @patch("app.services.ocr_service.settings")
-    def test_is_enabled_false_no_key(self, mock_settings):
+    async def test_is_enabled_false_no_key(self, mock_settings):
         """Test is_enabled returns False when API key is missing"""
         mock_settings.ocr_service_enabled = True
         mock_settings.gemini_api_key = None
 
         with patch("app.services.ocr_service.genai"):
-            with pytest.raises(OCRError):
-                OCRService()
+            service = OCRService()
+            result = await service.is_enabled()
+            assert result is False
 
 
 class TestOCRServiceSingleton:
@@ -357,16 +363,15 @@ class TestOCRServiceSingleton:
         assert result == mock_instance
 
     @patch("app.services.ocr_service.OCRService")
-    def test_get_ocr_service_returns_existing_instance(self, mock_ocr_class):
-        """Test that get_ocr_service returns existing instance"""
-        # Set up existing instance
-        import app.services.ocr_service
+    def test_get_ocr_service_returns_new_instance_each_call(self, mock_ocr_class):
+        """Test that get_ocr_service creates a new instance each call (no singleton)"""
+        mock_instance1 = MagicMock()
+        mock_instance2 = MagicMock()
+        mock_ocr_class.side_effect = [mock_instance1, mock_instance2]
 
-        existing_instance = MagicMock()
-        app.services.ocr_service.ocr_service = existing_instance
+        result1 = get_ocr_service()
+        result2 = get_ocr_service()
 
-        result = get_ocr_service()
-
-        # Should not create new instance
-        mock_ocr_class.assert_not_called()
-        assert result == existing_instance
+        assert mock_ocr_class.call_count == 2
+        assert result1 == mock_instance1
+        assert result2 == mock_instance2
