@@ -285,7 +285,7 @@ export function ManualDistributionPanel({
         setStudents(studentsResp.data);
         const allocMap = new Map<number, LocalAlloc | null>();
         for (const s of studentsResp.data) {
-          if (s.allocated_sub_type) {
+          if (s.is_allocated && s.allocated_sub_type) {
             allocMap.set(s.ranking_item_id, {
               sub_type: s.allocated_sub_type,
               year: s.allocation_year ?? selectedAcademicYear!,
@@ -562,7 +562,7 @@ export function ManualDistributionPanel({
           setStudents(studentsResp.data);
           const initial = new Map<number, LocalAlloc | null>();
           for (const s of studentsResp.data) {
-            if (s.allocated_sub_type) {
+            if (s.is_allocated && s.allocated_sub_type) {
               initial.set(s.ranking_item_id, {
                 sub_type: s.allocated_sub_type,
                 year: s.allocation_year ?? selectedAcademicYear!,
@@ -704,7 +704,7 @@ export function ManualDistributionPanel({
           setStudents(studentsResp.data);
           const initial = new Map<number, LocalAlloc | null>();
           for (const s of studentsResp.data) {
-            if (s.allocated_sub_type) {
+            if (s.is_allocated && s.allocated_sub_type) {
               initial.set(s.ranking_item_id, {
                 sub_type: s.allocated_sub_type,
                 year: s.allocation_year ?? selectedAcademicYear!,

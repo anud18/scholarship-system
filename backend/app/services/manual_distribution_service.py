@@ -346,6 +346,11 @@ class ManualDistributionService:
                     "rejected_sub_types": list(rejected_map.get(app.id, set())),
                     "allocated_sub_type": item.allocated_sub_type,
                     "allocation_year": item.allocation_year,
+                    # Live funding flag — cancel (revoke/suspend) flips this to
+                    # False to free the quota slot, restore flips it back. The
+                    # frontend seeds the 核配 checkbox from this, not from
+                    # allocated_sub_type (which is preserved across cancel).
+                    "is_allocated": item.is_allocated,
                     "status": item.status,
                     # Application-level allocation status — drives the
                     # distribution-row status control (正常/撤銷/停發) and
@@ -735,6 +740,12 @@ class ManualDistributionService:
 
             # Skip soft-deleted applications
             if app.deleted_at is not None:
+                continue
+
+            # Skip applications already revoked/suspended post-finalize. Their
+            # ranking item was unallocated (is_allocated=False) by the cancel
+            # flow; finalize must never flip them back to approved/allocated.
+            if app.quota_allocation_status in ("revoked", "suspended"):
                 continue
 
             if item.is_allocated and item.allocated_sub_type:
@@ -1174,9 +1185,7 @@ class ManualDistributionService:
         rosters are re-created on the next roster generation, and items manually
         removed from a LOCKED roster stay removed (its Excel was already
         re-exported — we never silently un-delete a locked roster line)."""
-        result = await self.db.execute(
-            select(Application).where(Application.id == application_id).with_for_update()
-        )
+        result = await self.db.execute(select(Application).where(Application.id == application_id).with_for_update())
         app = result.scalar_one_or_none()
         if app is None:
             raise ValueError(f"Application {application_id} not found")
@@ -1184,16 +1193,15 @@ class ManualDistributionService:
         prior_status = app.quota_allocation_status
         if prior_status not in ("revoked", "suspended"):
             raise ValueError(
-                f"Application {application_id} is not revoked/suspended "
-                f"(quota_allocation_status={prior_status})"
+                f"Application {application_id} is not revoked/suspended " f"(quota_allocation_status={prior_status})"
             )
 
-        ranking_item_result = await self.db.execute(
-            select(CollegeRankingItem.id).where(CollegeRankingItem.application_id == application_id).limit(1)
+        ranking_items_result = await self.db.execute(
+            select(CollegeRankingItem).where(CollegeRankingItem.application_id == application_id)
         )
-        ranking_item_id = ranking_item_result.scalar_one_or_none()
+        ranking_items = ranking_items_result.scalars().all()
+        ranking_item_id = ranking_items[0].id if ranking_items else None
 
-        now = datetime.now(timezone.utc)
         app.status = ApplicationStatus.approved
         app.quota_allocation_status = "allocated"
         # Clear both metadata sets regardless of which one applied.
@@ -1203,6 +1211,14 @@ class ManualDistributionService:
         app.suspended_at = None
         app.suspended_by = None
         app.suspend_reason = None
+
+        # Re-affirm the allocation on the ranking item(s) so the student
+        # re-consumes the quota slot and a finalize run re-approves them. The
+        # allocated_sub_type / allocation_year were preserved at cancel time, so
+        # we only flip is_allocated back for items that actually held a slot.
+        for ri in ranking_items:
+            if ri.allocated_sub_type:
+                ri.is_allocated = True
 
         log = AuditLog.create_log(
             user_id=admin_user_id,
@@ -1220,7 +1236,7 @@ class ManualDistributionService:
             "ranking_item_id": ranking_item_id,
             "quota_allocation_status": app.quota_allocation_status,
             "restored_from": prior_status,
-            "restored_at": now.isoformat(),
+            "restored_at": datetime.now(timezone.utc).isoformat(),
         }
 
     async def _cancel_allocation(
@@ -1247,13 +1263,14 @@ class ManualDistributionService:
                 f"(quota_allocation_status={app.quota_allocation_status})"
             )
 
-        # Find the CollegeRankingItem for this application (the row that drove the
-        # allocation in the manual-distribution flow). The spec response includes
-        # ranking_item_id so downstream consumers can reference it.
-        ranking_item_result = await self.db.execute(
-            select(CollegeRankingItem.id).where(CollegeRankingItem.application_id == application_id).limit(1)
+        # Find the CollegeRankingItem(s) for this application (the rows that drove
+        # the allocation in the manual-distribution flow). The spec response
+        # includes ranking_item_id so downstream consumers can reference it.
+        ranking_items_result = await self.db.execute(
+            select(CollegeRankingItem).where(CollegeRankingItem.application_id == application_id)
         )
-        ranking_item_id = ranking_item_result.scalar_one_or_none()
+        ranking_items = ranking_items_result.scalars().all()
+        ranking_item_id = ranking_items[0].id if ranking_items else None
 
         now = datetime.now(timezone.utc)
 
@@ -1269,6 +1286,14 @@ class ManualDistributionService:
             app.suspended_at = now
             app.suspended_by = admin_user_id
             app.suspend_reason = reason
+
+        # 4b. Free the quota slot: flip the ranking item(s) out of the allocated
+        # state so (a) the freed slot becomes available for a replacement and
+        # (b) a re-run of finalize cannot resurrect this student. We keep
+        # allocated_sub_type / allocation_year so restore_allocation can re-affirm
+        # the exact same slot without re-deriving it.
+        for ri in ranking_items:
+            ri.is_allocated = False
 
         # 5. Hard-delete items in non-LOCKED rosters
         items_result = await self.db.execute(

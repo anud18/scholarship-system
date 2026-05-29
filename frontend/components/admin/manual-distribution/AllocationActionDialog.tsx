@@ -138,7 +138,9 @@ export function AllocationActionDialog({
               (isRestore ? (
                 <>
                   確定要將 <strong>{target.studentName}</strong>{" "}
-                  恢復為正常分發嗎？申請狀態將改回「核准（已分配）」。已從鎖定造冊移除的項目不會自動還原，請重新生成造冊。
+                  恢復為正常分發嗎？申請狀態將改回「核准（已分配）」，並重新佔用配額。
+                  造冊不會自動還原：請重新生成造冊以將該生加回未鎖定名冊；
+                  <strong>已鎖定造冊先前移除的項目無法自動還原</strong>，如需加回須手動處理。
                 </>
               ) : (
                 <>

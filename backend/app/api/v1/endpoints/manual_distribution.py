@@ -751,4 +751,9 @@ async def restore_application_allocation(
         await db.commit()
         return {"success": True, "message": "已恢復", "data": result}
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        msg = str(e)
+        # "not revoked/suspended" is a state conflict (the app isn't in a
+        # restorable state) — surface it as 409, consistent with revoke/suspend.
+        if "not revoked/suspended" in msg:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg) from e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg) from e

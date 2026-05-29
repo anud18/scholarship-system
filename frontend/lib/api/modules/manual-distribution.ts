@@ -17,6 +17,8 @@ export interface DistributionStudent {
   rejected_sub_types: string[];
   allocated_sub_type: string | null;
   allocation_year: number | null;
+  /** Live funding flag. Cancel (revoke/suspend) sets this false to free the quota slot; restore sets it true. Seed the 核配 checkbox from this, NOT from allocated_sub_type (preserved across cancel). */
+  is_allocated: boolean;
   status: string;
   /** Application-level allocation status: "allocated" | "revoked" | "suspended" | "rejected" | null. Drives the row status control + checkbox disabling. */
   quota_allocation_status: string | null;

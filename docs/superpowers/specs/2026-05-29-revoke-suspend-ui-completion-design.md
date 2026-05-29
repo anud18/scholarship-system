@@ -48,16 +48,25 @@ This spec specifies **only the remaining + changed work**. It does not re-descri
 
 - Automatic 停發 from SIS verification (graduated/suspended/withdrawn) — deferred. `StudentVerificationStatus` already exists if revisited later.
 - Batch revoke/suspend (multi-select toolbar).
-- Undo / restore flow (recovery via audit log + DB, as in old spec).
 - Auto-promote alternate when a slot frees up.
 - Student notifications (email/SMS).
-- Any new backend service/endpoint/migration. **Backend is complete; this iteration is frontend + tests only.** The one allowed backend touch is adding tests if coverage is missing (see Testing).
+
+## Scope Expansion (post-approval, user-requested)
+
+The original spec scoped this iteration as "frontend + tests only". During implementation the user requested two refinements that required backend changes; these are now **in scope** and shipped:
+
+1. **State-reflecting UI + checkbox disabling** ("停發或撤銷 獲獎獎學金類別（核配勾選）應該要不能勾"). The distribution payload (`get_students_for_distribution`) now exposes `quota_allocation_status`, `revoke_reason`, `suspend_reason`, and `is_allocated` so the row can render its 正常/撤銷/停發 state and disable the 核配 checkbox.
+2. **Reversibility** ("按下去之後要可以改回來"). A new `restore_allocation` service + `POST /applications/{id}/restore` endpoint flips a revoked/suspended application back to approved/allocated.
+
+Consequent data-layer change (see Behavior): revoke/suspend now also free the quota slot by flipping the linked `CollegeRankingItem.is_allocated` to `False` (preserving `allocated_sub_type`/`allocation_year` for a clean restore), restore re-affirms it, and `finalize` skips already-revoked/suspended applications so it can never resurrect them. OpenAPI types regenerated accordingly (CLAUDE.md §8).
+
+Still deferred: auto-re-add to rosters on restore (admin regenerates 造冊; items removed from a LOCKED roster stay removed by policy).
 
 ---
 
 ## Behavior
 
-No data-layer behavior changes. Revoke and suspend already share `_cancel_allocation`; `remove_item_from_locked_roster` already deletes any item regardless of revoke/suspend. The only behavioral delta is in the **UI surface**:
+Revoke and suspend share `_cancel_allocation`; `remove_item_from_locked_roster` deletes any item regardless of revoke/suspend. Beyond the UI surface below, the data-layer deltas from the post-approval scope expansion are: `_cancel_allocation` flips the linked `CollegeRankingItem.is_allocated` to `False` (freeing the quota slot), `restore_allocation` re-affirms it, and `finalize` skips revoked/suspended applications. UI deltas:
 
 - **Distribution table**: ✕ column removed. For a student with a persisted allocation (gate: `student.allocated_sub_type` present — same gate the current 撤 button uses), render `[撤] [停]`. Each opens its mode's dialog. Backend still defends with the `quota_allocation_status == 'allocated'` → 400 check and `with_for_update` row lock.
 - **撤 dialog**: free-text reason, required. Placeholder「違反獎學金要點」. Confirm disabled while `reason.trim()` empty.
@@ -73,7 +82,8 @@ No data-layer behavior changes. Revoke and suspend already share `_cancel_alloca
 | 停發 with no dropdown option selected | Confirm button disabled (client). Backend 422s on empty reason as defense. |
 | 停發 option = 其他 with empty note | Confirm stays disabled — note is **required** when 其他 is chosen, so the composed reason is always `「其他：{note}」` (never bare `其他`). |
 | Removing a 停發 student from a LOCKED roster | Same as 撤銷 removal: hard-delete item, recompute totals, set `excel_stale`, roster stays LOCKED, audit `roster.item_removed_after_lock`. |
-| Student already revoked/suspended | After any action, `fetchData` refreshes the row. A second action is rejected by the backend (409). **No client-side hide/disable of the buttons in this iteration** — the distribution-student payload (`DistributionStudent`, manual-distribution.ts:12-37) does not expose `quota_allocation_status`, and adding it is a backend change explicitly out of scope. Rely on backend 409 + refresh. |
+| Student already revoked/suspended | The row renders its terminal state via `AllocationStatusControl` (driven by `quota_allocation_status` now in the payload); the opposite action segment is inert and the 核配 checkbox is disabled. To switch type, restore to 正常 first. The backend still defends with a 409 on a repeated cancel. |
+| Restore a revoked/suspended student | `POST /restore` flips the application to approved/allocated, clears revoke/suspend metadata, and re-affirms `is_allocated` on the ranking item. Rosters are NOT auto-restored — items removed from a LOCKED roster stay removed; admin regenerates 造冊 to re-add. The restore dialog states this. |
 
 ---
 
