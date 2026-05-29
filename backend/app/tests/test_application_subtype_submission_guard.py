@@ -30,9 +30,7 @@ def _scholarship(sub_type_list):
 def test_phd_general_submission_rejected():
     # The exact csphd0003 bug: nstc/moe_1w defined, "general" submitted.
     with pytest.raises(ValidationError):
-        ApplicationService._validate_sub_type_for_submission(
-            _scholarship(["nstc", "moe_1w"]), "general"
-        )
+        ApplicationService._validate_sub_type_for_submission(_scholarship(["nstc", "moe_1w"]), "general")
 
 
 def test_phd_none_submission_rejected():
@@ -49,9 +47,7 @@ def test_sub_type_not_in_list_rejected():
 
 def test_error_message_lists_valid_sub_types():
     with pytest.raises(ValidationError) as exc:
-        ApplicationService._validate_sub_type_for_submission(
-            _scholarship(["nstc", "moe_1w"]), "general"
-        )
+        ApplicationService._validate_sub_type_for_submission(_scholarship(["nstc", "moe_1w"]), "general")
     msg = str(exc.value)
     assert "nstc" in msg and "moe_1w" in msg
 
