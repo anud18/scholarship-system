@@ -24,7 +24,6 @@ class SystemSettingBase(BaseModel):
             raise ValueError("Configuration key cannot be empty")
         if len(v) > 100:
             raise ValueError("Configuration key cannot exceed 100 characters")
-        # 確保鍵名符合命名規範
         if not v.replace("_", "").replace(".", "").replace("-", "").isalnum():
             raise ValueError(
                 "Configuration key can only contain alphanumeric characters, underscores, dots, and hyphens"
