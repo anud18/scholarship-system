@@ -224,7 +224,7 @@ async def test_check_rules_detailed_groups_results():
         rule_name="Warn",
         operator="contains",
         condition_field="clubs",
-        expected_value="math",
+        expected_value="robotics",
         is_hard_rule=False,
         is_warning=True,
     )

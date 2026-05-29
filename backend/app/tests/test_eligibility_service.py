@@ -212,6 +212,10 @@ class TestEligibilityServiceWhitelist:
         config.renewal_application_start_date = None
         config.renewal_application_end_date = None
         config.whitelist_student_ids = {"112550001": True, "112550002": True}
+        config.is_student_in_whitelist.side_effect = lambda nycu_id, sub_type=None: nycu_id in {
+            "112550001",
+            "112550002",
+        }
         return config
 
     async def test_whitelist_student_allowed_dict(self, service, whitelist_config):

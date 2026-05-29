@@ -63,7 +63,7 @@ class TestNotificationService:
             created_notification.message = message
 
             with patch(
-                "app.models.notification.Notification",
+                "app.services.notification_service.Notification",
                 return_value=created_notification,
             ):
                 result = await service.createUserNotification(user_id=user_id, title=title, message=message)
@@ -95,7 +95,7 @@ class TestNotificationService:
         with patch.object(service.db, "add"), patch.object(service.db, "commit"), patch.object(service.db, "refresh"):
             created_notification = Mock(spec=Notification)
 
-            with patch("app.models.notification.Notification") as mock_notification_class:
+            with patch("app.services.notification_service.Notification") as mock_notification_class:
                 mock_notification_class.return_value = created_notification
 
                 result = await service.createUserNotification(
@@ -149,7 +149,7 @@ class TestNotificationService:
             created_notification.message = message
 
             with patch(
-                "app.models.notification.Notification",
+                "app.services.notification_service.Notification",
                 return_value=created_notification,
             ):
                 result = await service.createSystemAnnouncement(title=title, message=message)
@@ -170,7 +170,7 @@ class TestNotificationService:
         new_status = "approved"
         application_title = "獎學金申請"
 
-        with patch.object(service, "createUserNotification") as mock_create:
+        with patch.object(service, "create_notification") as mock_create:
             mock_notification = Mock(spec=Notification)
             mock_create.return_value = mock_notification
 
@@ -181,19 +181,17 @@ class TestNotificationService:
                 application_title=application_title,
             )
 
-            # Verify createUserNotification was called with correct parameters
+            # Verify create_notification was called with correct parameters
             mock_create.assert_called_once()
             call_args = mock_create.call_args[1]
 
             assert call_args["user_id"] == user_id
-            assert call_args["title"] == f"{application_title}狀態更新"
-            assert call_args["title_en"] == f"{application_title} Status Update"
-            assert "恭喜" in call_args["message"]  # Approved message should contain congratulations
-            assert call_args["notification_type"] == NotificationType.success.value
-            assert call_args["priority"] == NotificationPriority.high.value
-            assert call_args["related_resource_type"] == "application"
-            assert call_args["related_resource_id"] == application_id
-            assert call_args["action_url"] == f"/applications/{application_id}"
+            assert call_args["data"]["title"] == f"{application_title}狀態更新"
+            assert call_args["data"]["title_en"] == f"{application_title} Status Update"
+            assert "恭喜" in call_args["data"]["message"]  # Approved message should contain congratulations
+            assert call_args["notification_type"] == NotificationType.success
+            assert call_args["priority"] == NotificationPriority.high
+            assert call_args["href"] == f"/applications/{application_id}"
 
             assert result == mock_notification
 
