@@ -46,9 +46,10 @@ class TestOCRService:
         image.save(buffer, format="JPEG")
         return buffer.getvalue()
 
+    @pytest.mark.asyncio
     @patch("app.services.ocr_service.settings")
     @patch("app.services.ocr_service.genai")
-    def test_ocr_service_initialization_success(self, mock_genai, mock_settings):
+    async def test_ocr_service_initialization_success(self, mock_genai, mock_settings):
         """Test successful OCR service initialization"""
         mock_settings.ocr_service_enabled = True
         mock_settings.gemini_api_key = "test-key"
@@ -59,27 +60,32 @@ class TestOCRService:
         mock_genai.GenerativeModel.return_value = mock_model
 
         service = OCRService()
+        await service._load_config()
 
         mock_genai.configure.assert_called_once_with(api_key="test-key")
         mock_genai.GenerativeModel.assert_called_once_with("gemini-2.0-flash")
         assert service.model == mock_model
 
+    @pytest.mark.asyncio
     @patch("app.services.ocr_service.settings")
-    def test_ocr_service_initialization_disabled(self, mock_settings):
+    async def test_ocr_service_initialization_disabled(self, mock_settings):
         """Test OCR service initialization when disabled"""
         mock_settings.ocr_service_enabled = False
 
+        service = OCRService()
         with pytest.raises(OCRError, match="OCR service is disabled"):
-            OCRService()
+            await service._load_config()
 
+    @pytest.mark.asyncio
     @patch("app.services.ocr_service.settings")
-    def test_ocr_service_initialization_no_api_key(self, mock_settings):
+    async def test_ocr_service_initialization_no_api_key(self, mock_settings):
         """Test OCR service initialization without API key"""
         mock_settings.ocr_service_enabled = True
         mock_settings.gemini_api_key = None
 
+        service = OCRService()
         with pytest.raises(OCRError, match="Gemini API key is not configured"):
-            OCRService()
+            await service._load_config()
 
     @pytest.mark.asyncio
     @patch("app.services.ocr_service.settings")
