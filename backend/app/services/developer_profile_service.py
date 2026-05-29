@@ -216,7 +216,7 @@ class DeveloperProfileManager:
                 english_name=f"{developer_id.title()} PhD Student",
                 role=UserRole.student,
                 custom_attributes={
-                    "student_type": "graduate",
+                    "student_type": "phd",
                     "year": "phd",
                     "gpa": 3.9,
                 },

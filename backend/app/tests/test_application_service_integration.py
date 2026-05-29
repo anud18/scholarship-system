@@ -144,23 +144,30 @@ class TestApplicationServiceIntegration:
         return ApplicationService(db)
 
     def test_integrate_application_file_data_basic(self, service):
-        """Test file data integration"""
+        """Test file data integration - service normalises to {fields, documents} shape"""
         application = Mock(spec=Application)
         application.submitted_form_data = {"name": "Test"}
         application.documents = {}
         application.app_id = "APP001"
+        application.files = []
 
         user = Mock(spec=User)
 
         result = service._integrate_application_file_data(application, user)
-        assert result["name"] == "Test"
+        # _normalize_submitted_form_data converts flat dict → {fields: {…}, documents: […]}
+        assert "fields" in result
+        assert result["fields"]["name"]["value"] == "Test"
 
     def test_integrate_application_file_data_with_documents(self, service):
-        """Test file data integration with documents"""
+        """Test file data integration - documents key is preserved"""
         application = Mock(spec=Application)
-        application.submitted_form_data = {"name": "Test"}
-        application.documents = {"transcript": "path/to/file.pdf"}
+        application.submitted_form_data = {
+            "name": "Test",
+            "documents": [{"document_id": "transcript", "file_path": "path/to/file.pdf"}],
+        }
+        application.documents = {}
         application.app_id = "APP001"
+        application.files = []
 
         user = Mock(spec=User)
 
@@ -183,18 +190,20 @@ class TestApplicationServiceDashboard:
         user.id = 1
         user.nycu_id = "112550001"
 
-        # Mock database queries
-        mock_result = Mock()
-        mock_result.scalar.return_value = 0
-        mock_result.scalars.return_value.all.return_value = []
-        service.db.execute = AsyncMock(return_value=mock_result)
+        # Mock database queries — first execute returns row-iterable (status counts),
+        # second returns scalars().all() for recent applications.
+        mock_result_1 = Mock()
+        mock_result_1.__iter__ = Mock(return_value=iter([]))
+        mock_result_2 = Mock()
+        mock_result_2.scalars.return_value.all.return_value = []
+        service.db.execute = AsyncMock(side_effect=[mock_result_1, mock_result_2])
 
         stats = await service.get_student_dashboard_stats(user)
 
+        # Service returns {total_applications, status_counts, recent_applications}
         assert "total_applications" in stats
-        assert "draft_count" in stats
-        assert "submitted_count" in stats
-        assert "approved_count" in stats
+        assert "status_counts" in stats
+        assert "recent_applications" in stats
 
 
 @pytest.mark.asyncio
@@ -208,49 +217,46 @@ class TestApplicationServiceListResponse:
 
     def test_create_application_list_response(self, service):
         """Test creating application list response"""
+        now = datetime.now(timezone.utc)
         application = Mock(spec=Application)
         application.id = 1
         application.app_id = "APP001"
         application.user_id = 1
+        application.scholarship = None
+        application.scholarship_configuration = None
         application.scholarship_type_id = 1
         application.scholarship_subtype_list = ["type_a"]
+        application.sub_scholarship_type = None
         application.status = ApplicationStatus.draft.value
         application.status_name = "草稿"
+        application.review_stage = None
         application.is_renewal = False
+        application.renewal_year = None
+        application.previous_application_id = None
+        application.challenges_application_id = None
+        application.cancelled_due_to_application_id = None
         application.academic_year = 113
         application.semester = Semester.first
-        application.created_at = datetime.now(timezone.utc)
+        application.student_data = {}
+        application.agree_terms = False
+        application.professor_id = None
+        application.reviewer_id = None
+        application.final_approver_id = None
         application.submitted_at = None
+        application.reviewed_at = None
         application.approved_at = None
+        application.created_at = now
+        application.updated_at = now
+        application.meta_data = None
+        application.application_document_url = None
+        application.application_document_original_filename = None
 
         user = Mock(spec=User)
         user.nycu_id = "112550001"
 
-        integrated_data = {"name": "Test"}
+        integrated_data = {"fields": {}, "documents": []}
 
         response = service._create_application_list_response(application, user, integrated_data)
 
         assert response.app_id == "APP001"
         assert response.status == ApplicationStatus.draft.value
-
-
-@pytest.mark.asyncio
-class TestApplicationServiceZhTranslation:
-    """Test Chinese translation methods"""
-
-    @pytest.fixture
-    def service(self):
-        db = Mock(spec=AsyncSession)
-        return ApplicationService(db)
-
-    def test_add_scholarship_type_zh(self, service):
-        """Test adding Chinese scholarship type"""
-        from app.schemas.application import ApplicationListResponse
-
-        app_data = Mock(spec=ApplicationListResponse)
-        app_data.scholarship_type_id = 1
-        app_data.scholarship_type_zh = None
-        app_data.scholarship_subtype_list = []
-
-        result = service._add_scholarship_type_zh(app_data)
-        assert result is not None

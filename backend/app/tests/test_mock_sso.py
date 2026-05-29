@@ -74,7 +74,7 @@ class TestMockSSO:
 
         assert response.status_code == 400
         data = response.json()
-        assert "Username is required" in data["detail"]
+        assert "Username is required" in data["message"]
 
     async def test_mock_users_contain_all_roles(self, client: AsyncClient):
         """Test that mock users include all user roles"""

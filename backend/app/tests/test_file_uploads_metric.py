@@ -14,7 +14,7 @@ from app.core.metrics import file_uploads_total
 
 def _sample(file_type: str, status: str) -> float:
     value = REGISTRY.get_sample_value(
-        "file_uploads_total_total",
+        "file_uploads_total",
         labels={"file_type": file_type, "status": status},
     )
     return value or 0.0

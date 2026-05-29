@@ -195,7 +195,7 @@ class TestBusinessLogicError:
         assert exc.message == message
         assert exc.status_code == 422
         assert exc.error_code == "BUSINESS_LOGIC_ERROR"
-        assert exc.details is None
+        assert exc.details == {}  # ScholarshipException.__init__ does `details or {}`
 
     def test_business_logic_error_with_details(self):
         """Test BusinessLogicError with details"""

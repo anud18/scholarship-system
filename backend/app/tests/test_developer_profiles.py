@@ -194,7 +194,7 @@ class TestDeveloperProfileManager:
         profile = DeveloperProfileManager.create_custom_profile(
             developer_id="testdev",
             role=UserRole.student,
-            full_name="Custom Student",
+            name="Custom Student",
             chinese_name="自定義學生",
             gpa=3.9,
             major="Computer Science",
@@ -202,7 +202,7 @@ class TestDeveloperProfileManager:
 
         assert profile.developer_id == "testdev"
         assert profile.role == UserRole.student
-        assert profile.full_name == "Custom Student"
+        assert profile.name == "Custom Student"
         assert profile.chinese_name == "自定義學生"
         assert profile.custom_attributes["gpa"] == 3.9
         assert profile.custom_attributes["major"] == "Computer Science"
@@ -220,23 +220,24 @@ class TestDeveloperProfileManager:
         # Verify all are students
         for profile in profiles:
             assert profile.role == UserRole.student
-            assert "testdev" in profile.full_name.lower()
+            assert "testdev" in profile.name.lower()
 
     def test_create_staff_profiles(self):
         """Test creating staff profile suite"""
         profiles = DeveloperProfileManager.create_staff_profiles("testdev")
 
-        assert len(profiles) == 3  # Professor, College, Admin
+        assert len(profiles) == 4  # two professors, one college reviewer, one super_admin
 
         roles = {p.role for p in profiles}
-        expected_roles = {UserRole.professor, UserRole.college, UserRole.admin}
+        expected_roles = {UserRole.professor, UserRole.college, UserRole.super_admin}
         assert roles == expected_roles
 
         # Verify all have testdev in name
         for profile in profiles:
-            assert "testdev" in profile.full_name.lower()
+            assert "testdev" in profile.name.lower()
 
 
+@pytest.mark.integration
 class TestDeveloperProfileAPI:
     """Test the developer profile API endpoints"""
 
@@ -357,7 +358,7 @@ class TestDeveloperProfileAPI:
         assert response.status_code == 400
         data = response.json()
         assert data["success"] is False
-        assert "invalid" in data["detail"].lower()
+        assert "invalid" in data["message"].lower()
 
     def test_missing_required_fields_custom_profile(self):
         """Test creating custom profile with missing required fields"""
@@ -422,11 +423,11 @@ class TestProductionSafety:
                 if "create-custom" in endpoint:
                     response = client.post(endpoint, json={"full_name": "Test", "role": "student"})
                 else:
-                    response = client.get(endpoint) if endpoint.count("/") == 6 else client.post(endpoint)
+                    response = client.get(endpoint) if endpoint.count("/") == 5 else client.post(endpoint)
 
                 assert response.status_code == 404
                 data = response.json()
-                assert "disabled" in data["detail"].lower()
+                assert "disabled" in data["message"].lower()
 
         finally:
             # Restore original setting

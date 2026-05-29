@@ -4,7 +4,7 @@ Unit tests for BatchImportService
 Tests file parsing, validation, bulk operations, and transaction rollback.
 """
 
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +32,7 @@ class TestBatchImportService:
         scholarship = Mock(spec=ScholarshipType)
         scholarship.id = 1
         scholarship.name = "Test Scholarship"
+        scholarship.code = "test_scholarship"
         scholarship.amount = 10000
         scholarship.main_type = "general"
         scholarship.sub_type_selection_mode = "single"
@@ -77,7 +78,7 @@ class TestBatchImportService:
         ]
 
     @pytest.mark.asyncio
-    async def test_parse_excel_file_success(self, service):
+    async def test_parse_excel_file_success(self, service, mock_scholarship):
         """Test successful Excel file parsing"""
         # Create valid Excel content (minimal valid XLSX)
         import io
@@ -97,10 +98,11 @@ class TestBatchImportService:
             df.to_excel(writer, index=False)
         file_content = buffer.getvalue()
 
-        # Parse file
-        parsed_data, errors = await service.parse_excel_file(
-            file_content=file_content, scholarship_type_id=1, academic_year=113, semester="first"
-        )
+        # Mock scholarship lookup; custom_fields query hits real empty test DB (returns [])
+        with patch.object(service.db, "get", return_value=mock_scholarship):
+            parsed_data, errors = await service.parse_excel_file(
+                file_content=file_content, scholarship_type_id=1, academic_year=113, semester="first"
+            )
 
         # Assertions
         assert len(parsed_data) == 2
@@ -109,7 +111,7 @@ class TestBatchImportService:
         assert parsed_data[0]["student_name"] == "王小明"
 
     @pytest.mark.asyncio
-    async def test_parse_excel_file_missing_columns(self, service):
+    async def test_parse_excel_file_missing_columns(self, service, mock_scholarship):
         """Test Excel parsing with missing required columns"""
         import io
 
@@ -123,10 +125,11 @@ class TestBatchImportService:
             df.to_excel(writer, index=False)
         file_content = buffer.getvalue()
 
-        # Parse file
-        parsed_data, errors = await service.parse_excel_file(
-            file_content=file_content, scholarship_type_id=1, academic_year=113, semester="first"
-        )
+        # Mock scholarship lookup; custom_fields query hits real empty test DB (returns [])
+        with patch.object(service.db, "get", return_value=mock_scholarship):
+            parsed_data, errors = await service.parse_excel_file(
+                file_content=file_content, scholarship_type_id=1, academic_year=113, semester="first"
+            )
 
         # Assertions
         assert len(parsed_data) == 0
@@ -239,8 +242,8 @@ class TestBatchImportService:
                 semester="first",
             )
 
-            # Should create 2 applications
-            assert mock_add.call_count == 2
+            # Should create 2 applications + 2 ApplicationSequence records (one per student)
+            assert mock_add.call_count == 4
             assert len(errors) == 0
 
     @pytest.mark.asyncio
@@ -323,6 +326,7 @@ class TestBatchImportService:
             assert "找不到獎學金配置" in str(exc_info.value)
             assert "113學年度" in str(exc_info.value)
 
+    @pytest.mark.skip(reason="validate_college_permission removed from BatchImportService")
     @pytest.mark.asyncio
     async def test_validate_college_permission_success(self, service):
         """Test successful college permission validation"""
@@ -356,6 +360,7 @@ class TestBatchImportService:
             assert is_valid is True
             assert error_msg is None
 
+    @pytest.mark.skip(reason="validate_college_permission removed from BatchImportService")
     @pytest.mark.asyncio
     async def test_validate_college_permission_mismatch(self, service):
         """Test college permission validation with mismatch"""
@@ -423,7 +428,9 @@ class TestBatchImportService:
         from app.models.student import Department
 
         db_mock = AsyncMock()
-        service = BatchImportService(db_mock)
+        mock_student_service = MagicMock()
+        mock_student_service.api_enabled = False
+        service = BatchImportService(db_mock, student_service=mock_student_service)
 
         student = Mock(spec=User)
         student.nycu_id = "111111111"
@@ -436,19 +443,12 @@ class TestBatchImportService:
         user_scalars.all.return_value = [student]
         user_result.scalars.return_value = user_scalars
 
-        department = Mock(spec=Department)
-        department.code = "5201"
-        department.academy_code = "C"
-
-        dept_result = Mock()
-        dept_result.scalar_one_or_none.return_value = department
-
         duplicates_result = Mock()
         duplicates_scalars = Mock()
         duplicates_scalars.all.return_value = []
         duplicates_result.scalars.return_value = duplicates_scalars
 
-        db_mock.execute.side_effect = [user_result, dept_result, duplicates_result]
+        db_mock.execute.side_effect = [user_result, duplicates_result]
 
         permission_results, duplicate_results, warnings = await service.bulk_validate_permissions_and_duplicates(
             student_ids=["111111111"],

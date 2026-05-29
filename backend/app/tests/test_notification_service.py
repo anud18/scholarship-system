@@ -433,14 +433,12 @@ class TestNotificationService:
             notification.meta_data = {}
 
         with patch.object(service.db, "execute") as mock_execute:
-            # Mock notification query result
-            mock_execute.return_value.scalars.return_value.all.return_value = mock_notifications
-
-            # Mock read records query (empty)
-            mock_execute.return_value.scalars.return_value.all.side_effect = [
+            mock_result = Mock()
+            mock_result.scalars.return_value.all.side_effect = [
                 mock_notifications,  # First call for notifications
                 [],  # Second call for read records
             ]
+            mock_execute.return_value = mock_result
 
             result = await service.getUserNotifications(user_id=user_id)
 
@@ -460,7 +458,9 @@ class TestNotificationService:
         with patch.object(service.db, "execute") as mock_execute:
             # Mock personal notifications count (3 unread)
             # Mock system notifications count (2 unread)
-            mock_execute.return_value.scalar.side_effect = [3, 2]
+            mock_result = Mock()
+            mock_result.scalar.side_effect = [3, 2]
+            mock_execute.return_value = mock_result
 
             result = await service.getUnreadNotificationCount(user_id)
 
@@ -483,7 +483,9 @@ class TestNotificationService:
         mock_notification.mark_as_read = Mock()
 
         with patch.object(service.db, "execute") as mock_execute, patch.object(service.db, "commit") as mock_commit:
-            mock_execute.return_value.scalar_one_or_none.return_value = mock_notification
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.return_value = mock_notification
+            mock_execute.return_value = mock_result
 
             result = await service.markNotificationAsRead(notification_id, user_id)
 
@@ -509,10 +511,12 @@ class TestNotificationService:
             patch.object(service.db, "commit") as mock_commit,
         ):
             # Mock notification query
-            mock_execute.return_value.scalar_one_or_none.side_effect = [
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.side_effect = [
                 mock_notification,  # Notification found
                 None,  # No existing read record
             ]
+            mock_execute.return_value = mock_result
 
             result = await service.markNotificationAsRead(notification_id, user_id)
 
@@ -532,7 +536,9 @@ class TestNotificationService:
         user_id = 1
 
         with patch.object(service.db, "execute") as mock_execute:
-            mock_execute.return_value.scalar_one_or_none.return_value = None
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.return_value = None
+            mock_execute.return_value = mock_result
 
             result = await service.markNotificationAsRead(notification_id, user_id)
 
@@ -584,10 +590,12 @@ class TestNotificationService:
 
         with patch.object(service.db, "execute") as mock_execute:
             mock_notifications = []
-            mock_execute.return_value.scalars.return_value.all.side_effect = [
+            mock_result = Mock()
+            mock_result.scalars.return_value.all.side_effect = [
                 mock_notifications,  # Notifications query
                 [],  # Read records query
             ]
+            mock_execute.return_value = mock_result
 
             result = await service.getUserNotifications(
                 user_id=user_id,

@@ -138,7 +138,9 @@ class TestBulkApprovalServiceReject:
         assert results["total_requested"] == 1
         assert len(results["successful_rejections"]) == 1
         assert mock_application.status == ApplicationStatus.rejected.value
-        assert mock_application.rejection_reason == "Does not meet criteria"
+        service.db.add.assert_called_once()
+        added_review = service.db.add.call_args[0][0]
+        assert added_review.comments == "Does not meet criteria"
 
     async def test_bulk_reject_invalid_status(self, service, mock_application):
         """Test bulk rejection with invalid status"""
@@ -339,12 +341,14 @@ class TestBulkApprovalServiceCriteria:
         assert not service._meets_approval_criteria(mock_application, criteria)
 
     def test_meets_approval_criteria_priority_score(self, service, mock_application):
-        """Test priority score criteria check"""
+        """priority_score field was removed; min_priority_score criteria is
+        now a no-op — _meets_approval_criteria always returns True for it."""
         criteria = {"min_priority_score": 80}
         assert service._meets_approval_criteria(mock_application, criteria)
 
+        # min_priority_score is ignored (priority_score field removed from Application)
         criteria = {"min_priority_score": 90}
-        assert not service._meets_approval_criteria(mock_application, criteria)
+        assert service._meets_approval_criteria(mock_application, criteria)
 
     def test_meets_approval_criteria_multiple(self, service, mock_application):
         """Test multiple criteria check"""

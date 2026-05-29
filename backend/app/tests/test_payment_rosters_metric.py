@@ -13,7 +13,7 @@ from app.core.metrics import payment_rosters_total
 
 def _sample(status: str) -> float:
     value = REGISTRY.get_sample_value(
-        "payment_rosters_total_total",
+        "payment_rosters_total",
         labels={"status": status},
     )
     return value or 0.0

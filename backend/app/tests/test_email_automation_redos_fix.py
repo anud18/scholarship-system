@@ -188,17 +188,13 @@ class TestValidateConditionQueryReDoSFix:
     # ==================== EDGE CASE TESTS ====================
 
     def test_query_with_exactly_50_consecutive_braces_passes(self):
-        """Test boundary condition: exactly 50 consecutive braces should pass."""
-        # The pre-check uses r"\{{50,}" which means 50 or more
-        # So exactly 49 should pass, 50 should be rejected
+        """Test boundary condition: exactly 49 consecutive braces pass the brace check."""
+        # The pre-check uses r"\{{50,}" which means 50 or more consecutive braces
+        # So exactly 49 should pass the brace check entirely (no HTTPException)
         boundary_query = "SELECT * FROM table WHERE field = " + "{" * 49 + " text"
 
-        # This should pass the brace check but fail on other validation
-        with pytest.raises(HTTPException) as exc_info:
-            validate_condition_query(boundary_query)
-
-        # Should NOT be rejected for excessive braces
-        assert "excessive consecutive braces" not in exc_info.value.detail.lower()
+        # 49 braces: no closing }, so no placeholder found → passes all validation
+        validate_condition_query(boundary_query)  # should not raise
 
     def test_query_with_51_consecutive_braces_rejected(self):
         """Test boundary condition: 51 consecutive braces should be rejected."""
