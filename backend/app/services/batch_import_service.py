@@ -166,7 +166,7 @@ class BatchImportService:
                     student_id=None,
                     field="columns",
                     error_type="missing_columns",
-                    message=f"缺少必要欄位: {', '.join(required_columns_chinese)}",
+                    message=f"缺少必要欄位: {', '.join(required_columns_chinese)} (或 {', '.join(required_columns_english)})",
                 )
             )
             return [], errors

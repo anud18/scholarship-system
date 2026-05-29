@@ -185,17 +185,14 @@ class BulkApprovalService:
                     application.decision_date = datetime.now(timezone.utc)
                     application.reviewer_id = rejector_user_id
 
-                    # Note: rejection_reason moved to ApplicationReview model
                     # Create ApplicationReview record to store rejection reason
-                    from app.models.application import ApplicationReview, ReviewStatus
+                    from app.models.review import ApplicationReview
 
                     review = ApplicationReview(
                         application_id=application.id,
                         reviewer_id=rejector_user_id,
-                        review_stage="bulk_rejection",
-                        review_status=ReviewStatus.REJECTED.value,
                         recommendation="reject",
-                        decision_reason=rejection_reason,
+                        comments=rejection_reason,
                         reviewed_at=datetime.now(timezone.utc),
                     )
                     self.db.add(review)

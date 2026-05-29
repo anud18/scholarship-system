@@ -441,19 +441,12 @@ class TestBatchImportService:
         user_scalars.all.return_value = [student]
         user_result.scalars.return_value = user_scalars
 
-        department = Mock(spec=Department)
-        department.code = "5201"
-        department.academy_code = "C"
-
-        dept_result = Mock()
-        dept_result.scalar_one_or_none.return_value = department
-
         duplicates_result = Mock()
         duplicates_scalars = Mock()
         duplicates_scalars.all.return_value = []
         duplicates_result.scalars.return_value = duplicates_scalars
 
-        db_mock.execute.side_effect = [user_result, dept_result, duplicates_result]
+        db_mock.execute.side_effect = [user_result, duplicates_result]
 
         permission_results, duplicate_results, warnings = await service.bulk_validate_permissions_and_duplicates(
             student_ids=["111111111"],
