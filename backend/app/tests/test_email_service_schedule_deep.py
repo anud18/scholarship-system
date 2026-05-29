@@ -25,7 +25,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.email_management import ScheduledEmail
+from app.models.email_management import EmailCategory, ScheduledEmail
 from app.services.email_service import EmailService
 
 
@@ -127,7 +127,7 @@ async def test_metadata_kwargs_persist_to_their_columns(db: AsyncSession):
         template_key="professor_review_notification",
         application_id=42,
         scholarship_type_id=7,
-        email_category="review",
+        email_category=EmailCategory.review_college,
         created_by_user_id=100,
     )
 
@@ -135,7 +135,7 @@ async def test_metadata_kwargs_persist_to_their_columns(db: AsyncSession):
     assert fetched.template_key == "professor_review_notification"
     assert fetched.application_id == 42
     assert fetched.scholarship_type_id == 7
-    assert fetched.email_category == "review"
+    assert fetched.email_category == EmailCategory.review_college
     assert fetched.created_by_user_id == 100
 
 
