@@ -623,6 +623,8 @@ async def extract_bank_info_from_passbook(
                     detail="無法辨識銀行資訊。請確認圖片格式正確且清晰可讀。",
                 )
 
+        except HTTPException:
+            raise
         except Exception as e:
             # SECURITY: Log exception type only (prevent stack trace exposure)
             logger.error(f"Bank OCR failed for user {current_user.id}: {type(e).__name__}")

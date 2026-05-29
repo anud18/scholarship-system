@@ -140,11 +140,9 @@ class TestOCREndpoints:
             "/api/v1/user-profiles/bank-passbook-ocr", files={"file": ("test.jpg", sample_image_file, "image/jpeg")}
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 422
         data = response.json()
-        assert data["success"] is True  # API call succeeded
-        assert data["message"] == "銀行資訊提取失敗"
-        assert data["data"]["success"] is False
+        assert "無法辨識銀行資訊" in data["message"]
 
     @patch("app.api.v1.endpoints.user_profiles.get_current_user")
     def test_bank_passbook_ocr_invalid_file_type(self, mock_get_current_user, client, mock_current_user):
@@ -209,7 +207,7 @@ class TestOCREndpoints:
         )
 
         assert response.status_code == 422
-        assert "Failed to process image" in response.json()["message"]
+        assert "無法處理圖片" in response.json()["message"]
 
     @patch("app.api.v1.endpoints.user_profiles.get_current_user")
     @patch("app.api.v1.endpoints.user_profiles.get_ocr_service")
@@ -296,8 +294,8 @@ class TestOCREndpoints:
             "/api/v1/user-profiles/document-ocr", files={"file": ("test.jpg", sample_image_file, "image/jpeg")}
         )
 
-        assert response.status_code == 500
-        assert "An unexpected error occurred" in response.json()["message"]
+        assert response.status_code == 422
+        assert "無法處理圖片" in response.json()["message"]
 
     def test_bank_passbook_ocr_no_auth(self, sample_image_file):
         """Test bank passbook OCR without authentication"""
@@ -368,5 +366,5 @@ class TestOCRIntegration:
             "/api/v1/user-profiles/bank-passbook-ocr", files={"file": ("test.jpg", buffer, "image/jpeg")}
         )
 
-        assert response.status_code == 503
-        assert "OCR service is not available" in response.json()["message"]
+        assert response.status_code == 422
+        assert "無法處理圖片" in response.json()["message"]

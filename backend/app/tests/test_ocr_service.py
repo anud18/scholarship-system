@@ -46,9 +46,10 @@ class TestOCRService:
         image.save(buffer, format="JPEG")
         return buffer.getvalue()
 
+    @pytest.mark.asyncio
     @patch("app.services.ocr_service.settings")
     @patch("app.services.ocr_service.genai")
-    def test_ocr_service_initialization_success(self, mock_genai, mock_settings):
+    async def test_ocr_service_initialization_success(self, mock_genai, mock_settings):
         """Test successful OCR service initialization"""
         mock_settings.ocr_service_enabled = True
         mock_settings.gemini_api_key = "test-key"
@@ -59,27 +60,32 @@ class TestOCRService:
         mock_genai.GenerativeModel.return_value = mock_model
 
         service = OCRService()
+        await service._load_config()
 
         mock_genai.configure.assert_called_once_with(api_key="test-key")
         mock_genai.GenerativeModel.assert_called_once_with("gemini-2.0-flash")
         assert service.model == mock_model
 
+    @pytest.mark.asyncio
     @patch("app.services.ocr_service.settings")
-    def test_ocr_service_initialization_disabled(self, mock_settings):
+    async def test_ocr_service_initialization_disabled(self, mock_settings):
         """Test OCR service initialization when disabled"""
         mock_settings.ocr_service_enabled = False
 
+        service = OCRService()
         with pytest.raises(OCRError, match="OCR service is disabled"):
-            OCRService()
+            await service._load_config()
 
+    @pytest.mark.asyncio
     @patch("app.services.ocr_service.settings")
-    def test_ocr_service_initialization_no_api_key(self, mock_settings):
+    async def test_ocr_service_initialization_no_api_key(self, mock_settings):
         """Test OCR service initialization without API key"""
         mock_settings.ocr_service_enabled = True
         mock_settings.gemini_api_key = None
 
+        service = OCRService()
         with pytest.raises(OCRError, match="Gemini API key is not configured"):
-            OCRService()
+            await service._load_config()
 
     @pytest.mark.asyncio
     @patch("app.services.ocr_service.settings")
@@ -300,35 +306,41 @@ class TestOCRService:
         with pytest.raises(OCRError, match="Failed to extract bank information"):
             await service.extract_bank_info_from_image(sample_image_bytes)
 
+    @pytest.mark.asyncio
     @patch("app.services.ocr_service.settings")
-    def test_is_enabled_true(self, mock_settings):
+    async def test_is_enabled_true(self, mock_settings):
         """Test is_enabled returns True when properly configured"""
         mock_settings.ocr_service_enabled = True
         mock_settings.gemini_api_key = "test-key"
 
         with patch("app.services.ocr_service.genai"):
             service = OCRService()
-            assert service.is_enabled() is True
+            result = await service.is_enabled()
+            assert result is True
 
+    @pytest.mark.asyncio
     @patch("app.services.ocr_service.settings")
-    def test_is_enabled_false_disabled(self, mock_settings):
+    async def test_is_enabled_false_disabled(self, mock_settings):
         """Test is_enabled returns False when service is disabled"""
         mock_settings.ocr_service_enabled = False
         mock_settings.gemini_api_key = "test-key"
 
         with patch("app.services.ocr_service.genai"):
-            with pytest.raises(OCRError):
-                OCRService()
+            service = OCRService()
+            result = await service.is_enabled()
+            assert result is False
 
+    @pytest.mark.asyncio
     @patch("app.services.ocr_service.settings")
-    def test_is_enabled_false_no_key(self, mock_settings):
+    async def test_is_enabled_false_no_key(self, mock_settings):
         """Test is_enabled returns False when API key is missing"""
         mock_settings.ocr_service_enabled = True
         mock_settings.gemini_api_key = None
 
         with patch("app.services.ocr_service.genai"):
-            with pytest.raises(OCRError):
-                OCRService()
+            service = OCRService()
+            result = await service.is_enabled()
+            assert result is False
 
 
 class TestOCRServiceSingleton:
@@ -351,16 +363,15 @@ class TestOCRServiceSingleton:
         assert result == mock_instance
 
     @patch("app.services.ocr_service.OCRService")
-    def test_get_ocr_service_returns_existing_instance(self, mock_ocr_class):
-        """Test that get_ocr_service returns existing instance"""
-        # Set up existing instance
-        import app.services.ocr_service
+    def test_get_ocr_service_returns_new_instance_each_call(self, mock_ocr_class):
+        """Test that get_ocr_service creates a new instance each call (no singleton)"""
+        mock_instance1 = MagicMock()
+        mock_instance2 = MagicMock()
+        mock_ocr_class.side_effect = [mock_instance1, mock_instance2]
 
-        existing_instance = MagicMock()
-        app.services.ocr_service.ocr_service = existing_instance
+        result1 = get_ocr_service()
+        result2 = get_ocr_service()
 
-        result = get_ocr_service()
-
-        # Should not create new instance
-        mock_ocr_class.assert_not_called()
-        assert result == existing_instance
+        assert mock_ocr_class.call_count == 2
+        assert result1 == mock_instance1
+        assert result2 == mock_instance2
