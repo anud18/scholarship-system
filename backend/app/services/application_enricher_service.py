@@ -261,6 +261,7 @@ class ApplicationEnricherService:
                     "files_count": len(app.get("files", [])),
                 },
                 # 教授審核資訊
+                "requires_professor_recommendation": app.get("requires_professor_recommendation", False),
                 "professor_review_completed": app.get("professor_review_completed", False),
                 "professor_review_items": app.get("professor_review_items", []),
             }

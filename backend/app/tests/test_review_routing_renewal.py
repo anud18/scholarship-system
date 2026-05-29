@@ -402,24 +402,33 @@ async def test_application_service_pending_list_filters_by_renewal_phase(
 
 
 @pytest.mark.asyncio
-async def test_college_service_pending_list_filters_by_renewal_phase(
+async def test_college_service_pending_list_shows_all_regardless_of_phase(
     db: AsyncSession,
     test_user: User,
     test_scholarship: ScholarshipType,
 ):
     """End-to-end check that CollegeReviewService.get_applications_for_review
-    applies the renewal-phase filter to under_review rows while leaving
-    approved rows untouched.
+    shows EVERY application in the college regardless of the renewal/general
+    review phase.
+
+    This intentionally reverses the earlier phase-gated college behaviour:
+    「學院端應該要可以看到隸屬於該學院的所有申請，即使還卡在教授審核的階段」.
+    The college listing is no longer time-gated, so both the renewal and the
+    general pending apps surface even while only the renewal_college_review
+    window is open. The professor listing keeps its own phase filter (see the
+    professor test above), which is unchanged.
     """
     from app.services.college_review_service import CollegeReviewService
 
-    # Configuration currently in renewal_college_review window.
+    # Configuration currently in renewal_college_review window with the general
+    # college_review window still in the future. Under the old phase-gated
+    # behaviour this would have hidden the general pending app.
     config = _make_config_in_renewal_phase(test_scholarship.id, role="college", config_code="SVC-COL-RENEW")
     db.add(config)
     await db.commit()
     await db.refresh(config)
 
-    # Pending renewal app — should be visible.
+    # Pending renewal app — visible.
     renewal_pending = await _make_pending_application(
         db,
         user=test_user,
@@ -428,7 +437,7 @@ async def test_college_service_pending_list_filters_by_renewal_phase(
         is_renewal=True,
         app_id_suffix="00061",
     )
-    # Pending general app — should be hidden by the renewal-phase filter.
+    # Pending general app — now ALSO visible (previously hidden by the gate).
     general_pending = await _make_pending_application(
         db,
         user=test_user,
@@ -437,8 +446,7 @@ async def test_college_service_pending_list_filters_by_renewal_phase(
         is_renewal=False,
         app_id_suffix="00062",
     )
-    # Approved general app — should still be visible (historical visibility
-    # is unaffected by the phase filter).
+    # Approved general app — historical visibility unchanged.
     approved_general = Application(
         app_id=f"APP-{CURRENT_ACADEMIC_YEAR}-0-00063",
         user_id=test_user.id,
@@ -464,9 +472,51 @@ async def test_college_service_pending_list_filters_by_renewal_phase(
     )
     visible_ids = {r["id"] for r in rows}
 
-    assert renewal_pending.id in visible_ids, "renewal pending app should be visible during renewal phase"
-    assert general_pending.id not in visible_ids, "general pending app should be filtered out during renewal phase"
+    assert renewal_pending.id in visible_ids, "renewal pending app should be visible"
+    assert general_pending.id in visible_ids, "general pending app should now be visible (no college phase gate)"
     assert approved_general.id in visible_ids, "approved app should always remain visible"
+
+
+@pytest.mark.asyncio
+async def test_college_service_sees_pending_app_still_in_professor_stage(
+    db: AsyncSession,
+    test_user: User,
+    test_scholarship: ScholarshipType,
+):
+    """Regression for 「學院端應該看得到還卡在教授審核階段的申請」.
+
+    The configuration's professor review window is open NOW; the college
+    review window is not set / not open yet. Previously the college listing
+    was time-gated by apply_renewal_phase_filter(role="college"), so a
+    professor-stage application was invisible to the college until the college
+    window opened. It must now be visible.
+    """
+    from app.services.college_review_service import CollegeReviewService
+
+    # Professor general window open now; college windows left unset (None) →
+    # the old gate would have hidden every pending row for the college.
+    config = _make_config_in_general_phase(test_scholarship.id, role="professor", config_code="SVC-PROF-STAGE")
+    db.add(config)
+    await db.commit()
+    await db.refresh(config)
+
+    professor_stage_app = await _make_pending_application(
+        db,
+        user=test_user,
+        scholarship_type=test_scholarship,
+        configuration_id=config.id,
+        is_renewal=False,
+        app_id_suffix="00071",
+    )
+
+    service = CollegeReviewService(db)
+    rows = await service.get_applications_for_review(
+        scholarship_type_id=test_scholarship.id,
+        academic_year=CURRENT_ACADEMIC_YEAR,
+    )
+    visible_ids = {r["id"] for r in rows}
+
+    assert professor_stage_app.id in visible_ids, "college must see apps still in the professor review stage"
 
 
 @pytest.mark.asyncio

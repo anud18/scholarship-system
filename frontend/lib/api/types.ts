@@ -139,6 +139,10 @@ export interface Application {
   created_at: string;
   updated_at: string;
   is_recommended?: boolean;
+  /** Whether this scholarship requires a professor recommendation step
+   *  (top-level flag from the college review listing; distinct from the
+   *  nested scholarship_configuration.requires_professor_recommendation). */
+  requires_professor_recommendation?: boolean;
   professor_review_completed?: boolean;
   college_review_completed?: boolean;
   form_data?: Record<string, any>;

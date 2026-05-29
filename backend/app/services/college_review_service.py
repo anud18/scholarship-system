@@ -20,14 +20,13 @@ from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFoundError
 from app.core.metrics import scholarship_reviews_total
-from app.models.application import Application, ApplicationStatus
+from app.models.application import Application
 from app.models.college_review import CollegeRanking, CollegeRankingItem
-from app.models.enums import Semester
+from app.models.enums import REVIEWABLE_APPLICATION_STATUSES, Semester
 from app.models.review import ApplicationReview  # Unified review system
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole
 from app.services.email_automation_service import email_automation_service
-from app.services.review_phase_filter import apply_renewal_phase_filter
 
 func: Any = sa_func
 
@@ -293,54 +292,35 @@ class CollegeReviewService:
             f"Getting applications for college review with filters: type_id={scholarship_type_id}, type={scholarship_type}, sub_type={sub_type}, year={academic_year}, semester={semester}"
         )
 
-        # Base query for applications in reviewable state with comprehensive eager loading
-        # Phase 4 (renewal routing): for *pending* applications we must restrict to
-        # those matching the current college review phase — renewal apps during
-        # renewal_college_review, general apps during college_review. Historical
-        # statuses (approved / partial_approved / rejected) remain visible
-        # unconditionally so reviewers can audit past decisions.
+        # Base query for applications in reviewable state with comprehensive eager loading.
         #
-        # Pending = submitted OR under_review. Professor review is advisory (issue
-        # #182): it advances review_stage to professor_reviewed but leaves status at
-        # ``submitted``, so a professor-reviewed app awaiting college sign-off is
-        # still ``submitted``. The professor listing already treats submitted as
-        # pending; the college listing must too, or these apps never surface here.
-        pending_statuses = [
-            ApplicationStatus.submitted.value,
-            ApplicationStatus.under_review.value,
-        ]
-        pending_phase_subquery = (
-            apply_renewal_phase_filter(
-                select(Application.id).where(Application.status.in_(pending_statuses)),
-                role="college",
-                alias_name="college_phase_cfg",
-            )
-        ).subquery()
-
+        # College reviewers must see EVERY application belonging to their college,
+        # including ones still awaiting professor sign-off:
+        # 「學院端應該要可以看到隸屬於該學院的所有申請，即使還卡在教授審核的階段」.
+        #
+        # Professor review is advisory (issue #182): it advances review_stage to
+        # professor_reviewed but leaves status at ``submitted``. Previously this
+        # pending listing was time-gated by apply_renewal_phase_filter(role=
+        # "college"), so while a configuration was still inside its *professor*
+        # review window (college window not yet open), a professor-stage
+        # application was invisible to the college. We intentionally drop that
+        # gate here: pending (submitted / under_review) and historical (approved /
+        # partial_approved / rejected) rows are all shown, scoped to the college
+        # by the ``college_code`` filter below. The professor listing keeps its
+        # own renewal-phase filter — only college visibility is broadened.
         stmt = (
             select(Application)
             .options(
                 selectinload(Application.scholarship_type_ref),
+                selectinload(Application.scholarship_configuration),  # for requires_professor_recommendation
                 selectinload(Application.reviews).selectinload(ApplicationReview.reviewer),
                 selectinload(Application.reviews).selectinload(ApplicationReview.items),
                 selectinload(Application.files),
                 selectinload(Application.student),  # Load student information
             )
-            .where(
-                or_(
-                    # Pending rows (submitted / under_review) must match the current
-                    # renewal/general college review phase.
-                    and_(
-                        Application.status.in_(pending_statuses),
-                        Application.id.in_(select(pending_phase_subquery.c.id)),
-                    ),
-                    Application.status == ApplicationStatus.approved.value,  # 包含已核准的申請
-                    Application.status == ApplicationStatus.partial_approved.value,  # 包含部分同意的申請
-                    Application.status == ApplicationStatus.rejected.value,  # 包含已駁回的申請
-                )
-            )
+            .where(Application.status.in_(REVIEWABLE_APPLICATION_STATUSES))
         )
-        logger.info("Base query created, looking for status in [under_review, approved, partial_approved, rejected]")
+        logger.debug("Base query created, looking for status in %s", REVIEWABLE_APPLICATION_STATUSES)
 
         # Apply filters
         if scholarship_type_id:
@@ -388,10 +368,11 @@ class CollegeReviewService:
         result = await self.db.execute(stmt)
         applications = result.scalars().all()
         logger.info(f"Query executed, found {len(applications)} applications")
-        for app in applications:
-            logger.info(
-                f"  App {app.id}: status={app.status}, type_id={app.scholarship_type_id}, year={app.academic_year}, semester={app.semester}"
-            )
+        if logger.isEnabledFor(logging.DEBUG):
+            for app in applications:
+                logger.debug(
+                    f"  App {app.id}: status={app.status}, type_id={app.scholarship_type_id}, year={app.academic_year}, semester={app.semester}"
+                )
 
         # Note: CollegeReview removed - use Application.final_ranking_position instead
         # college_review_lookup logic removed - data now in Application model
@@ -425,6 +406,12 @@ class CollegeReviewService:
                 "created_at": app.created_at,
                 "student_data": student_payload,
                 "is_renewal": app.is_renewal,
+                # Whether this scholarship requires a professor recommendation step.
+                # Lets the college UI distinguish "professor hasn't recommended yet"
+                # (show 教授審核中) from "no professor step at all" (show —).
+                "requires_professor_recommendation": bool(
+                    app.scholarship_configuration and app.scholarship_configuration.requires_professor_recommendation
+                ),
                 # Professor review details
                 "professor_review_completed": any(
                     self._role_matches(review.reviewer.role, "professor") for review in app.reviews if review.reviewer
@@ -522,14 +509,9 @@ class CollegeReviewService:
             f"Building query for sub_type_code={sub_type_code}, semester_filter type={type(semester_filter)}, semester_filter={semester_filter}, creator_college={creator_college}"
         )
 
-        # Valid statuses for ranking: include all reviewed/approved states
-        valid_ranking_statuses = [
-            ApplicationStatus.submitted.value,
-            ApplicationStatus.under_review.value,
-            ApplicationStatus.approved.value,
-            ApplicationStatus.partial_approved.value,
-            ApplicationStatus.rejected.value,
-        ]
+        # Valid statuses for ranking: the same reviewed/approved states the
+        # review listings surface (shared constant keeps the three sites in sync).
+        valid_ranking_statuses = REVIEWABLE_APPLICATION_STATUSES
 
         if sub_type_code == "default":
             # Include all applications for this scholarship type, regardless of sub-type
