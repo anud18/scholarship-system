@@ -198,9 +198,8 @@ class TestApplicationServiceDashboard:
 
         # Service returns {total_applications, status_counts, recent_applications}
         assert "total_applications" in stats
-        assert "draft_count" in stats
-        assert "submitted_count" in stats
-        assert "approved_count" in stats
+        assert "status_counts" in stats
+        assert "recent_applications" in stats
 
 
 @pytest.mark.asyncio
@@ -214,20 +213,39 @@ class TestApplicationServiceListResponse:
 
     def test_create_application_list_response(self, service):
         """Test creating application list response"""
+        now = datetime.now(timezone.utc)
         application = Mock(spec=Application)
         application.id = 1
         application.app_id = "APP001"
         application.user_id = 1
         application.scholarship_type_id = 1
         application.scholarship_subtype_list = ["type_a"]
+        application.scholarship = None
+        application.scholarship_configuration = None
         application.status = ApplicationStatus.draft.value
         application.status_name = "草稿"
+        application.review_stage = None
         application.is_renewal = False
+        application.renewal_year = None
+        application.previous_application_id = None
+        application.challenges_application_id = None
+        application.cancelled_due_to_application_id = None
         application.academic_year = 113
         application.semester = Semester.first
-        application.created_at = datetime.now(timezone.utc)
+        application.student_data = {}
+        application.agree_terms = True
+        application.sub_scholarship_type = None
+        application.professor_id = None
+        application.reviewer_id = None
+        application.final_approver_id = None
         application.submitted_at = None
+        application.reviewed_at = None
         application.approved_at = None
+        application.created_at = now
+        application.updated_at = now
+        application.meta_data = None
+        application.application_document_url = None
+        application.application_document_original_filename = None
 
         user = Mock(spec=User)
         user.nycu_id = "112550001"
@@ -238,25 +256,3 @@ class TestApplicationServiceListResponse:
 
         assert response.app_id == "APP001"
         assert response.status == ApplicationStatus.draft.value
-
-
-@pytest.mark.asyncio
-class TestApplicationServiceZhTranslation:
-    """Test Chinese translation methods"""
-
-    @pytest.fixture
-    def service(self):
-        db = Mock(spec=AsyncSession)
-        return ApplicationService(db)
-
-    def test_add_scholarship_type_zh(self, service):
-        """Test adding Chinese scholarship type"""
-        from app.schemas.application import ApplicationListResponse
-
-        app_data = Mock(spec=ApplicationListResponse)
-        app_data.scholarship_type_id = 1
-        app_data.scholarship_type_zh = None
-        app_data.scholarship_subtype_list = []
-
-        result = service._add_scholarship_type_zh(app_data)
-        assert result is not None

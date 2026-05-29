@@ -523,14 +523,17 @@ class TestApplicationService:
 
         mock_application = Mock(spec=Application)
         mock_application.id = application_id
+        mock_application.app_id = "APP-2024-001"
         mock_application.user_id = user_id
         mock_application.status = ApplicationStatus.draft
         mock_application.submitted_form_data = {}
+        mock_application.files = []
 
         with (
             patch.object(service.db, "execute") as mock_execute,
             patch.object(service.db, "delete") as mock_delete,
             patch.object(service.db, "commit") as mock_commit,
+            patch("app.services.application_service.cache_invalidate", new_callable=AsyncMock),
         ):
             mock_result = Mock()
             mock_result.scalar_one_or_none.return_value = mock_application
