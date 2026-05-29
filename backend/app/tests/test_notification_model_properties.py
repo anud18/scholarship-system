@@ -20,9 +20,28 @@ import pytest
 from app.models.notification import Notification, NotificationPriority
 
 
-def _notif(**overrides) -> Notification:
-    """Build a Notification without invoking SQLAlchemy ORM init."""
-    n = object.__new__(Notification)
+class _FakeNotification:
+    """SA-free helper — bypasses SQLAlchemy column instrumentation so pure
+    Python @property methods can be exercised without _sa_instance_state."""
+
+    def __init__(self, **attrs):
+        self.__dict__.update(attrs)
+
+    is_expired = property(Notification.is_expired.fget)
+    is_urgent = property(Notification.is_urgent.fget)
+    is_critical = property(Notification.is_critical.fget)
+    is_system_announcement = property(Notification.is_system_announcement.fget)
+    age_in_hours = property(Notification.age_in_hours.fget)
+    effective_href = property(Notification.effective_href.fget)
+    effective_data = property(Notification.effective_data.fget)
+    mark_as_read = Notification.mark_as_read
+    mark_as_unread = Notification.mark_as_unread
+    archive = Notification.archive
+    hide = Notification.hide
+    dismiss = Notification.dismiss
+
+
+def _notif(**overrides) -> _FakeNotification:
     defaults = {
         "id": 1,
         "user_id": 42,
@@ -40,9 +59,7 @@ def _notif(**overrides) -> Notification:
         "meta_data": None,
     }
     defaults.update(overrides)
-    for k, v in defaults.items():
-        object.__setattr__(n, k, v)
-    return n
+    return _FakeNotification(**defaults)
 
 
 # ─── is_expired ──────────────────────────────────────────────────────
