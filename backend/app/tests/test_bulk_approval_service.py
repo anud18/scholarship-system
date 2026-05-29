@@ -339,12 +339,14 @@ class TestBulkApprovalServiceCriteria:
         assert not service._meets_approval_criteria(mock_application, criteria)
 
     def test_meets_approval_criteria_priority_score(self, service, mock_application):
-        """Test priority score criteria check"""
+        """priority_score field was removed; min_priority_score criteria is
+        now a no-op — _meets_approval_criteria always returns True for it."""
         criteria = {"min_priority_score": 80}
         assert service._meets_approval_criteria(mock_application, criteria)
 
+        # min_priority_score is ignored (priority_score field removed from Application)
         criteria = {"min_priority_score": 90}
-        assert not service._meets_approval_criteria(mock_application, criteria)
+        assert service._meets_approval_criteria(mock_application, criteria)
 
     def test_meets_approval_criteria_multiple(self, service, mock_application):
         """Test multiple criteria check"""

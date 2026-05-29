@@ -30,6 +30,7 @@ def _minimal_payload(**overrides):
     payload = {
         "application_id": 1,
         "verification_status": "verified",  # default; tests override
+        "success": True,
     }
     payload.update(overrides)
     return payload
@@ -89,6 +90,7 @@ def test_redaction_applied_to_all_4_protected_fields():
     trace = "Traceback (most recent call last):"
     s = BankVerificationResultSchema(
         application_id=1,
+        success=True,
         verification_status=trace,
         account_number_status=trace,
         account_holder_status=trace,

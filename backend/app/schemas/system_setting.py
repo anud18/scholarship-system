@@ -19,7 +19,8 @@ class SystemSettingBase(BaseModel):
     @field_validator("key")
     @classmethod
     def validate_key(cls, v):
-        if not v or len(v.strip()) == 0:
+        v = v.strip()
+        if not v:
             raise ValueError("Configuration key cannot be empty")
         if len(v) > 100:
             raise ValueError("Configuration key cannot exceed 100 characters")
@@ -28,7 +29,7 @@ class SystemSettingBase(BaseModel):
             raise ValueError(
                 "Configuration key can only contain alphanumeric characters, underscores, dots, and hyphens"
             )
-        return v.strip()
+        return v
 
     @field_validator("value")
     @classmethod

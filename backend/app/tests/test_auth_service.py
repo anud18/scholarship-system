@@ -127,11 +127,13 @@ class TestAuthService:
         existing_user.nycu_id = mock_user_create_data.nycu_id
 
         with patch.object(service.db, "execute", new_callable=AsyncMock) as mock_execute:
-            # Mock no user with same email, but user with same nycu_id
-            mock_execute.return_value.scalar_one_or_none.side_effect = [
-                None,
-                existing_user,
-            ]
+            # First execute (email check) returns no match; second (nycu_id) returns existing.
+            # Use side_effect on mock_execute itself so each await call gets a separate Mock.
+            mock_result_1 = Mock()
+            mock_result_1.scalar_one_or_none.return_value = None
+            mock_result_2 = Mock()
+            mock_result_2.scalar_one_or_none.return_value = existing_user
+            mock_execute.side_effect = [mock_result_1, mock_result_2]
 
             with pytest.raises(ConflictError, match="NYCU ID already exists"):
                 await service.register_user(mock_user_create_data)

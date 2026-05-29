@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import AuthorizationError, ConflictError, NotFoundError, ValidationError
+from app.core.exceptions import NotFoundError, ValidationError
 from app.models.application import Application, ApplicationStatus
 from app.models.scholarship import ScholarshipType
 from app.models.user import User, UserRole
@@ -526,7 +526,6 @@ class TestApplicationService:
         mock_application.user_id = user_id
         mock_application.status = ApplicationStatus.draft
         mock_application.submitted_form_data = {}
-        mock_application.files = []
 
         with (
             patch.object(service.db, "execute") as mock_execute,
@@ -580,12 +579,10 @@ class TestApplicationService:
         mock_application = Mock(spec=Application)
         mock_application.id = application_id
         mock_application.user_id = other_user_id  # Different user owns this
-        mock_application.status = ApplicationStatus.draft
+        mock_application.status = ApplicationStatus.draft.value
 
         with patch.object(service.db, "execute") as mock_execute:
-            mock_result = Mock()
-            mock_result.scalar_one_or_none.return_value = mock_application
-            mock_execute.return_value = mock_result
+            mock_execute.return_value.scalar_one_or_none.return_value = mock_application
 
             with pytest.raises(AuthorizationError, match="You can only delete your own applications"):
                 await service.delete_application(application_id, mock_user)
