@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from app.core.exceptions import OCRError
+from app.core.security import get_current_user
 from app.main import app
 
 
@@ -17,9 +18,12 @@ class TestOCREndpoints:
     """Test OCR API endpoints"""
 
     @pytest.fixture
-    def client(self):
-        """Create test client"""
-        return TestClient(app)
+    def client(self, mock_current_user):
+        """Create test client with authenticated user."""
+        app.dependency_overrides[get_current_user] = lambda: mock_current_user
+        with TestClient(app) as c:
+            yield c
+        del app.dependency_overrides[get_current_user]
 
     @pytest.fixture
     def sample_image_file(self):
@@ -295,21 +299,23 @@ class TestOCREndpoints:
         assert response.status_code == 500
         assert "An unexpected error occurred" in response.json()["message"]
 
-    def test_bank_passbook_ocr_no_auth(self, client, sample_image_file):
+    def test_bank_passbook_ocr_no_auth(self, sample_image_file):
         """Test bank passbook OCR without authentication"""
-        response = client.post(
-            "/api/v1/user-profiles/bank-passbook-ocr", files={"file": ("test.jpg", sample_image_file, "image/jpeg")}
-        )
-
+        with TestClient(app) as raw_client:
+            response = raw_client.post(
+                "/api/v1/user-profiles/bank-passbook-ocr",
+                files={"file": ("test.jpg", sample_image_file, "image/jpeg")},
+            )
         # Should require authentication
         assert response.status_code == 401 or response.status_code == 403
 
-    def test_document_ocr_no_auth(self, client, sample_image_file):
+    def test_document_ocr_no_auth(self, sample_image_file):
         """Test document OCR without authentication"""
-        response = client.post(
-            "/api/v1/user-profiles/document-ocr", files={"file": ("test.jpg", sample_image_file, "image/jpeg")}
-        )
-
+        with TestClient(app) as raw_client:
+            response = raw_client.post(
+                "/api/v1/user-profiles/document-ocr",
+                files={"file": ("test.jpg", sample_image_file, "image/jpeg")},
+            )
         # Should require authentication
         assert response.status_code == 401 or response.status_code == 403
 
@@ -337,19 +343,20 @@ class TestOCRIntegration:
 
     @pytest.fixture
     def client(self):
-        """Create test client"""
-        return TestClient(app)
+        """Create test client with authenticated user."""
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_user.nycu_id = "test_user"
+        app.dependency_overrides[get_current_user] = lambda: mock_user
+        with TestClient(app) as c:
+            yield c
+        del app.dependency_overrides[get_current_user]
 
     @patch("app.services.ocr_service.settings")
-    @patch("app.api.v1.endpoints.user_profiles.get_current_user")
-    def test_end_to_end_bank_ocr_disabled(self, mock_get_current_user, mock_settings, client):
+    def test_end_to_end_bank_ocr_disabled(self, mock_settings, client):
         """Test end-to-end flow when OCR is disabled"""
         # Mock settings with OCR disabled
         mock_settings.ocr_service_enabled = False
-
-        mock_user = MagicMock()
-        mock_user.id = 1
-        mock_get_current_user.return_value = mock_user
 
         # Create sample image
         image = Image.new("RGB", (200, 100), color="white")
