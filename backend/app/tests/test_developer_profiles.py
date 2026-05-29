@@ -423,7 +423,7 @@ class TestProductionSafety:
                 if "create-custom" in endpoint:
                     response = client.post(endpoint, json={"full_name": "Test", "role": "student"})
                 else:
-                    response = client.get(endpoint) if endpoint.count("/") == 6 else client.post(endpoint)
+                    response = client.get(endpoint) if endpoint.count("/") == 5 else client.post(endpoint)
 
                 assert response.status_code == 404
                 data = response.json()

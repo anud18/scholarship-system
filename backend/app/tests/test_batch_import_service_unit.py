@@ -77,7 +77,7 @@ class TestBatchImportService:
         ]
 
     @pytest.mark.asyncio
-    async def test_parse_excel_file_success(self, service):
+    async def test_parse_excel_file_success(self, service, mock_scholarship):
         """Test successful Excel file parsing"""
         # Create valid Excel content (minimal valid XLSX)
         import io
@@ -97,10 +97,11 @@ class TestBatchImportService:
             df.to_excel(writer, index=False)
         file_content = buffer.getvalue()
 
-        # Parse file
-        parsed_data, errors = await service.parse_excel_file(
-            file_content=file_content, scholarship_type_id=1, academic_year=113, semester="first"
-        )
+        # Mock scholarship lookup; custom_fields query hits real empty test DB (returns [])
+        with patch.object(service.db, "get", return_value=mock_scholarship):
+            parsed_data, errors = await service.parse_excel_file(
+                file_content=file_content, scholarship_type_id=1, academic_year=113, semester="first"
+            )
 
         # Assertions
         assert len(parsed_data) == 2
@@ -109,7 +110,7 @@ class TestBatchImportService:
         assert parsed_data[0]["student_name"] == "王小明"
 
     @pytest.mark.asyncio
-    async def test_parse_excel_file_missing_columns(self, service):
+    async def test_parse_excel_file_missing_columns(self, service, mock_scholarship):
         """Test Excel parsing with missing required columns"""
         import io
 
@@ -123,10 +124,11 @@ class TestBatchImportService:
             df.to_excel(writer, index=False)
         file_content = buffer.getvalue()
 
-        # Parse file
-        parsed_data, errors = await service.parse_excel_file(
-            file_content=file_content, scholarship_type_id=1, academic_year=113, semester="first"
-        )
+        # Mock scholarship lookup; custom_fields query hits real empty test DB (returns [])
+        with patch.object(service.db, "get", return_value=mock_scholarship):
+            parsed_data, errors = await service.parse_excel_file(
+                file_content=file_content, scholarship_type_id=1, academic_year=113, semester="first"
+            )
 
         # Assertions
         assert len(parsed_data) == 0
@@ -239,8 +241,8 @@ class TestBatchImportService:
                 semester="first",
             )
 
-            # Should create 2 applications
-            assert mock_add.call_count == 2
+            # Should create 2 applications + 2 ApplicationSequence records (one per student)
+            assert mock_add.call_count == 4
             assert len(errors) == 0
 
     @pytest.mark.asyncio
