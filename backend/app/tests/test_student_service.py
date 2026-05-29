@@ -140,7 +140,9 @@ class TestStudentService:
         student_id = 1
 
         with patch.object(service.db, "execute") as mock_execute:
-            mock_execute.return_value.scalar_one.return_value = mock_student
+            mock_result = Mock()
+            mock_result.scalar_one.return_value = mock_student
+            mock_execute.return_value = mock_result
 
             result = await service.get_student_snapshot(student_id)
 
@@ -167,7 +169,9 @@ class TestStudentService:
         student_id = 1
 
         with patch.object(service.db, "execute") as mock_execute:
-            mock_execute.return_value.scalar_one_or_none.return_value = mock_student
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.return_value = mock_student
+            mock_execute.return_value = mock_result
 
             result = await service.get_student_by_id(student_id)
 
@@ -180,7 +184,9 @@ class TestStudentService:
         student_id = 999
 
         with patch.object(service.db, "execute") as mock_execute:
-            mock_execute.return_value.scalar_one_or_none.return_value = None
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.return_value = None
+            mock_execute.return_value = mock_result
 
             result = await service.get_student_by_id(student_id)
 
@@ -193,7 +199,9 @@ class TestStudentService:
         stdcode = "112550001"
 
         with patch.object(service.db, "execute") as mock_execute:
-            mock_execute.return_value.scalar_one_or_none.return_value = mock_student
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.return_value = mock_student
+            mock_execute.return_value = mock_result
 
             result = await service.get_student_by_stdcode(stdcode)
 
@@ -206,7 +214,9 @@ class TestStudentService:
         stdcode = "999999999"
 
         with patch.object(service.db, "execute") as mock_execute:
-            mock_execute.return_value.scalar_one_or_none.return_value = None
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.return_value = None
+            mock_execute.return_value = mock_result
 
             result = await service.get_student_by_stdcode(stdcode)
 
@@ -314,7 +324,9 @@ class TestStudentService:
         mock_students = [Mock(spec=Student) for _ in range(3)]
 
         with patch.object(service.db, "execute") as mock_execute:
-            mock_execute.return_value.scalars.return_value.all.return_value = mock_students
+            mock_result = Mock()
+            mock_result.scalars.return_value.all.return_value = mock_students
+            mock_execute.return_value = mock_result
 
             result = await service.get_students_by_department(depno)
 
@@ -327,7 +339,9 @@ class TestStudentService:
         depno = "NONEXISTENT"
 
         with patch.object(service.db, "execute") as mock_execute:
-            mock_execute.return_value.scalars.return_value.all.return_value = []
+            mock_result = Mock()
+            mock_result.scalars.return_value.all.return_value = []
+            mock_execute.return_value = mock_result
 
             result = await service.get_students_by_department(depno)
 
@@ -341,7 +355,9 @@ class TestStudentService:
         mock_students = [Mock(spec=Student) for _ in range(5)]
 
         with patch.object(service.db, "execute") as mock_execute:
-            mock_execute.return_value.scalars.return_value.all.return_value = mock_students
+            mock_result = Mock()
+            mock_result.scalars.return_value.all.return_value = mock_students
+            mock_execute.return_value = mock_result
 
             result = await service.get_students_by_academy(aca_no)
 
@@ -354,7 +370,9 @@ class TestStudentService:
         aca_no = "NONEXISTENT"
 
         with patch.object(service.db, "execute") as mock_execute:
-            mock_execute.return_value.scalars.return_value.all.return_value = []
+            mock_result = Mock()
+            mock_result.scalars.return_value.all.return_value = []
+            mock_execute.return_value = mock_result
 
             result = await service.get_students_by_academy(aca_no)
 

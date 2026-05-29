@@ -149,6 +149,7 @@ def cached(key_fn: Callable[..., str], ttl: int, jitter: float = 0.1):
                     "cache: key_fn for %s rejected its args (%s) — " "caching disabled for this call. Fix the lambda.",
                     fn.__qualname__,
                     exc,
+                    exc_info=True,
                 )
                 return await fn(*args, **kwargs)
             except Exception:  # noqa: BLE001
@@ -186,6 +187,7 @@ def cached(key_fn: Callable[..., str], ttl: int, jitter: float = 0.1):
                     "cache: value for key=%s is not JSON-serialisable: %s",
                     key,
                     exc,
+                    exc_info=True,
                 )
             except Exception:  # noqa: BLE001
                 logger.warning("cache: SET failed; not cached", exc_info=True)

@@ -469,8 +469,10 @@ class TestAuthService:
             updated_at=mock_user.updated_at,
         )
         with (
-            patch("app.services.auth_service.create_access_token") as mock_access_token,
-            patch("app.services.auth_service.create_refresh_token"),
+            patch(
+                "app.services.auth_service.create_access_token", return_value="mock-access-token"
+            ) as mock_access_token,
+            patch("app.services.auth_service.create_refresh_token", return_value="mock-refresh-token"),
             patch("app.schemas.user.UserResponse.model_validate", return_value=mock_user_response),
         ):
             await service.create_tokens(mock_user)

@@ -358,7 +358,7 @@ class TestDeveloperProfileAPI:
         assert response.status_code == 400
         data = response.json()
         assert data["success"] is False
-        assert "invalid" in data["detail"].lower()
+        assert "invalid" in data["message"].lower()
 
     def test_missing_required_fields_custom_profile(self):
         """Test creating custom profile with missing required fields"""
@@ -427,7 +427,7 @@ class TestProductionSafety:
 
                 assert response.status_code == 404
                 data = response.json()
-                assert "disabled" in data["detail"].lower()
+                assert "disabled" in data["message"].lower()
 
         finally:
             # Restore original setting
