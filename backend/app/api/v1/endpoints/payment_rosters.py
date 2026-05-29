@@ -1590,7 +1590,7 @@ async def download_roster_excel(
     Download roster Excel file (supports MinIO and local files)
     """
     try:
-        stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)
+        stmt = select(PaymentRoster).options(selectinload(PaymentRoster.items)).where(PaymentRoster.id == roster_id)
 
         result = await db.execute(stmt)
 

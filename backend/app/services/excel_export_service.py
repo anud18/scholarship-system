@@ -489,8 +489,7 @@ class ExcelExportService:
         }
 
         if not excel_data:
-            validation_result["errors"].append("No data to export")
-            validation_result["is_valid"] = False
+            validation_result["warnings"].append("No data rows to export — generating header-only file")
             return validation_result
 
         # 統計資料
