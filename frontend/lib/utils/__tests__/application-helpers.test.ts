@@ -6,6 +6,7 @@ import {
   formatDisplayValue,
   getDocumentLabel,
   fetchApplicationFiles,
+  buildApplicationFormFields,
   BadgeVariant,
 } from "../application-helpers";
 import {
@@ -473,5 +474,73 @@ describe("Application Helpers", () => {
       expect(typeof result).toBe("string");
       expect(result.length).toBeGreaterThan(0);
     });
+  });
+});
+
+describe("buildApplicationFormFields", () => {
+  it("wraps dynamic form values into submitted_form_data field entries", () => {
+    const fields = buildApplicationFormFields(
+      { contact_phone: "0978789789", master_school_info: "nycucs" },
+      ""
+    );
+
+    expect(fields.contact_phone).toEqual({
+      field_id: "contact_phone",
+      field_type: "text",
+      value: "0978789789",
+      required: true,
+    });
+    expect(fields.master_school_info.value).toBe("nycucs");
+  });
+
+  it("includes the postal account number so admins and bank verification can see it", () => {
+    const fields = buildApplicationFormFields({}, "70000121234567");
+
+    // Backend extract_bank_fields_from_application looks up the "account_number" key.
+    expect(fields.account_number).toEqual({
+      field_id: "account_number",
+      field_type: "text",
+      value: "70000121234567",
+      required: true,
+    });
+  });
+
+  it("trims surrounding whitespace from the account number", () => {
+    const fields = buildApplicationFormFields({}, "  70000121234567  ");
+    expect(fields.account_number.value).toBe("70000121234567");
+  });
+
+  it("omits account_number when no account is provided", () => {
+    expect(buildApplicationFormFields({}, "")).not.toHaveProperty(
+      "account_number"
+    );
+    expect(buildApplicationFormFields({}, undefined)).not.toHaveProperty(
+      "account_number"
+    );
+    expect(buildApplicationFormFields({}, "   ")).not.toHaveProperty(
+      "account_number"
+    );
+  });
+
+  it("stringifies non-string dynamic values", () => {
+    const fields = buildApplicationFormFields({ completed_terms: 4 }, "");
+    expect(fields.completed_terms.value).toBe("4");
+  });
+
+  it("lets the dedicated account state win over a stale dynamic account_number key", () => {
+    // Editing a draft can surface a previously folded account_number as a
+    // dynamic key; the dedicated state must take precedence on re-save.
+    const fields = buildApplicationFormFields(
+      { account_number: "OLD" },
+      "70000121234567"
+    );
+    expect(fields.account_number.value).toBe("70000121234567");
+  });
+});
+
+describe("formatFieldName - postal account label", () => {
+  it("labels account_number as the post office account", () => {
+    expect(formatFieldName("account_number", "zh")).toBe("郵局帳號");
+    expect(formatFieldName("account_number", "en")).toBe("Post Office Account");
   });
 });

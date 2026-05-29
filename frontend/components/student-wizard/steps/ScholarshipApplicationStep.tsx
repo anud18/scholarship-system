@@ -56,6 +56,7 @@ import api, {
 } from "@/lib/api";
 import { isSelectableScholarship } from "@/lib/scholarship-eligibility";
 import { clsx } from "@/lib/utils";
+import { buildApplicationFormFields } from "@/lib/utils/application-helpers";
 import { useApplications } from "@/hooks/use-applications";
 import { useStudentProfile } from "@/hooks/use-student-profile";
 import {
@@ -620,6 +621,10 @@ export function ScholarshipApplicationStep({
         const existingFormData: Record<string, any> = {};
         Object.entries(formData.fields).forEach(
           ([fieldId, fieldData]: [string, any]) => {
+            // The postal account is sourced only from the dedicated
+            // `accountNumber` state (hydrated from the profile); skip the
+            // folded-in copy so it can't drift into dynamicFormData.
+            if (fieldId === "account_number") return;
             if (
               fieldData &&
               typeof fieldData === "object" &&
@@ -868,15 +873,13 @@ export function ScholarshipApplicationStep({
 
     setSubmitting(true);
     try {
-      const formFields: Record<string, any> = {};
-      Object.entries(dynamicFormData).forEach(([fieldName, value]) => {
-        formFields[fieldName] = {
-          field_id: fieldName,
-          field_type: "text",
-          value: String(value),
-          required: true,
-        };
-      });
+      // Include the applicant's postal account (郵局帳號) so the admin review
+      // dialog and the bank-verification service can see what the student
+      // entered — it lives in a dedicated wizard section, not dynamicFormData.
+      const formFields = buildApplicationFormFields(
+        dynamicFormData,
+        accountNumber
+      );
 
       const documents = Object.entries(dynamicFileData).map(
         ([docType, files]) => {
@@ -988,15 +991,13 @@ export function ScholarshipApplicationStep({
 
     setSubmitting(true);
     try {
-      const formFields: Record<string, any> = {};
-      Object.entries(dynamicFormData).forEach(([fieldName, value]) => {
-        formFields[fieldName] = {
-          field_id: fieldName,
-          field_type: "text",
-          value: String(value),
-          required: true,
-        };
-      });
+      // Include the applicant's postal account (郵局帳號) so the admin review
+      // dialog and the bank-verification service can see what the student
+      // entered — it lives in a dedicated wizard section, not dynamicFormData.
+      const formFields = buildApplicationFormFields(
+        dynamicFormData,
+        accountNumber
+      );
 
       const documents = Object.entries(dynamicFileData).map(
         ([docType, files]) => {
