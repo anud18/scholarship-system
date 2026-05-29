@@ -453,6 +453,8 @@ class ApplicationService:
         "general" application matches no quota slot during distribution, so it
         must carry a concrete sub-type before it can be submitted.
         """
+        if scholarship is None:
+            return
         real_sub_types = [st for st in (scholarship.sub_type_list or []) if st and st != "general"]
         if real_sub_types and (sub_scholarship_type or "general") not in real_sub_types:
             raise ValidationError("此獎學金需選擇申請類別（" + "、".join(real_sub_types) + "），不可使用通用類別")
