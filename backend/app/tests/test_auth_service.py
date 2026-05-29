@@ -424,6 +424,8 @@ class TestAuthService:
                 role=mock_user_create_data.role,
                 user_type=mock_user_create_data.user_type,
                 status=mock_user_create_data.status,
+                created_at=datetime(2024, 1, 1),
+                updated_at=datetime(2024, 1, 1),
             )
             mock_register.return_value = mock_response
 
@@ -455,10 +457,21 @@ class TestAuthService:
     @pytest.mark.asyncio
     async def test_token_data_structure(self, service, mock_user):
         """Test that token data contains expected fields"""
+        mock_user_response = UserResponse(
+            id=mock_user.id,
+            nycu_id=mock_user.nycu_id,
+            name=mock_user.name,
+            email=mock_user.email,
+            role=mock_user.role,
+            user_type=mock_user.user_type,
+            status=mock_user.status,
+            created_at=mock_user.created_at,
+            updated_at=mock_user.updated_at,
+        )
         with (
             patch("app.services.auth_service.create_access_token") as mock_access_token,
             patch("app.services.auth_service.create_refresh_token"),
-            patch("app.schemas.user.UserResponse.model_validate"),
+            patch("app.schemas.user.UserResponse.model_validate", return_value=mock_user_response),
         ):
             await service.create_tokens(mock_user)
 

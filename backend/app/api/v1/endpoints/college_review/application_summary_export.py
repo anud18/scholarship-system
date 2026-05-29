@@ -189,6 +189,7 @@ async def export_department_summary_single(
         len(export_rows),
         len(payload),
         extra={
+            "actor_user_id": current_user.id,
             **log_extra,
             "dept_name": dept_name,
             "row_count": len(export_rows),
