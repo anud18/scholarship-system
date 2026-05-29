@@ -342,7 +342,9 @@ class TestRosterServiceGenerate:
         db_sync.refresh(ranking)
 
         svc = RosterService(db_sync)
-        with pytest.raises(ValueError, match="尚未執行分發"):
+        # generate_roster wraps all internal exceptions (including the ValueError
+        # raised for unexecuted distribution) in RosterGenerationError before surfacing.
+        with pytest.raises(RosterGenerationError, match="尚未執行分發"):
             svc.generate_roster(
                 scholarship_configuration_id=config.id,
                 period_label="2024-01",

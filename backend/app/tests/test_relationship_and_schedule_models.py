@@ -42,9 +42,12 @@ def _rel(**overrides) -> ProfessorStudentRelationship:
 
 
 def _schedule(**overrides) -> RosterSchedule:
-    s = object.__new__(RosterSchedule)
+    """Build a RosterSchedule for pure-property tests.
+
+    Uses SA __init__ so instrumented attribute descriptors have a valid
+    _sa_instance_state (same fix as _rel above).
+    """
     defaults = {
-        "id": 1,
         "status": RosterScheduleStatus.ACTIVE,
         "total_runs": None,
         "successful_runs": None,
@@ -55,9 +58,7 @@ def _schedule(**overrides) -> RosterSchedule:
         "cron_expression": "0 3 * * *",
     }
     defaults.update(overrides)
-    for k, v in defaults.items():
-        object.__setattr__(s, k, v)
-    return s
+    return RosterSchedule(**defaults)
 
 
 # ─── ProfessorStudentRelationship.is_advisor ─────────────────────────
