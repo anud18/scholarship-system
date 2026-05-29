@@ -23,6 +23,7 @@ from app.models.enums import ApplicationStatus, ReviewStage
 from app.models.review import ApplicationReview, ApplicationReviewItem
 from app.models.payment_roster import PaymentRoster, PaymentRosterItem, RosterStatus
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipSubTypeConfig
+from app.models.user import User, UserRole
 from app.services.received_months_service import calculate_received_months_bulk_async
 
 logger = logging.getLogger(__name__)
@@ -889,8 +890,83 @@ class ManualDistributionService:
                 raise ValueError(f"Duplicate ranking item: {item_id}")
             seen_items.add(item_id)
 
+        # Professor-approval gate (issue: 分發時一定要教授有同意那個獎學金才能被分發到).
+        # A student may only be distributed to a sub-type the professor approved
+        # for that application. Exemptions handled in _assert_professor_approved:
+        #   - renewal applications (續領豁免 — they don't go through professor review)
+        #   - scholarships that don't require a professor recommendation step
+        #     (no professor reviews exist, so there is nothing to gate on)
+        await self._assert_professor_approved(allocations)
+
         # Quota validation is done real-time via the quota-status endpoint on the frontend.
         # The frontend sends only valid allocations based on displayed remaining counts.
+
+    async def _assert_professor_approved(self, allocations: list[dict[str, Any]]) -> None:
+        """Block any allocation to a sub-type the professor did not approve.
+
+        Only allocations that assign a sub-type are checked (``sub_type_code`` set;
+        ``None`` means unallocate). Renewal applications and scholarships that don't
+        require a professor recommendation are exempt — for those there is no
+        professor approval to enforce against.
+        """
+        allocating = [a for a in allocations if a.get("sub_type_code")]
+        if not allocating:
+            return
+
+        item_ids = [a["ranking_item_id"] for a in allocating]
+        stmt = (
+            select(CollegeRankingItem)
+            .options(selectinload(CollegeRankingItem.application).selectinload(Application.scholarship_configuration))
+            .where(CollegeRankingItem.id.in_(item_ids))
+        )
+        items = {it.id: it for it in (await self.db.execute(stmt)).scalars().all()}
+
+        # Keep only allocations that actually need the gate (skip renewal apps and
+        # scholarships without a professor recommendation step).
+        gated: list[tuple[dict[str, Any], Application]] = []
+        for alloc in allocating:
+            item = items.get(alloc["ranking_item_id"])
+            app = item.application if item else None
+            if app is None or app.is_renewal:
+                continue
+            cfg = app.scholarship_configuration
+            if not (cfg and cfg.requires_professor_recommendation):
+                continue
+            gated.append((alloc, app))
+
+        if not gated:
+            return
+
+        approved = await self._professor_approved_sub_types({app.id for _, app in gated})
+
+        violations = []
+        for alloc, app in gated:
+            sub_type = (alloc["sub_type_code"] or "").lower().strip()
+            if sub_type not in approved.get(app.id, set()):
+                violations.append(f"{app.app_id} → {alloc['sub_type_code']}")
+
+        if violations:
+            raise ValueError("以下分發未取得教授對該子類型的核准，無法分發：" + "、".join(violations))
+
+    async def _professor_approved_sub_types(self, app_ids: set[int]) -> dict[int, set[str]]:
+        """application_id → set of sub_type_codes a professor recommended ``approve``."""
+        if not app_ids:
+            return {}
+        stmt = (
+            select(ApplicationReview.application_id, ApplicationReviewItem.sub_type_code)
+            .join(ApplicationReviewItem, ApplicationReviewItem.review_id == ApplicationReview.id)
+            .join(User, User.id == ApplicationReview.reviewer_id)
+            .where(
+                ApplicationReview.application_id.in_(app_ids),
+                User.role == UserRole.professor,
+                ApplicationReviewItem.recommendation == "approve",
+            )
+        )
+        result = await self.db.execute(stmt)
+        approved: dict[int, set[str]] = {}
+        for app_id, sub_type_code in result.all():
+            approved.setdefault(app_id, set()).add((sub_type_code or "").lower().strip())
+        return approved
 
     def _compute_application_identity(self, app: Application) -> str:
         """
