@@ -15,6 +15,10 @@ class FakeResult:
     def __iter__(self):
         return iter(self._rows)
 
+    def scalar_one_or_none(self):
+        rows = list(self._rows)
+        return rows[0] if rows else None
+
 
 class StubAsyncSession:
     def __init__(self, results=None, side_effect=None):
@@ -43,6 +47,9 @@ class StubEmailService:
         self.scheduled = []
 
     async def send_with_template(self, **kwargs):
+        self.sent_with_template.append(kwargs)
+
+    async def send_with_react_template(self, **kwargs):
         self.sent_with_template.append(kwargs)
 
     async def schedule_email(self, **kwargs):
@@ -113,7 +120,7 @@ async def test_send_automated_email_invokes_email_service():
     assert len(stub_email_service.sent_with_template) == 1
     payload = stub_email_service.sent_with_template[0]
     assert payload["to"] == "user@example.com"
-    assert payload["default_subject"].startswith("Automated notification")
+    assert payload["subject"].startswith("Automated notification")
     assert payload["email_category"] == EmailCategory.application_student
     assert payload["application_id"] == 5
 
@@ -226,18 +233,27 @@ async def test_process_single_rule_immediate_send(monkeypatch):
 
     send_calls = []
 
-    async def fake_send(db, template_key, recipient_email, recipient_context, email_category, trigger_context):
+    async def fake_send(
+        db,
+        template_key,
+        recipient_email,
+        recipient_context,
+        scheduled_for,
+        email_category,
+        trigger_context,
+    ):
         send_calls.append(
             {
                 "template_key": template_key,
                 "recipient_email": recipient_email,
                 "recipient_context": recipient_context,
+                "scheduled_for": scheduled_for,
                 "email_category": email_category,
                 "trigger_context": trigger_context,
             }
         )
 
-    monkeypatch.setattr(service, "_send_automated_email", fake_send)
+    monkeypatch.setattr(service, "_schedule_automated_email", fake_send)
 
     rule = EmailAutomationRule(id=3, template_key="result_notification_student", trigger_event="submit", delay_hours=0)
 

@@ -163,7 +163,10 @@ class ScheduledEmail(Base):
     approval_notes = Column(Text)
 
     # Creation tracking
-    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    # nullable=True: automated/system-scheduled emails (no acting user) need to
+    # persist without a created_by_user_id; admin-initiated scheduling still
+    # passes a user id via metadata.
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
