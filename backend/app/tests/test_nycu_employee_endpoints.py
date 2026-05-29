@@ -2,7 +2,7 @@
 Tests for NYCU Employee API endpoints.
 """
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,12 +16,27 @@ from app.integrations.nycu_emp.exceptions import (
     NYCUEmpValidationError,
 )
 from app.main import app
+from app.models.user import User, UserRole
 
 
 @pytest.fixture
 def client():
-    """Create test client."""
-    return TestClient(app)
+    """Create test client with admin auth bypass."""
+    from app.core.security import require_admin
+
+    mock_admin = Mock(spec=User)
+    mock_admin.id = 1
+    mock_admin.role = UserRole.admin
+    mock_admin.is_admin = Mock(return_value=True)
+    mock_admin.is_super_admin = Mock(return_value=False)
+
+    def override_require_admin():
+        return mock_admin
+
+    app.dependency_overrides[require_admin] = override_require_admin
+    with TestClient(app) as c:
+        yield c
+    del app.dependency_overrides[require_admin]
 
 
 @pytest.fixture
