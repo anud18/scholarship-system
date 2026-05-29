@@ -110,12 +110,13 @@ class TestNYCUEmployeeEndpoints:
         assert response.status_code == 200
         data = response.json()
 
-        assert data["status"] == "0000"
-        assert data["total_page"] == 2
-        assert data["total_count"] == 3
-        assert data["page"] == 1
-        assert len(data["employees"]) == 1
-        assert data["employees"][0]["employee_no"] == "A00001"
+        assert data["success"] is True
+        assert data["data"]["status"] == "0000"
+        assert data["data"]["total_page"] == 2
+        assert data["data"]["total_count"] == 3
+        assert data["data"]["page"] == 1
+        assert len(data["data"]["employees"]) == 1
+        assert data["data"]["employees"][0]["employee_no"] == "A00001"
 
         # Verify client was called with correct parameters
         mock_client.get_employee_page.assert_called_once_with(page_row="1", status="01")
@@ -242,10 +243,12 @@ class TestNYCUEmployeeEndpoints:
         assert response.status_code == 200
         data = response.json()
 
-        assert len(data) == 2
-        assert data[0]["page"] == 1
-        assert data[1]["page"] == 2
-        assert all(page["total_count"] == 3 for page in data)
+        assert data["success"] is True
+        pages = data["data"]
+        assert len(pages) == 2
+        assert pages[0]["page"] == 1
+        assert pages[1]["page"] == 2
+        assert all(page["total_count"] == 3 for page in pages)
 
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_search_employees_success(self, mock_factory, client, sample_page):
@@ -259,11 +262,11 @@ class TestNYCUEmployeeEndpoints:
         assert response.status_code == 200
         data = response.json()
 
-        assert "employees" in data
-        assert "total_count" in data
-        assert "filtered_count" in data
-        assert data["total_count"] == 3
-        assert data["filtered_count"] == 1  # Should match one employee
+        assert "employees" in data["data"]
+        assert "total_count" in data["data"]
+        assert "filtered_count" in data["data"]
+        assert data["data"]["total_count"] == 3
+        assert data["data"]["filtered_count"] == 1  # Should match one employee
 
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_search_employees_no_matches(self, mock_factory, client, sample_page):
@@ -277,9 +280,9 @@ class TestNYCUEmployeeEndpoints:
         assert response.status_code == 200
         data = response.json()
 
-        assert data["total_count"] == 3
-        assert data["filtered_count"] == 0
-        assert len(data["employees"]) == 0
+        assert data["data"]["total_count"] == 3
+        assert data["data"]["filtered_count"] == 0
+        assert len(data["data"]["employees"]) == 0
 
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_search_employees_department_filter(self, mock_factory, client, sample_page):
@@ -293,9 +296,9 @@ class TestNYCUEmployeeEndpoints:
         assert response.status_code == 200
         data = response.json()
 
-        assert data["filtered_count"] == 1
-        assert len(data["employees"]) == 1
-        assert "光電" in data["employees"][0]["dept_name"]
+        assert data["data"]["filtered_count"] == 1
+        assert len(data["data"]["employees"]) == 1
+        assert "光電" in data["data"]["employees"][0]["dept_name"]
 
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_search_employees_position_filter(self, mock_factory, client, sample_page):
@@ -309,8 +312,8 @@ class TestNYCUEmployeeEndpoints:
         assert response.status_code == 200
         data = response.json()
 
-        assert data["filtered_count"] == 1
-        assert data["employees"][0]["position_name"] == "助理教授"
+        assert data["data"]["filtered_count"] == 1
+        assert data["data"]["employees"][0]["position_name"] == "助理教授"
 
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_get_employee_by_no_success(self, mock_factory, client, sample_page):
@@ -324,8 +327,8 @@ class TestNYCUEmployeeEndpoints:
         assert response.status_code == 200
         data = response.json()
 
-        assert data["employee_no"] == "A00001"
-        assert data["employee_name"] == "測試教授"
+        assert data["data"]["employee_no"] == "A00001"
+        assert data["data"]["employee_name"] == "測試教授"
 
     @patch("app.api.v1.endpoints.nycu_employee.create_nycu_emp_client_from_env")
     def test_get_employee_by_no_not_found(self, mock_factory, client, sample_page):
