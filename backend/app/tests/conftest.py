@@ -35,10 +35,14 @@ settings.database_url = TEST_DATABASE_URL_ASYNC  # Set async URL early too
 # Now import models (they will use SQLite-compatible JSON type)
 # Note: Password functions removed since system uses SSO authentication
 # from app.core.security import get_password_hash
-from app.core.deps import get_db as core_get_db  # noqa: E402
 from app.db.base_class import Base  # Use the correct Base class that models use  # noqa: E402
 from app.db.deps import get_db  # noqa: E402
 from app.main import app  # noqa: E402
+
+# Import after app.main so dynamic_config module graph is fully initialized before
+# core.deps is imported (importing core.deps first causes a circular import via
+# dynamic_config → services → email_service → dynamic_config).
+from app.core.deps import get_db as core_get_db  # noqa: E402
 from app.models.application import Application, ApplicationStatus  # noqa: E402
 from app.models.scholarship import ScholarshipType, SubTypeSelectionMode  # noqa: E402
 from app.models.user import User, UserRole, UserType  # noqa: E402
