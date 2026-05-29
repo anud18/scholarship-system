@@ -84,17 +84,24 @@ class TestApplicationServiceHelpers:
     def test_convert_semester_to_string_first(self, service):
         """Test semester conversion for first semester"""
         result = service._convert_semester_to_string(Semester.first)
-        assert result == "first"
+        assert result == "FIRST"
 
     def test_convert_semester_to_string_second(self, service):
         """Test semester conversion for second semester"""
         result = service._convert_semester_to_string(Semester.second)
-        assert result == "second"
+        assert result == "SECOND"
 
     def test_convert_semester_to_string_none(self, service):
         """Test semester conversion for None"""
         result = service._convert_semester_to_string(None)
         assert result is None
+
+    def test_generate_app_id(self, service):
+        """Test app ID generation"""
+        app_id = service._generate_app_id()
+        assert isinstance(app_id, str)
+        assert len(app_id) > 0
+        assert app_id.startswith("APP")
 
 
 @pytest.mark.asyncio
