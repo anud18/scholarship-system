@@ -200,7 +200,11 @@ async def test_professor_approve_promotes_to_approved_when_no_college_review(db:
 
 @pytest.mark.asyncio
 async def test_full_reject_is_terminal_regardless_of_pipeline(db: AsyncSession):
-    """All-rejected should still be terminal — no later role can rescue."""
+    """A professor full-reject sets status=rejected.
+
+    (Policy: a professor reject means the application is rejected. College/admin
+    still retain the right to edit / send it back — 回發 — afterwards, but that is
+    a separate explicit action, not this update_application_status path.)"""
     student = _user(UserRole.student, "s4")
     professor = _user(UserRole.professor, "p4")
     db.add_all([student, professor])
