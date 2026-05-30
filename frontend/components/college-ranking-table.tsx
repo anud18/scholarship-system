@@ -72,7 +72,10 @@ import {
 } from "lucide-react";
 import { getTranslation } from "@/lib/i18n";
 import { toast } from "sonner";
-import { exportRankingExcel } from "@/lib/api/modules/college";
+import {
+  exportRankingExcel,
+  downloadRankingTemplate,
+} from "@/lib/api/modules/college";
 import {
   parseRankingSheet,
   type ExcelRankingImportRow,
@@ -634,44 +637,21 @@ export function CollegeRankingTable({
     }
   };
 
-  const handleTemplateDownload = () => {
+  const handleTemplateDownload = async () => {
+    if (!rankingId) {
+      toast.error("缺少排名 ID，無法下載範本");
+      return;
+    }
     try {
-      // Sort by department code, then student ID
-      const sorted = [...localApplications].sort((a, b) => {
-        const deptA = a.department_code || a.department_name || "";
-        const deptB = b.department_code || b.department_name || "";
-        if (deptA !== deptB) return deptA.localeCompare(deptB);
-        return (a.student_id || "").localeCompare(b.student_id || "");
-      });
-
-      const templateData = sorted.map(app => ({
-        學號: app.student_id || "",
-        姓名: app.student_name || "",
-        系所: app.department_name || "",
-        排名: "", // Blank for user to fill in (integer or N)
-      }));
-
-      // Create worksheet
-      const worksheet = XLSX.utils.json_to_sheet(templateData);
-
-      // Set column widths for better readability
-      worksheet["!cols"] = [
-        { wch: 15 }, // 學號
-        { wch: 20 }, // 姓名
-        { wch: 25 }, // 系所
-        { wch: 10 }, // 排名
-      ];
-
-      // Create workbook
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "排名範本");
-
-      // Generate filename
-      const filename = `排名範本_${subTypeCode}_${academicYear}.xlsx`;
-
-      // Download file
-      XLSX.writeFile(workbook, filename);
-
+      const { blob, filename } = await downloadRankingTemplate(rankingId);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
       toast.success(`已下載範本檔案：${filename}`);
     } catch (error) {
       logger.error("Template download error", { error: error });
