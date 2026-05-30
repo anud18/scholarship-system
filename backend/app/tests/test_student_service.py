@@ -22,8 +22,17 @@ from app.services.student_service import StudentService
 
 
 @pytest.fixture
-def service():
-    """StudentService with API disabled (no env vars in test env)."""
+def service(monkeypatch):
+    """StudentService with the SIS API force-disabled.
+
+    `settings.student_api_enabled` defaults to True and the base_url/account/
+    hmac_key settings all have non-None defaults, so a bare StudentService() is
+    "configured" in every environment (CI included). Force the disabled state so
+    the disabled-path assertions are deterministic instead of env-dependent.
+    """
+    import app.services.student_service as student_service_module
+
+    monkeypatch.setattr(student_service_module.settings, "student_api_enabled", False)
     return StudentService()
 
 
