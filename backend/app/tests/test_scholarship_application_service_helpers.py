@@ -67,7 +67,7 @@ def test_initial_priority_independent_of_student_id(service):
 def _app_with_docs(required_docs, uploaded_doc_types):
     """Build a minimal Application-like object for the validator."""
     app = SimpleNamespace()
-    app.scholarship_type = SimpleNamespace(required_documents=required_docs)
+    app.scholarship_type_ref = SimpleNamespace(required_documents=required_docs)
     app.files = [SimpleNamespace(document_type=t) for t in uploaded_doc_types]
     return app
 
@@ -105,7 +105,7 @@ def test_validate_documents_required_none_treated_as_empty(service):
     # via the `or []` fallback. Defensive against legacy records
     # without the column populated.
     app = SimpleNamespace()
-    app.scholarship_type = SimpleNamespace(required_documents=None)
+    app.scholarship_type_ref = SimpleNamespace(required_documents=None)
     app.files = [SimpleNamespace(document_type="anything")]
     ok, msg = service._validate_application_documents(app)
     assert ok is True
@@ -125,7 +125,7 @@ def test_validate_documents_none_document_type_filtered_out(service):
     # included them in the "uploaded" set would falsely pass a
     # missing document.
     app = SimpleNamespace()
-    app.scholarship_type = SimpleNamespace(required_documents=["transcript"])
+    app.scholarship_type_ref = SimpleNamespace(required_documents=["transcript"])
     app.files = [
         SimpleNamespace(document_type=None),  # filtered out
         SimpleNamespace(document_type="transcript"),
@@ -137,7 +137,7 @@ def test_validate_documents_none_document_type_filtered_out(service):
 def test_validate_documents_only_none_doc_types_yields_missing(service):
     # Pin: all-None files leave the required set unsatisfied.
     app = SimpleNamespace()
-    app.scholarship_type = SimpleNamespace(required_documents=["transcript"])
+    app.scholarship_type_ref = SimpleNamespace(required_documents=["transcript"])
     app.files = [
         SimpleNamespace(document_type=None),
         SimpleNamespace(document_type=None),
