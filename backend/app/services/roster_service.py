@@ -154,6 +154,8 @@ class RosterService:
 
                 # 清除舊的明細
                 self.db.query(PaymentRosterItem).filter(PaymentRosterItem.roster_id == roster.id).delete()
+                self.db.flush()
+                self.db.expire(roster, ["items"])
 
                 logger.info(f"Regenerating roster {roster_code}")
             else:

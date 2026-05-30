@@ -482,10 +482,15 @@ class ReviewService:
                 else str(latest_review.reviewer.role).lower()
             )
 
-        # Professor recommendations are purely advisory: never change application.status.
-        # Only advance review_stage so college/admin can see where the pipeline stands.
         if latest_reviewer_role == "professor":
             application.review_stage = ReviewStage.professor_reviewed.value
+            awaits_further = await self._awaits_further_required_review(application, latest_reviewer_role)
+            if all_approved:
+                application.status = (
+                    ApplicationStatus.under_review.value if awaits_further else ApplicationStatus.approved.value
+                )
+            elif all_rejected:
+                application.status = ApplicationStatus.rejected.value
             return application.status
 
         awaits_further = await self._awaits_further_required_review(application, latest_reviewer_role)
