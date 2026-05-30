@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from app.models.enums import Semester
-from app.models.scholarship import ScholarshipStatus, ScholarshipType
+from app.models.scholarship import ScholarshipConfiguration
 
 
 class TestRenewalFlowSequence:
@@ -18,13 +18,13 @@ class TestRenewalFlowSequence:
         """Create a scholarship with sequential renewal and general flows"""
         now = datetime.now(timezone.utc)
 
-        return ScholarshipType(
-            code="SEQUENTIAL_SCHOLARSHIP",
-            name="順序流程獎學金",
+        return ScholarshipConfiguration(
+            config_code="SEQUENTIAL_SCHOLARSHIP",
+            config_name="順序流程獎學金",
             academic_year=113,
             semester=Semester.first,
             amount=50000,
-            status=ScholarshipStatus.active.value,
+            is_active=True,
             # 續領申請期間（優先處理）
             renewal_application_start_date=now - timedelta(days=60),
             renewal_application_end_date=now - timedelta(days=40),

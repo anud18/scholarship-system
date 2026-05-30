@@ -248,56 +248,6 @@ class ScholarshipType(Base):
 
         return translations
 
-    def can_student_apply(
-        self,
-        student_id: int,
-        existing_applications: List["Application"],
-        is_renewal: bool = None,
-    ) -> bool:
-        """
-        Check if student can apply for this scholarship based on semester limits and application type
-
-        Args:
-            student_id: Student ID to check
-            existing_applications: List of existing applications for this student
-            is_renewal: True for renewal, False for general, None to auto-detect based on current period
-
-        Returns:
-            bool: True if student can apply, False otherwise
-        """
-        # Check whitelist first
-        if not self.is_student_in_whitelist(student_id):
-            return False
-
-        # Auto-detect application type if not provided
-        if is_renewal is None:
-            is_renewal = self.current_application_type == "renewal"
-
-        # Check if we're in the correct application period
-        if is_renewal and not self.is_renewal_application_period:
-            return False
-        elif not is_renewal and not self.is_general_application_period:
-            return False
-
-        # Check if student already has an application for this semester
-        for application in existing_applications:
-            if (
-                application.scholarship_type_id == self.id
-                and application.student_id == student_id
-                and application.is_renewal == is_renewal
-            ):
-                return False
-
-        return True
-
-    def can_student_apply_renewal(self, student_id: int, existing_applications: List["Application"]) -> bool:
-        """Check if student can apply for renewal"""
-        return self.can_student_apply(student_id, existing_applications, True)
-
-    def can_student_apply_general(self, student_id: int, existing_applications: List["Application"]) -> bool:
-        """Check if student can apply for general application"""
-        return self.can_student_apply(student_id, existing_applications, False)
-
     def get_application_timeline(self) -> Dict[str, Dict[str, datetime]]:
         """Get complete application timeline"""
         timeline = {
@@ -921,6 +871,57 @@ class ScholarshipConfiguration(Base):
         elif self.is_general_application_period:
             return "general"
         return None
+
+    def can_student_apply(
+        self,
+        student_id: int,
+        existing_applications: List["Application"],
+        is_renewal: bool = None,
+    ) -> bool:
+        """
+        Check if student can apply for this configuration based on the current
+        application period and existing applications.
+
+        Args:
+            student_id: Student (user) ID to check
+            existing_applications: List of existing applications for this student
+            is_renewal: True for renewal, False for general, None to auto-detect based on current period
+
+        Returns:
+            bool: True if student can apply, False otherwise
+        """
+        # Check whitelist first
+        if not self.is_student_in_whitelist(student_id):
+            return False
+
+        # Auto-detect application type if not provided
+        if is_renewal is None:
+            is_renewal = self.current_application_type == "renewal"
+
+        # Check if we're in the correct application period
+        if is_renewal and not self.is_renewal_application_period:
+            return False
+        elif not is_renewal and not self.is_general_application_period:
+            return False
+
+        # Check if student already has an application for this configuration
+        for application in existing_applications:
+            if (
+                application.scholarship_configuration_id == self.id
+                and application.user_id == student_id
+                and application.is_renewal == is_renewal
+            ):
+                return False
+
+        return True
+
+    def can_student_apply_renewal(self, student_id: int, existing_applications: List["Application"]) -> bool:
+        """Check if student can apply for renewal"""
+        return self.can_student_apply(student_id, existing_applications, True)
+
+    def can_student_apply_general(self, student_id: int, existing_applications: List["Application"]) -> bool:
+        """Check if student can apply for general application"""
+        return self.can_student_apply(student_id, existing_applications, False)
 
     def is_renewal_professor_review_period(self) -> bool:
         """Check if within renewal professor review period"""
