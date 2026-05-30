@@ -21,8 +21,11 @@ from app.models.scholarship import ScholarshipRule, ScholarshipSubTypeConfig
 
 
 def _rule(**overrides) -> ScholarshipRule:
-    """Build a ScholarshipRule without invoking SQLAlchemy ORM init."""
-    r = object.__new__(ScholarshipRule)
+    """Build an in-memory ScholarshipRule (no DB session)."""
+    # scholarship_type is a relationship; tests stub it with a duck-typed
+    # SimpleNamespace for validate_sub_type. Pop it out and inject via __dict__
+    # afterwards, since the ORM constructor rejects a non-mapped instance.
+    scholarship_type = overrides.pop("scholarship_type", None)
     defaults = {
         "id": 1,
         "scholarship_type_id": 1,
@@ -32,17 +35,14 @@ def _rule(**overrides) -> ScholarshipRule:
         "academic_year": None,
         "semester": None,
         "is_template": False,
-        # scholarship_type set via SimpleNamespace when validate_sub_type needs it
-        "scholarship_type": None,
     }
     defaults.update(overrides)
-    for k, v in defaults.items():
-        object.__setattr__(r, k, v)
+    r = ScholarshipRule(**defaults)
+    r.__dict__["scholarship_type"] = scholarship_type
     return r
 
 
 def _config(**overrides) -> ScholarshipSubTypeConfig:
-    c = object.__new__(ScholarshipSubTypeConfig)
     defaults = {
         "id": 1,
         "name": "國科會",
@@ -50,9 +50,7 @@ def _config(**overrides) -> ScholarshipSubTypeConfig:
         "amount": None,
     }
     defaults.update(overrides)
-    for k, v in defaults.items():
-        object.__setattr__(c, k, v)
-    return c
+    return ScholarshipSubTypeConfig(**defaults)
 
 
 # ─── ScholarshipRule.validate_sub_type ───────────────────────────────
