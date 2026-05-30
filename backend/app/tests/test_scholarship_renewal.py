@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from app.models.enums import Semester
-from app.models.scholarship import ScholarshipStatus, ScholarshipType
+from app.models.scholarship import ScholarshipConfiguration
 
 
 class TestScholarshipRenewalPeriod:
@@ -18,13 +18,13 @@ class TestScholarshipRenewalPeriod:
         """Create a scholarship with renewal periods"""
         now = datetime.now(timezone.utc)
 
-        return ScholarshipType(
-            code="TEST_SCHOLARSHIP",
-            name="測試獎學金",
+        return ScholarshipConfiguration(
+            config_code="TEST_SCHOLARSHIP",
+            config_name="測試獎學金",
             academic_year=113,
             semester=Semester.first,
             amount=50000,
-            status=ScholarshipStatus.active.value,
+            is_active=True,
             # 續領申請期間（優先處理）
             renewal_application_start_date=now - timedelta(days=10),
             renewal_application_end_date=now + timedelta(days=5),
@@ -144,12 +144,11 @@ class TestApplicationRenewal:
         renewal_app = Application(
             app_id="APP-2025-000001",
             user_id=1,
-            student_id=1,
             scholarship_type_id=1,
             is_renewal=True,
             academic_year=113,
             semester=Semester.first,
-            status=ApplicationStatus.submitted.value,
+            status=ApplicationStatus.submitted,
         )
 
         assert renewal_app.is_renewal_application is True
@@ -161,12 +160,11 @@ class TestApplicationRenewal:
         general_app = Application(
             app_id="APP-2025-000002",
             user_id=2,
-            student_id=2,
             scholarship_type_id=1,
             is_renewal=False,
             academic_year=113,
             semester=Semester.first,
-            status=ApplicationStatus.submitted.value,
+            status=ApplicationStatus.submitted,
         )
 
         assert general_app.is_renewal_application is False
