@@ -248,6 +248,12 @@ class Application(Base):
             unique=True,
             postgresql_where=sa.text("is_renewal = false AND challenges_application_id IS NULL AND deleted_at IS NULL"),
         ),
+        # Plain index on the FK — heavily filtered by roster_service; PostgreSQL
+        # does not auto-create an index for foreign keys.
+        Index(
+            "ix_applications_scholarship_configuration_id",
+            "scholarship_configuration_id",
+        ),
     )
 
     def __repr__(self):
