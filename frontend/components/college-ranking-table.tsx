@@ -73,6 +73,10 @@ import {
 import { getTranslation } from "@/lib/i18n";
 import { toast } from "sonner";
 import { exportRankingExcel } from "@/lib/api/modules/college";
+import {
+  parseRankingSheet,
+  type ExcelRankingImportRow,
+} from "@/lib/ranking/parse-ranking-sheet";
 import * as XLSX from "xlsx";
 import { ApplicationReviewDialog } from "@/components/common/ApplicationReviewDialog";
 import { Application as ApplicationType, User } from "@/lib/api";
@@ -146,14 +150,6 @@ interface Application {
   renewal_year?: number | null;
   status: string;
   review_status?: string;
-}
-
-// Excel import row shape produced by handleFileUpload before being passed up
-// via onImportExcel — three columns (學號/姓名/排名) parsed and normalized.
-interface ExcelRankingImportRow {
-  student_id: string;
-  student_name: string;
-  rank_position: number | string;
 }
 
 // Per-application review scratch state, keyed by application id. Each entry is
@@ -588,104 +584,18 @@ export function CollegeRankingTable({
     setIsImporting(true);
 
     try {
-      // Read Excel file
+      // Read Excel file (學生資料彙整表 export format: row1 title, row2 headers,
+      // row3+ data). `range: 1` makes row 2 the header row; do NOT also pass a
+      // `header` option or the numeric range row is treated as data.
       const data = await file.arrayBuffer();
       const uint8Array = new Uint8Array(data);
       const workbook = XLSX.read(uint8Array, { type: "array" });
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+        range: 1,
+      }) as Array<Record<string, unknown>>;
 
-      // Parse Excel data - expected columns: 學號, 姓名, 排名
-      const errors: string[] = [];
-      const importData: ExcelRankingImportRow[] = [];
-
-      // XLSX.utils.sheet_to_json returns a heterogeneous record per row keyed by
-      // column header — the cell values are inherently dynamic (Excel allows
-      // strings/numbers/dates/etc per cell), so `unknown` here is correct and
-      // the field-by-field coercion below narrows for use.
-      (jsonData as Array<Record<string, unknown>>).forEach((row, index) => {
-        const rowNum = index + 2; // Excel row (header = row 1)
-        const studentId = String(row["學號"] || row["student_id"] || "").trim();
-        const studentName = String(
-          row["姓名"] || row["student_name"] || row["name"] || ""
-        ).trim();
-        const rawRank = row["排名"] ?? row["rank_position"] ?? row["rank"];
-
-        if (!studentId) return; // Skip empty rows
-
-        // Validate rank value
-        if (
-          rawRank === undefined ||
-          rawRank === null ||
-          String(rawRank).trim() === ""
-        ) {
-          errors.push(`第 ${rowNum} 行排名欄位為空（學號：${studentId}）`);
-          return;
-        }
-
-        const rankStr = String(rawRank).trim();
-
-        if (rankStr.toUpperCase() === "N") {
-          importData.push({
-            student_id: studentId,
-            student_name: studentName,
-            rank_position: "N",
-          });
-        } else {
-          const rankNum = Number(rankStr);
-          if (!Number.isInteger(rankNum) || rankNum < 1) {
-            errors.push(
-              `第 ${rowNum} 行排名格式無效：'${rankStr}'（學號：${studentId}）`
-            );
-          } else {
-            importData.push({
-              student_id: studentId,
-              student_name: studentName,
-              rank_position: rankNum,
-            });
-          }
-        }
-      });
-
-      // Validate: no duplicate student IDs
-      const seenStudentIds = new Set<string>();
-      const duplicateStudentIds = new Set<string>();
-      importData.forEach(item => {
-        if (seenStudentIds.has(item.student_id)) {
-          duplicateStudentIds.add(item.student_id);
-        }
-        seenStudentIds.add(item.student_id);
-      });
-      if (duplicateStudentIds.size > 0) {
-        errors.push(`學號重複：${Array.from(duplicateStudentIds).join(", ")}`);
-      }
-
-      // Validate: no duplicate integer ranks
-      const integerRanks = importData
-        .filter(item => typeof item.rank_position === "number")
-        .map(item => item.rank_position as number);
-
-      const rankCounts = new Map<number, number>();
-      integerRanks.forEach(r =>
-        rankCounts.set(r, (rankCounts.get(r) || 0) + 1)
-      );
-      rankCounts.forEach((count, rank) => {
-        if (count > 1) {
-          errors.push(`排名 ${rank} 重複出現（${count} 次）`);
-        }
-      });
-
-      // Validate: consecutive from 1
-      if (integerRanks.length > 0 && errors.length === 0) {
-        const rankSet = new Set(integerRanks);
-        const missing: number[] = [];
-        for (let i = 1; i <= integerRanks.length; i++) {
-          if (!rankSet.has(i)) missing.push(i);
-        }
-        if (missing.length > 0) {
-          errors.push(`排名不連續：缺少第 ${missing.join(", ")} 名`);
-        }
-      }
+      const { importData, errors } = parseRankingSheet(jsonData);
 
       if (errors.length > 0) {
         toast.error(errors.join("\n"), { duration: 10000 });
@@ -701,7 +611,6 @@ export function CollegeRankingTable({
         return;
       }
 
-      // Call import handler if provided
       if (onImportExcel) {
         await onImportExcel(importData);
         const rejectedCount = importData.filter(
