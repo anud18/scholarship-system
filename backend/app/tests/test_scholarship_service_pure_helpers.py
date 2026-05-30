@@ -110,7 +110,7 @@ def test_initial_priority_new_application_is_zero(app_service):
 def _app(*, required_docs, uploaded_docs):
     """Duck-typed Application with just the attributes the helper reads."""
     return SimpleNamespace(
-        scholarship_type=SimpleNamespace(required_documents=required_docs),
+        scholarship_type_ref=SimpleNamespace(required_documents=required_docs),
         files=[SimpleNamespace(document_type=d) for d in uploaded_docs],
     )
 
@@ -143,7 +143,7 @@ def test_validate_docs_none_required_is_ok(app_service):
     """No required docs configured ⇒ trivially valid (handles the edge
     case where scholarship_type.required_documents is None)."""
     app = SimpleNamespace(
-        scholarship_type=SimpleNamespace(required_documents=None),
+        scholarship_type_ref=SimpleNamespace(required_documents=None),
         files=[],
     )
     ok, _ = app_service._validate_application_documents(app)
