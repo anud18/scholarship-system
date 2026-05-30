@@ -196,7 +196,7 @@ class ScholarshipNotificationService:
                     <h3 style="margin-top: 0; color: #2d3748;">Application Information:</h3>
                     <ul style="margin: 10px 0;">
                         <li><strong>Application ID:</strong> {application.app_id}</li>
-                        <li><strong>Scholarship Type:</strong> {application.scholarship_type}</li>
+                        <li><strong>Scholarship Type:</strong> {application.scholarship_name or 'N/A'}</li>
                         <li><strong>Previous Status:</strong> {old_status.replace('_', ' ').title()}</li>
                         <li><strong>Current Status:</strong> {new_status.replace('_', ' ').title()}</li>
                         <li><strong>Status Changed:</strong> {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}</li>
@@ -299,7 +299,7 @@ class ScholarshipNotificationService:
                             <h3 style="margin-top: 0; color: #2d3748;">Deadline Information:</h3>
                             <ul style="margin: 10px 0;">
                                 <li><strong>Application ID:</strong> {application.app_id}</li>
-                                <li><strong>Scholarship Type:</strong> {application.scholarship_type}</li>
+                                <li><strong>Scholarship Type:</strong> {application.scholarship_name or 'N/A'}</li>
                                 <li><strong>Review Deadline:</strong> {application.review_deadline.strftime('%Y-%m-%d')}</li>
                                 <li><strong>Days Remaining:</strong> {days_remaining} days</li>
                                 <li><strong>Current Status:</strong> {application.status.replace('_', ' ').title()}</li>
@@ -374,7 +374,7 @@ class ScholarshipNotificationService:
                         <li><strong>Student:</strong> {student_name}</li>
                         <li><strong>Student ID:</strong> {student_no}</li>
                         <li><strong>Application ID:</strong> {application.app_id}</li>
-                        <li><strong>Scholarship Type:</strong> {application.scholarship_type}</li>
+                        <li><strong>Scholarship Type:</strong> {application.scholarship_name or 'N/A'}</li>
                         <li><strong>Application Status:</strong> {application.status.replace('_', ' ').title()}</li>
                         <li><strong>Submitted:</strong> {application.submitted_at.strftime('%Y-%m-%d') if application.submitted_at else 'N/A'}</li>
                     </ul>
