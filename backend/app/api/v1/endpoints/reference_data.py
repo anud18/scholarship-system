@@ -226,7 +226,13 @@ async def _get_all_reference_data_cached(session: AsyncSession) -> dict:
         "genders": [{"id": gender.id, "name": gender.name} for gender in genders],
         "academies": [{"id": academy.id, "code": academy.code, "name": academy.name} for academy in academies],
         "departments": [
-            {"id": department.id, "code": department.code, "name": department.name} for department in departments
+            {
+                "id": department.id,
+                "code": department.code,
+                "name": department.name,
+                "academy_code": department.academy_code,
+            }
+            for department in departments
         ],
         "enroll_types": [
             {
