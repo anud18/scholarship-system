@@ -686,6 +686,26 @@ export async function exportRankingExcel(
   );
 }
 
+/**
+ * Download the 學生資料彙整表 import TEMPLATE for a college ranking — the same
+ * export workbook with the rank column (學院初審會議之學院排序) left blank for the
+ * college to fill in and re-import.
+ *
+ * Endpoint: GET /api/v1/college-review/rankings/{ranking_id}/export-excel?template=true
+ */
+export async function downloadRankingTemplate(
+  rankingId: number
+): Promise<{ blob: Blob; filename: string }> {
+  const params = new URLSearchParams();
+  params.set("template", "true");
+  return _fetchBinaryExport(
+    `/api/v1/college-review/rankings/${rankingId}/export-excel`,
+    params,
+    `學生資料彙整表_${rankingId}_範本.xlsx`,
+    "無法下載範本"
+  );
+}
+
 type DepartmentSummaryExportArgs = {
   scholarship_type_id: number;
   academic_year: number;

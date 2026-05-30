@@ -20,6 +20,7 @@ import {
   exportRankingExcel,
   exportDepartmentSummary,
   exportDepartmentSummaryBulk,
+  downloadRankingTemplate,
 } from "../college";
 import { typedClient } from "../../typed-client";
 
@@ -511,5 +512,21 @@ describe("module-level export helpers", () => {
     global.fetch = fetchMock as any;
 
     await expect(exportRankingExcel(42)).rejects.toThrow("無法匯出排名資料");
+  });
+
+  it("downloadRankingTemplate hits export-excel with template=true + 範本 fallback filename", async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      headers: { get: jest.fn().mockReturnValue("") },
+      blob: jest.fn().mockResolvedValue(new Blob()),
+    });
+    global.fetch = fetchMock as any;
+
+    const result = await downloadRankingTemplate(42);
+
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain("/rankings/42/export-excel");
+    expect(url).toContain("template=true");
+    expect(result.filename).toBe("學生資料彙整表_42_範本.xlsx");
   });
 });
