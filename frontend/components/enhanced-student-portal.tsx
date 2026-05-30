@@ -495,10 +495,14 @@ export function EnhancedStudentPortal({
   useEffect(() => {
     const code = newApplicationData.scholarship_type;
     if (!code || eligibleRealSubTypes.length !== 1) return;
-    const onlyValue = eligibleRealSubTypes[0].value as string;
+    const onlyValue = eligibleRealSubTypes[0]?.value;
+    if (!onlyValue) return;
     setSelectedSubTypes(prev =>
       prev[code]?.length ? prev : { ...prev, [code]: [onlyValue] }
     );
+    // Depend on `.length` (not the array) — eligibleRealSubTypes is a fresh
+    // identity each render, so the array itself would loop; switching
+    // scholarships is covered by the scholarship_type dep.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newApplicationData.scholarship_type, eligibleRealSubTypes.length]);
 

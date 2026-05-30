@@ -444,6 +444,19 @@ class ApplicationService:
         return scholarship, config
 
     @staticmethod
+    def _derive_sub_scholarship_type(scholarship_subtype_list: Optional[List[str]]) -> str:
+        """Derive the denormalized scalar `sub_scholarship_type` from the selected
+        sub-type list: first entry wins, normalized to lowercase; empty → "general".
+
+        Shared by create and update so the scalar never drifts from the list
+        (a drift is what let a "general" scalar survive an edit that picked a
+        real sub-type — see _validate_sub_type_for_submission).
+        """
+        if scholarship_subtype_list:
+            return scholarship_subtype_list[0].lower()
+        return "general"
+
+    @staticmethod
     def _validate_sub_type_for_submission(scholarship: ScholarshipType, sub_scholarship_type: Optional[str]) -> None:
         """Reject the synthetic "general" category on submission for scholarships
         that define real sub-types.
@@ -452,11 +465,15 @@ class ApplicationService:
         For a scholarship that defines real ones (e.g. PhD: nstc / moe_1w), a
         "general" application matches no quota slot during distribution, so it
         must carry a concrete sub-type before it can be submitted.
+
+        Sub-types are stored lowercase (CLAUDE.md convention), but admin-entered
+        `sub_type_list` may not be — compare case-insensitively so a correct
+        submission is never falsely rejected over casing.
         """
         if scholarship is None:
             return
-        real_sub_types = [st for st in (scholarship.sub_type_list or []) if st and st != "general"]
-        if real_sub_types and (sub_scholarship_type or "general") not in real_sub_types:
+        real_sub_types = [st.lower() for st in (scholarship.sub_type_list or []) if st and st.lower() != "general"]
+        if real_sub_types and (sub_scholarship_type or "general").lower() not in real_sub_types:
             raise ValidationError("此獎學金需選擇申請類別（" + "、".join(real_sub_types) + "），不可使用通用類別")
 
     async def _create_application_instance(
@@ -484,9 +501,7 @@ class ApplicationService:
 
         # Determine sub scholarship type from selected subtypes (use first one if any)
         scholarship_subtype_list = application_data.scholarship_subtype_list or []
-        sub_scholarship_type = "general"  # Default (lowercase, configuration-driven)
-        if scholarship_subtype_list:
-            sub_scholarship_type = scholarship_subtype_list[0].lower()  # Normalize to lowercase
+        sub_scholarship_type = self._derive_sub_scholarship_type(scholarship_subtype_list)
 
         # Submitting (not a draft) requires a concrete sub-type when the
         # scholarship defines real ones — drafts may stay incomplete.
@@ -1150,6 +1165,11 @@ class ApplicationService:
         # 更新子項目列表（如果提供）
         if update_data.scholarship_subtype_list is not None:
             application.scholarship_subtype_list = update_data.scholarship_subtype_list
+            # Keep the denormalized scalar in sync with the list, otherwise an
+            # edit that picks a real sub-type (e.g. nstc) leaves a stale "general"
+            # scalar — which submit_application's guard would then reject, blocking
+            # the very correction the student is making.
+            application.sub_scholarship_type = self._derive_sub_scholarship_type(update_data.scholarship_subtype_list)
 
         await self.db.commit()
         await self.db.refresh(application)

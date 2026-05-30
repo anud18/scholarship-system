@@ -17,6 +17,10 @@ from types import SimpleNamespace
 import pytest
 
 from app.core.exceptions import ValidationError
+from app.models.application import Application, ApplicationStatus
+from app.models.scholarship import ScholarshipType, SubTypeSelectionMode
+from app.models.user import User, UserRole, UserType
+from app.schemas.application import ApplicationUpdate
 from app.services.application_service import ApplicationService
 
 
@@ -73,3 +77,94 @@ def test_scholarship_without_sub_types_allows_general():
 def test_scholarship_with_none_sub_type_list_allows_general():
     # Defensive: sub_type_list may be None on older rows.
     ApplicationService._validate_sub_type_for_submission(_scholarship(None), "general")
+
+
+# ─── case-insensitive comparison (admin sub_type_list may not be lowercase) ───
+
+
+def test_uppercase_sub_type_list_accepts_lowercase_submission():
+    # Pin: sub_type_list=["NSTC"] must accept submitted "nstc" — sub-types are
+    # stored lowercase, so a casing mismatch must NOT falsely reject.
+    ApplicationService._validate_sub_type_for_submission(_scholarship(["NSTC", "MOE_1W"]), "nstc")
+
+
+def test_uppercase_submission_against_lowercase_list_accepted():
+    ApplicationService._validate_sub_type_for_submission(_scholarship(["nstc", "moe_1w"]), "NSTC")
+
+
+# ─── _derive_sub_scholarship_type (shared by create + update) ───
+
+
+def test_derive_first_entry_lowercased():
+    assert ApplicationService._derive_sub_scholarship_type(["NSTC", "moe_1w"]) == "nstc"
+
+
+def test_derive_empty_list_is_general():
+    assert ApplicationService._derive_sub_scholarship_type([]) == "general"
+
+
+def test_derive_none_is_general():
+    assert ApplicationService._derive_sub_scholarship_type(None) == "general"
+
+
+# ─── integration: update_application re-derives the scalar (regression) ───
+#
+# The csphd0003 fix is defeated if editing an application to pick a real
+# sub-type leaves the denormalized sub_scholarship_type stale at "general",
+# because submit_application's guard then rejects the corrected application.
+
+
+@pytest.mark.asyncio
+async def test_update_application_resyncs_sub_scholarship_type(db):
+    # Seed: PhD-like scholarship with real sub-types + a draft owned by the user
+    # that currently carries the "general" fallback (the bug state).
+    user = User(
+        nycu_id="csphd_edit",
+        name="Edit Tester",
+        email="csphd_edit@university.edu",
+        user_type=UserType.student,
+        role=UserRole.student,
+    )
+    scholarship = ScholarshipType(
+        code="phd_like",
+        name="PhD-like",
+        description="defines real sub-types",
+        sub_type_list=["nstc", "moe_1w"],
+    )
+    db.add_all([user, scholarship])
+    await db.commit()
+    await db.refresh(user)
+    await db.refresh(scholarship)
+
+    application = Application(
+        user_id=user.id,
+        scholarship_type_id=scholarship.id,
+        sub_type_selection_mode=SubTypeSelectionMode.single,
+        status=ApplicationStatus.draft.value,
+        app_id="APP-114-0-09999",
+        academic_year=114,
+        semester=None,
+        scholarship_subtype_list=["general"],
+        sub_scholarship_type="general",
+        student_data={"name": "Edit Tester"},
+        submitted_form_data={"fields": {}, "documents": []},
+        agree_terms=True,
+    )
+    db.add(application)
+    await db.commit()
+    await db.refresh(application)
+
+    service = ApplicationService(db)
+    # Student edits the draft and picks nstc (sent uppercase to also prove
+    # normalization end-to-end).
+    await service.update_application(
+        application.id,
+        ApplicationUpdate(scholarship_subtype_list=["NSTC"]),
+        user,
+    )
+    await db.refresh(application)
+
+    # Scalar is re-derived from the list → guard will now accept it.
+    assert application.scholarship_subtype_list == ["NSTC"]
+    assert application.sub_scholarship_type == "nstc"
+    ApplicationService._validate_sub_type_for_submission(scholarship, application.sub_scholarship_type)
