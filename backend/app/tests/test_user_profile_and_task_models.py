@@ -23,7 +23,6 @@ from app.models.user_profile import UserProfile
 
 
 def _profile(**overrides) -> UserProfile:
-    p = object.__new__(UserProfile)
     defaults = {
         "id": 1,
         "user_id": 42,
@@ -33,13 +32,10 @@ def _profile(**overrides) -> UserProfile:
         "advisor_nycu_id": None,
     }
     defaults.update(overrides)
-    for k, v in defaults.items():
-        object.__setattr__(p, k, v)
-    return p
+    return UserProfile(**defaults)
 
 
 def _task(**overrides) -> BankVerificationTask:
-    t = object.__new__(BankVerificationTask)
     defaults = {
         "id": 1,
         "task_id": "task-001",
@@ -48,9 +44,7 @@ def _task(**overrides) -> BankVerificationTask:
         "processed_count": 0,
     }
     defaults.update(overrides)
-    for k, v in defaults.items():
-        object.__setattr__(t, k, v)
-    return t
+    return BankVerificationTask(**defaults)
 
 
 # ─── UserProfile.has_complete_bank_info ──────────────────────────────
