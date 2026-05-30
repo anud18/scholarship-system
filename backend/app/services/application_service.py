@@ -1577,8 +1577,8 @@ class ApplicationService:
                                 }
                             )
 
-            # Use eagerly loaded user (already loaded with selectinload)
-            app_user = application.user
+            # Use eagerly loaded student (already loaded with selectinload)
+            app_user = application.student
 
             # 創建響應數據
             app_data = ApplicationListResponse(
@@ -1600,7 +1600,7 @@ class ApplicationService:
                 cancelled_due_to_application_id=application.cancelled_due_to_application_id,
                 academic_year=application.academic_year,
                 semester=self._convert_semester_to_string(application.semester),
-                student_data=application.student_data,
+                student_data=application.student_data or {},
                 submitted_form_data=integrated_form_data,  # 使用整合後的表單資料
                 agree_terms=application.agree_terms,
                 professor_id=application.professor_id,
@@ -1999,8 +1999,8 @@ class ApplicationService:
                                 }
                             )
 
-            # Use eagerly loaded user (already loaded with selectinload)
-            app_user = application.user
+            # Use eagerly loaded student (already loaded with selectinload)
+            app_user = application.student
 
             # 創建響應數據
             app_data = ApplicationListResponse(
@@ -2022,7 +2022,7 @@ class ApplicationService:
                 cancelled_due_to_application_id=application.cancelled_due_to_application_id,
                 academic_year=application.academic_year,
                 semester=self._convert_semester_to_string(application.semester),
-                student_data=application.student_data,
+                student_data=application.student_data or {},
                 submitted_form_data=integrated_form_data,  # 使用整合後的表單資料
                 agree_terms=application.agree_terms,
                 professor_id=application.professor_id,
