@@ -19,13 +19,18 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services.scholarship_service import ScholarshipService
+from app.services.scholarship_service import ScholarshipApplicationService, ScholarshipService
 
 
 @pytest.fixture
 def service():
     """No DB I/O in the helpers — None session is fine."""
     return ScholarshipService(db=None)  # type: ignore[arg-type]
+
+
+@pytest.fixture
+def app_service():
+    return ScholarshipApplicationService(db=None)  # type: ignore[arg-type]
 
 
 # ─── _safe_gpa_to_decimal ─────────────────────────────────────────────
@@ -66,37 +71,37 @@ def test_safe_gpa_unexpected_type_returns_zero(service):
 # ─── _extract_sub_type ────────────────────────────────────────────────
 
 
-def test_extract_sub_type_nstc(service):
-    assert service._extract_sub_type("PHD_NSTC_2024") == "nstc"
+def test_extract_sub_type_nstc(app_service):
+    assert app_service._extract_sub_type("PHD_NSTC_2024") == "nstc"
 
 
-def test_extract_sub_type_moe_1w(service):
-    assert service._extract_sub_type("phd_moe_1w") == "moe_1w"
+def test_extract_sub_type_moe_1w(app_service):
+    assert app_service._extract_sub_type("phd_moe_1w") == "moe_1w"
 
 
-def test_extract_sub_type_moe_2w(service):
-    assert service._extract_sub_type("PHD_MOE_2W_2025") == "moe_2w"
+def test_extract_sub_type_moe_2w(app_service):
+    assert app_service._extract_sub_type("PHD_MOE_2W_2025") == "moe_2w"
 
 
-def test_extract_sub_type_default_general(service):
+def test_extract_sub_type_default_general(app_service):
     """Code without a recognized sub-type substring ⇒ 'general' (default
     track, matches the convention in CLAUDE.md §4 — sub-types are
     configuration-driven, not enum-constrained)."""
-    assert service._extract_sub_type("undergrad_academic") == "general"
-    assert service._extract_sub_type("") == "general"
+    assert app_service._extract_sub_type("undergrad_academic") == "general"
+    assert app_service._extract_sub_type("") == "general"
 
 
 # ─── _calculate_initial_priority ──────────────────────────────────────
 
 
-def test_initial_priority_renewal_gets_bonus(service):
+def test_initial_priority_renewal_gets_bonus(app_service):
     """Renewal applications get +100 priority (they queue ahead of new apps)."""
-    assert service._calculate_initial_priority(is_renewal=True, student_id=42) == 100
+    assert app_service._calculate_initial_priority(is_renewal=True, student_id=42) == 100
 
 
-def test_initial_priority_new_application_is_zero(service):
+def test_initial_priority_new_application_is_zero(app_service):
     """Non-renewal starts at 0 (additional factors not yet implemented)."""
-    assert service._calculate_initial_priority(is_renewal=False, student_id=42) == 0
+    assert app_service._calculate_initial_priority(is_renewal=False, student_id=42) == 0
 
 
 # ─── _validate_application_documents ──────────────────────────────────
@@ -110,36 +115,36 @@ def _app(*, required_docs, uploaded_docs):
     )
 
 
-def test_validate_docs_all_present(service):
+def test_validate_docs_all_present(app_service):
     app = _app(required_docs=["transcript", "bank"], uploaded_docs=["transcript", "bank"])
-    ok, msg = service._validate_application_documents(app)
+    ok, msg = app_service._validate_application_documents(app)
     assert ok is True
     assert "All required documents uploaded" in msg
 
 
-def test_validate_docs_missing_one(service):
+def test_validate_docs_missing_one(app_service):
     """Missing docs are listed by name in the failure message — admins use
     this to know what to follow up on."""
     app = _app(required_docs=["transcript", "bank"], uploaded_docs=["transcript"])
-    ok, msg = service._validate_application_documents(app)
+    ok, msg = app_service._validate_application_documents(app)
     assert ok is False
     assert "bank" in msg
     assert "Missing required documents" in msg
 
 
-def test_validate_docs_extra_uploads_dont_fail(service):
+def test_validate_docs_extra_uploads_dont_fail(app_service):
     """Uploading extras (beyond required) is fine — only missing matters."""
     app = _app(required_docs=["transcript"], uploaded_docs=["transcript", "bonus", "cover_letter"])
-    ok, _ = service._validate_application_documents(app)
+    ok, _ = app_service._validate_application_documents(app)
     assert ok is True
 
 
-def test_validate_docs_none_required_is_ok(service):
+def test_validate_docs_none_required_is_ok(app_service):
     """No required docs configured ⇒ trivially valid (handles the edge
     case where scholarship_type.required_documents is None)."""
     app = SimpleNamespace(
         scholarship_type=SimpleNamespace(required_documents=None),
         files=[],
     )
-    ok, _ = service._validate_application_documents(app)
+    ok, _ = app_service._validate_application_documents(app)
     assert ok is True
