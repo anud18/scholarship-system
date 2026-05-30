@@ -973,9 +973,10 @@ async def import_ranking_from_excel(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Import ranking data from Excel.
+    Import ranking data parsed from the 學生資料彙整表 Excel.
 
-    Expected columns: 學號, 姓名, 排名
+    Takes a JSON body (List[RankingImportItem]); the frontend parses the workbook
+    (學號 → student_id, 學生中文姓名 → student_name, 學院初審會議之學院排序 → rank_position).
     rank_position accepts positive integers (1-based, consecutive, no duplicates) or "N" (rejected).
     Student IDs must exactly match the ranking's application set.
     """
