@@ -22,7 +22,7 @@ from app.utils.academic_period import format_academic_period as format_academic_
 
 def _application_with_semester(semester: Semester) -> Application:
     """Build an in-memory Application for label-only assertion (no DB)."""
-    app = Application.__new__(Application)
+    app = Application()
     app.semester = semester
     app.academic_year = 114
     return app
@@ -45,7 +45,7 @@ def test_application_get_semester_label_yearly():
 
 
 def _rule_with_year_semester(year: int, semester: Semester | None) -> ScholarshipRule:
-    rule = ScholarshipRule.__new__(ScholarshipRule)
+    rule = ScholarshipRule()
     rule.is_template = False
     rule.academic_year = year
     rule.semester = semester
@@ -53,27 +53,27 @@ def _rule_with_year_semester(year: int, semester: Semester | None) -> Scholarshi
 
 
 def test_scholarship_rule_label_first():
-    assert _rule_with_year_semester(114, Semester.first).academic_year_label == "114學年度 第一學期"
+    assert _rule_with_year_semester(114, Semester.first).academic_period_label == "114學年度 第一學期"
 
 
 def test_scholarship_rule_label_second():
-    assert _rule_with_year_semester(114, Semester.second).academic_year_label == "114學年度 第二學期"
+    assert _rule_with_year_semester(114, Semester.second).academic_period_label == "114學年度 第二學期"
 
 
 def test_scholarship_rule_label_yearly():
     """Pre-fix: returned '114學年度 ' (trailing space, blank semester label)."""
-    assert _rule_with_year_semester(114, Semester.yearly).academic_year_label == "114學年度 全年"
+    assert _rule_with_year_semester(114, Semester.yearly).academic_period_label == "114學年度 全年"
 
 
 def test_scholarship_rule_label_no_semester():
-    assert _rule_with_year_semester(114, None).academic_year_label == "114學年度"
+    assert _rule_with_year_semester(114, None).academic_period_label == "114學年度"
 
 
 # ---- ScholarshipConfiguration.academic_year_label --------------------------
 
 
 def _config_with_year_semester(year: int, semester: Semester | None) -> ScholarshipConfiguration:
-    config = ScholarshipConfiguration.__new__(ScholarshipConfiguration)
+    config = ScholarshipConfiguration()
     config.academic_year = year
     config.semester = semester
     return config
