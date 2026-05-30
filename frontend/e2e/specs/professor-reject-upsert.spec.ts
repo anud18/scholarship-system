@@ -100,7 +100,7 @@ test.describe("Professor reject recommendation + upsert", () => {
     }
   });
 
-  test("@nightly stuphd001 → professor reject → upsert to approve; status stays submitted", async ({
+  test("@nightly stuphd001 → professor reject → rejected; upsert to approve → under_review", async ({
     browser,
   }) => {
     // 0. Drain any leftover (stuphd001, phd) apps from concurrent specs
@@ -194,14 +194,16 @@ test.describe("Professor reject recommendation + upsert", () => {
     expect(reviewsAfterReject[0].reviewer_id).toBe(professorUserId);
     expect(reviewsAfterReject[0].recommendation).toBe("reject");
 
-    //    b) application.status is unchanged — professor recommendation is
-    //       advisory only and must not flip status away from 'submitted'.
+    //    b) application.status becomes 'rejected' — a professor full-reject
+    //       marks the application rejected (政策: 教授拒絕代表此申請沒料了).
+    //       College/admin retain the right to edit / send back (回發) later, but
+    //       that is a separate action, not this professor-review path.
     const appAfterReject = await getApplication(appId);
     expect(appAfterReject, `application ${appId} disappeared after reject`).not.toBeNull();
     expect(
       appAfterReject!.status,
-      `professor reject should NOT change application.status, got ${appAfterReject!.status}`,
-    ).toBe("submitted");
+      `professor full-reject should set application.status=rejected, got ${appAfterReject!.status}`,
+    ).toBe("rejected");
 
     //    c) review_stage advanced to 'professor_reviewed' (per
     //       create_professor_review at services/application_service.py:1729).
@@ -256,8 +258,10 @@ test.describe("Professor reject recommendation + upsert", () => {
     //    c) Recommendation reflects the newer value.
     expect(reviewsAfterUpsert[0].recommendation).toBe("approve");
 
-    //    d) Status still 'submitted' — second call also advisory.
+    //    d) Status -> 'under_review' — the upsert to approve re-opens the app
+    //       and it awaits college review (issue #182: professor approve keeps it
+    //       at under_review while requires_college_review is set).
     const appAfterUpsert = await getApplication(appId);
-    expect(appAfterUpsert!.status).toBe("submitted");
+    expect(appAfterUpsert!.status).toBe("under_review");
   });
 });
