@@ -133,7 +133,7 @@ SAMPLE_STUDENTS = {
         "std_pid": "B123456789",
         "std_bdate": "880310",
         "std_academyno": "EE",
-        "std_depno": "3551",
+        "std_depno": "1511",
         "std_sex": 1,
         "std_nation": "中華民國",
         "std_degree": 1,
@@ -316,7 +316,7 @@ SAMPLE_STUDENTS = {
         "std_pid": "A123456001",
         "std_bdate": "900101",
         "std_academyno": "C",
-        "std_depno": "CS",
+        "std_depno": "1550",
         "std_sex": 1,
         "std_nation": "中華民國",
         "std_degree": 1,
@@ -342,7 +342,7 @@ SAMPLE_STUDENTS = {
         "std_pid": "A123456002",
         "std_bdate": "890215",
         "std_academyno": "C",
-        "std_depno": "CS",
+        "std_depno": "1550",
         "std_sex": 1,
         "std_nation": "中華民國",
         "std_degree": 1,
@@ -368,7 +368,7 @@ SAMPLE_STUDENTS = {
         "std_pid": "A123456003",
         "std_bdate": "880320",
         "std_academyno": "C",
-        "std_depno": "CS",
+        "std_depno": "1550",
         "std_sex": 2,
         "std_nation": "中華民國",
         "std_degree": 1,
@@ -4353,6 +4353,77 @@ SAMPLE_TERMS = {
 }
 
 # HMAC verification function moved to auth.py
+
+
+# --- Demo students for 申請總表 per-department export -----------------------
+# Mirrors backend/scripts/seed_summary_export_demo.py so these students are
+# loginable / re-submittable. std_depno values are REAL departments.code rows.
+# (stdcode -> cname, ename, sex, academyno, academyname, depno, depname, enrolltype, termcount)
+_SUMMARY_EXPORT_DEMO = {
+    "csdemo01": ("林演算法", "LIN,ALGORITHM", 1, "C", "資訊學院", "155", "資訊科學與工程研究所", 4, 5),
+    "csdemo02": ("黃資安", "HUANG,SECURITY", 2, "C", "資訊學院", "155", "資訊科學與工程研究所", 8, 3),
+    "csdemo03": ("吳網路", "WU,NETWORK", 1, "C", "資訊學院", "256", "網路工程研究所", 4, 7),
+    "csdemo04": ("趙多媒體", "CHAO,MULTIMEDIA", 2, "C", "資訊學院", "257", "多媒體工程研究所", 4, 4),
+    "csdemo05": ("錢數據", "CHIEN,DATA", 1, "C", "資訊學院", "260", "數據科學與工程研究所", 8, 6),
+    "eedemo01": ("周電機", "CHOU,EE", 1, "E", "電機學院", "183", "電機學院博士班", 4, 5),
+    "eedemo02": ("鄭電子", "CHENG,ECE", 2, "E", "電機學院", "3511", "電機工程學系", 4, 8),
+}
+
+
+def _mk_summary_demo_student(code, e):
+    cname, ename, sex, aca, acaname, dep, depname, etype, tcount = e
+    return {
+        "std_stdcode": code,
+        "std_enrollyear": 112,
+        "std_enrollterm": 1,
+        "std_highestschname": "國立陽明交通大學",
+        "std_cname": cname,
+        "std_ename": ename,
+        "std_pid": "D1234" + code[-2:].rjust(2, "0"),
+        "std_bdate": "900101",
+        "std_academyno": aca,
+        "std_depno": dep,
+        "std_sex": sex,
+        "std_nation": "中華民國",
+        "std_degree": 1,
+        "std_enrolltype": etype,
+        "std_identity": 1,
+        "std_schoolid": 1,
+        "std_overseaplace": "",
+        "std_termcount": tcount,
+        "std_studingstatus": 2,
+        "mgd_title": "在學",
+        "ToDoctor": 1,
+        "com_commadd": "新竹市東區大學路1001號",
+        "com_email": code + "@nycu.edu.tw",
+        "com_cellphone": "0912000000",
+    }
+
+
+def _mk_summary_demo_terms(code, e):
+    cname, ename, sex, aca, acaname, dep, depname, etype, tcount = e
+    return [{
+        "std_stdcode": code,
+        "trm_year": 114,
+        "trm_term": 1,
+        "trm_termcount": tcount,
+        "trm_studystatus": 1,
+        "trm_degree": 1,
+        "trm_academyno": aca,
+        "trm_academyname": acaname,
+        "trm_depno": dep,
+        "trm_depname": depname,
+        "trm_placings": 0,
+        "trm_placingsrate": 0.0,
+        "trm_depplacing": 0,
+        "trm_depplacingrate": 0.0,
+        "trm_ascore_gpa": 3.8,
+    }]
+
+
+SAMPLE_STUDENTS.update({c: _mk_summary_demo_student(c, e) for c, e in _SUMMARY_EXPORT_DEMO.items()})
+SAMPLE_TERMS.update({c: _mk_summary_demo_terms(c, e) for c, e in _SUMMARY_EXPORT_DEMO.items()})
+# --- end demo students ------------------------------------------------------
 
 
 @app.get("/")
