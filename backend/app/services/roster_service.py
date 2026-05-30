@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import and_, case as sa_case, func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.exceptions import RosterAlreadyExistsError, RosterGenerationError, RosterLockedError, RosterNotFoundError
 from app.core.metrics import payment_rosters_total
@@ -608,18 +608,28 @@ class RosterService:
 
         # 2. 基本查詢：已核准的申請
         # 容錯處理：如果 scholarship_configuration_id 為 NULL，則比對 scholarship_type_id
-        query = self.db.query(Application).filter(
-            and_(
-                or_(
-                    Application.scholarship_configuration_id == scholarship_configuration_id,
-                    and_(
-                        Application.scholarship_configuration_id.is_(None),
-                        Application.scholarship_type_id == config.scholarship_type_id,
+        # Eager-load the to-one relationships that _create_roster_item / verification
+        # loops read per row (student, scholarship_configuration → scholarship_type),
+        # otherwise each roster row triggers extra lazy round-trips (N+1).
+        query = (
+            self.db.query(Application)
+            .options(
+                joinedload(Application.student),
+                joinedload(Application.scholarship_configuration).joinedload(ScholarshipConfiguration.scholarship_type),
+            )
+            .filter(
+                and_(
+                    or_(
+                        Application.scholarship_configuration_id == scholarship_configuration_id,
+                        and_(
+                            Application.scholarship_configuration_id.is_(None),
+                            Application.scholarship_type_id == config.scholarship_type_id,
+                        ),
                     ),
-                ),
-                Application.status == "approved",  # 已核准
-                Application.academic_year == academic_year,
-                Application.deleted_at.is_(None),  # 排除已退件
+                    Application.status == "approved",  # 已核准
+                    Application.academic_year == academic_year,
+                    Application.deleted_at.is_(None),  # 排除已退件
+                )
             )
         )
 
