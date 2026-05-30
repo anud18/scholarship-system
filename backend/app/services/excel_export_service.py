@@ -146,7 +146,7 @@ class ExcelExportService:
         """確保匯出目錄存在；若無權限則退回系統暫存目錄（容器中 cwd 可能不可寫）"""
         try:
             Path(self.export_base_path).mkdir(parents=True, exist_ok=True)
-        except (PermissionError, OSError) as exc:
+        except OSError as exc:
             import tempfile
 
             fallback = os.path.join(tempfile.gettempdir(), "scholarship-exports")
