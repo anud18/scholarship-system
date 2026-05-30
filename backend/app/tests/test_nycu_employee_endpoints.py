@@ -5,6 +5,7 @@ Tests for NYCU Employee API endpoints.
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+import pytest_asyncio
 from fastapi.testclient import TestClient
 
 from app.integrations.nycu_emp import NYCUEmpItem, NYCUEmpPage
@@ -17,6 +18,18 @@ from app.integrations.nycu_emp.exceptions import (
 )
 from app.main import app
 from app.models.user import User, UserRole
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _clear_nycu_cache():
+    """Clear the Redis-backed employee-directory cache around each test so the
+    cached payload from one test does not leak into another (the dev container
+    has Redis; CI does not, where this is a no-op)."""
+    from app.core.cache import invalidate
+
+    await invalidate("nycu:employees")
+    yield
+    await invalidate("nycu:employees")
 
 
 @pytest.fixture

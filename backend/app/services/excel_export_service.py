@@ -143,8 +143,21 @@ class ExcelExportService:
         }
 
     def ensure_export_directory(self):
-        """確保匯出目錄存在"""
-        Path(self.export_base_path).mkdir(parents=True, exist_ok=True)
+        """確保匯出目錄存在；若無權限則退回系統暫存目錄（容器中 cwd 可能不可寫）"""
+        try:
+            Path(self.export_base_path).mkdir(parents=True, exist_ok=True)
+        except (PermissionError, OSError) as exc:
+            import tempfile
+
+            fallback = os.path.join(tempfile.gettempdir(), "scholarship-exports")
+            logger.warning(
+                "Cannot create export dir %s (%s); falling back to %s",
+                self.export_base_path,
+                exc,
+                fallback,
+            )
+            Path(fallback).mkdir(parents=True, exist_ok=True)
+            self.export_base_path = fallback
 
     def export_roster_to_excel(
         self,
