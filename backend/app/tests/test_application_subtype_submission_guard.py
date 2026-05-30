@@ -79,6 +79,25 @@ def test_scholarship_with_none_sub_type_list_allows_general():
     ApplicationService._validate_sub_type_for_submission(_scholarship(None), "general")
 
 
+def test_none_scholarship_is_skipped():
+    # Defensive: scholarship relationship may be unloaded — skip, don't crash.
+    ApplicationService._validate_sub_type_for_submission(None, "anything")
+
+
+# ─── no real sub-types: arbitrary values are rejected (not silently stored) ───
+
+
+def test_no_real_sub_types_rejects_arbitrary_value():
+    # ["general"]-only scholarship must not accept a bogus sub-type string.
+    with pytest.raises(ValidationError):
+        ApplicationService._validate_sub_type_for_submission(_scholarship(["general"]), "nstc")
+
+
+def test_empty_sub_type_list_rejects_arbitrary_value():
+    with pytest.raises(ValidationError):
+        ApplicationService._validate_sub_type_for_submission(_scholarship([]), "garbage")
+
+
 # ─── case-insensitive comparison (admin sub_type_list may not be lowercase) ───
 
 

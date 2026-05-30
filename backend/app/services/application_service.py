@@ -469,12 +469,21 @@ class ApplicationService:
         Sub-types are stored lowercase (CLAUDE.md convention), but admin-entered
         `sub_type_list` may not be — compare case-insensitively so a correct
         submission is never falsely rejected over casing.
+
+        When the scholarship defines no real sub-types, only the synthetic
+        "general" (or empty) is valid — an arbitrary sub-type string would be
+        stored verbatim and break downstream quota/distribution lookups, so it
+        is rejected too.
         """
         if scholarship is None:
             return
         real_sub_types = [st.lower() for st in (scholarship.sub_type_list or []) if st and st.lower() != "general"]
-        if real_sub_types and (sub_scholarship_type or "general").lower() not in real_sub_types:
-            raise ValidationError("此獎學金需選擇申請類別（" + "、".join(real_sub_types) + "），不可使用通用類別")
+        normalized = (sub_scholarship_type or "general").lower()
+        if real_sub_types:
+            if normalized not in real_sub_types:
+                raise ValidationError("此獎學金需選擇申請類別（" + "、".join(real_sub_types) + "），不可使用通用類別")
+        elif normalized != "general":
+            raise ValidationError("此獎學金不提供申請類別選擇，不可指定子類別")
 
     async def _create_application_instance(
         self,

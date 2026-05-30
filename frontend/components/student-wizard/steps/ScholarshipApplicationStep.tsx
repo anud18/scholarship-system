@@ -775,6 +775,21 @@ export function ScholarshipApplicationStep({
     }
   };
 
+  // Auto-select the sole eligible sub-type. With exactly one real choice,
+  // leaving it unselected strands the form below 100% (sub-type is a required
+  // progress item) and would otherwise fall back to the invalid "general"
+  // category at submit. Depend on the whole scholarship object so switching to
+  // a different single-sub-type scholarship re-selects correctly.
+  useEffect(() => {
+    const realSubTypes = (selectedScholarship?.eligible_sub_types ?? []).filter(
+      st => st.value && st.value !== "general"
+    );
+    if (realSubTypes.length !== 1) return;
+    const onlyValue = realSubTypes[0].value;
+    if (!onlyValue) return;
+    setSelectedSubTypes(prev => (prev.length > 0 ? prev : [onlyValue]));
+  }, [selectedScholarship]);
+
   const handleScholarshipChange = (scholarshipCode: string) => {
     const scholarship = eligibleScholarships.find(
       s => s.code === scholarshipCode
@@ -871,6 +886,13 @@ export function ScholarshipApplicationStep({
   const handleSaveDraft = async () => {
     if (!selectedScholarship) return;
 
+    // When the scholarship defines real sub-types, never fall back to the
+    // synthetic "general" category (it matches no quota slot at distribution);
+    // send [] so the backend guard / draft stays honest.
+    const hasRealEligibleSubTypes = (
+      selectedScholarship.eligible_sub_types ?? []
+    ).some(st => st.value && st.value !== "general");
+
     setSubmitting(true);
     try {
       // Include the applicant's postal account (郵局帳號) so the admin review
@@ -898,7 +920,11 @@ export function ScholarshipApplicationStep({
         scholarship_type: selectedScholarship.code,
         configuration_id: selectedScholarship.configuration_id || 0,
         scholarship_subtype_list:
-          selectedSubTypes.length > 0 ? selectedSubTypes : ["general"],
+          selectedSubTypes.length > 0
+            ? selectedSubTypes
+            : hasRealEligibleSubTypes
+              ? []
+              : ["general"],
         agree_terms: agreedToTerms,
         sub_type_preferences:
           subTypePreferences.length > 0 ? subTypePreferences : undefined,
@@ -989,6 +1015,13 @@ export function ScholarshipApplicationStep({
   const handleSubmit = async () => {
     if (!selectedScholarship) return;
 
+    // When the scholarship defines real sub-types, never fall back to the
+    // synthetic "general" category (it matches no quota slot at distribution);
+    // send [] so the backend guard / draft stays honest.
+    const hasRealEligibleSubTypes = (
+      selectedScholarship.eligible_sub_types ?? []
+    ).some(st => st.value && st.value !== "general");
+
     setSubmitting(true);
     try {
       // Include the applicant's postal account (郵局帳號) so the admin review
@@ -1016,7 +1049,11 @@ export function ScholarshipApplicationStep({
         scholarship_type: selectedScholarship.code,
         configuration_id: selectedScholarship.configuration_id || 0,
         scholarship_subtype_list:
-          selectedSubTypes.length > 0 ? selectedSubTypes : ["general"],
+          selectedSubTypes.length > 0
+            ? selectedSubTypes
+            : hasRealEligibleSubTypes
+              ? []
+              : ["general"],
         agree_terms: agreedToTerms,
         sub_type_preferences:
           subTypePreferences.length > 0 ? subTypePreferences : undefined,
