@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException
+from minio.commonconfig import CopySource
 from minio.error import S3Error
 
 from app.services.minio_service import MinIOService
@@ -147,21 +148,33 @@ def test_clone_file_to_application_success(minio_service, monkeypatch):
 
     new_name = minio_service.clone_file_to_application("user-profiles/1/file.pdf", application_id="APP-1")
 
+    # Must use the minio 7.x API: copy_object(..., source=CopySource(bucket, object)).
+    # A Mock client swallows wrong kwargs, so assert the real signature here — this is
+    # exactly the regression that produced 19-byte placeholder bank documents in prod.
     minio_service.client.copy_object.assert_called_once()
+    _, kwargs = minio_service.client.copy_object.call_args
+    source = kwargs["source"]
+    assert isinstance(source, CopySource)
+    assert source.bucket_name == minio_service.default_bucket
+    assert source.object_name == "user-profiles/1/file.pdf"
+    # No placeholder must ever be written on the success path.
+    minio_service.client.put_object.assert_not_called()
     assert new_name.startswith("applications/APP-1/documents/")
     assert new_name.endswith(".pdf")
 
 
-def test_clone_file_to_application_creates_placeholder(minio_service, monkeypatch):
+def test_clone_file_to_application_raises_on_copy_failure(minio_service, monkeypatch):
+    """A failed copy must raise (HTTP 500), never fabricate a placeholder file."""
     monkeypatch.setattr("app.services.minio_service.uuid", SimpleNamespace(uuid4=lambda: SimpleNamespace(hex="xyz987")))
 
     minio_service.client.copy_object.side_effect = Exception("not found")
 
-    new_name = minio_service.clone_file_to_application("user-profiles/1/missing.jpg", application_id="APP-2")
+    with pytest.raises(HTTPException) as exc:
+        minio_service.clone_file_to_application("user-profiles/1/missing.jpg", application_id="APP-2")
 
-    minio_service.client.put_object.assert_called_once()
-    assert new_name.startswith("applications/APP-2/documents/")
-    assert new_name.endswith(".jpg")
+    assert exc.value.status_code == 500
+    # CLAUDE.md #1: never write fallback/mock data when the real copy fails.
+    minio_service.client.put_object.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -173,18 +186,6 @@ async def test_upload_file_unexpected_error(minio_service, monkeypatch):
 
     with pytest.raises(HTTPException) as exc:
         await MinIOService.upload_file(minio_service, upload, application_id=3, file_type="doc")
-
-    assert exc.value.status_code == 500
-
-
-def test_clone_file_to_application_placeholder_failure(minio_service, monkeypatch):
-    monkeypatch.setattr("app.services.minio_service.uuid", SimpleNamespace(uuid4=lambda: SimpleNamespace(hex="abcd")))
-
-    minio_service.client.copy_object.side_effect = Exception("missing")
-    minio_service.client.put_object.side_effect = S3Error("code", "msg", "resource", "request", "host", "response")
-
-    with pytest.raises(HTTPException) as exc:
-        minio_service.clone_file_to_application("user-profiles/1/placeholder.pdf", application_id="APP-3")
 
     assert exc.value.status_code == 500
 
