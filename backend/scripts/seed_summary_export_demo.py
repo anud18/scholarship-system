@@ -88,9 +88,7 @@ async def main():
             sys.exit(1)
 
         phd_config = (
-            await db.execute(
-                select(ScholarshipConfiguration).where(ScholarshipConfiguration.config_code == "phd_114")
-            )
+            await db.execute(select(ScholarshipConfiguration).where(ScholarshipConfiguration.config_code == "phd_114"))
         ).scalar_one_or_none()
         if not phd_config:
             print("ERROR: phd_114 config not found.")
