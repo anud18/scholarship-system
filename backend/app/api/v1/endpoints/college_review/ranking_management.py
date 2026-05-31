@@ -1125,9 +1125,7 @@ async def import_ranking_from_excel(
 async def export_ranking_excel(
     ranking_id: int,
     request: Request,
-    template: bool = Query(
-        False, description="Render the rank column blank, as a fill-in import template"
-    ),
+    template: bool = Query(False, description="Render the rank column blank, as a fill-in import template"),
     current_user: User = Depends(require_scholarship_manager),
     db: AsyncSession = Depends(get_db),
 ):
