@@ -640,8 +640,34 @@ export function ScholarshipApplicationStep({
       // Load file data
       if (formData.documents) {
         const existingFileData: Record<string, File[]> = {};
+        const previewAppId =
+          editingApplication?.id ?? savedApplicationIdRef.current;
+        const previewToken = localStorage.getItem("auth_token") || "";
         formData.documents.forEach((doc: SubmittedDocumentPayload) => {
           if (doc.document_id && doc.original_filename) {
+            // Build a SAME-ORIGIN preview URL through the Next /api/v1/preview
+            // proxy from file_id, so the iframe never depends on the backend's
+            // file_path — that can be an absolute http://localhost:8000 URL when
+            // the deployment's BASE_URL is misconfigured (observed on staging),
+            // which the browser cannot load (blank preview).
+            const lowerName = doc.original_filename.toLowerCase();
+            const proxyType = lowerName.endsWith(".pdf")
+              ? "pdf"
+              : [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"].some(ext =>
+                    lowerName.endsWith(ext)
+                  )
+                ? "image"
+                : "";
+            const previewUrl =
+              doc.file_id && previewAppId
+                ? `/api/v1/preview?fileId=${encodeURIComponent(
+                    String(doc.file_id)
+                  )}&filename=${encodeURIComponent(
+                    doc.original_filename
+                  )}&type=${proxyType}&applicationId=${previewAppId}&token=${encodeURIComponent(
+                    previewToken
+                  )}`
+                : undefined;
             const fileData = {
               id: doc.file_id || doc.id,
               filename: doc.filename || doc.original_filename,
@@ -651,6 +677,8 @@ export function ScholarshipApplicationStep({
               file_type: doc.document_type,
               file_path: doc.file_path,
               download_url: doc.download_url,
+              // same-origin proxy URL preferred by FileUpload.getFilePreviewUrl
+              url: previewUrl,
               is_verified: doc.is_verified,
               uploaded_at: doc.upload_time,
               name: doc.original_filename,
