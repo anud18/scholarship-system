@@ -151,10 +151,10 @@ class ExcelExportService:
 
             fallback = os.path.join(tempfile.gettempdir(), "scholarship-exports")
             logger.warning(
-                "Cannot create export dir %s (%s); falling back to %s",
+                "Cannot create export dir %s; falling back to %s",
                 self.export_base_path,
-                exc,
                 fallback,
+                exc_info=True,
             )
             Path(fallback).mkdir(parents=True, exist_ok=True)
             self.export_base_path = fallback
