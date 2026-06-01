@@ -217,6 +217,11 @@ export function FileUpload({
       if (fp && (fp.startsWith("/") || fp.startsWith(window.location.origin))) {
         return fp;
       }
+      // Restored uploaded-file entries are plain objects (not real Blobs), so
+      // URL.createObjectURL would throw a TypeError. With no usable same-origin
+      // URL there is nothing to preview — return undefined (the dialog is
+      // skipped) instead of crashing the click handler.
+      if (!(file instanceof Blob)) return undefined;
       return URL.createObjectURL(file);
     }
     // 如果是本地文件，創建臨時URL
@@ -241,6 +246,11 @@ export function FileUpload({
   // 處理文件預覽
   const handleFilePreview = (file: File) => {
     const previewUrl = getFilePreviewUrl(file);
+    if (!previewUrl) {
+      // No previewable URL (e.g. a restored file lacking a same-origin path);
+      // nothing to show, and opening the dialog with an empty src renders blank.
+      return;
+    }
     const fileType = getFileType(file);
 
     setPreviewFile({
