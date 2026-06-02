@@ -62,7 +62,6 @@ import {
   getDepartmentName,
 } from "@/hooks/use-reference-data";
 import { useScholarshipData } from "@/hooks/use-scholarship-data";
-import * as XLSX from "xlsx";
 import { apiClient } from "@/lib/api";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import {
@@ -359,8 +358,10 @@ export function ApplicationReviewPanel({
     }
   };
 
-  const handleExportApplications = () => {
+  const handleExportApplications = async () => {
     try {
+      // Lazy-load the heavy sheetjs lib only when an export actually happens
+      const XLSX = await import("xlsx");
       if (applications.length === 0) {
         toast.error(locale === "zh" ? "無資料可匯出" : "No data to export", {
           description:

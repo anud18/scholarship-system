@@ -208,10 +208,16 @@ export function FileUpload({
   const getFilePreviewUrl = (file: File) => {
     if (isUploadedFile(file)) {
       const uploaded = file as UploadedFileLike;
-      // 如果是已上傳的文件，使用其URL
-      return (
-        uploaded.url || uploaded.file_path || URL.createObjectURL(file)
-      );
+      // Prefer a same-origin proxy URL set by the caller. Only fall back to
+      // file_path if it's a same-origin/relative URL — never iframe an absolute
+      // cross-origin URL (e.g. a misconfigured http://localhost:8000 file_path
+      // on staging) or a bare local filename, which both render blank.
+      if (uploaded.url) return uploaded.url;
+      const fp = uploaded.file_path;
+      if (fp && (fp.startsWith("/") || fp.startsWith(window.location.origin))) {
+        return fp;
+      }
+      return URL.createObjectURL(file);
     }
     // 如果是本地文件，創建臨時URL
     return URL.createObjectURL(file);

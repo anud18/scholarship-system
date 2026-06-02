@@ -61,10 +61,10 @@ def test_application_status_lifecycle_values():
 
 
 def test_application_status_count_pinned_for_change_review():
-    """Pin: 12 statuses defined. Adding a new status without updating
+    """Pin: 13 statuses defined. Adding a new status without updating
     the frontend switch-statement + admin filters would silently treat
     the new status as 'unknown'. This count forces code review."""
-    assert len(list(ApplicationStatus)) == 12
+    assert len(list(ApplicationStatus)) == 13
 
 
 # ─── ReviewStage (16 workflow positions) ─────────────────────────────

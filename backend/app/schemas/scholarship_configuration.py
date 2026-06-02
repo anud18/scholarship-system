@@ -5,7 +5,7 @@ Scholarship Configuration schemas for API requests and responses
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.enums import ApplicationCycle, QuotaManagementMode, Semester
 
@@ -96,23 +96,20 @@ class ScholarshipConfigurationBase(BaseModel):
                     raise ValueError(f"配額總和 ({college_total}) 超過總配額 ({total_quota})")
         return v
 
-    @field_validator("renewal_professor_review_end")
-    @classmethod
-    def validate_renewal_professor_review(cls, v, values):
-        """Validate renewal professor review dates"""
-        if not values.data.get("requires_professor_recommendation"):
-            if v or values.data.get("renewal_professor_review_start"):
-                raise ValueError("續領教授審查時間不應設定當不需要教授推薦時")
-        return v
-
-    @field_validator("renewal_college_review_end")
-    @classmethod
-    def validate_renewal_college_review(cls, v, values):
-        """Validate renewal college review dates"""
-        if not values.data.get("requires_college_review"):
-            if v or values.data.get("renewal_college_review_start"):
-                raise ValueError("續領學院審查時間不應設定當不需要學院審查時")
-        return v
+    @model_validator(mode="after")
+    def validate_renewal_review_dates(self):
+        """Renewal review dates must not be set unless the matching review step
+        is required. Implemented as a model-level validator so it can read the
+        requires_* flags reliably regardless of field-definition order (a
+        field_validator on the *_end field runs before the flags are populated).
+        """
+        if not self.requires_professor_recommendation and (
+            self.renewal_professor_review_end or self.renewal_professor_review_start
+        ):
+            raise ValueError("續領教授審查時間不應設定當不需要教授推薦時")
+        if not self.requires_college_review and (self.renewal_college_review_end or self.renewal_college_review_start):
+            raise ValueError("續領學院審查時間不應設定當不需要學院審查時")
+        return self
 
     @field_validator("effective_end_date")
     @classmethod

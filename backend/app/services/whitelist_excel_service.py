@@ -143,8 +143,16 @@ class WhitelistExcelService:
                 continue
 
             # 提取資料
-            nycu_id = str(row_data[col_indices["nycu_id"]]).strip() if "nycu_id" in col_indices else ""
-            sub_type = str(row_data[col_indices["sub_type"]]).strip() if "sub_type" in col_indices else ""
+            nycu_id = (
+                str(row_data[col_indices["nycu_id"]]).strip()
+                if "nycu_id" in col_indices and row_data[col_indices["nycu_id"]] is not None
+                else ""
+            )
+            sub_type = (
+                str(row_data[col_indices["sub_type"]]).strip()
+                if "sub_type" in col_indices and row_data[col_indices["sub_type"]] is not None
+                else ""
+            )
             name = (
                 str(row_data[col_indices["name"]]).strip()
                 if "name" in col_indices and row_data[col_indices["name"]]

@@ -73,7 +73,6 @@ import {
 import { getTranslation } from "@/lib/i18n";
 import { toast } from "sonner";
 import { exportRankingExcel } from "@/lib/api/modules/college";
-import * as XLSX from "xlsx";
 import { ApplicationReviewDialog } from "@/components/common/ApplicationReviewDialog";
 import { Application as ApplicationType, User } from "@/lib/api";
 import { ApplicationStatus, getApplicationStatusLabel } from "@/lib/enums";
@@ -588,6 +587,8 @@ export function CollegeRankingTable({
     setIsImporting(true);
 
     try {
+      // Lazy-load the heavy sheetjs lib only when an import actually happens
+      const XLSX = await import("xlsx");
       // Read Excel file
       const data = await file.arrayBuffer();
       const uint8Array = new Uint8Array(data);
@@ -725,8 +726,10 @@ export function CollegeRankingTable({
     }
   };
 
-  const handleTemplateDownload = () => {
+  const handleTemplateDownload = async () => {
     try {
+      // Lazy-load the heavy sheetjs lib only when a template is downloaded
+      const XLSX = await import("xlsx");
       // Sort by department code, then student ID
       const sorted = [...localApplications].sort((a, b) => {
         const deptA = a.department_code || a.department_name || "";

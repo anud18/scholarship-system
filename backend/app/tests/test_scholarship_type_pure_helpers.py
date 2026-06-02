@@ -26,8 +26,7 @@ from app.models.scholarship import ScholarshipType
 
 
 def _scholarship(**overrides):
-    """Construct a ScholarshipType without invoking SQLAlchemy ORM init."""
-    s = object.__new__(ScholarshipType)
+    """Construct an in-memory ScholarshipType (no DB session)."""
     defaults = {
         "id": 1,
         "code": "PHD_NSTC_2024",
@@ -37,8 +36,10 @@ def _scholarship(**overrides):
         "whitelist_student_ids": None,
     }
     defaults.update(overrides)
-    for k, v in defaults.items():
-        object.__setattr__(s, k, v)
+    # Construct via __init__ to get _sa_instance_state, then stuff __dict__
+    # directly so vestigial/non-column keys are tolerated (bypasses descriptors).
+    s = ScholarshipType()
+    s.__dict__.update(defaults)
     return s
 
 

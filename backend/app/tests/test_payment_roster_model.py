@@ -33,8 +33,7 @@ from app.models.payment_roster import (
 
 
 def _roster(**overrides) -> PaymentRoster:
-    """Build a PaymentRoster without invoking SQLAlchemy ORM init."""
-    r = object.__new__(PaymentRoster)
+    """Build a transient PaymentRoster for pure-property tests (no DB needed)."""
     defaults = {
         "id": 1,
         "roster_code": "ROSTER-114-2024",
@@ -43,13 +42,10 @@ def _roster(**overrides) -> PaymentRoster:
         "locked_by": None,
     }
     defaults.update(overrides)
-    for k, v in defaults.items():
-        object.__setattr__(r, k, v)
-    return r
+    return PaymentRoster(**defaults)
 
 
 def _item(**overrides) -> PaymentRosterItem:
-    item = object.__new__(PaymentRosterItem)
     defaults = {
         "id": 1,
         "student_id_number": "S12345",
@@ -61,9 +57,7 @@ def _item(**overrides) -> PaymentRosterItem:
         "warning_rules": None,
     }
     defaults.update(overrides)
-    for k, v in defaults.items():
-        object.__setattr__(item, k, v)
-    return item
+    return PaymentRosterItem(**defaults)
 
 
 # ─── PaymentRoster.is_locked / can_be_modified / is_completed ──────

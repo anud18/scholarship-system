@@ -33,8 +33,7 @@ from app.models.scholarship import ScholarshipConfiguration
 
 
 def _cfg(**overrides) -> ScholarshipConfiguration:
-    """Construct a ScholarshipConfiguration without invoking SQLAlchemy ORM init."""
-    c = object.__new__(ScholarshipConfiguration)
+    """Construct an in-memory ScholarshipConfiguration (no DB session)."""
     defaults = {
         "id": 1,
         "scholarship_type_id": 1,
@@ -72,9 +71,7 @@ def _cfg(**overrides) -> ScholarshipConfiguration:
         "college_review_end": None,
     }
     defaults.update(overrides)
-    for k, v in defaults.items():
-        object.__setattr__(c, k, v)
-    return c
+    return ScholarshipConfiguration(**defaults)
 
 
 # ─── cycle + academic_year_label ──────────────────────────────────────
