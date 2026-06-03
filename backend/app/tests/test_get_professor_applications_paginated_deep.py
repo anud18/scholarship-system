@@ -53,6 +53,11 @@ async def _seed_config(db: AsyncSession, *, requires_prof: bool, suffix: str) ->
         academic_year=114,
         application_start_date=datetime(2025, 1, 1, tzinfo=timezone.utc),
         application_end_date=datetime(2030, 1, 1, tzinfo=timezone.utc),
+        # The "pending" professor queue overlays a review-phase filter that
+        # requires an open professor-review window; without these the renewal
+        # phase filter excludes every row (total=0).
+        professor_review_start=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        professor_review_end=datetime(2030, 1, 1, tzinfo=timezone.utc),
         requires_professor_recommendation=requires_prof,
         requires_college_review=False,
         amount=0,

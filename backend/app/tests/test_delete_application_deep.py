@@ -209,7 +209,10 @@ async def test_submitted_deletion_is_soft_delete(db: AsyncSession, silence_colla
     assert persisted is not None, "submitted delete must NOT hard-delete the row"
     assert _val(persisted.status) == ApplicationStatus.deleted.value
     assert persisted.deleted_at is not None
-    assert before <= persisted.deleted_at <= after
+    deleted_at = (
+        persisted.deleted_at if persisted.deleted_at.tzinfo else persisted.deleted_at.replace(tzinfo=timezone.utc)
+    )
+    assert before <= deleted_at <= after
     assert persisted.deleted_by_id == admin.id
     assert persisted.deletion_reason == "compliance request"
 

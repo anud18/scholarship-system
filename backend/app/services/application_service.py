@@ -2388,13 +2388,17 @@ class ApplicationService:
             if application.professor_id != professor_id:
                 return False
 
-            # Check application status - should be submitted or under review (or historical)
+            # Check application status - should be submitted or under review (or historical).
+            # application is loaded fresh from the DB, so status is the Enum MEMBER, not its
+            # .value string — compare against members (matching the dominant convention in
+            # this file). Comparing a member against .value strings always failed → the
+            # method wrongly returned False for every status.
             if application.status not in [
-                ApplicationStatus.submitted.value,
-                ApplicationStatus.under_review.value,
-                ApplicationStatus.approved.value,
-                ApplicationStatus.partial_approved.value,
-                ApplicationStatus.rejected.value,
+                ApplicationStatus.submitted,
+                ApplicationStatus.under_review,
+                ApplicationStatus.approved,
+                ApplicationStatus.partial_approved,
+                ApplicationStatus.rejected,
             ]:
                 return False
 
