@@ -790,42 +790,8 @@ class ApplicationService:
         # Convert to response models with integrated file data
         recent_applications_response = []
         for application in recent_applications:
-            # 整合文件資訊到 submitted_form_data.documents
-            integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
-
-            if application.files:
-                # 生成文件訪問 token
-                from app.core.config import settings
-                from app.core.security import create_access_token
-
-                token_data = {"sub": str(user.id)}
-                access_token = create_access_token(token_data)
-
-                # 更新 submitted_form_data 中的 documents
-                if "documents" in integrated_form_data:
-                    existing_docs = integrated_form_data["documents"]
-                    for existing_doc in existing_docs:
-                        # 查找對應的文件記錄
-                        matching_file = next(
-                            (f for f in application.files if f.file_type == existing_doc.get("document_id")),
-                            None,
-                        )
-                        if matching_file:
-                            # 更新現有文件資訊
-                            base_url = f"{settings.base_url}{settings.api_v1_str}"
-                            existing_doc.update(
-                                {
-                                    "file_id": matching_file.id,
-                                    "filename": matching_file.filename,
-                                    "original_filename": matching_file.original_filename,
-                                    "file_size": matching_file.file_size,
-                                    "mime_type": matching_file.mime_type or matching_file.content_type,
-                                    "file_path": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}?token={access_token}",
-                                    "download_url": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}/download?token={access_token}",
-                                    "is_verified": matching_file.is_verified,
-                                    "object_name": matching_file.object_name,
-                                }
-                            )
+            # 整合 application.files 進 submitted_form_data.documents（create-or-update，共用 helper）。
+            integrated_form_data = self._integrate_application_file_data(application, user)
 
             # 創建響應數據
             app_data = ApplicationListResponse(
@@ -1328,73 +1294,9 @@ class ApplicationService:
         except Exception as e:
             logger.error(f"❌ Failed to trigger automated submission emails: {e}", exc_info=True)
 
-        # 整合文件資訊到 submitted_form_data.documents
-        integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
-
-        # 生成文件訪問 token
-        from app.core.config import settings
-        from app.core.security import create_access_token
-
-        token_data = {"sub": str(user.id)}
-        access_token = create_access_token(token_data)
-
-        # 將 files 的完整資訊合併到 documents 中
-        if application.files:
-            integrated_documents = []
-            for file in application.files:
-                # 生成文件 URL
-                base_url = f"{settings.base_url}{settings.api_v1_str}"
-                file_path = f"{base_url}/files/applications/{application_id}/files/{file.id}?token={access_token}"
-                download_url = (
-                    f"{base_url}/files/applications/{application_id}/files/{file.id}/download?token={access_token}"
-                )
-
-                # 整合文件資訊
-                integrated_document = {
-                    "document_id": file.file_type,
-                    "document_type": file.file_type,
-                    "file_id": file.id,
-                    "filename": file.filename,
-                    "original_filename": file.original_filename,
-                    "file_size": file.file_size,
-                    "mime_type": file.mime_type or file.content_type,
-                    "file_path": file_path,
-                    "download_url": download_url,
-                    "upload_time": file.uploaded_at.isoformat() if file.uploaded_at else None,
-                    "is_verified": file.is_verified,
-                    "object_name": file.object_name,
-                }
-                integrated_documents.append(integrated_document)
-
-            # 更新 submitted_form_data 中的 documents
-            if "documents" in integrated_form_data:
-                # 如果已有 documents，合併文件資訊
-                existing_docs = integrated_form_data["documents"]
-                for existing_doc in existing_docs:
-                    # 查找對應的文件記錄
-                    matching_file = next(
-                        (f for f in application.files if f.file_type == existing_doc.get("document_id")),
-                        None,
-                    )
-                    if matching_file:
-                        # 更新現有文件資訊
-                        base_url = f"{settings.base_url}{settings.api_v1_str}"
-                        existing_doc.update(
-                            {
-                                "file_id": matching_file.id,
-                                "filename": matching_file.filename,
-                                "original_filename": matching_file.original_filename,
-                                "file_size": matching_file.file_size,
-                                "mime_type": matching_file.mime_type or matching_file.content_type,
-                                "file_path": f"{base_url}/files/applications/{application_id}/files/{matching_file.id}?token={access_token}",
-                                "download_url": f"{base_url}/files/applications/{application_id}/files/{matching_file.id}/download?token={access_token}",
-                                "is_verified": matching_file.is_verified,
-                                "object_name": matching_file.object_name,
-                            }
-                        )
-            else:
-                # 如果沒有 documents，創建新的
-                integrated_form_data["documents"] = integrated_documents
+        # 整合 application.files 進 submitted_form_data.documents（create-or-update，共用 helper）。
+        # 僅用於 response（不寫回 DB），與 get_application_by_id 一致；避免以 documents:[] 存的草稿送出後掉檔。
+        integrated_form_data = self._integrate_application_file_data(application, user)
 
         # Convert application to response model
         response_data = {
@@ -1503,42 +1405,9 @@ class ApplicationService:
         # Convert to response models
         response_applications = []
         for application in applications:
-            # 整合文件資訊到 submitted_form_data.documents
-            integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
-
-            if application.files:
-                # 生成文件訪問 token
-                from app.core.config import settings
-                from app.core.security import create_access_token
-
-                token_data = {"sub": str(current_user.id)}
-                access_token = create_access_token(token_data)
-
-                # 更新 submitted_form_data 中的 documents
-                if "documents" in integrated_form_data:
-                    existing_docs = integrated_form_data["documents"]
-                    for existing_doc in existing_docs:
-                        # 查找對應的文件記錄
-                        matching_file = next(
-                            (f for f in application.files if f.file_type == existing_doc.get("document_id")),
-                            None,
-                        )
-                        if matching_file:
-                            # 更新現有文件資訊
-                            base_url = f"{settings.base_url}{settings.api_v1_str}"
-                            existing_doc.update(
-                                {
-                                    "file_id": matching_file.id,
-                                    "filename": matching_file.filename,
-                                    "original_filename": matching_file.original_filename,
-                                    "file_size": matching_file.file_size,
-                                    "mime_type": matching_file.mime_type or matching_file.content_type,
-                                    "file_path": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}?token={access_token}",
-                                    "download_url": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}/download?token={access_token}",
-                                    "is_verified": matching_file.is_verified,
-                                    "object_name": matching_file.object_name,
-                                }
-                            )
+            # 整合 application.files 進 submitted_form_data.documents（create-or-update，共用 helper）。
+            # 與 get_application_by_id 一致：把尚未出現在 documents[] 的已上傳檔案補進去（審核列表才不會掉檔）。
+            integrated_form_data = self._integrate_application_file_data(application, current_user)
 
             # Use eagerly loaded student (already loaded with selectinload)
             app_user = application.student
@@ -1925,42 +1794,9 @@ class ApplicationService:
         # Convert to response models
         response_applications = []
         for application in applications:
-            # 整合文件資訊到 submitted_form_data.documents
-            integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
-
-            if application.files:
-                # 生成文件訪問 token
-                from app.core.config import settings
-                from app.core.security import create_access_token
-
-                token_data = {"sub": str(current_user.id)}
-                access_token = create_access_token(token_data)
-
-                # 更新 submitted_form_data 中的 documents
-                if "documents" in integrated_form_data:
-                    existing_docs = integrated_form_data["documents"]
-                    for existing_doc in existing_docs:
-                        # 查找對應的文件記錄
-                        matching_file = next(
-                            (f for f in application.files if f.file_type == existing_doc.get("document_id")),
-                            None,
-                        )
-                        if matching_file:
-                            # 更新現有文件資訊
-                            base_url = f"{settings.base_url}{settings.api_v1_str}"
-                            existing_doc.update(
-                                {
-                                    "file_id": matching_file.id,
-                                    "filename": matching_file.filename,
-                                    "original_filename": matching_file.original_filename,
-                                    "file_size": matching_file.file_size,
-                                    "mime_type": matching_file.mime_type or matching_file.content_type,
-                                    "file_path": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}?token={access_token}",
-                                    "download_url": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}/download?token={access_token}",
-                                    "is_verified": matching_file.is_verified,
-                                    "object_name": matching_file.object_name,
-                                }
-                            )
+            # 整合 application.files 進 submitted_form_data.documents（create-or-update，共用 helper）。
+            # 與 get_application_by_id 一致：把尚未出現在 documents[] 的已上傳檔案補進去。
+            integrated_form_data = self._integrate_application_file_data(application, current_user)
 
             # Use eagerly loaded student (already loaded with selectinload)
             app_user = application.student

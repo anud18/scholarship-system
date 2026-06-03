@@ -171,6 +171,72 @@ class TestApplicationServiceIntegration:
         result = service._integrate_application_file_data(application, user)
         assert "documents" in result
 
+    @staticmethod
+    def _fake_file(**over):
+        """Build a duck-typed ApplicationFile with all attrs the helper reads."""
+        from types import SimpleNamespace
+
+        defaults = dict(
+            id=42,
+            file_type="transcript",
+            filename="t.pdf",
+            original_filename="transcript.pdf",
+            file_size=1234,
+            mime_type="application/pdf",
+            content_type="application/pdf",
+            is_verified=True,
+            object_name="applications/1/documents/abc.pdf",
+            uploaded_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+        defaults.update(over)
+        return SimpleNamespace(**defaults)
+
+    def test_integrate_adds_file_missing_from_documents(self, service):
+        """#885 regression guard: a file present in application.files but ABSENT
+        from documents[] (e.g. a draft saved with documents:[]) MUST be added on
+        read. This is the create branch shared by get_application_by_id,
+        get_user_applications, get_applications, get_applications_for_review,
+        submit_application, and get_student_dashboard_stats."""
+        application = Mock(spec=Application)
+        application.submitted_form_data = {"fields": {}, "documents": []}
+        application.app_id = "APP001"
+        application.id = 1
+        application.files = [self._fake_file(file_type="transcript", id=42)]
+        user = Mock(spec=User)
+        user.id = 7
+
+        result = service._integrate_application_file_data(application, user)
+
+        docs = result["documents"]
+        assert len(docs) == 1, "uploaded file must be added, not dropped"
+        d = docs[0]
+        assert d["file_id"] == 42
+        assert d["document_type"] == "transcript"
+        assert d["object_name"] == "applications/1/documents/abc.pdf"
+        assert d["mime_type"] == "application/pdf"
+        # same-origin proxy path that files.py serves inline
+        assert "/files/applications/1/files/42" in d["file_path"]
+
+    def test_integrate_updates_existing_doc_without_duplicating(self, service):
+        """A partial doc already in documents[] (matching file_type) must be
+        enriched in place — not duplicated — when its ApplicationFile exists."""
+        application = Mock(spec=Application)
+        application.submitted_form_data = {
+            "fields": {},
+            "documents": [{"document_type": "transcript", "document_id": "transcript"}],
+        }
+        application.app_id = "APP001"
+        application.id = 1
+        application.files = [self._fake_file(file_type="transcript", id=99)]
+        user = Mock(spec=User)
+        user.id = 7
+
+        result = service._integrate_application_file_data(application, user)
+
+        docs = result["documents"]
+        assert len(docs) == 1, "matching doc must be updated in place, not duplicated"
+        assert docs[0]["file_id"] == 99
+
 
 @pytest.mark.asyncio
 class TestApplicationServiceDashboard:
