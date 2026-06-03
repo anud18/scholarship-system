@@ -11,6 +11,7 @@ import { Upload, File, X, CheckCircle, AlertCircle, Eye } from "lucide-react";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { Locale } from "@/lib/validators";
 import { getTranslation } from "@/lib/i18n";
+import { resolveFilePreviewUrl } from "@/lib/file-preview";
 
 // Files passed as `initialFiles` may have been previously uploaded — the
 // caller attaches server-side metadata (id, url, file_path, originalSize)
@@ -204,29 +205,9 @@ export function FileUpload({
     return formatFileSize(file.size);
   };
 
-  // 獲取文件的預覽URL
-  const getFilePreviewUrl = (file: File) => {
-    if (isUploadedFile(file)) {
-      const uploaded = file as UploadedFileLike;
-      // Prefer a same-origin proxy URL set by the caller. Only fall back to
-      // file_path if it's a same-origin/relative URL — never iframe an absolute
-      // cross-origin URL (e.g. a misconfigured http://localhost:8000 file_path
-      // on staging) or a bare local filename, which both render blank.
-      if (uploaded.url) return uploaded.url;
-      const fp = uploaded.file_path;
-      if (fp && (fp.startsWith("/") || fp.startsWith(window.location.origin))) {
-        return fp;
-      }
-      // Restored uploaded-file entries are plain objects (not real Blobs), so
-      // URL.createObjectURL would throw a TypeError. With no usable same-origin
-      // URL there is nothing to preview — return undefined (the dialog is
-      // skipped) instead of crashing the click handler.
-      if (!(file instanceof Blob)) return undefined;
-      return URL.createObjectURL(file);
-    }
-    // 如果是本地文件，創建臨時URL
-    return URL.createObjectURL(file);
-  };
+  // 獲取文件的預覽URL — pure logic lives in lib/file-preview so it can be
+  // unit-tested without rendering this component (see lib/__tests__/file-preview).
+  const getFilePreviewUrl = (file: File) => resolveFilePreviewUrl(file, window.location.origin);
 
   // 獲取文件類型
   const getFileType = (file: File) => {
