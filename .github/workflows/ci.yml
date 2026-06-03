@@ -251,7 +251,12 @@ jobs:
             test-mark: "not integration and not asyncio"
             continue-on-error: false
           - test-suite: integration
-            test-path: app/tests/test_*_service*.py
+            # test_*_service*.py + two deep async suites rescued from the
+            # orphaned set: their filenames lack "service" so the glob missed
+            # them, and being asyncio they're also excluded from the unit lane —
+            # so they ran nowhere. (More test_*_deep.py files remain orphaned;
+            # tracked separately, pending fixes to their stale assertions.)
+            test-path: "app/tests/test_*_service*.py app/tests/test_submit_application_deep.py app/tests/test_update_application_deep.py"
             test-mark: "integration or asyncio"
             continue-on-error: false
           - test-suite: critical-workflows

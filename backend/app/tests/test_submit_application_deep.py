@@ -176,7 +176,13 @@ async def test_submit_happy_path_flips_status_and_sets_submitted_at(db: AsyncSes
     await db.refresh(app)
     assert app.status == ApplicationStatus.submitted.value or app.status == ApplicationStatus.submitted
     assert app.submitted_at is not None
-    assert before_submit <= app.submitted_at <= after_submit
+    # submitted_at is tz-naive on the sqlite test DB but tz-aware on postgres;
+    # normalise to aware-UTC before comparing against the aware bounds so the
+    # assertion holds on both backends.
+    submitted_at = app.submitted_at
+    if submitted_at.tzinfo is None:
+        submitted_at = submitted_at.replace(tzinfo=timezone.utc)
+    assert before_submit <= submitted_at <= after_submit
     # Response carries the same app_id.
     if hasattr(result, "app_id"):
         assert result.app_id == app.app_id
