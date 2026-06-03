@@ -227,6 +227,7 @@ jobs:
           MINIO_SECRET_KEY: ${{ secrets.STAGING_MINIO_SECRET_KEY }}
           MINIO_BUCKET: ${{ secrets.STAGING_MINIO_BUCKET }}
           FRONTEND_URL: ${{ secrets.STAGING_API_URL }}
+          BASE_URL: ${{ secrets.STAGING_API_URL }}
           NEXT_PUBLIC_API_URL: ${{ secrets.STAGING_API_URL }}
           NEXT_PUBLIC_NYCU_PORTAL_URL: ${{ secrets.NEXT_PUBLIC_NYCU_PORTAL_URL }}
           NODE_ENV: ${{ secrets.NODE_ENV }}
@@ -357,6 +358,7 @@ jobs:
           MINIO_SECRET_KEY: ${{ secrets.STAGING_MINIO_SECRET_KEY }}
           MINIO_BUCKET: ${{ secrets.STAGING_MINIO_BUCKET }}
           FRONTEND_URL: ${{ secrets.STAGING_API_URL }}
+          BASE_URL: ${{ secrets.STAGING_API_URL }}
           NEXT_PUBLIC_API_URL: ${{ secrets.STAGING_API_URL }}
           NEXT_PUBLIC_NYCU_PORTAL_URL: ${{ secrets.NEXT_PUBLIC_NYCU_PORTAL_URL }}
           NODE_ENV: ${{ secrets.NODE_ENV }}
