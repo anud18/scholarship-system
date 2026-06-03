@@ -186,3 +186,7 @@ docs/staging-tests/**/*
 !docs/staging-tests/**/REPORT.md
 !docs/staging-tests/.gitkeep
 !docs/staging-tests/README.md
+
+# npm-managed repo — never commit bun lockfile or test report artifacts
+frontend/bun.lock
+frontend/junit.xml
