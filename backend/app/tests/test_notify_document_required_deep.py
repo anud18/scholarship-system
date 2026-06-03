@@ -120,8 +120,12 @@ async def test_with_deadline_includes_upload_by_suffix(db: AsyncSession):
     assert "Please upload by 2026/12/15" in (fetched.message_en or "")
     # expires_at is set to the deadline.
     assert fetched.expires_at is not None
-    # Compare as UTC; the model column may strip subseconds.
-    assert fetched.expires_at.replace(microsecond=0) == deadline.replace(microsecond=0)
+    # Compare as UTC; the model column may strip subseconds and the sqlite test
+    # DB returns a tz-naive value, so normalise to aware-UTC before comparing.
+    expires_at = fetched.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    assert expires_at.replace(microsecond=0) == deadline.replace(microsecond=0)
 
 
 @pytest.mark.asyncio

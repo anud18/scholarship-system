@@ -172,14 +172,16 @@ class ScholarshipNotificationService:
                 },
             )
 
-            # Note: rejection_reason moved to ApplicationReview model
-            # Get rejection reason from latest ApplicationReview if applicable
+            # Note: rejection_reason moved to ApplicationReview model.
+            # ApplicationReview stores the reject reason in `comments` (it has no
+            # `decision_reason` column — reading that AttributeError'd at runtime
+            # when sending a rejected-application email).
             rejection_reason = None
             if new_status == ApplicationStatus.rejected.value and application.reviews:
-                # Get the latest review with a decision_reason
+                # Get the latest review carrying a comment (the reject reason).
                 for review in reversed(application.reviews):
-                    if review.decision_reason:
-                        rejection_reason = review.decision_reason
+                    if review.comments:
+                        rejection_reason = review.comments
                         break
 
             subject = f"{status_info['title']} - {application.app_id}"

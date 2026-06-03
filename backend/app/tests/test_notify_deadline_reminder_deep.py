@@ -47,7 +47,10 @@ def _val(x):
 async def test_deadline_reminder_far_future_uses_high_priority_and_N_days_copy(db: AsyncSession):
     user = await _seed_user(db, nycu_id="ddl_far")
     service = NotificationService(db)
-    deadline = datetime.now(timezone.utc) + timedelta(days=5)
+    # +5d2h so timedelta.days (which floors, the shipped behaviour — see
+    # test_notification_service.test_notify_deadline_reminder_multiple_days)
+    # lands on 5 rather than 4 after the few ms elapse since "now".
+    deadline = datetime.now(timezone.utc) + timedelta(days=5, hours=2)
 
     notif = await service.notifyDeadlineReminder(
         user_id=user.id,
@@ -67,7 +70,12 @@ async def test_deadline_reminder_far_future_uses_high_priority_and_N_days_copy(d
     assert fetched.action_url == "/student/applications"
     # expires_at is deadline + 7 days.
     assert fetched.expires_at is not None
-    delta = fetched.expires_at - deadline
+    # sqlite returns a tz-naive datetime; normalise before subtracting the
+    # aware `deadline`.
+    expires_at = fetched.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    delta = expires_at - deadline
     assert abs(delta.total_seconds() - timedelta(days=7).total_seconds()) < 5
     # Metadata captures reminder_type + days_left.
     assert fetched.meta_data is not None
