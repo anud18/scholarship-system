@@ -110,7 +110,7 @@ requires-python = ">=3.12"
 dependencies = [
     # FastAPI and web framework
     "fastapi==0.129.0",
-    "starlette==0.52.1",
+    "starlette==1.0.1",
     "uvicorn[standard]==0.38.0",
     "python-multipart==0.0.27",
     
