@@ -144,7 +144,7 @@ def _make_approved_application(
         app_id=app_id,
         academic_year=113,
         semester="first",
-        student_data={"std_stdcode": student_id, "std_cname": student_name},
+        student_data={"std_stdcode": student_id, "std_pid": student_id, "std_cname": student_name},
         submitted_form_data={},
         agree_terms=True,
         amount=Decimal("50000"),

@@ -9,12 +9,11 @@ Tests critical API functionality including:
 - Data filtering and security
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi.testclient import TestClient
+from httpx import AsyncClient
 
-from app.core.exceptions import NotFoundError
 from app.models.application import Application
 from app.models.college_review import CollegeRanking  # CollegeReview removed in schema cleanup
 from app.models.user import EmployeeStatus, User, UserRole, UserType
@@ -79,8 +78,8 @@ class TestCollegeReviewEndpoints:
             "recommendation": "STRONG_RECOMMEND",
         }
 
-    @patch("app.api.v1.endpoints.college_review.get_db")
-    @patch("app.api.v1.endpoints.college_review.require_college")
+    @patch("app.api.v1.endpoints.college_review.application_review.get_db")
+    @patch("app.api.v1.endpoints.college_review.application_review.require_college")
     async def test_create_college_review_success(self, mock_auth, mock_db, college_user, sample_review_data):
         """Test successful college review creation"""
         # Mock authentication
@@ -90,25 +89,19 @@ class TestCollegeReviewEndpoints:
         mock_session = AsyncMock()
         mock_db.return_value = mock_session
 
-        # Mock service. CollegeReview model was removed in schema cleanup;
-        # since the test body ends with `pass` (placeholder), the mock
-        # return value is never inspected — a generic MagicMock is enough.
-        with patch.object(CollegeReviewService, "create_or_update_review") as mock_create:
-            mock_create.return_value = MagicMock(
-                id=1, application_id=1, reviewer_id=college_user.id, **sample_review_data
-            )
+        # NOTE: CollegeReviewService.create_or_update_review() was removed in the
+        # schema cleanup, so it can no longer be patched. The test body is a
+        # placeholder (`pass`), so only the permission-check patch remains.
+        with patch(
+            "app.api.v1.endpoints.college_review._helpers._check_application_review_permission",
+            return_value=True,
+        ):
+            # This would test the actual endpoint call
+            # In a real test, you would make HTTP request to the endpoint
+            pass
 
-            # Mock permission check
-            with patch(
-                "app.api.v1.endpoints.college_review._check_application_review_permission",
-                return_value=True,
-            ):
-                # This would test the actual endpoint call
-                # In a real test, you would make HTTP request to the endpoint
-                pass
-
-    @patch("app.api.v1.endpoints.college_review.get_db")
-    @patch("app.api.v1.endpoints.college_review.require_college")
+    @patch("app.api.v1.endpoints.college_review.application_review.get_db")
+    @patch("app.api.v1.endpoints.college_review.application_review.require_college")
     async def test_create_review_unauthorized_user(self, mock_auth, mock_db, student_user):
         """Test college review creation with unauthorized user"""
         # Mock authentication with student user (should fail)
@@ -118,24 +111,22 @@ class TestCollegeReviewEndpoints:
         # In real implementation, the require_college dependency would handle this
         pass
 
-    @patch("app.api.v1.endpoints.college_review.get_db")
-    @patch("app.api.v1.endpoints.college_review.require_college")
+    @patch("app.api.v1.endpoints.college_review.application_review.get_db")
+    @patch("app.api.v1.endpoints.college_review.application_review.require_college")
     async def test_create_review_application_not_found(self, mock_auth, mock_db, college_user):
         """Test review creation for non-existent application"""
         mock_auth.return_value = college_user
         mock_session = AsyncMock()
         mock_db.return_value = mock_session
 
-        # Mock service to raise NotFoundError
-        with patch.object(CollegeReviewService, "create_or_update_review") as mock_create:
-            mock_create.side_effect = NotFoundError("Application", "999")
+        # NOTE: CollegeReviewService.create_or_update_review() was removed in the
+        # schema cleanup, so it can no longer be patched. Body is a placeholder.
+        # This should return 404 status
+        # In real test, would verify HTTP 404 response
+        pass
 
-            # This should return 404 status
-            # In real test, would verify HTTP 404 response
-            pass
-
-    @patch("app.api.v1.endpoints.college_review.get_db")
-    @patch("app.api.v1.endpoints.college_review.require_college")
+    @patch("app.api.v1.endpoints.college_review.application_review.get_db")
+    @patch("app.api.v1.endpoints.college_review.application_review.require_college")
     async def test_create_review_permission_denied(self, mock_auth, mock_db, college_user):
         """Test review creation when user lacks permission for specific application"""
         mock_auth.return_value = college_user
@@ -144,7 +135,7 @@ class TestCollegeReviewEndpoints:
 
         # Mock permission check to return False
         with patch(
-            "app.api.v1.endpoints.college_review._check_application_review_permission",
+            "app.api.v1.endpoints.college_review._helpers._check_application_review_permission",
             return_value=False,
         ):
             # This should return 403 status
@@ -168,8 +159,8 @@ class TestCollegeReviewEndpoints:
         # Could be done with multiple rapid requests
         pass
 
-    @patch("app.api.v1.endpoints.college_review.get_db")
-    @patch("app.api.v1.endpoints.college_review.require_college")
+    @patch("app.api.v1.endpoints.college_review.application_review.get_db")
+    @patch("app.api.v1.endpoints.college_review.application_review.require_college")
     async def test_get_applications_for_review(self, mock_auth, mock_db, college_user):
         """Test getting applications available for college review"""
         mock_auth.return_value = college_user
@@ -210,8 +201,8 @@ class TestCollegeReviewEndpoints:
         # 3. Field-level filtering works correctly
         pass
 
-    @patch("app.api.v1.endpoints.college_review.get_db")
-    @patch("app.api.v1.endpoints.college_review.require_college")
+    @patch("app.api.v1.endpoints.college_review.application_review.get_db")
+    @patch("app.api.v1.endpoints.college_review.application_review.require_college")
     async def test_concurrent_review_handling(self, mock_auth, mock_db, college_user):
         """Test handling of concurrent review operations"""
         mock_auth.return_value = college_user
@@ -234,7 +225,7 @@ class TestCollegeReviewEndpointsIntegration:
     """Integration tests for college review endpoints with real HTTP requests"""
 
     @pytest.mark.integration
-    async def test_full_review_api_workflow(self, client: TestClient, auth_headers):
+    async def test_full_review_api_workflow(self, client: AsyncClient):
         """Test complete review workflow through API"""
         # This would test:
         # 1. Authentication
@@ -245,14 +236,14 @@ class TestCollegeReviewEndpointsIntegration:
         pass
 
     @pytest.mark.integration
-    async def test_rate_limiting_enforcement(self, client: TestClient, auth_headers):
+    async def test_rate_limiting_enforcement(self, client: AsyncClient):
         """Test that rate limiting is actually enforced"""
         # Make rapid requests to trigger rate limiting
         # Verify 429 responses are returned
         pass
 
     @pytest.mark.integration
-    async def test_authorization_matrix(self, client: TestClient):
+    async def test_authorization_matrix(self, client: AsyncClient):
         """Test authorization for different user roles"""
 
         # Test each role's access to college review endpoints

@@ -2,7 +2,7 @@
 Unit tests for rate limiting functionality
 """
 
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -14,16 +14,26 @@ class TestRateLimiter:
     """Test core RateLimiter class"""
 
     @pytest.fixture
-    async def mock_redis(self):
-        """Mock Redis connection"""
-        mock_redis = AsyncMock()
-        mock_redis.pipeline.return_value.__aenter__.return_value.execute.return_value = [
+    def mock_redis(self):
+        """Mock Redis connection.
+
+        pipeline() is a *sync* call returning an async context manager, while the
+        pipe itself must be awaitable (zremrangebyscore/zcard/zadd/expire/execute
+        are all awaited in production code).
+        """
+        redis_mock = MagicMock()
+        pipe = AsyncMock()
+        pipe.execute.return_value = [
             None,  # zremrangebyscore result
             0,  # zcard result (current request count)
             None,  # zadd result
             None,  # expire result
         ]
-        return mock_redis
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=pipe)
+        cm.__aexit__ = AsyncMock(return_value=False)
+        redis_mock.pipeline = MagicMock(return_value=cm)
+        return redis_mock
 
     @pytest.fixture
     def rate_limiter(self, mock_redis):
@@ -38,7 +48,7 @@ class TestRateLimiter:
         # Mock pipeline execution to return 0 current requests
         pipeline_mock = AsyncMock()
         pipeline_mock.execute.return_value = [None, 0, None, None]
-        mock_redis.pipeline.return_value.__aenter__.return_value = pipeline_mock
+        mock_redis.pipeline.return_value.__aenter__ = AsyncMock(return_value=pipeline_mock)
 
         is_limited, remaining = await rate_limiter.is_rate_limited("test_key", 10, 3600)
 
@@ -51,7 +61,7 @@ class TestRateLimiter:
         # Mock pipeline execution to return limit number of requests
         pipeline_mock = AsyncMock()
         pipeline_mock.execute.return_value = [None, 10, None, None]  # Already at limit
-        mock_redis.pipeline.return_value.__aenter__.return_value = pipeline_mock
+        mock_redis.pipeline.return_value.__aenter__ = AsyncMock(return_value=pipeline_mock)
 
         is_limited, remaining = await rate_limiter.is_rate_limited("test_key", 10, 3600)
 
@@ -76,7 +86,10 @@ class TestRateLimitDecorator:
     @pytest.fixture
     def mock_request(self):
         """Mock FastAPI request"""
-        request = Mock()
+        # spec restricts attributes so the decorator's hasattr() duck-typing does
+        # not misclassify this Mock as a user (a bare Mock auto-creates id/role).
+        request = Mock(spec=["method", "url", "client"])
+        request.client = Mock(spec=["host"])
         request.client.host = "127.0.0.1"
         request.method = "GET"
         request.url = "http://test.com/api/endpoint"
@@ -85,7 +98,9 @@ class TestRateLimitDecorator:
     @pytest.fixture
     def mock_user(self):
         """Mock user object"""
-        user = Mock()
+        # spec restricts attributes so the decorator's hasattr() duck-typing does
+        # not misclassify this Mock as a request (a bare Mock auto-creates method/url).
+        user = Mock(spec=["id", "role"])
         user.id = 123
         user.role = "professor"
         return user
