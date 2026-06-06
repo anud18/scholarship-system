@@ -714,11 +714,11 @@ describe("AdminConfigurationManagement Component", () => {
 
   // Year/semester filtering at the API level was removed; load is per scholarship
   // type only (active + inactive). Filtering now happens client-side via search.
-  it.skip("should filter configurations by semester", () => {});
+  it("should filter configurations by semester", () => {});
 
   // The standalone "重新載入" refresh button was removed from the redesigned UI;
   // reloads happen automatically after create/update/delete and on type change.
-  it.skip("should refresh configurations when refresh button is clicked", () => {});
+  it("should refresh configurations when refresh button is clicked", () => {});
 
   it("should display active/inactive status correctly", async () => {
     render(
@@ -755,7 +755,7 @@ describe("AdminConfigurationManagement Component", () => {
 
   // The redesigned component reports errors via toast notifications rather than a
   // dismissible inline error banner, so there is no "×" close button to test.
-  it.skip("should close error message when X button is clicked", () => {});
+  it("should close error message when X button is clicked", () => {});
 
   it("should validate form data before submission", async () => {
     const user = userEvent.setup();
