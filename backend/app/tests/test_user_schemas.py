@@ -182,12 +182,14 @@ def test_token_response_token_type_defaults_bearer():
 # ─── DeveloperProfileRequest defaults ───────────────────────────────
 
 
-def test_developer_profile_email_domain_defaults_dev_local():
-    # Pin: "dev.local" — isolated dev environment. Flipping to
-    # real domain ("nycu.edu.tw") would let dev users pretend to be
-    # real ones in the development DB.
+def test_developer_profile_email_domain_defaults_dev_example():
+    # Pin: "dev.example.com" — RFC-2606 reserved, non-routable, so dev users
+    # still can't impersonate real ones in the development DB. NOT "dev.local":
+    # EmailStr rejects the special-use ".local" TLD, which made @dev.local dev
+    # users fail UserResponse serialization and break mock-sso login. NOT a real
+    # domain ("nycu.edu.tw") either, for the same impersonation reason.
     d = DeveloperProfileRequest(role=UserRole.student)
-    assert d.email_domain == "dev.local"
+    assert d.email_domain == "dev.example.com"
 
 
 def test_developer_profile_requires_role():
