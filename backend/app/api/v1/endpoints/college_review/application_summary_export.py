@@ -69,7 +69,11 @@ async def export_department_summary_single(
     scholarship_type_id: int = Query(..., description="Scholarship type ID"),
     academic_year: int = Query(..., description="Academic year"),
     semester: Optional[str] = Query(None, description="first / second / yearly / null"),
-    department_code: str = Query(..., min_length=1, description="Department code (Department.code)"),
+    department_code: str = Query(
+        ...,
+        min_length=1,
+        description="Department code(s) — Department.code; comma-separated to bundle a name group",
+    ),
     current_user: User = Depends(require_scholarship_manager),
     db: AsyncSession = Depends(get_db),
 ):
@@ -94,26 +98,35 @@ async def export_department_summary_single(
         logger.warning("department-summary-export denied: academic-year permission missing", extra=log_extra)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限存取此學年度")
 
-    # Resolve department row + auth check
-    dept = (await db.execute(select(Department).where(Department.code == department_code))).scalar_one_or_none()
-    if dept is None:
+    # Resolve department rows + auth check. department_code may be a comma-separated
+    # group of codes sharing a display name (e.g. 資訊工程學系 = 117/217/317/1550); the
+    # export then bundles every code in the group into one workbook.
+    requested_codes = [c.strip() for c in department_code.split(",") if c.strip()]
+    if not requested_codes:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="未提供系所代碼")
+
+    depts = list((await db.execute(select(Department).where(Department.code.in_(requested_codes)))).scalars().all())
+    found_codes = {d.code for d in depts}
+    missing = [c for c in requested_codes if c not in found_codes]
+    if missing:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"找不到系所代碼 {department_code}",
+            detail=f"找不到系所代碼 {', '.join(missing)}",
         )
 
     if current_user.role not in (UserRole.admin, UserRole.super_admin):
         user_college = (current_user.college_code or "").strip()
-        dept_academy = (dept.academy_code or "").strip()
-        if not user_college or not dept_academy or user_college != dept_academy:
-            logger.warning(
-                "department-summary-export denied: cross-college export attempt",
-                extra={**log_extra, "user_college": user_college, "dept_academy": dept_academy},
-            )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="無權限匯出此系所之資料",
-            )
+        for dept in depts:
+            dept_academy = (dept.academy_code or "").strip()
+            if not user_college or not dept_academy or user_college != dept_academy:
+                logger.warning(
+                    "department-summary-export denied: cross-college export attempt",
+                    extra={**log_extra, "user_college": user_college, "dept_academy": dept_academy},
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="無權限匯出此系所之資料",
+                )
 
     # Load scholarship type (with sub_type_configs)
     stype = (
@@ -144,7 +157,7 @@ async def export_department_summary_single(
         stmt = stmt.where(Application.semester == normalised_semester)
 
     raw_apps = list((await db.execute(stmt)).scalars().all())
-    apps = [a for a in raw_apps if ((a.student_data or {}).get("std_depno") or "").strip() == department_code]
+    apps = [a for a in raw_apps if ((a.student_data or {}).get("std_depno") or "").strip() in found_codes]
     apps.sort(key=_sort_key)
 
     # Aux data
@@ -166,7 +179,8 @@ async def export_department_summary_single(
     ]
 
     scholarship_name = stype.name or "獎學金"
-    dept_name = dept.name or department_code
+    name_by_code = {d.code: d.name for d in depts}
+    dept_name = name_by_code.get(requested_codes[0]) or requested_codes[0]
     title = f"{academic_year}學年度{scholarship_name}學生資料彙整表 - {dept_name}"
     sheet_name = f"{academic_year}學年"
     base_filename = (

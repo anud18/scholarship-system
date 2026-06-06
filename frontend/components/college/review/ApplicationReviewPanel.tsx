@@ -137,6 +137,24 @@ export function ApplicationReviewPanel({
     );
   }, [departments, user]);
 
+  // Bundle departments that share a display name (e.g. 資訊工程學系 = 117/217/317/1550)
+  // into one option, keyed within academy. Selecting it exports every code in the
+  // group as a single 總表. value = the comma-joined codes (backend splits on ",").
+  const departmentGroups = useMemo(() => {
+    const groups = new Map<string, { name: string; codes: string[] }>();
+    for (const d of visibleDepartments as Array<{
+      code: string;
+      name: string;
+      academy_code?: string | null;
+    }>) {
+      const key = `${d.academy_code ?? ""}__${d.name}`;
+      const existing = groups.get(key);
+      if (existing) existing.codes.push(d.code);
+      else groups.set(key, { name: d.name, codes: [d.code] });
+    }
+    return Array.from(groups.values());
+  }, [visibleDepartments]);
+
   // Fetch college quota when scholarship type, year, or semester changes
   const fetchCollegeQuota = useCallback(async () => {
     if (!activeScholarshipTab || !selectedAcademicYear) {
@@ -712,11 +730,14 @@ export function ApplicationReviewPanel({
               <SelectValue placeholder="選擇系所匯出總表" />
             </SelectTrigger>
             <SelectContent>
-              {visibleDepartments.map((d: { code: string; name: string }) => (
-                <SelectItem key={d.code} value={d.code}>
-                  {d.name}
-                </SelectItem>
-              ))}
+              {departmentGroups.map(group => {
+                const value = group.codes.join(",");
+                return (
+                  <SelectItem key={value} value={value}>
+                    {group.name}
+                  </SelectItem>
+                );
+              })}
               {user.college_code && (
                 <SelectItem value={ALL_DEPTS_OWN}>
                   本學院全部 (ZIP)
