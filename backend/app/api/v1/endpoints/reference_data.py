@@ -172,7 +172,7 @@ async def get_all_reference_data(
     return ApiResponse(success=True, message="Reference data retrieved successfully", data=data)
 
 
-@cached(key_fn=lambda *_, **__: "refdata:all", ttl=86400)  # 24 h
+@cached(key_fn=lambda *_, **__: "refdata:all:v2", ttl=86400)  # 24 h; :v2 busts stale pre-academy_code cache on deploy
 async def _get_all_reference_data_cached(session: AsyncSession) -> dict:
     """Server-side cached body of /reference-data/all. See the wrapper above for
     the no-store HTTP header rationale."""
@@ -226,7 +226,13 @@ async def _get_all_reference_data_cached(session: AsyncSession) -> dict:
         "genders": [{"id": gender.id, "name": gender.name} for gender in genders],
         "academies": [{"id": academy.id, "code": academy.code, "name": academy.name} for academy in academies],
         "departments": [
-            {"id": department.id, "code": department.code, "name": department.name} for department in departments
+            {
+                "id": department.id,
+                "code": department.code,
+                "name": department.name,
+                "academy_code": department.academy_code,
+            }
+            for department in departments
         ],
         "enroll_types": [
             {

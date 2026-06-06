@@ -104,6 +104,12 @@ async def test_all_reference_data_returns_api_response(client):
     data = payload["data"]
     for key in ("degrees", "identities", "academies", "departments", "genders"):
         assert key in data, f"missing '{key}' in /reference-data/all .data payload"
+    # Regression guard: academy_code must be present on department objects so the
+    # college summary export can group by academy without a separate /departments call.
+    departments = data["departments"]
+    if departments:
+        dept = departments[0]
+        assert "academy_code" in dept, f"department object in /all is missing 'academy_code': {dept!r}"
 
 
 @pytest.mark.asyncio
