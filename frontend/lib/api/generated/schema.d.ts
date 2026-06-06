@@ -8669,7 +8669,7 @@ export interface components {
             role: components["schemas"]["UserRole"];
             /**
              * Email Domain
-             * @default dev.local
+             * @default dev.example.com
              */
             email_domain: string | null;
             /** Custom Attributes */
