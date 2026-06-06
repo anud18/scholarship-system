@@ -30,10 +30,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Loader2, Lock, LockOpen, X } from "lucide-react";
+import { Loader2, Lock, LockOpen, X, AlertTriangle, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
-import type { RevokedSuspendedList } from "@/lib/api/modules/payment-rosters";
+import type { RevokedSuspendedList, DistributionDiff, DistributionDiffEntry } from "@/lib/api/modules/payment-rosters";
+import { Checkbox } from "@/components/ui/checkbox";
 import { RevokedSuspendedSection } from "@/components/roster/RevokedSuspendedSection";
 
 interface Period {
@@ -116,6 +117,17 @@ export function RosterDetailDialog({
   >("returned");
   const [excludeNote, setExcludeNote] = useState("");
   const [excludeSubmitting, setExcludeSubmitting] = useState(false);
+
+  // 比對分發名單 (reconcile) state
+  const [diff, setDiff] = useState<DistributionDiff | null>(null);
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [selectedAddIds, setSelectedAddIds] = useState<Set<number>>(new Set());
+  const [selectedRemoveItemIds, setSelectedRemoveItemIds] = useState<Set<number>>(new Set());
+  const [reconcileConfirmOpen, setReconcileConfirmOpen] = useState(false);
+  const [reconcileSubmitting, setReconcileSubmitting] = useState(false);
+
+  const canReconcile =
+    period.roster_status === "completed" || period.roster_status === "locked";
 
   const openExcludeDialog = (item: RosterItem) => {
     setExcludeTarget(item);
@@ -233,6 +245,57 @@ export function RosterDetailDialog({
       toast.error(message);
     } finally {
       setExcludeSubmitting(false);
+    }
+  };
+
+  const loadDistributionDiff = async () => {
+    if (!period.roster_id) return;
+    setDiffLoading(true);
+    try {
+      const resp = await apiClient.paymentRosters.getDistributionDiff(period.roster_id);
+      if (resp.success && resp.data) {
+        setDiff(resp.data);
+        setSelectedAddIds(new Set());
+        setSelectedRemoveItemIds(new Set());
+      } else {
+        toast.error(resp.message || "比對失敗");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "比對失敗");
+    } finally {
+      setDiffLoading(false);
+    }
+  };
+
+  const toggle = (set: Set<number>, id: number): Set<number> => {
+    const next = new Set(set);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  };
+
+  const submitReconcile = async () => {
+    if (!period.roster_id) return;
+    setReconcileSubmitting(true);
+    try {
+      const resp = await apiClient.paymentRosters.reconcileRoster(period.roster_id, {
+        add_application_ids: Array.from(selectedAddIds),
+        remove_item_ids: Array.from(selectedRemoveItemIds),
+      });
+      if (resp.success) {
+        const added = resp.data?.added.length ?? 0;
+        const removed = resp.data?.removed.length ?? 0;
+        toast.success(`已更新造冊名單：新增 ${added} 人 / 移除 ${removed} 人`);
+        setReconcileConfirmOpen(false);
+        await loadRosterItems();
+        await loadDistributionDiff();
+      } else {
+        toast.error(resp.message || "更新造冊名單失敗");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "更新造冊名單失敗");
+    } finally {
+      setReconcileSubmitting(false);
     }
   };
 
@@ -405,18 +468,20 @@ export function RosterDetailDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Task 10: Status-change notice panel + Excel-stale banner (LOCKED rosters only) */}
+        {/* Excel-stale banner — shows for any COMPLETED or LOCKED roster whose
+            items changed (e.g. after a reconcile or a post-lock removal). */}
+        {period.excel_stale && (
+          <div className="mb-3 p-3 border border-amber-300 bg-amber-50 rounded flex items-center justify-between">
+            <span className="text-amber-800 text-sm">
+              ⚠️ 造冊資料已變更，請重新匯出 Excel
+            </span>
+            {/* Reuse existing "重新匯出 Excel" handler if wired in this component in future */}
+          </div>
+        )}
+
+        {/* Status-change notice panel (LOCKED rosters only — post-lock revoke/suspend) */}
         {period.roster_status === "locked" && (
           <>
-            {period.excel_stale && (
-              <div className="mb-3 p-3 border border-amber-300 bg-amber-50 rounded flex items-center justify-between">
-                <span className="text-amber-800 text-sm">
-                  ⚠️ 造冊資料已變更，請重新匯出 Excel
-                </span>
-                {/* Reuse existing "重新匯出 Excel" handler if wired in this component in future */}
-              </div>
-            )}
-
             {(revokedSuspended.revoked.length > 0 ||
               revokedSuspended.suspended.length > 0) && (
               <div className="mb-4 space-y-3">
@@ -435,6 +500,99 @@ export function RosterDetailDialog({
               </div>
             )}
           </>
+        )}
+
+        {canReconcile && (
+          <div className="mb-4 p-3 border rounded">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">比對分發名單</span>
+              <Button size="sm" variant="outline" onClick={loadDistributionDiff} disabled={diffLoading}>
+                {diffLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
+                比對分發 vs 造冊
+              </Button>
+            </div>
+
+            {diff && diff.to_add.length === 0 && diff.to_remove.length === 0 && (
+              <p className="mt-2 text-sm text-muted-foreground">名單一致，無需補充。</p>
+            )}
+
+            {diff && diff.to_add.length > 0 && (
+              <div className="mt-3">
+                <p className="text-sm font-medium text-emerald-700">待補充 ({diff.to_add.length})</p>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10"></TableHead>
+                      <TableHead>學號</TableHead>
+                      <TableHead>姓名</TableHead>
+                      <TableHead>系所</TableHead>
+                      <TableHead className="text-right">金額</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {diff.to_add.map((e: DistributionDiffEntry) => (
+                      <TableRow key={`add-${e.application_id}`}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedAddIds.has(e.application_id)}
+                            onCheckedChange={() =>
+                              setSelectedAddIds(prev => toggle(prev, e.application_id))
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>{e.student_id}</TableCell>
+                        <TableCell>{e.student_name}</TableCell>
+                        <TableCell>{e.department_name}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(e.scholarship_amount)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+
+            {diff && diff.to_remove.length > 0 && (
+              <div className="mt-3">
+                <p className="text-sm font-medium text-red-700">待移除 ({diff.to_remove.length})</p>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10"></TableHead>
+                      <TableHead>學號</TableHead>
+                      <TableHead>姓名</TableHead>
+                      <TableHead>系所</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {diff.to_remove.map((e: DistributionDiffEntry) => (
+                      <TableRow key={`rm-${e.item_id}`}>
+                        <TableCell>
+                          <Checkbox
+                            checked={!!e.item_id && selectedRemoveItemIds.has(e.item_id)}
+                            onCheckedChange={() =>
+                              e.item_id &&
+                              setSelectedRemoveItemIds(prev => toggle(prev, e.item_id as number))
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>{e.student_id}</TableCell>
+                        <TableCell>{e.student_name}</TableCell>
+                        <TableCell>{e.department_name}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+
+            {diff && (selectedAddIds.size > 0 || selectedRemoveItemIds.size > 0) && (
+              <div className="mt-3 flex justify-end">
+                <Button size="sm" onClick={() => setReconcileConfirmOpen(true)}>
+                  套用 (新增 {selectedAddIds.size} / 移除 {selectedRemoveItemIds.size})
+                </Button>
+              </div>
+            )}
+          </div>
         )}
 
         {loading ? (
@@ -534,6 +692,38 @@ export function RosterDetailDialog({
           )}
         </div>
       </DialogContent>
+
+      {/* 比對分發名單 confirm */}
+      <Dialog
+        open={reconcileConfirmOpen}
+        onOpenChange={open => !open && !reconcileSubmitting && setReconcileConfirmOpen(false)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>確認更新造冊名單</DialogTitle>
+            <DialogDescription className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 mt-0.5 text-amber-500" />
+              <span>
+                將新增 <strong>{selectedAddIds.size}</strong> 人、移除{" "}
+                <strong>{selectedRemoveItemIds.size}</strong> 人。此操作會將造冊標記為「需重新匯出 Excel」並記錄稽核日誌。
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setReconcileConfirmOpen(false)}
+              disabled={reconcileSubmitting}
+            >
+              取消
+            </Button>
+            <Button onClick={submitReconcile} disabled={reconcileSubmitting}>
+              {reconcileSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              確認套用
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* #66: exclude confirmation dialog */}
       <Dialog
