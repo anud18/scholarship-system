@@ -1955,7 +1955,10 @@ class RosterService:
                 DistributionDiffEntry(
                     application_id=item.application_id,
                     item_id=item.id,
-                    student_id=sd.get("std_stdcode", item.student_id_number),
+                    # 學號 (std_stdcode) only — do NOT fall back to
+                    # item.student_id_number (that is the national ID / std_pid,
+                    # which would render under the 學號 column in the UI).
+                    student_id=sd.get("std_stdcode"),
                     student_name=item.student_name,
                     department_name=sd.get("trm_depname"),
                     college_name=sd.get("trm_academyname"),
@@ -2155,37 +2158,9 @@ class RosterService:
         self.db.delete(item)
         self.db.flush()
 
-        # Recompute totals using CASE-based split to match _recompute_roster_totals
-        total_count, qualified, total_amount = (
-            self.db.query(
-                func.count(PaymentRosterItem.id),
-                func.coalesce(
-                    func.sum(
-                        sa_case(
-                            (PaymentRosterItem.is_included.is_(True), 1),
-                            else_=0,
-                        )
-                    ),
-                    0,
-                ),
-                func.coalesce(
-                    func.sum(
-                        sa_case(
-                            (PaymentRosterItem.is_included.is_(True), PaymentRosterItem.scholarship_amount),
-                            else_=0,
-                        )
-                    ),
-                    0,
-                ),
-            )
-            .filter(PaymentRosterItem.roster_id == roster_id)
-            .one()
-        )
-
-        roster.total_applications = total_count
-        roster.qualified_count = qualified
-        roster.disqualified_count = total_count - qualified
-        roster.total_amount = total_amount
+        # Recompute totals via the shared sync helper (persists
+        # total_applications / qualified_count / disqualified_count / total_amount).
+        qualified, total_count, total_amount = self._recompute_roster_totals_sync(roster_id)
         roster.excel_stale = True
 
         self.db.add(
