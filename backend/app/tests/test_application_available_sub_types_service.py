@@ -126,3 +126,52 @@ class TestGetApplicationAvailableSubTypes:
         result = await service.get_application_available_sub_types(app.id, prof)
 
         assert result == []
+
+    async def test_college_excludes_professor_rejected_within_applied(self, db: AsyncSession):
+        """College sees applied sub-types minus the ones a professor rejected.
+
+        Composition of the two filters: student applied for {nstc, moe_1w}
+        (moe_2w configured but not applied), professor rejected nstc → college
+        sees only moe_1w. moe_2w stays hidden because it was never applied for.
+        """
+        from datetime import datetime, timezone
+
+        from app.models.review import ApplicationReview, ApplicationReviewItem
+
+        scholarship = await _scholarship_with_configs(db, ["nstc", "moe_1w", "moe_2w"])
+        prof = await _professor(db)
+        app = await _application(db, scholarship=scholarship, applied=["nstc", "moe_1w"])
+
+        # Professor rejects the applied sub-type "nstc".
+        review = ApplicationReview(
+            application_id=app.id,
+            reviewer_id=prof.id,
+            recommendation="reject",
+            reviewed_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+        db.add(review)
+        await db.flush()
+        db.add(
+            ApplicationReviewItem(
+                review_id=review.id,
+                sub_type_code="nstc",
+                recommendation="reject",
+                comments="不符合",
+            )
+        )
+        await db.flush()
+
+        college = User(
+            nycu_id="college_subtype",
+            name="學院",
+            email="college@nycu.edu.tw",
+            user_type=UserType.employee,
+            role=UserRole.college,
+        )
+        db.add(college)
+        await db.flush()
+
+        service = ApplicationService(db)
+        result = await service.get_application_available_sub_types(app.id, college)
+
+        assert {row["value"] for row in result} == {"moe_1w"}
