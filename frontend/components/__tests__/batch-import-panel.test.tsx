@@ -20,10 +20,7 @@
 import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import { BatchImportPanel } from "../batch-import-panel";
-
-const mockGetMyScholarships = jest.fn();
-const mockGetScholarshipPeriods = jest.fn();
-const mockGetHistory = jest.fn();
+import { apiClient } from "@/lib/api";
 
 jest.mock("@/hooks/use-auth", () => ({
   __esModule: true,
@@ -37,32 +34,28 @@ jest.mock("@/hooks/use-auth", () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
-jest.mock("@/lib/api", () => ({
-  __esModule: true,
-  apiClient: {
-    admin: {
-      getMyScholarships: (...args: unknown[]) => mockGetMyScholarships(...args),
-    },
-    referenceData: {
-      getScholarshipPeriods: (...args: unknown[]) =>
-        mockGetScholarshipPeriods(...args),
-    },
-    batchImport: {
-      getHistory: (...args: unknown[]) => mockGetHistory(...args),
-      downloadTemplate: jest.fn(),
-      uploadData: jest.fn(),
-      confirm: jest.fn(),
-      getDetails: jest.fn(),
-      deleteBatch: jest.fn(),
-      deleteRecord: jest.fn(),
-    },
-  },
-}));
+// NOTE: We do NOT jest.mock("@/lib/api"). The component imports the REAL
+// `apiClient` singleton, whose `admin` / `referenceData` / `batchImport`
+// namespaces are stable lazy getters. Under this repo's native-ESM jest
+// setup, a factory mock of "@/lib/api" does not intercept the component's
+// import (the spies saw 0 calls). Spying directly on the real singleton's
+// namespace objects works because they are the same objects the component
+// reaches at runtime.
 
 beforeEach(() => {
-  mockGetMyScholarships.mockResolvedValue({ success: true, data: [] });
-  mockGetScholarshipPeriods.mockResolvedValue({ success: true, data: [] });
-  mockGetHistory.mockResolvedValue({ success: true, data: [] });
+  jest
+    .spyOn(apiClient.admin, "getMyScholarships")
+    .mockResolvedValue({ success: true, data: [] } as any);
+  jest
+    .spyOn(apiClient.referenceData, "getScholarshipPeriods")
+    .mockResolvedValue({ success: true, data: [] } as any);
+  jest
+    .spyOn(apiClient.batchImport, "getHistory")
+    .mockResolvedValue({ success: true, data: { items: [] } } as any);
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
 });
 
 describe("BatchImportPanel", () => {
@@ -78,19 +71,11 @@ describe("BatchImportPanel", () => {
     ).toBeInTheDocument();
   });
 
-  // broken mock harness — `@/lib/api` loads via native ESM (the
-  // `--experimental-require-module` node flag this repo runs jest under),
-  // so jest.mock("@/lib/api") does not intercept the component's import and
-  // the spy sees 0 calls even though the mount effect runs. The component
-  // instead resolves through the real apiClient + the global fetch mock,
-  // which is why the render-based tests above still pass. Fixing this needs
-  // a jest.config/setup change (out of scope here). Same limitation is
-  // documented in admin-rule-management.test.tsx and other admin tests.
-  it.skip("triggers getMyScholarships and getHistory on mount", async () => {
+  it("triggers getMyScholarships and getHistory on mount", async () => {
     render(<BatchImportPanel />);
     await waitFor(() => {
-      expect(mockGetMyScholarships).toHaveBeenCalled();
-      expect(mockGetHistory).toHaveBeenCalled();
+      expect(apiClient.admin.getMyScholarships).toHaveBeenCalled();
+      expect(apiClient.batchImport.getHistory).toHaveBeenCalled();
     });
   });
 });
