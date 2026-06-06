@@ -2595,8 +2595,12 @@ class ApplicationService:
         Filtering rules (additive — stricter as the role moves through the
         review chain):
 
-        - All callers: only ``is_active=True`` sub-type configs.
-        - ``professor``: returns every active sub-type (full set).
+        - All callers: only ``is_active=True`` sub-type configs that the
+          applicant actually applied for (``Application.scholarship_subtype_list``).
+          Reviewers must never see sub-types the student didn't request — and
+          this keeps the form in sync with the submit-time permission check in
+          ``ReviewService.get_reviewable_subtypes``.
+        - ``professor``: returns every applied active sub-type.
         - ``college``: also excludes sub-types where any professor has
           recommended ``reject`` on the application.
         - ``admin`` / ``super_admin``: also excludes sub-types where any
@@ -2626,7 +2630,17 @@ class ApplicationService:
         if not application.scholarship or not application.scholarship.sub_type_configs:
             return []
 
-        active_configs = [c for c in application.scholarship.sub_type_configs if c.is_active]
+        # Only sub-types the applicant actually applied for. An empty applied
+        # list (single-mode / "general" application) -> empty list, so the
+        # frontend falls back to its single "default" recommendation form.
+        # Normalized to match the lowercase/stripped convention used by
+        # ReviewService.get_reviewable_subtypes (the submit-time gate).
+        applied_codes = {
+            code.lower().strip() for code in (application.scholarship_subtype_list or []) if isinstance(code, str)
+        }
+        active_configs = [
+            c for c in application.scholarship.sub_type_configs if c.is_active and c.sub_type_code in applied_codes
+        ]
 
         async def _rejected_by_role(role: UserRole) -> set[str]:
             """sub_type_codes rejected by any reviewer of the given role on this application."""
