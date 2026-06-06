@@ -84,7 +84,14 @@ export function parseRankingSheet(
     });
   });
 
-  // Duplicate 學號
+  // Row-level parse errors (blank / invalid rank) drop their row from
+  // importData, so the consecutiveness check below would false-positive on the
+  // incomplete set. Capture that state before the cross-row checks add more.
+  const hasRowLevelErrors = errors.length > 0;
+
+  // Duplicate 學號. Unlike row-level errors this does NOT drop a row, so it must
+  // not suppress the consecutiveness check (matches the backend, which reports
+  // both at once).
   const duplicateStudentIds = [
     ...countOccurrences(importData.map(item => item.student_id)),
   ]
@@ -99,14 +106,18 @@ export function parseRankingSheet(
     .filter(item => typeof item.rank_position === "number")
     .map(item => item.rank_position as number);
 
+  let hasDuplicateRanks = false;
   countOccurrences(integerRanks).forEach((count, rank) => {
     if (count > 1) {
+      hasDuplicateRanks = true;
       errors.push(`排名 ${rank} 重複出現（${count} 次）`);
     }
   });
 
-  // Consecutive from 1 (only when no prior errors, mirroring legacy behavior)
-  if (integerRanks.length > 0 && errors.length === 0) {
+  // Consecutive from 1 — mirror the backend (ranking_management.py): run whenever
+  // there are integer ranks, no row-level parse errors, and no duplicate ranks.
+  // A duplicate 學號 alone no longer hides a missing-rank error.
+  if (integerRanks.length > 0 && !hasRowLevelErrors && !hasDuplicateRanks) {
     const rankSet = new Set(integerRanks);
     const missing: number[] = [];
     for (let i = 1; i <= integerRanks.length; i++) {

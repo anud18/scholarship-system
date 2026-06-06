@@ -88,4 +88,24 @@ describe("parseRankingSheet", () => {
     expect(importData).toHaveLength(3);
     expect(importData[2].rank_position).toBe("N");
   });
+
+  it("surfaces both 學號重複 and 排名不連續 in one pass (a dup 學號 does not hide the gap)", () => {
+    const { errors } = parseRankingSheet([
+      rowOf("310460099", "王小明", 1),
+      rowOf("310460099", "王小明", 3),
+    ]);
+    expect(errors.some(e => e.includes("學號重複"))).toBe(true);
+    expect(errors.some(e => e.includes("排名不連續"))).toBe(true);
+  });
+
+  it("suppresses the consecutive check when a row was dropped by a blank rank", () => {
+    const { errors } = parseRankingSheet([
+      rowOf("310460099", "王小明", 1),
+      rowOf("310460100", "李小華", ""), // dropped → importData incomplete
+      rowOf("310460101", "張小強", 3),
+    ]);
+    expect(errors.some(e => e.includes("排名欄位為空"))).toBe(true);
+    // no false "排名不連續：缺少第 2 名" from the incomplete set
+    expect(errors.some(e => e.includes("排名不連續"))).toBe(false);
+  });
 });
