@@ -30,7 +30,8 @@ jest.mock("@/lib/api", () => ({
   api: {
     admin: {
       getAvailableYears: (...args: unknown[]) => mockGetAvailableYears(...args),
-      getScholarshipRules: (...args: unknown[]) => mockGetScholarshipRules(...args),
+      getScholarshipRules: (...args: unknown[]) =>
+        mockGetScholarshipRules(...args),
       deleteScholarshipRule: jest.fn(),
       createScholarshipRule: jest.fn(),
       updateScholarshipRule: jest.fn(),
@@ -50,6 +51,17 @@ jest.mock("../copy-rules-modal", () => ({
 jest.mock("sonner", () => ({
   toast: { success: jest.fn(), error: jest.fn() },
 }));
+jest.mock("@/hooks/use-auth", () => ({
+  __esModule: true,
+  useAuth: () => ({
+    isAuthenticated: true,
+    user: { id: 1, role: "admin", name: "Test Admin" },
+    login: jest.fn(),
+    logout: jest.fn(),
+    isLoading: false,
+  }),
+  AuthProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
 
 beforeEach(() => {
   mockGetAvailableYears.mockResolvedValue({
@@ -62,13 +74,15 @@ beforeEach(() => {
   });
 });
 
-describe.skip("AdminRuleManagement", () => {
-  it("renders empty-state copy and short-circuits API calls when scholarshipTypes is []", () => {
+describe("AdminRuleManagement", () => {
+  it("renders empty-state copy and short-circuits the rules fetch when scholarshipTypes is []", () => {
     render(<AdminRuleManagement scholarshipTypes={[]} />);
     expect(screen.getByText("尚無獎學金類型")).toBeInTheDocument();
 
-    // Short-circuit: no API calls fire when there's nothing to manage.
-    expect(mockGetAvailableYears).not.toHaveBeenCalled();
+    // Rules short-circuit: with no scholarship types there is never a
+    // selected type, so the rules-loading effect never calls the API.
+    // (The available-years effect, by contrast, fetches unconditionally on
+    // mount — it is intentionally NOT asserted here.)
     expect(mockGetScholarshipRules).not.toHaveBeenCalled();
   });
 
@@ -76,22 +90,43 @@ describe.skip("AdminRuleManagement", () => {
     render(
       <AdminRuleManagement
         scholarshipTypes={[
-          { id: 1, code: "phd", name: "博士獎學金", application_cycle: "semester" } as never,
-          { id: 2, code: "undergrad", name: "學士新生", application_cycle: "yearly" } as never,
+          {
+            id: 1,
+            code: "phd",
+            name: "博士獎學金",
+            application_cycle: "semester",
+          } as never,
+          {
+            id: 2,
+            code: "undergrad",
+            name: "學士新生",
+            application_cycle: "yearly",
+          } as never,
         ]}
-      />,
+      />
     );
     expect(screen.getByRole("tab", { name: "博士獎學金" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "學士新生" })).toBeInTheDocument();
   });
 
-  it("fetches available years from the API on mount", async () => {
+  // broken mock harness: `@/lib/api` pulls in `openapi-fetch` (ESM-only) via
+  // lib/api/typed-client.ts. Under NODE_OPTIONS="--experimental-require-module"
+  // the whole api subtree loads through native ESM, so jest's CJS mock registry
+  // never substitutes it — the component imports the real `api` and the spies
+  // below see 0 calls (verified: `imported !== jest.requireMock("@/lib/api").api`).
+  // These cannot pass without a jest.config/harness change, which is out of scope.
+  it.skip("fetches available years from the API on mount", async () => {
     render(
       <AdminRuleManagement
         scholarshipTypes={[
-          { id: 1, code: "phd", name: "博士獎學金", application_cycle: "semester" } as never,
+          {
+            id: 1,
+            code: "phd",
+            name: "博士獎學金",
+            application_cycle: "semester",
+          } as never,
         ]}
-      />,
+      />
     );
 
     await waitFor(() => {
@@ -99,7 +134,9 @@ describe.skip("AdminRuleManagement", () => {
     });
   });
 
-  it("fetches rules for the active scholarship type when one is selected", async () => {
+  // broken mock harness — see note above (`@/lib/api` loads via native ESM,
+  // jest mock not applied, spy sees 0 calls).
+  it.skip("fetches rules for the active scholarship type when one is selected", async () => {
     mockGetScholarshipRules.mockResolvedValue({
       success: true,
       data: [
@@ -110,9 +147,14 @@ describe.skip("AdminRuleManagement", () => {
     render(
       <AdminRuleManagement
         scholarshipTypes={[
-          { id: 1, code: "phd", name: "博士獎學金", application_cycle: "semester" } as never,
+          {
+            id: 1,
+            code: "phd",
+            name: "博士獎學金",
+            application_cycle: "semester",
+          } as never,
         ]}
-      />,
+      />
     );
 
     // Wait for the auto-selection + fetch to settle.
@@ -121,7 +163,9 @@ describe.skip("AdminRuleManagement", () => {
     });
   });
 
-  it("does not crash if the years endpoint rejects", async () => {
+  // broken mock harness — see note above. (Asserts `mockGetAvailableYears`
+  // was called, which the dead mock never registers.)
+  it.skip("does not crash if the years endpoint rejects", async () => {
     // The "years" API failure used to silently break the year selector;
     // pin that the component still renders the tab list and doesn't
     // unmount on the error.
@@ -130,9 +174,14 @@ describe.skip("AdminRuleManagement", () => {
     render(
       <AdminRuleManagement
         scholarshipTypes={[
-          { id: 1, code: "phd", name: "博士獎學金", application_cycle: "semester" } as never,
+          {
+            id: 1,
+            code: "phd",
+            name: "博士獎學金",
+            application_cycle: "semester",
+          } as never,
         ]}
-      />,
+      />
     );
 
     // Tabs render regardless of the years-fetch outcome.
@@ -144,7 +193,9 @@ describe.skip("AdminRuleManagement", () => {
     });
   });
 
-  it("does not crash if the rules endpoint returns an unsuccessful response", async () => {
+  // broken mock harness — see note above. (Asserts `mockGetScholarshipRules`
+  // was called, which the dead mock never registers.)
+  it.skip("does not crash if the rules endpoint returns an unsuccessful response", async () => {
     // Pin the soft-failure branch: production code maps a non-success
     // response to setRules([]), not an exception bubbling out.
     mockGetScholarshipRules.mockResolvedValue({
@@ -155,9 +206,14 @@ describe.skip("AdminRuleManagement", () => {
     render(
       <AdminRuleManagement
         scholarshipTypes={[
-          { id: 1, code: "phd", name: "博士獎學金", application_cycle: "semester" } as never,
+          {
+            id: 1,
+            code: "phd",
+            name: "博士獎學金",
+            application_cycle: "semester",
+          } as never,
         ]}
-      />,
+      />
     );
 
     await waitFor(() => {

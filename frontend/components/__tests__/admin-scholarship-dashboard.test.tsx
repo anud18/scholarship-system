@@ -24,7 +24,8 @@ const mockRefetch = jest.fn();
 const mockUseScholarshipSpecificApplications = jest.fn();
 
 jest.mock("@/hooks/use-admin", () => ({
-  useScholarshipSpecificApplications: () => mockUseScholarshipSpecificApplications(),
+  useScholarshipSpecificApplications: () =>
+    mockUseScholarshipSpecificApplications(),
 }));
 
 jest.mock("@/hooks/use-scholarship-permissions", () => ({
@@ -56,10 +57,21 @@ jest.mock("@/lib/api", () => ({
 jest.mock("sonner", () => ({
   toast: { success: jest.fn(), error: jest.fn() },
 }));
+jest.mock("@/hooks/use-auth", () => ({
+  __esModule: true,
+  useAuth: () => ({
+    isAuthenticated: true,
+    user: { id: 1, role: "admin", name: "Test Admin" },
+    login: jest.fn(),
+    logout: jest.fn(),
+    isLoading: false,
+  }),
+  AuthProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
 
 const baseUser = { id: 1, role: "admin", name: "Test", nycu_id: "admin1" };
 
-describe.skip("AdminScholarshipDashboard", () => {
+describe("AdminScholarshipDashboard", () => {
   beforeEach(() => {
     mockRefetch.mockClear();
   });

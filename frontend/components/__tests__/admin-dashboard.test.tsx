@@ -27,7 +27,24 @@ jest.mock("@/hooks/use-scholarship-permissions", () => ({
 
 // Helpers from lib/utils — not under test here.
 jest.mock("@/lib/utils/application-helpers", () => ({
-  getDisplayStatusInfo: () => ({ statusLabel: "已提交", statusVariant: "default" }),
+  getDisplayStatusInfo: () => ({
+    statusLabel: "已提交",
+    statusVariant: "default",
+  }),
+}));
+
+// Child components downstream of the dashboard call useAuth; stub it so
+// they don't throw "useAuth must be used within AuthProvider" in tests.
+jest.mock("@/hooks/use-auth", () => ({
+  __esModule: true,
+  useAuth: () => ({
+    isAuthenticated: true,
+    user: { id: 1, role: "admin", name: "Test Admin" },
+    login: jest.fn(),
+    logout: jest.fn(),
+    isLoading: false,
+  }),
+  AuthProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 // API client only referenced inside the error "test login" button path.
@@ -60,7 +77,7 @@ const baseProps = {
   onTabChange: jest.fn(),
 };
 
-describe.skip("AdminDashboard", () => {
+describe("AdminDashboard", () => {
   it("renders the welcome banner unconditionally", () => {
     render(<AdminDashboard {...baseProps} />);
     expect(screen.getByText("獎學金管理系統儀表板")).toBeInTheDocument();
@@ -76,25 +93,28 @@ describe.skip("AdminDashboard", () => {
           approved: 18,
           rejected: 3,
         }}
-      />,
+      />
     );
     // Card labels + values appear together. Use getByText which is keyed on
     // the rendered number string — Loader2 would replace these if loading.
     expect(screen.getByText("42")).toBeInTheDocument();
     expect(screen.getByText("7")).toBeInTheDocument();
     expect(screen.getByText("18")).toBeInTheDocument();
-    // "3" might be ambiguous; assert via label proximity.
-    expect(screen.getByText("總申請案件")).toBeInTheDocument();
+    // "總申請案件" appears twice (CardTitle + the small label under the
+    // number), so assert presence via getAllByText.
+    expect(screen.getAllByText("總申請案件").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("待審核")).toBeInTheDocument();
   });
 
   it("falls back to 0 for missing stat fields, never crashes on partial data", () => {
     render(<AdminDashboard {...baseProps} stats={{ total_applications: 5 }} />);
     expect(screen.getByText("5")).toBeInTheDocument();
-    // pending_review, approved, rejected default to 0 — there should be
-    // multiple "0" cells.
+    // pending_review and approved default to 0 (the 4th card,
+    // avg_processing_time, falls back to "N/A" rather than 0), so there
+    // should be at least two "0" cells — the key contract is no crash on
+    // partial data.
     const zeros = screen.getAllByText("0");
-    expect(zeros.length).toBeGreaterThanOrEqual(3);
+    expect(zeros.length).toBeGreaterThanOrEqual(2);
   });
 
   it("shows the error banner with diagnostic context when `error` is set", () => {
@@ -103,7 +123,7 @@ describe.skip("AdminDashboard", () => {
         {...baseProps}
         error="Network timeout"
         user={{ id: 99, role: "admin" }}
-      />,
+      />
     );
     expect(screen.getByText("載入資料時發生錯誤")).toBeInTheDocument();
     expect(screen.getByText("Network timeout")).toBeInTheDocument();
@@ -121,7 +141,7 @@ describe.skip("AdminDashboard", () => {
         {...baseProps}
         error="Auth failed"
         isAuthenticated={false}
-      />,
+      />
     );
     expect(screen.getByText(/認證狀態: 未認證/)).toBeInTheDocument();
   });
@@ -146,7 +166,7 @@ describe.skip("AdminDashboard", () => {
             created_at: "2026-03-10T00:00:00Z",
           },
         ]}
-      />,
+      />
     );
     expect(screen.getByText("博士獎學金")).toBeInTheDocument();
     expect(screen.getByText("APP-114-1-00007")).toBeInTheDocument();
@@ -167,7 +187,7 @@ describe.skip("AdminDashboard", () => {
             created_at: "2026-03-10T00:00:00Z",
           },
         ]}
-      />,
+      />
     );
     expect(screen.getByText("APP-42")).toBeInTheDocument();
   });
@@ -189,7 +209,7 @@ describe.skip("AdminDashboard", () => {
             notification_type: "warning",
           },
         ]}
-      />,
+      />
     );
     expect(screen.getByText("系統維護通知")).toBeInTheDocument();
     expect(screen.getByText("今晚 11 點到 1 點維護")).toBeInTheDocument();
@@ -197,7 +217,7 @@ describe.skip("AdminDashboard", () => {
 
   it("shows loading state for stats when isStatsLoading=true", () => {
     const { container } = render(
-      <AdminDashboard {...baseProps} isStatsLoading={true} stats={null} />,
+      <AdminDashboard {...baseProps} isStatsLoading={true} stats={null} />
     );
     // 4 stat cards each get a spinner instead of a number.
     // lucide-react renders <svg> with class containing 'lucide-loader' or

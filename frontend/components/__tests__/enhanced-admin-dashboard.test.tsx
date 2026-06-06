@@ -20,10 +20,32 @@ import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { EnhancedAdminDashboard } from "../enhanced-admin-dashboard";
 
+jest.mock("@/hooks/use-auth", () => ({
+  __esModule: true,
+  useAuth: () => ({
+    isAuthenticated: true,
+    user: { id: 1, role: "admin", name: "Test Admin" },
+    login: jest.fn(),
+    logout: jest.fn(),
+    isLoading: false,
+  }),
+  AuthProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 jest.mock("@/lib/api", () => ({
   __esModule: true,
   api: {
     request: jest.fn(),
+  },
+  apiClient: {
+    admin: {
+      getDashboardStats: jest
+        .fn()
+        .mockResolvedValue({ success: true, data: null }),
+      getRecentApplications: jest
+        .fn()
+        .mockResolvedValue({ success: true, data: [] }),
+    },
   },
 }));
 
@@ -33,11 +55,19 @@ jest.mock("../semester-selector", () => ({
 }));
 
 jest.mock("@/lib/utils/application-helpers", () => ({
-  getDisplayStatusInfo: () => ({ statusLabel: "已提交", statusVariant: "default" }),
+  getDisplayStatusInfo: () => ({
+    statusLabel: "已提交",
+    statusVariant: "default",
+  }),
 }));
 
 const baseProps = {
-  stats: { total_applications: 10, pending_review: 4, approved: 5, rejected: 1 },
+  stats: {
+    total_applications: 10,
+    pending_review: 4,
+    approved: 5,
+    rejected: 1,
+  },
   recentApplications: [] as any[],
   systemAnnouncements: [] as any[],
   isStatsLoading: false,
@@ -53,9 +83,11 @@ const baseProps = {
   onTabChange: jest.fn(),
 };
 
-describe.skip("EnhancedAdminDashboard", () => {
+describe("EnhancedAdminDashboard", () => {
   it("short-circuits to the error card when error is set", () => {
-    render(<EnhancedAdminDashboard {...baseProps} error="Service unavailable" />);
+    render(
+      <EnhancedAdminDashboard {...baseProps} error="Service unavailable" />
+    );
     expect(screen.getByText("載入錯誤")).toBeInTheDocument();
     expect(screen.getByText("Service unavailable")).toBeInTheDocument();
     // The semester selector is NOT rendered on the error path.
@@ -69,7 +101,7 @@ describe.skip("EnhancedAdminDashboard", () => {
         {...baseProps}
         error="Service unavailable"
         fetchDashboardStats={fetchDashboardStats}
-      />,
+      />
     );
     fireEvent.click(screen.getByRole("button", { name: "重新載入" }));
     expect(fetchDashboardStats).toHaveBeenCalledTimes(1);

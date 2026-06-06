@@ -23,7 +23,7 @@ const mockGetFormConfig = jest.fn();
 const mockGetAll = jest.fn();
 const mockGetConfigurationWhitelist = jest.fn();
 
-jest.mock("@/lib/api", () => ({
+jest.mock("../../lib/api", () => ({
   __esModule: true,
   api: {
     applicationFields: {
@@ -42,7 +42,8 @@ jest.mock("@/lib/api", () => ({
       getAll: (...args: unknown[]) => mockGetAll(...args),
     },
     whitelist: {
-      getConfigurationWhitelist: (...args: unknown[]) => mockGetConfigurationWhitelist(...args),
+      getConfigurationWhitelist: (...args: unknown[]) =>
+        mockGetConfigurationWhitelist(...args),
       batchAddWhitelist: jest.fn(),
       batchRemoveWhitelist: jest.fn(),
       importWhitelistExcel: jest.fn(),
@@ -56,22 +57,39 @@ jest.mock("sonner", () => ({
   toast: { success: jest.fn(), error: jest.fn() },
 }));
 
+jest.mock("@/hooks/use-auth", () => ({
+  __esModule: true,
+  useAuth: () => ({
+    isAuthenticated: true,
+    user: { id: 1, role: "admin", name: "Test Admin" },
+    login: jest.fn(),
+    logout: jest.fn(),
+    isLoading: false,
+  }),
+  AuthProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 beforeEach(() => {
   // Hang the initial fetch so the component sits in loading state on first render.
   // Individual tests can re-mock to resolve.
   mockGetFormConfig.mockReturnValue(new Promise(() => {}));
   mockGetAll.mockResolvedValue({ success: true, data: [] });
-  mockGetConfigurationWhitelist.mockResolvedValue({ success: true, data: { students: [] } });
+  mockGetConfigurationWhitelist.mockResolvedValue({
+    success: true,
+    data: { students: [] },
+  });
 });
 
-describe.skip("AdminScholarshipManagementInterface", () => {
+describe("AdminScholarshipManagementInterface", () => {
   it("renders the loading copy while the form-config fetch is in flight", () => {
     render(<AdminScholarshipManagementInterface type="phd" />);
     expect(screen.getByText("載入設定中...")).toBeInTheDocument();
   });
 
   it("forwards the `type` prop to api.applicationFields.getFormConfig", async () => {
-    render(<AdminScholarshipManagementInterface type="undergraduate_freshman" />);
+    render(
+      <AdminScholarshipManagementInterface type="undergraduate_freshman" />
+    );
     await waitFor(() => {
       expect(mockGetFormConfig).toHaveBeenCalled();
     });
