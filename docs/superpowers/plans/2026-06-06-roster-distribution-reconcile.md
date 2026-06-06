@@ -999,8 +999,10 @@ async def test_reconcile_endpoint_adds_member(admin_api_client, api_scenario):
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `cd backend && python -m pytest app/tests/test_roster_distribution_reconcile_api.py -p no:cacheprovider -v`
-Expected: FAIL — 404 (route not found) so assertions on `body["data"]` fail.
+Run the local sync command (env prefix from Task 3) on `app/tests/test_roster_distribution_reconcile_api.py`.
+Expected: FAIL — `AttributeError: module 'app.api.v1.endpoints.payment_rosters' has no attribute 'get_distribution_diff'` (endpoints not added yet).
+
+> **NOTE (environment correction):** The endpoints use `get_sync_db` (sync `Session`) and the reconcile endpoint wraps `with_lock_sync` (needs Redis). conftest's sync test engine is a SEPARATE in-memory DB from the async `db` fixture, and there is no Redis in the test/CI lane. So the API test does NOT use httpx/async `db`. Instead it **calls the endpoint functions directly** with the `db_sync` session and a `monkeypatch` that replaces `with_lock_sync` with a no-op contextmanager. The corrected test is provided by the controller at dispatch time. These tests are plain sync `def` (unit lane).
 
 - [ ] **Step 3: Add the endpoints**
 
@@ -1071,8 +1073,8 @@ def reconcile_roster_endpoint(
 
 - [ ] **Step 4: Run to verify it passes**
 
-Run: `cd backend && python -m pytest app/tests/test_roster_distribution_reconcile_api.py -p no:cacheprovider -v`
-Expected: PASS. (Run inside the dev container if Redis/`with_lock_sync` needs it — CI integration lane has it. Locally, if Redis is absent the lock is a no-op fallback; confirm by reading `app/core/cache.py:with_lock_sync` behavior, but do not assert on it.)
+Run the local sync command (env prefix from Task 3) on `app/tests/test_roster_distribution_reconcile_api.py` with `--no-cov`.
+Expected: PASS (4 tests: diff returns ApiResponse, diff requires admin → 403, reconcile adds member, reconcile maps service ValueError → 400). The `with_lock_sync` no-op monkeypatch means no Redis is required.
 
 - [ ] **Step 5: Lint + commit**
 
