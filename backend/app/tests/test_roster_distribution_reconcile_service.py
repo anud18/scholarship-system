@@ -221,3 +221,135 @@ def test_distribution_diff_lists_missing_and_orphan(db_sync, diff_scenario):
     assert entry.department_name == "教育博"
     assert entry.allocated_sub_type == "nstc"
     assert entry.allocation_year == 114
+
+
+def test_reconcile_adds_missing_and_removes_orphan(db_sync, diff_scenario):
+    svc = RosterService(db_sync)
+    roster_id = diff_scenario["roster"].id
+    result = svc.reconcile_roster(
+        roster_id=roster_id,
+        add_application_ids=[diff_scenario["app_b"]],
+        remove_item_ids=[diff_scenario["item_c"]],
+        admin_user_id=diff_scenario["admin"].id,
+        reason="sync",
+    )
+
+    assert len(result["added"]) == 1
+    assert result["added"][0]["application_id"] == diff_scenario["app_b"]
+    assert result["added"][0]["item_id"] is not None
+    assert len(result["removed"]) == 1
+    assert result["removed"][0]["item_id"] == diff_scenario["item_c"]
+    assert result["excel_stale"] is True
+
+    db_sync.refresh(diff_scenario["roster"])
+    # roster now holds app_a (kept) + app_b (added); app_c removed → 2 items
+    assert diff_scenario["roster"].total_applications == 2
+    assert db_sync.get(PaymentRosterItem, diff_scenario["item_c"]) is None
+    # added item is included (student_data has bank account, verification disabled)
+    assert result["added"][0]["is_included"] is True
+
+
+def test_reconcile_rejects_application_not_in_diff(db_sync, diff_scenario):
+    svc = RosterService(db_sync)
+    with pytest.raises(ValueError, match="not addable"):
+        svc.reconcile_roster(
+            roster_id=diff_scenario["roster"].id,
+            add_application_ids=[diff_scenario["app_a"]],  # already in roster → not addable
+            remove_item_ids=[],
+            admin_user_id=diff_scenario["admin"].id,
+            reason=None,
+        )
+
+
+def test_reconcile_rejects_item_not_orphan(db_sync, diff_scenario):
+    # app_a's roster item is still allocated → not removable via reconcile
+    svc = RosterService(db_sync)
+    a_item = (
+        db_sync.query(PaymentRosterItem)
+        .filter(
+            PaymentRosterItem.roster_id == diff_scenario["roster"].id,
+            PaymentRosterItem.application_id == diff_scenario["app_a"],
+        )
+        .one()
+    )
+    with pytest.raises(ValueError, match="not removable"):
+        svc.reconcile_roster(
+            roster_id=diff_scenario["roster"].id,
+            add_application_ids=[],
+            remove_item_ids=[a_item.id],
+            admin_user_id=diff_scenario["admin"].id,
+            reason=None,
+        )
+
+
+def test_reconcile_rejects_draft_roster(db_sync, diff_scenario):
+    roster = diff_scenario["roster"]
+    roster.status = RosterStatus.DRAFT
+    db_sync.commit()
+    svc = RosterService(db_sync)
+    with pytest.raises(RosterLockedError, match="COMPLETED or LOCKED"):
+        svc.reconcile_roster(
+            roster_id=roster.id,
+            add_application_ids=[diff_scenario["app_b"]],
+            remove_item_ids=[],
+            admin_user_id=diff_scenario["admin"].id,
+            reason=None,
+        )
+
+
+def test_reconcile_works_on_completed_roster(db_sync, diff_scenario):
+    roster = diff_scenario["roster"]
+    roster.status = RosterStatus.COMPLETED
+    db_sync.commit()
+    svc = RosterService(db_sync)
+    result = svc.reconcile_roster(
+        roster_id=roster.id,
+        add_application_ids=[diff_scenario["app_b"]],
+        remove_item_ids=[],
+        admin_user_id=diff_scenario["admin"].id,
+        reason=None,
+    )
+    assert len(result["added"]) == 1
+    db_sync.refresh(roster)
+    assert roster.status == RosterStatus.COMPLETED  # status unchanged
+    assert roster.excel_stale is True
+
+
+def test_reconcile_writes_audit_logs(db_sync, diff_scenario):
+    svc = RosterService(db_sync)
+    svc.reconcile_roster(
+        roster_id=diff_scenario["roster"].id,
+        add_application_ids=[diff_scenario["app_b"]],
+        remove_item_ids=[diff_scenario["item_c"]],
+        admin_user_id=diff_scenario["admin"].id,
+        reason="sync",
+    )
+    added_log = db_sync.query(AuditLog).filter(AuditLog.action == "roster.item_added_from_distribution").one()
+    assert added_log.new_values["application_id"] == diff_scenario["app_b"]
+    summary = db_sync.query(AuditLog).filter(AuditLog.action == "roster.reconciled").one()
+    assert summary.new_values["added"] == 1
+    assert summary.new_values["removed"] == 1
+
+
+def test_reconcile_add_missing_student_data_raises(db_sync):
+    admin = _admin(db_sync, nycu_id="rc_guard_admin")
+    sch = _scholarship(db_sync, code="rc_guard_sch")
+    config = _config(db_sync, sch)
+    u = _student(db_sync, "rc_guard_b")
+    app_b = _application(db_sync, u, sch, config, app_id="APP-RC-GUARD-B", std_code="999B")
+    app_b.student_data = {"std_cname": "乙"}  # no std_stdcode
+    db_sync.flush()
+    ranking = _ranking(db_sync, sch)
+    _ranking_item(db_sync, ranking, app_b, rank=1)
+    roster = _roster(db_sync, config, admin, code="ROSTER-RC-GUARD-1")
+    db_sync.commit()
+
+    svc = RosterService(db_sync)
+    with pytest.raises(ValueError, match="missing student ID"):
+        svc.reconcile_roster(
+            roster_id=roster.id,
+            add_application_ids=[app_b.id],
+            remove_item_ids=[],
+            admin_user_id=admin.id,
+            reason=None,
+        )

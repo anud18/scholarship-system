@@ -1976,6 +1976,160 @@ class RosterService:
             "to_remove": to_remove,
         }
 
+    def _verify_and_create_item(self, roster: PaymentRoster, application: Application) -> PaymentRosterItem:
+        """Verify (if enabled) + validate eligibility + build a PaymentRosterItem.
+        Mirrors the generation per-application block. self.db.add()s the item
+        (does NOT flush/commit) and returns it."""
+        sd = application.student_data or {}
+        student_id_number = sd.get("std_stdcode")
+        student_name = sd.get("std_cname")
+        if not student_id_number or not student_name:
+            raise ValueError(f"Application {application.id} is missing student ID or name in student_data")
+
+        verification_result = None
+        verification_status = StudentVerificationStatus.VERIFIED
+        fresh_student_data = None
+
+        if roster.student_verification_enabled:
+            verification_result = self.student_verification_service.verify_student(
+                sd.get("std_stdcode"), sd.get("std_cname")
+            )
+            verification_status = verification_result.get("status", StudentVerificationStatus.VERIFIED)
+            if verification_status != StudentVerificationStatus.API_ERROR:
+                fresh_student_data = verification_result.get("student_info", {})
+
+        eligibility_result = self._validate_student_eligibility(
+            application, roster.academic_year, roster.period_label, fresh_api_data=fresh_student_data
+        )
+        return self._create_roster_item(
+            roster, application, verification_result, verification_status, eligibility_result
+        )
+
+    def reconcile_roster(
+        self,
+        roster_id: int,
+        add_application_ids: List[int],
+        remove_item_ids: List[int],
+        admin_user_id: int,
+        reason: Optional[str] = None,
+    ) -> dict:
+        """Apply a selective add/remove against a generated roster, validated
+        against the server-re-derived distribution diff. Works on COMPLETED and
+        LOCKED rosters. Recomputes totals, sets excel_stale=True, audits each
+        change, commits. NEVER touches quota_allocation_status."""
+        from app.models.application import ApplicationStatus
+
+        roster = self.db.get(PaymentRoster, roster_id)
+        if roster is None:
+            raise ValueError(f"Roster {roster_id} not found")
+        if roster.status not in (RosterStatus.COMPLETED, RosterStatus.LOCKED):
+            raise RosterLockedError(
+                f"Roster {roster_id} must be COMPLETED or LOCKED to reconcile " f"(status={roster.status.value})"
+            )
+
+        add_ids = list(dict.fromkeys(add_application_ids or []))
+        remove_ids = list(dict.fromkeys(remove_item_ids or []))
+
+        # Re-derive allowed sets — never trust the client.
+        allocated_map = self._resolve_distribution_for_roster(roster)
+        existing_items = self.db.query(PaymentRosterItem).filter(PaymentRosterItem.roster_id == roster_id).all()
+        existing_app_ids = {it.application_id for it in existing_items}
+        items_by_id = {it.id: it for it in existing_items}
+
+        allowed_add = {
+            aid
+            for aid, ri in allocated_map.items()
+            if aid not in existing_app_ids
+            and ri.application is not None
+            and ri.application.status == ApplicationStatus.approved
+        }
+        allowed_remove = {it.id for it in existing_items if it.application_id not in allocated_map}
+
+        bad_add = [a for a in add_ids if a not in allowed_add]
+        if bad_add:
+            raise ValueError(f"Applications {bad_add} are not addable from the current distribution diff")
+        bad_remove = [r for r in remove_ids if r not in allowed_remove]
+        if bad_remove:
+            raise ValueError(f"Items {bad_remove} are not removable from the current distribution diff")
+
+        added, removed = [], []
+
+        for app_id in add_ids:
+            application = self.db.get(Application, app_id)
+            item = self._verify_and_create_item(roster, application)
+            self.db.flush()
+            added.append(
+                {
+                    "application_id": app_id,
+                    "item_id": item.id,
+                    "is_included": item.is_included,
+                    "exclusion_reason": item.exclusion_reason,
+                }
+            )
+            self.db.add(
+                AuditLog.create_log(
+                    user_id=admin_user_id,
+                    action="roster.item_added_from_distribution",
+                    resource_type="payment_roster",
+                    resource_id=str(roster_id),
+                    description=f"Added item {item.id} (application {app_id}) to roster from distribution",
+                    new_values={
+                        "item_id": item.id,
+                        "application_id": app_id,
+                        "is_included": item.is_included,
+                        "reason": reason,
+                    },
+                )
+            )
+
+        for item_id in remove_ids:
+            item = items_by_id[item_id]
+            removed_app_id = item.application_id
+            removed_amount = item.scholarship_amount
+            self.db.delete(item)
+            removed.append({"item_id": item_id, "application_id": removed_app_id})
+            self.db.add(
+                AuditLog.create_log(
+                    user_id=admin_user_id,
+                    action="roster.item_removed_reconcile",
+                    resource_type="payment_roster",
+                    resource_id=str(roster_id),
+                    description=f"Removed item {item_id} (application {removed_app_id}) during reconcile",
+                    new_values={
+                        "item_id": item_id,
+                        "application_id": removed_app_id,
+                        "reason": reason,
+                        "removed_amount": float(removed_amount) if removed_amount else 0,
+                    },
+                )
+            )
+
+        self.db.flush()
+        qualified, total_count, total_amount = self._recompute_roster_totals_sync(roster_id)
+        if added or removed:
+            roster.excel_stale = True
+
+        self.db.add(
+            AuditLog.create_log(
+                user_id=admin_user_id,
+                action="roster.reconciled",
+                resource_type="payment_roster",
+                resource_id=str(roster_id),
+                description=f"Reconciled roster: +{len(added)} / -{len(removed)}",
+                new_values={"added": len(added), "removed": len(removed), "reason": reason},
+            )
+        )
+        self.db.commit()
+
+        return {
+            "added": added,
+            "removed": removed,
+            "qualified_count": qualified,
+            "total_applications": total_count,
+            "total_amount": float(total_amount),
+            "excel_stale": roster.excel_stale,
+        }
+
     def remove_item_from_locked_roster(
         self,
         roster_id: int,
