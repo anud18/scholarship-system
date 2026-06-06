@@ -317,6 +317,110 @@ class TestDepartmentSummaryExportEndpoint:
         assert response.status_code == 200
         assert response.content[:2] == b"PK"
 
+    # ------------------------------------------------------------------
+    # Bundled code group: same-name departments exported together
+    # ------------------------------------------------------------------
+
+    def _seed_extra_department(self, code: str, academy_code: str, name: str = "資訊工程學系"):
+        """Add one more Department row (the scholarship type is seeded separately)."""
+
+        async def _impl():
+            async with _AsyncSession() as session:
+                session.add(Department(code=code, name=name, academy_code=academy_code))
+                await session.commit()
+
+        _run_async(_impl())
+
+    def _seed_application(self, app_pk: int, depno: str, stdcode: str):
+        async def _impl():
+            async with _AsyncSession() as session:
+                session.add(
+                    Application(
+                        id=app_pk,
+                        app_id=f"APP-114-1-{app_pk:05d}",
+                        user_id=app_pk,
+                        scholarship_type_id=1,
+                        academic_year=114,
+                        semester="first",
+                        status="submitted",
+                        sub_type_selection_mode=SubTypeSelectionMode.single,
+                        student_data={"std_depno": depno, "std_stdcode": stdcode},
+                    )
+                )
+                await session.commit()
+
+        _run_async(_impl())
+
+    def test_college_user_foreign_code_in_group_rejected(self):
+        """SECURITY: a college user who slips a foreign-academy code into the group
+        is fully rejected (403) — no partial export of the codes they DO own."""
+        self._seed_department_and_scholarship(dept_code="CE4460", academy_code="CE")
+        self._seed_extra_department(code="EE5500", academy_code="EE")  # foreign academy
+        _seed_college_permissions(user_id=9002, scholarship_type_id=1, academic_year=114)
+
+        college_user = _make_college_user(college_code="CE")
+        client = self._client_with_user(college_user)
+
+        response = client.get(
+            "/api/v1/college-review/applications/department-summary-export",
+            params={
+                "scholarship_type_id": 1,
+                "academic_year": 114,
+                "department_code": "CE4460,EE5500",  # own + foreign
+            },
+        )
+
+        assert response.status_code == 403, response.text
+        assert "無權限" in response.json().get("message", "")
+
+    def test_admin_group_unions_applicants_into_one_workbook(self):
+        """A comma-separated group exports applicants across ALL its codes in one xlsx."""
+        self._seed_department_and_scholarship(dept_code="CE4460", academy_code="CE")
+        self._seed_extra_department(code="CE4461", academy_code="CE")
+        self._seed_application(app_pk=2001, depno="CE4460", stdcode="S001")
+        self._seed_application(app_pk=2002, depno="CE4461", stdcode="S002")
+
+        admin = _make_admin_user()
+        client = self._client_with_user(admin)
+
+        response = client.get(
+            "/api/v1/college-review/applications/department-summary-export",
+            params={
+                "scholarship_type_id": 1,
+                "academic_year": 114,
+                "semester": "first",
+                "department_code": "CE4460,CE4461",
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        import io
+        import zipfile
+
+        z = zipfile.ZipFile(io.BytesIO(response.content))
+        blob = b"".join(z.read(n) for n in z.namelist() if n.endswith(".xml"))
+        # Both departments' applicants appear in the single bundled workbook.
+        assert b"S001" in blob and b"S002" in blob
+
+    def test_group_with_missing_code_returns_404(self):
+        """If any code in the group does not exist, 404 names the missing code."""
+        self._seed_department_and_scholarship(dept_code="CE4460", academy_code="CE")
+
+        admin = _make_admin_user()
+        client = self._client_with_user(admin)
+
+        response = client.get(
+            "/api/v1/college-review/applications/department-summary-export",
+            params={
+                "scholarship_type_id": 1,
+                "academic_year": 114,
+                "department_code": "CE4460,NOSUCHDEPT",
+            },
+        )
+
+        assert response.status_code == 404
+        assert "NOSUCHDEPT" in response.json().get("message", "")
+
 
 # ---------------------------------------------------------------------------
 # Bulk ZIP endpoint tests
