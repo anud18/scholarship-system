@@ -143,30 +143,43 @@ class TestBankVerificationService:
         assert result["verification_status"] == "no_document"
 
     @pytest.mark.asyncio
+    @patch("app.services.minio_service.get_minio_service")
     @patch("app.services.bank_verification_service.get_ocr_service")
-    async def test_verify_bank_account_success_scenario(self, mock_get_ocr_service, verification_service, mock_db):
+    async def test_verify_bank_account_success_scenario(
+        self, mock_get_ocr_service, mock_get_minio_service, verification_service, mock_db
+    ):
         """Test successful bank account verification"""
-        # Mock OCR service
+        # Mock OCR service (extract_bank_info_from_image is awaited)
         mock_ocr_service = MagicMock()
-        mock_ocr_service.extract_bank_info_from_image.return_value = {
-            "success": True,
-            "account_number": "123456789012",
-            "account_holder": "王小明",
-            "branch_name": "台北分行",
-            "confidence": 0.95,
-        }
+        mock_ocr_service.extract_bank_info_from_image = AsyncMock(
+            return_value={
+                "success": True,
+                "account_number": "123456789012",
+                "account_holder": "王小明",
+                "branch_name": "台北分行",
+                "confidence": 0.95,
+            }
+        )
         mock_get_ocr_service.return_value = mock_ocr_service
+
+        # Mock MinIO service (file read is performed before OCR)
+        mock_file_stream = MagicMock()
+        mock_file_stream.read.return_value = b"fake-image-bytes"
+        mock_minio_service = MagicMock()
+        mock_minio_service.get_file_stream.return_value = mock_file_stream
+        mock_get_minio_service.return_value = mock_minio_service
 
         # Mock application with complete data
         application = Application()
         application.id = 1
+        application.meta_data = None
         application.submitted_form_data = {
             "fields": {
                 "bank_account": {"value": "123456789012"},
                 "account_holder": {"value": "王小明"},
             },
             "documents": [
-                {"document_id": "bank_account_cover", "file_path": "test.pdf", "original_filename": "passbook.pdf"}
+                {"document_id": "bank_account_cover", "filename": "test.pdf", "original_filename": "passbook.pdf"}
             ],
         }
 
@@ -174,6 +187,7 @@ class TestBankVerificationService:
         passbook_doc = ApplicationFile()
         passbook_doc.filename = "test.pdf"
         passbook_doc.original_filename = "passbook.pdf"
+        passbook_doc.object_name = "applications/1/test.pdf"
         passbook_doc.uploaded_at = None
 
         mock_result = MagicMock()
@@ -256,8 +270,8 @@ class TestBankVerificationService:
         application.id = 1
         application.submitted_form_data = {
             "documents": [
-                {"document_id": "bank_account_cover", "file_path": "passbook.pdf"},
-                {"document_id": "other_document", "file_path": "other.pdf"},
+                {"document_id": "bank_account_cover", "filename": "passbook.pdf"},
+                {"document_id": "other_document", "filename": "other.pdf"},
             ]
         }
 

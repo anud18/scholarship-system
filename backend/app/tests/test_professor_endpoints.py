@@ -3,10 +3,13 @@ Unit tests for professor review endpoints
 """
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from fastapi import HTTPException
+
+from app.core.exceptions import NotFoundError
 
 # Import test dependencies
 from app.api.v1.endpoints.professor import (
@@ -17,10 +20,28 @@ from app.api.v1.endpoints.professor import (
     submit_professor_review,
 )
 from app.models.user import User, UserRole
-
-# ProfessorReviewCreate/ItemCreate removed; unified review schema now in app.schemas.review
 from app.schemas.application import ApplicationListResponse
-from app.schemas.common import PaginatedResponse
+from app.schemas.review import ReviewItemCreate, ReviewSubmitRequest
+
+
+def _make_review_obj(*, id=1, application_id=10, reviewer_id=1, recommendation="approve", comments=None, items=None):
+    """Build a lightweight stand-in for an ApplicationReview ORM object.
+
+    The endpoint reads plain attributes off the review and its items to build a
+    ``ReviewResponse``; a SimpleNamespace with real datetimes satisfies the
+    Pydantic validation that a bare Mock would break.
+    """
+    now = datetime.now(timezone.utc)
+    return SimpleNamespace(
+        id=id,
+        application_id=application_id,
+        reviewer_id=reviewer_id,
+        recommendation=recommendation,
+        comments=comments,
+        reviewed_at=now,
+        created_at=now,
+        items=items if items is not None else [],
+    )
 
 
 class TestProfessorApplicationsEndpoint:
@@ -73,9 +94,6 @@ class TestProfessorApplicationsEndpoint:
                 professor_id=1,
                 reviewer_id=None,
                 final_approver_id=None,
-                review_score=None,
-                review_comments=None,
-                rejection_reason=None,
                 submitted_at=datetime.now(timezone.utc),
                 reviewed_at=None,
                 approved_at=None,
@@ -92,17 +110,9 @@ class TestProfessorApplicationsEndpoint:
         self, mock_professor, mock_db_session, mock_request, sample_applications
     ):
         """Test successful retrieval of professor applications"""
-        # Mock the service call and rate limiting
-        with (
-            patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class,
-            patch("app.core.rate_limiting.get_rate_limiter") as mock_get_limiter,
-        ):
+        with patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class:
             mock_service = mock_service_class.return_value
             mock_service.get_professor_applications_paginated = AsyncMock(return_value=(sample_applications, 1))
-
-            mock_limiter = Mock()
-            mock_limiter.is_rate_limited = AsyncMock(return_value=(False, 10))
-            mock_get_limiter.return_value = mock_limiter
 
             # Call the endpoint
             result = await get_professor_applications(
@@ -114,13 +124,15 @@ class TestProfessorApplicationsEndpoint:
                 db=mock_db_session,
             )
 
-            # Assertions
-            assert isinstance(result, PaginatedResponse)
-            assert result.items == sample_applications
-            assert result.total == 1
-            assert result.page == 1
-            assert result.size == 20
-            assert result.pages == 1
+            # Endpoint now returns a standardized ApiResponse dict
+            assert result["success"] is True
+            data = result["data"]
+            assert data["total"] == 1
+            assert data["page"] == 1
+            assert data["size"] == 20
+            assert data["pages"] == 1
+            assert len(data["items"]) == 1
+            assert data["items"][0]["id"] == 1
 
             # Verify service was called correctly
             mock_service.get_professor_applications_paginated.assert_called_once_with(
@@ -132,16 +144,9 @@ class TestProfessorApplicationsEndpoint:
         self, mock_professor, mock_db_session, mock_request, sample_applications
     ):
         """Test applications retrieval with status filter"""
-        with (
-            patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class,
-            patch("app.core.rate_limiting.get_rate_limiter") as mock_get_limiter,
-        ):
+        with patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class:
             mock_service = mock_service_class.return_value
             mock_service.get_professor_applications_paginated = AsyncMock(return_value=(sample_applications, 1))
-
-            mock_limiter = Mock()
-            mock_limiter.is_rate_limited = AsyncMock(return_value=(False, 10))
-            mock_get_limiter.return_value = mock_limiter
 
             result = await get_professor_applications(
                 request=mock_request,
@@ -152,9 +157,10 @@ class TestProfessorApplicationsEndpoint:
                 db=mock_db_session,
             )
 
-            assert isinstance(result, PaginatedResponse)
-            assert result.page == 2
-            assert result.size == 10
+            assert result["success"] is True
+            data = result["data"]
+            assert data["page"] == 2
+            assert data["size"] == 10
 
             mock_service.get_professor_applications_paginated.assert_called_once_with(
                 professor_id=mock_professor.id, status_filter="pending", page=2, size=10
@@ -163,16 +169,9 @@ class TestProfessorApplicationsEndpoint:
     @pytest.mark.asyncio
     async def test_get_professor_applications_empty_result(self, mock_professor, mock_db_session, mock_request):
         """Test applications retrieval with no results"""
-        with (
-            patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class,
-            patch("app.core.rate_limiting.get_rate_limiter") as mock_get_limiter,
-        ):
+        with patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class:
             mock_service = mock_service_class.return_value
             mock_service.get_professor_applications_paginated = AsyncMock(return_value=([], 0))
-
-            mock_limiter = Mock()
-            mock_limiter.is_rate_limited = AsyncMock(return_value=(False, 10))
-            mock_get_limiter.return_value = mock_limiter
 
             result = await get_professor_applications(
                 request=mock_request,
@@ -183,24 +182,18 @@ class TestProfessorApplicationsEndpoint:
                 db=mock_db_session,
             )
 
-            assert isinstance(result, PaginatedResponse)
-            assert result.items == []
-            assert result.total == 0
-            assert result.pages == 0
+            assert result["success"] is True
+            data = result["data"]
+            assert data["items"] == []
+            assert data["total"] == 0
+            assert data["pages"] == 0
 
     @pytest.mark.asyncio
     async def test_get_professor_applications_service_error(self, mock_professor, mock_db_session, mock_request):
         """Test applications retrieval when service throws error"""
-        with (
-            patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class,
-            patch("app.core.rate_limiting.get_rate_limiter") as mock_get_limiter,
-        ):
+        with patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class:
             mock_service = mock_service_class.return_value
-            mock_service.get_professor_applications_paginated.side_effect = Exception("Database error")
-
-            mock_limiter = Mock()
-            mock_limiter.is_rate_limited = AsyncMock(return_value=(False, 10))
-            mock_get_limiter.return_value = mock_limiter
+            mock_service.get_professor_applications_paginated = AsyncMock(side_effect=Exception("Database error"))
 
             with pytest.raises(HTTPException) as exc_info:
                 await get_professor_applications(
@@ -213,7 +206,7 @@ class TestProfessorApplicationsEndpoint:
                 )
 
             assert exc_info.value.status_code == 500
-            assert "Failed to fetch applications" in str(exc_info.value.detail)
+            assert "fetching applications" in str(exc_info.value.detail)
 
 
 class TestProfessorReviewEndpoints:
@@ -236,32 +229,32 @@ class TestProfessorReviewEndpoints:
         request.client.host = "127.0.0.1"
         return request
 
-    # NOTE: `sample_review_create` fixture removed alongside the
-    # ProfessorReviewCreate / ProfessorReviewItemCreate schemas during the
-    # unified-review-schema refactor (see app.schemas.review). The
-    # `test_create_professor_review_success` test that consumed it has
-    # already been removed; the fixture itself was the only remaining F821
-    # reference.
+    @pytest.fixture
+    def sample_review_create(self):
+        """Unified review submit payload (ReviewSubmitRequest)."""
+        return ReviewSubmitRequest(
+            items=[
+                ReviewItemCreate(
+                    sub_type_code="nstc",
+                    recommendation="approve",
+                    comments="Looks good",
+                )
+            ]
+        )
 
     @pytest.mark.asyncio
     async def test_get_professor_review_success(self, mock_professor, mock_db_session, mock_request):
         """Test successful retrieval of existing review"""
-        from app.schemas.application import ProfessorReviewResponse
-
-        mock_review = ProfessorReviewResponse(
+        mock_review = _make_review_obj(
             id=1,
             application_id=10,
-            professor_id=1,
-            recommendation="Test recommendation",
-            review_status="approved",
-            reviewed_at=datetime.now(timezone.utc),
-            created_at=datetime.now(timezone.utc),
-            items=[],
+            reviewer_id=1,
+            recommendation="approve",
         )
 
-        with patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class:
+        with patch("app.api.v1.endpoints.professor.ReviewService") as mock_service_class:
             mock_service = mock_service_class.return_value
-            mock_service.get_professor_review = AsyncMock(return_value=mock_review)
+            mock_service.get_review_by_application_and_reviewer = AsyncMock(return_value=mock_review)
 
             result = await get_professor_review(
                 request=mock_request,
@@ -270,15 +263,22 @@ class TestProfessorReviewEndpoints:
                 db=mock_db_session,
             )
 
-            assert result == mock_review
-            mock_service.get_professor_review.assert_called_once_with(application_id=10, professor_id=1)
+            assert result["success"] is True
+            data = result["data"]
+            assert data["id"] == 1
+            assert data["application_id"] == 10
+            assert data["reviewer_id"] == 1
+            assert data["items"] == []
+            mock_service.get_review_by_application_and_reviewer.assert_called_once_with(
+                application_id=10, reviewer_id=1
+            )
 
     @pytest.mark.asyncio
     async def test_get_professor_review_not_found(self, mock_professor, mock_db_session, mock_request):
-        """Test retrieval of non-existent review returns empty structure"""
-        with patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class:
+        """Test retrieval of non-existent review returns null data"""
+        with patch("app.api.v1.endpoints.professor.ReviewService") as mock_service_class:
             mock_service = mock_service_class.return_value
-            mock_service.get_professor_review = AsyncMock(return_value=None)
+            mock_service.get_review_by_application_and_reviewer = AsyncMock(return_value=None)
 
             result = await get_professor_review(
                 request=mock_request,
@@ -287,61 +287,55 @@ class TestProfessorReviewEndpoints:
                 db=mock_db_session,
             )
 
-            # Should return empty review structure for new reviews
-            assert result.id == 0
-            assert result.application_id == 10
-            assert result.professor_id == 1
-            assert result.items == []
+            # When no review exists the endpoint returns null data for the frontend
+            assert result["success"] is True
+            assert result["data"] is None
 
     @pytest.mark.asyncio
     async def test_submit_professor_review_success(
         self, mock_professor, mock_db_session, mock_request, sample_review_create
     ):
         """Test successful review submission"""
-        from app.schemas.application import ProfessorReviewResponse
-
         mock_application = Mock()
         mock_application.id = 10
 
-        mock_review_response = ProfessorReviewResponse(
+        mock_review = _make_review_obj(
             id=1,
             application_id=10,
-            professor_id=1,
-            recommendation=sample_review_create.recommendation,
-            review_status="submitted",
-            reviewed_at=datetime.now(timezone.utc),
-            created_at=datetime.now(timezone.utc),
-            items=[],
+            reviewer_id=1,
+            recommendation="approve",
         )
 
-        with patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class:
-            mock_service = mock_service_class.return_value
-            mock_service.get_application_by_id = AsyncMock(return_value=mock_application)
-            mock_service.can_professor_submit_review = AsyncMock(return_value=True)
-            mock_service.submit_professor_review = AsyncMock(return_value=mock_review_response)
+        with (
+            patch("app.api.v1.endpoints.professor.ApplicationService") as mock_app_service_class,
+            patch("app.api.v1.endpoints.professor.ReviewService") as mock_review_service_class,
+            patch("app.core.config.settings.bypass_time_restrictions", True),
+        ):
+            mock_app_service = mock_app_service_class.return_value
+            mock_app_service.get_application_by_id = AsyncMock(return_value=mock_application)
+            mock_app_service.can_professor_submit_review = AsyncMock(return_value=True)
 
-            # Mock the TESTING environment variable and rate limiting
-            with (
-                patch("os.getenv", return_value="true"),
-                patch("app.core.rate_limiting.get_rate_limiter") as mock_get_limiter,
-            ):
-                mock_limiter = Mock()
-                mock_limiter.is_rate_limited = AsyncMock(return_value=(False, 10))
-                mock_get_limiter.return_value = mock_limiter
+            mock_review_service = mock_review_service_class.return_value
+            mock_review_service.assert_professor_review_unlocked = AsyncMock(return_value=None)
+            mock_review_service.create_review = AsyncMock(return_value=mock_review)
 
-                result = await submit_professor_review(
-                    request=mock_request,
-                    review_data=sample_review_create,
-                    application_id=10,
-                    current_user=mock_professor,
-                    db=mock_db_session,
-                )
-
-            assert result == mock_review_response
-            mock_service.submit_professor_review.assert_called_once_with(
+            result = await submit_professor_review(
+                request=mock_request,
+                review_data=sample_review_create,
                 application_id=10,
-                professor_id=1,
-                review_data=sample_review_create.model_dump(),
+                current_user=mock_professor,
+                db=mock_db_session,
+            )
+
+            assert result["success"] is True
+            data = result["data"]
+            assert data["id"] == 1
+            assert data["application_id"] == 10
+
+            mock_review_service.create_review.assert_called_once_with(
+                application_id=10,
+                reviewer_id=1,
+                items=[item.model_dump() for item in sample_review_create.items],
             )
 
     @pytest.mark.asyncio
@@ -350,15 +344,11 @@ class TestProfessorReviewEndpoints:
     ):
         """Test review submission for non-existent application"""
         with (
-            patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class,
-            patch("app.core.rate_limiting.get_rate_limiter") as mock_get_limiter,
+            patch("app.api.v1.endpoints.professor.ApplicationService") as mock_app_service_class,
+            patch("app.api.v1.endpoints.professor.ReviewService"),
         ):
-            mock_service = mock_service_class.return_value
-            mock_service.get_application_by_id = AsyncMock(return_value=None)
-
-            mock_limiter = Mock()
-            mock_limiter.is_rate_limited = AsyncMock(return_value=(False, 10))
-            mock_get_limiter.return_value = mock_limiter
+            mock_app_service = mock_app_service_class.return_value
+            mock_app_service.get_application_by_id = AsyncMock(return_value=None)
 
             with pytest.raises(HTTPException) as exc_info:
                 await submit_professor_review(
@@ -381,30 +371,25 @@ class TestProfessorReviewEndpoints:
         mock_application.id = 10
 
         with (
-            patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class,
-            patch("app.core.rate_limiting.get_rate_limiter") as mock_get_limiter,
+            patch("app.api.v1.endpoints.professor.ApplicationService") as mock_app_service_class,
+            patch("app.api.v1.endpoints.professor.ReviewService"),
+            patch("app.core.config.settings.bypass_time_restrictions", False),
         ):
-            mock_service = mock_service_class.return_value
-            mock_service.get_application_by_id = AsyncMock(return_value=mock_application)
-            mock_service.can_professor_submit_review = AsyncMock(return_value=False)
+            mock_app_service = mock_app_service_class.return_value
+            mock_app_service.get_application_by_id = AsyncMock(return_value=mock_application)
+            mock_app_service.can_professor_submit_review = AsyncMock(return_value=False)
 
-            mock_limiter = Mock()
-            mock_limiter.is_rate_limited = AsyncMock(return_value=(False, 10))
-            mock_get_limiter.return_value = mock_limiter
+            with pytest.raises(HTTPException) as exc_info:
+                await submit_professor_review(
+                    request=mock_request,
+                    review_data=sample_review_create,
+                    application_id=10,
+                    current_user=mock_professor,
+                    db=mock_db_session,
+                )
 
-            # Mock the TESTING environment variable as false
-            with patch("os.getenv", return_value="false"):
-                with pytest.raises(HTTPException) as exc_info:
-                    await submit_professor_review(
-                        request=mock_request,
-                        review_data=sample_review_create,
-                        application_id=10,
-                        current_user=mock_professor,
-                        db=mock_db_session,
-                    )
-
-                assert exc_info.value.status_code == 403
-                assert "Professor not authorized to submit review" in str(exc_info.value.detail)
+            assert exc_info.value.status_code == 403
+            assert "Professor not authorized" in str(exc_info.value.detail)
 
 
 class TestProfessorSubTypesEndpoint:
@@ -455,15 +440,22 @@ class TestProfessorSubTypesEndpoint:
                 db=mock_db_session,
             )
 
-            assert result == sample_sub_types
-            mock_service.get_application_available_sub_types.assert_called_once_with(10)
+            assert result["success"] is True
+            assert result["data"] == sample_sub_types
+            mock_service.get_application_available_sub_types.assert_called_once_with(10, mock_professor)
 
     @pytest.mark.asyncio
-    async def test_get_application_sub_types_service_error(self, mock_professor, mock_db_session, mock_request):
-        """Test sub-types retrieval when service throws error"""
+    async def test_get_application_sub_types_application_not_found(self, mock_professor, mock_db_session, mock_request):
+        """Test sub-types retrieval surfaces a 404 when the application is missing.
+
+        The endpoint only translates NotFoundError into a 404; other service
+        errors propagate to FastAPI's framework-level handler (no 500 wrap here).
+        """
         with patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class:
             mock_service = mock_service_class.return_value
-            mock_service.get_application_available_sub_types = AsyncMock(side_effect=Exception("Service error"))
+            mock_service.get_application_available_sub_types = AsyncMock(
+                side_effect=NotFoundError("Application not found")
+            )
 
             with pytest.raises(HTTPException) as exc_info:
                 await get_application_sub_types(
@@ -473,8 +465,8 @@ class TestProfessorSubTypesEndpoint:
                     db=mock_db_session,
                 )
 
-            assert exc_info.value.status_code == 500
-            assert "Failed to fetch sub-types" in str(exc_info.value.detail)
+            assert exc_info.value.status_code == 404
+            assert "Application not found" in str(exc_info.value.detail)
 
 
 class TestProfessorStatsEndpoint:
@@ -507,22 +499,16 @@ class TestProfessorStatsEndpoint:
         self, mock_professor, mock_db_session, mock_request, sample_stats
     ):
         """Test successful retrieval of statistics"""
-        with (
-            patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class,
-            patch("app.core.rate_limiting.get_rate_limiter") as mock_get_limiter,
-        ):
+        with patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class:
             mock_service = mock_service_class.return_value
             mock_service.get_professor_review_stats = AsyncMock(return_value=sample_stats)
-
-            mock_limiter = Mock()
-            mock_limiter.is_rate_limited = AsyncMock(return_value=(False, 10))
-            mock_get_limiter.return_value = mock_limiter
 
             result = await get_professor_review_stats(
                 request=mock_request, current_user=mock_professor, db=mock_db_session
             )
 
-            assert result == {
+            assert result["success"] is True
+            assert result["data"] == {
                 "pending_reviews": 5,
                 "completed_reviews": 12,
                 "overdue_reviews": 2,
@@ -532,16 +518,9 @@ class TestProfessorStatsEndpoint:
     @pytest.mark.asyncio
     async def test_get_professor_review_stats_service_error(self, mock_professor, mock_db_session, mock_request):
         """Test statistics retrieval when service throws error"""
-        with (
-            patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class,
-            patch("app.core.rate_limiting.get_rate_limiter") as mock_get_limiter,
-        ):
+        with patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class:
             mock_service = mock_service_class.return_value
             mock_service.get_professor_review_stats = AsyncMock(side_effect=Exception("Database connection failed"))
-
-            mock_limiter = Mock()
-            mock_limiter.is_rate_limited = AsyncMock(return_value=(False, 10))
-            mock_get_limiter.return_value = mock_limiter
 
             with pytest.raises(HTTPException) as exc_info:
                 await get_professor_review_stats(
@@ -551,4 +530,4 @@ class TestProfessorStatsEndpoint:
                 )
 
             assert exc_info.value.status_code == 500
-            assert "Failed to fetch statistics" in str(exc_info.value.detail)
+            assert "fetching statistics" in str(exc_info.value.detail)

@@ -74,9 +74,31 @@ class TestMockSSO:
 
         assert response.status_code == 400
         data = response.json()
-        assert "Username is required" in data["message"]
+        assert "NYCU ID is required" in data["message"]
 
-    async def test_mock_users_contain_all_roles(self, client: AsyncClient):
+    @pytest.fixture
+    async def all_role_users(self, db: AsyncSession) -> None:
+        """Seed one user per role so /mock-sso/users (which queries the DB)
+        can return every role on the fresh per-test database."""
+        for role in (
+            UserRole.student,
+            UserRole.professor,
+            UserRole.college,
+            UserRole.admin,
+            UserRole.super_admin,
+        ):
+            db.add(
+                User(
+                    nycu_id=f"mock_{role.value}",
+                    name=f"Mock {role.value}",
+                    email=f"mock_{role.value}@nycu.edu.tw",
+                    user_type=UserType.employee if role != UserRole.student else UserType.student,
+                    role=role,
+                )
+            )
+        await db.commit()
+
+    async def test_mock_users_contain_all_roles(self, client: AsyncClient, all_role_users: None):
         """Test that mock users include all user roles"""
         response = await client.get("/api/v1/auth/mock-sso/users")
 

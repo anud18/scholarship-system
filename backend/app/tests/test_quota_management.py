@@ -3,30 +3,98 @@ Tests for quota management functionality
 """
 
 import pytest
+import pytest_asyncio
 from httpx import AsyncClient
-from sqlalchemy import Column, Integer, String
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.college_mappings import get_all_colleges, is_valid_college_code
-from app.db.base_class import Base
-from app.models.application import Application, ApplicationStatus
-
-# Student model removed - student data from external API
-from app.models.enums import QuotaManagementMode, Semester
+from app.core.security import require_admin, require_staff
+from app.main import app
+from app.models.application import Application
+from app.models.enums import ApplicationStatus, QuotaManagementMode, Semester, SubTypeSelectionMode
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
-from app.models.user import AdminScholarship, User
+from app.models.user import AdminScholarship, User, UserRole, UserType
 
 
-class Student(Base):  # pragma: no cover - lightweight model for tests only
-    """Minimal student model used by quota management tests."""
+@pytest_asyncio.fixture
+async def super_admin_user(db: AsyncSession) -> User:
+    """Create a real super-admin user persisted in the test DB."""
+    user = User(
+        nycu_id="superadmin",
+        name="Super Admin",
+        email="superadmin@university.edu",
+        user_type=UserType.employee,
+        role=UserRole.super_admin,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
 
-    __tablename__ = "test_students"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    student_id = Column(String(20), unique=True, nullable=False)
-    name = Column(String(100), nullable=False)
-    dept_code = Column(String(10), nullable=False)
-    year = Column(Integer, nullable=False)
+@pytest_asyncio.fixture
+async def admin_db_user(db: AsyncSession) -> User:
+    """Create a real (regular) admin user persisted in the test DB."""
+    user = User(
+        nycu_id="reguladmin",
+        name="Regular Admin",
+        email="reguladmin@university.edu",
+        user_type=UserType.employee,
+        role=UserRole.admin,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+def _auth_as(user: User):
+    """Override admin/staff guards so endpoints resolve to the given user without a real JWT."""
+
+    def _override() -> User:
+        return user
+
+    app.dependency_overrides[require_admin] = _override
+    app.dependency_overrides[require_staff] = _override
+
+
+def _make_config(scholarship_type_id: int, **overrides) -> ScholarshipConfiguration:
+    """Build a ScholarshipConfiguration with all NOT NULL columns populated."""
+    defaults = dict(
+        scholarship_type_id=scholarship_type_id,
+        academic_year=113,
+        semester=None,
+        config_name="Test Config",
+        config_code=f"cfg-{scholarship_type_id}-{overrides.get('academic_year', 113)}-{overrides.get('semester', 'y')}",
+        quota_management_mode=QuotaManagementMode.matrix_based,
+        is_active=True,
+        amount=40000,
+    )
+    defaults.update(overrides)
+    return ScholarshipConfiguration(**defaults)
+
+
+def _make_application(scholarship_type_id: int, user_id: int, college_code: str, **overrides) -> Application:
+    """Build an Application with all NOT NULL columns populated.
+
+    Quota usage in the endpoint is derived from student_data['std_academyno'] and
+    quota_allocation_status == 'allocated' (not from a Student model / status).
+    """
+    defaults = dict(
+        app_id=overrides.pop("app_id"),
+        user_id=user_id,
+        scholarship_type_id=scholarship_type_id,
+        scholarship_subtype_list=["nstc"],
+        sub_type_selection_mode=SubTypeSelectionMode.single,
+        academic_year=113,
+        semester=None,
+        status=ApplicationStatus.approved.value,
+        quota_allocation_status="allocated",
+        student_data={"std_academyno": college_code},
+        agree_terms=True,
+    )
+    defaults.update(overrides)
+    return Application(**defaults)
 
 
 class TestQuotaManagementPermissions:
@@ -35,31 +103,26 @@ class TestQuotaManagementPermissions:
     @pytest.mark.asyncio
     async def test_super_admin_can_access_quota_endpoints(
         self,
-        async_client: AsyncClient,
+        client: AsyncClient,
         super_admin_user: User,
-        db_session: AsyncSession,
+        db: AsyncSession,
     ):
         """Super admin should have full access to quota management"""
-        # Create PhD scholarship configuration
-        phd_scholarship = ScholarshipType(code="phd", name="博士生獎學金", category="doctoral", status="active")
-        db_session.add(phd_scholarship)
-        await db_session.commit()
+        _auth_as(super_admin_user)
 
-        config = ScholarshipConfiguration(
-            scholarship_type_id=phd_scholarship.id,
-            academic_year=113,
-            semester=None,
-            quota_management_mode=QuotaManagementMode.matrix_based,
-            is_active=True,
+        phd_scholarship = ScholarshipType(code="phd", name="博士生獎學金", status="active")
+        db.add(phd_scholarship)
+        await db.commit()
+
+        config = _make_config(
+            phd_scholarship.id,
             quotas={"nstc": {"E": 5, "C": 3}, "moe_1w": {"E": 2, "C": 1}},
         )
-        db_session.add(config)
-        await db_session.commit()
+        db.add(config)
+        await db.commit()
 
-        # Test available semesters endpoint
-        response = await async_client.get(
+        response = await client.get(
             "/api/v1/scholarship-configurations/available-semesters?quota_management_mode=matrix_based",
-            headers={"Authorization": f"Bearer {super_admin_user.token}"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -68,32 +131,28 @@ class TestQuotaManagementPermissions:
 
     @pytest.mark.asyncio
     async def test_regular_admin_with_permission_can_access(
-        self, async_client: AsyncClient, admin_user: User, db_session: AsyncSession
+        self, client: AsyncClient, admin_db_user: User, db: AsyncSession
     ):
         """Regular admin with scholarship permissions should have access"""
-        # Create PhD scholarship
-        phd_scholarship = ScholarshipType(code="phd", name="博士生獎學金", category="doctoral", status="active")
-        db_session.add(phd_scholarship)
-        await db_session.commit()
+        _auth_as(admin_db_user)
 
-        # Grant permission to admin
-        permission = AdminScholarship(admin_id=admin_user.id, scholarship_id=phd_scholarship.id)
-        db_session.add(permission)
-        await db_session.commit()
+        phd_scholarship = ScholarshipType(code="phd", name="博士生獎學金", status="active")
+        db.add(phd_scholarship)
+        await db.commit()
 
-        response = await async_client.get(
-            "/api/v1/scholarship-configurations/available-semesters",
-            headers={"Authorization": f"Bearer {admin_user.token}"},
-        )
+        permission = AdminScholarship(admin_id=admin_db_user.id, scholarship_id=phd_scholarship.id)
+        db.add(permission)
+        await db.commit()
+
+        response = await client.get("/api/v1/scholarship-configurations/available-semesters")
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    async def test_regular_admin_without_permission_denied(self, async_client: AsyncClient, admin_user: User):
-        """Regular admin without permissions should be denied"""
-        response = await async_client.get(
-            "/api/v1/scholarship-configurations/available-semesters",
-            headers={"Authorization": f"Bearer {admin_user.token}"},
-        )
+    async def test_regular_admin_without_permission_denied(self, client: AsyncClient, admin_db_user: User):
+        """Regular admin without permissions sees no accessible scholarships"""
+        _auth_as(admin_db_user)
+
+        response = await client.get("/api/v1/scholarship-configurations/available-semesters")
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
@@ -106,40 +165,33 @@ class TestMatrixQuotaOperations:
     @pytest.mark.asyncio
     async def test_get_matrix_quota_status_success(
         self,
-        async_client: AsyncClient,
+        client: AsyncClient,
         super_admin_user: User,
-        db_session: AsyncSession,
+        db: AsyncSession,
     ):
         """Test successful retrieval of matrix quota status"""
-        # Setup PhD scholarship with matrix configuration
+        _auth_as(super_admin_user)
+
         phd_scholarship = ScholarshipType(
             code="phd",
             name="博士生獎學金",
-            category="doctoral",
             status="active",
             sub_type_list=["nstc", "moe_1w", "moe_2w"],
         )
-        db_session.add(phd_scholarship)
-        await db_session.commit()
+        db.add(phd_scholarship)
+        await db.commit()
 
-        config = ScholarshipConfiguration(
-            scholarship_type_id=phd_scholarship.id,
-            academic_year=113,
-            semester=None,
-            quota_management_mode=QuotaManagementMode.matrix_based,
-            is_active=True,
+        config = _make_config(
+            phd_scholarship.id,
             quotas={
                 "nstc": {"E": 5, "C": 3, "I": 2},
                 "moe_1w": {"E": 2, "C": 1, "I": 1},
             },
         )
-        db_session.add(config)
-        await db_session.commit()
+        db.add(config)
+        await db.commit()
 
-        response = await async_client.get(
-            "/api/v1/scholarship-configurations/matrix-quota-status/113",
-            headers={"Authorization": f"Bearer {super_admin_user.token}"},
-        )
+        response = await client.get("/api/v1/scholarship-configurations/matrix-quota-status/113")
 
         assert response.status_code == 200
         data = response.json()
@@ -156,36 +208,31 @@ class TestMatrixQuotaOperations:
     @pytest.mark.asyncio
     async def test_update_matrix_quota_success(
         self,
-        async_client: AsyncClient,
+        client: AsyncClient,
         super_admin_user: User,
-        db_session: AsyncSession,
+        db: AsyncSession,
     ):
         """Test successful quota update"""
-        # Setup PhD scholarship
+        _auth_as(super_admin_user)
+
         phd_scholarship = ScholarshipType(
             code="phd",
             name="博士生獎學金",
-            category="doctoral",
             status="active",
             sub_type_list=["nstc", "moe_1w"],
         )
-        db_session.add(phd_scholarship)
-        await db_session.commit()
+        db.add(phd_scholarship)
+        await db.commit()
 
-        config = ScholarshipConfiguration(
-            scholarship_type_id=phd_scholarship.id,
-            academic_year=113,
-            semester=None,
-            quota_management_mode=QuotaManagementMode.matrix_based,
-            is_active=True,
+        config = _make_config(
+            phd_scholarship.id,
             quotas={"nstc": {"E": 5, "C": 3}, "moe_1w": {"E": 2, "C": 1}},
             total_quota=11,
         )
-        db_session.add(config)
-        await db_session.commit()
+        db.add(config)
+        await db.commit()
 
-        # Update quota
-        response = await async_client.put(
+        response = await client.put(
             "/api/v1/scholarship-configurations/matrix-quota",
             json={
                 "sub_type": "nstc",
@@ -193,7 +240,6 @@ class TestMatrixQuotaOperations:
                 "new_quota": 8,
                 "academic_year": 113,
             },
-            headers={"Authorization": f"Bearer {super_admin_user.token}"},
         )
 
         assert response.status_code == 200
@@ -205,12 +251,14 @@ class TestMatrixQuotaOperations:
     @pytest.mark.asyncio
     async def test_update_matrix_quota_negative_value_rejected(
         self,
-        async_client: AsyncClient,
+        client: AsyncClient,
         super_admin_user: User,
-        db_session: AsyncSession,
+        db: AsyncSession,
     ):
         """Test that negative quota values are rejected"""
-        response = await async_client.put(
+        _auth_as(super_admin_user)
+
+        response = await client.put(
             "/api/v1/scholarship-configurations/matrix-quota",
             json={
                 "sub_type": "nstc",
@@ -218,12 +266,12 @@ class TestMatrixQuotaOperations:
                 "new_quota": -1,
                 "academic_year": 113,
             },
-            headers={"Authorization": f"Bearer {super_admin_user.token}"},
         )
 
         assert response.status_code == 400
         data = response.json()
-        assert "Quota cannot be negative" in data["message"]
+        # Endpoint returns the Chinese message "配額不能為負數".
+        assert "配額不能為負數" in data["message"]
 
 
 class TestQuotaUsageCalculation:
@@ -232,74 +280,65 @@ class TestQuotaUsageCalculation:
     @pytest.mark.asyncio
     async def test_quota_usage_calculation_accuracy(
         self,
-        async_client: AsyncClient,
+        client: AsyncClient,
         super_admin_user: User,
-        db_session: AsyncSession,
+        db: AsyncSession,
     ):
         """Test that quota usage is calculated correctly from applications"""
-        # Setup scholarship and student
+        _auth_as(super_admin_user)
+
         phd_scholarship = ScholarshipType(
             code="phd",
             name="博士生獎學金",
-            category="doctoral",
             status="active",
             sub_type_list=["nstc"],
         )
-        db_session.add(phd_scholarship)
-        await db_session.commit()
+        db.add(phd_scholarship)
+        await db.commit()
 
-        config = ScholarshipConfiguration(
-            scholarship_type_id=phd_scholarship.id,
-            academic_year=113,
-            semester=None,
-            quota_management_mode=QuotaManagementMode.matrix_based,
-            is_active=True,
+        config = _make_config(
+            phd_scholarship.id,
             quotas={"nstc": {"E": 5, "C": 3}},
         )
-        db_session.add(config)
-        await db_session.commit()
+        db.add(config)
+        await db.commit()
 
-        # Create students in different colleges
-        student_e = Student(student_id="110001001", name="Test Student E", dept_code="E", year=3)
-        student_c = Student(student_id="110001002", name="Test Student C", dept_code="C", year=3)
-        db_session.add_all([student_e, student_c])
-        await db_session.commit()
+        # Applicants need real Users (Application.user_id FK). College comes from
+        # student_data['std_academyno']; usage counts quota_allocation_status='allocated'.
+        applicant_e = User(
+            nycu_id="applicant_e",
+            name="Applicant E",
+            email="applicant_e@university.edu",
+            user_type=UserType.student,
+            role=UserRole.student,
+        )
+        applicant_c = User(
+            nycu_id="applicant_c",
+            name="Applicant C",
+            email="applicant_c@university.edu",
+            user_type=UserType.student,
+            role=UserRole.student,
+        )
+        db.add_all([applicant_e, applicant_c])
+        await db.commit()
+        await db.refresh(applicant_e)
+        await db.refresh(applicant_c)
 
-        # Create approved applications
-        app1 = Application(
-            scholarship_type_id=phd_scholarship.id,
-            student_id=student_e.id,
-            academic_year=113,
-            status=ApplicationStatus.approved,
-        )
-        app2 = Application(
-            scholarship_type_id=phd_scholarship.id,
-            student_id=student_e.id,
-            academic_year=113,
-            status=ApplicationStatus.approved,
-        )
-        app3 = Application(
-            scholarship_type_id=phd_scholarship.id,
-            student_id=student_c.id,
-            academic_year=113,
-            status=ApplicationStatus.approved,
-        )
-        db_session.add_all([app1, app2, app3])
-        await db_session.commit()
+        # 2 allocated apps for college E, 1 for college C.
+        app1 = _make_application(phd_scholarship.id, applicant_e.id, "E", app_id="APP-113-0-00001")
+        app2 = _make_application(phd_scholarship.id, applicant_e.id, "E", app_id="APP-113-0-00002")
+        app3 = _make_application(phd_scholarship.id, applicant_c.id, "C", app_id="APP-113-0-00003")
+        db.add_all([app1, app2, app3])
+        await db.commit()
 
-        # Get quota status
-        response = await async_client.get(
-            "/api/v1/scholarship-configurations/matrix-quota-status/113",
-            headers={"Authorization": f"Bearer {super_admin_user.token}"},
-        )
+        response = await client.get("/api/v1/scholarship-configurations/matrix-quota-status/113")
 
         assert response.status_code == 200
         data = response.json()
         quota_data = data["data"]
 
-        # Check usage calculation
-        assert quota_data["phd_quotas"]["nstc"]["E"]["used"] == 2  # 2 approved apps for college E
-        assert quota_data["phd_quotas"]["nstc"]["C"]["used"] == 1  # 1 approved app for college C
+        assert quota_data["phd_quotas"]["nstc"]["E"]["used"] == 2  # 2 allocated apps for college E
+        assert quota_data["phd_quotas"]["nstc"]["C"]["used"] == 1  # 1 allocated app for college C
         assert quota_data["phd_quotas"]["nstc"]["E"]["available"] == 3  # 5 - 2 = 3
         assert quota_data["phd_quotas"]["nstc"]["C"]["available"] == 2  # 3 - 1 = 2
 
@@ -310,51 +349,43 @@ class TestPeriodFiltering:
     @pytest.mark.asyncio
     async def test_matrix_based_filtering_shows_only_academic_years(
         self,
-        async_client: AsyncClient,
+        client: AsyncClient,
         super_admin_user: User,
-        db_session: AsyncSession,
+        db: AsyncSession,
     ):
         """Test that matrix-based scholarships only show academic years, not semesters"""
+        _auth_as(super_admin_user)
 
-        # Create PhD scholarship (yearly, matrix-based)
-        phd_scholarship = ScholarshipType(code="phd", name="博士生獎學金", category="doctoral", status="active")
-        db_session.add(phd_scholarship)
+        phd_scholarship = ScholarshipType(code="phd", name="博士生獎學金", status="active")
+        db.add(phd_scholarship)
 
-        # Create undergraduate scholarship (semester-based, not matrix)
         undergrad_scholarship = ScholarshipType(
             code="undergraduate_freshman",
             name="大學部新生獎學金",
-            category="undergraduate",
             status="active",
         )
-        db_session.add(undergrad_scholarship)
-        await db_session.commit()
+        db.add(undergrad_scholarship)
+        await db.commit()
 
         # PhD config - yearly, matrix-based
-        phd_config = ScholarshipConfiguration(
-            scholarship_type_id=phd_scholarship.id,
-            academic_year=113,
-            semester=None,  # No semester for yearly scholarships
+        phd_config = _make_config(
+            phd_scholarship.id,
+            semester=None,
             quota_management_mode=QuotaManagementMode.matrix_based,
-            is_active=True,
         )
 
         # Undergrad config - semester-based, not matrix
-        undergrad_config = ScholarshipConfiguration(
-            scholarship_type_id=undergrad_scholarship.id,
-            academic_year=113,
-            semester=Semester.first,  # Has semester
+        undergrad_config = _make_config(
+            undergrad_scholarship.id,
+            semester=Semester.first,
             quota_management_mode=QuotaManagementMode.simple,
-            is_active=True,
         )
 
-        db_session.add_all([phd_config, undergrad_config])
-        await db_session.commit()
+        db.add_all([phd_config, undergrad_config])
+        await db.commit()
 
-        # Test matrix_based filtering
-        response = await async_client.get(
+        response = await client.get(
             "/api/v1/scholarship-configurations/available-semesters?quota_management_mode=matrix_based",
-            headers={"Authorization": f"Bearer {super_admin_user.token}"},
         )
 
         assert response.status_code == 200
@@ -374,7 +405,6 @@ class TestCollegeMappings:
         """Test that all college codes have proper mappings"""
         colleges = get_all_colleges()
 
-        # Check that we have all expected colleges
         expected_codes = [
             "E",
             "C",
@@ -400,7 +430,6 @@ class TestCollegeMappings:
         """Test that mappings are consistent between backend and frontend expectations"""
         from app.core.college_mappings import COLLEGE_MAPPINGS as BACKEND_MAPPINGS
 
-        # Test some key mappings
         assert BACKEND_MAPPINGS["E"] == "電機學院"
         assert BACKEND_MAPPINGS["C"] == "資訊學院"
         assert BACKEND_MAPPINGS["I"] == "工學院"
@@ -410,8 +439,9 @@ class TestAPIResponseFormat:
     """Test API response format consistency"""
 
     @pytest.mark.asyncio
-    async def test_api_response_format_consistency(self, async_client: AsyncClient, super_admin_user: User):
+    async def test_api_response_format_consistency(self, client: AsyncClient, super_admin_user: User):
         """Test that all quota API endpoints return consistent response format"""
+        _auth_as(super_admin_user)
 
         endpoints_to_test = [
             "/api/v1/scholarship-configurations/available-semesters",
@@ -420,18 +450,13 @@ class TestAPIResponseFormat:
         ]
 
         for endpoint in endpoints_to_test:
-            response = await async_client.get(endpoint, headers={"Authorization": f"Bearer {super_admin_user.token}"})
+            response = await client.get(endpoint)
 
             assert response.status_code == 200
             data = response.json()
 
-            # Check standard ApiResponse format
             assert "success" in data
             assert "message" in data
             assert "data" in data
             assert isinstance(data["success"], bool)
             assert isinstance(data["message"], str)
-
-
-# Fixtures for test setup would be defined here or in conftest.py
-# These are referenced but implementation depends on your existing test setup

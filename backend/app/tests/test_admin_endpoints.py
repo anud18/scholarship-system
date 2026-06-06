@@ -84,8 +84,7 @@ class TestAdminEndpoints:
         scholarship = ScholarshipType(
             code="test_scholarship",
             name="Test Scholarship",
-            description="Test",
-            category="undergraduate_freshman",  # Required field
+            description="Test",  # Required field
         )
         db.add(scholarship)
         await db.commit()
@@ -111,8 +110,8 @@ class TestAdminEndpoints:
                 scholarship_type_id=scholarship.id,
                 status=ApplicationStatus.submitted.value,
                 academic_year=113,
-                semester="FIRST",
-                sub_type_selection_mode="SINGLE",
+                semester="first",
+                sub_type_selection_mode="single",
                 created_at=datetime.now(timezone.utc),
             ),
             Application(
@@ -121,8 +120,8 @@ class TestAdminEndpoints:
                 scholarship_type_id=scholarship.id,
                 status=ApplicationStatus.under_review.value,
                 academic_year=113,
-                semester="FIRST",
-                sub_type_selection_mode="SINGLE",
+                semester="first",
+                sub_type_selection_mode="single",
                 created_at=datetime.now(timezone.utc) - timedelta(days=1),
             ),
         ]
@@ -143,9 +142,10 @@ class TestAdminEndpoints:
         # Assert
         assert response.status_code == 200
         data = response.json()
-        # Check paginated response format
-        assert "items" in data
-        assert len(data["items"]) == 2
+        # ApiResponse envelope wraps the paginated payload under "data"
+        assert data["success"] is True
+        assert "items" in data["data"]
+        assert len(data["data"]["items"]) == 2
 
     @pytest.mark.asyncio
     async def test_get_all_applications_permission_denied(self, non_admin_client):
@@ -168,68 +168,42 @@ class TestAdminEndpoints:
         # Assert
         assert response.status_code == 200
         data = response.json()
-        # Paginated response has items directly
-        assert "items" in data
-        assert "total" in data
+        # ApiResponse envelope wraps the paginated payload under "data"
+        assert data["success"] is True
+        assert "items" in data["data"]
+        assert "total" in data["data"]
         # Should have at least 1 submitted application from sample_applications
-        assert len(data["items"]) >= 1
+        assert len(data["data"]["items"]) >= 1
 
     @pytest.mark.asyncio
-    async def test_get_historical_applications(self, admin_client):
-        """Test historical applications endpoint"""
-        # Arrange
-        with patch("app.api.v1.endpoints.admin.get_db") as mock_get_db:
-            mock_db = AsyncMock()
-            mock_get_db.return_value.__aenter__.return_value = mock_db
+    async def test_get_historical_applications(self, admin_client, sample_applications):
+        """Test historical applications endpoint (real DB via overridden get_db)."""
+        # Act
+        response = await admin_client.get("/api/v1/admin/applications/history")
 
-            # Mock query results
-            mock_result = Mock()
-            mock_result.fetchall.return_value = []
-            mock_count_result = Mock()
-            mock_count_result.scalar.return_value = 0
-
-            mock_db.execute.side_effect = [mock_result, mock_count_result]
-
-            # Act
-            response = await admin_client.get("/api/v1/admin/applications/history")
-
-            # Assert
-            assert response.status_code == 200
-            data = response.json()
-            assert "items" in data
-            assert "total" in data
-            assert "page" in data
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "items" in data["data"]
+        assert "total" in data["data"]
+        assert "page" in data["data"]
 
     @pytest.mark.asyncio
-    async def test_get_dashboard_stats_success(self, admin_client):
-        """Test dashboard statistics endpoint"""
-        # Arrange
-        with patch("app.api.v1.endpoints.admin.get_db") as mock_get_db:
-            mock_db = AsyncMock()
-            mock_get_db.return_value.__aenter__.return_value = mock_db
+    async def test_get_dashboard_stats_success(self, admin_client, sample_applications):
+        """Test dashboard statistics endpoint (real DB; assert field presence)."""
+        # Act
+        response = await admin_client.get("/api/v1/admin/dashboard/stats")
 
-            # Mock various statistical queries
-            mock_db.execute.return_value.scalar.side_effect = [
-                100,  # total_applications
-                25,  # pending_applications
-                50,  # approved_applications
-                15,  # rejected_applications
-                10,  # active_scholarships
-                5,  # recent_applications
-            ]
-
-            # Act
-            response = await admin_client.get("/api/v1/admin/dashboard/stats")
-
-            # Assert
-            assert response.status_code == 200
-            data = response.json()
-            assert data["success"] is True
-            assert "total_applications" in data["data"]
-            assert "pending_review" in data["data"]  # Actual field name
-            assert "approved" in data["data"]
-            assert "rejected" in data["data"]
-            assert "avg_processing_time" in data["data"]
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "total_applications" in data["data"]
+        assert "pending_review" in data["data"]  # Actual field name
+        assert "approved" in data["data"]
+        assert "rejected" in data["data"]
+        assert "avg_processing_time" in data["data"]
 
     @pytest.mark.asyncio
     async def test_assign_professor_to_application_success(self, admin_client, client, sample_applications):
@@ -283,8 +257,8 @@ class TestAdminEndpoints:
         )
 
         # Assert
-        # Endpoint returns 500 when application not found, not 404
-        assert response.status_code == 500
+        # Service raises NotFoundError, which the endpoint maps to 404
+        assert response.status_code == 404
 
     @pytest.mark.asyncio
     async def test_get_recent_applications(self, admin_client, sample_applications):
@@ -301,103 +275,84 @@ class TestAdminEndpoints:
         assert len(data["data"]) >= 0
 
     @pytest.mark.asyncio
-    async def test_get_applications_by_scholarship(self, admin_client, scholarship_type):
-        """Test applications by scholarship type endpoint"""
-        # Arrange
-        with patch("app.api.v1.endpoints.admin.get_db") as mock_get_db:
-            mock_db = AsyncMock()
-            mock_get_db.return_value.__aenter__.return_value = mock_db
+    async def test_get_applications_by_scholarship(self, admin_client, client):
+        """Test applications by scholarship type endpoint (real DB)."""
+        # Arrange - create a real scholarship type in the shared DB session
+        from app.db.deps import get_db
+        from app.main import app
+        from app.models.scholarship import ScholarshipType
 
-            # Mock scholarship existence check
-            mock_scholarship_result = Mock()
-            mock_scholarship_result.scalar_one_or_none.return_value = scholarship_type
+        db = await app.dependency_overrides[get_db]().__anext__()
+        scholarship = ScholarshipType(
+            code="by_scholarship_test",
+            name="By Scholarship Test",
+            description="For scholarship-applications endpoint test",
+        )
+        db.add(scholarship)
+        await db.commit()
+        await db.refresh(scholarship)
 
-            # Mock applications query
-            mock_apps_result = Mock()
-            mock_apps_result.fetchall.return_value = []
+        # Act
+        response = await admin_client.get(f"/api/v1/admin/scholarships/{scholarship.id}/applications")
 
-            mock_count_result = Mock()
-            mock_count_result.scalar.return_value = 0
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
 
-            mock_db.execute.side_effect = [
-                mock_scholarship_result,
-                mock_apps_result,
-                mock_count_result,
-            ]
+    @pytest_asyncio.fixture
+    async def professor_users(self, client):
+        """Create two professor users in the shared DB session."""
+        from app.db.deps import get_db
+        from app.main import app
+        from app.models.user import User, UserType
 
-            # Act
-            response = await admin_client.get(f"/api/v1/admin/scholarships/{scholarship_type.id}/applications")
-
-            # Assert
-            assert response.status_code == 200
-            data = response.json()
-            assert data["success"] is True
-
-    @pytest.mark.asyncio
-    async def test_get_available_professors(self, admin_client):
-        """Test available professors endpoint"""
-        # Arrange
-        with patch("app.api.v1.endpoints.admin.get_db") as mock_get_db:
-            mock_db = AsyncMock()
-            mock_get_db.return_value.__aenter__.return_value = mock_db
-
-            mock_professors = [
-                Mock(
-                    id=1,
-                    name="Prof. Smith",
-                    email="smith@university.edu",
-                    nycu_id="P001",
-                ),
-                Mock(
-                    id=2,
-                    name="Prof. Johnson",
-                    email="johnson@university.edu",
-                    nycu_id="P002",
-                ),
-            ]
-
-            mock_result = Mock()
-            mock_result.scalars.return_value.all.return_value = mock_professors
-            mock_db.execute.return_value = mock_result
-
-            # Act
-            response = await admin_client.get("/api/v1/admin/professors")
-
-            # Assert
-            assert response.status_code == 200
-            data = response.json()
-            assert data["success"] is True
-            assert len(data["data"]) == 2
+        db = await app.dependency_overrides[get_db]().__anext__()
+        profs = [
+            User(
+                nycu_id="P001",
+                name="Prof. Smith",
+                email="smith@university.edu",
+                user_type=UserType.employee,
+                role=UserRole.professor,
+            ),
+            User(
+                nycu_id="P002",
+                name="Prof. Johnson",
+                email="johnson@university.edu",
+                user_type=UserType.employee,
+                role=UserRole.professor,
+            ),
+        ]
+        for prof in profs:
+            db.add(prof)
+        await db.commit()
+        return profs
 
     @pytest.mark.asyncio
-    async def test_get_available_professors_with_search(self, admin_client):
-        """Test professors endpoint with search parameter"""
-        # Arrange
-        with patch("app.api.v1.endpoints.admin.get_db") as mock_get_db:
-            mock_db = AsyncMock()
-            mock_get_db.return_value.__aenter__.return_value = mock_db
+    async def test_get_available_professors(self, admin_client, professor_users):
+        """Test available professors endpoint (real DB)."""
+        # Act
+        response = await admin_client.get("/api/v1/admin/professors")
 
-            mock_professors = [
-                Mock(
-                    id=1,
-                    name="Prof. Smith",
-                    email="smith@university.edu",
-                    nycu_id="P001",
-                )
-            ]
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert len(data["data"]) == 2
 
-            mock_result = Mock()
-            mock_result.scalars.return_value.all.return_value = mock_professors
-            mock_db.execute.return_value = mock_result
+    @pytest.mark.asyncio
+    async def test_get_available_professors_with_search(self, admin_client, professor_users):
+        """Test professors endpoint with search parameter (real DB)."""
+        # Act
+        response = await admin_client.get("/api/v1/admin/professors?search=smith")
 
-            # Act
-            response = await admin_client.get("/api/v1/admin/professors?search=smith")
-
-            # Assert
-            assert response.status_code == 200
-            data = response.json()
-            assert data["success"] is True
-            assert len(data["data"]) == 1
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert len(data["data"]) == 1
+        assert data["data"][0]["nycu_id"] == "P001"
 
     @pytest.mark.asyncio
     async def test_bulk_approve_applications_success(self, admin_client):
@@ -409,7 +364,7 @@ class TestAdminEndpoints:
             "comments": "Bulk approval for qualified candidates",
         }
 
-        with patch("app.services.bulk_approval_service.BulkApprovalService") as mock_service_class:
+        with patch("app.api.v1.endpoints.admin.applications.BulkApprovalService") as mock_service_class:
             mock_service = mock_service_class.return_value
             mock_service.bulk_approve_applications = AsyncMock(return_value={"approved": 3, "failed": 0, "details": []})
 
@@ -437,6 +392,7 @@ class TestAdminEndpoints:
         # Assert
         assert response.status_code == 422  # Validation error
 
+    @pytest.mark.skip(reason="endpoint removed: GET /admin/applications/export no longer exists")
     @pytest.mark.asyncio
     async def test_export_applications_csv(self, admin_client):
         """Test applications export in CSV format"""
@@ -473,6 +429,7 @@ class TestAdminEndpoints:
             assert data["success"] is True
             assert "database" in data["data"]
 
+    @pytest.mark.skip(reason="endpoint removed: GET /admin/system/logs no longer exists")
     @pytest.mark.asyncio
     async def test_get_system_logs(self, admin_client):
         """Test system logs endpoint"""
@@ -494,26 +451,21 @@ class TestAdminEndpoints:
 
     @pytest.mark.asyncio
     async def test_update_system_settings(self, admin_client):
-        """Test system settings update"""
-        # Arrange
-        settings_data = {
-            "max_file_size": 10485760,  # 10MB
-            "allowed_file_types": ["pdf", "jpg", "jpeg", "png"],
-            "email_notifications_enabled": True,
-        }
+        """Test system setting update (route renamed to /system-setting, real DB)."""
+        # Arrange - endpoint now takes a single {key, value} setting
+        setting_data = {"key": "email_notifications_enabled", "value": "true"}
 
-        with patch("app.services.system_setting_service.SystemSettingService") as mock_service_class:
-            mock_service = mock_service_class.return_value
-            mock_service.update_settings = AsyncMock(return_value=settings_data)
+        # Act
+        response = await admin_client.put("/api/v1/admin/system-setting", json=setting_data)
 
-            # Act
-            response = await admin_client.put("/api/v1/admin/system/settings", json=settings_data)
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["data"]["key"] == "email_notifications_enabled"
+        assert data["data"]["value"] == "true"
 
-            # Assert
-            assert response.status_code == 200
-            data = response.json()
-            assert data["success"] is True
-
+    @pytest.mark.skip(reason="endpoint removed: GET /admin/audit-logs no longer exists")
     @pytest.mark.asyncio
     async def test_get_audit_logs(self, admin_client):
         """Test audit logs retrieval"""
@@ -565,8 +517,8 @@ class TestAdminEndpoints:
     @pytest.mark.asyncio
     async def test_malformed_request_returns_422(self, admin_client):
         """Test that malformed requests return validation error"""
-        # Act
-        response = await admin_client.post(
+        # Act - assign-professor is a PUT route; a body missing professor_nycu_id is a 422
+        response = await admin_client.put(
             "/api/v1/admin/applications/1/assign-professor",
             json={"invalid_field": "invalid_value"},
         )
@@ -601,7 +553,6 @@ class TestAdminEndpoints:
                 code="delete_test_scholarship",
                 name="Delete Test Scholarship",
                 description="For testing admin delete endpoint",
-                category="undergraduate_freshman",
             )
             db.add(scholarship)
             await db.commit()
@@ -636,7 +587,7 @@ class TestAdminEndpoints:
                 status=status_value,
                 academic_year=113,
                 semester="first",
-                sub_type_selection_mode="SINGLE",
+                sub_type_selection_mode="single",
                 student_data={"std_cname": f"學生{i}", "std_stdcode": f"3104600{i:02d}"},
                 created_at=datetime.now(timezone.utc),
             )
