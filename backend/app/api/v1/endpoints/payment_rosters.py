@@ -31,6 +31,9 @@ from app.models.payment_roster import (
 from app.models.user import User, UserRole
 from app.schemas.response import ApiResponse
 from app.schemas.payment_roster import (
+    DistributionDiff,
+    ReconcileRequest,
+    ReconcileResult,
     RemoveLockedItemRequest,
     RevokedSuspendedListResponse,
 )
@@ -2123,3 +2126,53 @@ def remove_locked_roster_item(
     except (ValueError, RosterLockedError) as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return {"success": True, "message": "已從造冊移除", "data": result}
+
+
+@router.get("/{roster_id}/distribution-diff")
+def get_distribution_diff(
+    roster_id: int,
+    db: Session = Depends(get_sync_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Compare a generated roster against its slice of the distribution.
+    Returns allocated-but-missing (to_add) and in-roster-but-unallocated
+    (to_remove) lists for the admin to selectively reconcile."""
+    _require_admin(current_user)
+    svc = RosterService(db)
+    try:
+        result = svc.get_distribution_diff_for_roster(roster_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    payload = DistributionDiff(**result).model_dump()
+    return {"success": True, "message": "OK", "data": payload}
+
+
+@router.post("/{roster_id}/reconcile")
+def reconcile_roster_endpoint(
+    roster_id: int,
+    request: ReconcileRequest,
+    db: Session = Depends(get_sync_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Selectively add allocated students missing from the roster (補充人) and/or
+    remove items no longer allocated. Works on COMPLETED and LOCKED rosters;
+    sets excel_stale; audits each change. Presentation-layer only — does not
+    touch quota."""
+    _require_admin(current_user)
+    lock_key = f"roster:reconcile:{roster_id}"
+    try:
+        with with_lock_sync(lock_key, ttl_seconds=300):
+            svc = RosterService(db)
+            result = svc.reconcile_roster(
+                roster_id=roster_id,
+                add_application_ids=request.add_application_ids,
+                remove_item_ids=request.remove_item_ids,
+                admin_user_id=current_user.id,
+                reason=request.reason,
+            )
+    except LockBusy as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="造冊處理中，請稍候再試") from exc
+    except (ValueError, RosterLockedError) as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    payload = ReconcileResult(**result).model_dump()
+    return {"success": True, "message": "已更新造冊名單", "data": payload}
