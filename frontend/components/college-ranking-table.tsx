@@ -116,6 +116,26 @@ function formatIdentityLabel(
   return locale === "zh" ? `身分別 ${code}` : `Identity ${code}`;
 }
 
+// Trigger a browser download for a fetched binary export. Shared by the ranking
+// export and template-download handlers, which both receive { blob, filename }
+// from the college API module.
+function triggerBlobDownload({
+  blob,
+  filename,
+}: {
+  blob: Blob;
+  filename: string;
+}): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 interface Application {
   id: number;
   app_id: string;
@@ -603,15 +623,11 @@ export function CollegeRankingTable({
 
       if (errors.length > 0) {
         toast.error(errors.join("\n"), { duration: 10000 });
-        setIsImporting(false);
-        event.target.value = "";
         return;
       }
 
       if (importData.length === 0) {
         toast.error("Excel 檔案中沒有找到有效的排名資料");
-        setIsImporting(false);
-        event.target.value = "";
         return;
       }
 
@@ -644,16 +660,9 @@ export function CollegeRankingTable({
       return;
     }
     try {
-      const { blob, filename } = await downloadRankingTemplate(rankingId);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      toast.success(`已下載範本檔案：${filename}`);
+      const result = await downloadRankingTemplate(rankingId);
+      triggerBlobDownload(result);
+      toast.success(`已下載範本檔案：${result.filename}`);
     } catch (error) {
       logger.error("Template download error", { error: error });
       toast.error(error instanceof Error ? error.message : "無法產生範本檔案");
@@ -666,16 +675,9 @@ export function CollegeRankingTable({
       return;
     }
     try {
-      const { blob, filename } = await exportRankingExcel(rankingId);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      toast.success(`已下載 ${filename}`);
+      const result = await exportRankingExcel(rankingId);
+      triggerBlobDownload(result);
+      toast.success(`已下載 ${result.filename}`);
     } catch (error) {
       logger.error("Export error", { error: error });
       toast.error(error instanceof Error ? error.message : "無法匯出排名資料");

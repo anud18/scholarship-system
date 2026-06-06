@@ -29,6 +29,13 @@ export interface ParseResult {
   errors: string[];
 }
 
+// Count how many times each value appears, in first-seen order.
+function countOccurrences<T>(values: T[]): Map<T, number> {
+  const counts = new Map<T, number>();
+  values.forEach(v => counts.set(v, (counts.get(v) ?? 0) + 1));
+  return counts;
+}
+
 export function parseRankingSheet(
   rows: Array<Record<string, unknown>>
 ): ParseResult {
@@ -78,16 +85,13 @@ export function parseRankingSheet(
   });
 
   // Duplicate 學號
-  const seenStudentIds = new Set<string>();
-  const duplicateStudentIds = new Set<string>();
-  importData.forEach(item => {
-    if (seenStudentIds.has(item.student_id)) {
-      duplicateStudentIds.add(item.student_id);
-    }
-    seenStudentIds.add(item.student_id);
-  });
-  if (duplicateStudentIds.size > 0) {
-    errors.push(`學號重複：${Array.from(duplicateStudentIds).join(", ")}`);
+  const duplicateStudentIds = [
+    ...countOccurrences(importData.map(item => item.student_id)),
+  ]
+    .filter(([, count]) => count > 1)
+    .map(([studentId]) => studentId);
+  if (duplicateStudentIds.length > 0) {
+    errors.push(`學號重複：${duplicateStudentIds.join(", ")}`);
   }
 
   // Duplicate integer ranks
@@ -95,9 +99,7 @@ export function parseRankingSheet(
     .filter(item => typeof item.rank_position === "number")
     .map(item => item.rank_position as number);
 
-  const rankCounts = new Map<number, number>();
-  integerRanks.forEach(r => rankCounts.set(r, (rankCounts.get(r) || 0) + 1));
-  rankCounts.forEach((count, rank) => {
+  countOccurrences(integerRanks).forEach((count, rank) => {
     if (count > 1) {
       errors.push(`排名 ${rank} 重複出現（${count} 次）`);
     }
