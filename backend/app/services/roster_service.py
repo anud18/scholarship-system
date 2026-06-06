@@ -27,7 +27,7 @@ from app.models.audit_log import AuditLog
 from app.models.roster_audit import RosterAuditAction, RosterAuditLevel
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
 from app.models.user import User
-from app.schemas.payment_roster import RevokedSuspendedEntry
+from app.schemas.payment_roster import DistributionDiffEntry, RevokedSuspendedEntry
 from app.services.audit_service import audit_service
 from app.services.student_verification_service import StudentVerificationService
 
@@ -1797,6 +1797,184 @@ class RosterService:
             )
             (revoked if app.quota_allocation_status == "revoked" else suspended).append(entry)
         return {"revoked": revoked, "suspended": suspended}
+
+    def _recompute_roster_totals_sync(self, roster_id: int) -> tuple:
+        """Recompute + persist total_applications / qualified_count /
+        disqualified_count / total_amount for a roster from its items.
+        Returns (qualified, total_count, total_amount). SYNC."""
+        total_count, qualified, total_amount = (
+            self.db.query(
+                func.count(PaymentRosterItem.id),
+                func.coalesce(
+                    func.sum(sa_case((PaymentRosterItem.is_included.is_(True), 1), else_=0)),
+                    0,
+                ),
+                func.coalesce(
+                    func.sum(
+                        sa_case(
+                            (PaymentRosterItem.is_included.is_(True), PaymentRosterItem.scholarship_amount),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+            )
+            .filter(PaymentRosterItem.roster_id == roster_id)
+            .one()
+        )
+        roster = self.db.get(PaymentRoster, roster_id)
+        roster.total_applications = total_count
+        roster.qualified_count = qualified
+        roster.disqualified_count = total_count - qualified
+        roster.total_amount = total_amount
+        return qualified, total_count, total_amount
+
+    def _resolve_distribution_for_roster(
+        self, roster: PaymentRoster, config: Optional[ScholarshipConfiguration] = None
+    ) -> dict:
+        """Return {application_id: CollegeRankingItem} for allocated ranking
+        items that belong in THIS roster's (allocation_year, sub_type) group,
+        across all finalized + distribution_executed rankings for the roster's
+        scholarship_type / academic_year / semester. Mirrors
+        generate_rosters_from_distribution grouping exactly."""
+        from app.models.college_review import CollegeRanking, CollegeRankingItem
+
+        if config is None:
+            config = self.db.get(ScholarshipConfiguration, roster.scholarship_configuration_id)
+        if config is None:
+            raise ValueError(f"Scholarship configuration {roster.scholarship_configuration_id} not found")
+
+        semester = (
+            (config.semester.value if hasattr(config.semester, "value") else config.semester)
+            if config.semester
+            else None
+        )
+        if semester in (None, "annual", "yearly", ""):
+            sem_filter = or_(
+                CollegeRanking.semester.is_(None),
+                CollegeRanking.semester == "annual",
+                CollegeRanking.semester == "yearly",
+            )
+        else:
+            sem_filter = CollegeRanking.semester == semester
+
+        rankings = (
+            self.db.query(CollegeRanking)
+            .filter(
+                and_(
+                    CollegeRanking.scholarship_type_id == config.scholarship_type_id,
+                    CollegeRanking.academic_year == config.academic_year,
+                    sem_filter,
+                    CollegeRanking.is_finalized.is_(True),
+                    CollegeRanking.distribution_executed.is_(True),
+                )
+            )
+            .all()
+        )
+        ranking_ids = [r.id for r in rankings]
+        if not ranking_ids:
+            return {}
+
+        allocated = (
+            self.db.query(CollegeRankingItem)
+            .options(joinedload(CollegeRankingItem.application))
+            .filter(
+                and_(
+                    CollegeRankingItem.ranking_id.in_(ranking_ids),
+                    CollegeRankingItem.is_allocated.is_(True),
+                )
+            )
+            .all()
+        )
+
+        roster_year = roster.allocation_year or config.academic_year
+        roster_sub = roster.sub_type or "general"
+
+        result: dict = {}
+        for item in allocated:
+            item_year = item.allocation_year or config.academic_year
+            item_sub = item.allocated_sub_type or "general"
+            if item_year == roster_year and item_sub == roster_sub:
+                result[item.application_id] = item
+        return result
+
+    def get_distribution_diff_for_roster(self, roster_id: int) -> dict:
+        """Compute the diff between this roster and its slice of the
+        distribution. Returns a dict with to_add (allocated-but-missing) and
+        to_remove (in-roster-but-unallocated) lists of DistributionDiffEntry."""
+        from app.models.application import ApplicationStatus
+
+        roster = self.db.get(PaymentRoster, roster_id)
+        if roster is None:
+            raise ValueError(f"Roster {roster_id} not found")
+
+        config = self.db.get(ScholarshipConfiguration, roster.scholarship_configuration_id)
+        if config is None:
+            raise ValueError(f"Scholarship configuration {roster.scholarship_configuration_id} not found")
+        allocated_map = self._resolve_distribution_for_roster(roster, config=config)
+
+        existing_items = self.db.query(PaymentRosterItem).filter(PaymentRosterItem.roster_id == roster_id).all()
+        existing_app_ids = {it.application_id for it in existing_items}
+
+        to_add = []
+        for app_id, ranking_item in allocated_map.items():
+            if app_id in existing_app_ids:
+                continue
+            application = ranking_item.application
+            if application is None or application.status != ApplicationStatus.approved:
+                continue
+            sd = application.student_data or {}
+            to_add.append(
+                DistributionDiffEntry(
+                    application_id=app_id,
+                    item_id=None,
+                    student_id=sd.get("std_stdcode", ""),
+                    student_name=sd.get("std_cname", ""),
+                    department_name=sd.get("trm_depname"),
+                    college_name=sd.get("trm_academyname"),
+                    allocation_year=ranking_item.allocation_year,
+                    allocated_sub_type=ranking_item.allocated_sub_type,
+                    application_identity=None,
+                    scholarship_amount=float(application.amount or config.amount or 0),
+                )
+            )
+
+        orphan_app_ids = {it.application_id for it in existing_items if it.application_id not in allocated_map}
+        orphan_apps = (
+            self.db.query(Application).filter(Application.id.in_(orphan_app_ids)).all() if orphan_app_ids else []
+        )
+        apps_by_id = {a.id: a for a in orphan_apps}
+
+        to_remove = []
+        for item in existing_items:
+            if item.application_id in allocated_map:
+                continue
+            app = apps_by_id.get(item.application_id)
+            sd = (app.student_data or {}) if app else {}
+            to_remove.append(
+                DistributionDiffEntry(
+                    application_id=item.application_id,
+                    item_id=item.id,
+                    student_id=sd.get("std_stdcode", item.student_id_number),
+                    student_name=item.student_name,
+                    department_name=sd.get("trm_depname"),
+                    college_name=sd.get("trm_academyname"),
+                    allocation_year=item.allocation_year,
+                    allocated_sub_type=item.allocated_sub_type,
+                    application_identity=item.application_identity,
+                    scholarship_amount=float(item.scholarship_amount or 0),
+                )
+            )
+
+        return {
+            "roster_id": roster.id,
+            "roster_code": roster.roster_code,
+            "status": roster.status.value,
+            "allocation_year": roster.allocation_year,
+            "sub_type": roster.sub_type,
+            "to_add": to_add,
+            "to_remove": to_remove,
+        }
 
     def remove_item_from_locked_roster(
         self,
