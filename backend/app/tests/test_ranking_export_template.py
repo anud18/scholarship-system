@@ -6,11 +6,13 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 from openpyxl import load_workbook
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import require_scholarship_manager
 from app.main import app
 from app.models.application import Application, ApplicationStatus
+from app.models.audit_log import AuditAction, AuditLog
 from app.models.college_review import CollegeRanking, CollegeRankingItem
 from app.models.scholarship import (
     ScholarshipConfiguration,
@@ -48,9 +50,7 @@ async def scholarship(db: AsyncSession) -> ScholarshipType:
 
 
 @pytest_asyncio.fixture
-async def configuration(
-    db: AsyncSession, scholarship: ScholarshipType, admin_user: User
-) -> ScholarshipConfiguration:
+async def configuration(db: AsyncSession, scholarship: ScholarshipType, admin_user: User) -> ScholarshipConfiguration:
     cfg = ScholarshipConfiguration(
         scholarship_type_id=scholarship.id,
         academic_year=114,
@@ -154,6 +154,20 @@ class TestExportTemplateFlag:
         assert str(ws.cell(row=3, column=13).value) == "310460099"  # 學號 present
         assert (ws.cell(row=3, column=2).value or "") == ""  # rank BLANK
 
+        # PII audit must be recorded even for the template: the 彙整表 still
+        # contains plaintext std_pid, so the template export is logged like any
+        # other, tagged is_template=True.
+        result = await db.execute(
+            select(AuditLog).where(
+                AuditLog.action == AuditAction.pii_access.value,
+                AuditLog.resource_type == "college_ranking",
+                AuditLog.resource_id == str(ranking_with_item.id),
+            )
+        )
+        audit = result.scalars().first()
+        assert audit is not None, "template export must record a pii_access audit"
+        assert audit.meta_data["is_template"] is True
+
     async def test_default_keeps_rank_filled(
         self,
         client: AsyncClient,
@@ -163,9 +177,7 @@ class TestExportTemplateFlag:
     ):
         app.dependency_overrides[require_scholarship_manager] = lambda: admin_user
         try:
-            resp = await client.get(
-                f"/api/v1/college-review/rankings/{ranking_with_item.id}/export-excel"
-            )
+            resp = await client.get(f"/api/v1/college-review/rankings/{ranking_with_item.id}/export-excel")
         finally:
             app.dependency_overrides.pop(require_scholarship_manager, None)
 

@@ -77,4 +77,15 @@ describe("parseRankingSheet", () => {
     ]);
     expect(errors.some(e => e.includes("排名不連續"))).toBe(true);
   });
+
+  it("does not treat N as a gap: ranks 1,2 + one N are consecutive", () => {
+    const { importData, errors } = parseRankingSheet([
+      rowOf("310460099", "王小明", 1),
+      rowOf("310460100", "李小華", 2),
+      rowOf("310460101", "張小強", "N"),
+    ]);
+    expect(errors).toEqual([]);
+    expect(importData).toHaveLength(3);
+    expect(importData[2].rank_position).toBe("N");
+  });
 });
