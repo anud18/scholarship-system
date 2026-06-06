@@ -48,6 +48,7 @@ interface Period {
   sub_type?: string | null;
   allocation_year?: number | null;
   project_number?: string | null;
+  excel_stale?: boolean;
 }
 
 interface RosterListTableProps {
