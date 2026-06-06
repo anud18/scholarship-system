@@ -117,9 +117,7 @@ def test_all_reference_data_returns_api_response():
     departments = data["departments"]
     if departments:
         dept = departments[0]
-        assert "academy_code" in dept, (
-            f"department object in /all is missing 'academy_code': {dept!r}"
-        )
+        assert "academy_code" in dept, f"department object in /all is missing 'academy_code': {dept!r}"
 
 
 def test_scholarship_types_with_cycles_returns_api_response():
