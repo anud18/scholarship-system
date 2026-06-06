@@ -141,19 +141,40 @@ export function ApplicationReviewPanel({
   // into one option, keyed within academy. Selecting it exports every code in the
   // group as a single 總表. value = the comma-joined codes (backend splits on ",").
   const departmentGroups = useMemo(() => {
-    const groups = new Map<string, { name: string; codes: string[] }>();
+    const groups = new Map<
+      string,
+      { name: string; academyCode: string | null; codes: string[] }
+    >();
     for (const d of visibleDepartments as Array<{
       code: string;
       name: string;
       academy_code?: string | null;
     }>) {
-      const key = `${d.academy_code ?? ""}__${d.name}`;
+      const academyCode = d.academy_code ?? null;
+      const key = `${academyCode ?? ""}__${d.name}`;
       const existing = groups.get(key);
       if (existing) existing.codes.push(d.code);
-      else groups.set(key, { name: d.name, codes: [d.code] });
+      else groups.set(key, { name: d.name, academyCode, codes: [d.code] });
     }
     return Array.from(groups.values());
   }, [visibleDepartments]);
+
+  // A program name can exist under more than one academy (only reachable by admins,
+  // whose visibleDepartments spans academies). Those need the academy appended so the
+  // two same-named options stay distinguishable; college views never hit this.
+  const ambiguousGroupNames = useMemo(() => {
+    const academiesByName = new Map<string, Set<string>>();
+    for (const g of departmentGroups) {
+      const set = academiesByName.get(g.name) ?? new Set<string>();
+      set.add(g.academyCode ?? "");
+      academiesByName.set(g.name, set);
+    }
+    return new Set(
+      Array.from(academiesByName.entries())
+        .filter(([, codes]) => codes.size > 1)
+        .map(([name]) => name)
+    );
+  }, [departmentGroups]);
 
   // Fetch college quota when scholarship type, year, or semester changes
   const fetchCollegeQuota = useCallback(async () => {
@@ -732,9 +753,12 @@ export function ApplicationReviewPanel({
             <SelectContent>
               {departmentGroups.map(group => {
                 const value = group.codes.join(",");
+                const label = ambiguousGroupNames.has(group.name)
+                  ? `${group.name}（${getAcademyName(group.academyCode, academies)}）`
+                  : group.name;
                 return (
                   <SelectItem key={value} value={value}>
-                    {group.name}
+                    {label}
                   </SelectItem>
                 );
               })}
