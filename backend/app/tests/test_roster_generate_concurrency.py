@@ -127,6 +127,7 @@ def _make_application(
     app_id: str = "APP-113-1-00001",
     student_id: str = "112550001",
     student_name: str = "羅斯特同學",
+    national_id: str = "A123456789",
 ) -> Application:
     a = Application(
         user_id=user.id,
@@ -138,7 +139,7 @@ def _make_application(
         app_id=app_id,
         academic_year=113,
         semester="first",
-        student_data={"std_stdcode": student_id, "std_cname": student_name},
+        student_data={"std_stdcode": student_id, "std_cname": student_name, "std_pid": national_id},
         submitted_form_data={},
         agree_terms=True,
         amount=Decimal("50000"),

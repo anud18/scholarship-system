@@ -2,7 +2,7 @@
 Unit tests for NotificationService
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 
 import pytest
@@ -202,7 +202,7 @@ class TestNotificationService:
         application_id = 123
         new_status = "rejected"
 
-        with patch.object(service, "createUserNotification") as mock_create:
+        with patch.object(service, "create_notification") as mock_create:
             mock_notification = Mock(spec=Notification)
             mock_create.return_value = mock_notification
 
@@ -210,12 +210,12 @@ class TestNotificationService:
                 user_id=user_id, application_id=application_id, new_status=new_status
             )
 
-            # Verify createUserNotification was called with correct parameters
+            mock_create.assert_called_once()
             call_args = mock_create.call_args[1]
 
-            assert "很抱歉" in call_args["message"]  # Rejected message should contain apology
-            assert call_args["notification_type"] == NotificationType.info.value
-            assert call_args["priority"] == NotificationPriority.high.value
+            assert "很抱歉" in call_args["data"]["message"]  # Rejected message should contain apology
+            assert call_args["notification_type"] == NotificationType.info
+            assert call_args["priority"] == NotificationPriority.high
 
             assert result == mock_notification
 
@@ -226,7 +226,7 @@ class TestNotificationService:
         application_id = 123
         new_status = "under_review"
 
-        with patch.object(service, "createUserNotification") as mock_create:
+        with patch.object(service, "create_notification") as mock_create:
             mock_notification = Mock(spec=Notification)
             mock_create.return_value = mock_notification
 
@@ -234,22 +234,24 @@ class TestNotificationService:
                 user_id=user_id, application_id=application_id, new_status=new_status
             )
 
-            # Verify createUserNotification was called with correct parameters
+            mock_create.assert_called_once()
             call_args = mock_create.call_args[1]
 
-            assert "審核中" in call_args["message"]  # Under review message
-            assert call_args["notification_type"] == NotificationType.info.value
-            assert call_args["priority"] == NotificationPriority.normal.value
+            assert "審核中" in call_args["data"]["message"]  # Under review message
+            assert call_args["notification_type"] == NotificationType.info
+            assert call_args["priority"] == NotificationPriority.normal
 
             assert result == mock_notification
 
     @pytest.mark.asyncio
     async def test_notify_document_required_with_deadline(self, service):
         """Test notifying required documents with deadline"""
+        from datetime import timezone
+
         user_id = 1
         application_id = 123
         required_documents = ["成績單", "推薦信", "證明文件"]
-        deadline = datetime.now() + timedelta(days=7)
+        deadline = datetime.now(timezone.utc) + timedelta(days=7)
 
         with patch.object(service, "createUserNotification") as mock_create:
             mock_notification = Mock(spec=Notification)
@@ -269,8 +271,8 @@ class TestNotificationService:
             assert call_args["title"] == "申請文件補充通知"
             assert call_args["title_en"] == "Document Requirement Notification"
             assert "成績單、推薦信、證明文件" in call_args["message"]
-            assert call_args["notification_type"] == NotificationType.warning.value
-            assert call_args["priority"] == NotificationPriority.high.value
+            assert call_args["notification_type"] == NotificationType.warning
+            assert call_args["priority"] == NotificationPriority.high
             assert call_args["expires_at"] == deadline
 
             assert result == mock_notification
@@ -305,10 +307,12 @@ class TestNotificationService:
     @pytest.mark.asyncio
     async def test_notify_deadline_reminder_multiple_days(self, service):
         """Test deadline reminder with multiple days left"""
+        from datetime import timezone
+
         user_id = 1
         title = "獎學金申請"
         title_en = "Scholarship Application"
-        deadline = datetime.now() + timedelta(days=5)
+        deadline = datetime.now(timezone.utc) + timedelta(days=6)
         action_url = "/applications/123"
 
         with patch.object(service, "createUserNotification") as mock_create:
@@ -327,17 +331,19 @@ class TestNotificationService:
             call_args = mock_create.call_args[1]
 
             assert "5 天後到期" in call_args["message"]
-            assert call_args["priority"] == NotificationPriority.high.value
-            assert call_args["notification_type"] == NotificationType.reminder.value
+            assert call_args["priority"] == NotificationPriority.high
+            assert call_args["notification_type"] == NotificationType.reminder
 
             assert result == mock_notification
 
     @pytest.mark.asyncio
     async def test_notify_deadline_reminder_tomorrow(self, service):
         """Test deadline reminder with one day left"""
+        from datetime import timezone
+
         user_id = 1
         title = "獎學金申請"
-        deadline = datetime.now() + timedelta(days=1)
+        deadline = datetime.now(timezone.utc) + timedelta(days=2)
 
         with patch.object(service, "createUserNotification") as mock_create:
             mock_notification = Mock(spec=Notification)
@@ -358,7 +364,7 @@ class TestNotificationService:
         """Test deadline reminder when deadline has passed"""
         user_id = 1
         title = "獎學金申請"
-        deadline = datetime.now() - timedelta(days=1)  # Yesterday
+        deadline = datetime.now(timezone.utc) - timedelta(days=1)  # Yesterday
 
         with patch.object(service, "createUserNotification") as mock_create:
             mock_notification = Mock(spec=Notification)
@@ -393,7 +399,7 @@ class TestNotificationService:
                 notification.user_id = user_ids[i]
 
             with patch(
-                "app.models.notification.Notification",
+                "app.services.notification_service.Notification",
                 side_effect=created_notifications,
             ):
                 result = await service.bulkNotifyUsers(

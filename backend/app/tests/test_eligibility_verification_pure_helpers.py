@@ -33,16 +33,17 @@ def _service() -> EligibilityVerificationService:
 
 
 def _scholarship_type(**overrides) -> ScholarshipType:
-    """Construct a ScholarshipType bypassing SQLAlchemy ORM init."""
-    s = object.__new__(ScholarshipType)
+    """Construct an in-memory ScholarshipType (no DB session)."""
     defaults = {
         "id": 1,
         "code": "TEST",
         "eligible_student_types": None,
     }
     defaults.update(overrides)
-    for k, v in defaults.items():
-        object.__setattr__(s, k, v)
+    # Construct via __init__ to get _sa_instance_state, then stuff __dict__
+    # directly so vestigial/non-column keys are tolerated (bypasses descriptors).
+    s = ScholarshipType()
+    s.__dict__.update(defaults)
     return s
 
 

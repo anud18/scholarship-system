@@ -33,6 +33,7 @@ export function middleware(request: NextRequest) {
       "script-src 'self' 'unsafe-eval' 'unsafe-inline'", // HMR requires unsafe-eval
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
+      "frame-src 'self' blob:", // inline file preview: same-origin /api proxy + just-selected blob: PDFs
       "font-src 'self'",
       "connect-src 'self' ws: wss:", // WebSocket for HMR
       "frame-ancestors 'none'",
@@ -53,6 +54,7 @@ export function middleware(request: NextRequest) {
       `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`, // strict-dynamic for bundled scripts
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
+      "frame-src 'self' blob:", // inline file preview: same-origin /api proxy + just-selected blob: PDFs
       "font-src 'self'",
       "connect-src 'self' https://*.nycu.edu.tw",
       "base-uri 'self'",

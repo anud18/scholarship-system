@@ -165,8 +165,15 @@ def test_decrypt_tamper_raises_no_fallback():
     with patch.dict(os.environ, _env_with_v1_key(), clear=False):
         reset_key_cache()
         ct = encrypt_pii("A123456789")
-        # Flip a single character in the payload
-        tampered = ct[:-1] + ("A" if ct[-1] != "A" else "B")
+        # Flip a character in the MIDDLE of the base64 payload. Flipping the LAST
+        # char is flaky: with padding stripped it can change only unused base64
+        # bits, leaving the decoded bytes (and GCM tag) intact → decrypt succeeds
+        # and the test sees DID NOT RAISE. A middle char maps to a full byte of
+        # nonce/ciphertext/tag, so the corruption (and auth failure) is reliable.
+        prefix, sep, payload = ct.rpartition(":")
+        mid = len(payload) // 2
+        flipped = "A" if payload[mid] != "A" else "B"
+        tampered = f"{prefix}{sep}{payload[:mid]}{flipped}{payload[mid + 1:]}"
         with pytest.raises(PIICryptoError) as exc:
             decrypt_pii(tampered)
         # Either authentication failure OR malformed envelope is acceptable

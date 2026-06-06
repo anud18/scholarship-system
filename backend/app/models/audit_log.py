@@ -4,7 +4,7 @@ Audit log model for tracking system activities
 
 import enum
 
-from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -92,6 +92,17 @@ class AuditLog(Base):
 
     # 關聯
     user = relationship("User", back_populates="audit_logs")
+
+    __table_args__ = (
+        # Per-entity audit-trail lookups filter resource_type + resource_id and
+        # order by created_at desc; without this they full-scan an ever-growing table.
+        Index(
+            "ix_audit_logs_resource_lookup",
+            "resource_type",
+            "resource_id",
+            "created_at",
+        ),
+    )
 
     def __repr__(self):
         return f"<AuditLog(id={self.id}, user_id={self.user_id}, action={self.action})>"

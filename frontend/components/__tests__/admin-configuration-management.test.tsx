@@ -52,6 +52,19 @@ const mockGetAcademies = jest.fn().mockResolvedValue({
   data: [],
 });
 
+const mockGetScholarshipConfiguration = jest.fn().mockResolvedValue({
+  success: true,
+  data: { id: 1, config_code: "test_config" },
+});
+
+const mockToggleConfigSupplementaryImport = jest
+  .fn()
+  .mockResolvedValue({ success: true, data: {} });
+
+const mockToggleScholarshipWhitelist = jest
+  .fn()
+  .mockResolvedValue({ success: true, data: {} });
+
 // Mock the API client
 jest.mock("@/lib/api", () => ({
   __esModule: true,
@@ -61,6 +74,8 @@ jest.mock("@/lib/api", () => ({
         mockGetScholarshipConfigTypes(...args),
       getScholarshipConfigurations: (...args: any[]) =>
         mockGetScholarshipConfigurations(...args),
+      getScholarshipConfiguration: (...args: any[]) =>
+        mockGetScholarshipConfiguration(...args),
       createScholarshipConfiguration: (...args: any[]) =>
         mockCreateScholarshipConfiguration(...args),
       updateScholarshipConfiguration: (...args: any[]) =>
@@ -73,18 +88,53 @@ jest.mock("@/lib/api", () => ({
     referenceData: {
       getAcademies: (...args: any[]) => mockGetAcademies(...args),
     },
+    college: {
+      toggleConfigSupplementaryImport: (...args: any[]) =>
+        mockToggleConfigSupplementaryImport(...args),
+    },
+    whitelist: {
+      toggleScholarshipWhitelist: (...args: any[]) =>
+        mockToggleScholarshipWhitelist(...args),
+    },
   },
   ScholarshipType: {},
   ScholarshipConfiguration: {},
   ScholarshipConfigurationFormData: {},
 }));
 
+// Mock sonner toast (component reports errors/success via toast, not inline UI)
+jest.mock("sonner", () => ({
+  toast: {
+    success: jest.fn(),
+    error: jest.fn(),
+  },
+}));
+
+// Mock useAuth so child components don't throw outside AuthProvider
+jest.mock("@/hooks/use-auth", () => ({
+  __esModule: true,
+  useAuth: () => ({
+    isAuthenticated: true,
+    user: { id: 1, role: "admin", name: "Test Admin" },
+    login: jest.fn(),
+    logout: jest.fn(),
+    isLoading: false,
+  }),
+  AuthProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
+import { toast } from "sonner";
 import mockApiDefault from "@/lib/api";
-const mockApi = mockApiDefault;
+const mockApi = mockApiDefault as any;
+const mockToast = toast as unknown as {
+  success: jest.Mock;
+  error: jest.Mock;
+};
 
 // Override with mutable mocks
 mockApi.admin.getScholarshipConfigTypes = mockGetScholarshipConfigTypes;
 mockApi.admin.getScholarshipConfigurations = mockGetScholarshipConfigurations;
+mockApi.admin.getScholarshipConfiguration = mockGetScholarshipConfiguration;
 mockApi.admin.createScholarshipConfiguration =
   mockCreateScholarshipConfiguration;
 mockApi.admin.updateScholarshipConfiguration =
@@ -93,7 +143,10 @@ mockApi.admin.deleteScholarshipConfiguration =
   mockDeleteScholarshipConfiguration;
 mockApi.admin.duplicateScholarshipConfiguration =
   mockDuplicateScholarshipConfiguration;
-// Note: referenceData is already mocked in jest.mock() above (line 73-75)
+mockApi.college.toggleConfigSupplementaryImport =
+  mockToggleConfigSupplementaryImport;
+mockApi.whitelist.toggleScholarshipWhitelist = mockToggleScholarshipWhitelist;
+// Note: referenceData is already mocked in jest.mock() above
 
 // Mock UI components to avoid complex rendering issues
 jest.mock("@/components/ui/card", () => ({
@@ -132,30 +185,40 @@ jest.mock("@/components/ui/button", () => ({
   ),
 }));
 
-jest.mock("@/components/ui/tabs", () => ({
-  Tabs: ({ children, value, onValueChange }: any) => (
-    <div
-      data-testid="tabs"
-      data-value={value}
-      onClick={() => onValueChange && onValueChange("test-value")}
-    >
-      {children}
-    </div>
-  ),
-  TabsList: ({ children }: any) => (
-    <div data-testid="tabs-list">{children}</div>
-  ),
-  TabsTrigger: ({ children, value }: any) => (
-    <button data-testid="tabs-trigger" data-value={value}>
-      {children}
-    </button>
-  ),
-  TabsContent: ({ children, value }: any) => (
-    <div data-testid="tabs-content" data-value={value}>
-      {children}
-    </div>
-  ),
-}));
+jest.mock("@/components/ui/tabs", () => {
+  // Only mount the active TabsContent, mirroring real Radix behaviour.
+  // (Defined inside the factory because jest hoists the mock; React is global.)
+  const TabsCtx = React.createContext("");
+  return {
+    Tabs: ({ children, value, onValueChange }: any) => (
+      <TabsCtx.Provider value={value}>
+        <div
+          data-testid="tabs"
+          data-value={value}
+          onClick={() => onValueChange && onValueChange("test-value")}
+        >
+          {children}
+        </div>
+      </TabsCtx.Provider>
+    ),
+    TabsList: ({ children }: any) => (
+      <div data-testid="tabs-list">{children}</div>
+    ),
+    TabsTrigger: ({ children, value }: any) => (
+      <button data-testid="tabs-trigger" data-value={value}>
+        {children}
+      </button>
+    ),
+    TabsContent: ({ children, value }: any) => {
+      const active = React.useContext(TabsCtx);
+      return active === value ? (
+        <div data-testid="tabs-content" data-value={value}>
+          {children}
+        </div>
+      ) : null;
+    },
+  };
+});
 
 jest.mock("@/components/ui/select", () => ({
   Select: ({ children, value, onValueChange }: any) => (
@@ -303,7 +366,7 @@ afterAll(() => {
 // TODO: Fix remaining tests - many test non-existent functionality or complex dialog/tab interactions
 // 6/20 tests passing - basic rendering and simple actions work
 // Remaining failures: tests expect component to load data that's passed as props, or complex UI interactions
-describe.skip("AdminConfigurationManagement Component", () => {
+describe("AdminConfigurationManagement Component", () => {
   const mockScholarshipTypes = [
     {
       id: 1,
@@ -372,6 +435,12 @@ describe.skip("AdminConfigurationManagement Component", () => {
     },
   ];
 
+  // mockConfigurations[0] is active, [1] is inactive. The component issues two
+  // requests (is_active:true then is_active:false) and concatenates the results,
+  // so split the data by the requested flag to avoid duplicate rows/keys.
+  const activeConfigs = mockConfigurations.filter(c => c.is_active);
+  const inactiveConfigs = mockConfigurations.filter(c => !c.is_active);
+
   beforeEach(() => {
     jest.clearAllMocks();
 
@@ -381,10 +450,12 @@ describe.skip("AdminConfigurationManagement Component", () => {
       data: mockScholarshipTypes,
     });
 
-    mockApi.admin.getScholarshipConfigurations.mockResolvedValue({
-      success: true,
-      data: mockConfigurations,
-    });
+    mockApi.admin.getScholarshipConfigurations.mockImplementation((p: any) =>
+      Promise.resolve({
+        success: true,
+        data: p?.is_active ? activeConfigs : inactiveConfigs,
+      })
+    );
   });
 
   it("should render component with loading state initially", () => {
@@ -413,13 +484,12 @@ describe.skip("AdminConfigurationManagement Component", () => {
       <AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />
     );
 
-    // Wait for error to appear (component auto-selects first scholarship type)
+    // Errors are surfaced via toast (no inline error UI).
     await waitFor(
       () => {
-        const errorElements = screen.queryAllByText(
-          /載入配置失敗|Failed to load/i
+        expect(mockToast.error).toHaveBeenCalledWith(
+          expect.stringContaining("載入配置失敗")
         );
-        expect(errorElements.length).toBeGreaterThan(0);
       },
       { timeout: 2000 }
     );
@@ -430,18 +500,17 @@ describe.skip("AdminConfigurationManagement Component", () => {
       <AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />
     );
 
-    // Wait for initial load
-    await waitFor(() => {
-      expect(mockApi.admin.getScholarshipConfigTypes).toHaveBeenCalled();
-    });
-
-    // Check that configurations are loaded
+    // Check that configurations are loaded for the auto-selected first type.
+    // Load is per-type only (active + inactive), no academic_year/semester filter.
     await waitFor(() => {
       expect(mockApi.admin.getScholarshipConfigurations).toHaveBeenCalledWith({
         scholarship_type_id: 1,
-        academic_year: expect.any(Number),
         is_active: true,
       });
+    });
+    expect(mockApi.admin.getScholarshipConfigurations).toHaveBeenCalledWith({
+      scholarship_type_id: 1,
+      is_active: false,
     });
   });
 
@@ -454,9 +523,11 @@ describe.skip("AdminConfigurationManagement Component", () => {
       expect(
         screen.getByText("PhD獎學金114學年度第一學期")
       ).toBeInTheDocument();
-      expect(screen.getByText("50,000 TWD")).toBeInTheDocument();
-      expect(screen.getByText("114學年度 第一學期")).toBeInTheDocument();
     });
+    // Year/semester rendered together: "114 第一學期"
+    expect(screen.getByText(/114\s*第一學期/)).toBeInTheDocument();
+    // Config code badge is rendered
+    expect(screen.getByText("PHD-114-1")).toBeInTheDocument();
   });
 
   it("should show empty state when no configurations exist", async () => {
@@ -471,9 +542,6 @@ describe.skip("AdminConfigurationManagement Component", () => {
 
     await waitFor(() => {
       expect(screen.getByText("尚無配置資料")).toBeInTheDocument();
-      expect(
-        screen.getByText("點擊「新增配置」開始建立獎學金配置")
-      ).toBeInTheDocument();
     });
   });
 
@@ -554,8 +622,11 @@ describe.skip("AdminConfigurationManagement Component", () => {
     const submitButton = screen.getByText("建立配置");
     await user.click(submitButton);
 
+    // Error surfaced via toast: "建立配置失敗: Creation failed"
     await waitFor(() => {
-      expect(screen.getByText("Creation failed")).toBeInTheDocument();
+      expect(mockToast.error).toHaveBeenCalledWith(
+        expect.stringContaining("Creation failed")
+      );
     });
   });
 
@@ -565,15 +636,19 @@ describe.skip("AdminConfigurationManagement Component", () => {
       <AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />
     );
 
+    // Wait for the row (and its action buttons) to render.
     await waitFor(() => {
-      const editButtons = screen.getAllByTestId("button");
-      // Find the edit button (with Edit icon, should be one of the action buttons)
-      const editButton = editButtons.find(
-        button =>
-          button.getAttribute("onClick")?.includes("openEditDialog") ||
-          button.textContent?.includes("Edit")
-      );
-      expect(editButton).toBeTruthy();
+      expect(
+        screen.getByText("PhD獎學金114學年度第一學期")
+      ).toBeInTheDocument();
+    });
+
+    // The edit action button carries title="編輯配置" (spread onto the mock button).
+    const editButton = screen.getAllByTitle("編輯配置")[0];
+    await user.click(editButton);
+
+    await waitFor(() => {
+      expect(screen.getByText("編輯獎學金配置")).toBeInTheDocument();
     });
   });
 
@@ -624,7 +699,7 @@ describe.skip("AdminConfigurationManagement Component", () => {
     });
   });
 
-  it("should filter configurations by academic year", async () => {
+  it("should load configurations for the selected type (per-type, no year filter)", async () => {
     render(
       <AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />
     );
@@ -632,45 +707,18 @@ describe.skip("AdminConfigurationManagement Component", () => {
     await waitFor(() => {
       expect(mockApi.admin.getScholarshipConfigurations).toHaveBeenCalledWith({
         scholarship_type_id: 1,
-        academic_year: expect.any(Number),
         is_active: true,
       });
     });
   });
 
-  it("should filter configurations by semester", async () => {
-    render(
-      <AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />
-    );
+  // Year/semester filtering at the API level was removed; load is per scholarship
+  // type only (active + inactive). Filtering now happens client-side via search.
+  it.skip("should filter configurations by semester", () => {});
 
-    // Initial load
-    await waitFor(() => {
-      expect(mockApi.admin.getScholarshipConfigurations).toHaveBeenCalledTimes(
-        1
-      );
-    });
-  });
-
-  it("should refresh configurations when refresh button is clicked", async () => {
-    const user = userEvent.setup();
-    render(
-      <AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText("重新載入")).toBeInTheDocument();
-    });
-
-    const refreshButton = screen.getByText("重新載入");
-    await user.click(refreshButton);
-
-    // Should call API again
-    await waitFor(() => {
-      expect(mockApi.admin.getScholarshipConfigurations).toHaveBeenCalledTimes(
-        2
-      );
-    });
-  });
+  // The standalone "重新載入" refresh button was removed from the redesigned UI;
+  // reloads happen automatically after create/update/delete and on type change.
+  it.skip("should refresh configurations when refresh button is clicked", () => {});
 
   it("should display active/inactive status correctly", async () => {
     render(
@@ -678,10 +726,11 @@ describe.skip("AdminConfigurationManagement Component", () => {
     );
 
     await waitFor(() => {
-      // Active configuration should show "啟用"
-      expect(screen.getByText("啟用")).toBeInTheDocument();
-      // Note: Inactive configs might not be shown due to filtering, but status should be correct when shown
+      // Active config row shows the "已啟用" status badge.
+      expect(screen.getByText("已啟用")).toBeInTheDocument();
     });
+    // Inactive config row shows "已停用".
+    expect(screen.getByText("已停用")).toBeInTheDocument();
   });
 
   it("should handle API errors gracefully", async () => {
@@ -695,34 +744,18 @@ describe.skip("AdminConfigurationManagement Component", () => {
       <AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />
     );
 
+    // Load failures are surfaced via toast (the error has no `.message`, so the
+    // component falls back to its default "載入配置失敗: ..." prefix).
     await waitFor(() => {
-      expect(screen.getByText("Server error")).toBeInTheDocument();
+      expect(mockToast.error).toHaveBeenCalledWith(
+        expect.stringContaining("載入配置失敗")
+      );
     });
   });
 
-  it("should close error message when X button is clicked", async () => {
-    const user = userEvent.setup();
-    mockApi.admin.getScholarshipConfigurations.mockRejectedValue({
-      response: {
-        data: { message: "Test error message" },
-      },
-    });
-
-    render(
-      <AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText("Test error message")).toBeInTheDocument();
-    });
-
-    const closeButton = screen.getByText("×");
-    await user.click(closeButton);
-
-    await waitFor(() => {
-      expect(screen.queryByText("Test error message")).not.toBeInTheDocument();
-    });
-  });
+  // The redesigned component reports errors via toast notifications rather than a
+  // dismissible inline error banner, so there is no "×" close button to test.
+  it.skip("should close error message when X button is clicked", () => {});
 
   it("should validate form data before submission", async () => {
     const user = userEvent.setup();

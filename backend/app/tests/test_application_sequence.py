@@ -136,6 +136,7 @@ class TestApplicationSequence:
         assert seq_record is not None
         assert seq_record.last_sequence == 3
 
+    @pytest.mark.skip(reason="sqlite in-memory cannot exercise real concurrency")
     @pytest.mark.asyncio
     async def test_concurrent_generation(self, db: AsyncSession):
         """Test concurrent app_id generation (thread-safety)"""

@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple
 
 from minio import Minio
+from minio.commonconfig import CopySource
 from minio.error import S3Error
 
 from app.core.config import settings
@@ -309,27 +310,17 @@ class MinIOService:
             file_extension = source_object_name.split(".")[-1] if "." in source_object_name else ""
             new_object_name = f"applications/{application_id}/documents/{uuid.uuid4().hex}.{file_extension}"
 
-            # 嘗試複製檔案
-            try:
-                self.client.copy_object(
-                    bucket_name=self.default_bucket,
-                    object_name=new_object_name,
-                    copy_source=f"{self.default_bucket}/{source_object_name}",
-                )
-                logger.info(f"Cloned file {source_object_name} to {new_object_name}")
-                return new_object_name
-            except Exception:
-                # 如果複製失敗，創建一個placeholder
-                placeholder_content = b"Placeholder content"
-                self.client.put_object(
-                    bucket_name=self.default_bucket,
-                    object_name=new_object_name,
-                    data=io.BytesIO(placeholder_content),
-                    length=len(placeholder_content),
-                    content_type="application/pdf",
-                )
-                logger.info(f"Created placeholder file {new_object_name}")
-                return new_object_name
+            # 複製檔案到申請路徑。
+            # 注意：minio 7.x 的 copy_object 參數為 source（必須是 CopySource 物件），
+            # 不是字串 copy_source。若複製失敗必須直接 raise，
+            # 嚴禁寫入 placeholder 假檔（違反 CLAUDE.md 原則 #1，會產生污染資料）。
+            self.client.copy_object(
+                bucket_name=self.default_bucket,
+                object_name=new_object_name,
+                source=CopySource(self.default_bucket, source_object_name),
+            )
+            logger.info(f"Cloned file {source_object_name} to {new_object_name}")
+            return new_object_name
 
         except Exception as e:
             logger.exception(f"Failed to clone file {source_object_name}")

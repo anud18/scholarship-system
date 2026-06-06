@@ -167,7 +167,19 @@ async def test_update_persists_form_data_status_is_renewal_subtype_list(db: Asyn
     service = ApplicationService(db)
 
     update_data = ApplicationUpdate(
-        form_data=ApplicationFormData(fields={"bank_account": "123456789"}, documents=[]),
+        # fields is Dict[str, DynamicFormField] — pass a full field object, not a
+        # bare string (the schema rejects a plain string value).
+        form_data=ApplicationFormData(
+            fields={
+                "bank_account": {
+                    "field_id": "bank_account",
+                    "field_type": "text",
+                    "value": "123456789",
+                    "required": False,
+                }
+            },
+            documents=[],
+        ),
         is_renewal=True,
         scholarship_subtype_list=["nstc", "moe_1w"],
     )
@@ -175,9 +187,12 @@ async def test_update_persists_form_data_status_is_renewal_subtype_list(db: Asyn
     result = await service.update_application(application_id=app.id, update_data=update_data, current_user=student)
 
     await db.refresh(app)
-    # form_data persisted.
+    # form_data persisted — the field round-trips as a serialised DynamicFormField,
+    # so the value lives under ["bank_account"]["value"].
     assert app.submitted_form_data is not None
-    assert app.submitted_form_data.get("fields", {}).get("bank_account") == "123456789"
+    persisted = app.submitted_form_data.get("fields", {}).get("bank_account")
+    persisted_value = persisted.get("value") if isinstance(persisted, dict) else persisted
+    assert persisted_value == "123456789"
     # is_renewal flipped.
     assert app.is_renewal is True
     # subtype list updated.

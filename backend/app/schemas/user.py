@@ -126,7 +126,9 @@ class DeveloperProfileRequest(BaseModel):
     chinese_name: Optional[str] = None
     english_name: Optional[str] = None
     role: UserRole
-    email_domain: Optional[str] = "dev.local"
+    # dev.example.com, not dev.local — EmailStr rejects the ".local" special-use
+    # TLD, which made @dev.local dev users fail UserResponse serialization on login.
+    email_domain: Optional[str] = "dev.example.com"
     custom_attributes: Optional[dict] = None
 
 

@@ -2,6 +2,7 @@
 Unit tests for core exceptions
 """
 
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -362,8 +363,9 @@ class TestExceptionHandler:
     async def test_scholarship_exception_handler_no_trace_id(self):
         """Test exception handler when request has no trace_id"""
         request = Mock(spec=Request)
-        request.state = Mock()
-        # No trace_id attribute
+        # Use a real object with no trace_id so getattr falls back to None.
+        # A bare Mock() would auto-create trace_id as a (non-serializable) Mock.
+        request.state = SimpleNamespace()
 
         exc = ValidationError("Test validation error")
 

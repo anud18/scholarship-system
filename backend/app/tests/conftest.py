@@ -38,6 +38,11 @@ settings.database_url = TEST_DATABASE_URL_ASYNC  # Set async URL early too
 from app.db.base_class import Base  # Use the correct Base class that models use  # noqa: E402
 from app.db.deps import get_db  # noqa: E402
 from app.main import app  # noqa: E402
+
+# Import after app.main so dynamic_config module graph is fully initialized before
+# core.deps is imported (importing core.deps first causes a circular import via
+# dynamic_config → services → email_service → dynamic_config).
+from app.core.deps import get_db as core_get_db  # noqa: E402
 from app.models.application import Application, ApplicationStatus  # noqa: E402
 from app.models.scholarship import ScholarshipType, SubTypeSelectionMode  # noqa: E402
 from app.models.user import User, UserRole, UserType  # noqa: E402
@@ -115,6 +120,7 @@ async def client(db: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         yield db
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[core_get_db] = override_get_db
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac

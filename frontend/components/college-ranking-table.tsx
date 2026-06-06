@@ -80,7 +80,6 @@ import {
   parseRankingSheet,
   type ExcelRankingImportRow,
 } from "@/lib/ranking/parse-ranking-sheet";
-import * as XLSX from "xlsx";
 import { ApplicationReviewDialog } from "@/components/common/ApplicationReviewDialog";
 import { Application as ApplicationType, User } from "@/lib/api";
 import { ApplicationStatus, getApplicationStatusLabel } from "@/lib/enums";
@@ -587,6 +586,8 @@ export function CollegeRankingTable({
     setIsImporting(true);
 
     try {
+      // Lazy-load the heavy sheetjs lib only when an import actually happens
+      const XLSX = await import("xlsx");
       // Read Excel file (學生資料彙整表 export format: row1 title, row2 headers,
       // row3+ data). `range: 1` makes row 2 the header row; do NOT also pass a
       // `header` option or the numeric range row is treated as data.

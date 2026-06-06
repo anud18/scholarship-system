@@ -27,13 +27,8 @@ from app.models.user import User, UserRole
 
 
 def _user(role: UserRole) -> User:
-    """Construct a User without invoking SQLAlchemy ORM init."""
-    u = object.__new__(User)
-    object.__setattr__(u, "role", role)
-    object.__setattr__(u, "id", 1)
-    object.__setattr__(u, "name", "Test")
-    object.__setattr__(u, "nycu_id", "test1")
-    return u
+    """Construct an in-memory User (no DB session)."""
+    return User(role=role, id=1, name="Test", nycu_id="test1")
 
 
 # ─── Role predicates ─────────────────────────────────────────────────

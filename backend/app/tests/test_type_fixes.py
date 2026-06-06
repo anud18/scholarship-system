@@ -39,7 +39,7 @@ def test_application_model_properties():
         app_id="APP-2025-123456",
         user_id=1,
         scholarship_name="Academic Excellence",
-        status=ApplicationStatus.draft.value,
+        status=ApplicationStatus.draft,
         academic_year=113,
         semester=Semester.first,
         scholarship_subtype_list=[],
@@ -57,7 +57,7 @@ def test_application_model_properties():
     assert app.can_be_reviewed is False
 
     # Test property values for submitted status
-    app.status = ApplicationStatus.submitted.value
+    app.status = ApplicationStatus.submitted
     assert app.is_editable is False
     assert app.is_submitted is True
     assert app.can_be_reviewed is True

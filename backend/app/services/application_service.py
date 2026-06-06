@@ -443,6 +443,48 @@ class ApplicationService:
 
         return scholarship, config
 
+    @staticmethod
+    def _derive_sub_scholarship_type(scholarship_subtype_list: Optional[List[str]]) -> str:
+        """Derive the denormalized scalar `sub_scholarship_type` from the selected
+        sub-type list: first entry wins, normalized to lowercase; empty → "general".
+
+        Shared by create and update so the scalar never drifts from the list
+        (a drift is what let a "general" scalar survive an edit that picked a
+        real sub-type — see _validate_sub_type_for_submission).
+        """
+        if scholarship_subtype_list:
+            return scholarship_subtype_list[0].lower()
+        return "general"
+
+    @staticmethod
+    def _validate_sub_type_for_submission(scholarship: ScholarshipType, sub_scholarship_type: Optional[str]) -> None:
+        """Reject the synthetic "general" category on submission for scholarships
+        that define real sub-types.
+
+        "general" is only a valid category for scholarships with no sub-types.
+        For a scholarship that defines real ones (e.g. PhD: nstc / moe_1w), a
+        "general" application matches no quota slot during distribution, so it
+        must carry a concrete sub-type before it can be submitted.
+
+        Sub-types are stored lowercase (CLAUDE.md convention), but admin-entered
+        `sub_type_list` may not be — compare case-insensitively so a correct
+        submission is never falsely rejected over casing.
+
+        When the scholarship defines no real sub-types, only the synthetic
+        "general" (or empty) is valid — an arbitrary sub-type string would be
+        stored verbatim and break downstream quota/distribution lookups, so it
+        is rejected too.
+        """
+        if scholarship is None:
+            return
+        real_sub_types = [st.lower() for st in (scholarship.sub_type_list or []) if st and st.lower() != "general"]
+        normalized = (sub_scholarship_type or "general").lower()
+        if real_sub_types:
+            if normalized not in real_sub_types:
+                raise ValidationError("此獎學金需選擇申請類別（" + "、".join(real_sub_types) + "），不可使用通用類別")
+        elif normalized != "general":
+            raise ValidationError("此獎學金不提供申請類別選擇，不可指定子類別")
+
     async def _create_application_instance(
         self,
         user: User,
@@ -468,9 +510,12 @@ class ApplicationService:
 
         # Determine sub scholarship type from selected subtypes (use first one if any)
         scholarship_subtype_list = application_data.scholarship_subtype_list or []
-        sub_scholarship_type = "general"  # Default (lowercase, configuration-driven)
-        if scholarship_subtype_list:
-            sub_scholarship_type = scholarship_subtype_list[0].lower()  # Normalize to lowercase
+        sub_scholarship_type = self._derive_sub_scholarship_type(scholarship_subtype_list)
+
+        # Submitting (not a draft) requires a concrete sub-type when the
+        # scholarship defines real ones — drafts may stay incomplete.
+        if not is_draft:
+            self._validate_sub_type_for_submission(scholarship, sub_scholarship_type)
 
         # Determine status based on is_draft flag
         from app.models.enums import ApplicationStatus
@@ -699,7 +744,7 @@ class ApplicationService:
             cancelled_due_to_application_id=application.cancelled_due_to_application_id,
             academic_year=application.academic_year,
             semester=self._convert_semester_to_string(application.semester),
-            student_data=application.student_data,
+            student_data=application.student_data or {},
             submitted_form_data=integrated_form_data,
             agree_terms=application.agree_terms,
             professor_id=application.professor_id,
@@ -790,42 +835,8 @@ class ApplicationService:
         # Convert to response models with integrated file data
         recent_applications_response = []
         for application in recent_applications:
-            # 整合文件資訊到 submitted_form_data.documents
-            integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
-
-            if application.files:
-                # 生成文件訪問 token
-                from app.core.config import settings
-                from app.core.security import create_access_token
-
-                token_data = {"sub": str(user.id)}
-                access_token = create_access_token(token_data)
-
-                # 更新 submitted_form_data 中的 documents
-                if "documents" in integrated_form_data:
-                    existing_docs = integrated_form_data["documents"]
-                    for existing_doc in existing_docs:
-                        # 查找對應的文件記錄
-                        matching_file = next(
-                            (f for f in application.files if f.file_type == existing_doc.get("document_id")),
-                            None,
-                        )
-                        if matching_file:
-                            # 更新現有文件資訊
-                            base_url = f"{settings.base_url}{settings.api_v1_str}"
-                            existing_doc.update(
-                                {
-                                    "file_id": matching_file.id,
-                                    "filename": matching_file.filename,
-                                    "original_filename": matching_file.original_filename,
-                                    "file_size": matching_file.file_size,
-                                    "mime_type": matching_file.mime_type or matching_file.content_type,
-                                    "file_path": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}?token={access_token}",
-                                    "download_url": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}/download?token={access_token}",
-                                    "is_verified": matching_file.is_verified,
-                                    "object_name": matching_file.object_name,
-                                }
-                            )
+            # 整合 application.files 進 submitted_form_data.documents（create-or-update，共用 helper）。
+            integrated_form_data = self._integrate_application_file_data(application, user)
 
             # 創建響應數據
             app_data = ApplicationListResponse(
@@ -847,7 +858,7 @@ class ApplicationService:
                 cancelled_due_to_application_id=application.cancelled_due_to_application_id,
                 academic_year=application.academic_year,
                 semester=self._convert_semester_to_string(application.semester),
-                student_data=application.student_data,
+                student_data=application.student_data or {},
                 submitted_form_data=integrated_form_data,  # 使用整合後的表單資料
                 agree_terms=application.agree_terms,
                 professor_id=application.professor_id,
@@ -925,48 +936,11 @@ class ApplicationService:
         if not application:
             return None
 
-        # 先標準化表單資料格式
-        integrated_form_data = self._normalize_submitted_form_data(
-            application.submitted_form_data.copy() if application.submitted_form_data else {}
-        )
-
-        # 然後整合文件資訊到 submitted_form_data.documents
-        if application.files:
-            # 生成文件訪問 token
-            from app.core.config import settings
-            from app.core.security import create_access_token
-
-            token_data = {"sub": str(current_user.id)}
-            access_token = create_access_token(token_data)
-
-            # 更新 submitted_form_data 中的 documents
-            if "documents" in integrated_form_data:
-                existing_docs = integrated_form_data["documents"]
-                for existing_doc in existing_docs:
-                    # 查找對應的文件記錄
-                    matching_file = next(
-                        (f for f in application.files if f.file_type == existing_doc.get("document_id")),
-                        None,
-                    )
-                    if matching_file:
-                        # 更新現有文件資訊
-                        base_url = f"{settings.base_url}{settings.api_v1_str}"
-                        existing_doc.update(
-                            {
-                                "file_id": matching_file.id,
-                                "filename": matching_file.filename,
-                                "original_filename": matching_file.original_filename,
-                                "file_size": matching_file.file_size,
-                                "mime_type": matching_file.mime_type or matching_file.content_type,
-                                "file_path": f"{base_url}/files/applications/{application_id}/files/{matching_file.id}?token={access_token}",
-                                "download_url": f"{base_url}/files/applications/{application_id}/files/{matching_file.id}/download?token={access_token}",
-                                "is_verified": matching_file.is_verified,
-                                "object_name": matching_file.object_name,
-                            }
-                        )
-
-            # 更新 application 的 submitted_form_data
-            application.submitted_form_data = integrated_form_data
+        # 整合 application.files 的檔案參照進 submitted_form_data.documents。
+        # 使用共用 helper（其他讀取路徑也用它）：它會「create-or-update」——把尚未
+        # 出現在 documents[] 的已上傳檔案「補進去」。先前這裡的 inline 迴圈只更新
+        # 已存在的 doc，所以以 documents:[] 存的草稿在重開時會掉光所有上傳檔案。
+        integrated_form_data = self._integrate_application_file_data(application, current_user)
 
         # Construct ApplicationResponse with additional display fields
         from app.schemas.application import ApplicationResponse
@@ -1129,6 +1103,11 @@ class ApplicationService:
         # 更新子項目列表（如果提供）
         if update_data.scholarship_subtype_list is not None:
             application.scholarship_subtype_list = update_data.scholarship_subtype_list
+            # Keep the denormalized scalar in sync with the list, otherwise an
+            # edit that picks a real sub-type (e.g. nstc) leaves a stale "general"
+            # scalar — which submit_application's guard would then reject, blocking
+            # the very correction the student is making.
+            application.sub_scholarship_type = self._derive_sub_scholarship_type(update_data.scholarship_subtype_list)
 
         await self.db.commit()
         await self.db.refresh(application)
@@ -1272,6 +1251,11 @@ class ApplicationService:
         # 驗證所有必填欄位
         _ = ApplicationFormData(**application.submitted_form_data)
 
+        # A draft can only be submitted once it carries a concrete sub-type
+        # for scholarships that define real ones (the "general" fallback maps
+        # to no quota slot at distribution time).
+        self._validate_sub_type_for_submission(application.scholarship, application.sub_scholarship_type)
+
         # 處理銀行帳戶證明文件 clone（從個人資料複製到申請）
         await self._clone_user_profile_documents(application, user)
 
@@ -1365,73 +1349,9 @@ class ApplicationService:
         except Exception as e:
             logger.error(f"❌ Failed to trigger automated submission emails: {e}", exc_info=True)
 
-        # 整合文件資訊到 submitted_form_data.documents
-        integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
-
-        # 生成文件訪問 token
-        from app.core.config import settings
-        from app.core.security import create_access_token
-
-        token_data = {"sub": str(user.id)}
-        access_token = create_access_token(token_data)
-
-        # 將 files 的完整資訊合併到 documents 中
-        if application.files:
-            integrated_documents = []
-            for file in application.files:
-                # 生成文件 URL
-                base_url = f"{settings.base_url}{settings.api_v1_str}"
-                file_path = f"{base_url}/files/applications/{application_id}/files/{file.id}?token={access_token}"
-                download_url = (
-                    f"{base_url}/files/applications/{application_id}/files/{file.id}/download?token={access_token}"
-                )
-
-                # 整合文件資訊
-                integrated_document = {
-                    "document_id": file.file_type,
-                    "document_type": file.file_type,
-                    "file_id": file.id,
-                    "filename": file.filename,
-                    "original_filename": file.original_filename,
-                    "file_size": file.file_size,
-                    "mime_type": file.mime_type or file.content_type,
-                    "file_path": file_path,
-                    "download_url": download_url,
-                    "upload_time": file.uploaded_at.isoformat() if file.uploaded_at else None,
-                    "is_verified": file.is_verified,
-                    "object_name": file.object_name,
-                }
-                integrated_documents.append(integrated_document)
-
-            # 更新 submitted_form_data 中的 documents
-            if "documents" in integrated_form_data:
-                # 如果已有 documents，合併文件資訊
-                existing_docs = integrated_form_data["documents"]
-                for existing_doc in existing_docs:
-                    # 查找對應的文件記錄
-                    matching_file = next(
-                        (f for f in application.files if f.file_type == existing_doc.get("document_id")),
-                        None,
-                    )
-                    if matching_file:
-                        # 更新現有文件資訊
-                        base_url = f"{settings.base_url}{settings.api_v1_str}"
-                        existing_doc.update(
-                            {
-                                "file_id": matching_file.id,
-                                "filename": matching_file.filename,
-                                "original_filename": matching_file.original_filename,
-                                "file_size": matching_file.file_size,
-                                "mime_type": matching_file.mime_type or matching_file.content_type,
-                                "file_path": f"{base_url}/files/applications/{application_id}/files/{matching_file.id}?token={access_token}",
-                                "download_url": f"{base_url}/files/applications/{application_id}/files/{matching_file.id}/download?token={access_token}",
-                                "is_verified": matching_file.is_verified,
-                                "object_name": matching_file.object_name,
-                            }
-                        )
-            else:
-                # 如果沒有 documents，創建新的
-                integrated_form_data["documents"] = integrated_documents
+        # 整合 application.files 進 submitted_form_data.documents（create-or-update，共用 helper）。
+        # 僅用於 response（不寫回 DB），與 get_application_by_id 一致；避免以 documents:[] 存的草稿送出後掉檔。
+        integrated_form_data = self._integrate_application_file_data(application, user)
 
         # Convert application to response model
         response_data = {
@@ -1540,45 +1460,12 @@ class ApplicationService:
         # Convert to response models
         response_applications = []
         for application in applications:
-            # 整合文件資訊到 submitted_form_data.documents
-            integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
+            # 整合 application.files 進 submitted_form_data.documents（create-or-update，共用 helper）。
+            # 與 get_application_by_id 一致：把尚未出現在 documents[] 的已上傳檔案補進去（審核列表才不會掉檔）。
+            integrated_form_data = self._integrate_application_file_data(application, current_user)
 
-            if application.files:
-                # 生成文件訪問 token
-                from app.core.config import settings
-                from app.core.security import create_access_token
-
-                token_data = {"sub": str(current_user.id)}
-                access_token = create_access_token(token_data)
-
-                # 更新 submitted_form_data 中的 documents
-                if "documents" in integrated_form_data:
-                    existing_docs = integrated_form_data["documents"]
-                    for existing_doc in existing_docs:
-                        # 查找對應的文件記錄
-                        matching_file = next(
-                            (f for f in application.files if f.file_type == existing_doc.get("document_id")),
-                            None,
-                        )
-                        if matching_file:
-                            # 更新現有文件資訊
-                            base_url = f"{settings.base_url}{settings.api_v1_str}"
-                            existing_doc.update(
-                                {
-                                    "file_id": matching_file.id,
-                                    "filename": matching_file.filename,
-                                    "original_filename": matching_file.original_filename,
-                                    "file_size": matching_file.file_size,
-                                    "mime_type": matching_file.mime_type or matching_file.content_type,
-                                    "file_path": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}?token={access_token}",
-                                    "download_url": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}/download?token={access_token}",
-                                    "is_verified": matching_file.is_verified,
-                                    "object_name": matching_file.object_name,
-                                }
-                            )
-
-            # Use eagerly loaded user (already loaded with selectinload)
-            app_user = application.user
+            # Use eagerly loaded student (already loaded with selectinload)
+            app_user = application.student
 
             # 創建響應數據
             app_data = ApplicationListResponse(
@@ -1600,7 +1487,7 @@ class ApplicationService:
                 cancelled_due_to_application_id=application.cancelled_due_to_application_id,
                 academic_year=application.academic_year,
                 semester=self._convert_semester_to_string(application.semester),
-                student_data=application.student_data,
+                student_data=application.student_data or {},
                 submitted_form_data=integrated_form_data,  # 使用整合後的表單資料
                 agree_terms=application.agree_terms,
                 professor_id=application.professor_id,
@@ -1962,45 +1849,12 @@ class ApplicationService:
         # Convert to response models
         response_applications = []
         for application in applications:
-            # 整合文件資訊到 submitted_form_data.documents
-            integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
+            # 整合 application.files 進 submitted_form_data.documents（create-or-update，共用 helper）。
+            # 與 get_application_by_id 一致：把尚未出現在 documents[] 的已上傳檔案補進去。
+            integrated_form_data = self._integrate_application_file_data(application, current_user)
 
-            if application.files:
-                # 生成文件訪問 token
-                from app.core.config import settings
-                from app.core.security import create_access_token
-
-                token_data = {"sub": str(current_user.id)}
-                access_token = create_access_token(token_data)
-
-                # 更新 submitted_form_data 中的 documents
-                if "documents" in integrated_form_data:
-                    existing_docs = integrated_form_data["documents"]
-                    for existing_doc in existing_docs:
-                        # 查找對應的文件記錄
-                        matching_file = next(
-                            (f for f in application.files if f.file_type == existing_doc.get("document_id")),
-                            None,
-                        )
-                        if matching_file:
-                            # 更新現有文件資訊
-                            base_url = f"{settings.base_url}{settings.api_v1_str}"
-                            existing_doc.update(
-                                {
-                                    "file_id": matching_file.id,
-                                    "filename": matching_file.filename,
-                                    "original_filename": matching_file.original_filename,
-                                    "file_size": matching_file.file_size,
-                                    "mime_type": matching_file.mime_type or matching_file.content_type,
-                                    "file_path": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}?token={access_token}",
-                                    "download_url": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}/download?token={access_token}",
-                                    "is_verified": matching_file.is_verified,
-                                    "object_name": matching_file.object_name,
-                                }
-                            )
-
-            # Use eagerly loaded user (already loaded with selectinload)
-            app_user = application.user
+            # Use eagerly loaded student (already loaded with selectinload)
+            app_user = application.student
 
             # 創建響應數據
             app_data = ApplicationListResponse(
@@ -2022,7 +1876,7 @@ class ApplicationService:
                 cancelled_due_to_application_id=application.cancelled_due_to_application_id,
                 academic_year=application.academic_year,
                 semester=self._convert_semester_to_string(application.semester),
-                student_data=application.student_data,
+                student_data=application.student_data or {},
                 submitted_form_data=integrated_form_data,  # 使用整合後的表單資料
                 agree_terms=application.agree_terms,
                 professor_id=application.professor_id,
@@ -2589,13 +2443,17 @@ class ApplicationService:
             if application.professor_id != professor_id:
                 return False
 
-            # Check application status - should be submitted or under review (or historical)
+            # Check application status - should be submitted or under review (or historical).
+            # application is loaded fresh from the DB, so status is the Enum MEMBER, not its
+            # .value string — compare against members (matching the dominant convention in
+            # this file). Comparing a member against .value strings always failed → the
+            # method wrongly returned False for every status.
             if application.status not in [
-                ApplicationStatus.submitted.value,
-                ApplicationStatus.under_review.value,
-                ApplicationStatus.approved.value,
-                ApplicationStatus.partial_approved.value,
-                ApplicationStatus.rejected.value,
+                ApplicationStatus.submitted,
+                ApplicationStatus.under_review,
+                ApplicationStatus.approved,
+                ApplicationStatus.partial_approved,
+                ApplicationStatus.rejected,
             ]:
                 return False
 

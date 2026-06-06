@@ -28,8 +28,8 @@ type Department = {
 };
 
 type ReferenceDataAll = {
-  academies: Array<{ id: number; code: string; name: string }>;
-  departments: Array<{ id: number; code: string; name: string }>;
+  academies: Array<Academy>;
+  departments: Array<Department>;
   degrees: Array<{ id: number; name: string }>;
   identities: Array<{ id: number; name: string }>;
   studying_statuses: Array<{ id: number; name: string }>;

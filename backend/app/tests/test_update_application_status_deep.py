@@ -158,7 +158,8 @@ async def test_approve_sets_approved_at_and_creates_review_row(db: AsyncSession,
     assert _val(app.status) == ApplicationStatus.approved.value
     assert app.reviewer_id == admin.id
     assert app.approved_at is not None
-    assert before <= app.approved_at <= after
+    approved_at = app.approved_at if app.approved_at.tzinfo else app.approved_at.replace(tzinfo=timezone.utc)
+    assert before <= approved_at <= after
 
     # An ApplicationReview row was created with the comments.
     reviews = (
@@ -194,8 +195,9 @@ async def test_reject_creates_review_row_with_decision_reason(db: AsyncSession, 
         (await db.execute(select(ApplicationReview).where(ApplicationReview.application_id == app.id))).scalars().all()
     )
     assert len(reviews) == 1
-    # rejection_reason from the status update lands on decision_reason on the review row.
-    assert reviews[0].decision_reason == "GPA below threshold."
+    # The reject reason lands on the review row's `comments` (ApplicationReview
+    # has no decision_reason column; that field lives on the Application model).
+    assert reviews[0].comments == "GPA below threshold."
 
 
 @pytest.mark.asyncio

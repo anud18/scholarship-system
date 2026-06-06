@@ -640,8 +640,34 @@ export function ScholarshipApplicationStep({
       // Load file data
       if (formData.documents) {
         const existingFileData: Record<string, File[]> = {};
+        const previewAppId =
+          editingApplication?.id ?? savedApplicationIdRef.current;
+        const previewToken = localStorage.getItem("auth_token") || "";
         formData.documents.forEach((doc: SubmittedDocumentPayload) => {
           if (doc.document_id && doc.original_filename) {
+            // Build a SAME-ORIGIN preview URL through the Next /api/v1/preview
+            // proxy from file_id, so the iframe never depends on the backend's
+            // file_path — that can be an absolute http://localhost:8000 URL when
+            // the deployment's BASE_URL is misconfigured (observed on staging),
+            // which the browser cannot load (blank preview).
+            const lowerName = doc.original_filename.toLowerCase();
+            const proxyType = lowerName.endsWith(".pdf")
+              ? "pdf"
+              : [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"].some(ext =>
+                    lowerName.endsWith(ext)
+                  )
+                ? "image"
+                : "";
+            const previewUrl =
+              doc.file_id && previewAppId
+                ? `/api/v1/preview?fileId=${encodeURIComponent(
+                    String(doc.file_id)
+                  )}&filename=${encodeURIComponent(
+                    doc.original_filename
+                  )}&type=${proxyType}&applicationId=${previewAppId}&token=${encodeURIComponent(
+                    previewToken
+                  )}`
+                : undefined;
             const fileData = {
               id: doc.file_id || doc.id,
               filename: doc.filename || doc.original_filename,
@@ -651,6 +677,8 @@ export function ScholarshipApplicationStep({
               file_type: doc.document_type,
               file_path: doc.file_path,
               download_url: doc.download_url,
+              // same-origin proxy URL preferred by FileUpload.getFilePreviewUrl
+              url: previewUrl,
               is_verified: doc.is_verified,
               uploaded_at: doc.upload_time,
               name: doc.original_filename,
@@ -775,6 +803,21 @@ export function ScholarshipApplicationStep({
     }
   };
 
+  // Auto-select the sole eligible sub-type. With exactly one real choice,
+  // leaving it unselected strands the form below 100% (sub-type is a required
+  // progress item) and would otherwise fall back to the invalid "general"
+  // category at submit. Depend on the whole scholarship object so switching to
+  // a different single-sub-type scholarship re-selects correctly.
+  useEffect(() => {
+    const realSubTypes = (selectedScholarship?.eligible_sub_types ?? []).filter(
+      st => st.value && st.value !== "general"
+    );
+    if (realSubTypes.length !== 1) return;
+    const onlyValue = realSubTypes[0].value;
+    if (!onlyValue) return;
+    setSelectedSubTypes(prev => (prev.length > 0 ? prev : [onlyValue]));
+  }, [selectedScholarship]);
+
   const handleScholarshipChange = (scholarshipCode: string) => {
     const scholarship = eligibleScholarships.find(
       s => s.code === scholarshipCode
@@ -871,6 +914,13 @@ export function ScholarshipApplicationStep({
   const handleSaveDraft = async () => {
     if (!selectedScholarship) return;
 
+    // When the scholarship defines real sub-types, never fall back to the
+    // synthetic "general" category (it matches no quota slot at distribution);
+    // send [] so the backend guard / draft stays honest.
+    const hasRealEligibleSubTypes = (
+      selectedScholarship.eligible_sub_types ?? []
+    ).some(st => st.value && st.value !== "general");
+
     setSubmitting(true);
     try {
       // Include the applicant's postal account (郵局帳號) so the admin review
@@ -898,7 +948,11 @@ export function ScholarshipApplicationStep({
         scholarship_type: selectedScholarship.code,
         configuration_id: selectedScholarship.configuration_id || 0,
         scholarship_subtype_list:
-          selectedSubTypes.length > 0 ? selectedSubTypes : ["general"],
+          selectedSubTypes.length > 0
+            ? selectedSubTypes
+            : hasRealEligibleSubTypes
+              ? []
+              : ["general"],
         agree_terms: agreedToTerms,
         sub_type_preferences:
           subTypePreferences.length > 0 ? subTypePreferences : undefined,
@@ -989,6 +1043,13 @@ export function ScholarshipApplicationStep({
   const handleSubmit = async () => {
     if (!selectedScholarship) return;
 
+    // When the scholarship defines real sub-types, never fall back to the
+    // synthetic "general" category (it matches no quota slot at distribution);
+    // send [] so the backend guard / draft stays honest.
+    const hasRealEligibleSubTypes = (
+      selectedScholarship.eligible_sub_types ?? []
+    ).some(st => st.value && st.value !== "general");
+
     setSubmitting(true);
     try {
       // Include the applicant's postal account (郵局帳號) so the admin review
@@ -1016,7 +1077,11 @@ export function ScholarshipApplicationStep({
         scholarship_type: selectedScholarship.code,
         configuration_id: selectedScholarship.configuration_id || 0,
         scholarship_subtype_list:
-          selectedSubTypes.length > 0 ? selectedSubTypes : ["general"],
+          selectedSubTypes.length > 0
+            ? selectedSubTypes
+            : hasRealEligibleSubTypes
+              ? []
+              : ["general"],
         agree_terms: agreedToTerms,
         sub_type_preferences:
           subTypePreferences.length > 0 ? subTypePreferences : undefined,

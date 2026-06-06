@@ -27,9 +27,7 @@ from app.models.email_management import ScheduledEmail, ScheduleStatus
 
 
 def _email(**overrides) -> ScheduledEmail:
-    e = object.__new__(ScheduledEmail)
     defaults = {
-        "id": 1,
         "recipient_email": "test@u.tw",
         "scheduled_for": datetime.now(timezone.utc),
         "status": ScheduleStatus.pending,
@@ -41,9 +39,7 @@ def _email(**overrides) -> ScheduledEmail:
         "retry_count": 0,
     }
     defaults.update(overrides)
-    for k, v in defaults.items():
-        object.__setattr__(e, k, v)
-    return e
+    return ScheduledEmail(**defaults)
 
 
 # ─── is_due ──────────────────────────────────────────────────────────

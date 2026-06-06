@@ -594,7 +594,7 @@ class ScholarshipApplicationService:
     def _validate_application_documents(self, application: "Application") -> Tuple[bool, str]:
         """Validate that all required documents are uploaded"""
 
-        required_docs = application.scholarship_type.required_documents or []
+        required_docs = application.scholarship_type_ref.required_documents or []
         uploaded_docs = [f.document_type for f in application.files if f.document_type]
 
         missing_docs = []

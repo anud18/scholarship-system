@@ -100,7 +100,7 @@ test.describe("Professor reject recommendation + upsert", () => {
     }
   });
 
-  test("@nightly stuphd001 → professor reject → upsert to approve; status stays submitted", async ({
+  test("@nightly stuphd001 → professor reject → rejected; professor cannot re-review (403)", async ({
     browser,
   }) => {
     // 0. Drain any leftover (stuphd001, phd) apps from concurrent specs
@@ -194,14 +194,16 @@ test.describe("Professor reject recommendation + upsert", () => {
     expect(reviewsAfterReject[0].reviewer_id).toBe(professorUserId);
     expect(reviewsAfterReject[0].recommendation).toBe("reject");
 
-    //    b) application.status is unchanged — professor recommendation is
-    //       advisory only and must not flip status away from 'submitted'.
+    //    b) application.status becomes 'rejected' — a professor full-reject
+    //       marks the application rejected (政策: 教授拒絕代表此申請沒料了).
+    //       College/admin retain the right to edit / send back (回發) later, but
+    //       that is a separate action, not this professor-review path.
     const appAfterReject = await getApplication(appId);
     expect(appAfterReject, `application ${appId} disappeared after reject`).not.toBeNull();
     expect(
       appAfterReject!.status,
-      `professor reject should NOT change application.status, got ${appAfterReject!.status}`,
-    ).toBe("submitted");
+      `professor full-reject should set application.status=rejected, got ${appAfterReject!.status}`,
+    ).toBe("rejected");
 
     //    c) review_stage advanced to 'professor_reviewed' (per
     //       create_professor_review at services/application_service.py:1729).
@@ -211,10 +213,11 @@ test.describe("Professor reject recommendation + upsert", () => {
     );
     expect(stageAfterReject.rows[0]?.review_stage).toBe("professor_reviewed");
 
-    // 5. Second professor review for the SAME application with a DIFFERENT
-    //    recommendation. The service upserts on (application_id, reviewer_id)
-    //    so the row count must stay at 1 and the value must update.
-    const approveRes = await apiAs<{ success: boolean; data: { id: number } }>(
+    // 5. A professor full-reject is terminal for the professor: once the app is
+    //    `rejected`, the professor can no longer submit/upsert another review —
+    //    only college/admin may revert it (回發). A re-submit must be refused
+    //    (403), NOT silently re-open the application.
+    const reReviewRes = await apiAs<{ success: boolean; message?: string }>(
       profLogin.token,
       "POST",
       `/professor/applications/${appDbId}/review`,
@@ -223,41 +226,30 @@ test.describe("Professor reject recommendation + upsert", () => {
           {
             sub_type_code: SUB_TYPE,
             recommendation: "approve",
-            comments: "E2E upsert path",
+            comments: "E2E re-review attempt after reject",
           },
         ],
       },
     );
-    pushTrace(runState, approveRes.traceId);
+    pushTrace(runState, reReviewRes.traceId);
     expect(
-      approveRes.ok,
-      `professor approve review (upsert) failed: HTTP ${approveRes.status} body=${JSON.stringify(
-        approveRes.body,
+      reReviewRes.status,
+      `professor re-review of a rejected app should be refused (403), got HTTP ${reReviewRes.status} body=${JSON.stringify(
+        reReviewRes.body,
       )}`,
-    ).toBe(true);
-    expect(approveRes.body.success).toBe(true);
+    ).toBe(403);
 
-    // 6. Upsert invariants:
-    //    a) Still exactly one application_reviews row — no duplicate created.
-    const reviewsAfterUpsert = await getReviews(appDbId);
-    expect(
-      reviewsAfterUpsert.length,
-      `expected exactly 1 review row after upsert (no duplicate), got ${reviewsAfterUpsert.length}: ${JSON.stringify(
-        reviewsAfterUpsert,
-      )}`,
-    ).toBe(1);
+    // 6. Invariants after the refused re-review — nothing changed:
+    //    a) still exactly one review row (the original reject), same id,
+    //       recommendation unchanged.
+    const reviewsAfterReReview = await getReviews(appDbId);
+    expect(reviewsAfterReReview.length).toBe(1);
+    expect(reviewsAfterReReview[0].id).toBe(reviewsAfterReject[0].id);
+    expect(reviewsAfterReReview[0].recommendation).toBe("reject");
 
-    //    b) Same row id as before (truly an update, not a delete+insert).
-    expect(
-      reviewsAfterUpsert[0].id,
-      "upsert should reuse the existing review row, not allocate a new id",
-    ).toBe(reviewsAfterReject[0].id);
-
-    //    c) Recommendation reflects the newer value.
-    expect(reviewsAfterUpsert[0].recommendation).toBe("approve");
-
-    //    d) Status still 'submitted' — second call also advisory.
-    const appAfterUpsert = await getApplication(appId);
-    expect(appAfterUpsert!.status).toBe("submitted");
+    //    b) application status is still 'rejected' — the refused call did not
+    //       re-open it.
+    const appAfterReReview = await getApplication(appId);
+    expect(appAfterReReview!.status).toBe("rejected");
   });
 });

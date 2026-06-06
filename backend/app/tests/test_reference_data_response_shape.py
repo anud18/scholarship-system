@@ -7,25 +7,17 @@ Wave 1 of the production-readiness rollout (audit found 10 endpoints in
 a regression to a bare list/dict return would fail CI rather than silently
 break the frontend's auto-detection in ``frontend/lib/api.ts``.
 
-NOTE: These tests construct a TestClient against the real FastAPI app and
-hit endpoints that SELECT from reference-data tables (genders, degrees,
-identities, studying_statuses). They require a populated DB and are NOT
-suitable for the lightweight ``smoke`` marker — running them under the
-smoke harness (no DB seed) yields ``no such table: genders``. The
-``smoke`` marker has been removed; the tests still run under the full
-integration suite where the DB is seeded.
+NOTE: Tests use the async ``client`` fixture from conftest.py, which overrides
+BOTH ``app.db.deps.get_db`` and ``app.core.deps.get_db`` with the test SQLite
+session (tables created via Base.metadata.create_all). This ensures reference-
+data endpoints that import from ``app.core.deps`` get the same in-memory DB.
 
-A future PR can re-add ``smoke`` once the DB plumbing is fixed (the two
-``get_db`` import paths — ``app.core.deps.get_db`` and
-``app.db.deps.get_db`` — must be consolidated so test ``dependency_overrides``
-applies to both, and all reference-data models must be registered with
-``Base.metadata`` before the test fixture's ``create_all`` runs).
+Reference-data tables (genders, degrees, identities, studying_statuses) may be
+empty in the test DB — that is acceptable: the shape check passes for an empty
+list, and this suite only validates the response envelope, not the data content.
 """
 
 import pytest
-from fastapi.testclient import TestClient
-
-from app.main import app
 
 
 def _assert_api_response_shape(payload, expected_data_type=(list, dict)) -> None:
@@ -41,40 +33,41 @@ def _assert_api_response_shape(payload, expected_data_type=(list, dict)) -> None
     ), f"data must be {expected_data_type}, got {type(payload['data'])}"
 
 
-def test_degrees_returns_api_response():
+@pytest.mark.asyncio
+async def test_degrees_returns_api_response(client):
     """GET /api/v1/reference-data/degrees returns wrapped ApiResponse[list]."""
-    client = TestClient(app)
-    response = client.get("/api/v1/reference-data/degrees")
+    response = await client.get("/api/v1/reference-data/degrees")
     assert response.status_code == 200, response.text
     _assert_api_response_shape(response.json(), expected_data_type=list)
 
 
-def test_identities_returns_api_response():
+@pytest.mark.asyncio
+async def test_identities_returns_api_response(client):
     """GET /api/v1/reference-data/identities returns wrapped ApiResponse[list]."""
-    client = TestClient(app)
-    response = client.get("/api/v1/reference-data/identities")
+    response = await client.get("/api/v1/reference-data/identities")
     assert response.status_code == 200, response.text
     _assert_api_response_shape(response.json(), expected_data_type=list)
 
 
-def test_studying_statuses_returns_api_response():
+@pytest.mark.asyncio
+async def test_studying_statuses_returns_api_response(client):
     """GET /api/v1/reference-data/studying-statuses returns wrapped ApiResponse[list]."""
-    client = TestClient(app)
-    response = client.get("/api/v1/reference-data/studying-statuses")
+    response = await client.get("/api/v1/reference-data/studying-statuses")
     assert response.status_code == 200, response.text
     _assert_api_response_shape(response.json(), expected_data_type=list)
 
 
-def test_genders_returns_api_response():
+@pytest.mark.asyncio
+async def test_genders_returns_api_response(client):
     """GET /api/v1/reference-data/genders returns wrapped ApiResponse[list]."""
-    client = TestClient(app)
-    response = client.get("/api/v1/reference-data/genders")
+    response = await client.get("/api/v1/reference-data/genders")
     assert response.status_code == 200, response.text
     _assert_api_response_shape(response.json(), expected_data_type=list)
 
 
+@pytest.mark.asyncio
 @pytest.mark.smoke
-def test_semesters_returns_api_response():
+async def test_semesters_returns_api_response(client):
     """GET /api/v1/reference-data/semesters returns wrapped ApiResponse[dict].
 
     This endpoint historically returned a bare dict (academic_years, semesters,
@@ -83,8 +76,7 @@ def test_semesters_returns_api_response():
 
     Kept under smoke because this endpoint doesn't touch the DB.
     """
-    client = TestClient(app)
-    response = client.get("/api/v1/reference-data/semesters")
+    response = await client.get("/api/v1/reference-data/semesters")
     assert response.status_code == 200, response.text
     payload = response.json()
     _assert_api_response_shape(payload, expected_data_type=dict)
@@ -95,7 +87,8 @@ def test_semesters_returns_api_response():
     assert "current_academic_year" in data
 
 
-def test_all_reference_data_returns_api_response():
+@pytest.mark.asyncio
+async def test_all_reference_data_returns_api_response(client):
     """GET /api/v1/reference-data/all returns wrapped ApiResponse[dict].
 
     Wave-1 closeout: this aggregate endpoint historically returned a bare dict
@@ -103,8 +96,7 @@ def test_all_reference_data_returns_api_response():
     ApiResponse so frontend auto-detection in ``frontend/lib/api.ts`` continues
     to work uniformly.
     """
-    client = TestClient(app)
-    response = client.get("/api/v1/reference-data/all")
+    response = await client.get("/api/v1/reference-data/all")
     assert response.status_code == 200, response.text
     payload = response.json()
     _assert_api_response_shape(payload, expected_data_type=dict)
@@ -112,17 +104,23 @@ def test_all_reference_data_returns_api_response():
     data = payload["data"]
     for key in ("degrees", "identities", "academies", "departments", "genders"):
         assert key in data, f"missing '{key}' in /reference-data/all .data payload"
+    # Regression guard: academy_code must be present on department objects so the
+    # college summary export can group by academy without a separate /departments call.
+    departments = data["departments"]
+    if departments:
+        dept = departments[0]
+        assert "academy_code" in dept, f"department object in /all is missing 'academy_code': {dept!r}"
 
 
-def test_scholarship_types_with_cycles_returns_api_response():
+@pytest.mark.asyncio
+async def test_scholarship_types_with_cycles_returns_api_response(client):
     """GET /api/v1/reference-data/scholarship-types-with-cycles returns wrapped ApiResponse[dict].
 
     Wave-1 closeout: this endpoint historically returned a bare dict
     (scholarships, cycle_counts, total_scholarships). It is now wrapped in
     ApiResponse for parity with the rest of the reference-data module.
     """
-    client = TestClient(app)
-    response = client.get("/api/v1/reference-data/scholarship-types-with-cycles")
+    response = await client.get("/api/v1/reference-data/scholarship-types-with-cycles")
     assert response.status_code == 200, response.text
     payload = response.json()
     _assert_api_response_shape(payload, expected_data_type=dict)

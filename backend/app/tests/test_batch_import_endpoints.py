@@ -13,10 +13,25 @@ from fastapi import status
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.security import get_current_user
+from app.main import app
 from app.models.batch_import import BatchImport
 from app.models.enums import BatchImportStatus
 from app.models.scholarship import ScholarshipType
 from app.models.user import User, UserRole
+
+# Router is mounted under this prefix in app/api/v1/api.py
+BASE = "/api/v1/college-review/batch-import"
+
+
+def _override_user(user: User):
+    """Override the get_current_user dependency to return the given user.
+
+    require_college_role still executes (so role gating is preserved); only the
+    underlying get_current_user dependency is replaced. The conftest `client`
+    fixture clears all overrides at teardown.
+    """
+    app.dependency_overrides[get_current_user] = lambda: user
 
 
 class TestBatchImportEndpoints:
@@ -55,15 +70,15 @@ class TestBatchImportEndpoints:
 
     @pytest.fixture
     async def test_scholarship(self, db: AsyncSession):
-        """Create a test scholarship"""
+        """Create a test scholarship type.
+
+        academic_year/semester/amount/main_type live on ScholarshipConfiguration,
+        not ScholarshipType, so only the columns that exist on ScholarshipType are
+        set here.
+        """
         scholarship = ScholarshipType(
             code="test_scholarship",
             name="Test Scholarship",
-            category="general",
-            academic_year=113,
-            semester="first",
-            amount=10000,
-            main_type="general",
             sub_type_list=["type_a", "type_b"],
             sub_type_selection_mode="single",
         )
@@ -95,26 +110,26 @@ class TestBatchImportEndpoints:
         self, client: AsyncClient, college_user: User, test_scholarship: ScholarshipType, valid_excel_file
     ):
         """Test successful batch import upload"""
-        # Mock auth to return college user
-        with patch("app.core.security.get_current_user", return_value=college_user):
-            response = await client.post(
-                "/api/v1/college/batch-import/upload-data",
-                params={
-                    "scholarship_type": test_scholarship.code,
-                    "academic_year": 113,
-                    "semester": "first",
-                },
-                files={
-                    "file": (
-                        "test.xlsx",
-                        valid_excel_file,
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    )
-                },
-            )
+        _override_user(college_user)
+        response = await client.post(
+            f"{BASE}/upload-data",
+            params={
+                "scholarship_type": test_scholarship.code,
+                "academic_year": 113,
+                "semester": "first",
+            },
+            files={
+                "file": (
+                    "test.xlsx",
+                    valid_excel_file,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
 
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
+        body = response.json()
+        data = body["data"]
         assert "batch_id" in data
         assert data["total_records"] == 2
         assert len(data["preview_data"]) == 2
@@ -127,22 +142,22 @@ class TestBatchImportEndpoints:
         # Create a file larger than 10MB
         large_file = b"x" * (11 * 1024 * 1024)  # 11MB
 
-        with patch("app.core.security.get_current_user", return_value=college_user):
-            response = await client.post(
-                "/api/v1/college/batch-import/upload-data",
-                params={
-                    "scholarship_type": test_scholarship.code,
-                    "academic_year": 113,
-                    "semester": "first",
-                },
-                files={
-                    "file": (
-                        "large.xlsx",
-                        large_file,
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    )
-                },
-            )
+        _override_user(college_user)
+        response = await client.post(
+            f"{BASE}/upload-data",
+            params={
+                "scholarship_type": test_scholarship.code,
+                "academic_year": 113,
+                "semester": "first",
+            },
+            files={
+                "file": (
+                    "large.xlsx",
+                    large_file,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
 
         assert response.status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
         assert "超過限制" in response.json()["message"]
@@ -152,18 +167,20 @@ class TestBatchImportEndpoints:
         self, client: AsyncClient, college_user: User, test_scholarship: ScholarshipType
     ):
         """Test file type validation"""
-        invalid_file = b"This is not an Excel file"
+        # PNG magic header -> libmagic reports image/png, which is not an allowed
+        # Excel/CSV MIME type.
+        invalid_file = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
 
-        with patch("app.core.security.get_current_user", return_value=college_user):
-            response = await client.post(
-                "/api/v1/college/batch-import/upload-data",
-                params={
-                    "scholarship_type": test_scholarship.code,
-                    "academic_year": 113,
-                    "semester": "first",
-                },
-                files={"file": ("test.txt", invalid_file, "text/plain")},
-            )
+        _override_user(college_user)
+        response = await client.post(
+            f"{BASE}/upload-data",
+            params={
+                "scholarship_type": test_scholarship.code,
+                "academic_year": 113,
+                "semester": "first",
+            },
+            files={"file": ("test.png", invalid_file, "image/png")},
+        )
 
         assert response.status_code == status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
         assert "不支援的檔案格式" in response.json()["message"]
@@ -182,22 +199,22 @@ class TestBatchImportEndpoints:
             college_code=None,
         )
 
-        with patch("app.core.security.get_current_user", return_value=user_without_college):
-            response = await client.post(
-                "/api/v1/college/batch-import/upload-data",
-                params={
-                    "scholarship_type": test_scholarship.code,
-                    "academic_year": 113,
-                    "semester": "first",
-                },
-                files={
-                    "file": (
-                        "test.xlsx",
-                        valid_excel_file,
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    )
-                },
-            )
+        _override_user(user_without_college)
+        response = await client.post(
+            f"{BASE}/upload-data",
+            params={
+                "scholarship_type": test_scholarship.code,
+                "academic_year": 113,
+                "semester": "first",
+            },
+            files={
+                "file": (
+                    "test.xlsx",
+                    valid_excel_file,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "未設定學院代碼" in response.json()["message"]
@@ -226,23 +243,21 @@ class TestBatchImportEndpoints:
         await db.commit()
         await db.refresh(batch_import)
 
-        # Mock scholarship and service
-        with (
-            patch("app.core.security.get_current_user", return_value=college_user),
-            patch("app.api.v1.endpoints.batch_import.BatchImportService") as mock_service_class,
-        ):
+        # Mock service so no real application creation runs
+        _override_user(college_user)
+        with patch("app.api.v1.endpoints.batch_import.BatchImportService") as mock_service_class:
             mock_service = Mock()
             mock_service.create_applications_from_batch = AsyncMock(return_value=([1, 2], []))
             mock_service.update_batch_import_status = AsyncMock()
             mock_service_class.return_value = mock_service
 
             response = await client.post(
-                f"/api/v1/college/batch-import/{batch_import.id}/confirm",
+                f"{BASE}/{batch_import.id}/confirm",
                 json={"batch_id": batch_import.id, "confirm": True},
             )
 
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
+        data = response.json()["data"]
         assert data["success_count"] == 2
         assert data["failed_count"] == 0
 
@@ -264,19 +279,19 @@ class TestBatchImportEndpoints:
         await db.commit()
         await db.refresh(batch_import)
 
-        with patch("app.core.security.get_current_user", return_value=college_user):
-            response = await client.post(
-                f"/api/v1/college/batch-import/{batch_import.id}/confirm",
-                json={"batch_id": batch_import.id, "confirm": False},
-            )
+        _override_user(college_user)
+        response = await client.post(
+            f"{BASE}/{batch_import.id}/confirm",
+            json={"batch_id": batch_import.id, "confirm": False},
+        )
 
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
+        data = response.json()["data"]
         assert data["success_count"] == 0
 
         # Verify status updated
         await db.refresh(batch_import)
-        assert batch_import.import_status == BatchImportStatus.cancelled.value
+        assert batch_import.import_status == BatchImportStatus.cancelled
 
     @pytest.mark.asyncio
     async def test_confirm_batch_import_wrong_status(self, client: AsyncClient, db: AsyncSession, college_user: User):
@@ -296,11 +311,11 @@ class TestBatchImportEndpoints:
         await db.commit()
         await db.refresh(batch_import)
 
-        with patch("app.core.security.get_current_user", return_value=college_user):
-            response = await client.post(
-                f"/api/v1/college/batch-import/{batch_import.id}/confirm",
-                json={"batch_id": batch_import.id, "confirm": True},
-            )
+        _override_user(college_user)
+        response = await client.post(
+            f"{BASE}/{batch_import.id}/confirm",
+            json={"batch_id": batch_import.id, "confirm": True},
+        )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "無法再次確認" in response.json()["message"]
@@ -308,7 +323,7 @@ class TestBatchImportEndpoints:
     @pytest.mark.asyncio
     async def test_get_batch_import_history_college(self, client: AsyncClient, db: AsyncSession, college_user: User):
         """Test getting batch import history as college user"""
-        # Create batch imports
+        # Create batch imports (only confirmed statuses appear in history)
         batch1 = BatchImport(
             importer_id=college_user.id,
             college_code="E",
@@ -317,7 +332,7 @@ class TestBatchImportEndpoints:
             semester="first",
             file_name="test1.xlsx",
             total_records=10,
-            import_status=BatchImportStatus.completed.value,
+            import_status=BatchImportStatus.completed,
         )
         batch2 = BatchImport(
             importer_id=college_user.id,
@@ -327,16 +342,16 @@ class TestBatchImportEndpoints:
             semester="first",
             file_name="test2.xlsx",
             total_records=20,
-            import_status=BatchImportStatus.pending.value,
+            import_status=BatchImportStatus.partial,
         )
         db.add_all([batch1, batch2])
         await db.commit()
 
-        with patch("app.core.security.get_current_user", return_value=college_user):
-            response = await client.get("/api/v1/college/batch-import/history")
+        _override_user(college_user)
+        response = await client.get(f"{BASE}/history")
 
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
+        data = response.json()["data"]
         assert data["total"] == 2
         assert len(data["items"]) == 2
 
@@ -345,7 +360,7 @@ class TestBatchImportEndpoints:
         self, client: AsyncClient, db: AsyncSession, college_user: User, super_admin_user: User
     ):
         """Test super admin can see all batch imports"""
-        # Create batch from college user
+        # Create batch from college user (confirmed status so it shows in history)
         batch = BatchImport(
             importer_id=college_user.id,
             college_code="E",
@@ -354,16 +369,16 @@ class TestBatchImportEndpoints:
             semester="first",
             file_name="test.xlsx",
             total_records=10,
-            import_status=BatchImportStatus.completed.value,
+            import_status=BatchImportStatus.completed,
         )
         db.add(batch)
         await db.commit()
 
-        with patch("app.core.security.get_current_user", return_value=super_admin_user):
-            response = await client.get("/api/v1/college/batch-import/history")
+        _override_user(super_admin_user)
+        response = await client.get(f"{BASE}/history")
 
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
+        data = response.json()["data"]
         assert data["total"] >= 1  # Should see college user's batch
 
     @pytest.mark.asyncio
@@ -386,11 +401,11 @@ class TestBatchImportEndpoints:
         await db.commit()
         await db.refresh(batch)
 
-        with patch("app.core.security.get_current_user", return_value=college_user):
-            response = await client.get(f"/api/v1/college/batch-import/{batch.id}/details")
+        _override_user(college_user)
+        response = await client.get(f"{BASE}/{batch.id}/details")
 
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
+        data = response.json()["data"]
         assert data["id"] == batch.id
         assert data["total_records"] == 10
         assert data["success_count"] == 8
@@ -399,15 +414,20 @@ class TestBatchImportEndpoints:
     @pytest.mark.asyncio
     async def test_download_template(self, client: AsyncClient, college_user: User, test_scholarship: ScholarshipType):
         """Test template download"""
-        with patch("app.core.security.get_current_user", return_value=college_user):
-            response = await client.get(
-                "/api/v1/college/batch-import/template",
-                params={"scholarship_type": test_scholarship.code},
-            )
+        _override_user(college_user)
+        response = await client.get(
+            f"{BASE}/template",
+            params={"scholarship_type": test_scholarship.code},
+        )
 
         assert response.status_code == status.HTTP_200_OK
         assert response.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        assert "batch_import_template" in response.headers.get("content-disposition", "")
+        # Template is served as an .xlsx attachment named after the scholarship.
+        content_disposition = response.headers.get("content-disposition", "")
+        assert "attachment" in content_disposition
+        assert ".xlsx" in content_disposition
+        # Filename is derived from the scholarship name ("Test Scholarship" -> "Test%20Scholarship").
+        assert "Test" in content_disposition
 
     @pytest.mark.asyncio
     async def test_upload_requires_college_role(
@@ -423,21 +443,21 @@ class TestBatchImportEndpoints:
             user_type="student",
         )
 
-        with patch("app.core.security.get_current_user", return_value=student_user):
-            response = await client.post(
-                "/api/v1/college/batch-import/upload-data",
-                params={
-                    "scholarship_type": test_scholarship.code,
-                    "academic_year": 113,
-                    "semester": "first",
-                },
-                files={
-                    "file": (
-                        "test.xlsx",
-                        valid_excel_file,
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    )
-                },
-            )
+        _override_user(student_user)
+        response = await client.post(
+            f"{BASE}/upload-data",
+            params={
+                "scholarship_type": test_scholarship.code,
+                "academic_year": 113,
+                "semester": "first",
+            },
+            files={
+                "file": (
+                    "test.xlsx",
+                    valid_excel_file,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
 
         assert response.status_code == status.HTTP_403_FORBIDDEN

@@ -302,7 +302,7 @@ class TestRosterServiceGenerate:
         )
         svc.lock_roster(roster.id, locked_by_user_id=admin.id)
 
-        with pytest.raises(RosterLockedError):
+        with pytest.raises(RosterGenerationError):
             svc.generate_roster(
                 scholarship_configuration_id=config.id,
                 period_label="2024-01",
@@ -331,9 +331,10 @@ class TestRosterServiceGenerate:
             quota_mode=QuotaManagementMode.matrix_based,
         )
         ranking = CollegeRanking(
-            scholarship_configuration_id=config.id,
+            scholarship_type_id=scholarship.id,
+            sub_type_code="default",
             academic_year=113,
-            semester=Semester.first,
+            semester=Semester.first.value,
             distribution_executed=False,
         )
         db_sync.add(ranking)
@@ -341,7 +342,9 @@ class TestRosterServiceGenerate:
         db_sync.refresh(ranking)
 
         svc = RosterService(db_sync)
-        with pytest.raises(ValueError, match="尚未執行分發"):
+        # generate_roster wraps all internal exceptions (including the ValueError
+        # raised for unexecuted distribution) in RosterGenerationError before surfacing.
+        with pytest.raises(RosterGenerationError, match="尚未執行分發"):
             svc.generate_roster(
                 scholarship_configuration_id=config.id,
                 period_label="2024-01",
