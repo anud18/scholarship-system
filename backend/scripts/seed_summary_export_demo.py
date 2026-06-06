@@ -75,7 +75,7 @@ def _build_student_data(idx: int, entry) -> dict:
         "trm_degree": 1,
         "trm_studystatus": 1,
         "trm_ascore_gpa": 3.8,
-        "_api_source": "seed_summary_export_demo",
+        "_api_fetched_at": "2025-10-22T00:00:00Z",
         "_term_data_status": "success",
     }
 

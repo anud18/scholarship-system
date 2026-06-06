@@ -4379,7 +4379,7 @@ def _mk_summary_demo_student(code, e):
         "std_highestschname": "國立陽明交通大學",
         "std_cname": cname,
         "std_ename": ename,
-        "std_pid": "D1234" + code[-2:].rjust(2, "0"),
+        "std_pid": f"D1234{list(_SUMMARY_EXPORT_DEMO.keys()).index(code) + 1:05d}",
         "std_bdate": "900101",
         "std_academyno": aca,
         "std_depno": dep,
@@ -4396,7 +4396,7 @@ def _mk_summary_demo_student(code, e):
         "ToDoctor": 1,
         "com_commadd": "新竹市東區大學路1001號",
         "com_email": code + "@nycu.edu.tw",
-        "com_cellphone": "0912000000",
+        "com_cellphone": f"091200{list(_SUMMARY_EXPORT_DEMO.keys()).index(code) + 1:04d}",
     }
 
 
