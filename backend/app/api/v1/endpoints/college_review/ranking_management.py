@@ -973,9 +973,10 @@ async def import_ranking_from_excel(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Import ranking data from Excel.
+    Import ranking data parsed from the 學生資料彙整表 Excel.
 
-    Expected columns: 學號, 姓名, 排名
+    Takes a JSON body (List[RankingImportItem]); the frontend parses the workbook
+    (學號 → student_id, 學生中文姓名 → student_name, 學院初審會議之學院排序 → rank_position).
     rank_position accepts positive integers (1-based, consecutive, no duplicates) or "N" (rejected).
     Student IDs must exactly match the ranking's application set.
     """
@@ -1124,6 +1125,7 @@ async def import_ranking_from_excel(
 async def export_ranking_excel(
     ranking_id: int,
     request: Request,
+    template: bool = Query(False, description="Render the rank column blank, as a fill-in import template"),
     current_user: User = Depends(require_scholarship_manager),
     db: AsyncSession = Depends(get_db),
 ):
@@ -1173,7 +1175,7 @@ async def export_ranking_excel(
 
     export_rows = [
         ExportRow(
-            rank_position=item.rank_position,
+            rank_position=None if template else item.rank_position,
             application=item.application,
             bank_account=account_number_by_user.get(item.application.user_id),
             advisor_names=advisor_string_by_user.get(item.application.user_id),
@@ -1196,7 +1198,10 @@ async def export_ranking_excel(
         if current_user.role not in (UserRole.admin, UserRole.super_admin)
         else (getattr(ranking.creator, "college_code", None) or "全校")
     )
-    base_filename = f"{ranking.academic_year}學年度{scholarship_name}學生資料彙整表_{college_label}.xlsx"
+    template_suffix = "_範本" if template else ""
+    base_filename = (
+        f"{ranking.academic_year}學年度{scholarship_name}學生資料彙整表_{college_label}{template_suffix}.xlsx"
+    )
     encoded = _url_quote(base_filename, safe="")
 
     # 7. Render workbook
@@ -1220,7 +1225,8 @@ async def export_ranking_excel(
             resource_id=str(ranking_id),
             resource_name=base_filename,
             description=(
-                f"匯出學生資料彙整表（含身分證字號明文）: ranking_id={ranking_id}, " f"records={len(exported_app_ids)}"
+                f"匯出學生資料彙整表（{'範本，' if template else ''}含身分證字號明文）: "
+                f"ranking_id={ranking_id}, records={len(exported_app_ids)}"
             ),
             ip_address=(request.client.host if request.client else None),
             user_agent=request.headers.get("user-agent"),
@@ -1235,6 +1241,7 @@ async def export_ranking_excel(
                 "application_ids": exported_app_ids,
                 "pii_fields": ["std_pid"],
                 "export_format": "xlsx",
+                "is_template": template,
             },
         )
         db.add(audit_log)
