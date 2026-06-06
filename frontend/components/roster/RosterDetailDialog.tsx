@@ -305,6 +305,16 @@ export function RosterDetailDialog({
     }
   }, [open, period.roster_id]);
 
+  // The dialog stays mounted while the parent swaps `period` between rosters,
+  // so clear any prior roster's reconcile diff/selection when the roster (or
+  // open state) changes — otherwise a stale diff could show under a new roster.
+  useEffect(() => {
+    setDiff(null);
+    setSelectedAddIds(new Set());
+    setSelectedRemoveItemIds(new Set());
+    setReconcileConfirmOpen(false);
+  }, [open, period.roster_id]);
+
   const loadRosterItems = async () => {
     if (!period.roster_id) return;
 

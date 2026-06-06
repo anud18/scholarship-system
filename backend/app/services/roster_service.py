@@ -2059,6 +2059,11 @@ class RosterService:
 
         for app_id in add_ids:
             application = self.db.get(Application, app_id)
+            if application is None:
+                # Unreachable in practice (allowed_add is derived from loaded,
+                # approved applications) but guard so a deleted row yields a
+                # clean 400 instead of an AttributeError 500.
+                raise ValueError(f"Application {app_id} not found")
             item = self._verify_and_create_item(roster, application)
             self.db.flush()
             added.append(
