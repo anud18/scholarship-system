@@ -216,3 +216,40 @@ describe("createPaymentRostersApi", () => {
     );
   });
 });
+
+describe("getDistributionDiff", () => {
+  it("calls GET with the roster_id path param", async () => {
+    const api = createPaymentRostersApi();
+    mockedRaw.GET.mockResolvedValue(_ok({ roster_id: 7, to_add: [], to_remove: [] }));
+
+    const res = await api.getDistributionDiff(7);
+
+    expect(mockedRaw.GET).toHaveBeenCalledWith(
+      "/api/v1/payment-rosters/{roster_id}/distribution-diff",
+      { params: { path: { roster_id: 7 } } }
+    );
+    expect(res.success).toBe(true);
+  });
+});
+
+describe("reconcileRoster", () => {
+  it("calls POST with path + add/remove body", async () => {
+    const api = createPaymentRostersApi();
+    mockedRaw.POST.mockResolvedValue(_ok({ added: [], removed: [], excel_stale: true }));
+
+    const res = await api.reconcileRoster(7, {
+      add_application_ids: [11],
+      remove_item_ids: [22],
+      reason: "sync",
+    });
+
+    expect(mockedRaw.POST).toHaveBeenCalledWith(
+      "/api/v1/payment-rosters/{roster_id}/reconcile",
+      {
+        params: { path: { roster_id: 7 } },
+        body: { add_application_ids: [11], remove_item_ids: [22], reason: "sync" },
+      }
+    );
+    expect(res.success).toBe(true);
+  });
+});

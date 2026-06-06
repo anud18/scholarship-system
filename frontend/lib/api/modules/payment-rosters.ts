@@ -29,6 +29,38 @@ export interface RevokedSuspendedList {
   suspended: RevokedSuspendedEntry[];
 }
 
+export interface DistributionDiffEntry {
+  application_id: number;
+  item_id: number | null;
+  student_id: string | null;
+  student_name: string;
+  department_name: string | null;
+  college_name: string | null;
+  allocation_year: number | null;
+  allocated_sub_type: string | null;
+  application_identity: string | null;
+  scholarship_amount: number;
+}
+
+export interface DistributionDiff {
+  roster_id: number;
+  roster_code: string;
+  status: string;
+  allocation_year: number | null;
+  sub_type: string | null;
+  to_add: DistributionDiffEntry[];
+  to_remove: DistributionDiffEntry[];
+}
+
+export interface ReconcileResult {
+  added: { application_id: number | null; item_id: number | null; is_included: boolean | null; exclusion_reason: string | null }[];
+  removed: { application_id: number | null; item_id: number | null }[];
+  qualified_count: number;
+  total_applications: number;
+  total_amount: number;
+  excel_stale: boolean;
+}
+
 export function createPaymentRostersApi() {
   return {
     /**
@@ -374,6 +406,46 @@ export function createPaymentRostersApi() {
         }
       );
       return toApiResponse(response);
+    },
+
+    /**
+     * 取得造冊與分發名單的差異 (補充/移除候選)
+     * GET /api/v1/payment-rosters/{roster_id}/distribution-diff
+     */
+    getDistributionDiff: async (
+      roster_id: number
+    ): Promise<ApiResponse<DistributionDiff>> => {
+      const response = await typedClient.raw.GET(
+        '/api/v1/payment-rosters/{roster_id}/distribution-diff',
+        { params: { path: { roster_id } } }
+      );
+      return toApiResponse(response) as ApiResponse<DistributionDiff>;
+    },
+
+    /**
+     * 依分發名單補充/移除造冊明細
+     * POST /api/v1/payment-rosters/{roster_id}/reconcile
+     */
+    reconcileRoster: async (
+      roster_id: number,
+      body: {
+        add_application_ids: number[];
+        remove_item_ids: number[];
+        reason?: string;
+      }
+    ): Promise<ApiResponse<ReconcileResult>> => {
+      const response = await typedClient.raw.POST(
+        '/api/v1/payment-rosters/{roster_id}/reconcile',
+        {
+          params: { path: { roster_id } },
+          body: {
+            add_application_ids: body.add_application_ids,
+            remove_item_ids: body.remove_item_ids,
+            reason: body.reason ?? null,
+          },
+        }
+      );
+      return toApiResponse(response) as ApiResponse<ReconcileResult>;
     },
   };
 }
