@@ -342,3 +342,56 @@ class RevokedSuspendedListResponse(BaseModel):
 
     revoked: List[RevokedSuspendedEntry]
     suspended: List[RevokedSuspendedEntry]
+
+
+class DistributionDiffEntry(BaseModel):
+    """One row in a roster↔distribution diff. Used for both add and remove sides."""
+
+    application_id: int
+    item_id: Optional[int] = None  # set only for to_remove rows (the PaymentRosterItem id)
+    student_id: Optional[str] = None  # 學號 (std_stdcode), display only
+    student_name: str
+    department_name: Optional[str] = None
+    college_name: Optional[str] = None
+    allocation_year: Optional[int] = None
+    allocated_sub_type: Optional[str] = None
+    application_identity: Optional[str] = None
+    scholarship_amount: float
+
+
+class DistributionDiff(BaseModel):
+    """Response for GET /payment-rosters/{roster_id}/distribution-diff."""
+
+    roster_id: int
+    roster_code: str
+    status: str
+    allocation_year: Optional[int] = None
+    sub_type: Optional[str] = None
+    to_add: List[DistributionDiffEntry]  # allocated in distribution, missing from roster
+    to_remove: List[DistributionDiffEntry]  # in roster, no longer allocated
+
+
+class ReconcileRequest(BaseModel):
+    """Body for POST /payment-rosters/{roster_id}/reconcile."""
+
+    add_application_ids: List[int] = Field(default_factory=list)
+    remove_item_ids: List[int] = Field(default_factory=list)
+    reason: Optional[str] = Field(None, max_length=500)
+
+
+class ReconcileResultEntry(BaseModel):
+    application_id: Optional[int] = None
+    item_id: Optional[int] = None
+    is_included: Optional[bool] = None
+    exclusion_reason: Optional[str] = None
+
+
+class ReconcileResult(BaseModel):
+    """Response for POST /payment-rosters/{roster_id}/reconcile."""
+
+    added: List[ReconcileResultEntry]
+    removed: List[ReconcileResultEntry]
+    qualified_count: int
+    total_applications: int
+    total_amount: float
+    excel_stale: bool
