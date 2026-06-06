@@ -8,8 +8,6 @@ import pytest
 from fastapi import HTTPException
 
 from app.api.v1.endpoints import payment_rosters as ep
-from app.models.payment_roster import RosterStatus  # noqa: F401  (kept for clarity / future use)
-from app.models.user import User, UserRole, UserType
 from app.schemas.payment_roster import ReconcileRequest
 from app.tests.test_roster_distribution_reconcile_service import (
     _admin,
@@ -38,19 +36,6 @@ def _build_scenario(db_sync):
     return admin, roster, app_b
 
 
-def _nonadmin(db_sync):
-    u = User(
-        nycu_id="ep_student_u",
-        email="ep_student_u@nycu.edu.tw",
-        name="S",
-        role=UserRole.student,
-        user_type=UserType.student,
-    )
-    db_sync.add(u)
-    db_sync.flush()
-    return u
-
-
 @contextlib.contextmanager
 def _passthrough_lock(*args, **kwargs):
     yield "test-token"
@@ -66,7 +51,7 @@ def test_distribution_diff_endpoint_returns_apiresponse(db_sync):
 
 def test_distribution_diff_endpoint_requires_admin(db_sync):
     admin, roster, app_b = _build_scenario(db_sync)
-    student = _nonadmin(db_sync)
+    student = _student(db_sync, "ep_student_u")
     with pytest.raises(HTTPException) as exc:
         ep.get_distribution_diff(roster_id=roster.id, db=db_sync, current_user=student)
     assert exc.value.status_code == 403

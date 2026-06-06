@@ -287,8 +287,8 @@ export function RosterDetailDialog({
         const removed = resp.data?.removed.length ?? 0;
         toast.success(`已更新造冊名單：新增 ${added} 人 / 移除 ${removed} 人`);
         setReconcileConfirmOpen(false);
-        await loadRosterItems();
-        await loadDistributionDiff();
+        // Independent refreshes — run in parallel to halve the post-apply wait.
+        await Promise.all([loadRosterItems(), loadDistributionDiff()]);
       } else {
         toast.error(resp.message || "更新造冊名單失敗");
       }

@@ -438,11 +438,7 @@ export function createPaymentRostersApi() {
         '/api/v1/payment-rosters/{roster_id}/reconcile',
         {
           params: { path: { roster_id } },
-          body: {
-            add_application_ids: body.add_application_ids,
-            remove_item_ids: body.remove_item_ids,
-            reason: body.reason ?? null,
-          },
+          body: { ...body, reason: body.reason ?? null },
         }
       );
       return toApiResponse(response) as ApiResponse<ReconcileResult>;

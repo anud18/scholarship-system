@@ -1414,6 +1414,23 @@ class RosterService:
             logger.exception("Dry run failed")
             raise ValueError("預演失敗") from e
 
+    @staticmethod
+    def _build_semester_filter(semester: Optional[str]):
+        """SQLAlchemy filter selecting CollegeRanking rows for a semester.
+        None / "annual" / "yearly" / "" all map to the yearly bucket
+        (semester IS NULL OR "annual" OR "yearly"); otherwise exact match.
+        Single source of truth shared by generation and reconcile so the diff
+        stays the exact inverse of generation."""
+        from app.models.college_review import CollegeRanking
+
+        if semester in (None, "annual", "yearly", ""):
+            return or_(
+                CollegeRanking.semester.is_(None),
+                CollegeRanking.semester == "annual",
+                CollegeRanking.semester == "yearly",
+            )
+        return CollegeRanking.semester == semester
+
     def generate_rosters_from_distribution(
         self,
         scholarship_type_id: int,
@@ -1448,15 +1465,7 @@ class RosterService:
         from app.models.college_review import CollegeRanking, CollegeRankingItem
 
         # 1. 取得所有已完成分發的排名
-        # 根據 semester 的值建立篩選條件
-        if semester in ("annual", "yearly", ""):
-            sem_filter = or_(
-                CollegeRanking.semester.is_(None),
-                CollegeRanking.semester == "annual",
-                CollegeRanking.semester == "yearly",
-            )
-        else:
-            sem_filter = CollegeRanking.semester == semester
+        sem_filter = self._build_semester_filter(semester)
 
         rankings = (
             self.db.query(CollegeRanking)
@@ -1849,14 +1858,7 @@ class RosterService:
             if config.semester
             else None
         )
-        if semester in (None, "annual", "yearly", ""):
-            sem_filter = or_(
-                CollegeRanking.semester.is_(None),
-                CollegeRanking.semester == "annual",
-                CollegeRanking.semester == "yearly",
-            )
-        else:
-            sem_filter = CollegeRanking.semester == semester
+        sem_filter = self._build_semester_filter(semester)
 
         rankings = (
             self.db.query(CollegeRanking)
