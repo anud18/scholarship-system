@@ -532,3 +532,55 @@ async def test_distributable_pool_cross_type_link(db: AsyncSession):
         {"config_id": requesting.id, "config_code": "phd_115", "academic_year": 115, "is_own": True, "remaining": 5},
         {"config_id": prior.id, "config_code": "direct_phd_114", "academic_year": 114, "is_own": False, "remaining": 2},
     ]
+
+
+# --------------------------------------------------------------------------- #
+# 2.6 _pick_config — own first, then linked by descending year (spec §6.3)
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.asyncio
+async def test_pick_config_prefers_own_then_descending_year(db: AsyncSession):
+    st = await _make_type(db, code="phd")
+    older = await _make_config(
+        db,
+        scholarship_type_id=st.id,
+        config_code="phd_113",
+        academic_year=113,
+        quotas={"nstc": {"E": 2}},
+    )
+    newer = await _make_config(
+        db,
+        scholarship_type_id=st.id,
+        config_code="phd_114",
+        academic_year=114,
+        quotas={"nstc": {"E": 2}},
+    )
+    requesting = await _make_config(
+        db,
+        scholarship_type_id=st.id,
+        config_code="phd_115",
+        academic_year=115,
+        quotas={"nstc": {"E": 5}},
+        shared_quota_sources=[
+            {"source_config_code": "phd_113", "sub_types": ["nstc"]},
+            {"source_config_code": "phd_114", "sub_types": ["nstc"]},
+        ],
+    )
+    svc = ManualDistributionService(db)
+
+    # All have remaining → own (phd_115) wins.
+    wr = {requesting.id: 5, newer.id: 2, older.id: 2}
+    assert await svc._pick_config(requesting, "nstc", wr) == requesting.id
+
+    # Own exhausted → highest-year linked (phd_114) wins.
+    wr = {requesting.id: 0, newer.id: 2, older.id: 2}
+    assert await svc._pick_config(requesting, "nstc", wr) == newer.id
+
+    # Own + phd_114 exhausted → phd_113 wins.
+    wr = {requesting.id: 0, newer.id: 0, older.id: 2}
+    assert await svc._pick_config(requesting, "nstc", wr) == older.id
+
+    # Nothing left → None.
+    wr = {requesting.id: 0, newer.id: 0, older.id: 0}
+    assert await svc._pick_config(requesting, "nstc", wr) is None

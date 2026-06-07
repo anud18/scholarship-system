@@ -1726,55 +1726,27 @@ class ManualDistributionService:
         )
         return list((await self.db.execute(stmt)).scalars().all())
 
-    @staticmethod
-    def _pick_pool(
-        remaining: dict[tuple[str, int], int],
+    async def _pick_config(
+        self,
+        requesting_config: ScholarshipConfiguration,
         sub_type: str,
-        config: ScholarshipConfiguration,
+        working_remaining: dict[int, int],
     ) -> Optional[int]:
-        """Pick the next allocation_year with available quota for `sub_type`.
+        """Pick the next config id with positive working remaining for sub_type.
 
-        Policy: prefer the current academic_year first, then prior years in
-        descending order. Returns None when no pool with positive remaining
-        quota exists for this sub_type.
+        Replaces the year-keyed `_pick_pool` (spec §6.3). Policy: prefer the OWN
+        config first, then linked source configs by DESCENDING academic_year.
+        `working_remaining` is keyed by config id and supplied (and decremented)
+        by the caller so a multi-assign loop need not re-query the DB. Returns
+        None when no candidate config has positive remaining.
         """
-        candidate_years = sorted(
-            [y for (st, y), c in remaining.items() if st == sub_type and c > 0],
-            reverse=True,
-        )
-        if not candidate_years:
-            return None
-        # Prefer the configured current year if available; otherwise the
-        # highest-numbered prior year (already sorted descending).
-        if config.academic_year in candidate_years:
-            return config.academic_year
-        return candidate_years[0]
-
-    @staticmethod
-    def _build_remaining_quota(
-        quotas: dict,
-        used_by_renewal: dict[tuple[str, int], int],
-    ) -> dict[tuple[str, int], int]:
-        """Build {(sub_type, alloc_year): remaining} from config quotas.
-
-        The Phase 6 quotas dict is `{sub_type: {year_string: total_int}}` per
-        spec Section 9.1. Year keys are coerced to int so downstream code can
-        compare against renewal_year / academic_year (also ints).
-        """
-        remaining: dict[tuple[str, int], int] = {}
-        for sub_type, year_map in (quotas or {}).items():
-            if not isinstance(year_map, dict):
-                continue
-            for year_key, total in year_map.items():
-                try:
-                    year_int = int(year_key)
-                except (TypeError, ValueError):
-                    # Non-year keys (legacy college-code matrix) aren't used
-                    # by the Phase 6 algorithm; skip silently.
-                    continue
-                used = used_by_renewal.get((sub_type, year_int), 0)
-                remaining[(sub_type, year_int)] = int(total) - used
-        return remaining
+        if working_remaining.get(requesting_config.id, 0) > 0:
+            return requesting_config.id
+        linked = await self._resolve_linked_configs(requesting_config, sub_type)
+        for cfg in sorted(linked, key=lambda c: c.academic_year, reverse=True):
+            if working_remaining.get(cfg.id, 0) > 0:
+                return cfg.id
+        return None
 
     async def execute_general_distribution(
         self,
