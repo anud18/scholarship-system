@@ -199,6 +199,29 @@ class ManualDistributionService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    def pool_total(self, config: ScholarshipConfiguration, sub_type: str) -> int:
+        """Mode-aware per-(config, sub_type) pool total (spec §6.1).
+
+        matrix_based / college_based (has_college_quota): sum the per-college
+        matrix row → same as model.get_sub_type_total_quota.
+        simple / none (NOT has_college_quota): quotas[sub_type] is a scalar
+        (or fall back to total_quota). get_sub_type_total_quota returns 0 for
+        these configs, so we MUST NOT route the non-matrix branch through it —
+        a cross-type borrow from such a config would read an empty pool.
+        """
+        quotas = config.quotas or {}
+        if config.has_college_quota:
+            sub_type_quotas = quotas.get(sub_type, {})
+            if not isinstance(sub_type_quotas, dict):
+                return 0
+            return sum(sub_type_quotas.values())
+        scalar = quotas.get(sub_type, 0)
+        try:
+            scalar_int = int(scalar)
+        except (TypeError, ValueError):
+            scalar_int = 0
+        return scalar_int or int(config.total_quota or 0)
+
     async def _batch_load_rejected_map(self, app_ids: list[int]) -> dict[int, set[str]]:
         """Load professor-rejected sub-types for a batch of applications."""
         rejected_map: dict[int, set[str]] = {}
