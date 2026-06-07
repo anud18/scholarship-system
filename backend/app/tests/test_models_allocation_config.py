@@ -29,3 +29,11 @@ def test_college_ranking_item_allocation_config_relationship():
     rels = sa_inspect(CollegeRankingItem).relationships
     assert "allocation_config" in rels, "allocation_config relationship missing"
     assert rels["allocation_config"].mapper.class_ is ScholarshipConfiguration
+
+
+def test_application_has_allocation_config_id_fk():
+    col = _column(Application, "allocation_config_id")
+    assert col is not None, "Application.allocation_config_id column missing"
+    assert col.nullable is True
+    fk = next(iter(col.foreign_keys))
+    assert fk.column.table.name == "scholarship_configurations"

@@ -101,7 +101,10 @@ class Application(Base):
         nullable=False,
     )
     is_renewal = Column(Boolean, default=False, nullable=False)  # 是否為續領申請
-    renewal_year = Column(Integer, nullable=True)  # 續領年份 (e.g. 113)，用於批次匯入時直接指定
+    renewal_year = Column(Integer, nullable=True)  # 續領年份 (e.g. 113)，display-only (§9，不再參與配額計算)
+    allocation_config_id = Column(
+        Integer, ForeignKey("scholarship_configurations.id"), nullable=True
+    )  # Config a renewal consumes (§9); NEVER NULL for an approved renewal
     previous_application_id = Column(Integer, ForeignKey("applications.id"))
     challenges_application_id = Column(Integer, ForeignKey("applications.id"), nullable=True, index=True)
     cancelled_due_to_application_id = Column(Integer, ForeignKey("applications.id"), nullable=True, index=True)
