@@ -159,7 +159,10 @@ class CollegeRankingItem(Base):
     allocated_sub_type = Column(String(50), nullable=True)  # Sub-type code allocated to (e.g., 'nstc', 'moe_1w')
     allocation_year = Column(
         Integer, nullable=True
-    )  # Which academic year's quota was used (e.g., 113 for prior-year supplement)
+    )  # DEPRECATED (dropped in shared-quota MIGRATION 2): superseded by allocation_config_id
+    allocation_config_id = Column(
+        Integer, ForeignKey("scholarship_configurations.id"), nullable=True
+    )  # Which config's quota this slot consumed (NULL only on whole-period sentinel rows)
     backup_position = Column(Integer, nullable=True)  # Backup position (NULL for admitted, 1, 2, 3... for backup)
     backup_allocations = Column(
         get_json_type(), nullable=True
@@ -178,6 +181,7 @@ class CollegeRankingItem(Base):
     # Relationships using string references to avoid circular imports
     ranking = relationship("CollegeRanking", back_populates="items")
     application = relationship("Application", lazy="select", foreign_keys=[application_id])
+    allocation_config = relationship("ScholarshipConfiguration", lazy="select", foreign_keys=[allocation_config_id])
 
     def __repr__(self):
         return f"<CollegeRankingItem(id={self.id}, rank={self.rank_position}, allocated={self.is_allocated})>"
