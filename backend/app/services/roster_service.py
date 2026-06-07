@@ -1937,12 +1937,25 @@ class RosterService:
             if application is None or application.status != ApplicationStatus.approved:
                 continue
             sd = application.student_data or {}
+            std_code = sd.get("std_stdcode")
+            std_name = sd.get("std_cname")
+            if not std_code or not std_name:
+                # _verify_and_create_item rejects these (ValueError), so offering
+                # them as addable would mislead the admin. Skip — but log rather
+                # than silently drop so a bad snapshot is still visible.
+                logger.warning(
+                    "Roster %s: skipping to_add candidate application %s — "
+                    "student_data missing std_stdcode/std_cname",
+                    roster_id,
+                    app_id,
+                )
+                continue
             to_add.append(
                 DistributionDiffEntry(
                     application_id=app_id,
                     item_id=None,
-                    student_id=sd.get("std_stdcode", ""),
-                    student_name=sd.get("std_cname", ""),
+                    student_id=std_code,
+                    student_name=std_name,
                     department_name=sd.get("trm_depname"),
                     college_name=sd.get("trm_academyname"),
                     allocation_year=ranking_item.allocation_year,

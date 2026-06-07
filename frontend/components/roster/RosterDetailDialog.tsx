@@ -270,9 +270,17 @@ export function RosterDetailDialog({
         setSelectedAddIds(new Set());
         setSelectedRemoveItemIds(new Set());
       } else {
+        // Drop any prior diff so a failed reload never leaves stale add/remove
+        // candidates on screen for the admin to act on.
+        setDiff(null);
+        setSelectedAddIds(new Set());
+        setSelectedRemoveItemIds(new Set());
         toast.error(resp.message || "比對失敗");
       }
     } catch (e) {
+      setDiff(null);
+      setSelectedAddIds(new Set());
+      setSelectedRemoveItemIds(new Set());
       toast.error(e instanceof Error ? e.message : "比對失敗");
     } finally {
       setDiffLoading(false);
@@ -593,6 +601,7 @@ export function RosterDetailDialog({
                       <TableRow key={`add-${e.application_id}`}>
                         <TableCell>
                           <Checkbox
+                            aria-label={`補充 ${e.student_name}`}
                             checked={selectedAddIds.has(e.application_id)}
                             onCheckedChange={() =>
                               setSelectedAddIds(prev => toggle(prev, e.application_id))
@@ -627,6 +636,7 @@ export function RosterDetailDialog({
                       <TableRow key={`rm-${e.item_id}`}>
                         <TableCell>
                           <Checkbox
+                            aria-label={`移除 ${e.student_name}`}
                             checked={!!e.item_id && selectedRemoveItemIds.has(e.item_id)}
                             onCheckedChange={() =>
                               e.item_id &&

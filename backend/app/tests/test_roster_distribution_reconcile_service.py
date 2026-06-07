@@ -362,6 +362,27 @@ def test_distribution_diff_whole_period_roster_ignores_subtype_slice(db_sync):
     assert {e.item_id for e in diff["to_remove"]} == {item_c.id}
 
 
+def test_distribution_diff_excludes_to_add_missing_student_data(db_sync):
+    """to_add must not list an allocated app whose student_data lacks
+    std_stdcode/std_cname — _verify_and_create_item rejects those, so offering
+    them would mislead the admin into a guaranteed-failing add."""
+    admin = _admin(db_sync, nycu_id="filt_admin")
+    sch = _scholarship(db_sync, code="filt_sch")
+    config = _config(db_sync, sch)
+    u = _student(db_sync, "filt_b")
+    app_b = _application(db_sync, u, sch, config, app_id="APP-FILT-B", std_code="888B")
+    app_b.student_data = {"std_cname": "乙"}  # no std_stdcode
+    db_sync.flush()
+    ranking = _ranking(db_sync, sch)
+    _ranking_item(db_sync, ranking, app_b, rank=1)
+    roster = _roster(db_sync, config, admin, code="ROSTER-FILT-1")
+    db_sync.commit()
+
+    svc = RosterService(db_sync)
+    diff = svc.get_distribution_diff_for_roster(roster.id)
+    assert app_b.id not in {e.application_id for e in diff["to_add"]}
+
+
 def test_reconcile_add_missing_student_data_raises(db_sync):
     admin = _admin(db_sync, nycu_id="rc_guard_admin")
     sch = _scholarship(db_sync, code="rc_guard_sch")
