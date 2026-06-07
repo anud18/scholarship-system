@@ -303,6 +303,36 @@ class ManualDistributionService:
             allowed.add(linked.id)
         return allowed
 
+    async def distributable_pool(self, requesting_config: ScholarshipConfiguration, sub_type: str) -> list[dict]:
+        """The pool of consumable configs for (requesting_config, sub_type), §6.3.
+
+        Returns the own config first, then each linked source config in
+        DESCENDING academic_year, each with its LIVE `remaining`. Each entry maps
+        to one grid column; an allocation records that config's id as
+        allocation_config_id.
+        """
+        pool: list[dict] = [
+            {
+                "config_id": requesting_config.id,
+                "config_code": requesting_config.config_code,
+                "academic_year": requesting_config.academic_year,
+                "is_own": True,
+                "remaining": await self.remaining(requesting_config, sub_type),
+            }
+        ]
+        linked = await self._resolve_linked_configs(requesting_config, sub_type)
+        for cfg in sorted(linked, key=lambda c: c.academic_year, reverse=True):
+            pool.append(
+                {
+                    "config_id": cfg.id,
+                    "config_code": cfg.config_code,
+                    "academic_year": cfg.academic_year,
+                    "is_own": False,
+                    "remaining": await self.remaining(cfg, sub_type),
+                }
+            )
+        return pool
+
     async def _batch_load_rejected_map(self, app_ids: list[int]) -> dict[int, set[str]]:
         """Load professor-rejected sub-types for a batch of applications."""
         rejected_map: dict[int, set[str]] = {}

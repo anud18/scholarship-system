@@ -418,3 +418,117 @@ async def test_allowed_config_ids_missing_target_config_ignored(db: AsyncSession
     )
     svc = ManualDistributionService(db)
     assert await svc._allowed_config_ids(requesting, "nstc") == {requesting.id}
+
+
+# --------------------------------------------------------------------------- #
+# 2.5 distributable_pool — own + linked, live remaining (spec §6.3, §7)
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.asyncio
+async def test_distributable_pool_own_plus_linked(db: AsyncSession):
+    st = await _make_type(db, code="phd")
+    prior = await _make_config(
+        db,
+        scholarship_type_id=st.id,
+        config_code="phd_114",
+        academic_year=114,
+        quotas={"nstc": {"E": 3}},  # remaining 3
+    )
+    requesting = await _make_config(
+        db,
+        scholarship_type_id=st.id,
+        config_code="phd_115",
+        academic_year=115,
+        quotas={"nstc": {"E": 5}},  # remaining 5
+        shared_quota_sources=[{"source_config_code": "phd_114", "sub_types": ["nstc"]}],
+    )
+    svc = ManualDistributionService(db)
+    pool = await svc.distributable_pool(requesting, "nstc")
+    # own first, then linked by descending academic_year
+    assert pool == [
+        {"config_id": requesting.id, "config_code": "phd_115", "academic_year": 115, "is_own": True, "remaining": 5},
+        {"config_id": prior.id, "config_code": "phd_114", "academic_year": 114, "is_own": False, "remaining": 3},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_distributable_pool_revoking_source_winner_raises_borrower_remaining(db: AsyncSession):
+    st = await _make_type(db, code="phd")
+    prior = await _make_config(
+        db,
+        scholarship_type_id=st.id,
+        config_code="phd_114",
+        academic_year=114,
+        quotas={"nstc": {"E": 3}},
+    )
+    requesting = await _make_config(
+        db,
+        scholarship_type_id=st.id,
+        config_code="phd_115",
+        academic_year=115,
+        quotas={"nstc": {"E": 5}},
+        shared_quota_sources=[{"source_config_code": "phd_114", "sub_types": ["nstc"]}],
+    )
+    # One winner consuming the PRIOR config → prior remaining drops to 2.
+    ranking = await _make_ranking(db, scholarship_type_id=st.id, sub_type_code="nstc", academic_year=115)
+    u = await _make_user(db, nycu_id="bw")
+    a = await _make_application(
+        db,
+        user_id=u.id,
+        scholarship_type_id=st.id,
+        academic_year=115,
+        sub_scholarship_type="nstc",
+        is_renewal=False,
+        status=ApplicationStatus.submitted,
+        app_id="APP-115-0-30000",
+    )
+    item = await _make_item(
+        db,
+        ranking_id=ranking.id,
+        application_id=a.id,
+        rank=1,
+        is_allocated=True,
+        allocated_sub_type="nstc",
+        allocation_config_id=prior.id,
+    )
+    svc = ManualDistributionService(db)
+    before = {p["config_id"]: p["remaining"] for p in await svc.distributable_pool(requesting, "nstc")}
+    assert before[prior.id] == 2  # 3 - 1 winner
+
+    # Revoke the source winner → its slot frees → borrower's linked column rises.
+    item.is_allocated = False
+    item.allocated_sub_type = None
+    item.allocation_config_id = None
+    item.status = "ranked"
+    await db.commit()
+
+    after = {p["config_id"]: p["remaining"] for p in await svc.distributable_pool(requesting, "nstc")}
+    assert after[prior.id] == 3  # restored live
+
+
+@pytest.mark.asyncio
+async def test_distributable_pool_cross_type_link(db: AsyncSession):
+    phd = await _make_type(db, code="phd")
+    direct = await _make_type(db, code="direct_phd")
+    prior = await _make_config(
+        db,
+        scholarship_type_id=direct.id,
+        config_code="direct_phd_114",
+        academic_year=114,
+        quotas={"nstc": {"E": 2}},
+    )
+    requesting = await _make_config(
+        db,
+        scholarship_type_id=phd.id,
+        config_code="phd_115",
+        academic_year=115,
+        quotas={"nstc": {"E": 5}},
+        shared_quota_sources=[{"source_config_code": "direct_phd_114", "sub_types": ["nstc"]}],
+    )
+    svc = ManualDistributionService(db)
+    pool = await svc.distributable_pool(requesting, "nstc")
+    assert pool == [
+        {"config_id": requesting.id, "config_code": "phd_115", "academic_year": 115, "is_own": True, "remaining": 5},
+        {"config_id": prior.id, "config_code": "direct_phd_114", "academic_year": 114, "is_own": False, "remaining": 2},
+    ]
