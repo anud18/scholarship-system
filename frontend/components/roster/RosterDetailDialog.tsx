@@ -66,7 +66,10 @@ interface RosterDetailDialogProps {
   onOpenChange: (open: boolean) => void;
   period: Period;
   configId: number;
-  onLockStateChange?: () => void;
+  /** Fired after any mutation that changes roster membership/state
+   * (lock, unlock, reconcile, remove) so the parent can refetch its list
+   * and the 人數 badge updates without a manual page reload. */
+  onRosterChanged?: () => void;
 }
 
 interface RosterItem {
@@ -93,7 +96,7 @@ export function RosterDetailDialog({
   onOpenChange,
   period,
   configId,
-  onLockStateChange,
+  onRosterChanged,
 }: RosterDetailDialogProps) {
   const [loading, setLoading] = useState(true);
   const [rosterItems, setRosterItems] = useState<RosterItem[]>([]);
@@ -125,6 +128,12 @@ export function RosterDetailDialog({
   const [selectedRemoveItemIds, setSelectedRemoveItemIds] = useState<Set<number>>(new Set());
   const [reconcileConfirmOpen, setReconcileConfirmOpen] = useState(false);
   const [reconcileSubmitting, setReconcileSubmitting] = useState(false);
+
+  // Local mirror of excel_stale: the `period` prop is a snapshot from when the
+  // dialog opened, so reconcile/remove mutations must flip the banner locally —
+  // otherwise "需重新匯出 Excel" only shows after a full page reload.
+  const [excelStale, setExcelStale] = useState(false);
+  const [reExporting, setReExporting] = useState(false);
 
   const canReconcile =
     period.roster_status === "completed" || period.roster_status === "locked";
@@ -169,9 +178,12 @@ export function RosterDetailDialog({
           period.roster_id
         );
         if (refresh.success && refresh.data) setRevokedSuspended(refresh.data);
-        // No onChanged callback on this dialog; parent will see updated state
-        // the next time it opens. To propagate excel_stale, a full reload of
-        // roster list data would be needed — wire onChanged if added to props later.
+        // Reload the dialog's own list so the removed row + 人數 drop instantly,
+        // flip the stale banner locally, and notify the parent so its list
+        // badge refreshes without a reload.
+        await loadRosterItems();
+        setExcelStale(true);
+        onRosterChanged?.();
         toast.success(`已從造冊移除 ${studentName}`);
       } else {
         alert(resp.message || "移除失敗");
@@ -189,7 +201,7 @@ export function RosterDetailDialog({
       const resp = await apiClient.paymentRosters.lockRoster(period.roster_id);
       if (resp.success) {
         toast.success("造冊已鎖定");
-        onLockStateChange?.();
+        onRosterChanged?.();
       } else {
         toast.error(resp.message || "鎖定失敗");
       }
@@ -208,7 +220,7 @@ export function RosterDetailDialog({
       const resp = await apiClient.paymentRosters.unlockRoster(period.roster_id);
       if (resp.success) {
         toast.success("造冊已解鎖");
-        onLockStateChange?.();
+        onRosterChanged?.();
       } else {
         toast.error(resp.message || "解鎖失敗");
       }
@@ -289,6 +301,9 @@ export function RosterDetailDialog({
         setReconcileConfirmOpen(false);
         // Independent refreshes — run in parallel to halve the post-apply wait.
         await Promise.all([loadRosterItems(), loadDistributionDiff()]);
+        if (resp.data?.excel_stale) setExcelStale(true);
+        // Propagate to parent so its 人數 badge updates without a page reload.
+        onRosterChanged?.();
       } else {
         toast.error(resp.message || "更新造冊名單失敗");
       }
@@ -296,6 +311,27 @@ export function RosterDetailDialog({
       toast.error(e instanceof Error ? e.message : "更新造冊名單失敗");
     } finally {
       setReconcileSubmitting(false);
+    }
+  };
+
+  // Re-render the Excel from the current items; backend clears excel_stale on
+  // success, so we drop the banner locally too.
+  const handleReExport = async () => {
+    if (!period.roster_id) return;
+    setReExporting(true);
+    try {
+      const resp = await apiClient.paymentRosters.exportRoster(period.roster_id);
+      if (resp.success) {
+        setExcelStale(false);
+        onRosterChanged?.();
+        toast.success("Excel 已重新匯出");
+      } else {
+        toast.error(resp.message || "Excel 匯出失敗");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Excel 匯出失敗");
+    } finally {
+      setReExporting(false);
     }
   };
 
@@ -313,7 +349,8 @@ export function RosterDetailDialog({
     setSelectedAddIds(new Set());
     setSelectedRemoveItemIds(new Set());
     setReconcileConfirmOpen(false);
-  }, [open, period.roster_id]);
+    setExcelStale(period.excel_stale ?? false);
+  }, [open, period.roster_id, period.excel_stale]);
 
   const loadRosterItems = async () => {
     if (!period.roster_id) return;
@@ -480,12 +517,24 @@ export function RosterDetailDialog({
 
         {/* Excel-stale banner — shows for any COMPLETED or LOCKED roster whose
             items changed (e.g. after a reconcile or a post-lock removal). */}
-        {period.excel_stale && (
+        {excelStale && (
           <div className="mb-3 p-3 border border-amber-300 bg-amber-50 rounded flex items-center justify-between">
             <span className="text-amber-800 text-sm">
               ⚠️ 造冊資料已變更，請重新匯出 Excel
             </span>
-            {/* Reuse existing "重新匯出 Excel" handler if wired in this component in future */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleReExport}
+              disabled={reExporting}
+            >
+              {reExporting ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-1" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-1" />
+              )}
+              重新匯出 Excel
+            </Button>
           </div>
         )}
 

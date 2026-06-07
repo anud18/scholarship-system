@@ -1566,6 +1566,13 @@ def export_roster_to_excel(
             current_user.id,
         )
 
+        # The freshly exported file reflects the current items, so the roster is
+        # no longer stale. Clear the flag (set True by reconcile / post-lock
+        # remove) so the 「需重新匯出 Excel」banner clears.
+        if "error" not in export_result:
+            roster.excel_stale = False
+            db.commit()
+
         return ApiResponse(
             success=True,
             message="Excel檔案匯出成功",

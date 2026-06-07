@@ -431,6 +431,7 @@ export function RosterListTable({
           onOpenChange={setDialogOpen}
           period={selectedPeriod}
           configId={configId}
+          onRosterChanged={onRosterGenerated}
         />
       )}
     </>
