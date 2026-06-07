@@ -522,73 +522,27 @@ class ManualDistributionService:
         academic_year: int,
         semester: str,
     ) -> dict[str, Any]:
-        """
-        Get real-time quota status per sub-type per (year × college).
-        Uses prior_quota_years from the current year's config to determine
-        which prior years' quotas are available per sub-type.
+        """Real-time quota grid per sub-type, keyed by **config** (spec §6.3, §12).
 
-        Response structure:
+        Response:
         {
           "nstc": {
             "display_name": "國科會",
-            "by_year": {
-              "114": {"total": 80, "allocated": 0, "remaining": 80, "by_college": {...}},
-              "113": {"total": 15, "allocated": 3, "remaining": 12, "by_college": {...}},
-            }
+            "by_config": [
+              {"config_id", "config_code", "academic_year", "is_own", "total", "remaining"},
+              ...  # own config first, then linked source configs by descending year
+            ]
           },
-          "moe_1w": {
-            "display_name": "教育部",
-            "by_year": {
-              "114": {"total": 55, ...}    // no 113 — moe_1w has no prior years
-            }
-          }
+          ...
         }
+        remaining is the LIVE global value (pool_total − every consumer of that
+        config anywhere, INCLUDING approved renewals — see §17.1 behavior change).
         """
-        # 1. Load current year's config to get prior_quota_years
         current_config = await self._load_config(scholarship_type_id, academic_year, semester)
+        if current_config is None:
+            return {}
 
-        prior_years_map: dict[str, list[int]] = {}
-        if current_config and current_config.prior_quota_years:
-            raw = current_config.prior_quota_years
-            # Handle case where JSON column stored as string instead of dict
-            if isinstance(raw, str):
-                try:
-                    raw = _json.loads(raw)
-                except (ValueError, TypeError):
-                    raw = {}
-            if isinstance(raw, dict):
-                prior_years_map = raw
-
-        # Determine all years to check: current year + union of all prior years
-        all_prior_years: set[int] = set()
-        for sub_type, years_list in prior_years_map.items():
-            if isinstance(years_list, list):
-                all_prior_years.update(years_list)
-            else:
-                logger.warning("Invalid prior_quota_years for %s: expected list, got %s", sub_type, type(years_list))
-        years_to_check = sorted([academic_year] + list(all_prior_years), reverse=True)
-
-        # 2. Load configs for all years in a single query
-        configs_by_year: dict[int, Optional[ScholarshipConfiguration]] = {}
-        if years_to_check:
-            configs_stmt = (
-                select(ScholarshipConfiguration)
-                .where(
-                    and_(
-                        ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
-                        ScholarshipConfiguration.academic_year.in_(years_to_check),
-                        _config_semester_condition(semester),
-                    )
-                )
-                .order_by(ScholarshipConfiguration.id.desc())
-            )
-            configs_result = await self.db.execute(configs_stmt)
-            for cfg in configs_result.scalars().all():
-                # Keep only the first (latest) config per year
-                if cfg.academic_year not in configs_by_year:
-                    configs_by_year[cfg.academic_year] = cfg
-
-        # 3. Get sub-type display names (shared across years)
+        # Sub-type display names.
         sub_type_query = (
             select(ScholarshipSubTypeConfig)
             .where(
@@ -599,109 +553,37 @@ class ManualDistributionService:
             )
             .order_by(ScholarshipSubTypeConfig.display_order)
         )
-        result = await self.db.execute(sub_type_query)
-        sub_type_configs = result.scalars().all()
+        sub_type_configs = (await self.db.execute(sub_type_query)).scalars().all()
         sub_type_names = {stc.sub_type_code: stc.name for stc in sub_type_configs}
 
-        # 4. Count allocations using allocation_year across ALL finalized rankings
-        all_rankings_query = select(CollegeRanking).where(
-            and_(
-                CollegeRanking.scholarship_type_id == scholarship_type_id,
-                CollegeRanking.is_finalized.is_(True),
-            )
-        )
-        result = await self.db.execute(all_rankings_query)
-        all_rankings = result.scalars().all()
-        all_ranking_ids = [r.id for r in all_rankings]
+        # Drive columns off the requesting config's own quota sub_types.
+        own_quotas = current_config.quotas or {}
 
-        if all_ranking_ids:
-            allocated_items_query = (
-                select(CollegeRankingItem)
-                .options(selectinload(CollegeRankingItem.application))
-                .where(
-                    and_(
-                        CollegeRankingItem.ranking_id.in_(all_ranking_ids),
-                        CollegeRankingItem.is_allocated.is_(True),
-                    )
-                )
-            )
-            result = await self.db.execute(allocated_items_query)
-            allocated_items = result.scalars().all()
-        else:
-            allocated_items = []
-
-        # Build allocation counts: {sub_type: {year: {college: count}}}
-        ranking_by_id = {r.id: r for r in all_rankings}
-        allocation_counts: dict[str, dict[int, dict[str, int]]] = {}
-        for item in allocated_items:
-            # Skip soft-deleted applications from quota accounting
-            if item.application and item.application.deleted_at is not None:
-                continue
-            sub_type = item.allocated_sub_type
-            if not sub_type:
-                continue
-            ranking = ranking_by_id.get(item.ranking_id)
-            alloc_year = item.allocation_year or (ranking.academic_year if ranking else None)
-            if not alloc_year:
-                continue
-            college = (item.application.student_data or {}).get("std_academyno", "unknown")
-
-            allocation_counts.setdefault(sub_type, {})
-            allocation_counts[sub_type].setdefault(alloc_year, {})
-            allocation_counts[sub_type][alloc_year][college] = (
-                allocation_counts[sub_type][alloc_year].get(college, 0) + 1
-            )
-
-        # 5. Build response: for each year's config, filtered by prior_quota_years
         quota_status: dict[str, Any] = {}
-
-        for year in years_to_check:
-            year_config = configs_by_year.get(year)
-            if not year_config or not year_config.quotas:
+        for sub_type in own_quotas.keys():
+            if self.pool_total(current_config, sub_type) <= 0:
                 continue
-
-            quotas = year_config.quotas  # {sub_type: {college_code: quota}}
-
-            for sub_type, college_quotas in quotas.items():
-                if not isinstance(college_quotas, dict):
-                    continue
-
-                # Skip this (sub_type, year) if year != academic_year
-                # and not in prior_quota_years for this sub_type
-                if year != academic_year:
-                    allowed_years = prior_years_map.get(sub_type, [])
-                    if year not in allowed_years:
-                        continue
-
-                by_college_for_year = allocation_counts.get(sub_type, {}).get(year, {})
-                total_quota = sum(college_quotas.values())
-                total_allocated = sum(by_college_for_year.values())
-                remaining = total_quota - total_allocated
-
-                if total_quota <= 0:
-                    continue
-
-                by_college = {}
-                for college_code, quota in college_quotas.items():
-                    allocated = by_college_for_year.get(college_code, 0)
-                    by_college[college_code] = {
-                        "total": quota,
-                        "allocated": allocated,
-                        "remaining": quota - allocated,
+            by_config = []
+            for col in await self.distributable_pool(current_config, sub_type):
+                cfg = current_config if col["is_own"] else None
+                if cfg is None:
+                    linked = getattr(current_config, "_linked_configs", {}) or {}
+                    cfg = linked.get(col["config_code"])
+                total = self.pool_total(cfg, sub_type) if cfg is not None else 0
+                by_config.append(
+                    {
+                        "config_id": col["config_id"],
+                        "config_code": col["config_code"],
+                        "academic_year": col["academic_year"],
+                        "is_own": col["is_own"],
+                        "total": total,
+                        "remaining": col["remaining"],
                     }
-
-                if sub_type not in quota_status:
-                    quota_status[sub_type] = {
-                        "display_name": sub_type_names.get(sub_type, sub_type),
-                        "by_year": {},
-                    }
-
-                quota_status[sub_type]["by_year"][str(year)] = {
-                    "total": total_quota,
-                    "allocated": total_allocated,
-                    "remaining": remaining,
-                    "by_college": by_college,
-                }
+                )
+            quota_status[sub_type] = {
+                "display_name": sub_type_names.get(sub_type, sub_type),
+                "by_config": by_config,
+            }
 
         return quota_status
 
