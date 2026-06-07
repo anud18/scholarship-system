@@ -27,7 +27,7 @@ from app.models.audit_log import AuditLog
 from app.models.roster_audit import RosterAuditAction, RosterAuditLevel
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
 from app.models.user import User
-from app.schemas.payment_roster import RevokedSuspendedEntry
+from app.schemas.payment_roster import DistributionDiffEntry, RevokedSuspendedEntry
 from app.services.audit_service import audit_service
 from app.services.student_verification_service import StudentVerificationService
 
@@ -1414,6 +1414,23 @@ class RosterService:
             logger.exception("Dry run failed")
             raise ValueError("預演失敗") from e
 
+    @staticmethod
+    def _build_semester_filter(semester: Optional[str]):
+        """SQLAlchemy filter selecting CollegeRanking rows for a semester.
+        None / "annual" / "yearly" / "" all map to the yearly bucket
+        (semester IS NULL OR "annual" OR "yearly"); otherwise exact match.
+        Single source of truth shared by generation and reconcile so the diff
+        stays the exact inverse of generation."""
+        from app.models.college_review import CollegeRanking
+
+        if semester in (None, "annual", "yearly", ""):
+            return or_(
+                CollegeRanking.semester.is_(None),
+                CollegeRanking.semester == "annual",
+                CollegeRanking.semester == "yearly",
+            )
+        return CollegeRanking.semester == semester
+
     def generate_rosters_from_distribution(
         self,
         scholarship_type_id: int,
@@ -1448,15 +1465,7 @@ class RosterService:
         from app.models.college_review import CollegeRanking, CollegeRankingItem
 
         # 1. 取得所有已完成分發的排名
-        # 根據 semester 的值建立篩選條件
-        if semester in ("annual", "yearly", ""):
-            sem_filter = or_(
-                CollegeRanking.semester.is_(None),
-                CollegeRanking.semester == "annual",
-                CollegeRanking.semester == "yearly",
-            )
-        else:
-            sem_filter = CollegeRanking.semester == semester
+        sem_filter = self._build_semester_filter(semester)
 
         rankings = (
             self.db.query(CollegeRanking)
@@ -1798,6 +1807,363 @@ class RosterService:
             (revoked if app.quota_allocation_status == "revoked" else suspended).append(entry)
         return {"revoked": revoked, "suspended": suspended}
 
+    def _recompute_roster_totals_sync(self, roster_id: int) -> tuple:
+        """Recompute + persist total_applications / qualified_count /
+        disqualified_count / total_amount for a roster from its items.
+        Returns (qualified, total_count, total_amount). SYNC."""
+        total_count, qualified, total_amount = (
+            self.db.query(
+                func.count(PaymentRosterItem.id),
+                func.coalesce(
+                    func.sum(sa_case((PaymentRosterItem.is_included.is_(True), 1), else_=0)),
+                    0,
+                ),
+                func.coalesce(
+                    func.sum(
+                        sa_case(
+                            (PaymentRosterItem.is_included.is_(True), PaymentRosterItem.scholarship_amount),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+            )
+            .filter(PaymentRosterItem.roster_id == roster_id)
+            .one()
+        )
+        roster = self.db.get(PaymentRoster, roster_id)
+        roster.total_applications = total_count
+        roster.qualified_count = qualified
+        roster.disqualified_count = total_count - qualified
+        roster.total_amount = total_amount
+        return qualified, total_count, total_amount
+
+    def _resolve_distribution_for_roster(
+        self, roster: PaymentRoster, config: Optional[ScholarshipConfiguration] = None
+    ) -> dict:
+        """Return {application_id: CollegeRankingItem} for allocated ranking
+        items that belong in THIS roster's (allocation_year, sub_type) group,
+        across all finalized + distribution_executed rankings for the roster's
+        scholarship_type / academic_year / semester. Mirrors
+        generate_rosters_from_distribution grouping exactly."""
+        from app.models.college_review import CollegeRanking, CollegeRankingItem
+
+        if config is None:
+            config = self.db.get(ScholarshipConfiguration, roster.scholarship_configuration_id)
+        if config is None:
+            raise ValueError(f"Scholarship configuration {roster.scholarship_configuration_id} not found")
+
+        semester = (
+            (config.semester.value if hasattr(config.semester, "value") else config.semester)
+            if config.semester
+            else None
+        )
+        sem_filter = self._build_semester_filter(semester)
+
+        rankings = (
+            self.db.query(CollegeRanking)
+            .filter(
+                and_(
+                    CollegeRanking.scholarship_type_id == config.scholarship_type_id,
+                    CollegeRanking.academic_year == config.academic_year,
+                    sem_filter,
+                    CollegeRanking.is_finalized.is_(True),
+                    CollegeRanking.distribution_executed.is_(True),
+                )
+            )
+            .all()
+        )
+        ranking_ids = [r.id for r in rankings]
+        if not ranking_ids:
+            return {}
+
+        allocated = (
+            self.db.query(CollegeRankingItem)
+            .options(joinedload(CollegeRankingItem.application))
+            .filter(
+                and_(
+                    CollegeRankingItem.ranking_id.in_(ranking_ids),
+                    CollegeRankingItem.is_allocated.is_(True),
+                )
+            )
+            .all()
+        )
+
+        # Whole-period roster (generate_roster / 立即產生造冊): sub_type and
+        # allocation_year are both NULL because that path holds EVERY allocated
+        # item in the ranking regardless of sub_type (mirrors
+        # _get_eligible_applications matrix mode). Slicing by a derived "general"
+        # sub_type would exclude every nstc/moe item → empty diff. So for these,
+        # the distribution is the full allocated set, no slicing.
+        if roster.sub_type is None and roster.allocation_year is None:
+            return {item.application_id: item for item in allocated}
+
+        # Per-slice roster (generate_rosters_from_distribution): one roster per
+        # (allocation_year, sub_type) group — match that exact group.
+        roster_year = roster.allocation_year or config.academic_year
+        roster_sub = roster.sub_type or "general"
+
+        result: dict = {}
+        for item in allocated:
+            item_year = item.allocation_year or config.academic_year
+            item_sub = item.allocated_sub_type or "general"
+            if item_year == roster_year and item_sub == roster_sub:
+                result[item.application_id] = item
+        return result
+
+    def get_distribution_diff_for_roster(self, roster_id: int) -> dict:
+        """Compute the diff between this roster and its slice of the
+        distribution. Returns a dict with to_add (allocated-but-missing) and
+        to_remove (in-roster-but-unallocated) lists of DistributionDiffEntry."""
+        from app.models.application import ApplicationStatus
+
+        roster = self.db.get(PaymentRoster, roster_id)
+        if roster is None:
+            raise ValueError(f"Roster {roster_id} not found")
+
+        config = self.db.get(ScholarshipConfiguration, roster.scholarship_configuration_id)
+        if config is None:
+            raise ValueError(f"Scholarship configuration {roster.scholarship_configuration_id} not found")
+        allocated_map = self._resolve_distribution_for_roster(roster, config=config)
+
+        existing_items = self.db.query(PaymentRosterItem).filter(PaymentRosterItem.roster_id == roster_id).all()
+        existing_app_ids = {it.application_id for it in existing_items}
+
+        to_add = []
+        for app_id, ranking_item in allocated_map.items():
+            if app_id in existing_app_ids:
+                continue
+            application = ranking_item.application
+            if application is None or application.status != ApplicationStatus.approved:
+                continue
+            sd = application.student_data or {}
+            std_code = sd.get("std_stdcode")
+            std_name = sd.get("std_cname")
+            if not std_code or not std_name:
+                # _verify_and_create_item rejects these (ValueError), so offering
+                # them as addable would mislead the admin. Skip — but log rather
+                # than silently drop so a bad snapshot is still visible.
+                logger.warning(
+                    "Roster %s: skipping to_add candidate application %s — "
+                    "student_data missing std_stdcode/std_cname",
+                    roster_id,
+                    app_id,
+                )
+                continue
+            to_add.append(
+                DistributionDiffEntry(
+                    application_id=app_id,
+                    item_id=None,
+                    student_id=std_code,
+                    student_name=std_name,
+                    department_name=sd.get("trm_depname"),
+                    college_name=sd.get("trm_academyname"),
+                    allocation_year=ranking_item.allocation_year,
+                    allocated_sub_type=ranking_item.allocated_sub_type,
+                    application_identity=None,
+                    scholarship_amount=float(application.amount or config.amount or 0),
+                )
+            )
+
+        orphan_app_ids = {it.application_id for it in existing_items if it.application_id not in allocated_map}
+        orphan_apps = (
+            self.db.query(Application).filter(Application.id.in_(orphan_app_ids)).all() if orphan_app_ids else []
+        )
+        apps_by_id = {a.id: a for a in orphan_apps}
+
+        to_remove = []
+        for item in existing_items:
+            if item.application_id in allocated_map:
+                continue
+            app = apps_by_id.get(item.application_id)
+            sd = (app.student_data or {}) if app else {}
+            to_remove.append(
+                DistributionDiffEntry(
+                    application_id=item.application_id,
+                    item_id=item.id,
+                    # 學號 (std_stdcode) only — do NOT fall back to
+                    # item.student_id_number (that is the national ID / std_pid,
+                    # which would render under the 學號 column in the UI).
+                    student_id=sd.get("std_stdcode"),
+                    student_name=item.student_name,
+                    department_name=sd.get("trm_depname"),
+                    college_name=sd.get("trm_academyname"),
+                    allocation_year=item.allocation_year,
+                    allocated_sub_type=item.allocated_sub_type,
+                    application_identity=item.application_identity,
+                    scholarship_amount=float(item.scholarship_amount or 0),
+                )
+            )
+
+        return {
+            "roster_id": roster.id,
+            "roster_code": roster.roster_code,
+            "status": roster.status.value,
+            "allocation_year": roster.allocation_year,
+            "sub_type": roster.sub_type,
+            "to_add": to_add,
+            "to_remove": to_remove,
+        }
+
+    def _verify_and_create_item(self, roster: PaymentRoster, application: Application) -> PaymentRosterItem:
+        """Verify (if enabled) + validate eligibility + build a PaymentRosterItem.
+        Mirrors the generation per-application block. self.db.add()s the item
+        (does NOT flush/commit) and returns it."""
+        sd = application.student_data or {}
+        student_id_number = sd.get("std_stdcode")
+        student_name = sd.get("std_cname")
+        if not student_id_number or not student_name:
+            raise ValueError(f"Application {application.id} is missing student ID or name in student_data")
+
+        verification_result = None
+        verification_status = StudentVerificationStatus.VERIFIED
+        fresh_student_data = None
+
+        if roster.student_verification_enabled:
+            verification_result = self.student_verification_service.verify_student(
+                sd.get("std_stdcode"), sd.get("std_cname")
+            )
+            verification_status = verification_result.get("status", StudentVerificationStatus.VERIFIED)
+            if verification_status != StudentVerificationStatus.API_ERROR:
+                fresh_student_data = verification_result.get("student_info", {})
+
+        eligibility_result = self._validate_student_eligibility(
+            application, roster.academic_year, roster.period_label, fresh_api_data=fresh_student_data
+        )
+        return self._create_roster_item(
+            roster, application, verification_result, verification_status, eligibility_result
+        )
+
+    def reconcile_roster(
+        self,
+        roster_id: int,
+        add_application_ids: List[int],
+        remove_item_ids: List[int],
+        admin_user_id: int,
+        reason: Optional[str] = None,
+    ) -> dict:
+        """Apply a selective add/remove against a generated roster, validated
+        against the server-re-derived distribution diff. Works on COMPLETED and
+        LOCKED rosters. Recomputes totals, sets excel_stale=True, audits each
+        change, commits. NEVER touches quota_allocation_status."""
+        from app.models.application import ApplicationStatus
+
+        roster = self.db.get(PaymentRoster, roster_id)
+        if roster is None:
+            raise ValueError(f"Roster {roster_id} not found")
+        if roster.status not in (RosterStatus.COMPLETED, RosterStatus.LOCKED):
+            raise RosterLockedError(
+                f"Roster {roster_id} must be COMPLETED or LOCKED to reconcile " f"(status={roster.status.value})"
+            )
+
+        add_ids = list(dict.fromkeys(add_application_ids or []))
+        remove_ids = list(dict.fromkeys(remove_item_ids or []))
+
+        # Re-derive allowed sets — never trust the client.
+        allocated_map = self._resolve_distribution_for_roster(roster)
+        existing_items = self.db.query(PaymentRosterItem).filter(PaymentRosterItem.roster_id == roster_id).all()
+        existing_app_ids = {it.application_id for it in existing_items}
+        items_by_id = {it.id: it for it in existing_items}
+
+        allowed_add = {
+            aid
+            for aid, ri in allocated_map.items()
+            if aid not in existing_app_ids
+            and ri.application is not None
+            and ri.application.status == ApplicationStatus.approved
+        }
+        allowed_remove = {it.id for it in existing_items if it.application_id not in allocated_map}
+
+        bad_add = [a for a in add_ids if a not in allowed_add]
+        if bad_add:
+            raise ValueError(f"Applications {bad_add} are not addable from the current distribution diff")
+        bad_remove = [r for r in remove_ids if r not in allowed_remove]
+        if bad_remove:
+            raise ValueError(f"Items {bad_remove} are not removable from the current distribution diff")
+
+        added, removed = [], []
+
+        for app_id in add_ids:
+            application = self.db.get(Application, app_id)
+            if application is None:
+                # Unreachable in practice (allowed_add is derived from loaded,
+                # approved applications) but guard so a deleted row yields a
+                # clean 400 instead of an AttributeError 500.
+                raise ValueError(f"Application {app_id} not found")
+            item = self._verify_and_create_item(roster, application)
+            self.db.flush()
+            added.append(
+                {
+                    "application_id": app_id,
+                    "item_id": item.id,
+                    "is_included": item.is_included,
+                    "exclusion_reason": item.exclusion_reason,
+                }
+            )
+            self.db.add(
+                AuditLog.create_log(
+                    user_id=admin_user_id,
+                    action="roster.item_added_from_distribution",
+                    resource_type="payment_roster",
+                    resource_id=str(roster_id),
+                    description=f"Added item {item.id} (application {app_id}) to roster from distribution",
+                    new_values={
+                        "item_id": item.id,
+                        "application_id": app_id,
+                        "is_included": item.is_included,
+                        "reason": reason,
+                    },
+                )
+            )
+
+        for item_id in remove_ids:
+            item = items_by_id[item_id]
+            removed_app_id = item.application_id
+            removed_amount = item.scholarship_amount
+            self.db.delete(item)
+            removed.append({"item_id": item_id, "application_id": removed_app_id})
+            self.db.add(
+                AuditLog.create_log(
+                    user_id=admin_user_id,
+                    action="roster.item_removed_reconcile",
+                    resource_type="payment_roster",
+                    resource_id=str(roster_id),
+                    description=f"Removed item {item_id} (application {removed_app_id}) during reconcile",
+                    new_values={
+                        "item_id": item_id,
+                        "application_id": removed_app_id,
+                        "reason": reason,
+                        "removed_amount": float(removed_amount) if removed_amount else 0,
+                    },
+                )
+            )
+
+        self.db.flush()
+        qualified, total_count, total_amount = self._recompute_roster_totals_sync(roster_id)
+        if added or removed:
+            roster.excel_stale = True
+
+        self.db.add(
+            AuditLog.create_log(
+                user_id=admin_user_id,
+                action="roster.reconciled",
+                resource_type="payment_roster",
+                resource_id=str(roster_id),
+                description=f"Reconciled roster: +{len(added)} / -{len(removed)}",
+                new_values={"added": len(added), "removed": len(removed), "reason": reason},
+            )
+        )
+        self.db.commit()
+
+        return {
+            "added": added,
+            "removed": removed,
+            "qualified_count": qualified,
+            "total_applications": total_count,
+            "total_amount": float(total_amount),
+            "excel_stale": roster.excel_stale,
+        }
+
     def remove_item_from_locked_roster(
         self,
         roster_id: int,
@@ -1823,37 +2189,9 @@ class RosterService:
         self.db.delete(item)
         self.db.flush()
 
-        # Recompute totals using CASE-based split to match _recompute_roster_totals
-        total_count, qualified, total_amount = (
-            self.db.query(
-                func.count(PaymentRosterItem.id),
-                func.coalesce(
-                    func.sum(
-                        sa_case(
-                            (PaymentRosterItem.is_included.is_(True), 1),
-                            else_=0,
-                        )
-                    ),
-                    0,
-                ),
-                func.coalesce(
-                    func.sum(
-                        sa_case(
-                            (PaymentRosterItem.is_included.is_(True), PaymentRosterItem.scholarship_amount),
-                            else_=0,
-                        )
-                    ),
-                    0,
-                ),
-            )
-            .filter(PaymentRosterItem.roster_id == roster_id)
-            .one()
-        )
-
-        roster.total_applications = total_count
-        roster.qualified_count = qualified
-        roster.disqualified_count = total_count - qualified
-        roster.total_amount = total_amount
+        # Recompute totals via the shared sync helper (persists
+        # total_applications / qualified_count / disqualified_count / total_amount).
+        qualified, total_count, total_amount = self._recompute_roster_totals_sync(roster_id)
         roster.excel_stale = True
 
         self.db.add(

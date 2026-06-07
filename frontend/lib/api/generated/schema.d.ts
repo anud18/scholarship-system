@@ -4573,9 +4573,10 @@ export interface paths {
         put?: never;
         /**
          * Import Ranking From Excel
-         * @description Import ranking data from Excel.
+         * @description Import ranking data parsed from the 學生資料彙整表 Excel.
          *
-         *     Expected columns: 學號, 姓名, 排名
+         *     Takes a JSON body (List[RankingImportItem]); the frontend parses the workbook
+         *     (學號 → student_id, 學生中文姓名 → student_name, 學院初審會議之學院排序 → rank_position).
          *     rank_position accepts positive integers (1-based, consecutive, no duplicates) or "N" (rejected).
          *     Student IDs must exactly match the ranking's application set.
          */
@@ -6367,6 +6368,51 @@ export interface paths {
          *     excel_stale is set to True; audit log written.
          */
         delete: operations["remove_locked_roster_item_api_v1_payment_rosters__roster_id__items__item_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payment-rosters/{roster_id}/distribution-diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Distribution Diff
+         * @description Compare a generated roster against its slice of the distribution.
+         *     Returns allocated-but-missing (to_add) and in-roster-but-unallocated
+         *     (to_remove) lists for the admin to selectively reconcile.
+         */
+        get: operations["get_distribution_diff_api_v1_payment_rosters__roster_id__distribution_diff_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payment-rosters/{roster_id}/reconcile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reconcile Roster Endpoint
+         * @description Selectively add allocated students missing from the roster (補充人) and/or
+         *     remove items no longer allocated. Works on COMPLETED and LOCKED rosters;
+         *     sets excel_stale; audits each change. Presentation-layer only — does not
+         *     touch quota.
+         */
+        post: operations["reconcile_roster_endpoint_api_v1_payment_rosters__roster_id__reconcile_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -9208,6 +9254,18 @@ export interface components {
              * @description New ranking name
              */
             ranking_name: string;
+        };
+        /**
+         * ReconcileRequest
+         * @description Body for POST /payment-rosters/{roster_id}/reconcile.
+         */
+        ReconcileRequest: {
+            /** Add Application Ids */
+            add_application_ids?: number[];
+            /** Remove Item Ids */
+            remove_item_ids?: number[];
+            /** Reason */
+            reason?: string | null;
         };
         /**
          * RedistributionInfo
@@ -18154,7 +18212,7 @@ export interface operations {
                 academic_year: number;
                 /** @description first / second / yearly / null */
                 semester?: string | null;
-                /** @description Department code (Department.code) */
+                /** @description Department code(s) — Department.code; comma-separated to bundle a name group */
                 department_code: string;
             };
             header?: never;
@@ -18515,7 +18573,10 @@ export interface operations {
     };
     export_ranking_excel_api_v1_college_review_rankings__ranking_id__export_excel_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Render the rank column blank, as a fill-in import template */
+                template?: boolean;
+            };
             header?: never;
             path: {
                 ranking_id: number;
@@ -20946,6 +21007,72 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["RemoveLockedItemRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_distribution_diff_api_v1_payment_rosters__roster_id__distribution_diff_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roster_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reconcile_roster_endpoint_api_v1_payment_rosters__roster_id__reconcile_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roster_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReconcileRequest"];
             };
         };
         responses: {

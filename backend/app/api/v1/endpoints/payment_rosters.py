@@ -31,6 +31,9 @@ from app.models.payment_roster import (
 from app.models.user import User, UserRole
 from app.schemas.response import ApiResponse
 from app.schemas.payment_roster import (
+    DistributionDiff,
+    ReconcileRequest,
+    ReconcileResult,
     RemoveLockedItemRequest,
     RevokedSuspendedListResponse,
 )
@@ -949,6 +952,7 @@ async def get_roster_cycle_status(
                             "roster_id": roster.id,
                             "roster_code": roster.roster_code,
                             "roster_status": roster.status.value,
+                            "excel_stale": roster.excel_stale,
                             "sub_type": roster.sub_type,
                             "allocation_year": roster.allocation_year,
                             "project_number": roster.project_number,
@@ -1015,6 +1019,7 @@ async def get_roster_cycle_status(
                             "roster_id": roster.id,
                             "roster_code": roster.roster_code,
                             "roster_status": roster.status.value,
+                            "excel_stale": roster.excel_stale,
                             "sub_type": roster.sub_type,
                             "allocation_year": roster.allocation_year,
                             "project_number": roster.project_number,
@@ -1081,6 +1086,7 @@ async def get_roster_cycle_status(
                         "roster_id": roster.id,
                         "roster_code": roster.roster_code,
                         "roster_status": roster.status.value,
+                        "excel_stale": roster.excel_stale,
                         "sub_type": roster.sub_type,
                         "allocation_year": roster.allocation_year,
                         "project_number": roster.project_number,
@@ -1134,6 +1140,7 @@ async def get_roster_cycle_status(
                         "roster_id": roster.id,
                         "roster_code": roster.roster_code,
                         "roster_status": roster.status.value,
+                        "excel_stale": roster.excel_stale,
                         "sub_type": roster.sub_type,
                         "allocation_year": roster.allocation_year,
                         "project_number": roster.project_number,
@@ -1274,9 +1281,11 @@ async def get_roster_items(
         items_data = []
         for item in items:
             item_dict = RosterItemResponse.model_validate(item).model_dump()
-            # 從 application.student_data 補充學院/系所資訊
+            # 從 application.student_data 補充學號/學院/系所資訊
+            # (PaymentRosterItem 只存 student_id_number=身分證，學號需從快照取得)
             if item.application and item.application.student_data:
                 sd = item.application.student_data
+                item_dict["student_id"] = sd.get("std_stdcode")
                 item_dict["college_code"] = sd.get("std_academyno") or sd.get("trm_academyno")
                 item_dict["college_name"] = sd.get("trm_academyname")
                 item_dict["department_name"] = sd.get("trm_depname")
@@ -1558,6 +1567,13 @@ def export_roster_to_excel(
             export_result["file_path"],
             current_user.id,
         )
+
+        # The freshly exported file reflects the current items, so the roster is
+        # no longer stale. Clear the flag (set True by reconcile / post-lock
+        # remove) so the 「需重新匯出 Excel」banner clears.
+        if "error" not in export_result:
+            roster.excel_stale = False
+            db.commit()
 
         return ApiResponse(
             success=True,
@@ -2123,3 +2139,53 @@ def remove_locked_roster_item(
     except (ValueError, RosterLockedError) as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return {"success": True, "message": "已從造冊移除", "data": result}
+
+
+@router.get("/{roster_id}/distribution-diff")
+def get_distribution_diff(
+    roster_id: int,
+    db: Session = Depends(get_sync_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Compare a generated roster against its slice of the distribution.
+    Returns allocated-but-missing (to_add) and in-roster-but-unallocated
+    (to_remove) lists for the admin to selectively reconcile."""
+    _require_admin(current_user)
+    svc = RosterService(db)
+    try:
+        result = svc.get_distribution_diff_for_roster(roster_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    payload = DistributionDiff(**result).model_dump()
+    return {"success": True, "message": "OK", "data": payload}
+
+
+@router.post("/{roster_id}/reconcile")
+def reconcile_roster_endpoint(
+    roster_id: int,
+    request: ReconcileRequest,
+    db: Session = Depends(get_sync_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Selectively add allocated students missing from the roster (補充人) and/or
+    remove items no longer allocated. Works on COMPLETED and LOCKED rosters;
+    sets excel_stale; audits each change. Presentation-layer only — does not
+    touch quota."""
+    _require_admin(current_user)
+    lock_key = f"roster:reconcile:{roster_id}"
+    try:
+        with with_lock_sync(lock_key, ttl_seconds=300):
+            svc = RosterService(db)
+            result = svc.reconcile_roster(
+                roster_id=roster_id,
+                add_application_ids=request.add_application_ids,
+                remove_item_ids=request.remove_item_ids,
+                admin_user_id=current_user.id,
+                reason=request.reason,
+            )
+    except LockBusy as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="造冊處理中，請稍候再試") from exc
+    except (ValueError, RosterLockedError) as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    payload = ReconcileResult(**result).model_dump()
+    return {"success": True, "message": "已更新造冊名單", "data": payload}

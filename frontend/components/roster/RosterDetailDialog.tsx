@@ -30,10 +30,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Loader2, Lock, LockOpen, X } from "lucide-react";
+import { Loader2, Lock, LockOpen, X, AlertTriangle, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
-import type { RevokedSuspendedList } from "@/lib/api/modules/payment-rosters";
+import type { RevokedSuspendedList, DistributionDiff, DistributionDiffEntry } from "@/lib/api/modules/payment-rosters";
 import { RevokedSuspendedSection } from "@/components/roster/RevokedSuspendedSection";
 
 interface Period {
@@ -65,7 +65,10 @@ interface RosterDetailDialogProps {
   onOpenChange: (open: boolean) => void;
   period: Period;
   configId: number;
-  onLockStateChange?: () => void;
+  /** Fired after any mutation that changes roster membership/state
+   * (lock, unlock, reconcile, remove) so the parent can refetch its list
+   * and the 人數 badge updates without a manual page reload. */
+  onRosterChanged?: () => void;
 }
 
 interface RosterItem {
@@ -92,7 +95,7 @@ export function RosterDetailDialog({
   onOpenChange,
   period,
   configId,
-  onLockStateChange,
+  onRosterChanged,
 }: RosterDetailDialogProps) {
   const [loading, setLoading] = useState(true);
   const [rosterItems, setRosterItems] = useState<RosterItem[]>([]);
@@ -116,6 +119,26 @@ export function RosterDetailDialog({
   >("returned");
   const [excludeNote, setExcludeNote] = useState("");
   const [excludeSubmitting, setExcludeSubmitting] = useState(false);
+
+  // 比對分發名單 (reconcile) state
+  const [diff, setDiff] = useState<DistributionDiff | null>(null);
+  const [diffLoading, setDiffLoading] = useState(false);
+  // Per-row reconcile is single-action: a 待補充 row only adds, a 待移除 row only
+  // removes. The pending row awaits confirmation before applying.
+  const [pendingAction, setPendingAction] = useState<{
+    kind: "add" | "remove";
+    entry: DistributionDiffEntry;
+  } | null>(null);
+  const [reconcileSubmitting, setReconcileSubmitting] = useState(false);
+
+  // Local mirror of excel_stale: the `period` prop is a snapshot from when the
+  // dialog opened, so reconcile/remove mutations must flip the banner locally —
+  // otherwise "需重新匯出 Excel" only shows after a full page reload.
+  const [excelStale, setExcelStale] = useState(false);
+  const [reExporting, setReExporting] = useState(false);
+
+  const canReconcile =
+    period.roster_status === "completed" || period.roster_status === "locked";
 
   const openExcludeDialog = (item: RosterItem) => {
     setExcludeTarget(item);
@@ -157,9 +180,12 @@ export function RosterDetailDialog({
           period.roster_id
         );
         if (refresh.success && refresh.data) setRevokedSuspended(refresh.data);
-        // No onChanged callback on this dialog; parent will see updated state
-        // the next time it opens. To propagate excel_stale, a full reload of
-        // roster list data would be needed — wire onChanged if added to props later.
+        // Reload the dialog's own list so the removed row + 人數 drop instantly,
+        // flip the stale banner locally, and notify the parent so its list
+        // badge refreshes without a reload.
+        await loadRosterItems();
+        setExcelStale(true);
+        onRosterChanged?.();
         toast.success(`已從造冊移除 ${studentName}`);
       } else {
         alert(resp.message || "移除失敗");
@@ -177,7 +203,7 @@ export function RosterDetailDialog({
       const resp = await apiClient.paymentRosters.lockRoster(period.roster_id);
       if (resp.success) {
         toast.success("造冊已鎖定");
-        onLockStateChange?.();
+        onRosterChanged?.();
       } else {
         toast.error(resp.message || "鎖定失敗");
       }
@@ -196,7 +222,7 @@ export function RosterDetailDialog({
       const resp = await apiClient.paymentRosters.unlockRoster(period.roster_id);
       if (resp.success) {
         toast.success("造冊已解鎖");
-        onLockStateChange?.();
+        onRosterChanged?.();
       } else {
         toast.error(resp.message || "解鎖失敗");
       }
@@ -236,11 +262,104 @@ export function RosterDetailDialog({
     }
   };
 
+  const loadDistributionDiff = async () => {
+    if (!period.roster_id) return;
+    setDiffLoading(true);
+    try {
+      const resp = await apiClient.paymentRosters.getDistributionDiff(period.roster_id);
+      if (resp.success && resp.data) {
+        setDiff(resp.data);
+        setPendingAction(null);
+      } else {
+        // Drop any prior diff so a failed reload never leaves stale add/remove
+        // candidates on screen for the admin to act on.
+        setDiff(null);
+        setPendingAction(null);
+        toast.error(resp.message || "比對失敗");
+      }
+    } catch (e) {
+      setDiff(null);
+      setPendingAction(null);
+      toast.error(e instanceof Error ? e.message : "比對失敗");
+    } finally {
+      setDiffLoading(false);
+    }
+  };
+
+  // Apply a single-row add or remove. Each 待補充/待移除 row is one action — the
+  // server still re-derives the allowed set and rejects anything stale.
+  const applyReconcile = async (addIds: number[], removeItemIds: number[]) => {
+    if (!period.roster_id) return;
+    setReconcileSubmitting(true);
+    try {
+      const resp = await apiClient.paymentRosters.reconcileRoster(period.roster_id, {
+        add_application_ids: addIds,
+        remove_item_ids: removeItemIds,
+      });
+      if (resp.success) {
+        const added = resp.data?.added.length ?? 0;
+        const removed = resp.data?.removed.length ?? 0;
+        toast.success(`已更新造冊名單：新增 ${added} 人 / 移除 ${removed} 人`);
+        setPendingAction(null);
+        // Independent refreshes — run in parallel to halve the post-apply wait.
+        await Promise.all([loadRosterItems(), loadDistributionDiff()]);
+        if (resp.data?.excel_stale) setExcelStale(true);
+        // Propagate to parent so its 人數 badge updates without a page reload.
+        onRosterChanged?.();
+      } else {
+        toast.error(resp.message || "更新造冊名單失敗");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "更新造冊名單失敗");
+    } finally {
+      setReconcileSubmitting(false);
+    }
+  };
+
+  const confirmPending = () => {
+    if (!pendingAction) return;
+    if (pendingAction.kind === "add") {
+      applyReconcile([pendingAction.entry.application_id], []);
+    } else if (pendingAction.entry.item_id != null) {
+      applyReconcile([], [pendingAction.entry.item_id]);
+    }
+  };
+
+  // Re-render the Excel from the current items; backend clears excel_stale on
+  // success, so we drop the banner locally too.
+  const handleReExport = async () => {
+    if (!period.roster_id) return;
+    setReExporting(true);
+    try {
+      const resp = await apiClient.paymentRosters.exportRoster(period.roster_id);
+      if (resp.success) {
+        setExcelStale(false);
+        onRosterChanged?.();
+        toast.success("Excel 已重新匯出");
+      } else {
+        toast.error(resp.message || "Excel 匯出失敗");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Excel 匯出失敗");
+    } finally {
+      setReExporting(false);
+    }
+  };
+
   useEffect(() => {
     if (open && period.roster_id) {
       loadRosterItems();
     }
   }, [open, period.roster_id]);
+
+  // The dialog stays mounted while the parent swaps `period` between rosters,
+  // so clear any prior roster's reconcile diff/selection when the roster (or
+  // open state) changes — otherwise a stale diff could show under a new roster.
+  useEffect(() => {
+    setDiff(null);
+    setPendingAction(null);
+    setExcelStale(period.excel_stale ?? false);
+  }, [open, period.roster_id, period.excel_stale]);
 
   const loadRosterItems = async () => {
     if (!period.roster_id) return;
@@ -325,7 +444,7 @@ export function RosterDetailDialog({
             <TableRow key={index}>
               <TableCell className="font-medium">{item.student_name}</TableCell>
               <TableCell className="font-mono text-sm">
-                {item.student_id_number}
+                {item.student_id || "-"}
               </TableCell>
               <TableCell>{item.department_name || "-"}</TableCell>
               <TableCell>
@@ -405,18 +524,32 @@ export function RosterDetailDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Task 10: Status-change notice panel + Excel-stale banner (LOCKED rosters only) */}
+        {/* Excel-stale banner — shows for any COMPLETED or LOCKED roster whose
+            items changed (e.g. after a reconcile or a post-lock removal). */}
+        {excelStale && (
+          <div className="mb-3 p-3 border border-amber-300 bg-amber-50 rounded flex items-center justify-between">
+            <span className="text-amber-800 text-sm">
+              ⚠️ 造冊資料已變更，請重新匯出 Excel
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleReExport}
+              disabled={reExporting}
+            >
+              {reExporting ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-1" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-1" />
+              )}
+              重新匯出 Excel
+            </Button>
+          </div>
+        )}
+
+        {/* Status-change notice panel (LOCKED rosters only — post-lock revoke/suspend) */}
         {period.roster_status === "locked" && (
           <>
-            {period.excel_stale && (
-              <div className="mb-3 p-3 border border-amber-300 bg-amber-50 rounded flex items-center justify-between">
-                <span className="text-amber-800 text-sm">
-                  ⚠️ 造冊資料已變更，請重新匯出 Excel
-                </span>
-                {/* Reuse existing "重新匯出 Excel" handler if wired in this component in future */}
-              </div>
-            )}
-
             {(revokedSuspended.revoked.length > 0 ||
               revokedSuspended.suspended.length > 0) && (
               <div className="mb-4 space-y-3">
@@ -435,6 +568,96 @@ export function RosterDetailDialog({
               </div>
             )}
           </>
+        )}
+
+        {canReconcile && (
+          <div className="mb-4 p-3 border rounded">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">比對分發名單</span>
+              <Button size="sm" variant="outline" onClick={loadDistributionDiff} disabled={diffLoading}>
+                {diffLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
+                比對分發 vs 造冊
+              </Button>
+            </div>
+
+            {diff && diff.to_add.length === 0 && diff.to_remove.length === 0 && (
+              <p className="mt-2 text-sm text-muted-foreground">名單一致，無需補充。</p>
+            )}
+
+            {diff && diff.to_add.length > 0 && (
+              <div className="mt-3">
+                <p className="text-sm font-medium text-emerald-700">待補充 ({diff.to_add.length})</p>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>學號</TableHead>
+                      <TableHead>姓名</TableHead>
+                      <TableHead>系所</TableHead>
+                      <TableHead className="text-right">金額</TableHead>
+                      <TableHead className="w-20 text-right">操作</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {diff.to_add.map((e: DistributionDiffEntry) => (
+                      <TableRow key={`add-${e.application_id}`}>
+                        <TableCell>{e.student_id}</TableCell>
+                        <TableCell>{e.student_name}</TableCell>
+                        <TableCell>{e.department_name}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(e.scholarship_amount)}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+                            disabled={reconcileSubmitting}
+                            onClick={() => setPendingAction({ kind: "add", entry: e })}
+                          >
+                            新增
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+
+            {diff && diff.to_remove.length > 0 && (
+              <div className="mt-3">
+                <p className="text-sm font-medium text-red-700">待移除 ({diff.to_remove.length})</p>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>學號</TableHead>
+                      <TableHead>姓名</TableHead>
+                      <TableHead>系所</TableHead>
+                      <TableHead className="w-20 text-right">操作</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {diff.to_remove.map((e: DistributionDiffEntry) => (
+                      <TableRow key={`rm-${e.item_id}`}>
+                        <TableCell>{e.student_id}</TableCell>
+                        <TableCell>{e.student_name}</TableCell>
+                        <TableCell>{e.department_name}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-red-700 border-red-300 hover:bg-red-50"
+                            disabled={reconcileSubmitting || e.item_id == null}
+                            onClick={() => setPendingAction({ kind: "remove", entry: e })}
+                          >
+                            移除
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
         )}
 
         {loading ? (
@@ -534,6 +757,42 @@ export function RosterDetailDialog({
           )}
         </div>
       </DialogContent>
+
+      {/* 比對分發名單 — single-row confirm */}
+      <Dialog
+        open={!!pendingAction}
+        onOpenChange={open => !open && !reconcileSubmitting && setPendingAction(null)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {pendingAction?.kind === "add" ? "確認補充進造冊" : "確認從造冊移除"}
+            </DialogTitle>
+            <DialogDescription className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 mt-0.5 text-amber-500" />
+              <span>
+                {pendingAction?.kind === "add" ? "將補充 " : "將移除 "}
+                <strong>{pendingAction?.entry.student_name}</strong>
+                {pendingAction?.kind === "add" ? " 進造冊" : " 出造冊"}
+                。此操作會將造冊標記為「需重新匯出 Excel」並記錄稽核日誌。
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPendingAction(null)}
+              disabled={reconcileSubmitting}
+            >
+              取消
+            </Button>
+            <Button onClick={confirmPending} disabled={reconcileSubmitting}>
+              {reconcileSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              {pendingAction?.kind === "add" ? "確認新增" : "確認移除"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* #66: exclude confirmation dialog */}
       <Dialog
