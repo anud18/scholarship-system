@@ -106,6 +106,7 @@ async def test_quota_status_keys_by_config_and_subtracts_renewals(db: AsyncSessi
         "remaining": 2,
     }
     # linked phd_114 nstc: total 2, remaining 2
+    assert by_cfg[setup["prior"].id]["total"] == 2
     assert by_cfg[setup["prior"].id]["remaining"] == 2
     assert by_cfg[setup["prior"].id]["is_own"] is False
     # moe_1w: own only, no linked column

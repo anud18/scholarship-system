@@ -563,12 +563,12 @@ class ManualDistributionService:
         for sub_type in own_quotas.keys():
             if self.pool_total(current_config, sub_type) <= 0:
                 continue
+            # Resolve linked configs once so we can look up pool_total per linked config.
+            linked_configs = await self._resolve_linked_configs(current_config, sub_type)
+            linked_by_code: dict[str, ScholarshipConfiguration] = {cfg.config_code: cfg for cfg in linked_configs}
             by_config = []
             for col in await self.distributable_pool(current_config, sub_type):
-                cfg = current_config if col["is_own"] else None
-                if cfg is None:
-                    linked = getattr(current_config, "_linked_configs", {}) or {}
-                    cfg = linked.get(col["config_code"])
+                cfg = current_config if col["is_own"] else linked_by_code.get(col["config_code"])
                 total = self.pool_total(cfg, sub_type) if cfg is not None else 0
                 by_config.append(
                     {
