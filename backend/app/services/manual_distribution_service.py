@@ -259,6 +259,15 @@ class ManualDistributionService:
 
         return int(winners) + int(renewals)
 
+    async def remaining(self, config: ScholarshipConfiguration, sub_type: str) -> int:
+        """Global live remaining = pool_total - consumers_count (spec §6.2).
+
+        GLOBAL: counts every consumer of this config anywhere, regardless of
+        which distribution round (or which borrowing config) created the slot —
+        so freeing a slot anywhere instantly raises this value everywhere.
+        """
+        return self.pool_total(config, sub_type) - await self.consumers_count(config.id, sub_type)
+
     async def _batch_load_rejected_map(self, app_ids: list[int]) -> dict[int, set[str]]:
         """Load professor-rejected sub-types for a batch of applications."""
         rejected_map: dict[int, set[str]] = {}

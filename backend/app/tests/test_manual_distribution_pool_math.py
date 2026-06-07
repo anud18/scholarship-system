@@ -316,3 +316,59 @@ async def test_consumers_revoked_then_restored_renewal_not_double_counted(db: As
     svc = ManualDistributionService(db)
     # Counted ONCE (via the Application renewal half), not twice.
     assert await svc.consumers_count(cfg.id, "nstc") == 1
+
+
+# --------------------------------------------------------------------------- #
+# 2.3 remaining — global live (spec §6.2)
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.asyncio
+async def test_remaining_is_pool_total_minus_global_consumers(db: AsyncSession):
+    st = await _make_type(db, code="phd")
+    cfg = await _make_config(
+        db,
+        scholarship_type_id=st.id,
+        config_code="phd_115",
+        academic_year=115,
+        quotas={"nstc": {"E": 5, "C": 5}},  # pool_total = 10
+    )
+    ranking = await _make_ranking(db, scholarship_type_id=st.id, sub_type_code="nstc", academic_year=115)
+    # 2 general winners
+    for i in range(2):
+        u = await _make_user(db, nycu_id=f"w{i}")
+        a = await _make_application(
+            db,
+            user_id=u.id,
+            scholarship_type_id=st.id,
+            academic_year=115,
+            sub_scholarship_type="nstc",
+            is_renewal=False,
+            status=ApplicationStatus.submitted,
+            app_id=f"APP-115-0-1000{i}",
+        )
+        await _make_item(
+            db,
+            ranking_id=ranking.id,
+            application_id=a.id,
+            rank=i + 1,
+            is_allocated=True,
+            allocated_sub_type="nstc",
+            allocation_config_id=cfg.id,
+        )
+    # 1 approved renewal
+    ru = await _make_user(db, nycu_id="rw")
+    await _make_application(
+        db,
+        user_id=ru.id,
+        scholarship_type_id=st.id,
+        academic_year=115,
+        sub_scholarship_type="nstc",
+        is_renewal=True,
+        status=ApplicationStatus.approved,
+        app_id="APP-115-0-20000",
+        allocation_config_id=cfg.id,
+    )
+    svc = ManualDistributionService(db)
+    # 10 total - (2 winners + 1 renewal) = 7
+    assert await svc.remaining(cfg, "nstc") == 7
