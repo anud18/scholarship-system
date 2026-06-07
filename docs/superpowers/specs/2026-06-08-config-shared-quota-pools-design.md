@@ -142,7 +142,7 @@ This replaces `_pick_pool` (returns a **config**, prefer own `P` then linked con
 - Group allocated `CollegeRankingItem`s by **(allocation_config_id, sub_type)** (was `(allocation_year, sub_type)`). `allocation_config_id NULL` ⇒ the whole-period bucket (unchanged sentinel).
 - **Resolve the consumed config per group** (not one up-front config): `generate_rosters_from_distribution` currently fetches a single requesting config before grouping (`roster_service.py:1494-1503`); the consumed config must be loaded per `allocation_config_id` group and passed into `_generate_one_sub_type_roster`.
 - **Per consumed config:** `project_number = consumed_config.project_numbers.get(sub_type)` (flattened, no year key); `scholarship_amount = application.amount or consumed_config.amount` (keep the per-application override; only the fallback changes from requesting → consumed config). `_create_roster_item` (`roster_service.py:819-880`) must load the consumed config via `allocation_config_id` and re-key its independent allocation re-derivation onto it.
-- **Cross-type borrow field sourcing (decision):** for a borrowed slot, `project_number`, `scholarship_amount`, and the `allocation_year` display snapshot (= consumed config's `academic_year`) come from the **consumed** config; `scholarship_name` stays the **requesting** config's scholarship type name (the award the student actually holds). *Open for confirmation (§16).* For same-type borrows (the common case) the two configs share a name so this is moot.
+- **Cross-type borrow field sourcing (decided):** for a borrowed slot, `project_number`, `scholarship_amount`, and the `allocation_year` display snapshot (= consumed config's `academic_year`) come from the **consumed** config; `scholarship_name` stays the **requesting** config's scholarship type name (the award the student actually holds). For same-type borrows (the common case) the two configs share a name so this is moot.
 - `PaymentRoster`/`PaymentRosterItem` store `allocation_config_id`; `allocation_year` is set to the consumed config's `academic_year` as a frozen display snapshot (keeps Excel export / student-history / list views working with no join).
 - **Rebuilt unique index** `uq_roster_scholarship_period_alloc` = `(scholarship_configuration_id, period_label, COALESCE(allocation_config_id,-1), COALESCE(sub_type,''))` — **sub_type retained** (two rosters share a config but differ by sub_type, e.g. `nstc` vs `moe_1w`).
 - Reconcile (`_resolve_distribution_for_roster`, `get_distribution_diff_for_roster`, `reconcile_roster`) and the `payment_rosters.py:589-637` `allocation_map` builder match/read on `allocation_config_id`.
@@ -215,10 +215,10 @@ Two contradictory live interpretations of `quotas` exist; this design settles th
 3. **Display-snapshot drift** — roster `allocation_year` snapshot is frozen at generation; editing a config's `academic_year` later won't update it (acceptable — rosters are point-in-time).
 4. **Missing sibling configs** — borrowing only works if the source config row exists; the seed must create `phd_112` etc. Dangling `prior_quota_years` years are dropped, so an admin who relied on a 112 borrow loses it until a `phd_112` config + link is created.
 
-## 16. Open points for spec review
+## 16. Resolved during spec review
 
-1. **Cross-type roster naming (§8):** confirm `scholarship_name` follows the **requesting** config while `project_number`/`amount` follow the **consumed** config. (Moot for same-type borrows.)
-2. **allocate vs finalize gate (§10):** gate at **both** allocate and finalize, or finalize only? (Allocate-only render counts are advisory; finalize is the hard commit.)
+1. **Cross-type roster naming (§8):** `scholarship_name` follows the **requesting** config; `project_number` / `amount` / display-year follow the **consumed** config. (Moot for same-type borrows.)
+2. **Quota gate (§10):** enforce at **both** allocate and finalize — `SELECT … FOR UPDATE` on the consumed config rows + recount at each.
 
 ## 17. Behavior changes vs today (QA call-outs)
 
