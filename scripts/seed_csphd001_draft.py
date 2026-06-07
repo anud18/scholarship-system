@@ -7,6 +7,7 @@ Usage:
   python seed_csphd001_draft.py csphd0001
   python seed_csphd001_draft.py csphd0002
 """
+
 import argparse
 import asyncio
 from datetime import datetime, timezone
@@ -32,15 +33,13 @@ async def seed(nycu_id: str):
             return
 
         # 2. Get PhD scholarship config for year 114
-        config_result = await session.execute(
-            text("""
+        config_result = await session.execute(text("""
                 SELECT sc.id, sc.scholarship_type_id, sc.academic_year, sc.semester,
                        st.code, st.name
                 FROM scholarship_configurations sc
                 JOIN scholarship_types st ON st.id = sc.scholarship_type_id
                 WHERE st.code = 'phd' AND sc.academic_year = 114
-            """)
-        )
+            """))
         config = config_result.fetchone()
         if not config:
             print("❌ PhD scholarship configuration for year 114 not found")
@@ -50,9 +49,7 @@ async def seed(nycu_id: str):
         print(f"🎓 Scholarship: {config.name}, config_id={config.id}")
 
         # 3. Create or update user_profile (fixed fields)
-        profile_result = await session.execute(
-            select(UserProfile).where(UserProfile.user_id == user.id)
-        )
+        profile_result = await session.execute(select(UserProfile).where(UserProfile.user_id == user.id))
         profile = profile_result.scalar_one_or_none()
         if not profile:
             profile = UserProfile(
@@ -109,6 +106,12 @@ async def seed(nycu_id: str):
                     "field_id": "master_school_info",
                     "field_type": "text",
                     "value": f"{student_data.get('std_highestschname', '國立陽明交通大學')} 資訊工程研究所",
+                    "required": True,
+                },
+                "contact_phone": {
+                    "field_id": "contact_phone",
+                    "field_type": "text",
+                    "value": "0989123123",
                     "required": True,
                 },
             },
