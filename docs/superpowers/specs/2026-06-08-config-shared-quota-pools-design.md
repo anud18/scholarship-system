@@ -1,7 +1,7 @@
 # Config-Level Shared Quota Pools (Cross-Config NSTC Borrowing)
 
 - **Date:** 2026-06-08
-- **Status:** Approved design — pending spec review (hardened after adversarial code review)
+- **Status:** Approved — ready for implementation planning (hardened after adversarial code review)
 - **Area:** Manual distribution, scholarship configuration, roster generation
 - **Branch:** `worktree-config-shared-quota-pools`
 
