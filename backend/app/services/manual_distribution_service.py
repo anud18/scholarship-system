@@ -268,6 +268,41 @@ class ManualDistributionService:
         """
         return self.pool_total(config, sub_type) - await self.consumers_count(config.id, sub_type)
 
+    async def _resolve_linked_configs(
+        self, requesting_config: ScholarshipConfiguration, sub_type: str
+    ) -> list[ScholarshipConfiguration]:
+        """Load the linked source configs of `requesting_config` whose
+        shared_quota_sources entry lists `sub_type` (spec §6.3).
+
+        Missing target configs (the source_config_code resolves to nothing) are
+        silently dropped — consistent with §10/§11.5 dangling-link handling.
+        """
+        sources = requesting_config.shared_quota_sources or []
+        codes: list[str] = []
+        for entry in sources:
+            if not isinstance(entry, dict):
+                continue
+            entry_sub_types = entry.get("sub_types") or []
+            code = entry.get("source_config_code")
+            if code and sub_type in entry_sub_types:
+                codes.append(code)
+        if not codes:
+            return []
+        stmt = select(ScholarshipConfiguration).where(ScholarshipConfiguration.config_code.in_(codes))
+        return list((await self.db.execute(stmt)).scalars().all())
+
+    async def _allowed_config_ids(self, requesting_config: ScholarshipConfiguration, sub_type: str) -> set[int]:
+        """Allowed consumed-config ids for an allocation of (requesting, sub_type).
+
+        = {own config id} ∪ {linked source config ids whose link lists sub_type}.
+        Used server-side to validate that an inbound allocation_config_id is
+        permitted before recomputing remaining (spec §7).
+        """
+        allowed = {requesting_config.id}
+        for linked in await self._resolve_linked_configs(requesting_config, sub_type):
+            allowed.add(linked.id)
+        return allowed
+
     async def _batch_load_rejected_map(self, app_ids: list[int]) -> dict[int, set[str]]:
         """Load professor-rejected sub-types for a batch of applications."""
         rejected_map: dict[int, set[str]] = {}

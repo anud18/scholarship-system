@@ -372,3 +372,49 @@ async def test_remaining_is_pool_total_minus_global_consumers(db: AsyncSession):
     svc = ManualDistributionService(db)
     # 10 total - (2 winners + 1 renewal) = 7
     assert await svc.remaining(cfg, "nstc") == 7
+
+
+# --------------------------------------------------------------------------- #
+# 2.4 _allowed_config_ids — own ∪ linked-for-sub_type (spec §6.3, §7)
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.asyncio
+async def test_allowed_config_ids_own_plus_linked_for_sub_type(db: AsyncSession):
+    st = await _make_type(db, code="phd")
+    prior = await _make_config(
+        db,
+        scholarship_type_id=st.id,
+        config_code="phd_114",
+        academic_year=114,
+        quotas={"nstc": {"E": 3}},
+    )
+    requesting = await _make_config(
+        db,
+        scholarship_type_id=st.id,
+        config_code="phd_115",
+        academic_year=115,
+        quotas={"nstc": {"E": 5}, "moe_1w": {"E": 4}},
+        shared_quota_sources=[{"source_config_code": "phd_114", "sub_types": ["nstc"]}],
+    )
+    svc = ManualDistributionService(db)
+    # nstc is linked → own + prior
+    assert await svc._allowed_config_ids(requesting, "nstc") == {requesting.id, prior.id}
+    # moe_1w is NOT in the link's sub_types → own only
+    assert await svc._allowed_config_ids(requesting, "moe_1w") == {requesting.id}
+
+
+@pytest.mark.asyncio
+async def test_allowed_config_ids_missing_target_config_ignored(db: AsyncSession):
+    st = await _make_type(db, code="phd")
+    requesting = await _make_config(
+        db,
+        scholarship_type_id=st.id,
+        config_code="phd_115",
+        academic_year=115,
+        quotas={"nstc": {"E": 5}},
+        # phd_112 config does not exist → link silently dropped
+        shared_quota_sources=[{"source_config_code": "phd_112", "sub_types": ["nstc"]}],
+    )
+    svc = ManualDistributionService(db)
+    assert await svc._allowed_config_ids(requesting, "nstc") == {requesting.id}
