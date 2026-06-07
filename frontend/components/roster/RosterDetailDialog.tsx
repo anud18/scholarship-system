@@ -34,7 +34,6 @@ import { Loader2, Lock, LockOpen, X, AlertTriangle, RefreshCw } from "lucide-rea
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import type { RevokedSuspendedList, DistributionDiff, DistributionDiffEntry } from "@/lib/api/modules/payment-rosters";
-import { Checkbox } from "@/components/ui/checkbox";
 import { RevokedSuspendedSection } from "@/components/roster/RevokedSuspendedSection";
 
 interface Period {
@@ -124,9 +123,12 @@ export function RosterDetailDialog({
   // 比對分發名單 (reconcile) state
   const [diff, setDiff] = useState<DistributionDiff | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
-  const [selectedAddIds, setSelectedAddIds] = useState<Set<number>>(new Set());
-  const [selectedRemoveItemIds, setSelectedRemoveItemIds] = useState<Set<number>>(new Set());
-  const [reconcileConfirmOpen, setReconcileConfirmOpen] = useState(false);
+  // Per-row reconcile is single-action: a 待補充 row only adds, a 待移除 row only
+  // removes. The pending row awaits confirmation before applying.
+  const [pendingAction, setPendingAction] = useState<{
+    kind: "add" | "remove";
+    entry: DistributionDiffEntry;
+  } | null>(null);
   const [reconcileSubmitting, setReconcileSubmitting] = useState(false);
 
   // Local mirror of excel_stale: the `period` prop is a snapshot from when the
@@ -267,46 +269,38 @@ export function RosterDetailDialog({
       const resp = await apiClient.paymentRosters.getDistributionDiff(period.roster_id);
       if (resp.success && resp.data) {
         setDiff(resp.data);
-        setSelectedAddIds(new Set());
-        setSelectedRemoveItemIds(new Set());
+        setPendingAction(null);
       } else {
         // Drop any prior diff so a failed reload never leaves stale add/remove
         // candidates on screen for the admin to act on.
         setDiff(null);
-        setSelectedAddIds(new Set());
-        setSelectedRemoveItemIds(new Set());
+        setPendingAction(null);
         toast.error(resp.message || "比對失敗");
       }
     } catch (e) {
       setDiff(null);
-      setSelectedAddIds(new Set());
-      setSelectedRemoveItemIds(new Set());
+      setPendingAction(null);
       toast.error(e instanceof Error ? e.message : "比對失敗");
     } finally {
       setDiffLoading(false);
     }
   };
 
-  const toggle = (set: Set<number>, id: number): Set<number> => {
-    const next = new Set(set);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    return next;
-  };
-
-  const submitReconcile = async () => {
+  // Apply a single-row add or remove. Each 待補充/待移除 row is one action — the
+  // server still re-derives the allowed set and rejects anything stale.
+  const applyReconcile = async (addIds: number[], removeItemIds: number[]) => {
     if (!period.roster_id) return;
     setReconcileSubmitting(true);
     try {
       const resp = await apiClient.paymentRosters.reconcileRoster(period.roster_id, {
-        add_application_ids: Array.from(selectedAddIds),
-        remove_item_ids: Array.from(selectedRemoveItemIds),
+        add_application_ids: addIds,
+        remove_item_ids: removeItemIds,
       });
       if (resp.success) {
         const added = resp.data?.added.length ?? 0;
         const removed = resp.data?.removed.length ?? 0;
         toast.success(`已更新造冊名單：新增 ${added} 人 / 移除 ${removed} 人`);
-        setReconcileConfirmOpen(false);
+        setPendingAction(null);
         // Independent refreshes — run in parallel to halve the post-apply wait.
         await Promise.all([loadRosterItems(), loadDistributionDiff()]);
         if (resp.data?.excel_stale) setExcelStale(true);
@@ -319,6 +313,15 @@ export function RosterDetailDialog({
       toast.error(e instanceof Error ? e.message : "更新造冊名單失敗");
     } finally {
       setReconcileSubmitting(false);
+    }
+  };
+
+  const confirmPending = () => {
+    if (!pendingAction) return;
+    if (pendingAction.kind === "add") {
+      applyReconcile([pendingAction.entry.application_id], []);
+    } else if (pendingAction.entry.item_id != null) {
+      applyReconcile([], [pendingAction.entry.item_id]);
     }
   };
 
@@ -354,9 +357,7 @@ export function RosterDetailDialog({
   // open state) changes — otherwise a stale diff could show under a new roster.
   useEffect(() => {
     setDiff(null);
-    setSelectedAddIds(new Set());
-    setSelectedRemoveItemIds(new Set());
-    setReconcileConfirmOpen(false);
+    setPendingAction(null);
     setExcelStale(period.excel_stale ?? false);
   }, [open, period.roster_id, period.excel_stale]);
 
@@ -443,7 +444,7 @@ export function RosterDetailDialog({
             <TableRow key={index}>
               <TableCell className="font-medium">{item.student_name}</TableCell>
               <TableCell className="font-mono text-sm">
-                {item.student_id_number}
+                {item.student_id || "-"}
               </TableCell>
               <TableCell>{item.department_name || "-"}</TableCell>
               <TableCell>
@@ -589,29 +590,31 @@ export function RosterDetailDialog({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-10"></TableHead>
                       <TableHead>學號</TableHead>
                       <TableHead>姓名</TableHead>
                       <TableHead>系所</TableHead>
                       <TableHead className="text-right">金額</TableHead>
+                      <TableHead className="w-20 text-right">操作</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {diff.to_add.map((e: DistributionDiffEntry) => (
                       <TableRow key={`add-${e.application_id}`}>
-                        <TableCell>
-                          <Checkbox
-                            aria-label={`補充 ${e.student_name}`}
-                            checked={selectedAddIds.has(e.application_id)}
-                            onCheckedChange={() =>
-                              setSelectedAddIds(prev => toggle(prev, e.application_id))
-                            }
-                          />
-                        </TableCell>
                         <TableCell>{e.student_id}</TableCell>
                         <TableCell>{e.student_name}</TableCell>
                         <TableCell>{e.department_name}</TableCell>
                         <TableCell className="text-right">{formatCurrency(e.scholarship_amount)}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+                            disabled={reconcileSubmitting}
+                            onClick={() => setPendingAction({ kind: "add", entry: e })}
+                          >
+                            新增
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -625,40 +628,33 @@ export function RosterDetailDialog({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-10"></TableHead>
                       <TableHead>學號</TableHead>
                       <TableHead>姓名</TableHead>
                       <TableHead>系所</TableHead>
+                      <TableHead className="w-20 text-right">操作</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {diff.to_remove.map((e: DistributionDiffEntry) => (
                       <TableRow key={`rm-${e.item_id}`}>
-                        <TableCell>
-                          <Checkbox
-                            aria-label={`移除 ${e.student_name}`}
-                            checked={!!e.item_id && selectedRemoveItemIds.has(e.item_id)}
-                            onCheckedChange={() =>
-                              e.item_id &&
-                              setSelectedRemoveItemIds(prev => toggle(prev, e.item_id as number))
-                            }
-                          />
-                        </TableCell>
                         <TableCell>{e.student_id}</TableCell>
                         <TableCell>{e.student_name}</TableCell>
                         <TableCell>{e.department_name}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-red-700 border-red-300 hover:bg-red-50"
+                            disabled={reconcileSubmitting || e.item_id == null}
+                            onClick={() => setPendingAction({ kind: "remove", entry: e })}
+                          >
+                            移除
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
-              </div>
-            )}
-
-            {diff && (selectedAddIds.size > 0 || selectedRemoveItemIds.size > 0) && (
-              <div className="mt-3 flex justify-end">
-                <Button size="sm" onClick={() => setReconcileConfirmOpen(true)}>
-                  套用 (新增 {selectedAddIds.size} / 移除 {selectedRemoveItemIds.size})
-                </Button>
               </div>
             )}
           </div>
@@ -762,33 +758,37 @@ export function RosterDetailDialog({
         </div>
       </DialogContent>
 
-      {/* 比對分發名單 confirm */}
+      {/* 比對分發名單 — single-row confirm */}
       <Dialog
-        open={reconcileConfirmOpen}
-        onOpenChange={open => !open && !reconcileSubmitting && setReconcileConfirmOpen(false)}
+        open={!!pendingAction}
+        onOpenChange={open => !open && !reconcileSubmitting && setPendingAction(null)}
       >
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>確認更新造冊名單</DialogTitle>
+            <DialogTitle>
+              {pendingAction?.kind === "add" ? "確認補充進造冊" : "確認從造冊移除"}
+            </DialogTitle>
             <DialogDescription className="flex items-start gap-2">
               <AlertTriangle className="h-4 w-4 mt-0.5 text-amber-500" />
               <span>
-                將新增 <strong>{selectedAddIds.size}</strong> 人、移除{" "}
-                <strong>{selectedRemoveItemIds.size}</strong> 人。此操作會將造冊標記為「需重新匯出 Excel」並記錄稽核日誌。
+                {pendingAction?.kind === "add" ? "將補充 " : "將移除 "}
+                <strong>{pendingAction?.entry.student_name}</strong>
+                {pendingAction?.kind === "add" ? " 進造冊" : " 出造冊"}
+                。此操作會將造冊標記為「需重新匯出 Excel」並記錄稽核日誌。
               </span>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setReconcileConfirmOpen(false)}
+              onClick={() => setPendingAction(null)}
               disabled={reconcileSubmitting}
             >
               取消
             </Button>
-            <Button onClick={submitReconcile} disabled={reconcileSubmitting}>
+            <Button onClick={confirmPending} disabled={reconcileSubmitting}>
               {reconcileSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              確認套用
+              {pendingAction?.kind === "add" ? "確認新增" : "確認移除"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -45,7 +45,8 @@ class RosterItemResponse(BaseModel):
     id: int
     roster_id: int
     application_id: int
-    student_id_number: str
+    student_id_number: str  # 身分證字號 (national ID / std_pid)
+    student_id: Optional[str] = None  # 學號 (std_stdcode), enriched from student_data
     student_name: str
     student_email: Optional[str] = None
     scholarship_name: Optional[str] = None

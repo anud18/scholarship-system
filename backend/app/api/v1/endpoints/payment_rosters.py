@@ -1281,9 +1281,11 @@ async def get_roster_items(
         items_data = []
         for item in items:
             item_dict = RosterItemResponse.model_validate(item).model_dump()
-            # 從 application.student_data 補充學院/系所資訊
+            # 從 application.student_data 補充學號/學院/系所資訊
+            # (PaymentRosterItem 只存 student_id_number=身分證，學號需從快照取得)
             if item.application and item.application.student_data:
                 sd = item.application.student_data
+                item_dict["student_id"] = sd.get("std_stdcode")
                 item_dict["college_code"] = sd.get("std_academyno") or sd.get("trm_academyno")
                 item_dict["college_name"] = sd.get("trm_academyname")
                 item_dict["department_name"] = sd.get("trm_depname")
