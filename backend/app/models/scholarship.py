@@ -543,12 +543,17 @@ class ScholarshipConfiguration(Base):
         JSON, nullable=True
     )  # 配額配置，矩陣格式 {"nstc": {"EE": 5, "EN": 4}, "moe_1w": {"EE": 6, "EN": 5}}
 
-    # 計畫編號設定（矩陣模式）
+    # 計畫編號設定（flat，own-year only）
     project_numbers = Column(
         JSON, nullable=True
-    )  # 計畫編號，依子類型及學年度 {"nstc": {"115": "115RXXXXXXX", "114": "114RXXXXXXX"}, "moe_1w": {"115": "115CXXXXXX"}}
+    )  # 計畫編號，依子類型 {sub_type: own-year-code} e.g. {"nstc": "114R000001", "moe_1w": "114E000001"}
 
-    # 各子類型可使用的前年度配額
+    # 跨配置共享配額來源（取代 prior_quota_years）— 依 config_code 連結前年度配置，per sub_type，無數量
+    shared_quota_sources = Column(
+        JSON, nullable=True
+    )  # [{"source_config_code": "phd_114", "sub_types": ["nstc"]}, ...]
+
+    # DEPRECATED (dropped in shared-quota MIGRATION 2): superseded by shared_quota_sources
     prior_quota_years = Column(JSON, nullable=True)  # {"nstc": [113, 112], "moe_1w": []}
 
     # 金額設定 (從 ScholarshipType 移至此處)

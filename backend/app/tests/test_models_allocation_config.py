@@ -37,3 +37,13 @@ def test_application_has_allocation_config_id_fk():
     assert col.nullable is True
     fk = next(iter(col.foreign_keys))
     assert fk.column.table.name == "scholarship_configurations"
+
+
+def test_scholarship_configuration_has_shared_quota_sources_json():
+    col = _column(ScholarshipConfiguration, "shared_quota_sources")
+    assert col is not None, "ScholarshipConfiguration.shared_quota_sources column missing"
+    assert col.nullable is True
+    # quotas matrix stays untouched (per-college matrix is NOT removed)
+    assert _column(ScholarshipConfiguration, "quotas") is not None
+    # prior_quota_years still present at Phase-1 (dropped in MIGRATION 2)
+    assert _column(ScholarshipConfiguration, "prior_quota_years") is not None
