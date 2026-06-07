@@ -12,6 +12,22 @@
 
 > **Migration ordering (critical):** MIGRATION 1 (Task 1.5) is additive + backfill + project_numbers data-move and must run FIRST. MIGRATION 2 (Task 1.6) drops `college_ranking_items.allocation_year` and `scholarship_configurations.prior_quota_years` and must run LAST — only after every code reader (Phases 3–6) is rewritten. Execute Phase 1 models + MIGRATION 1, then Phases 2–6, then MIGRATION 2.
 
+## Plan reconciliation notes (READ FIRST — these override any contradictory task text)
+
+This plan was drafted by six parallel authors; the following resolves cross-phase overlaps. Where a task body contradicts a note here, **the note wins**.
+
+1. **Pool helpers live ONCE, in Phase 2.** `pool_total`, `consumers_count`, `remaining`, `_resolve_linked_configs`, `_allowed_config_ids`, `distributable_pool`, and `_pick_config` are defined and unit-tested in **Phase 2** and are the single source of truth. **Phase 3 Tasks 3.1–3.3 must NOT redefine them** — skip their "add method" steps; keep only genuinely new code. Canonical contract: `_resolve_linked_configs(config)` and `_allowed_config_ids(requesting_config, sub_type)` are **`async`** (they query the DB to resolve `shared_quota_sources` codes → config rows). **Every Phase 3 call site must `await`** them; do not introduce a sync `_linked_configs` attribute cache.
+2. **Delete `_pick_pool` / `_build_remaining_quota` ONCE** — in **Phase 2 Task 2.6**. Phase 3 Task 3.10 must NOT re-delete them (already gone); treat that step as a no-op. Task 3.3's "remove in Task 3.7" cross-reference should read **Task 2.6**.
+3. **`SubTypeConfigCol` (TS) is declared ONCE — in Phase 6 Task 6.3**, shape `{config_id, config_code, academic_year, is_own, sub_type, remaining, display_name, total, key}`. **Phase 3 Task 3.11 must NOT declare `SubTypeConfigCol`** — if 3.11 adds a type it adds only the backend `by_config` *response* type (name it `ByConfigQuota`), never the grid column type.
+4. **Each §13 backend test file is owned by its Phase 3/4 rewrite task** — `test_distribution_state_endpoint`→3.9, `test_auto_allocate_preview`→3.8, `test_challenge_release_distribution`→4.8, `test_renewal_end_to_end`→4.9, `test_restore_allocation_service`→4.7, `test_roster_distribution_reconcile_service`→4.4. **Task 6.19 is a verification-only gate** (run the whole §13 suite + lint); it does NOT re-edit those files (it may add the small `test_excel_export_*` edit, which no earlier task owns).
+5. **Drop the old ORM Column lines with MIGRATION 2.** Tasks 1.1/1.3 keep `allocation_year` / `prior_quota_years` Columns during the additive phase. As the final step of **Task 1.6 (applied LAST, after Phase 6)**, delete `allocation_year = Column(...)` from `college_review.py` and `prior_quota_years = Column(...)` from `scholarship.py` so the ORM matches the post-drop DB.
+6. **"Phase 2 migration" / "Phase-2 migration" anywhere is a typo for MIGRATION 2 (Task 1.6).** The destructive drop is Phase 1's second migration file, applied last — never in Phase 2.
+7. **Task 1.5 pre-drop audit logs to the alembic migration logger** (a `logger.warning` with orphan counts), NOT an `audit_logs` INSERT (`audit_logs.user_id` is NOT NULL and there is no `details` column — already fixed in the Task 1.5 body).
+8. **Concurrency gate (Task 3.5 `_assert_round_not_oversubscribed`):** first line is `await self.db.flush()` (do not rely on autoflush for the recount); lock with a deterministic order — `select(ScholarshipConfiguration).where(ScholarshipConfiguration.id.in_(consumed_ids)).order_by(ScholarshipConfiguration.id).with_for_update()` — to prevent cross-round deadlocks. Add one test that leaves the over-cap write un-flushed.
+9. **Approved renewals must never have NULL `allocation_config_id`** (else §6.2 under-counts → over-allocation). `create_renewal_from_previous` (Task 4.6, sole creation path; one non-test caller `renewal.py:183`) sets it with the own-config fallback; additionally, finalize/approval backfills `allocation_config_id = scholarship_configuration_id` for any approved `is_renewal` app found NULL.
+10. **Trust quoted source over `:NNN` anchors.** Some line numbers drift ±50 from HEAD (e.g. `roster_service._create_roster_item` is at :764, `_generate_one_sub_type_roster` :1567, `generate_rosters_from_distribution` :1434). Match on the quoted code text.
+11. **`renewal.py` needs no code change** (reads `renewal_year` for display only, which stays) — confirm during Phase 4.
+
 ---
 
 
@@ -828,21 +844,17 @@ def upgrade() -> None:
             "WHERE is_renewal = true AND status = 'approved' AND allocation_config_id IS NULL"
         )
     ).scalar()
-    op.execute(
-        sa.text(
-            "INSERT INTO audit_logs (action, resource_type, details, created_at) "
-            "VALUES (:action, :rtype, :details, now())"
-        ).bindparams(
-            action="migration_shared_quota_audit",
-            rtype="scholarship_configuration",
-            details=_json.dumps(
-                {
-                    "orphan_allocated_items": orphan_items,
-                    "orphan_approved_renewals": orphan_renewals,
-                    "dropped_shared_quota_links": dropped_links,
-                }
-            ),
-        )
+    # Pre-drop audit: log orphan counts to the alembic migration logger (crash-proof).
+    # NOT an audit_logs INSERT — audit_logs.user_id is NOT NULL and there is no `details`
+    # column, so a raw INSERT would abort the migration. See reconciliation note 7.
+    import logging as _logging
+
+    _logging.getLogger("alembic.runtime.migration").warning(
+        "shared_quota_pools migration audit: orphan_allocated_items=%s "
+        "orphan_approved_renewals=%s dropped_shared_quota_links=%s",
+        orphan_items,
+        orphan_renewals,
+        dropped_links,
     )
 
 
@@ -880,7 +892,7 @@ def downgrade() -> None:
 # FLATTEN   = step 6 (project_numbers flattened to own-year only)
 ```
 
-> Note: the audit-log `INSERT` assumes `audit_logs(action, resource_type, details, created_at)`. Confirm these column names against the live `audit_logs` table during the smoke (Task 1.7); if the schema differs, adjust the INSERT column list before the smoke passes — the per-`reset` run is the real verifier of this statement.
+> Note: the pre-drop audit logs orphan counts via the alembic migration logger (visible in `docker compose -f docker-compose.dev.yml logs backend` during the smoke). It does NOT write to `audit_logs` — that table's `user_id` is NOT NULL and it has no `details` column, so a raw INSERT would abort the migration.
 
 - [ ] Run the static migration tests, expect PASS:
 ```bash
@@ -6349,7 +6361,7 @@ git commit -m "test(roster): align reconcile API test with allocation_config_id 
 - `backend/app/api/v1/endpoints/payment_rosters.py` (`:589-637` `allocation_map` reads `allocation_config_id`)
 - Tests: `backend/app/tests/test_scholarship_configuration_schema_validators.py`, `backend/app/tests/test_scholarship_configuration_endpoints.py`, `backend/app/tests/test_shared_quota_link_validation.py` (new)
 
-> Assumes Phase 1 already added the model columns `ScholarshipConfiguration.shared_quota_sources` (JSON), flattened `project_numbers` to `{sub_type: str}`, and Phase 2 dropped `prior_quota_years` + `CollegeRankingItem.allocation_year`, replacing it with `CollegeRankingItem.allocation_config_id`. Phase 5 wires the schema, CRUD write/read paths, and imperative link validation.
+> Assumes Phase 1 already added the model columns `ScholarshipConfiguration.shared_quota_sources` (JSON), flattened `project_numbers` to `{sub_type: str}`, and MIGRATION 1 (Task 1.5, additive) added `CollegeRankingItem.allocation_config_id`. `prior_quota_years` and `CollegeRankingItem.allocation_year` STILL EXIST at this point — they are dropped LAST by MIGRATION 2 (Task 1.6), after Phase 6. Phase 5 wires the schema, CRUD write/read paths, and imperative link validation.
 
 ---
 
@@ -7505,25 +7517,6 @@ Expect no output from either command.
 
 
 ## Phase 6 — Frontend + seed + test sweep
-
-**Files in this phase:**
-
-| Path | Change |
-|---|---|
-| `frontend/lib/api/modules/manual-distribution.ts` | `AllocationItem`/`AllocationSuggestion.allocation_year`→`allocation_config_id`; `SubTypeYearCol`→`SubTypeConfigCol`; pool/display fields on `DistributionStudent`/`DistributionStateAvailableQuota`/`RosterSummary`/`DistributionSummaryGroup` |
-| `frontend/components/admin/manual-distribution/ManualDistributionPanel.tsx` | config-keyed grid columns + `allocation_config_id` payload |
-| `frontend/components/admin-configuration-management.tsx` | `shared_quota_sources` link picker + `project_numbers` field; `formData` init / `openEditDialog` |
-| `frontend/lib/api/types.ts` | `project_numbers: Record<string,string>`; drop `prior_quota_years`; add `shared_quota_sources` |
-| `frontend/lib/api/generated/schema.d.ts` | regenerate (`npm run api:generate`) |
-| `frontend/lib/api/modules/__tests__/manual-distribution.test.ts` | allocate body `allocation_config_id` |
-| `backend/app/db/seed_scholarship_configs.py` | flat `project_numbers`, `shared_quota_sources`, sibling project codes, re-sync block |
-| `backend/scripts/seed_distribution_test_data.py` | `allocation_year`→`allocation_config_id` |
-| §13 backend test files | fixture rewrites (checklist) |
-```
-
-Let me write the complete output now.
-
----
 
 **Files in this phase:**
 
@@ -8918,7 +8911,7 @@ git commit -m "feat(seed): distribution test data uses allocation_config_id"
 **Files:**
 - Test: `backend/app/db/seed_scholarship_configs.py`, `backend/scripts/seed_distribution_test_data.py` (runtime verify)
 
-- [ ] Rebuild the DB (applies the Phase-2 migration, then seeds):
+- [ ] Rebuild the DB (applies both shared-quota migrations — MIGRATION 1 then MIGRATION 2 — then seeds):
 ```bash
 /home/howard/scholarship-system/.claude/worktrees/config-shared-quota-pools/scripts/reset_database.sh
 ```
