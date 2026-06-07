@@ -331,6 +331,37 @@ def test_reconcile_writes_audit_logs(db_sync, diff_scenario):
     assert summary.new_values["removed"] == 1
 
 
+def test_distribution_diff_whole_period_roster_ignores_subtype_slice(db_sync):
+    """Regression: a roster made by generate_roster (立即產生造冊) has
+    sub_type=NULL / allocation_year=NULL and holds EVERY allocated item across
+    sub_types. The diff must compare against the full allocated set, not a
+    derived 'general' slice — that slice matches zero nstc items, so the diff
+    would bogusly report to_add=[] and flag every real member as removable."""
+    admin = _admin(db_sync, nycu_id="wp_admin")
+    sch = _scholarship(db_sync, code="wp_sch")
+    config = _config(db_sync, sch)
+    ua = _student(db_sync, "wp_a")
+    ub = _student(db_sync, "wp_b")
+    uc = _student(db_sync, "wp_c")
+    app_a = _application(db_sync, ua, sch, config, app_id="APP-WP-A", std_code="222A")
+    app_b = _application(db_sync, ub, sch, config, app_id="APP-WP-B", std_code="222B")
+    app_c = _application(db_sync, uc, sch, config, app_id="APP-WP-C", std_code="222C")
+    ranking = _ranking(db_sync, sch)
+    _ranking_item(db_sync, ranking, app_a, rank=1)  # allocated nstc, already in roster
+    _ranking_item(db_sync, ranking, app_b, rank=2)  # allocated nstc, missing → to_add
+    _ranking_item(db_sync, ranking, app_c, rank=3, allocated=False)  # de-allocated → orphan
+    roster = _roster(db_sync, config, admin, sub_type=None, alloc_year=None, code="ROSTER-WP-1")
+    _roster_item(db_sync, roster, app_a)
+    item_c = _roster_item(db_sync, roster, app_c)
+    db_sync.commit()
+
+    svc = RosterService(db_sync)
+    diff = svc.get_distribution_diff_for_roster(roster.id)
+
+    assert {e.application_id for e in diff["to_add"]} == {app_b.id}
+    assert {e.item_id for e in diff["to_remove"]} == {item_c.id}
+
+
 def test_reconcile_add_missing_student_data_raises(db_sync):
     admin = _admin(db_sync, nycu_id="rc_guard_admin")
     sch = _scholarship(db_sync, code="rc_guard_sch")

@@ -1889,6 +1889,17 @@ class RosterService:
             .all()
         )
 
+        # Whole-period roster (generate_roster / 立即產生造冊): sub_type and
+        # allocation_year are both NULL because that path holds EVERY allocated
+        # item in the ranking regardless of sub_type (mirrors
+        # _get_eligible_applications matrix mode). Slicing by a derived "general"
+        # sub_type would exclude every nstc/moe item → empty diff. So for these,
+        # the distribution is the full allocated set, no slicing.
+        if roster.sub_type is None and roster.allocation_year is None:
+            return {item.application_id: item for item in allocated}
+
+        # Per-slice roster (generate_rosters_from_distribution): one roster per
+        # (allocation_year, sub_type) group — match that exact group.
         roster_year = roster.allocation_year or config.academic_year
         roster_sub = roster.sub_type or "general"
 
