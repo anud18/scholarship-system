@@ -81,7 +81,10 @@ class PaymentRoster(Base):
 
     # 矩陣分發造冊欄位（多年補發支援）
     sub_type = Column(String(50), nullable=True)  # 獎學金子類型 (e.g. nstc, moe_1w)，非矩陣模式為 NULL
-    allocation_year = Column(Integer, nullable=True)  # 消耗配額的學年度，補發時與 academic_year 不同
+    allocation_config_id = Column(
+        Integer, ForeignKey("scholarship_configurations.id"), nullable=True
+    )  # 消耗配額的 config (NULL 僅代表 whole-period sentinel)
+    allocation_year = Column(Integer, nullable=True)  # 消耗 config 的 academic_year — 凍結 display snapshot (§8)
     project_number = Column(String(100), nullable=True)  # 計畫編號 e.g. 115RXXXXXXX
 
     # 造冊狀態與觸發方式
@@ -129,16 +132,16 @@ class PaymentRoster(Base):
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 
     # 關聯
-    scholarship_configuration = relationship("ScholarshipConfiguration")
+    scholarship_configuration = relationship("ScholarshipConfiguration", foreign_keys=[scholarship_configuration_id])
     ranking = relationship("CollegeRanking", lazy="select")  # 關聯的排名（可選）
     creator = relationship("User", foreign_keys=[created_by])
     locker = relationship("User", foreign_keys=[locked_by])
     items = relationship("PaymentRosterItem", back_populates="roster", cascade="all, delete-orphan")
     audit_logs = relationship("RosterAuditLog", back_populates="roster", cascade="all, delete-orphan")
 
-    # 唯一約束：每個獎學金配置+期間+子類型+配額學年度只能有一個造冊
+    # 唯一約束：每個獎學金配置+期間+子類型+消耗 config 只能有一個造冊
     # 實際約束由 migration 建立的 functional unique index 實施：
-    # UNIQUE(scholarship_configuration_id, period_label, COALESCE(allocation_year, -1), COALESCE(sub_type, ''))
+    # UNIQUE(scholarship_configuration_id, period_label, COALESCE(allocation_config_id, -1), COALESCE(sub_type, ''))
     __table_args__ = ()
 
     def __repr__(self):
@@ -205,7 +208,10 @@ class PaymentRosterItem(Base):
     scholarship_name = Column(String(200), nullable=False)
     scholarship_amount = Column(Numeric(10, 2), nullable=False)
     scholarship_subtype = Column(String(50))
-    allocation_year = Column(Integer, nullable=True)  # 消耗哪一年的配額（補發時不同於 academic_year）
+    allocation_config_id = Column(
+        Integer, ForeignKey("scholarship_configurations.id"), nullable=True
+    )  # 消耗配額的 config (NULL 僅代表 whole-period sentinel)
+    allocation_year = Column(Integer, nullable=True)  # 消耗 config 的 academic_year — 凍結 display snapshot (§8)
     allocated_sub_type = Column(String(50), nullable=True)  # 分發到的子類型快照 (e.g. nstc, moe_1w)
     application_identity = Column(String(50), nullable=True)  # 申請身分快照 (e.g. "114新申請", "114續領")
 

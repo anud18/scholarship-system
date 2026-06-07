@@ -47,3 +47,14 @@ def test_scholarship_configuration_has_shared_quota_sources_json():
     assert _column(ScholarshipConfiguration, "quotas") is not None
     # prior_quota_years still present at Phase-1 (dropped in MIGRATION 2)
     assert _column(ScholarshipConfiguration, "prior_quota_years") is not None
+
+
+def test_payment_roster_tables_have_allocation_config_id_fk():
+    for model in (PaymentRoster, PaymentRosterItem):
+        col = _column(model, "allocation_config_id")
+        assert col is not None, f"{model.__name__}.allocation_config_id column missing"
+        assert col.nullable is True
+        fk = next(iter(col.foreign_keys))
+        assert fk.column.table.name == "scholarship_configurations"
+        # allocation_year kept as a denormalized display snapshot
+        assert _column(model, "allocation_year") is not None
