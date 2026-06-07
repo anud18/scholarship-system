@@ -222,6 +222,43 @@ class ManualDistributionService:
             scalar_int = 0
         return scalar_int or int(config.total_quota or 0)
 
+    async def consumers_count(self, config_id: int, sub_type: str) -> int:
+        """Count every LIVE consumer of (config_id, sub_type) anywhere (spec §6.2).
+
+        Guaranteed two-half partition:
+          half 1 — general/manual winners: allocated CollegeRankingItem whose
+                   application is NOT a renewal (is_renewal==False guard).
+          half 2 — approved renewals: Application(is_renewal, approved).
+
+        The is_renewal==False guard on half 1 is load-bearing:
+        college_review_service.py:636-657 creates a CollegeRankingItem for
+        every application INCLUDING renewals (sorted first), and
+        restore_allocation flips is_allocated=True on any item with an
+        allocated_sub_type — so a revoked-then-restored renewal would otherwise
+        be counted in BOTH halves.
+        """
+        winners_stmt = (
+            select(func.count(CollegeRankingItem.id))
+            .join(Application, CollegeRankingItem.application_id == Application.id)
+            .where(
+                CollegeRankingItem.is_allocated.is_(True),
+                CollegeRankingItem.allocated_sub_type == sub_type,
+                CollegeRankingItem.allocation_config_id == config_id,
+                Application.is_renewal.is_(False),
+            )
+        )
+        winners = (await self.db.execute(winners_stmt)).scalar_one()
+
+        renewals_stmt = select(func.count(Application.id)).where(
+            Application.is_renewal.is_(True),
+            Application.status == ApplicationStatus.approved,
+            Application.sub_scholarship_type == sub_type,
+            Application.allocation_config_id == config_id,
+        )
+        renewals = (await self.db.execute(renewals_stmt)).scalar_one()
+
+        return int(winners) + int(renewals)
+
     async def _batch_load_rejected_map(self, app_ids: list[int]) -> dict[int, set[str]]:
         """Load professor-rejected sub-types for a batch of applications."""
         rejected_map: dict[int, set[str]] = {}

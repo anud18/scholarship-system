@@ -195,3 +195,124 @@ async def test_pool_total_non_matrix_scalar_then_total_quota(db: AsyncSession):
     svc = ManualDistributionService(db)
     assert svc.pool_total(scalar_cfg, "nstc") == 20
     assert svc.pool_total(fallback_cfg, "nstc") == 7
+
+
+# --------------------------------------------------------------------------- #
+# 2.2 consumers_count — is_renewal partition (spec §6.2)
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.asyncio
+async def test_consumers_general_winner_counted_once(db: AsyncSession):
+    st = await _make_type(db, code="phd")
+    cfg = await _make_config(
+        db,
+        scholarship_type_id=st.id,
+        config_code="phd_115",
+        academic_year=115,
+        quotas={"nstc": {"E": 10}},
+    )
+    user = await _make_user(db, nycu_id="s1")
+    app = await _make_application(
+        db,
+        user_id=user.id,
+        scholarship_type_id=st.id,
+        academic_year=115,
+        sub_scholarship_type="nstc",
+        is_renewal=False,
+        status=ApplicationStatus.submitted,
+        app_id="APP-115-0-00001",
+    )
+    ranking = await _make_ranking(db, scholarship_type_id=st.id, sub_type_code="nstc", academic_year=115)
+    await _make_item(
+        db,
+        ranking_id=ranking.id,
+        application_id=app.id,
+        rank=1,
+        is_allocated=True,
+        allocated_sub_type="nstc",
+        allocation_config_id=cfg.id,
+    )
+    svc = ManualDistributionService(db)
+    assert await svc.consumers_count(cfg.id, "nstc") == 1
+
+
+@pytest.mark.asyncio
+async def test_consumers_renewal_counted_once_via_application_half(db: AsyncSession):
+    st = await _make_type(db, code="phd")
+    cfg = await _make_config(
+        db,
+        scholarship_type_id=st.id,
+        config_code="phd_115",
+        academic_year=115,
+        quotas={"nstc": {"E": 10}},
+    )
+    user = await _make_user(db, nycu_id="r1")
+    renewal = await _make_application(
+        db,
+        user_id=user.id,
+        scholarship_type_id=st.id,
+        academic_year=115,
+        sub_scholarship_type="nstc",
+        is_renewal=True,
+        status=ApplicationStatus.approved,
+        app_id="APP-115-0-00002",
+        allocation_config_id=cfg.id,
+    )
+    # College builds a ranking item for the renewal too, but is_allocated stays
+    # False, so the CollegeRankingItem half must NOT pick it up.
+    ranking = await _make_ranking(db, scholarship_type_id=st.id, sub_type_code="nstc", academic_year=115)
+    await _make_item(
+        db,
+        ranking_id=ranking.id,
+        application_id=renewal.id,
+        rank=1,
+        is_allocated=False,
+        allocated_sub_type=None,
+        allocation_config_id=None,
+    )
+    svc = ManualDistributionService(db)
+    assert await svc.consumers_count(cfg.id, "nstc") == 1
+
+
+@pytest.mark.asyncio
+async def test_consumers_revoked_then_restored_renewal_not_double_counted(db: AsyncSession):
+    """restore_allocation flips is_allocated=True on any item with an
+    allocated_sub_type — including a renewal's item. The is_renewal==False
+    guard on the ranking-item half is what keeps this from being counted
+    twice (once as a winner, once as the approved-renewal application).
+    """
+    st = await _make_type(db, code="phd")
+    cfg = await _make_config(
+        db,
+        scholarship_type_id=st.id,
+        config_code="phd_115",
+        academic_year=115,
+        quotas={"nstc": {"E": 10}},
+    )
+    user = await _make_user(db, nycu_id="r2")
+    renewal = await _make_application(
+        db,
+        user_id=user.id,
+        scholarship_type_id=st.id,
+        academic_year=115,
+        sub_scholarship_type="nstc",
+        is_renewal=True,
+        status=ApplicationStatus.approved,
+        app_id="APP-115-0-00003",
+        allocation_config_id=cfg.id,
+    )
+    ranking = await _make_ranking(db, scholarship_type_id=st.id, sub_type_code="nstc", academic_year=115)
+    # Restored renewal item: is_allocated=True with allocated_sub_type set.
+    await _make_item(
+        db,
+        ranking_id=ranking.id,
+        application_id=renewal.id,
+        rank=1,
+        is_allocated=True,
+        allocated_sub_type="nstc",
+        allocation_config_id=cfg.id,
+    )
+    svc = ManualDistributionService(db)
+    # Counted ONCE (via the Application renewal half), not twice.
+    assert await svc.consumers_count(cfg.id, "nstc") == 1
