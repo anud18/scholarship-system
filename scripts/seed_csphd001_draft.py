@@ -60,7 +60,7 @@ async def seed(nycu_id: str):
                 account_number="0011234-5678901",
                 advisor_name="張教授",
                 advisor_email="professor@nycu.edu.tw",
-                advisor_nycu_id="T001",
+                advisor_nycu_id="professor",
             )
             session.add(profile)
             print("  ✓ User profile created")
