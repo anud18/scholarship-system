@@ -117,14 +117,14 @@ def _ranking(db_sync, scholarship, *, sub_type="nstc"):
     return r
 
 
-def _ranking_item(db_sync, ranking, application, *, rank, sub_type="nstc", alloc_year=114, allocated=True):
+def _ranking_item(db_sync, ranking, application, *, rank, sub_type="nstc", alloc_config_id, allocated=True):
     it = CollegeRankingItem(
         ranking_id=ranking.id,
         application_id=application.id,
         rank_position=rank,
         is_allocated=allocated,
         allocated_sub_type=sub_type if allocated else None,
-        allocation_year=alloc_year if allocated else None,
+        allocation_config_id=alloc_config_id if allocated else None,
         status="allocated" if allocated else "ranked",
     )
     db_sync.add(it)
@@ -132,15 +132,18 @@ def _ranking_item(db_sync, ranking, application, *, rank, sub_type="nstc", alloc
     return it
 
 
-def _roster(db_sync, config, admin, *, status=RosterStatus.LOCKED, sub_type="nstc", alloc_year=114, code="ROSTER-RC-1"):
+def _roster(
+    db_sync, config, admin, *, status=RosterStatus.LOCKED, sub_type="nstc", alloc_config_id, code="ROSTER-RC-1"
+):
     r = PaymentRoster(
         roster_code=code,
         scholarship_configuration_id=config.id,
+        allocation_config_id=alloc_config_id,
         period_label="114",
         academic_year=114,
         roster_cycle=RosterCycle.YEARLY,
         sub_type=sub_type,
-        allocation_year=alloc_year,
+        allocation_year=114 if alloc_config_id is not None else None,
         status=status,
         trigger_type=RosterTriggerType.MANUAL,
         created_by=admin.id,
@@ -151,7 +154,7 @@ def _roster(db_sync, config, admin, *, status=RosterStatus.LOCKED, sub_type="nst
     return r
 
 
-def _roster_item(db_sync, roster, application, *, sub_type="nstc", alloc_year=114, amount=50000):
+def _roster_item(db_sync, roster, application, *, sub_type="nstc", amount=50000):
     it = PaymentRosterItem(
         roster_id=roster.id,
         application_id=application.id,
@@ -160,7 +163,8 @@ def _roster_item(db_sync, roster, application, *, sub_type="nstc", alloc_year=11
         scholarship_name="NSTC",
         scholarship_amount=amount,
         scholarship_subtype=sub_type,
-        allocation_year=alloc_year,
+        allocation_config_id=roster.allocation_config_id,
+        allocation_year=roster.allocation_year,
         allocated_sub_type=sub_type,
         is_included=True,
     )
@@ -184,10 +188,10 @@ def diff_scenario(db_sync):
     app_b = _application(db_sync, ub, sch, config, app_id="APP-RC-B", std_code="111B")
     app_c = _application(db_sync, uc, sch, config, app_id="APP-RC-C", std_code="111C")
     ranking = _ranking(db_sync, sch)
-    _ranking_item(db_sync, ranking, app_a, rank=1)  # allocated, in roster
-    _ranking_item(db_sync, ranking, app_b, rank=2)  # allocated, missing → to_add
-    _ranking_item(db_sync, ranking, app_c, rank=3, allocated=False)  # not allocated
-    roster = _roster(db_sync, config, admin)
+    _ranking_item(db_sync, ranking, app_a, rank=1, alloc_config_id=config.id)  # allocated, in roster
+    _ranking_item(db_sync, ranking, app_b, rank=2, alloc_config_id=config.id)  # allocated, missing → to_add
+    _ranking_item(db_sync, ranking, app_c, rank=3, alloc_config_id=None, allocated=False)  # not allocated
+    roster = _roster(db_sync, config, admin, alloc_config_id=config.id)
     _roster_item(db_sync, roster, app_a)  # matches distribution
     item_c = _roster_item(db_sync, roster, app_c)  # orphan → to_remove
     db_sync.commit()
@@ -347,10 +351,10 @@ def test_distribution_diff_whole_period_roster_ignores_subtype_slice(db_sync):
     app_b = _application(db_sync, ub, sch, config, app_id="APP-WP-B", std_code="222B")
     app_c = _application(db_sync, uc, sch, config, app_id="APP-WP-C", std_code="222C")
     ranking = _ranking(db_sync, sch)
-    _ranking_item(db_sync, ranking, app_a, rank=1)  # allocated nstc, already in roster
-    _ranking_item(db_sync, ranking, app_b, rank=2)  # allocated nstc, missing → to_add
-    _ranking_item(db_sync, ranking, app_c, rank=3, allocated=False)  # de-allocated → orphan
-    roster = _roster(db_sync, config, admin, sub_type=None, alloc_year=None, code="ROSTER-WP-1")
+    _ranking_item(db_sync, ranking, app_a, rank=1, alloc_config_id=config.id)  # allocated nstc, already in roster
+    _ranking_item(db_sync, ranking, app_b, rank=2, alloc_config_id=config.id)  # allocated nstc, missing → to_add
+    _ranking_item(db_sync, ranking, app_c, rank=3, alloc_config_id=None, allocated=False)  # de-allocated → orphan
+    roster = _roster(db_sync, config, admin, sub_type=None, alloc_config_id=None, code="ROSTER-WP-1")
     _roster_item(db_sync, roster, app_a)
     item_c = _roster_item(db_sync, roster, app_c)
     db_sync.commit()
@@ -374,8 +378,8 @@ def test_distribution_diff_excludes_to_add_missing_student_data(db_sync):
     app_b.student_data = {"std_cname": "乙"}  # no std_stdcode
     db_sync.flush()
     ranking = _ranking(db_sync, sch)
-    _ranking_item(db_sync, ranking, app_b, rank=1)
-    roster = _roster(db_sync, config, admin, code="ROSTER-FILT-1")
+    _ranking_item(db_sync, ranking, app_b, rank=1, alloc_config_id=config.id)
+    roster = _roster(db_sync, config, admin, alloc_config_id=config.id, code="ROSTER-FILT-1")
     db_sync.commit()
 
     svc = RosterService(db_sync)
@@ -392,8 +396,8 @@ def test_reconcile_add_missing_student_data_raises(db_sync):
     app_b.student_data = {"std_cname": "乙"}  # no std_stdcode
     db_sync.flush()
     ranking = _ranking(db_sync, sch)
-    _ranking_item(db_sync, ranking, app_b, rank=1)
-    roster = _roster(db_sync, config, admin, code="ROSTER-RC-GUARD-1")
+    _ranking_item(db_sync, ranking, app_b, rank=1, alloc_config_id=config.id)
+    roster = _roster(db_sync, config, admin, alloc_config_id=config.id, code="ROSTER-RC-GUARD-1")
     db_sync.commit()
 
     svc = RosterService(db_sync)

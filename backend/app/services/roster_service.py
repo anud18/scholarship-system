@@ -1916,24 +1916,25 @@ class RosterService:
         )
 
         # Whole-period roster (generate_roster / 立即產生造冊): sub_type and
-        # allocation_year are both NULL because that path holds EVERY allocated
-        # item in the ranking regardless of sub_type (mirrors
+        # allocation_config_id are both NULL because that path holds EVERY
+        # allocated item in the ranking regardless of sub_type (mirrors
         # _get_eligible_applications matrix mode). Slicing by a derived "general"
         # sub_type would exclude every nstc/moe item → empty diff. So for these,
         # the distribution is the full allocated set, no slicing.
-        if roster.sub_type is None and roster.allocation_year is None:
+        if roster.sub_type is None and roster.allocation_config_id is None:
             return {item.application_id: item for item in allocated}
 
         # Per-slice roster (generate_rosters_from_distribution): one roster per
-        # (allocation_year, sub_type) group — match that exact group.
-        roster_year = roster.allocation_year or config.academic_year
+        # (allocation_config_id, sub_type) group — match that exact group.
+        # allocation_config_id NULL on an item ⇒ consumed the requesting config.
+        roster_config_id = roster.allocation_config_id or config.id
         roster_sub = roster.sub_type or "general"
 
         result: dict = {}
         for item in allocated:
-            item_year = item.allocation_year or config.academic_year
+            item_config_id = item.allocation_config_id or config.id
             item_sub = item.allocated_sub_type or "general"
-            if item_year == roster_year and item_sub == roster_sub:
+            if item_config_id == roster_config_id and item_sub == roster_sub:
                 result[item.application_id] = item
         return result
 
@@ -1976,6 +1977,11 @@ class RosterService:
                     app_id,
                 )
                 continue
+            consumed = (
+                self.db.get(ScholarshipConfiguration, ranking_item.allocation_config_id)
+                if ranking_item.allocation_config_id is not None
+                else config
+            ) or config
             to_add.append(
                 DistributionDiffEntry(
                     application_id=app_id,
@@ -1984,10 +1990,10 @@ class RosterService:
                     student_name=std_name,
                     department_name=sd.get("trm_depname"),
                     college_name=sd.get("trm_academyname"),
-                    allocation_year=ranking_item.allocation_year,
+                    allocation_year=consumed.academic_year,
                     allocated_sub_type=ranking_item.allocated_sub_type,
                     application_identity=None,
-                    scholarship_amount=float(application.amount or config.amount or 0),
+                    scholarship_amount=float(application.amount or consumed.amount or 0),
                 )
             )
 
