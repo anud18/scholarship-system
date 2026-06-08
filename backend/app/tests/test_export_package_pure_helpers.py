@@ -22,6 +22,9 @@ import pytest
 
 from app.services.export_package_service import (
     _sanitize_filename,
+    _ext_for_application_document,
+    _application_document_entry,
+    _fetch_and_write,
     FILE_TYPE_LABELS,
     DEGREE_LABELS,
 )
@@ -98,11 +101,11 @@ class TestFileTypeLabels:
     """Pin: FILE_TYPE_LABELS — zh-TW labels for 8 file types.
     Used by the export PDF and ZIP folder naming."""
 
-    def test_all_8_known_file_types_present(self):
-        # Pin: exactly 8 file types. Pin so adding a new file_type
-        # without a label silently labels it as the dict's KeyError
-        # behavior in the export pipeline (currently uses .get()
-        # with default but the missing label would surface in PDFs).
+    def test_all_9_known_file_types_present(self):
+        # Pin: exactly 9 file types. bank_account_proof is the
+        # value actually stored on the cloned passbook
+        # ApplicationFile (application_service.py:2118); it must
+        # have a label or it falls through to the 其他文件 default.
         expected_keys = {
             "transcript",
             "research_proposal",
@@ -111,6 +114,7 @@ class TestFileTypeLabels:
             "insurance_record",
             "agreement",
             "bank_account_cover",
+            "bank_account_proof",
             "other",
         }
         assert set(FILE_TYPE_LABELS.keys()) == expected_keys
@@ -124,6 +128,12 @@ class TestFileTypeLabels:
         # doesn't change to 銀行帳戶 which would mismatch the
         # admin UI's existing strings.
         assert FILE_TYPE_LABELS["bank_account_cover"] == "存摺封面"
+
+    def test_bank_account_proof_label(self):
+        # Pin: the cloned passbook's real file_type
+        # (bank_account_proof) maps to 存摺封面 so it stops landing
+        # under 其他文件 in the export ZIP.
+        assert FILE_TYPE_LABELS["bank_account_proof"] == "存摺封面"
 
     def test_all_labels_are_non_empty_chinese(self):
         # Pin: every label is non-empty and contains CJK chars.
@@ -157,3 +167,133 @@ class TestDegreeLabels:
         # is explicit.
         for key in DEGREE_LABELS:
             assert isinstance(key, str), f"DEGREE_LABELS key {key!r} is not str"
+
+
+class TestExtForApplicationDocument:
+    """Pin: extension derivation for the student-uploaded 申請文件.
+    Prefers the original filename's extension, falls back to the
+    stored MinIO object name's suffix."""
+
+    def test_uses_original_filename_extension(self):
+        assert _ext_for_application_document("申請文件.pdf", "application-documents/12_x.pdf") == ".pdf"
+
+    def test_original_filename_extension_wins_over_object_name(self):
+        assert _ext_for_application_document("draft.docx", "application-documents/12_x.pdf") == ".docx"
+
+    def test_falls_back_to_object_name_when_no_original(self):
+        assert _ext_for_application_document(None, "application-documents/12_x.pdf") == ".pdf"
+
+    def test_empty_original_falls_back_to_object_name(self):
+        assert _ext_for_application_document("", "application-documents/12_x.pdf") == ".pdf"
+
+    def test_returns_empty_when_no_extension_anywhere(self):
+        assert _ext_for_application_document("noext", "application-documents/12_x") == ""
+
+    def test_directory_dot_not_mistaken_for_extension(self):
+        # A dot in a directory segment must not be treated as the
+        # file extension — only the last path segment counts.
+        assert _ext_for_application_document(None, "v1.2/objectname") == ""
+
+
+class TestApplicationDocumentEntry:
+    """Pin: descriptor for placing the student-uploaded 申請文件 into
+    the ZIP. Returns None when the application has no 申請文件."""
+
+    def test_returns_none_when_no_object_name(self):
+        assert _application_document_entry(None, "x.pdf", "117_資工系", "310_王小明") is None
+
+    def test_returns_none_when_object_name_empty(self):
+        assert _application_document_entry("", "x.pdf", "117_資工系", "310_王小明") is None
+
+    def test_builds_entry_with_expected_paths(self):
+        entry = _application_document_entry(
+            "application-documents/12_x.pdf",
+            "申請文件.pdf",
+            "117_資工系",
+            "310_王小明",
+        )
+        assert entry == {
+            "object_name": "application-documents/12_x.pdf",
+            "zip_path": "117_資工系/310_王小明_申請文件.pdf",
+            "error_path": "117_資工系/_錯誤_找不到檔案_申請文件.txt",
+            "error_label": "申請文件.pdf",
+        }
+
+    def test_error_label_falls_back_to_object_name(self):
+        entry = _application_document_entry("application-documents/12_x.pdf", None, "117_資工系", "310_王小明")
+        assert entry["error_label"] == "application-documents/12_x.pdf"
+
+    def test_zip_filename_is_sanitized(self):
+        # A student name containing a path separator must not escape
+        # the student folder (ZIP path-traversal guard).
+        entry = _application_document_entry("application-documents/12_x.pdf", "x.pdf", "117_資工系", "310_a/b")
+        assert "/" not in entry["zip_path"].rsplit("/", 1)[-1]
+
+
+class TestFetchAndWrite:
+    """Pin: the shared MinIO fetch-and-write used by both the
+    app.files loop and the 申請文件. On success the bytes land at
+    zip_path; on any MinIO error a placeholder .txt lands at
+    error_path instead (the ZIP build never aborts)."""
+
+    def test_success_writes_bytes_and_releases_connection(self):
+        import asyncio
+        import io
+        import zipfile
+        from unittest.mock import MagicMock
+
+        fake_response = MagicMock()
+        fake_response.read.return_value = b"PDF-BYTES"
+        minio = MagicMock()
+        minio.get_file_stream.return_value = fake_response
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            asyncio.run(
+                _fetch_and_write(
+                    zf,
+                    minio,
+                    object_name="application-documents/12_x.pdf",
+                    zip_path="dept/stu/stu_申請文件.pdf",
+                    error_path="dept/stu/_錯誤_找不到檔案_申請文件.txt",
+                    error_label="申請文件.pdf",
+                )
+            )
+
+        buf.seek(0)
+        with zipfile.ZipFile(buf) as zf:
+            assert zf.read("dept/stu/stu_申請文件.pdf") == b"PDF-BYTES"
+            assert "dept/stu/_錯誤_找不到檔案_申請文件.txt" not in zf.namelist()
+        fake_response.close.assert_called_once()
+        fake_response.release_conn.assert_called_once()
+
+    def test_failure_writes_error_placeholder(self):
+        import asyncio
+        import io
+        import zipfile
+        from unittest.mock import MagicMock
+
+        minio = MagicMock()
+        minio.get_file_stream.side_effect = Exception("object missing")
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            asyncio.run(
+                _fetch_and_write(
+                    zf,
+                    minio,
+                    object_name="application-documents/12_x.pdf",
+                    zip_path="dept/stu/stu_申請文件.pdf",
+                    error_path="dept/stu/_錯誤_找不到檔案_申請文件.txt",
+                    error_label="申請文件.pdf",
+                )
+            )
+
+        buf.seek(0)
+        with zipfile.ZipFile(buf) as zf:
+            names = zf.namelist()
+            assert "dept/stu/stu_申請文件.pdf" not in names
+            assert "dept/stu/_錯誤_找不到檔案_申請文件.txt" in names
+            content = zf.read("dept/stu/_錯誤_找不到檔案_申請文件.txt").decode("utf-8")
+            assert "object missing" in content
+            assert "申請文件.pdf" in content

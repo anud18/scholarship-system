@@ -47,6 +47,7 @@ FILE_TYPE_LABELS: Dict[str, str] = {
     "insurance_record": "投保紀錄",
     "agreement": "切結書",
     "bank_account_cover": "存摺封面",
+    "bank_account_proof": "存摺封面",  # value actually stored on the cloned passbook ApplicationFile
     "other": "其他文件",
 }
 
@@ -60,6 +61,71 @@ DEGREE_LABELS: Dict[str, str] = {
 def _sanitize_filename(name: str) -> str:
     """Replace characters that are invalid in ZIP file paths."""
     return re.sub(r'[/\\:*?"<>|]', "_", name).strip()
+
+
+def _ext_for_application_document(original_filename: Optional[str], object_name: str) -> str:
+    """Extension (with leading dot) for the student-uploaded 申請文件.
+
+    Prefers the original filename's extension, falls back to the stored
+    object name's suffix. Only the last path segment is inspected, so a dot
+    in a directory name is never mistaken for an extension.
+    """
+    for source in (original_filename, object_name):
+        if source:
+            last_segment = source.rsplit("/", 1)[-1]
+            if "." in last_segment:
+                return "." + last_segment.rsplit(".", 1)[1]
+    return ""
+
+
+def _application_document_entry(
+    object_name: Optional[str],
+    original_filename: Optional[str],
+    base_path: str,
+    student_prefix: str,
+) -> Optional[Dict[str, str]]:
+    """Describe where the student-uploaded 申請文件 goes in the ZIP.
+
+    Returns None when the application has no 申請文件. Otherwise returns the
+    kwargs for `_fetch_and_write`: the source object name, the sanitized ZIP
+    path, the error-placeholder path, and a human label for the error text.
+    """
+    if not object_name:
+        return None
+    ext = _ext_for_application_document(original_filename, object_name)
+    filename = _sanitize_filename(f"{student_prefix}_申請文件{ext}")
+    return {
+        "object_name": object_name,
+        "zip_path": f"{base_path}/{filename}",
+        "error_path": f"{base_path}/_錯誤_找不到檔案_申請文件.txt",
+        "error_label": original_filename or object_name,
+    }
+
+
+async def _fetch_and_write(
+    zf: zipfile.ZipFile,
+    minio: MinIOService,
+    object_name: str,
+    zip_path: str,
+    error_path: str,
+    error_label: str,
+) -> None:
+    """Stream one MinIO object into the ZIP at `zip_path`.
+
+    On any failure, writes a `_錯誤_…txt` placeholder at `error_path`
+    instead so a single bad object never aborts the whole ZIP build.
+    """
+    try:
+        response = await asyncio.to_thread(minio.get_file_stream, object_name)
+        try:
+            file_bytes = await asyncio.to_thread(response.read)
+        finally:
+            response.close()
+            response.release_conn()
+        zf.writestr(zip_path, file_bytes)
+    except Exception as e:
+        logger.exception(f"Failed to fetch file {object_name}")
+        zf.writestr(error_path, f"檔案下載失敗：{error_label}\n錯誤：{str(e)}")
 
 
 CJK_FONT_PATH = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
@@ -258,20 +324,25 @@ class ExportPackageService:
             else:
                 filename = f"{student_prefix}_{label}{ext}"
 
-            try:
-                response = await asyncio.to_thread(self.minio.get_file_stream, af.object_name)
-                try:
-                    file_bytes = await asyncio.to_thread(response.read)
-                finally:
-                    response.close()
-                    response.release_conn()
-                zf.writestr(f"{base_path}/{_sanitize_filename(filename)}", file_bytes)
-            except Exception as e:
-                logger.exception(f"Failed to fetch file {af.object_name} for app {app.id}")
-                zf.writestr(
-                    f"{base_path}/_錯誤_找不到檔案_{_sanitize_filename(label)}.txt",
-                    f"檔案下載失敗：{af.original_filename or af.object_name}\n錯誤：{str(e)}",
-                )
+            await _fetch_and_write(
+                zf,
+                self.minio,
+                object_name=af.object_name,
+                zip_path=f"{base_path}/{_sanitize_filename(filename)}",
+                error_path=f"{base_path}/_錯誤_找不到檔案_{_sanitize_filename(label)}.txt",
+                error_label=af.original_filename or af.object_name,
+            )
+
+        # Student-uploaded 申請文件 — stored on the application itself,
+        # not as an ApplicationFile, so the app.files loop above misses it.
+        entry = _application_document_entry(
+            app.application_document_url,
+            app.application_document_original_filename,
+            base_path,
+            student_prefix,
+        )
+        if entry:
+            await _fetch_and_write(zf, self.minio, **entry)
 
     def _generate_summary_pdf(
         self,
