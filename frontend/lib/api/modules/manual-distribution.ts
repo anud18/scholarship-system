@@ -139,7 +139,10 @@ export interface RosterSummary {
   id: number;
   roster_code: string;
   sub_type: string;
-  allocation_year: number;
+  /** Consumed config id (pool key for this roster). */
+  allocation_config_id: number | null;
+  /** Frozen display snapshot = consumed config's academic_year. */
+  allocation_year: number | null;
   project_number: string | null;
   period_label: string;
   status: string;
@@ -176,7 +179,9 @@ export interface DistributionSummaryStudent {
 
 export interface DistributionSummaryGroup {
   sub_type: string;
-  allocation_year: number;
+  allocation_config_id: number | null;
+  /** Consumed config's academic_year, for the "XXX 年度" group label. */
+  allocation_year: number | null;
   count: number;
   students: DistributionSummaryStudent[];
 }
@@ -265,7 +270,7 @@ export interface ReleaseChainItem {
   /** The slot that would be freed. */
   freed_slot: {
     sub_type: string | null;
-    allocation_year: number | null;
+    allocation_config_id: number | null;
   };
   /** Suggested waitlist candidate (pure-new) to fill the freed slot. */
   suggested_fill_id: number | null;
