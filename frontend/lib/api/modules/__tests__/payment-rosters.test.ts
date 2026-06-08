@@ -253,3 +253,25 @@ describe("reconcileRoster", () => {
     expect(res.success).toBe(true);
   });
 });
+
+describe("restoreRosterItem", () => {
+  it("restoreRosterItem POSTs to the restore path with reason_note", async () => {
+    mockedRaw.POST.mockResolvedValueOnce(_ok({}));
+    const api = createPaymentRostersApi();
+    await api.restoreRosterItem(7, 42, "誤刪");
+    expect(mockedRaw.POST).toHaveBeenCalledWith(
+      "/api/v1/payment-rosters/{roster_id}/items/{item_id}/restore",
+      {
+        params: { path: { roster_id: 7, item_id: 42 } },
+        body: { reason_note: "誤刪" },
+      }
+    );
+  });
+
+  it("restoreRosterItem sends reason_note=null when omitted", async () => {
+    mockedRaw.POST.mockResolvedValueOnce(_ok({}));
+    const api = createPaymentRostersApi();
+    await api.restoreRosterItem(1, 2);
+    expect(mockedRaw.POST.mock.calls[0][1].body).toEqual({ reason_note: null });
+  });
+});

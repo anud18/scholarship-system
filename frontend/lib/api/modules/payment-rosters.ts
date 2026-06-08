@@ -277,6 +277,25 @@ export function createPaymentRostersApi() {
     },
 
     /**
+     * 回復造冊明細（將已移除者放回名單）
+     * POST /api/v1/payment-rosters/{roster_id}/items/{item_id}/restore
+     */
+    restoreRosterItem: async (
+      roster_id: number,
+      item_id: number,
+      reason_note?: string
+    ): Promise<ApiResponse<unknown>> => {
+      const response = await typedClient.raw.POST(
+        '/api/v1/payment-rosters/{roster_id}/items/{item_id}/restore',
+        {
+          params: { path: { roster_id, item_id } },
+          body: { reason_note: reason_note ?? null },
+        }
+      );
+      return toApiResponse(response);
+    },
+
+    /**
      * 取得造冊統計資訊
      * GET /api/v1/payment-rosters/{roster_id}/statistics
      */
