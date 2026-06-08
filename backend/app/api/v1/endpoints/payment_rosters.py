@@ -585,10 +585,27 @@ async def preview_roster_students(
                 )
                 .all()
             )
+            # Resolve the display year per allocation: the CONSUMED config's
+            # academic_year (borrowing prior-year shared quota shows that year).
+            # allocation_config_id NULL ⇒ own requesting config ⇒ this year.
+            consumed_ids = {ri.allocation_config_id for ri in alloc_items if ri.allocation_config_id is not None}
+            consumed_year_by_id: dict = {}
+            if consumed_ids:
+                for cid, cyear in (
+                    db.query(ScholarshipConfiguration.id, ScholarshipConfiguration.academic_year)
+                    .filter(ScholarshipConfiguration.id.in_(consumed_ids))
+                    .all()
+                ):
+                    consumed_year_by_id[cid] = cyear
             for ri in alloc_items:
                 allocation_map[ri.application_id] = {
                     "allocated_sub_type": ri.allocated_sub_type,
                     "allocation_config_id": ri.allocation_config_id,
+                    "allocation_year": (
+                        consumed_year_by_id.get(ri.allocation_config_id)
+                        if ri.allocation_config_id is not None
+                        else academic_year
+                    ),
                 }
 
         # Initialize summary statistics
@@ -635,6 +652,7 @@ async def preview_roster_students(
                 "backup_info": [],
                 "allocated_sub_type": allocation_map.get(application.id, {}).get("allocated_sub_type"),
                 "allocation_config_id": allocation_map.get(application.id, {}).get("allocation_config_id"),
+                "allocation_year": allocation_map.get(application.id, {}).get("allocation_year"),
                 # Validation fields
                 "is_included": False,
                 "exclusion_reason": None,
