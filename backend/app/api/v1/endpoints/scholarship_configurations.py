@@ -1089,18 +1089,17 @@ async def update_scholarship_configuration(
         if "quotas" in config_data:
             config.quotas = config_data["quotas"]
             flag_modified(config, "quotas")
-        if "prior_quota_years" in config_data:
-            pqy = config_data["prior_quota_years"]
-            # Frontend textarea may send as string; parse to dict
-            if isinstance(pqy, str):
-                import json as _json
-
-                try:
-                    pqy = _json.loads(pqy)
-                except (ValueError, TypeError):
-                    pqy = {}
-            config.prior_quota_years = pqy
-            flag_modified(config, "prior_quota_years")
+        if "project_numbers" in config_data:
+            config.project_numbers = config_data["project_numbers"]
+            flag_modified(config, "project_numbers")
+        if "shared_quota_sources" in config_data:
+            # Validate links against the config's (possibly updated) academic_year.
+            requesting_year = config_data.get("academic_year", config.academic_year)
+            await _validate_shared_quota_sources(
+                db, config_data["shared_quota_sources"], requesting_academic_year=requesting_year
+            )
+            config.shared_quota_sources = config_data["shared_quota_sources"]
+            flag_modified(config, "shared_quota_sources")
 
         config.updated_by = current_user.id
 
