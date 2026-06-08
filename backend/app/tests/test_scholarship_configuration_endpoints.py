@@ -752,3 +752,39 @@ class TestScholarshipConfigurationEndpointsIntegration:
         assert body["quotas"] == {"nstc": {"EE": 5}}
         assert body["project_numbers"] == {"nstc": "114R000001"}
         assert body["shared_quota_sources"] == [{"source_config_code": "PRIOR-113-1", "sub_types": ["nstc"]}]
+
+    @pytest.mark.asyncio
+    async def test_list_emits_shared_quota_sources_not_prior_quota_years(
+        self,
+        authenticated_admin_client: AsyncClient,
+        db: AsyncSession,
+        test_scholarship_type,
+        test_admin_with_scholarship_access,
+    ):
+        """The list endpoint row must carry project_numbers + shared_quota_sources
+        and must NOT carry the dropped prior_quota_years key."""
+        cfg = ScholarshipConfiguration(
+            scholarship_type_id=test_scholarship_type.id,
+            academic_year=114,
+            semester=Semester.first,
+            config_name="List Row 114",
+            config_code="LISTROW-114-1",
+            amount=40000,
+            project_numbers={"nstc": "114R000001"},
+            shared_quota_sources=[{"source_config_code": "X-113-1", "sub_types": ["nstc"]}],
+            is_active=True,
+            created_by=test_admin_with_scholarship_access.id,
+        )
+        db.add(cfg)
+        await db.commit()
+        await db.refresh(cfg)
+
+        response = await authenticated_admin_client.get(
+            BASE, params={"scholarship_type_id": test_scholarship_type.id, "academic_year": 114}
+        )
+        assert response.status_code == 200
+        rows = response.json()["data"]
+        row = next(r for r in rows if r["config_code"] == "LISTROW-114-1")
+        assert row["project_numbers"] == {"nstc": "114R000001"}
+        assert row["shared_quota_sources"] == [{"source_config_code": "X-113-1", "sub_types": ["nstc"]}]
+        assert "prior_quota_years" not in row

@@ -1384,7 +1384,7 @@ async def list_scholarship_configurations(
                 "total_quota": config.total_quota,
                 "quotas": config.quotas,
                 "project_numbers": config.project_numbers,
-                "prior_quota_years": config.prior_quota_years,
+                "shared_quota_sources": config.shared_quota_sources,
                 "is_active": config.is_active,
                 "allow_supplementary_import": config.allow_supplementary_import,
                 "renewal_application_start_date": (
