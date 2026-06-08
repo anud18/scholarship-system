@@ -31,6 +31,7 @@ class RosterAuditAction(enum.Enum):
     ITEM_ADD = "item_add"  # 新增明細
     ITEM_REMOVE = "item_remove"  # 移除明細
     ITEM_UPDATE = "item_update"  # 更新明細
+    ITEM_RESTORE = "item_restore"  # 回復明細（將已移除者放回名單）
 
 
 class RosterAuditLevel(enum.Enum):

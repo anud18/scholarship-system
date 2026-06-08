@@ -162,3 +162,9 @@ def test_create_audit_log_with_all_optional_fields():
     assert log.tags == ["export", "manual"]
     assert log.audit_metadata == {"trace_id": "abc-123"}
     assert log.affected_items_count == 42
+
+
+def test_item_restore_action_exists():
+    from app.models.roster_audit import RosterAuditAction
+
+    assert RosterAuditAction.ITEM_RESTORE.value == "item_restore"
