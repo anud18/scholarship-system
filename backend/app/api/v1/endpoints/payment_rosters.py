@@ -588,7 +588,7 @@ async def preview_roster_students(
             for ri in alloc_items:
                 allocation_map[ri.application_id] = {
                     "allocated_sub_type": ri.allocated_sub_type,
-                    "allocation_year": ri.allocation_year,
+                    "allocation_config_id": ri.allocation_config_id,
                 }
 
         # Initialize summary statistics
@@ -634,7 +634,7 @@ async def preview_roster_students(
                 "rank_position": None,
                 "backup_info": [],
                 "allocated_sub_type": allocation_map.get(application.id, {}).get("allocated_sub_type"),
-                "allocation_year": allocation_map.get(application.id, {}).get("allocation_year"),
+                "allocation_config_id": allocation_map.get(application.id, {}).get("allocation_config_id"),
                 # Validation fields
                 "is_included": False,
                 "exclusion_reason": None,
