@@ -202,6 +202,41 @@ async def test_update_persists_form_data_status_is_renewal_subtype_list(db: Asyn
 
 
 @pytest.mark.asyncio
+async def test_update_persists_sub_type_preferences(db: AsyncSession, silence_collaborators):
+    """志願序 (sub_type_preferences) must persist on update.
+
+    Regression guard: this is the field the distribution service reads first
+    (`raw_prefs = app.sub_type_preferences or applied or default_prefs` in
+    manual_distribution_service). update_application silently dropped it before
+    — the schema accepted it but it was never written to the model — which made
+    the wizard's forced ordering a no-op end-to-end. Caught by the Playwright
+    E2E (a saved draft persisted NULL instead of the ordered list)."""
+    student = await _seed_user(db, role=UserRole.student, nycu_id="upd_prefs_stu")
+    cfg = await _seed_config(db, suffix="prefs")
+    app = await _seed_app(
+        db,
+        student=student,
+        config=cfg,
+        status=ApplicationStatus.draft.value,
+        scholarship_subtype_list=["nstc", "moe_1w"],
+        suffix="prefs",
+    )
+    assert app.sub_type_preferences is None  # nothing persisted at seed time
+    service = ApplicationService(db)
+
+    update_data = ApplicationUpdate(
+        scholarship_subtype_list=["nstc", "moe_1w"],
+        sub_type_preferences=["moe_1w", "nstc"],  # MOE (moe_1w) forced to first preference
+    )
+    result = await service.update_application(application_id=app.id, update_data=update_data, current_user=student)
+
+    await db.refresh(app)
+    # The ordered preference list round-trips to the DB, leading with moe_1w.
+    assert app.sub_type_preferences == ["moe_1w", "nstc"]
+    assert result.sub_type_preferences == ["moe_1w", "nstc"]
+
+
+@pytest.mark.asyncio
 async def test_student_cannot_update_other_students_draft(db: AsyncSession, silence_collaborators):
     """`_get_application_model` returns None for cross-student access ⇒
     update_application raises NotFoundError uniformly (the service does
