@@ -10,7 +10,14 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import and_, case as sa_case, func, or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.exceptions import RosterAlreadyExistsError, RosterGenerationError, RosterLockedError, RosterNotFoundError
+from app.core.exceptions import (
+    ConflictError,
+    NotFoundError,
+    RosterAlreadyExistsError,
+    RosterGenerationError,
+    RosterLockedError,
+    RosterNotFoundError,
+)
 from app.core.metrics import payment_rosters_total
 from app.core.pii_crypto import redact_dict_pii
 from app.models.application import Application
@@ -23,8 +30,7 @@ from app.models.payment_roster import (
     RosterTriggerType,
     StudentVerificationStatus,
 )
-from app.models.audit_log import AuditLog
-from app.models.roster_audit import RosterAuditAction, RosterAuditLevel
+from app.models.roster_audit import RosterAuditAction, RosterAuditLevel, RosterAuditLog
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
 from app.models.user import User
 from app.schemas.payment_roster import DistributionDiffEntry, RevokedSuspendedEntry
@@ -1790,6 +1796,11 @@ class RosterService:
             .join(Application, PaymentRosterItem.application_id == Application.id)
             .filter(
                 PaymentRosterItem.roster_id == roster_id,
+                # Only items STILL active in the roster. A soft-removed item
+                # (is_included=False, e.g. 鎖定後移除 / 排除) has already been
+                # handled and must NOT linger in the 撤銷/停發 needs-attention
+                # panel (pre soft-delete it was hard-deleted, so it vanished).
+                PaymentRosterItem.is_included.is_(True),
                 Application.quota_allocation_status.in_(("revoked", "suspended")),
             )
             .all()
@@ -1837,6 +1848,48 @@ class RosterService:
         roster.disqualified_count = total_count - qualified
         roster.total_amount = total_amount
         return qualified, total_count, total_amount
+
+    _AUDIT_ACTION_LABELS = {
+        RosterAuditAction.ITEM_REMOVE: "移除",
+        RosterAuditAction.ITEM_ADD: "新增",
+        RosterAuditAction.ITEM_RESTORE: "回復",
+    }
+
+    def _write_roster_item_audit(
+        self,
+        roster_id: int,
+        action: "RosterAuditAction",
+        item: "PaymentRosterItem",
+        admin_user_id: int,
+        source: str,
+        reason: Optional[str] = None,
+    ) -> None:
+        """Add (not commit) one RosterAuditLog row for an item-level mutation.
+        Caller commits. `source` is one of exclude/reconcile/locked_remove/restore."""
+        user = self.db.get(User, admin_user_id)
+        student_id = None
+        if item.application is not None and item.application.student_data:
+            student_id = item.application.student_data.get("std_stdcode")
+        label = self._AUDIT_ACTION_LABELS.get(action, action.value)
+        self.db.add(
+            RosterAuditLog.create_audit_log(
+                roster_id=roster_id,
+                action=action,
+                title=f"{label} {item.student_name}",
+                description=f"{label} {item.student_name}（原因：{reason or '—'}）",
+                user_id=admin_user_id,
+                user_name=user.name if user else None,
+                user_role=(user.role.value if user and user.role else None),
+                audit_metadata={
+                    "student_name": item.student_name,
+                    "student_id": student_id,
+                    "application_id": item.application_id,
+                    "source": source,
+                    "reason": reason,
+                },
+                affected_items_count=1,
+            )
+        )
 
     def _resolve_distribution_for_roster(
         self, roster: PaymentRoster, config: Optional[ScholarshipConfiguration] = None
@@ -1975,6 +2028,9 @@ class RosterService:
         for item in existing_items:
             if item.application_id in allocated_map:
                 continue
+            if not item.is_included:
+                # Already soft-removed — not an actionable orphan anymore.
+                continue
             app = apps_by_id.get(item.application_id)
             sd = (app.student_data or {}) if app else {}
             to_remove.append(
@@ -2072,7 +2128,7 @@ class RosterService:
             and ri.application is not None
             and ri.application.status == ApplicationStatus.approved
         }
-        allowed_remove = {it.id for it in existing_items if it.application_id not in allocated_map}
+        allowed_remove = {it.id for it in existing_items if it.is_included and it.application_id not in allocated_map}
 
         bad_add = [a for a in add_ids if a not in allowed_add]
         if bad_add:
@@ -2086,11 +2142,20 @@ class RosterService:
         for app_id in add_ids:
             application = self.db.get(Application, app_id)
             if application is None:
-                # Unreachable in practice (allowed_add is derived from loaded,
-                # approved applications) but guard so a deleted row yields a
-                # clean 400 instead of an AttributeError 500.
                 raise ValueError(f"Application {app_id} not found")
-            item = self._verify_and_create_item(roster, application)
+            # Defensive: if a (soft-removed) item already exists for this app,
+            # restore it instead of creating a duplicate row (no DB unique
+            # constraint protects us). Unreachable via the gated diff today,
+            # but keeps the invariant if gating changes.
+            existing = next((it for it in existing_items if it.application_id == app_id), None)
+            if existing is not None:
+                existing.is_included = True
+                existing.exclusion_reason = None
+                item = existing
+                action = RosterAuditAction.ITEM_RESTORE
+            else:
+                item = self._verify_and_create_item(roster, application)
+                action = RosterAuditAction.ITEM_ADD
             self.db.flush()
             added.append(
                 {
@@ -2100,42 +2165,27 @@ class RosterService:
                     "exclusion_reason": item.exclusion_reason,
                 }
             )
-            self.db.add(
-                AuditLog.create_log(
-                    user_id=admin_user_id,
-                    action="roster.item_added_from_distribution",
-                    resource_type="payment_roster",
-                    resource_id=str(roster_id),
-                    description=f"Added item {item.id} (application {app_id}) to roster from distribution",
-                    new_values={
-                        "item_id": item.id,
-                        "application_id": app_id,
-                        "is_included": item.is_included,
-                        "reason": reason,
-                    },
-                )
+            self._write_roster_item_audit(
+                roster_id=roster_id,
+                action=action,
+                item=item,
+                admin_user_id=admin_user_id,
+                source="reconcile",
+                reason=reason,
             )
 
         for item_id in remove_ids:
             item = items_by_id[item_id]
-            removed_app_id = item.application_id
-            removed_amount = item.scholarship_amount
-            self.db.delete(item)
-            removed.append({"item_id": item_id, "application_id": removed_app_id})
-            self.db.add(
-                AuditLog.create_log(
-                    user_id=admin_user_id,
-                    action="roster.item_removed_reconcile",
-                    resource_type="payment_roster",
-                    resource_id=str(roster_id),
-                    description=f"Removed item {item_id} (application {removed_app_id}) during reconcile",
-                    new_values={
-                        "item_id": item_id,
-                        "application_id": removed_app_id,
-                        "reason": reason,
-                        "removed_amount": float(removed_amount) if removed_amount else 0,
-                    },
-                )
+            item.is_included = False
+            item.exclusion_reason = "比對分發移除：不在分發名單"
+            removed.append({"item_id": item_id, "application_id": item.application_id})
+            self._write_roster_item_audit(
+                roster_id=roster_id,
+                action=RosterAuditAction.ITEM_REMOVE,
+                item=item,
+                admin_user_id=admin_user_id,
+                source="reconcile",
+                reason=reason,
             )
 
         self.db.flush()
@@ -2143,16 +2193,6 @@ class RosterService:
         if added or removed:
             roster.excel_stale = True
 
-        self.db.add(
-            AuditLog.create_log(
-                user_id=admin_user_id,
-                action="roster.reconciled",
-                resource_type="payment_roster",
-                resource_id=str(roster_id),
-                description=f"Reconciled roster: +{len(added)} / -{len(removed)}",
-                new_values={"added": len(added), "removed": len(removed), "reason": reason},
-            )
-        )
         self.db.commit()
 
         return {
@@ -2171,9 +2211,8 @@ class RosterService:
         admin_user_id: int,
         reason: Optional[str],
     ) -> dict:
-        """Hard-delete a PaymentRosterItem from a LOCKED roster. Recompute
-        roster totals, set excel_stale=True, write audit log. Roster stays
-        LOCKED."""
+        """Soft-remove a PaymentRosterItem from a LOCKED roster (sets is_included=False; row survives for restore).
+        Recompute roster totals, set excel_stale=True, write RosterAuditLog. Roster stays LOCKED."""
         roster = self.db.get(PaymentRoster, roster_id)
         if roster is None:
             raise ValueError(f"Roster {roster_id} not found")
@@ -2184,9 +2223,8 @@ class RosterService:
         if item is None or item.roster_id != roster_id:
             raise ValueError(f"Item {item_id} not found in roster {roster_id}")
 
-        removed_amount = item.scholarship_amount
-        removed_app_id = item.application_id
-        self.db.delete(item)
+        item.is_included = False
+        item.exclusion_reason = f"鎖定後移除：{reason}" if reason else "鎖定後移除"
         self.db.flush()
 
         # Recompute totals via the shared sync helper (persists
@@ -2194,25 +2232,74 @@ class RosterService:
         qualified, total_count, total_amount = self._recompute_roster_totals_sync(roster_id)
         roster.excel_stale = True
 
-        self.db.add(
-            AuditLog.create_log(
-                user_id=admin_user_id,
-                action="roster.item_removed_after_lock",
-                resource_type="payment_roster",
-                resource_id=str(roster_id),
-                description=(f"Removed item {item_id} (application {removed_app_id}) from LOCKED roster"),
-                new_values={
-                    "item_id": item_id,
-                    "application_id": removed_app_id,
-                    "reason": reason,
-                    "removed_amount": float(removed_amount) if removed_amount else 0,
-                },
-            )
+        self._write_roster_item_audit(
+            roster_id=roster_id,
+            action=RosterAuditAction.ITEM_REMOVE,
+            item=item,
+            admin_user_id=admin_user_id,
+            source="locked_remove",
+            reason=reason,
         )
         self.db.commit()
         return {
             "roster_id": roster_id,
             "removed_item_id": item_id,
+            "qualified_count": qualified,
+            "total_amount": float(total_amount),
+            "excel_stale": True,
+        }
+
+    def restore_item(
+        self,
+        roster_id: int,
+        item_id: int,
+        admin_user_id: int,
+        reason: Optional[str] = None,
+    ) -> dict:
+        """Re-include a soft-removed PaymentRosterItem. Works on COMPLETED and
+        LOCKED rosters. Recompute totals, set excel_stale=True, write
+        RosterAuditLog(ITEM_RESTORE).
+
+        Raises (mapped to HTTP by the global ScholarshipException handler / the
+        endpoint): RosterNotFoundError / NotFoundError -> 404, ConflictError
+        (already-included, idempotency) -> 409, ValueError (wrong roster / not a
+        restorable status) -> 400."""
+        roster = self.db.get(PaymentRoster, roster_id)
+        if roster is None:
+            raise RosterNotFoundError(str(roster_id))
+
+        if roster.status not in (RosterStatus.COMPLETED, RosterStatus.LOCKED):
+            raise ValueError(
+                f"Roster {roster_id} must be COMPLETED or LOCKED to restore items " f"(status={roster.status.value})"
+            )
+
+        item = self.db.get(PaymentRosterItem, item_id)
+        if item is None:
+            raise NotFoundError("Roster item", str(item_id))
+        if item.roster_id != roster_id:
+            raise ValueError(f"Item {item_id} does not belong to roster {roster_id}")
+        if item.is_included:
+            raise ConflictError("明細未被移除，無需回復")
+
+        item.is_included = True
+        item.exclusion_reason = None
+        self.db.flush()
+
+        qualified, total_count, total_amount = self._recompute_roster_totals_sync(roster_id)
+        roster.excel_stale = True
+
+        self._write_roster_item_audit(
+            roster_id=roster_id,
+            action=RosterAuditAction.ITEM_RESTORE,
+            item=item,
+            admin_user_id=admin_user_id,
+            source="restore",
+            reason=reason,
+        )
+        self.db.commit()
+        return {
+            "roster_id": roster_id,
+            "restored_item_id": item_id,
             "qualified_count": qualified,
             "total_amount": float(total_amount),
             "excel_stale": True,

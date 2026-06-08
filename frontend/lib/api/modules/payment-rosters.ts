@@ -170,7 +170,7 @@ export function createPaymentRostersApi() {
 
     /**
      * 從已鎖定造冊中移除單一項目
-     * Hard-delete a single item from a LOCKED roster; sets excel_stale to true.
+     * Soft-remove a single item from a LOCKED roster (sets is_included=False; row survives for restore); sets excel_stale to true.
      */
     removeItemFromLockedRoster: async (
       roster_id: number,
@@ -271,6 +271,25 @@ export function createPaymentRostersApi() {
             path: { roster_id },
             query: params,
           },
+        }
+      );
+      return toApiResponse(response);
+    },
+
+    /**
+     * 回復造冊明細（將已移除者放回名單）
+     * POST /api/v1/payment-rosters/{roster_id}/items/{item_id}/restore
+     */
+    restoreRosterItem: async (
+      roster_id: number,
+      item_id: number,
+      reason_note?: string
+    ): Promise<ApiResponse<unknown>> => {
+      const response = await typedClient.raw.POST(
+        '/api/v1/payment-rosters/{roster_id}/items/{item_id}/restore',
+        {
+          params: { path: { roster_id, item_id } },
+          body: { reason_note: reason_note ?? null },
         }
       );
       return toApiResponse(response);

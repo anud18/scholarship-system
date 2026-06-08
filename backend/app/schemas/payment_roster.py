@@ -314,6 +314,12 @@ class RemoveLockedItemRequest(BaseModel):
     reason: Optional[str] = Field(None, max_length=500)
 
 
+class RestoreItemRequest(BaseModel):
+    """Body for POST /payment-rosters/{roster_id}/items/{item_id}/restore"""
+
+    reason_note: Optional[str] = Field(None, max_length=500)
+
+
 class RevokedSuspendedEntry(BaseModel):
     """A single revoked- or suspended-allocation entry returned by
     GET /payment-rosters/{roster_id}/revoked-suspended.
