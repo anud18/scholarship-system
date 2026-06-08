@@ -1163,12 +1163,9 @@ class ManualDistributionService:
         requesting_config = await self._load_config(scholarship_type_id, academic_year, semester)
         if requesting_config is None:
             return []
-        linked = await self._resolve_linked_configs(requesting_config, "")
-
-        # Configs reachable for any sub_type: own + every linked source.
+        # Configs reachable for any sub_type: own + every linked source,
+        # seeded per real sub_type below (a bare resolve("") matches nothing).
         all_configs: dict[int, ScholarshipConfiguration] = {requesting_config.id: requesting_config}
-        for cfg in linked:
-            all_configs[cfg.id] = cfg
 
         # Build all linked configs across all sub_types
         sub_types = set((requesting_config.quotas or {}).keys())
@@ -1501,37 +1498,6 @@ class ManualDistributionService:
         if config is None:
             raise ValueError(f"No active ScholarshipConfiguration for type {scholarship_type_id}, year {academic_year}")
         return config
-
-    async def _count_approved_renewals_per_pool(
-        self, scholarship_type_id: int, academic_year: int
-    ) -> dict[tuple[str, int], int]:
-        """Count approved renewals grouped by (sub_scholarship_type, allocation_config_id).
-
-        Renewals consume the config their prior slot consumed (spec §9), so the
-        quota key is allocation_config_id — one indexed query, no recursive
-        previous_application_id walk. Renewals with a NULL allocation_config_id
-        are skipped (an approved renewal should never be NULL — see §11.3).
-        """
-        stmt = (
-            select(
-                Application.sub_scholarship_type,
-                Application.allocation_config_id,
-                func.count(Application.id),
-            )
-            .where(
-                Application.scholarship_type_id == scholarship_type_id,
-                Application.academic_year == academic_year,
-                Application.is_renewal.is_(True),
-                Application.status == ApplicationStatus.approved,
-                Application.allocation_config_id.isnot(None),
-            )
-            .group_by(Application.sub_scholarship_type, Application.allocation_config_id)
-        )
-        rows = (await self.db.execute(stmt)).all()
-        result: dict[tuple[str, int], int] = {}
-        for sub_type, config_id, count in rows:
-            result[(sub_type, int(config_id))] = result.get((sub_type, int(config_id)), 0) + int(count)
-        return result
 
     async def _get_general_candidates(
         self,
@@ -1871,7 +1837,7 @@ class ManualDistributionService:
         renewal_grouped: dict[tuple[str, int], list[dict[str, Any]]] = {}
         for app in renewal_apps:
             # Fallback renewal_year → academic_year matches the rest of the
-            # Phase 6 code (see _count_approved_renewals_per_pool).
+            # renewal accounting (consumers_count owns approved-renewal counts).
             year_key = int(app.renewal_year) if app.renewal_year is not None else int(academic_year)
             key = (app.sub_scholarship_type, year_key)
             renewal_grouped.setdefault(key, []).append(

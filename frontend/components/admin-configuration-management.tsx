@@ -303,6 +303,14 @@ export function AdminConfigurationManagement({
   const taiwanYear = currentYear - 1911;
   const academicYears = Array.from({ length: 5 }, (_, i) => taiwanYear - 2 + i);
 
+  // Prior-year configs eligible to borrow shared quota from (own-year excluded).
+  // Shared by the create + edit dialogs' SharedQuotaSourcesPicker.
+  const sharedQuotaCandidateConfigs = configurations.filter(
+    c =>
+      c.academic_year < (formData.academic_year ?? 0) &&
+      c.config_code !== formData.config_code
+  );
+
   // Load academy codes from database
   useEffect(() => {
     const loadAcademyCodes = async () => {
@@ -1873,11 +1881,7 @@ export function AdminConfigurationManagement({
                     subTypes={Object.keys(
                       (typeof formData.quotas === "object" && formData.quotas) || {}
                     )}
-                    candidateConfigs={configurations.filter(
-                      c =>
-                        c.academic_year < (formData.academic_year ?? 0) &&
-                        c.config_code !== formData.config_code
-                    )}
+                    candidateConfigs={sharedQuotaCandidateConfigs}
                   />
                 )}
 
@@ -2363,11 +2367,7 @@ export function AdminConfigurationManagement({
                     subTypes={Object.keys(
                       (typeof formData.quotas === "object" && formData.quotas) || {}
                     )}
-                    candidateConfigs={configurations.filter(
-                      c =>
-                        c.academic_year < (formData.academic_year ?? 0) &&
-                        c.config_code !== formData.config_code
-                    )}
+                    candidateConfigs={sharedQuotaCandidateConfigs}
                   />
                 )}
 
