@@ -46,6 +46,7 @@ FILE_TYPE_LABELS: Dict[str, str] = {
     "insurance_record": "投保紀錄",
     "agreement": "切結書",
     "bank_account_cover": "存摺封面",
+    "bank_account_proof": "存摺封面",  # value actually stored on the cloned passbook ApplicationFile
     "other": "其他文件",
 }
 

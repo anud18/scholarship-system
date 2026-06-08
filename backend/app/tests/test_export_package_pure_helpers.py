@@ -98,11 +98,11 @@ class TestFileTypeLabels:
     """Pin: FILE_TYPE_LABELS — zh-TW labels for 8 file types.
     Used by the export PDF and ZIP folder naming."""
 
-    def test_all_8_known_file_types_present(self):
-        # Pin: exactly 8 file types. Pin so adding a new file_type
-        # without a label silently labels it as the dict's KeyError
-        # behavior in the export pipeline (currently uses .get()
-        # with default but the missing label would surface in PDFs).
+    def test_all_9_known_file_types_present(self):
+        # Pin: exactly 9 file types. bank_account_proof is the
+        # value actually stored on the cloned passbook
+        # ApplicationFile (application_service.py:2118); it must
+        # have a label or it falls through to the 其他文件 default.
         expected_keys = {
             "transcript",
             "research_proposal",
@@ -111,6 +111,7 @@ class TestFileTypeLabels:
             "insurance_record",
             "agreement",
             "bank_account_cover",
+            "bank_account_proof",
             "other",
         }
         assert set(FILE_TYPE_LABELS.keys()) == expected_keys
@@ -124,6 +125,12 @@ class TestFileTypeLabels:
         # doesn't change to 銀行帳戶 which would mismatch the
         # admin UI's existing strings.
         assert FILE_TYPE_LABELS["bank_account_cover"] == "存摺封面"
+
+    def test_bank_account_proof_label(self):
+        # Pin: the cloned passbook's real file_type
+        # (bank_account_proof) maps to 存摺封面 so it stops landing
+        # under 其他文件 in the export ZIP.
+        assert FILE_TYPE_LABELS["bank_account_proof"] == "存摺封面"
 
     def test_all_labels_are_non_empty_chinese(self):
         # Pin: every label is non-empty and contains CJK chars.
