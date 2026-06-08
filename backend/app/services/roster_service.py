@@ -24,7 +24,7 @@ from app.models.payment_roster import (
     StudentVerificationStatus,
 )
 from app.models.audit_log import AuditLog
-from app.models.roster_audit import RosterAuditAction, RosterAuditLevel
+from app.models.roster_audit import RosterAuditAction, RosterAuditLevel, RosterAuditLog
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
 from app.models.user import User
 from app.schemas.payment_roster import DistributionDiffEntry, RevokedSuspendedEntry
@@ -1837,6 +1837,48 @@ class RosterService:
         roster.disqualified_count = total_count - qualified
         roster.total_amount = total_amount
         return qualified, total_count, total_amount
+
+    _AUDIT_ACTION_LABELS = {
+        RosterAuditAction.ITEM_REMOVE: "移除",
+        RosterAuditAction.ITEM_ADD: "新增",
+        RosterAuditAction.ITEM_RESTORE: "回復",
+    }
+
+    def _write_roster_item_audit(
+        self,
+        roster_id: int,
+        action: "RosterAuditAction",
+        item: "PaymentRosterItem",
+        admin_user_id: int,
+        source: str,
+        reason: Optional[str] = None,
+    ) -> None:
+        """Add (not commit) one RosterAuditLog row for an item-level mutation.
+        Caller commits. `source` is one of exclude/reconcile/locked_remove/restore."""
+        user = self.db.get(User, admin_user_id)
+        student_id = None
+        if item.application is not None and item.application.student_data:
+            student_id = item.application.student_data.get("std_stdcode")
+        label = self._AUDIT_ACTION_LABELS.get(action, action.value)
+        self.db.add(
+            RosterAuditLog.create_audit_log(
+                roster_id=roster_id,
+                action=action,
+                title=f"{label} {item.student_name}",
+                description=f"{label} {item.student_name}（原因：{reason or '—'}）",
+                user_id=admin_user_id,
+                user_name=user.name if user else None,
+                user_role=(user.role.value if user and user.role else None),
+                audit_metadata={
+                    "student_name": item.student_name,
+                    "student_id": student_id,
+                    "application_id": item.application_id,
+                    "source": source,
+                    "reason": reason,
+                },
+                affected_items_count=1,
+            )
+        )
 
     def _resolve_distribution_for_roster(
         self, roster: PaymentRoster, config: Optional[ScholarshipConfiguration] = None
