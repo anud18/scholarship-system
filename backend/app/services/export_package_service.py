@@ -62,6 +62,21 @@ def _sanitize_filename(name: str) -> str:
     return re.sub(r'[/\\:*?"<>|]', "_", name).strip()
 
 
+def _ext_for_application_document(original_filename: Optional[str], object_name: str) -> str:
+    """Extension (with leading dot) for the student-uploaded 申請文件.
+
+    Prefers the original filename's extension, falls back to the stored
+    object name's suffix. Only the last path segment is inspected, so a dot
+    in a directory name is never mistaken for an extension.
+    """
+    for source in (original_filename, object_name):
+        if source:
+            last_segment = source.rsplit("/", 1)[-1]
+            if "." in last_segment:
+                return "." + last_segment.rsplit(".", 1)[1]
+    return ""
+
+
 CJK_FONT_PATH = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
 _font_registered = False
 

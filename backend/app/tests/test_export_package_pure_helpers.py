@@ -22,6 +22,7 @@ import pytest
 
 from app.services.export_package_service import (
     _sanitize_filename,
+    _ext_for_application_document,
     FILE_TYPE_LABELS,
     DEGREE_LABELS,
 )
@@ -164,3 +165,29 @@ class TestDegreeLabels:
         # is explicit.
         for key in DEGREE_LABELS:
             assert isinstance(key, str), f"DEGREE_LABELS key {key!r} is not str"
+
+
+class TestExtForApplicationDocument:
+    """Pin: extension derivation for the student-uploaded 申請文件.
+    Prefers the original filename's extension, falls back to the
+    stored MinIO object name's suffix."""
+
+    def test_uses_original_filename_extension(self):
+        assert _ext_for_application_document("申請文件.pdf", "application-documents/12_x.pdf") == ".pdf"
+
+    def test_original_filename_extension_wins_over_object_name(self):
+        assert _ext_for_application_document("draft.docx", "application-documents/12_x.pdf") == ".docx"
+
+    def test_falls_back_to_object_name_when_no_original(self):
+        assert _ext_for_application_document(None, "application-documents/12_x.pdf") == ".pdf"
+
+    def test_empty_original_falls_back_to_object_name(self):
+        assert _ext_for_application_document("", "application-documents/12_x.pdf") == ".pdf"
+
+    def test_returns_empty_when_no_extension_anywhere(self):
+        assert _ext_for_application_document("noext", "application-documents/12_x") == ""
+
+    def test_directory_dot_not_mistaken_for_extension(self):
+        # A dot in a directory segment must not be treated as the
+        # file extension — only the last path segment counts.
+        assert _ext_for_application_document(None, "v1.2/objectname") == ""
