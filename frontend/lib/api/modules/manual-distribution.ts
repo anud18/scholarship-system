@@ -76,13 +76,14 @@ export interface SubTypeYearCol {
 export interface AllocationItem {
   ranking_item_id: number;
   sub_type_code: string | null;
-  allocation_year: number | null;
+  /** The config whose quota this slot consumes (own config or a linked source). Null only for the whole-period sentinel. */
+  allocation_config_id: number | null;
 }
 
 export interface AllocationSuggestion {
   ranking_item_id: number;
   sub_type_code: string | null;
-  allocation_year: number | null;
+  allocation_config_id: number | null;
 }
 
 export interface AllocateRequest {
