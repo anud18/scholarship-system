@@ -2236,3 +2236,47 @@ class RosterService:
             "total_amount": float(total_amount),
             "excel_stale": True,
         }
+
+    def restore_item(
+        self,
+        roster_id: int,
+        item_id: int,
+        admin_user_id: int,
+        reason: Optional[str] = None,
+    ) -> dict:
+        """Re-include a soft-removed PaymentRosterItem. Works on COMPLETED and
+        LOCKED rosters. Recompute totals, set excel_stale=True, write
+        RosterAuditLog(ITEM_RESTORE). Caller-facing 409 maps from ValueError."""
+        roster = self.db.get(PaymentRoster, roster_id)
+        if roster is None:
+            raise ValueError(f"Roster {roster_id} not found")
+
+        item = self.db.get(PaymentRosterItem, item_id)
+        if item is None or item.roster_id != roster_id:
+            raise ValueError(f"Item {item_id} not found in roster {roster_id}")
+        if item.is_included:
+            raise ValueError("明細未被移除，無需回復")
+
+        item.is_included = True
+        item.exclusion_reason = None
+        self.db.flush()
+
+        qualified, total_count, total_amount = self._recompute_roster_totals_sync(roster_id)
+        roster.excel_stale = True
+
+        self._write_roster_item_audit(
+            roster_id=roster_id,
+            action=RosterAuditAction.ITEM_RESTORE,
+            item=item,
+            admin_user_id=admin_user_id,
+            source="restore",
+            reason=reason,
+        )
+        self.db.commit()
+        return {
+            "roster_id": roster_id,
+            "restored_item_id": item_id,
+            "qualified_count": qualified,
+            "total_amount": float(total_amount),
+            "excel_stale": True,
+        }

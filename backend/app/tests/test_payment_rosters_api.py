@@ -616,3 +616,87 @@ async def test_audit_logs_endpoint_returns_operator_name(client_admin: AsyncClie
     assert first["user_name"] == expected_user_name
     assert "user_id" in first
     assert "user_role" in first
+
+
+# ===========================================================================
+# POST /{id}/items/{item_id}/restore
+# ===========================================================================
+
+
+@pytest.fixture
+def locked_roster_with_removed_item(sync_db_for_rosters):
+    """LOCKED roster + one SOFT-REMOVED item (is_included=False) for restore tests.
+
+    Built on the sync session so the sync endpoint (get_sync_db → sync_db_for_rosters)
+    can see it. The client_admin / client_student fixtures also depend on
+    sync_db_for_rosters, which pytest resolves to the same session instance.
+    """
+    from datetime import datetime, timezone
+
+    u = User(
+        nycu_id="admin_rmrest",
+        email="admin_rmrest@nycu.edu.tw",
+        name="Admin RMREST",
+        role=UserRole.admin,
+        user_type=UserType.employee,
+    )
+    sync_db_for_rosters.add(u)
+    sync_db_for_rosters.commit()
+    sync_db_for_rosters.refresh(u)
+
+    r = PaymentRoster(
+        roster_code="ROSTER-PR-RMREST",
+        scholarship_configuration_id=1,
+        period_label="2026-06",
+        academic_year=114,
+        roster_cycle=RosterCycle.MONTHLY,
+        status=RosterStatus.LOCKED,
+        trigger_type=RosterTriggerType.MANUAL,
+        created_by=u.id,
+        qualified_count=1,
+        disqualified_count=0,
+        total_applications=1,
+        total_amount=Decimal("40000"),
+        started_at=datetime.now(timezone.utc),
+        completed_at=datetime.now(timezone.utc),
+    )
+    sync_db_for_rosters.add(r)
+    sync_db_for_rosters.commit()
+    sync_db_for_rosters.refresh(r)
+
+    item = PaymentRosterItem(
+        roster_id=r.id,
+        application_id=1,
+        student_id_number="PR-RMREST-001",
+        student_name="Restore Test Student",
+        scholarship_name="Test Scholarship",
+        scholarship_amount=Decimal("40000"),
+        is_included=False,
+        exclusion_reason="鎖定後移除：繳回",
+    )
+    sync_db_for_rosters.add(item)
+    sync_db_for_rosters.commit()
+    sync_db_for_rosters.refresh(item)
+    return (r.id, item.id)
+
+
+@pytest.mark.asyncio
+async def test_restore_endpoint_reincludes_item(client_admin: AsyncClient, locked_roster_with_removed_item):
+    roster_id, item_id = locked_roster_with_removed_item
+    resp = await client_admin.post(
+        f"/api/v1/payment-rosters/{roster_id}/items/{item_id}/restore",
+        json={"reason_note": "誤刪"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+
+    # Idempotent: restoring again → 409
+    resp2 = await client_admin.post(f"/api/v1/payment-rosters/{roster_id}/items/{item_id}/restore", json={})
+    assert resp2.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_restore_endpoint_forbidden_for_non_admin(client_student: AsyncClient, locked_roster_with_removed_item):
+    roster_id, item_id = locked_roster_with_removed_item
+    resp = await client_student.post(f"/api/v1/payment-rosters/{roster_id}/items/{item_id}/restore", json={})
+    assert resp.status_code == 403

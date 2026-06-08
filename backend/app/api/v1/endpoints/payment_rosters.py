@@ -35,6 +35,7 @@ from app.schemas.payment_roster import (
     ReconcileRequest,
     ReconcileResult,
     RemoveLockedItemRequest,
+    RestoreItemRequest,
     RevokedSuspendedListResponse,
 )
 from app.schemas.roster import (
@@ -2141,6 +2142,33 @@ def remove_locked_roster_item(
     except (ValueError, RosterLockedError) as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return {"success": True, "message": "已從造冊移除", "data": result}
+
+
+@router.post("/{roster_id}/items/{item_id}/restore")
+def restore_roster_item(
+    roster_id: int,
+    item_id: int,
+    request: RestoreItemRequest,
+    db: Session = Depends(get_sync_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Re-include a soft-removed roster item (回復). Admin only. Works on
+    COMPLETED and LOCKED rosters; sets excel_stale; audits ITEM_RESTORE."""
+    _require_admin(current_user)
+    svc = RosterService(db)
+    try:
+        result = svc.restore_item(
+            roster_id=roster_id,
+            item_id=item_id,
+            admin_user_id=current_user.id,
+            reason=request.reason_note,
+        )
+    except ValueError as e:
+        msg = str(e)
+        # "未被移除" is the idempotency conflict → 409; other ValueErrors → 400.
+        code = status.HTTP_409_CONFLICT if "未被移除" in msg else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=code, detail=msg) from e
+    return {"success": True, "message": "已回復造冊明細", "data": result}
 
 
 @router.get("/{roster_id}/distribution-diff")

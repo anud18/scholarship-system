@@ -266,3 +266,38 @@ def test_remove_item_from_locked_roster_soft_deletes_and_audits(db_sync, locked_
     )
     assert log is not None
     assert log.audit_metadata["source"] == "locked_remove"
+
+
+def test_restore_item_reincludes_and_audits(db_sync, locked_roster_two_items, admin_db_user_sync):
+    from app.models.roster_audit import RosterAuditAction, RosterAuditLog
+    from app.models.payment_roster import PaymentRosterItem
+
+    roster = locked_roster_two_items
+    target = roster.items[0]
+    svc = RosterService(db_sync)
+    svc.remove_item_from_locked_roster(roster.id, target.id, admin_db_user_sync.id, "繳回")
+
+    result = svc.restore_item(roster.id, target.id, admin_db_user_sync.id, "誤刪回復")
+
+    item = db_sync.get(PaymentRosterItem, target.id)
+    assert item.is_included is True
+    assert item.exclusion_reason is None
+    db_sync.refresh(roster)
+    assert roster.excel_stale is True  # locked roster → re-export needed
+    log = (
+        db_sync.query(RosterAuditLog)
+        .filter(RosterAuditLog.roster_id == roster.id, RosterAuditLog.action == RosterAuditAction.ITEM_RESTORE)
+        .first()
+    )
+    assert log is not None
+    assert log.audit_metadata["source"] == "restore"
+    assert result["excel_stale"] is True
+
+
+def test_restore_item_rejects_already_included(db_sync, locked_roster_two_items, admin_db_user_sync):
+    import pytest
+
+    roster = locked_roster_two_items
+    svc = RosterService(db_sync)
+    with pytest.raises(ValueError):
+        svc.restore_item(roster.id, roster.items[0].id, admin_db_user_sync.id, "noop")  # already included
