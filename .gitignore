@@ -190,3 +190,7 @@ docs/staging-tests/**/*
 # npm-managed repo — never commit bun lockfile or test report artifacts
 frontend/bun.lock
 frontend/junit.xml
+# claude 
+.claude/worktrees/
+# codegraph
+.codegraph/
