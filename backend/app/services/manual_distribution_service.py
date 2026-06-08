@@ -858,7 +858,7 @@ class ManualDistributionService:
     ) -> dict[str, Any]:
         """
         Restore allocations from a historical snapshot.
-        The snapshot contains: {ranking_item_id: {sub_type, allocation_year, status}, ...}
+        The snapshot contains: {ranking_item_id: {sub_type, allocation_config_id, status}, ...}
         """
         # First clear all current allocations
         ranking_query = select(CollegeRanking).where(
@@ -881,7 +881,7 @@ class ManualDistributionService:
             for item in items:
                 item.is_allocated = False
                 item.allocated_sub_type = None
-                item.allocation_year = None
+                item.allocation_config_id = None
                 item.status = "ranked"
                 item.allocation_reason = None
 
@@ -897,7 +897,7 @@ class ManualDistributionService:
                 if item and alloc_data.get("sub_type"):
                     item.is_allocated = True
                     item.allocated_sub_type = alloc_data["sub_type"]
-                    item.allocation_year = alloc_data.get("allocation_year")
+                    item.allocation_config_id = alloc_data.get("allocation_config_id")
                     item.status = alloc_data.get("status", "allocated")
                     item.allocation_reason = "還原歷史分發"
                     restored_count += 1
@@ -1091,11 +1091,11 @@ class ManualDistributionService:
 
     async def _batch_load_previous_allocation_years(self, previous_app_ids: list[int]) -> dict[int, int]:
         """
-        For renewal students, find the allocation_year from their previous application's
-        CollegeRankingItem.
+        For renewal students, find the allocation_config_id from their previous
+        application's CollegeRankingItem (the config that prior slot consumed).
 
-        Returns: {previous_application_id: allocation_year}
-        Only includes entries where allocation_year IS NOT NULL.
+        Returns: {previous_application_id: allocation_config_id}
+        Only includes entries where allocation_config_id IS NOT NULL.
         """
         if not previous_app_ids:
             return {}
@@ -1103,7 +1103,7 @@ class ManualDistributionService:
         stmt = select(CollegeRankingItem).where(
             and_(
                 CollegeRankingItem.application_id.in_(previous_app_ids),
-                CollegeRankingItem.allocation_year.isnot(None),
+                CollegeRankingItem.allocation_config_id.isnot(None),
             )
         )
         result = await self.db.execute(stmt)
@@ -1113,7 +1113,7 @@ class ManualDistributionService:
         mapping: dict[int, int] = {}
         for item in items:
             if item.application_id not in mapping:
-                mapping[item.application_id] = item.allocation_year
+                mapping[item.application_id] = item.allocation_config_id
         return mapping
 
     async def auto_allocate_preview(
