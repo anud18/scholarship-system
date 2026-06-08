@@ -319,3 +319,38 @@ def test_whitelist_remove_accepts_optional_sub_type():
     req = WhitelistBatchRemoveRequest(nycu_ids=["0856001"], sub_type=None)
     assert req.sub_type is None
     assert req.nycu_ids == ["0856001"]
+
+
+# ─── SharedQuotaSource + new config fields ───────────────────────────
+
+
+def test_shared_quota_source_round_trips_on_base():
+    """A shared_quota_sources link is parsed into SharedQuotaSource models
+    and project_numbers flattens to {sub_type: code}."""
+    cfg = ScholarshipConfigurationBase(
+        **_base_payload(
+            project_numbers={"nstc": "114R000001", "moe_1w": "114C000002"},
+            shared_quota_sources=[
+                {"source_config_code": "phd_113", "sub_types": ["nstc"]},
+                {"source_config_code": "phd_112", "sub_types": ["nstc", "moe_1w"]},
+            ],
+        )
+    )
+    assert cfg.project_numbers == {"nstc": "114R000001", "moe_1w": "114C000002"}
+    assert len(cfg.shared_quota_sources) == 2
+    assert cfg.shared_quota_sources[0].source_config_code == "phd_113"
+    assert cfg.shared_quota_sources[0].sub_types == ["nstc"]
+    assert cfg.shared_quota_sources[1].sub_types == ["nstc", "moe_1w"]
+
+
+def test_shared_quota_source_requires_source_config_code():
+    """A link entry missing source_config_code is rejected at the schema boundary."""
+    with pytest.raises(ValidationError):
+        ScholarshipConfigurationBase(**_base_payload(shared_quota_sources=[{"sub_types": ["nstc"]}]))
+
+
+def test_new_fields_default_to_none():
+    """Both new fields are optional and default to None when omitted."""
+    cfg = ScholarshipConfigurationBase(**_base_payload())
+    assert cfg.shared_quota_sources is None
+    assert cfg.project_numbers is None
