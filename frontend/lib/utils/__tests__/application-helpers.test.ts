@@ -7,6 +7,8 @@ import {
   getDocumentLabel,
   fetchApplicationFiles,
   buildApplicationFormFields,
+  isValidTaiwanMobile,
+  TAIWAN_MOBILE_MESSAGE,
   BadgeVariant,
 } from "../application-helpers";
 import {
@@ -542,5 +544,37 @@ describe("formatFieldName - postal account label", () => {
   it("labels account_number as the post office account", () => {
     expect(formatFieldName("account_number", "zh")).toBe("郵局帳號");
     expect(formatFieldName("account_number", "en")).toBe("Post Office Account");
+  });
+});
+
+describe("isValidTaiwanMobile", () => {
+  it("accepts a 09-prefixed 10-digit number", () => {
+    expect(isValidTaiwanMobile("0912345678")).toBe(true);
+  });
+
+  it("rejects landline / dashed formats", () => {
+    expect(isValidTaiwanMobile("0912-345-678")).toBe(false);
+    expect(isValidTaiwanMobile("02-12345678")).toBe(false);
+  });
+
+  it("rejects wrong length", () => {
+    expect(isValidTaiwanMobile("091234567")).toBe(false);
+    expect(isValidTaiwanMobile("09123456789")).toBe(false);
+  });
+
+  it("rejects a non-09 prefix and non-digits", () => {
+    expect(isValidTaiwanMobile("0812345678")).toBe(false);
+    expect(isValidTaiwanMobile("09abcd5678")).toBe(false);
+  });
+
+  it("rejects empty / non-string input", () => {
+    expect(isValidTaiwanMobile("")).toBe(false);
+    expect(isValidTaiwanMobile(undefined)).toBe(false);
+    expect(isValidTaiwanMobile(null)).toBe(false);
+    expect(isValidTaiwanMobile(912345678)).toBe(false);
+  });
+
+  it("exposes the requested help message", () => {
+    expect(TAIWAN_MOBILE_MESSAGE).toBe("請輸入本人有效的台灣手機 (09xxxxxx)");
   });
 });

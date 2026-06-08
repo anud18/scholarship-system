@@ -498,6 +498,14 @@ export interface SubmittedFormFieldValue {
  * `account_number` key). If it is omitted here the account never reaches the
  * admin side, so we always fold it into the form fields.
  */
+// Taiwan mobile number: pure digits, starts with 09, exactly 10 digits.
+// Mirrors the backend contact_phone validation so client and server agree.
+export const TAIWAN_MOBILE_PATTERN = /^09\d{8}$/;
+export const TAIWAN_MOBILE_MESSAGE = "請輸入本人有效的台灣手機 (09xxxxxx)";
+
+export const isValidTaiwanMobile = (value: unknown): boolean =>
+  typeof value === "string" && TAIWAN_MOBILE_PATTERN.test(value);
+
 export const buildApplicationFormFields = (
   dynamicFormData: Record<string, unknown>,
   accountNumber?: string | null
