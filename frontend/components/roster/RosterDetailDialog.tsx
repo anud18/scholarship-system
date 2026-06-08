@@ -461,6 +461,10 @@ export function RosterDetailDialog({
     }
   };
 
+  const filteredAuditLogs = auditLogs.filter(
+    l => auditFilter === "all" || l.action === auditFilter
+  );
+
   const getItemsByCollege = (college: string): RosterItem[] => {
     return rosterItems.filter(item => item.college_code === college);
   };
@@ -900,21 +904,19 @@ export function RosterDetailDialog({
             <div className="py-6 text-center text-muted-foreground">載入中…</div>
           ) : (
             <ul className="space-y-2 max-h-64 overflow-y-auto">
-              {auditLogs
-                .filter(l => auditFilter === "all" || l.action === auditFilter)
-                .map(l => (
-                  <li key={l.id} className="border rounded p-2 text-sm">
-                    <div className="font-medium">{l.title}</div>
-                    {l.description && (
-                      <div className="text-muted-foreground">{l.description}</div>
-                    )}
-                    <div className="text-xs text-muted-foreground">
-                      {l.user_name || "系統"} ·{" "}
-                      {new Date(l.created_at).toLocaleString("zh-TW")}
-                    </div>
-                  </li>
-                ))}
-              {auditLogs.length === 0 && (
+              {filteredAuditLogs.map(l => (
+                <li key={l.id} className="border rounded p-2 text-sm">
+                  <div className="font-medium">{l.title}</div>
+                  {l.description && (
+                    <div className="text-muted-foreground">{l.description}</div>
+                  )}
+                  <div className="text-xs text-muted-foreground">
+                    {l.user_name || "系統"} ·{" "}
+                    {new Date(l.created_at).toLocaleString("zh-TW")}
+                  </div>
+                </li>
+              ))}
+              {filteredAuditLogs.length === 0 && (
                 <li className="py-6 text-center text-muted-foreground list-none">
                   尚無操作紀錄
                 </li>

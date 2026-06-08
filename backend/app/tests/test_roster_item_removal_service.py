@@ -296,11 +296,12 @@ def test_restore_item_reincludes_and_audits(db_sync, locked_roster_two_items, ad
 
 def test_restore_item_rejects_already_included(db_sync, locked_roster_two_items, admin_db_user_sync):
     import pytest
+    from app.core.exceptions import ConflictError
 
     roster = locked_roster_two_items
     svc = RosterService(db_sync)
-    with pytest.raises(ValueError):
-        svc.restore_item(roster.id, roster.items[0].id, admin_db_user_sync.id, "noop")  # already included
+    with pytest.raises(ConflictError):  # already included → 409
+        svc.restore_item(roster.id, roster.items[0].id, admin_db_user_sync.id, "noop")
 
 
 def test_restore_item_rejects_non_completed_or_locked_roster(db_sync, locked_roster_two_items, admin_db_user_sync):
@@ -320,8 +321,9 @@ def test_restore_item_rejects_non_completed_or_locked_roster(db_sync, locked_ros
 
 def test_restore_item_not_found_raises(db_sync, locked_roster_two_items, admin_db_user_sync):
     import pytest
+    from app.core.exceptions import NotFoundError
 
     roster = locked_roster_two_items
     svc = RosterService(db_sync)
-    with pytest.raises(ValueError, match="not found"):
+    with pytest.raises(NotFoundError):  # missing item → 404
         svc.restore_item(roster.id, 99999999, admin_db_user_sync.id, "x")

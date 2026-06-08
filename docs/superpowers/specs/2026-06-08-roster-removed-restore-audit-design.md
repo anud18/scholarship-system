@@ -2,7 +2,7 @@
 
 - **日期**: 2026-06-08
 - **分支**: `worktree-feat+roster-removed-restore-audit`
-- **狀態**: 設計已批准,待出實作計畫
+- **狀態**: 已實作 — 設計與實作計畫(`docs/superpowers/plans/2026-06-08-roster-removed-restore-audit.md`)皆已產出,程式碼於 PR #916
 
 ## 1. 目標
 

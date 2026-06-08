@@ -10,7 +10,14 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import and_, case as sa_case, func, or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.exceptions import RosterAlreadyExistsError, RosterGenerationError, RosterLockedError, RosterNotFoundError
+from app.core.exceptions import (
+    ConflictError,
+    NotFoundError,
+    RosterAlreadyExistsError,
+    RosterGenerationError,
+    RosterLockedError,
+    RosterNotFoundError,
+)
 from app.core.metrics import payment_rosters_total
 from app.core.pii_crypto import redact_dict_pii
 from app.models.application import Application
@@ -2246,10 +2253,15 @@ class RosterService:
     ) -> dict:
         """Re-include a soft-removed PaymentRosterItem. Works on COMPLETED and
         LOCKED rosters. Recompute totals, set excel_stale=True, write
-        RosterAuditLog(ITEM_RESTORE). Caller-facing 409 maps from ValueError."""
+        RosterAuditLog(ITEM_RESTORE).
+
+        Raises (mapped to HTTP by the global ScholarshipException handler / the
+        endpoint): RosterNotFoundError / NotFoundError -> 404, ConflictError
+        (already-included, idempotency) -> 409, ValueError (wrong roster / not a
+        restorable status) -> 400."""
         roster = self.db.get(PaymentRoster, roster_id)
         if roster is None:
-            raise ValueError(f"Roster {roster_id} not found")
+            raise RosterNotFoundError(str(roster_id))
 
         if roster.status not in (RosterStatus.COMPLETED, RosterStatus.LOCKED):
             raise ValueError(
@@ -2258,11 +2270,11 @@ class RosterService:
 
         item = self.db.get(PaymentRosterItem, item_id)
         if item is None:
-            raise ValueError(f"Item {item_id} not found")
+            raise NotFoundError("Roster item", str(item_id))
         if item.roster_id != roster_id:
             raise ValueError(f"Item {item_id} does not belong to roster {roster_id}")
         if item.is_included:
-            raise ValueError("明細未被移除，無需回復")
+            raise ConflictError("明細未被移除，無需回復")
 
         item.is_included = True
         item.exclusion_reason = None
