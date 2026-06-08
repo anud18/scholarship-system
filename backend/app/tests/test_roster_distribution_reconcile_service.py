@@ -8,7 +8,6 @@ import pytest
 
 from app.core.exceptions import RosterLockedError
 from app.models.application import Application, ApplicationStatus
-from app.models.audit_log import AuditLog
 from app.models.college_review import CollegeRanking, CollegeRankingItem
 from app.models.payment_roster import (
     PaymentRoster,
@@ -246,9 +245,13 @@ def test_reconcile_adds_missing_and_removes_orphan(db_sync, diff_scenario):
     assert result["excel_stale"] is True
 
     db_sync.refresh(diff_scenario["roster"])
-    # roster now holds app_a (kept) + app_b (added); app_c removed → 2 items
-    assert diff_scenario["roster"].total_applications == 2
-    assert db_sync.get(PaymentRosterItem, diff_scenario["item_c"]) is None
+    # Soft-delete: 3 rows total (app_a kept + app_b added + app_c soft-removed),
+    # 2 qualified (is_included=True). total_applications counts all rows.
+    assert diff_scenario["roster"].total_applications == 3
+    assert diff_scenario["roster"].qualified_count == 2
+    removed_item = db_sync.get(PaymentRosterItem, diff_scenario["item_c"])
+    assert removed_item is not None
+    assert removed_item.is_included is False
     # added item is included (student_data has bank account, verification disabled)
     assert result["added"][0]["is_included"] is True
 
@@ -320,6 +323,8 @@ def test_reconcile_works_on_completed_roster(db_sync, diff_scenario):
 
 
 def test_reconcile_writes_audit_logs(db_sync, diff_scenario):
+    from app.models.roster_audit import RosterAuditAction, RosterAuditLog
+
     svc = RosterService(db_sync)
     svc.reconcile_roster(
         roster_id=diff_scenario["roster"].id,
@@ -328,11 +333,27 @@ def test_reconcile_writes_audit_logs(db_sync, diff_scenario):
         admin_user_id=diff_scenario["admin"].id,
         reason="sync",
     )
-    added_log = db_sync.query(AuditLog).filter(AuditLog.action == "roster.item_added_from_distribution").one()
-    assert added_log.new_values["application_id"] == diff_scenario["app_b"]
-    summary = db_sync.query(AuditLog).filter(AuditLog.action == "roster.reconciled").one()
-    assert summary.new_values["added"] == 1
-    assert summary.new_values["removed"] == 1
+    add_log = (
+        db_sync.query(RosterAuditLog)
+        .filter(
+            RosterAuditLog.roster_id == diff_scenario["roster"].id,
+            RosterAuditLog.action == RosterAuditAction.ITEM_ADD,
+        )
+        .first()
+    )
+    assert add_log is not None
+    assert add_log.audit_metadata["source"] == "reconcile"
+    assert add_log.audit_metadata["application_id"] == diff_scenario["app_b"]
+    remove_log = (
+        db_sync.query(RosterAuditLog)
+        .filter(
+            RosterAuditLog.roster_id == diff_scenario["roster"].id,
+            RosterAuditLog.action == RosterAuditAction.ITEM_REMOVE,
+        )
+        .first()
+    )
+    assert remove_log is not None
+    assert remove_log.audit_metadata["source"] == "reconcile"
 
 
 def test_distribution_diff_whole_period_roster_ignores_subtype_slice(db_sync):
@@ -409,3 +430,64 @@ def test_reconcile_add_missing_student_data_raises(db_sync):
             admin_user_id=admin.id,
             reason=None,
         )
+
+
+def test_reconcile_remove_soft_deletes_and_audits(db_sync, diff_scenario):
+    from app.models.roster_audit import RosterAuditAction, RosterAuditLog
+    from app.models.payment_roster import PaymentRosterItem
+
+    svc = RosterService(db_sync)
+    svc.reconcile_roster(
+        roster_id=diff_scenario["roster"].id,
+        add_application_ids=[],
+        remove_item_ids=[diff_scenario["item_c"]],
+        admin_user_id=diff_scenario["admin"].id,
+        reason="比對移除",
+    )
+    item = db_sync.get(PaymentRosterItem, diff_scenario["item_c"])
+    assert item is not None  # soft, not hard
+    assert item.is_included is False
+    log = (
+        db_sync.query(RosterAuditLog)
+        .filter(
+            RosterAuditLog.roster_id == diff_scenario["roster"].id,
+            RosterAuditLog.action == RosterAuditAction.ITEM_REMOVE,
+        )
+        .first()
+    )
+    assert log is not None
+    assert log.audit_metadata["source"] == "reconcile"
+
+
+def test_reconcile_does_not_reflag_already_softremoved_orphan(db_sync, diff_scenario):
+    """After a soft-remove, the same orphan is no longer in allowed_remove, so a
+    second reconcile attempt on it is rejected as not-removable."""
+    svc = RosterService(db_sync)
+    svc.reconcile_roster(
+        roster_id=diff_scenario["roster"].id,
+        add_application_ids=[],
+        remove_item_ids=[diff_scenario["item_c"]],
+        admin_user_id=diff_scenario["admin"].id,
+        reason="first",
+    )
+    with pytest.raises(ValueError):
+        svc.reconcile_roster(
+            roster_id=diff_scenario["roster"].id,
+            add_application_ids=[],
+            remove_item_ids=[diff_scenario["item_c"]],
+            admin_user_id=diff_scenario["admin"].id,
+            reason="again",
+        )
+
+
+def test_diff_to_remove_excludes_softremoved_items(db_sync, diff_scenario):
+    svc = RosterService(db_sync)
+    svc.reconcile_roster(
+        roster_id=diff_scenario["roster"].id,
+        add_application_ids=[],
+        remove_item_ids=[diff_scenario["item_c"]],
+        admin_user_id=diff_scenario["admin"].id,
+        reason="soft",
+    )
+    diff = svc.get_distribution_diff_for_roster(diff_scenario["roster"].id)
+    assert all(e.item_id != diff_scenario["item_c"] for e in diff["to_remove"])

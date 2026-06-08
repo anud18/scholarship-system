@@ -533,6 +533,10 @@ class ApplicationService:
             scholarship_name=config.config_name or scholarship.name,
             amount=config.amount,
             scholarship_subtype_list=scholarship_subtype_list,
+            # Ordered sub-type preference list (志願序). The distribution service
+            # reads this first; without it, allocation falls back to selection
+            # order. The frontend computes the order (MOE/moe_1w forced first).
+            sub_type_preferences=application_data.sub_type_preferences,
             sub_type_selection_mode=sub_type_selection_mode,
             sub_scholarship_type=sub_scholarship_type,
             is_renewal=False,  # New applications are never renewals
@@ -1108,6 +1112,11 @@ class ApplicationService:
             # scalar — which submit_application's guard would then reject, blocking
             # the very correction the student is making.
             application.sub_scholarship_type = self._derive_sub_scholarship_type(update_data.scholarship_subtype_list)
+
+        # 更新志願序（如果提供）— persist the ordered preference list so the
+        # distribution service uses it instead of falling back to selection order.
+        if update_data.sub_type_preferences is not None:
+            application.sub_type_preferences = update_data.sub_type_preferences
 
         await self.db.commit()
         await self.db.refresh(application)

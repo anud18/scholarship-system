@@ -296,11 +296,13 @@ def remove_flow_locked_roster(db_sync, remove_flow_admin):
 def test_remove_locked_item_sets_stale_and_status_stays_locked(db_sync, remove_flow_locked_roster, remove_flow_admin):
     """Admin removes an item from a LOCKED roster.
 
-    After removal:
-    - item is gone
+    After removal (now SOFT-delete — the row survives, is_included=False, so it
+    can be restored):
+    - item still exists but is_included is False (was hard-deleted before)
     - roster.excel_stale is True
     - roster.status is still LOCKED
-    - RosterService.get_revoked_suspended_for_roster returns empty (item removed)
+    - get_revoked_suspended_for_roster returns empty: a soft-removed revoked
+      item must drop out of the needs-attention panel (gated on is_included)
     """
     from app.services.roster_service import RosterService
 
@@ -325,14 +327,17 @@ def test_remove_locked_item_sets_stale_and_status_stays_locked(db_sync, remove_f
     # RosterService.remove_item_from_locked_roster commits internally
     db_sync.refresh(roster)
 
-    # Item hard-deleted
-    assert db_sync.get(PaymentRosterItem, item_id) is None
+    # Item soft-removed (row survives for restore), not hard-deleted
+    removed = db_sync.get(PaymentRosterItem, item_id)
+    assert removed is not None
+    assert removed.is_included is False
+    assert "鎖定後移除" in (removed.exclusion_reason or "")
 
     # Roster metadata
     assert roster.excel_stale is True
     assert roster.status == RosterStatus.LOCKED
-    assert roster.qualified_count == 0
-    assert roster.total_applications == 0
+    assert roster.qualified_count == 0  # is_included rows only
+    assert roster.total_applications == 1  # soft-removed row still counted
 
     # get_revoked_suspended now returns empty (item removed from roster)
     listing_after = svc.get_revoked_suspended_for_roster(roster.id)

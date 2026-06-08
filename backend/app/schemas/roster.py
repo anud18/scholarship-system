@@ -81,7 +81,9 @@ class RosterAuditLogResponse(BaseModel):
     title: str
     description: Optional[str] = None
     audit_metadata: Optional[Dict[str, Any]] = None
-    created_by_user_id: Optional[int] = None
+    user_id: Optional[int] = None
+    user_name: Optional[str] = None
+    user_role: Optional[str] = None
     created_at: datetime
 
 

@@ -35,6 +35,7 @@ from app.schemas.payment_roster import (
     ReconcileRequest,
     ReconcileResult,
     RemoveLockedItemRequest,
+    RestoreItemRequest,
     RevokedSuspendedListResponse,
 )
 from app.schemas.roster import (
@@ -2112,9 +2113,11 @@ async def get_roster_audit_logs(
                         "level": log.level.value,
                         "title": log.title,
                         "description": log.description,
-                        "created_by_user_id": log.created_by_user_id,
-                        "created_at": log.created_at,
+                        "user_id": log.user_id,
+                        "user_name": log.user_name,
+                        "user_role": log.user_role,
                         "audit_metadata": log.audit_metadata,
+                        "created_at": log.created_at,
                     }
                     for log in logs
                 ],
@@ -2157,8 +2160,9 @@ def remove_locked_roster_item(
     db: Session = Depends(get_sync_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Hard-delete a single item from a LOCKED roster. Roster stays LOCKED;
-    excel_stale is set to True; audit log written."""
+    """Soft-remove a single item from a LOCKED roster (sets is_included=False;
+    row survives for restore). Roster stays LOCKED; excel_stale is set to True;
+    audit log written."""
     _require_admin(current_user)
     svc = RosterService(db)
     try:
@@ -2171,6 +2175,35 @@ def remove_locked_roster_item(
     except (ValueError, RosterLockedError) as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return {"success": True, "message": "已從造冊移除", "data": result}
+
+
+@router.post("/{roster_id}/items/{item_id}/restore")
+def restore_roster_item(
+    roster_id: int,
+    item_id: int,
+    request: RestoreItemRequest,
+    db: Session = Depends(get_sync_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Re-include a soft-removed roster item (回復). Admin only. Works on
+    COMPLETED and LOCKED rosters; sets excel_stale; audits ITEM_RESTORE."""
+    _require_admin(current_user)
+    svc = RosterService(db)
+    try:
+        result = svc.restore_item(
+            roster_id=roster_id,
+            item_id=item_id,
+            admin_user_id=current_user.id,
+            reason=request.reason_note,
+        )
+    except ValueError as e:
+        # restore_item raises typed exceptions for the precise codes: not-found
+        # → NotFoundError/RosterNotFoundError (404) and already-included →
+        # ConflictError (409), both handled by the global ScholarshipException
+        # handler. A plain ValueError reaching here is a 400 case (item belongs
+        # to another roster, or roster is not in a restorable status).
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    return {"success": True, "message": "已回復造冊明細", "data": result}
 
 
 @router.get("/{roster_id}/distribution-diff")
