@@ -816,9 +816,8 @@ class RosterService:
                 f"Checked nested and flat structures. submitted_form_data keys: {list(form_data.keys())}"
             )
 
-        # 查詢 CollegeRankingItem 以取得備取資訊與分發資訊
+        # 查詢 CollegeRankingItem 以取得備取資訊與分發子類型
         backup_info = None
-        allocation_year = None
         allocated_sub_type = None
         from app.models.college_review import CollegeRanking, CollegeRankingItem
 
@@ -838,10 +837,9 @@ class RosterService:
                 if ranking_item.backup_allocations:
                     backup_info = ranking_item.backup_allocations
                     logger.info(f"Application {application.id} has backup allocations: {len(backup_info)} positions")
-                allocation_year = ranking_item.allocation_year
                 allocated_sub_type = ranking_item.allocated_sub_type
 
-        # 若無 ranking_id（月份造冊），從同學年度已分發排名中查詢
+        # 若無 ranking_id（月份造冊），從同學年度已分發排名中查詢子類型
         if not allocated_sub_type:
             alloc_item = (
                 self.db.query(CollegeRankingItem)
@@ -856,8 +854,17 @@ class RosterService:
                 .first()
             )
             if alloc_item:
-                allocation_year = allocation_year or alloc_item.allocation_year
                 allocated_sub_type = alloc_item.allocated_sub_type
+
+        # 載入消耗配置 (consumed config) — 借用前年度配額時不同於發放配置。
+        # allocation_config_id NULL ⇒ 全期 sentinel，退回造冊自身的發放配置。
+        consumed_config = None
+        if roster.allocation_config_id is not None:
+            consumed_config = self.db.get(ScholarshipConfiguration, roster.allocation_config_id)
+        if consumed_config is None:
+            consumed_config = application.scholarship_configuration
+        # allocation_year 顯示快照取自造冊（= 消耗配置學年度）
+        allocation_year = roster.allocation_year
 
         # 計算申請身分別
         application_identity = None
@@ -874,9 +881,10 @@ class RosterService:
             student_email=student_data.get("com_email", ""),
             bank_account=bank_account,  # From submitted_form_data, not student_data
             scholarship_name=application.scholarship_configuration.scholarship_type.name,
-            scholarship_amount=application.amount or application.scholarship_configuration.amount,
+            scholarship_amount=application.amount or consumed_config.amount,
             scholarship_subtype=application.sub_scholarship_type,
-            allocation_year=allocation_year,  # 消耗哪一年的配額（補發時不同於 academic_year）
+            allocation_config_id=roster.allocation_config_id,  # 消耗配置 id 快照
+            allocation_year=allocation_year,  # 消耗配置學年度顯示快照
             allocated_sub_type=allocated_sub_type,  # 分發到的子類型快照
             application_identity=application_identity,  # 申請身分快照
             verification_status=verification_status,
