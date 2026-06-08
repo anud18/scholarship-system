@@ -36,9 +36,6 @@ class PaymentRosterItemBase(BaseModel):
     scholarship_amount: Decimal = Field(..., description="獎學金金額")
     scholarship_subtype: Optional[str] = Field(None, description="獎學金子類型")
     allocation_year: Optional[int] = Field(None, description="消耗哪一年的配額（補發時與學年度不同）")
-    allocated_sub_type: Optional[str] = Field(
-        None, description="分發到的子類型快照（借用共用配額時用於顯示『N年 子類型』）"
-    )
     is_included: bool = Field(True, description="是否納入造冊")
     exclusion_reason: Optional[str] = Field(None, description="排除原因")
 

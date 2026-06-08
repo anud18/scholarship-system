@@ -62,6 +62,20 @@ def _require_admin(user: User) -> None:
         raise HTTPException(status_code=403, detail="Admin role required")
 
 
+def _roster_item_dict_with_display_year(item: PaymentRosterItem, roster: PaymentRoster) -> dict:
+    """Serialize a roster item for the UI, resolving the display year.
+
+    Uses the per-item snapshot when set (the consumed/borrowed prior-year quota
+    for shared-quota allocations), else the roster's own academic_year — so
+    every 分發名單 row shows which year's quota it draws from. Monthly/legacy
+    rosters never snapshot allocation_year, so without this they'd show no year.
+    """
+    data = RosterItemResponse.model_validate(item).model_dump()
+    if data.get("allocation_year") is None:
+        data["allocation_year"] = roster.academic_year
+    return data
+
+
 def _generate_payment_roster_inner(
     request: RosterCreateRequest,
     db: Session,
@@ -442,7 +456,7 @@ async def list_payment_rosters(
 
             # 添加關聯資料（已 eager loaded，避免 MissingGreenlet）
             if roster.items:
-                roster_dict["items"] = [RosterItemResponse.model_validate(item).model_dump() for item in roster.items]
+                roster_dict["items"] = [_roster_item_dict_with_display_year(item, roster) for item in roster.items]
             if roster.audit_logs:
                 roster_dict["audit_logs"] = [
                     RosterAuditLogResponse.model_validate(log).model_dump() for log in roster.audit_logs
@@ -1298,7 +1312,7 @@ async def get_roster_items(
 
         items_data = []
         for item in items:
-            item_dict = RosterItemResponse.model_validate(item).model_dump()
+            item_dict = _roster_item_dict_with_display_year(item, roster)
             # 從 application.student_data 補充學號/學院/系所資訊
             # (PaymentRosterItem 只存 student_id_number=身分證，學號需從快照取得)
             if item.application and item.application.student_data:

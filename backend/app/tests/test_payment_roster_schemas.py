@@ -22,7 +22,7 @@ Finance. Bugs in these schemas have direct financial impact:
     (excluded with reason). Flipping the default would silently
     exclude every record from new rosters.
 
-22 cases pinning 10 schemas + 3 computed properties.
+20 cases pinning 9 schemas + 3 computed properties.
 """
 
 import pytest
@@ -35,7 +35,6 @@ from app.schemas.payment_roster import (
     PaymentRosterBase,
     PaymentRosterCreate,
     PaymentRosterItemBase,
-    PaymentRosterItemResponse,
     PaymentRosterListResponse,
     PaymentRosterResponse,
     RosterExportRequest,
@@ -43,7 +42,6 @@ from app.schemas.payment_roster import (
     RosterStatistics,
     RosterSummary,
 )
-from types import SimpleNamespace
 
 # ─── PaymentRosterBase / Create ─────────────────────────────────────
 
@@ -275,46 +273,3 @@ def test_statistics_groupby_dicts_default_empty():
     assert s.by_cycle == {}
     assert s.by_status == {}
     assert s.by_academic_year == {}
-
-
-# ─── PaymentRosterItemResponse: distributed sub_type + allocation year ──
-
-
-def _item_attrs(**overrides):
-    """Duck-typed ORM-ish object with every required PaymentRosterItemResponse
-    attribute, for from_attributes round-trips."""
-    base = dict(
-        id=1,
-        roster_id=1,
-        application_id=1,
-        student_id_number="A123456789",
-        student_name="王小明",
-        scholarship_name="博士生獎學金",
-        scholarship_amount=Decimal("40000"),
-        verification_status=StudentVerificationStatus.VERIFIED,
-        created_at=datetime(2026, 6, 8, tzinfo=timezone.utc),
-        updated_at=datetime(2026, 6, 8, tzinfo=timezone.utc),
-    )
-    base.update(overrides)
-    return SimpleNamespace(**base)
-
-
-def test_item_response_exposes_distributed_sub_type_and_year():
-    # The roster student list (查看名單) renders "{allocation_year}年 {label}"
-    # per student, but the whole cell is gated on allocated_sub_type. The
-    # response MUST expose allocated_sub_type (the DISTRIBUTED sub_type — distinct
-    # from the application's scholarship_subtype) AND allocation_year, or the
-    # borrowed-quota year is silently hidden for shared-quota rows.
-    fields = PaymentRosterItemResponse.model_fields
-    assert "allocated_sub_type" in fields
-    assert "allocation_year" in fields
-
-
-def test_item_response_round_trips_shared_quota_year():
-    # A 115 student borrowing 114's nstc quota: the item snapshots
-    # allocated_sub_type="nstc" + allocation_year=114. Both must survive
-    # serialization so the per-student cell can show "114年 國科會".
-    obj = _item_attrs(allocated_sub_type="nstc", allocation_year=114)
-    dumped = PaymentRosterItemResponse.model_validate(obj).model_dump()
-    assert dumped["allocated_sub_type"] == "nstc"
-    assert dumped["allocation_year"] == 114
