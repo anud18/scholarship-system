@@ -2016,6 +2016,9 @@ class RosterService:
         for item in existing_items:
             if item.application_id in allocated_map:
                 continue
+            if not item.is_included:
+                # Already soft-removed — not an actionable orphan anymore.
+                continue
             app = apps_by_id.get(item.application_id)
             sd = (app.student_data or {}) if app else {}
             to_remove.append(

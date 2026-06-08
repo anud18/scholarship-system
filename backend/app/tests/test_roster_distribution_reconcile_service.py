@@ -474,3 +474,16 @@ def test_reconcile_does_not_reflag_already_softremoved_orphan(db_sync, diff_scen
             admin_user_id=diff_scenario["admin"].id,
             reason="again",
         )
+
+
+def test_diff_to_remove_excludes_softremoved_items(db_sync, diff_scenario):
+    svc = RosterService(db_sync)
+    svc.reconcile_roster(
+        roster_id=diff_scenario["roster"].id,
+        add_application_ids=[],
+        remove_item_ids=[diff_scenario["item_c"]],
+        admin_user_id=diff_scenario["admin"].id,
+        reason="soft",
+    )
+    diff = svc.get_distribution_diff_for_roster(diff_scenario["roster"].id)
+    assert all(e.item_id != diff_scenario["item_c"] for e in diff["to_remove"])
