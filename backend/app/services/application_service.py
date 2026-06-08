@@ -38,6 +38,11 @@ from app.services.email_service import EmailService
 from app.services.minio_service import minio_service
 from app.services.review_phase_filter import apply_renewal_phase_filter
 from app.services.student_service import StudentService
+from app.utils.phone_validation import (
+    TAIWAN_MOBILE_MESSAGE,
+    extract_contact_phone,
+    is_valid_taiwan_mobile,
+)
 
 func: Any = sa_func
 
@@ -587,6 +592,10 @@ class ApplicationService:
         if not is_eligible:
             error_message = "Student is not eligible for this scholarship. " + "; ".join(eligibility_errors)
             raise ValidationError(error_message)
+
+        # 直接提交（非草稿）時驗證聯絡電話格式；草稿允許暫存未完成的號碼。
+        if not is_draft and application_data.form_data:
+            self._enforce_contact_phone_format(application_data.form_data.fields)
 
         # Create application instance using helper method
         application = await self._create_application_instance(
@@ -1232,6 +1241,19 @@ class ApplicationService:
 
         return application
 
+    def _enforce_contact_phone_format(self, form_fields: Optional[Dict[str, Any]]) -> None:
+        """Reject a submission whose contact_phone is present but not a TW mobile.
+
+        The number must be pure digits starting with 09 and 10 digits long.
+        Empty/absent values are deferred to the required-field check so forms
+        without a contact_phone field keep submitting unchanged.
+        """
+        phone = extract_contact_phone(form_fields)
+        if phone is None or phone == "":
+            return
+        if not is_valid_taiwan_mobile(phone):
+            raise ValidationError(TAIWAN_MOBILE_MESSAGE)
+
     async def submit_application(self, application_id: int, user: User) -> ApplicationResponse:
         """提交申請"""
         # Get application with relationships loaded
@@ -1259,6 +1281,9 @@ class ApplicationService:
 
         # 驗證所有必填欄位
         _ = ApplicationFormData(**application.submitted_form_data)
+
+        # 驗證聯絡電話格式（台灣手機，09 開頭共十碼純數字）
+        self._enforce_contact_phone_format((application.submitted_form_data or {}).get("fields"))
 
         # A draft can only be submitted once it carries a concrete sub-type
         # for scholarships that define real ones (the "general" fallback maps

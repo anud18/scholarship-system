@@ -56,7 +56,11 @@ import api, {
 } from "@/lib/api";
 import { isSelectableScholarship } from "@/lib/scholarship-eligibility";
 import { clsx } from "@/lib/utils";
-import { buildApplicationFormFields } from "@/lib/utils/application-helpers";
+import {
+  buildApplicationFormFields,
+  isValidTaiwanMobile,
+  TAIWAN_MOBILE_MESSAGE,
+} from "@/lib/utils/application-helpers";
 import { useApplications } from "@/hooks/use-applications";
 import { useStudentProfile } from "@/hooks/use-student-profile";
 import {
@@ -1066,6 +1070,19 @@ export function ScholarshipApplicationStep({
 
   const handleSubmit = async () => {
     if (!selectedScholarship) return;
+
+    // Enforce the Taiwan mobile format for 聯絡電話 before submitting. The field
+    // is required across every application form; the backend rejects the same
+    // value too, but blocking here gives the student immediate feedback.
+    const contactPhone = dynamicFormData["contact_phone"];
+    if (
+      contactPhone != null &&
+      String(contactPhone) !== "" &&
+      !isValidTaiwanMobile(contactPhone)
+    ) {
+      toast.error(TAIWAN_MOBILE_MESSAGE);
+      return;
+    }
 
     // When the scholarship defines real sub-types, never fall back to the
     // synthetic "general" category (it matches no quota slot at distribution);
