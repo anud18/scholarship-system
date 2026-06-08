@@ -2213,9 +2213,8 @@ class RosterService:
         admin_user_id: int,
         reason: Optional[str],
     ) -> dict:
-        """Hard-delete a PaymentRosterItem from a LOCKED roster. Recompute
-        roster totals, set excel_stale=True, write audit log. Roster stays
-        LOCKED."""
+        """Soft-remove a PaymentRosterItem from a LOCKED roster (sets is_included=False; row survives for restore).
+        Recompute roster totals, set excel_stale=True, write RosterAuditLog. Roster stays LOCKED."""
         roster = self.db.get(PaymentRoster, roster_id)
         if roster is None:
             raise ValueError(f"Roster {roster_id} not found")
@@ -2226,9 +2225,8 @@ class RosterService:
         if item is None or item.roster_id != roster_id:
             raise ValueError(f"Item {item_id} not found in roster {roster_id}")
 
-        removed_amount = item.scholarship_amount
-        removed_app_id = item.application_id
-        self.db.delete(item)
+        item.is_included = False
+        item.exclusion_reason = f"鎖定後移除：{reason}" if reason else "鎖定後移除"
         self.db.flush()
 
         # Recompute totals via the shared sync helper (persists
@@ -2236,20 +2234,13 @@ class RosterService:
         qualified, total_count, total_amount = self._recompute_roster_totals_sync(roster_id)
         roster.excel_stale = True
 
-        self.db.add(
-            AuditLog.create_log(
-                user_id=admin_user_id,
-                action="roster.item_removed_after_lock",
-                resource_type="payment_roster",
-                resource_id=str(roster_id),
-                description=(f"Removed item {item_id} (application {removed_app_id}) from LOCKED roster"),
-                new_values={
-                    "item_id": item_id,
-                    "application_id": removed_app_id,
-                    "reason": reason,
-                    "removed_amount": float(removed_amount) if removed_amount else 0,
-                },
-            )
+        self._write_roster_item_audit(
+            roster_id=roster_id,
+            action=RosterAuditAction.ITEM_REMOVE,
+            item=item,
+            admin_user_id=admin_user_id,
+            source="locked_remove",
+            reason=reason,
         )
         self.db.commit()
         return {
