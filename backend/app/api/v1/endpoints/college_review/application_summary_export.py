@@ -35,6 +35,10 @@ from app.services.college_ranking_export_service import (
     ExportRow,
 )
 
+# Re-exported so existing callers/tests can keep importing _sort_key from this
+# module; the single definition now lives in the service layer.
+from app.services.export_summary_tables import _sort_key
+
 from ._helpers import (
     _check_academic_year_permission,
     _check_scholarship_permission,
@@ -55,13 +59,6 @@ _UNSAFE_FILENAME_RE = re.compile(r'[\\/:*?"<>|]')
 
 def _sanitise_filename_part(value: str) -> str:
     return _UNSAFE_FILENAME_RE.sub("_", value).strip() or "untitled"
-
-
-def _sort_key(a: "Application"):
-    """Sort key: renewal applications first, then by student code (blanks last)."""
-    code = ((a.student_data or {}).get("std_stdcode") or "").strip()
-    renewal_group = 0 if getattr(a, "is_renewal", False) else 1  # 0=renewal first, 1=new
-    return (renewal_group, not code, code, a.id)
 
 
 @router.get("/applications/department-summary-export")
