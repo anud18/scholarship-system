@@ -622,7 +622,7 @@ class ManualDistributionService:
         Each allocation: {
             "ranking_item_id": int,
             "sub_type_code": str|None,
-            "allocation_year": int|None  (None → defaults to academic_year)
+            "allocation_config_id": int|None  (None → defaults to the requesting config)
         }
         sub_type_code=None means unallocate.
         """
@@ -630,10 +630,14 @@ class ManualDistributionService:
         await self._validate_allocations(scholarship_type_id, academic_year, semester, allocations)
 
         updated_count = 0
+        requesting_config = await self._load_config(scholarship_type_id, academic_year, semester)
+        if requesting_config is None:
+            raise ValueError("No active configuration for this distribution round")
+
         for alloc in allocations:
             item_id = alloc["ranking_item_id"]
             sub_type = alloc.get("sub_type_code")
-            alloc_year = alloc.get("allocation_year") or (academic_year if sub_type else None)
+            alloc_config_id = alloc.get("allocation_config_id") or (requesting_config.id if sub_type else None)
 
             item_query = select(CollegeRankingItem).where(CollegeRankingItem.id == item_id)
             result = await self.db.execute(item_query)
@@ -642,19 +646,27 @@ class ManualDistributionService:
                 continue
 
             if sub_type:
+                allowed = await self._allowed_config_ids(requesting_config, sub_type)
+                if alloc_config_id not in allowed:
+                    code = await self._config_code_by_id(requesting_config, sub_type, alloc_config_id)
+                    raise ValueError(f"分發目標配置不在允許範圍：{code} (sub_type={sub_type})")
                 item.is_allocated = True
                 item.allocated_sub_type = sub_type
-                item.allocation_year = alloc_year
+                item.allocation_config_id = alloc_config_id
                 item.status = "allocated"
                 item.allocation_reason = "手動分發"
             else:
                 item.is_allocated = False
                 item.allocated_sub_type = None
-                item.allocation_year = None
+                item.allocation_config_id = None
                 item.status = "ranked"
                 item.allocation_reason = None
 
             updated_count += 1
+
+        # §10 server-side quota gate: lock the consumed config rows, recount,
+        # reject if any is oversubscribed.
+        await self._assert_round_not_oversubscribed(requesting_config)
 
         await self.db.flush()
 
@@ -685,7 +697,7 @@ class ManualDistributionService:
                     if item.is_allocated:
                         allocations_snapshot[item.id] = {
                             "sub_type": item.allocated_sub_type,
-                            "allocation_year": item.allocation_year,
+                            "allocation_config_id": item.allocation_config_id,
                             "status": item.status,
                         }
                         total_allocated += 1
@@ -1629,6 +1641,58 @@ class ManualDistributionService:
             if working_remaining.get(cfg.id, 0) > 0:
                 return cfg.id
         return None
+
+    async def _config_code_by_id(
+        self, requesting_config: ScholarshipConfiguration, sub_type: str, config_id: Optional[int]
+    ) -> str:
+        """Human-readable config_code for an id (own, linked, or any other config),
+        for error messages. Falls back to a direct lookup so a disallowed-but-real
+        config still names itself, and to the raw id only if it does not exist."""
+        if config_id == requesting_config.id:
+            return requesting_config.config_code
+        for cfg in await self._resolve_linked_configs(requesting_config, sub_type):
+            if cfg.id == config_id:
+                return cfg.config_code
+        if config_id is not None:
+            code = await self.db.scalar(
+                select(ScholarshipConfiguration.config_code).where(ScholarshipConfiguration.id == config_id)
+            )
+            if code:
+                return code
+        return str(config_id)
+
+    async def _assert_round_not_oversubscribed(self, requesting_config: ScholarshipConfiguration) -> None:
+        """§10 quota gate: SELECT FOR UPDATE the consumed config rows for this
+        round (own + every linked source across every sub_type), recount remaining
+        via §6.2, and reject if any consumed config is oversubscribed.
+
+        Flushes pending allocation writes FIRST so the recount sees them (autoflush
+        is off on this session, so the just-written items would otherwise be
+        invisible to the count queries)."""
+        await self.db.flush()
+
+        consumed_ids = {requesting_config.id}
+        for sub_type in (requesting_config.quotas or {}).keys():
+            for cfg in await self._resolve_linked_configs(requesting_config, sub_type):
+                consumed_ids.add(cfg.id)
+
+        locked_rows = (
+            (
+                await self.db.execute(
+                    select(ScholarshipConfiguration)
+                    .where(ScholarshipConfiguration.id.in_(consumed_ids))
+                    .order_by(ScholarshipConfiguration.id)
+                    .with_for_update()
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        for cfg in locked_rows:
+            for sub_type in (cfg.quotas or {}).keys():
+                if await self.remaining(cfg, sub_type) < 0:
+                    raise ValueError(f"配額超額：{cfg.config_code} / {sub_type} 的核配數已超過總配額，請調整分發")
 
     async def execute_general_distribution(
         self,

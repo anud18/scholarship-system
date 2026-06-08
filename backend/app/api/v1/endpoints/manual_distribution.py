@@ -28,7 +28,7 @@ router = APIRouter(prefix="/manual-distribution", tags=["Manual Distribution"])
 class AllocationItem(BaseModel):
     ranking_item_id: int
     sub_type_code: Optional[str] = None
-    allocation_year: Optional[int] = None  # Which year's quota to use (None = current year)
+    allocation_config_id: Optional[int] = None  # Consumed config (None = own requesting config)
 
 
 class AllocateRequest(BaseModel):
