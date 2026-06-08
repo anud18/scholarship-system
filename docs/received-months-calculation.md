@@ -15,9 +15,13 @@
 
 篩選條件（**皆需符合**）：
 
-- `payment_roster_items.student_id_number = :student_nycu_id`
+- `payment_roster_items.student_number = :student_nycu_id`
 - `payment_roster_items.is_included = TRUE`
 - `payment_rosters.scholarship_configuration_id = :config_id`
+
+> ⚠️ 比對鍵是 **`student_number`（學號 / `std_stdcode`）**，不是 `student_id_number`。
+> `student_id_number` 已改存身分證字號（`std_pid`，供造冊 Excel 的「身分證字號」欄位），
+> 不能用於跨造冊的學生身分比對（外籍生可能無身分證字號）。各呼叫端（分發頁、36 個月上限、歷史查詢）一律以學號比對。
 
 **跨 sub_type 合併**：不篩選 `sub_type`，所以同一配置下的 `nstc`、`moe_1w`、`moe_2w` 一併計入。
 
@@ -44,7 +48,7 @@ SELECT
 FROM payment_roster_items pri
 JOIN payment_rosters pr ON pr.id = pri.roster_id
 WHERE pr.scholarship_configuration_id = :config_id
-  AND pri.student_id_number = :student_nycu_id
+  AND pri.student_number = :student_nycu_id
   AND pri.is_included = TRUE;
 ```
 

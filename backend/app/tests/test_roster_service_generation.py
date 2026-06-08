@@ -110,6 +110,7 @@ def _make_approved_application(
     student_id: str = "112550001",
     national_id: str = "A123456789",
     student_name: str = "羅斯特同學",
+    submitted_form_data: dict | None = None,
 ) -> Application:
     a = Application(
         user_id=user.id,
@@ -122,7 +123,7 @@ def _make_approved_application(
         academic_year=113,
         semester="first",
         student_data={"std_stdcode": student_id, "std_pid": national_id, "std_cname": student_name},
-        submitted_form_data={},
+        submitted_form_data={} if submitted_form_data is None else submitted_form_data,
         agree_terms=True,
         amount=Decimal("50000"),
     )
@@ -202,6 +203,59 @@ class TestRosterServiceGenerate:
 
         audit = patch_dependencies["audit"]
         assert audit.log_roster_creation.call_count == 1
+
+    def test_received_months_increases_after_generation(self, db_sync, patch_dependencies):
+        """
+        Regression for "造冊生成後學生領取月份數沒有增加".
+
+        After generating a roster, the student's received-months count must
+        increase. This broke because the roster item snapshots the national ID
+        in student_id_number (for the Excel 身分證字號 column) while every
+        received-months caller matches by 學號 (std_stdcode). The item must also
+        snapshot the 學號 in student_number so the cumulative count works.
+
+        The application carries a bank account so the item is is_included=True
+        (excluded items don't count toward received months).
+        """
+        from app.services.received_months_service import calculate_received_months
+
+        admin = _make_admin(db_sync)
+        scholarship = _make_scholarship(db_sync)
+        config = _make_config(db_sync, scholarship)
+        _make_approved_application(
+            db_sync,
+            admin,
+            scholarship,
+            config,
+            student_id="112550001",  # 學號
+            national_id="A123456789",  # 身分證字號
+            submitted_form_data={"fields": {"bank_account": {"value": "0001234567"}}},
+        )
+
+        # Before generation: nothing received.
+        assert calculate_received_months(db_sync, "112550001", config.id) == 0
+
+        svc = RosterService(db_sync)
+        roster = svc.generate_roster(
+            scholarship_configuration_id=config.id,
+            period_label="2024-01",
+            roster_cycle=RosterCycle.MONTHLY,
+            academic_year=113,
+            created_by_user_id=admin.id,
+            trigger_type=RosterTriggerType.MANUAL,
+            student_verification_enabled=False,
+        )
+
+        item = db_sync.query(PaymentRosterItem).filter_by(roster_id=roster.id).one()
+        assert item.is_included is True  # guard: excluded items wouldn't count
+        # Snapshots: 學號 in student_number, national ID in student_id_number.
+        assert item.student_number == "112550001"
+        assert item.student_id_number == "A123456789"
+
+        # After generation: one MONTHLY roster ⇒ one month, matched by 學號.
+        assert calculate_received_months(db_sync, "112550001", config.id) == 1
+        # The national ID must NOT match.
+        assert calculate_received_months(db_sync, "A123456789", config.id) == 0
 
     @pytest.mark.smoke
     def test_generate_roster_raises_on_duplicate_without_force(self, db_sync, patch_dependencies):

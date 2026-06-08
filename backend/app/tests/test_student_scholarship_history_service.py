@@ -158,7 +158,9 @@ async def seeded_rosters(db):
         item = PaymentRosterItem(
             roster_id=roster.id,
             application_id=1,  # placeholder — SQLite test DB doesn't enforce FK
-            student_id_number=stdcode,
+            # National ID (身分證字號) — distinct from the 學號 lookup key.
+            student_id_number=f"A{stdcode}",
+            student_number=stdcode,  # 學號 — what _fetch_paid_payments matches on
             student_name="王小明",
             scholarship_name=name,
             scholarship_amount=amount,
@@ -178,7 +180,7 @@ async def seeded_rosters(db):
 
 @pytest.mark.asyncio
 async def test_fetch_paid_payments_filters_drafts_and_excluded(db, seeded_rosters):
-    """Service must filter status IN (COMPLETED, LOCKED) AND is_included=TRUE AND matching student_id_number."""
+    """Service must filter status IN (COMPLETED, LOCKED) AND is_included=TRUE AND matching student_number (學號)."""
     svc = StudentScholarshipHistoryService()
     records, snapshot_name = await svc._fetch_paid_payments(db, "S001")
 
@@ -245,7 +247,8 @@ async def test_fetch_paid_payments_includes_completed_rosters(db):
     item = PaymentRosterItem(
         roster_id=completed_roster.id,
         application_id=1,
-        student_id_number="S999",
+        student_id_number="A999",  # national ID — distinct from the 學號 lookup key
+        student_number="S999",
         student_name="陳完成",
         scholarship_name="教育部",
         scholarship_amount="7500",

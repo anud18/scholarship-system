@@ -188,6 +188,12 @@ class PaymentRosterItem(Base):
 
     # 學生基本資料（造冊當時快照）
     student_id_number = Column(String(20), nullable=False)  # 身分證字號 (national ID / std_pid)
+    # 學號 (student number / std_stdcode) snapshot — the system's canonical
+    # student identifier, used for cross-roster student matching (received-months
+    # cumulative count, 36-month cap, scholarship history). student_id_number was
+    # repurposed to hold the national ID for the 身分證字號 Excel column, so a
+    # separate 學號 snapshot is required for identity matching.
+    student_number = Column(String(20), nullable=True, index=True)
     student_name = Column(String(100), nullable=False)  # 姓名
     student_email = Column(String(255))  # Email
 
