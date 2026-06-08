@@ -2080,9 +2080,11 @@ async def get_roster_audit_logs(
                         "level": log.level.value,
                         "title": log.title,
                         "description": log.description,
-                        "created_by_user_id": log.created_by_user_id,
-                        "created_at": log.created_at,
+                        "user_id": log.user_id,
+                        "user_name": log.user_name,
+                        "user_role": log.user_role,
                         "audit_metadata": log.audit_metadata,
+                        "created_at": log.created_at,
                     }
                     for log in logs
                 ],

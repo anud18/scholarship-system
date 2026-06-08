@@ -55,6 +55,7 @@ from app.models.payment_roster import (
     RosterStatus,
     RosterTriggerType,
 )
+from app.models.roster_audit import RosterAuditAction, RosterAuditLog
 from app.models.user import User, UserRole, UserType
 from app.tests.conftest import TestingSessionLocalSync, test_engine_sync
 
@@ -571,3 +572,47 @@ async def test_get_audit_logs_returns_envelope(client_admin: AsyncClient, draft_
 async def test_get_audit_logs_missing_roster_returns_404(client_admin: AsyncClient):
     resp = await client_admin.get("/api/v1/payment-rosters/99999/audit-logs")
     assert resp.status_code == 404, resp.text
+
+
+# ===========================================================================
+# GET /{id}/audit-logs — operator identity fields (regression for latent bug)
+# ===========================================================================
+
+
+@pytest_asyncio.fixture
+async def roster_with_audit_log(db):
+    """DRAFT roster with one RosterAuditLog carrying operator identity fields."""
+    u = await _seed_admin_user(db, "ral")
+    r = await _build_roster(
+        db,
+        code="ROSTER-PR-RAL",
+        status=RosterStatus.DRAFT,
+        created_by=u.id,
+        period="2026-05",
+    )
+    log = RosterAuditLog.create_audit_log(
+        roster_id=r.id,
+        action=RosterAuditAction.ITEM_REMOVE,
+        title="排除 測試生",
+        user_id=u.id,
+        user_name="Admin X",
+        user_role="admin",
+    )
+    db.add(log)
+    await db.commit()
+    return (r.id, "Admin X")
+
+
+@pytest.mark.asyncio
+async def test_audit_logs_endpoint_returns_operator_name(client_admin: AsyncClient, roster_with_audit_log):
+    roster_id, expected_user_name = roster_with_audit_log
+    resp = await client_admin.get(f"/api/v1/payment-rosters/{roster_id}/audit-logs")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    first = body["data"]["items"][0]
+    # The latent bug returned a non-existent created_by_user_id field; we now
+    # return real operator identity from the snapshot columns.
+    assert first["user_name"] == expected_user_name
+    assert "user_id" in first
+    assert "user_role" in first
