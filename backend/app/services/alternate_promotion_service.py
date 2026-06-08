@@ -109,10 +109,13 @@ class AlternatePromotionService:
             alternate_app = alternate_item.application
             alternate_student_name = get_snapshot_student_name(alternate_app)
 
-            # 4. Update alternate ranking_item to allocated
+            # 4. Update alternate ranking_item to allocated. Inherit the displaced
+            #    winner's consumed config so the promoted alternate lands in the
+            #    same (allocation_config_id, sub_type) roster group (spec §8).
             alternate_item.is_allocated = True
             alternate_item.status = "allocated"
             alternate_item.allocated_sub_type = ranking_item.allocated_sub_type
+            alternate_item.allocation_config_id = ranking_item.allocation_config_id
             alternate_item.allocation_reason = f"備取遞補（原學生 {original_student_name} 失格：{ineligible_reason}）"
             self.db.add(alternate_item)
 
