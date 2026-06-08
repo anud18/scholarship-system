@@ -23,7 +23,6 @@ from app.models.payment_roster import (
     RosterTriggerType,
     StudentVerificationStatus,
 )
-from app.models.audit_log import AuditLog
 from app.models.roster_audit import RosterAuditAction, RosterAuditLevel, RosterAuditLog
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
 from app.models.user import User
@@ -2114,7 +2113,7 @@ class RosterService:
             and ri.application is not None
             and ri.application.status == ApplicationStatus.approved
         }
-        allowed_remove = {it.id for it in existing_items if it.application_id not in allocated_map}
+        allowed_remove = {it.id for it in existing_items if it.is_included and it.application_id not in allocated_map}
 
         bad_add = [a for a in add_ids if a not in allowed_add]
         if bad_add:
@@ -2128,11 +2127,20 @@ class RosterService:
         for app_id in add_ids:
             application = self.db.get(Application, app_id)
             if application is None:
-                # Unreachable in practice (allowed_add is derived from loaded,
-                # approved applications) but guard so a deleted row yields a
-                # clean 400 instead of an AttributeError 500.
                 raise ValueError(f"Application {app_id} not found")
-            item = self._verify_and_create_item(roster, application)
+            # Defensive: if a (soft-removed) item already exists for this app,
+            # restore it instead of creating a duplicate row (no DB unique
+            # constraint protects us). Unreachable via the gated diff today,
+            # but keeps the invariant if gating changes.
+            existing = next((it for it in existing_items if it.application_id == app_id), None)
+            if existing is not None:
+                existing.is_included = True
+                existing.exclusion_reason = None
+                item = existing
+                action = RosterAuditAction.ITEM_RESTORE
+            else:
+                item = self._verify_and_create_item(roster, application)
+                action = RosterAuditAction.ITEM_ADD
             self.db.flush()
             added.append(
                 {
@@ -2142,42 +2150,27 @@ class RosterService:
                     "exclusion_reason": item.exclusion_reason,
                 }
             )
-            self.db.add(
-                AuditLog.create_log(
-                    user_id=admin_user_id,
-                    action="roster.item_added_from_distribution",
-                    resource_type="payment_roster",
-                    resource_id=str(roster_id),
-                    description=f"Added item {item.id} (application {app_id}) to roster from distribution",
-                    new_values={
-                        "item_id": item.id,
-                        "application_id": app_id,
-                        "is_included": item.is_included,
-                        "reason": reason,
-                    },
-                )
+            self._write_roster_item_audit(
+                roster_id=roster_id,
+                action=action,
+                item=item,
+                admin_user_id=admin_user_id,
+                source="reconcile",
+                reason=reason,
             )
 
         for item_id in remove_ids:
             item = items_by_id[item_id]
-            removed_app_id = item.application_id
-            removed_amount = item.scholarship_amount
-            self.db.delete(item)
-            removed.append({"item_id": item_id, "application_id": removed_app_id})
-            self.db.add(
-                AuditLog.create_log(
-                    user_id=admin_user_id,
-                    action="roster.item_removed_reconcile",
-                    resource_type="payment_roster",
-                    resource_id=str(roster_id),
-                    description=f"Removed item {item_id} (application {removed_app_id}) during reconcile",
-                    new_values={
-                        "item_id": item_id,
-                        "application_id": removed_app_id,
-                        "reason": reason,
-                        "removed_amount": float(removed_amount) if removed_amount else 0,
-                    },
-                )
+            item.is_included = False
+            item.exclusion_reason = "比對分發移除：不在分發名單"
+            removed.append({"item_id": item_id, "application_id": item.application_id})
+            self._write_roster_item_audit(
+                roster_id=roster_id,
+                action=RosterAuditAction.ITEM_REMOVE,
+                item=item,
+                admin_user_id=admin_user_id,
+                source="reconcile",
+                reason=reason,
             )
 
         self.db.flush()
@@ -2185,16 +2178,6 @@ class RosterService:
         if added or removed:
             roster.excel_stale = True
 
-        self.db.add(
-            AuditLog.create_log(
-                user_id=admin_user_id,
-                action="roster.reconciled",
-                resource_type="payment_roster",
-                resource_id=str(roster_id),
-                description=f"Reconciled roster: +{len(added)} / -{len(removed)}",
-                new_values={"added": len(added), "removed": len(removed), "reason": reason},
-            )
-        )
         self.db.commit()
 
         return {
