@@ -16,7 +16,8 @@ export interface DistributionStudent {
   applied_sub_types: string[];
   rejected_sub_types: string[];
   allocated_sub_type: string | null;
-  allocation_year: number | null;
+  /** Config whose quota this student's slot consumes. Seed the checked column from (allocated_sub_type, allocation_config_id). */
+  allocation_config_id: number | null;
   /** Live funding flag. Cancel (revoke/suspend) sets this false to free the quota slot; restore sets it true. Seed the 核配 checkbox from this, NOT from allocated_sub_type (preserved across cancel). */
   is_allocated: boolean;
   status: string;
@@ -219,10 +220,13 @@ export interface DistributionStateRenewalGroup {
   applications: DistributionStateRenewalApp[];
 }
 
-/** Available pool per (sub_type, allocation_year): total / used / remaining. */
+/** Available pool per (sub_type, config): total / used / remaining. */
 export interface DistributionStateAvailableQuota {
   sub_type: string;
-  allocation_year: number;
+  config_id: number;
+  config_code: string;
+  academic_year: number;
+  is_own: boolean;
   total: number;
   used: number;
   remaining: number;
