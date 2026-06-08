@@ -42,6 +42,7 @@ The `backend/uploads` and `backend/exports` directories may be created by Docker
 
 ```bash
 sudo chown -R $(whoami):$(whoami) backend/uploads backend/exports
+sudo chmod 777 backend/exports
 ```
 
 ## Step 3: Run database migrations
