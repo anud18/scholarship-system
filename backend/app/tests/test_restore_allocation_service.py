@@ -7,7 +7,7 @@ These cover behaviours the revoke/suspend service tests do not:
   log; restoring a non-terminal application raises.
 - cancel (revoke/suspend) frees the quota slot by flipping the linked
   CollegeRankingItem to is_allocated=False (while preserving allocated_sub_type
-  / allocation_year), and restore re-affirms it (is_allocated=True).
+  / allocation_config_id), and restore re-affirms it (is_allocated=True).
 - finalize never resurrects an already revoked/suspended application back to
   approved/allocated.
 
@@ -91,13 +91,27 @@ async def finalized_ranking(db, admin_db_user):
 @pytest_asyncio.fixture
 async def allocated_item(db, finalized_ranking, allocated_application):
     """A ranking item that holds an allocated quota slot for the application."""
+    from app.models.scholarship import ScholarshipConfiguration
+
+    cfg = ScholarshipConfiguration(
+        scholarship_type_id=1,
+        config_code="RESTORE-114",
+        config_name="Restore 114",
+        academic_year=114,
+        semester="first",
+        amount=50000,
+    )
+    db.add(cfg)
+    await db.commit()
+    await db.refresh(cfg)
+
     item = CollegeRankingItem(
         ranking_id=finalized_ranking.id,
         application_id=allocated_application.id,
         rank_position=1,
         is_allocated=True,
         allocated_sub_type="nstc",
-        allocation_year=114,
+        allocation_config_id=cfg.id,
         status="allocated",
     )
     db.add(item)
@@ -206,7 +220,7 @@ async def test_cancel_frees_quota_slot_and_restore_reaffirms(db, allocated_appli
     await db.refresh(allocated_item)
     assert allocated_item.is_allocated is False
     assert allocated_item.allocated_sub_type == "nstc"
-    assert allocated_item.allocation_year == 114
+    assert allocated_item.allocation_config_id is not None
 
     # Restore re-consumes the same slot.
     await svc.restore_allocation(
