@@ -92,8 +92,9 @@ class ExportPackageService:
         Returns:
             Tuple of (BytesIO buffer, suggested filename)
         """
-        # 1. Get scholarship name
-        scholarship_name = await self._get_scholarship_name(scholarship_type_id)
+        # 1. Get scholarship type (name drives ZIP/PDF filenames; object passed to table builder)
+        scholarship_type = await self._get_scholarship_type(scholarship_type_id)
+        scholarship_name = scholarship_type.name
 
         # 2. Query applications with files
         applications = await self._query_applications(scholarship_type_id, academic_year, semester, college_code)
@@ -122,12 +123,22 @@ class ExportPackageService:
             key = f"{_sanitize_filename(dep_no)}_{_sanitize_filename(dep_name)}"
             dept_groups[key].append(app)
 
+        # 3.5 Build the embedded 申請總表 workbooks from the SAME dept_groups
+        # (lazy import avoids an import cycle with export_summary_tables).
+        from app.services.export_summary_tables import build_embedded_summary_tables
+
+        summary_tables = await build_embedded_summary_tables(
+            self.db, scholarship_type, dept_groups, college_name, academic_year
+        )
+
         # 4. Build ZIP
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             for dept_folder, apps in sorted(dept_groups.items()):
                 for app in apps:
                     await self._add_application_to_zip(zf, dept_folder, app, scholarship_name, academic_year, semester)
+            for inner_path, payload in summary_tables.items():
+                zf.writestr(inner_path, payload)
 
         buf.seek(0)
 
@@ -141,14 +152,19 @@ class ExportPackageService:
 
         return buf, zip_filename
 
-    async def _get_scholarship_name(self, scholarship_type_id: int) -> str:
-        """Get scholarship name for ZIP filename."""
-        stmt = select(ScholarshipType).where(ScholarshipType.id == scholarship_type_id)
+    async def _get_scholarship_type(self, scholarship_type_id: int) -> ScholarshipType:
+        """Load the full ScholarshipType (with sub_type_configs) — name drives the
+        ZIP/PDF filenames; the object is also passed to the summary-table builder."""
+        stmt = (
+            select(ScholarshipType)
+            .where(ScholarshipType.id == scholarship_type_id)
+            .options(selectinload(ScholarshipType.sub_type_configs))
+        )
         result = await self.db.execute(stmt)
         scholarship = result.scalar_one_or_none()
         if not scholarship:
             raise ValueError(f"找不到獎學金類型 ID={scholarship_type_id}")
-        return scholarship.name
+        return scholarship
 
     async def _query_applications(
         self,
