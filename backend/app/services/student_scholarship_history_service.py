@@ -65,12 +65,16 @@ class StudentScholarshipHistoryService:
     ) -> Tuple[List[PaymentRecord], Optional[str]]:
         """Return roster items for the student from rosters in a paid state
         (COMPLETED or LOCKED). Also returns the student_name snapshot from the
-        most-recent matching item, for SIS-fallback display."""
+        most-recent matching item, for SIS-fallback display.
+
+        ``student_number`` is the 學號 (std_stdcode) the admin looks up by, so it
+        must match PaymentRosterItem.student_number — NOT student_id_number, which
+        holds the national ID (身分證字號) for the Excel payment column."""
         stmt = (
             select(PaymentRosterItem, PaymentRoster)
             .join(PaymentRoster, PaymentRosterItem.roster_id == PaymentRoster.id)
             .where(
-                PaymentRosterItem.student_id_number == student_number,
+                PaymentRosterItem.student_number == student_number,
                 PaymentRosterItem.is_included.is_(True),
                 PaymentRoster.status.in_([RosterStatus.COMPLETED, RosterStatus.LOCKED]),
             )

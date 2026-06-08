@@ -63,10 +63,15 @@ def test_idempotent_encrypt_passthrough_empty(two_keys):
 
 def test_tamper_detection(two_keys):
     envelope = pii_crypto.encrypt_pii(_PLAINTEXT)
-    # Flip a character in the base64 payload.
+    # Flip a character in the MIDDLE of the base64 payload. The FINAL base64
+    # char can encode only padding bits, so flipping it may decode to the same
+    # bytes and leave the GCM tag valid → flaky "DID NOT RAISE". A middle char
+    # always maps to a full nonce/ciphertext/tag byte, so corruption — and thus
+    # the GCM auth failure — is deterministic.
     head, payload = envelope.rsplit(":", 1)
-    flipped_char = "A" if payload[-1] != "A" else "B"
-    tampered = f"{head}:{payload[:-1]}{flipped_char}"
+    mid = len(payload) // 2
+    flipped_char = "A" if payload[mid] != "A" else "B"
+    tampered = f"{head}:{payload[:mid]}{flipped_char}{payload[mid + 1:]}"
     with pytest.raises(pii_crypto.PIICryptoError):
         pii_crypto.decrypt_pii(tampered)
 

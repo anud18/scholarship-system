@@ -142,7 +142,12 @@ def _make_item(
     item = PaymentRosterItem(
         roster_id=roster.id,
         application_id=application_id,
-        student_id_number=student_nycu_id,
+        # student_id_number snapshots the national ID (身分證字號), which is
+        # DISTINCT from the 學號. Derive a national-ID-shaped value so these
+        # fixtures mirror production and guard against matching on the wrong
+        # column — received_months must match by student_number (學號).
+        student_id_number=f"A{student_nycu_id}",
+        student_number=student_nycu_id,
         student_name=f"Student {student_nycu_id}",
         scholarship_name="Received Months Test Scholarship",
         scholarship_amount=amount,
@@ -353,6 +358,38 @@ class TestCalculateReceivedMonthsSingle:
         # Invisible under B.
         assert calculate_received_months(db_sync, "112550001", config_b.id) == 0
 
+    def test_matches_by_student_number_not_national_id(self, db_sync):
+        """Regression for "造冊生成後學生領取月份數沒有增加".
+
+        PaymentRosterItem.student_id_number was repurposed to hold the national
+        ID (身分證字號 / std_pid) for the Excel payment column, so cross-roster
+        matching must key off student_number (學號 / std_stdcode), which is what
+        every caller (distribution panel, 36-month cap, history) passes in.
+
+        Here student_id_number and student_number are deliberately distinct:
+        querying by the 學號 must find the item; querying by the national ID
+        must not.
+        """
+        admin = _make_admin(db_sync)
+        scholarship = _make_scholarship(db_sync)
+        config = _make_config(db_sync, scholarship)
+        roster = _make_roster(
+            db_sync,
+            config=config,
+            creator=admin,
+            roster_code="ROSTER-113-2025-01-NSTC",
+            period_label="2025-01",
+            roster_cycle=RosterCycle.MONTHLY,
+        )
+        # _make_item stores student_number="112550001" and
+        # student_id_number="A112550001" (national ID).
+        _make_item(db_sync, roster=roster, student_nycu_id="112550001")
+
+        # Matches by 學號.
+        assert calculate_received_months(db_sync, "112550001", config.id) == 1
+        # Does NOT match by national ID.
+        assert calculate_received_months(db_sync, "A112550001", config.id) == 0
+
 
 # ---------------------------------------------------------------------------
 # Bulk calculation (sync)
@@ -488,7 +525,9 @@ class TestCalculateReceivedMonthsBulkAsync:
         item = PaymentRosterItem(
             roster_id=roster.id,
             application_id=1,
-            student_id_number="112550001",
+            # National ID (身分證字號) — distinct from the 學號 used to match.
+            student_id_number="A112550001",
+            student_number="112550001",
             student_name="Async Student",
             scholarship_name="Async Test Scholarship",
             scholarship_amount=Decimal("10000"),

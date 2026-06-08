@@ -110,7 +110,10 @@ def _make_item(
     item = PaymentRosterItem(
         roster_id=roster_id,
         application_id=application_id,
-        student_id_number=student_nycu_id,
+        # National ID (身分證字號) — deliberately distinct from the 學號 so this
+        # suite guards that matching keys off student_number, not the national ID.
+        student_id_number=f"A{student_nycu_id}",
+        student_number=student_nycu_id,
         student_name="Test Student",
         scholarship_name="Test Scholarship",
         scholarship_amount=10000,

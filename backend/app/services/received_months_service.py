@@ -16,6 +16,11 @@ on its roster_cycle:
 
 Only rosters with PaymentRosterItem.is_included=True are counted.
 
+Students are matched on PaymentRosterItem.student_number (學號 / std_stdcode),
+the canonical student identifier. NOT student_id_number — that column holds the
+national ID (身分證字號 / std_pid) for the Excel payment column and is unsuitable
+for identity matching (e.g. foreign students may lack a national ID).
+
 See docs/received-months-calculation.md for full specification.
 """
 
@@ -45,7 +50,7 @@ def _single_stmt(student_nycu_id: str, scholarship_config_id: int) -> Select:
         .where(
             and_(
                 PaymentRoster.scholarship_configuration_id == scholarship_config_id,
-                PaymentRosterItem.student_id_number == student_nycu_id,
+                PaymentRosterItem.student_number == student_nycu_id,
                 PaymentRosterItem.is_included.is_(True),
             )
         )
@@ -56,7 +61,7 @@ def _single_stmt(student_nycu_id: str, scholarship_config_id: int) -> Select:
 def _bulk_stmt(student_nycu_ids: list[str], scholarship_config_id: int) -> Select:
     return (
         select(
-            PaymentRosterItem.student_id_number,
+            PaymentRosterItem.student_number,
             PaymentRoster.roster_cycle,
             func.count(PaymentRosterItem.id),
         )
@@ -64,11 +69,11 @@ def _bulk_stmt(student_nycu_ids: list[str], scholarship_config_id: int) -> Selec
         .where(
             and_(
                 PaymentRoster.scholarship_configuration_id == scholarship_config_id,
-                PaymentRosterItem.student_id_number.in_(student_nycu_ids),
+                PaymentRosterItem.student_number.in_(student_nycu_ids),
                 PaymentRosterItem.is_included.is_(True),
             )
         )
-        .group_by(PaymentRosterItem.student_id_number, PaymentRoster.roster_cycle)
+        .group_by(PaymentRosterItem.student_number, PaymentRoster.roster_cycle)
     )
 
 
