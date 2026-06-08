@@ -48,7 +48,12 @@ export interface CollegeQuota {
   remaining: number;
 }
 
-export interface YearQuota {
+/** Quota for one distributable config (own or linked source) under a sub_type. */
+export interface ConfigQuota {
+  config_id: number;
+  config_code: string;
+  academic_year: number;
+  is_own: boolean;
   total: number;
   allocated: number;
   remaining: number;
@@ -57,20 +62,23 @@ export interface YearQuota {
 
 export interface SubTypeQuotaStatus {
   display_name: string;
-  /** Multi-year quota data: year string → quota info */
-  by_year: Record<string, YearQuota>;
+  /** Distributable configs for this sub_type, keyed by config_id string. */
+  by_config: Record<string, ConfigQuota>;
 }
 
 export type QuotaStatus = Record<string, SubTypeQuotaStatus>;
 
-/** A flattened (sub_type × year) column descriptor for the distribution table */
-export interface SubTypeYearCol {
+/** A flattened (sub_type × source-config) column descriptor for the distribution table */
+export interface SubTypeConfigCol {
   sub_type: string;
-  year: number;
-  display_name: string; // e.g., "114年 國科會博士生獎學金"
+  config_id: number;
+  config_code: string;
+  academic_year: number;
+  is_own: boolean;
+  display_name: string; // e.g., "國科會 · phd_114"
   total: number;
-  remaining: number; // based on DB-confirmed allocations
-  key: string; // composite key: "nstc:114"
+  remaining: number; // live: pool_total − consumers, from /quota-status
+  key: string; // composite key: "nstc:42" (sub_type:config_id)
 }
 
 export interface AllocationItem {
