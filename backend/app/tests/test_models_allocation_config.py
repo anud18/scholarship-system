@@ -45,8 +45,8 @@ def test_scholarship_configuration_has_shared_quota_sources_json():
     assert col.nullable is True
     # quotas matrix stays untouched (per-college matrix is NOT removed)
     assert _column(ScholarshipConfiguration, "quotas") is not None
-    # prior_quota_years still present at Phase-1 (dropped in MIGRATION 2)
-    assert _column(ScholarshipConfiguration, "prior_quota_years") is not None
+    # prior_quota_years removed in MIGRATION 2 — superseded by shared_quota_sources
+    assert _column(ScholarshipConfiguration, "prior_quota_years") is None
 
 
 def test_payment_roster_tables_have_allocation_config_id_fk():
