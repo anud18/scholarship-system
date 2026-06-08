@@ -10,6 +10,17 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from app.models.enums import ApplicationCycle, QuotaManagementMode, Semester
 
 
+class SharedQuotaSource(BaseModel):
+    """A cross-config quota-borrow link: this config may consume the named
+    prior config's remaining quota for the listed sub_types. Selected by
+    config_code (year-bearing identity), no quantity (always the source's
+    live remaining). Cross-type allowed; existence + prior-year + sub_type
+    membership are validated imperatively at write time (endpoint §10)."""
+
+    source_config_code: str = Field(..., min_length=1, max_length=50)
+    sub_types: List[str] = Field(..., min_length=1)
+
+
 class ScholarshipConfigurationBase(BaseModel):
     """Base schema for scholarship configuration"""
 
@@ -28,6 +39,12 @@ class ScholarshipConfigurationBase(BaseModel):
     # 配額詳細設定
     total_quota: Optional[int] = Field(None, ge=0)
     quotas: Optional[Dict[str, Dict[str, int]]] = None
+
+    # 計畫編號 — flattened to own-year only {sub_type: code}
+    project_numbers: Optional[Dict[str, str]] = None
+
+    # 跨配置共享配額來源（取代 prior_quota_years）
+    shared_quota_sources: Optional[List[SharedQuotaSource]] = None
 
     # 金額設定 (從 ScholarshipType 移至此處)
     amount: int = Field(..., gt=0, description="獎學金金額（整數）")

@@ -6364,8 +6364,9 @@ export interface paths {
         post?: never;
         /**
          * Remove Locked Roster Item
-         * @description Hard-delete a single item from a LOCKED roster. Roster stays LOCKED;
-         *     excel_stale is set to True; audit log written.
+         * @description Soft-remove a single item from a LOCKED roster (sets is_included=False;
+         *     row survives for restore). Roster stays LOCKED; excel_stale is set to True;
+         *     audit log written.
          */
         delete: operations["remove_locked_roster_item_api_v1_payment_rosters__roster_id__items__item_id__delete"];
         options?: never;
@@ -7468,8 +7469,8 @@ export interface components {
             ranking_item_id: number;
             /** Sub Type Code */
             sub_type_code?: string | null;
-            /** Allocation Year */
-            allocation_year?: number | null;
+            /** Allocation Config Id */
+            allocation_config_id?: number | null;
         };
         /** ApiResponse[List[dict]] */
         ApiResponse_List_dict__: {

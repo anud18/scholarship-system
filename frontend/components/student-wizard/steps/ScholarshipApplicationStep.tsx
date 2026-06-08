@@ -839,9 +839,12 @@ export function ScholarshipApplicationStep({
     setSelectedSubTypes(prev => (prev.length > 0 ? prev : [onlyValue]));
   }, [selectedScholarship]);
 
-  const handleScholarshipChange = (scholarshipCode: string) => {
+  const handleScholarshipChange = (configurationId: string) => {
+    // Identify by configuration_id, not code: the same scholarship type can have
+    // several concurrently-eligible year configs (e.g. 114 + 115) that share one
+    // type code, so code is not a unique selection key.
     const scholarship = eligibleScholarships.find(
-      s => s.code === scholarshipCode
+      s => String(s.configuration_id) === configurationId
     );
     setSelectedScholarship(scholarship || null);
     setSelectedSubTypes([]);
@@ -1438,7 +1441,11 @@ export function ScholarshipApplicationStep({
               {text.selectScholarship} <span className="text-red-500">*</span>
             </Label>
             <Select
-              value={selectedScholarship?.code || ""}
+              value={
+                selectedScholarship?.configuration_id != null
+                  ? String(selectedScholarship.configuration_id)
+                  : ""
+              }
               onValueChange={handleScholarshipChange}
             >
               <SelectTrigger>
@@ -1446,7 +1453,10 @@ export function ScholarshipApplicationStep({
               </SelectTrigger>
               <SelectContent>
                 {eligibleScholarships.map(scholarship => (
-                  <SelectItem key={scholarship.id} value={scholarship.code}>
+                  <SelectItem
+                    key={scholarship.configuration_id}
+                    value={String(scholarship.configuration_id)}
+                  >
                     {locale === "zh"
                       ? scholarship.name
                       : scholarship.name_en || scholarship.name}

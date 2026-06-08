@@ -33,9 +33,15 @@ _MOCK_MODULES = [
     "app",
     "app.models",
     "app.models.application",
+    "app.models.audit_log",
     "app.models.college_review",
     "app.models.enums",
+    "app.models.review",
+    "app.models.payment_roster",
     "app.models.scholarship",
+    "app.models.user",
+    "app.services",
+    "app.services.received_months_service",
 ]
 
 
@@ -57,6 +63,7 @@ def _compute_suggestions():
     sys.modules["sqlalchemy.ext.asyncio"].AsyncSession = object
 
     sys.modules["sqlalchemy.orm"].selectinload = MagicMock()
+    sys.modules["sqlalchemy.orm"].joinedload = MagicMock()
 
     sys.modules["app.models.enums"].ApplicationStatus = MagicMock()
     sys.modules["app.models.enums"].ReviewStage = MagicMock()
@@ -69,6 +76,15 @@ def _compute_suggestions():
     sys.modules["app.models.scholarship"].ScholarshipSubTypeConfig = MagicMock()
 
     sys.modules["app.models.application"].Application = MagicMock()
+    sys.modules["app.models.audit_log"].AuditLog = MagicMock()
+    sys.modules["app.models.review"].ApplicationReview = MagicMock()
+    sys.modules["app.models.review"].ApplicationReviewItem = MagicMock()
+    sys.modules["app.models.payment_roster"].PaymentRoster = MagicMock()
+    sys.modules["app.models.payment_roster"].PaymentRosterItem = MagicMock()
+    sys.modules["app.models.payment_roster"].RosterStatus = MagicMock()
+    sys.modules["app.models.user"].User = MagicMock()
+    sys.modules["app.models.user"].UserRole = MagicMock()
+    sys.modules["app.services.received_months_service"].calculate_received_months_bulk_async = MagicMock()
 
     spec = importlib.util.spec_from_file_location("manual_distribution_service_direct", _SERVICE_PATH)
     module = importlib.util.module_from_spec(spec)
@@ -116,7 +132,7 @@ def _make_item(
     app: SimpleNamespace,
     is_allocated: bool = False,
     allocated_sub_type: Optional[str] = None,
-    allocation_year: Optional[int] = None,
+    allocation_config_id: Optional[int] = None,
 ) -> SimpleNamespace:
     """Build a minimal CollegeRankingItem-like object."""
     return SimpleNamespace(
@@ -125,15 +141,12 @@ def _make_item(
         application=app,
         is_allocated=is_allocated,
         allocated_sub_type=allocated_sub_type,
-        allocation_year=allocation_year,
+        allocation_config_id=allocation_config_id,
     )
 
 
 def _build_quota_tracker(entries: dict) -> dict:
-    """
-    Build a quota tracker dict.
-    entries: {(sub_type, year, college): count}
-    """
+    """Build a quota tracker dict. entries: {(config_id, sub_type, college): count}."""
     return dict(entries)
 
 
@@ -143,19 +156,19 @@ def _build_quota_tracker(entries: dict) -> dict:
 
 
 class TestNewApplicantsAllocatedToCurrentYearNstcFirst:
-    """Test 1: 2 new applicants with prefs ["nstc", "moe_1w"], both get nstc at current year."""
+    """Test 1: 2 new applicants with prefs ["nstc", "moe_1w"], both get nstc at own config."""
 
     def test_new_applicants_allocated_to_current_year_nstc_first(self, _compute_suggestions):
-        academic_year = 114
+        own_config_id = 115
         default_prefs = ["nstc", "moe_1w"]
-        prior_years_map = {"nstc": [113], "moe_1w": []}
+        allowed = {"nstc": [115], "moe_1w": [115]}
         quota_tracker = _build_quota_tracker(
             {
-                ("nstc", 114, "A"): 5,
-                ("moe_1w", 114, "A"): 3,
+                (115, "nstc", "A"): 5,
+                (115, "moe_1w", "A"): 3,
             }
         )
-        prev_alloc_years: dict[int, int] = {}
+        prev_alloc_configs: dict[int, int] = {}
 
         app1 = _make_app(1, college="A", sub_type_preferences=["nstc", "moe_1w"])
         app2 = _make_app(2, college="A", sub_type_preferences=["nstc", "moe_1w"])
@@ -165,32 +178,32 @@ class TestNewApplicantsAllocatedToCurrentYearNstcFirst:
         results = _compute_suggestions(
             unique_items=[item1, item2],
             default_prefs=default_prefs,
-            prev_alloc_years=prev_alloc_years,
-            prior_years_map=prior_years_map,
+            prev_alloc_configs=prev_alloc_configs,
+            allowed_configs_by_sub_type=allowed,
             quota_tracker=quota_tracker,
-            academic_year=academic_year,
+            own_config_id=own_config_id,
         )
 
         assert len(results) == 2
-        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_year": 114}
-        assert results[1] == {"ranking_item_id": 102, "sub_type_code": "nstc", "allocation_year": 114}
+        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_config_id": 115}
+        assert results[1] == {"ranking_item_id": 102, "sub_type_code": "nstc", "allocation_config_id": 115}
 
 
 class TestRenewalStudentsSortedBeforeNew:
     """Test 2: 1 renewal + 1 new, both rank 1, verify renewal processed first."""
 
     def test_renewal_students_sorted_before_new(self, _compute_suggestions):
-        academic_year = 114
+        own_config_id = 115
         default_prefs = ["nstc", "moe_1w"]
-        prior_years_map = {"nstc": [113], "moe_1w": []}
+        allowed = {"nstc": [115], "moe_1w": [115]}
         # Only 1 slot for nstc in college A
         quota_tracker = _build_quota_tracker(
             {
-                ("nstc", 114, "A"): 1,
-                ("moe_1w", 114, "A"): 5,
+                (115, "nstc", "A"): 1,
+                (115, "moe_1w", "A"): 5,
             }
         )
-        prev_alloc_years: dict[int, int] = {}
+        prev_alloc_configs: dict[int, int] = {}
 
         renewal_app = _make_app(1, college="A", is_renewal=True)
         new_app = _make_app(2, college="A", is_renewal=False)
@@ -201,10 +214,10 @@ class TestRenewalStudentsSortedBeforeNew:
         results = _compute_suggestions(
             unique_items=[new_item, renewal_item],  # new passed first, renewal should win
             default_prefs=default_prefs,
-            prev_alloc_years=prev_alloc_years,
-            prior_years_map=prior_years_map,
+            prev_alloc_configs=prev_alloc_configs,
+            allowed_configs_by_sub_type=allowed,
             quota_tracker=quota_tracker,
-            academic_year=academic_year,
+            own_config_id=own_config_id,
         )
 
         assert len(results) == 2
@@ -215,22 +228,23 @@ class TestRenewalStudentsSortedBeforeNew:
         assert new_result["sub_type_code"] == "moe_1w"
 
 
-class TestRenewalTargetsPreviousAllocationYear:
-    """Test 3: Renewal student with prev alloc year 113, verify suggestion is (nstc, 113)."""
+class TestRenewalTargetsPreviousAllocationConfig:
+    """Test 3: Renewal student with prev alloc config 114, verify suggestion uses config 114."""
 
-    def test_renewal_targets_previous_allocation_year(self, _compute_suggestions):
-        academic_year = 114
+    def test_renewal_targets_previous_allocation_config(self, _compute_suggestions):
+        own_config_id = 115
         default_prefs = ["nstc", "moe_1w"]
-        prior_years_map = {"nstc": [113], "moe_1w": []}
+        # nstc is linked: own (115) + prior (114)
+        allowed = {"nstc": [115, 114], "moe_1w": [115]}
         quota_tracker = _build_quota_tracker(
             {
-                ("nstc", 113, "A"): 2,  # Prior year quota available
-                ("nstc", 114, "A"): 5,
-                ("moe_1w", 114, "A"): 3,
+                (114, "nstc", "A"): 2,  # Prior config quota available
+                (115, "nstc", "A"): 5,
+                (115, "moe_1w", "A"): 3,
             }
         )
-        # Renewal student's previous app (id=99) was allocated to year 113
-        prev_alloc_years = {99: 113}
+        # Renewal student's previous app (id=99) was allocated to config 114
+        prev_alloc_configs = {99: 114}
 
         renewal_app = _make_app(1, college="A", is_renewal=True, prev_app_id=99)
         item = _make_item(101, rank_position=1, app=renewal_app)
@@ -238,31 +252,31 @@ class TestRenewalTargetsPreviousAllocationYear:
         results = _compute_suggestions(
             unique_items=[item],
             default_prefs=default_prefs,
-            prev_alloc_years=prev_alloc_years,
-            prior_years_map=prior_years_map,
+            prev_alloc_configs=prev_alloc_configs,
+            allowed_configs_by_sub_type=allowed,
             quota_tracker=quota_tracker,
-            academic_year=academic_year,
+            own_config_id=own_config_id,
         )
 
         assert len(results) == 1
-        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_year": 113}
+        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_config_id": 114}
 
 
-class TestRenewalFallbackToCurrentYearWhenPriorExhausted:
-    """Test 4: Prior year quota = 0, verify falls back to current year."""
+class TestRenewalFallbackToOwnConfigWhenPriorExhausted:
+    """Test 4: Prior config quota = 0, verify falls back to own config."""
 
-    def test_renewal_fallback_to_current_year_when_prior_exhausted(self, _compute_suggestions):
-        academic_year = 114
+    def test_renewal_fallback_to_own_config_when_prior_exhausted(self, _compute_suggestions):
+        own_config_id = 115
         default_prefs = ["nstc", "moe_1w"]
-        prior_years_map = {"nstc": [113], "moe_1w": []}
+        allowed = {"nstc": [115, 114], "moe_1w": [115]}
         quota_tracker = _build_quota_tracker(
             {
-                ("nstc", 113, "A"): 0,  # Prior year exhausted
-                ("nstc", 114, "A"): 5,  # Current year available
-                ("moe_1w", 114, "A"): 3,
+                (114, "nstc", "A"): 0,  # Prior config exhausted
+                (115, "nstc", "A"): 5,  # Own config available
+                (115, "moe_1w", "A"): 3,
             }
         )
-        prev_alloc_years = {99: 113}
+        prev_alloc_configs = {99: 114}
 
         renewal_app = _make_app(1, college="A", is_renewal=True, prev_app_id=99)
         item = _make_item(101, rank_position=1, app=renewal_app)
@@ -270,31 +284,31 @@ class TestRenewalFallbackToCurrentYearWhenPriorExhausted:
         results = _compute_suggestions(
             unique_items=[item],
             default_prefs=default_prefs,
-            prev_alloc_years=prev_alloc_years,
-            prior_years_map=prior_years_map,
+            prev_alloc_configs=prev_alloc_configs,
+            allowed_configs_by_sub_type=allowed,
             quota_tracker=quota_tracker,
-            academic_year=academic_year,
+            own_config_id=own_config_id,
         )
 
         assert len(results) == 1
-        # Falls back to current year since 113 is exhausted
-        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_year": 114}
+        # Falls back to own config since prior (114) is exhausted
+        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_config_id": 115}
 
 
 class TestQuotaExhaustedFallsToNextPreference:
     """Test 5: nstc quota = 0, verify student gets moe_1w."""
 
     def test_quota_exhausted_falls_to_next_preference(self, _compute_suggestions):
-        academic_year = 114
+        own_config_id = 115
         default_prefs = ["nstc", "moe_1w"]
-        prior_years_map = {"nstc": [113], "moe_1w": []}
+        allowed = {"nstc": [115], "moe_1w": [115]}
         quota_tracker = _build_quota_tracker(
             {
-                ("nstc", 114, "A"): 0,  # Exhausted
-                ("moe_1w", 114, "A"): 3,
+                (115, "nstc", "A"): 0,  # Exhausted
+                (115, "moe_1w", "A"): 3,
             }
         )
-        prev_alloc_years: dict[int, int] = {}
+        prev_alloc_configs: dict[int, int] = {}
 
         app = _make_app(1, college="A", sub_type_preferences=["nstc", "moe_1w"])
         item = _make_item(101, rank_position=1, app=app)
@@ -302,30 +316,30 @@ class TestQuotaExhaustedFallsToNextPreference:
         results = _compute_suggestions(
             unique_items=[item],
             default_prefs=default_prefs,
-            prev_alloc_years=prev_alloc_years,
-            prior_years_map=prior_years_map,
+            prev_alloc_configs=prev_alloc_configs,
+            allowed_configs_by_sub_type=allowed,
             quota_tracker=quota_tracker,
-            academic_year=academic_year,
+            own_config_id=own_config_id,
         )
 
         assert len(results) == 1
-        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "moe_1w", "allocation_year": 114}
+        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "moe_1w", "allocation_config_id": 115}
 
 
 class TestAllQuotasExhaustedReturnsNull:
     """Test 6: No quota remaining, verify null suggestion."""
 
     def test_all_quotas_exhausted_returns_null(self, _compute_suggestions):
-        academic_year = 114
+        own_config_id = 115
         default_prefs = ["nstc", "moe_1w"]
-        prior_years_map = {"nstc": [113], "moe_1w": []}
+        allowed = {"nstc": [115], "moe_1w": [115]}
         quota_tracker = _build_quota_tracker(
             {
-                ("nstc", 114, "A"): 0,
-                ("moe_1w", 114, "A"): 0,
+                (115, "nstc", "A"): 0,
+                (115, "moe_1w", "A"): 0,
             }
         )
-        prev_alloc_years: dict[int, int] = {}
+        prev_alloc_configs: dict[int, int] = {}
 
         app = _make_app(1, college="A", sub_type_preferences=["nstc", "moe_1w"])
         item = _make_item(101, rank_position=1, app=app)
@@ -333,30 +347,30 @@ class TestAllQuotasExhaustedReturnsNull:
         results = _compute_suggestions(
             unique_items=[item],
             default_prefs=default_prefs,
-            prev_alloc_years=prev_alloc_years,
-            prior_years_map=prior_years_map,
+            prev_alloc_configs=prev_alloc_configs,
+            allowed_configs_by_sub_type=allowed,
             quota_tracker=quota_tracker,
-            academic_year=academic_year,
+            own_config_id=own_config_id,
         )
 
         assert len(results) == 1
-        assert results[0] == {"ranking_item_id": 101, "sub_type_code": None, "allocation_year": None}
+        assert results[0] == {"ranking_item_id": 101, "sub_type_code": None, "allocation_config_id": None}
 
 
 class TestNullPreferencesUsesConfigDefaults:
     """Test 7: sub_type_preferences is None, verify uses ScholarshipSubTypeConfig order."""
 
     def test_null_preferences_uses_config_defaults(self, _compute_suggestions):
-        academic_year = 114
+        own_config_id = 115
         default_prefs = ["nstc", "moe_1w"]  # Config-driven defaults
-        prior_years_map = {"nstc": [113], "moe_1w": []}
+        allowed = {"nstc": [115], "moe_1w": [115]}
         quota_tracker = _build_quota_tracker(
             {
-                ("nstc", 114, "A"): 0,  # nstc exhausted
-                ("moe_1w", 114, "A"): 5,
+                (115, "nstc", "A"): 0,  # nstc exhausted
+                (115, "moe_1w", "A"): 5,
             }
         )
-        prev_alloc_years: dict[int, int] = {}
+        prev_alloc_configs: dict[int, int] = {}
 
         app = _make_app(1, college="A", sub_type_preferences=None)  # No preferences set
         item = _make_item(101, rank_position=1, app=app)
@@ -364,31 +378,31 @@ class TestNullPreferencesUsesConfigDefaults:
         results = _compute_suggestions(
             unique_items=[item],
             default_prefs=default_prefs,
-            prev_alloc_years=prev_alloc_years,
-            prior_years_map=prior_years_map,
+            prev_alloc_configs=prev_alloc_configs,
+            allowed_configs_by_sub_type=allowed,
             quota_tracker=quota_tracker,
-            academic_year=academic_year,
+            own_config_id=own_config_id,
         )
 
         assert len(results) == 1
         # Uses default prefs: nstc exhausted, falls to moe_1w
-        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "moe_1w", "allocation_year": 114}
+        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "moe_1w", "allocation_config_id": 115}
 
 
 class TestAlreadyAllocatedStudentsSkipped:
     """Test 8: Student with existing allocation, verify skipped."""
 
     def test_already_allocated_students_skipped(self, _compute_suggestions):
-        academic_year = 114
+        own_config_id = 115
         default_prefs = ["nstc", "moe_1w"]
-        prior_years_map = {"nstc": [113], "moe_1w": []}
+        allowed = {"nstc": [115], "moe_1w": [115]}
         quota_tracker = _build_quota_tracker(
             {
-                ("nstc", 114, "A"): 5,
-                ("moe_1w", 114, "A"): 3,
+                (115, "nstc", "A"): 5,
+                (115, "moe_1w", "A"): 3,
             }
         )
-        prev_alloc_years: dict[int, int] = {}
+        prev_alloc_configs: dict[int, int] = {}
 
         app = _make_app(1, college="A")
         # Item already has an allocation
@@ -398,39 +412,39 @@ class TestAlreadyAllocatedStudentsSkipped:
             app=app,
             is_allocated=True,
             allocated_sub_type="nstc",
-            allocation_year=114,
+            allocation_config_id=115,
         )
 
         results = _compute_suggestions(
             unique_items=[item],
             default_prefs=default_prefs,
-            prev_alloc_years=prev_alloc_years,
-            prior_years_map=prior_years_map,
+            prev_alloc_configs=prev_alloc_configs,
+            allowed_configs_by_sub_type=allowed,
             quota_tracker=quota_tracker,
-            academic_year=academic_year,
+            own_config_id=own_config_id,
         )
 
         # Already allocated items are not re-suggested; quota not consumed
         # The item should not appear in the results (it's already handled)
         assert len(results) == 0
         # Quota should NOT have been decremented by this already-allocated item
-        assert quota_tracker[("nstc", 114, "A")] == 5
+        assert quota_tracker[(115, "nstc", "A")] == 5
 
 
 class TestPerCollegeQuotaRespected:
     """Test 9: College A quota=1, 2 students from college A, only 1 gets allocated."""
 
     def test_per_college_quota_respected(self, _compute_suggestions):
-        academic_year = 114
+        own_config_id = 115
         default_prefs = ["nstc", "moe_1w"]
-        prior_years_map = {"nstc": [113], "moe_1w": []}
+        allowed = {"nstc": [115], "moe_1w": [115]}
         quota_tracker = _build_quota_tracker(
             {
-                ("nstc", 114, "A"): 1,  # Only 1 slot for college A
-                ("moe_1w", 114, "A"): 0,  # No moe_1w for college A either
+                (115, "nstc", "A"): 1,  # Only 1 slot for college A
+                (115, "moe_1w", "A"): 0,  # No moe_1w for college A either
             }
         )
-        prev_alloc_years: dict[int, int] = {}
+        prev_alloc_configs: dict[int, int] = {}
 
         app1 = _make_app(1, college="A", sub_type_preferences=["nstc", "moe_1w"])
         app2 = _make_app(2, college="A", sub_type_preferences=["nstc", "moe_1w"])
@@ -440,37 +454,37 @@ class TestPerCollegeQuotaRespected:
         results = _compute_suggestions(
             unique_items=[item1, item2],
             default_prefs=default_prefs,
-            prev_alloc_years=prev_alloc_years,
-            prior_years_map=prior_years_map,
+            prev_alloc_configs=prev_alloc_configs,
+            allowed_configs_by_sub_type=allowed,
             quota_tracker=quota_tracker,
-            academic_year=academic_year,
+            own_config_id=own_config_id,
         )
 
         assert len(results) == 2
         # First student gets nstc (rank 1)
-        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_year": 114}
+        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_config_id": 115}
         # Second student gets nothing (quota exhausted for both sub-types in college A)
-        assert results[1] == {"ranking_item_id": 102, "sub_type_code": None, "allocation_year": None}
+        assert results[1] == {"ranking_item_id": 102, "sub_type_code": None, "allocation_config_id": None}
 
 
-class TestRenewalWithPriorYearNotConfigured:
-    """Bonus test: Renewal targets prior year not in prior_years_map, should try current year."""
+class TestRenewalWithPriorConfigNotLinked:
+    """Bonus test: Renewal targets prior config not in allowed, should fall back to own config."""
 
-    def test_renewal_with_prior_year_not_in_config_uses_current(self, _compute_suggestions):
+    def test_renewal_with_prior_config_not_in_allowed_uses_own(self, _compute_suggestions):
         """
-        Renewal student's prev alloc year is 112, but prior_years_map only has 113.
-        Should try current year (114) as fallback.
+        Renewal student's prev alloc config is 112, but allowed only has [115].
+        Should try own config (115) as fallback.
         """
-        academic_year = 114
+        own_config_id = 115
         default_prefs = ["nstc"]
-        prior_years_map = {"nstc": [113]}  # Only 113, not 112
+        # 112 is NOT linked — only own config (115) is allowed
+        allowed = {"nstc": [115]}
         quota_tracker = _build_quota_tracker(
             {
-                ("nstc", 114, "A"): 3,  # Current year available
-                ("nstc", 113, "A"): 2,  # 113 available but not target
+                (115, "nstc", "A"): 3,  # Own config available
             }
         )
-        prev_alloc_years = {99: 112}  # Previous year was 112
+        prev_alloc_configs = {99: 112}  # Previous config was 112
 
         renewal_app = _make_app(1, college="A", is_renewal=True, prev_app_id=99)
         item = _make_item(101, rank_position=1, app=renewal_app)
@@ -478,30 +492,30 @@ class TestRenewalWithPriorYearNotConfigured:
         results = _compute_suggestions(
             unique_items=[item],
             default_prefs=default_prefs,
-            prev_alloc_years=prev_alloc_years,
-            prior_years_map=prior_years_map,
+            prev_alloc_configs=prev_alloc_configs,
+            allowed_configs_by_sub_type=allowed,
             quota_tracker=quota_tracker,
-            academic_year=academic_year,
+            own_config_id=own_config_id,
         )
 
         assert len(results) == 1
-        # Since 112 not in prior_years_map for nstc, falls back to current year
-        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_year": 114}
+        # Since 112 not in allowed for nstc, falls back to own config (115)
+        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_config_id": 115}
 
 
 class TestNoDedupInComputeSuggestions:
     """Verify _compute_suggestions does not re-deduplicate (caller's responsibility)."""
 
     def test_both_items_get_suggestions(self, _compute_suggestions):
-        academic_year = 114
+        own_config_id = 115
         default_prefs = ["nstc"]
-        prior_years_map = {"nstc": [113]}
+        allowed = {"nstc": [115]}
         quota_tracker = _build_quota_tracker(
             {
-                ("nstc", 114, "A"): 5,
+                (115, "nstc", "A"): 5,
             }
         )
-        prev_alloc_years: dict[int, int] = {}
+        prev_alloc_configs: dict[int, int] = {}
 
         app = _make_app(1, college="A")
         # Same application appears twice (from different rankings)
@@ -511,10 +525,10 @@ class TestNoDedupInComputeSuggestions:
         results = _compute_suggestions(
             unique_items=[item1, item2],  # Pre-deduplicated list passed in
             default_prefs=default_prefs,
-            prev_alloc_years=prev_alloc_years,
-            prior_years_map=prior_years_map,
+            prev_alloc_configs=prev_alloc_configs,
+            allowed_configs_by_sub_type=allowed,
             quota_tracker=quota_tracker,
-            academic_year=academic_year,
+            own_config_id=own_config_id,
         )
 
         # Both items passed in; _compute_suggestions does not re-deduplicate
@@ -530,27 +544,27 @@ class TestEmptyItemsList:
         results = _compute_suggestions(
             unique_items=[],
             default_prefs=["nstc"],
-            prev_alloc_years={},
-            prior_years_map={},
+            prev_alloc_configs={},
+            allowed_configs_by_sub_type={},
             quota_tracker={},
-            academic_year=114,
+            own_config_id=115,
         )
         assert results == []
 
 
 class TestRenewalWithNoPreviousApplicationId:
-    """Renewal student with no previous_application_id uses current year."""
+    """Renewal student with no previous_application_id uses own config."""
 
-    def test_renewal_no_prev_app_id_uses_current_year(self, _compute_suggestions):
-        academic_year = 114
+    def test_renewal_no_prev_app_id_uses_own_config(self, _compute_suggestions):
+        own_config_id = 115
         default_prefs = ["nstc"]
-        prior_years_map = {"nstc": [113]}
+        allowed = {"nstc": [115]}
         quota_tracker = _build_quota_tracker(
             {
-                ("nstc", 114, "A"): 5,
+                (115, "nstc", "A"): 5,
             }
         )
-        prev_alloc_years: dict[int, int] = {}
+        prev_alloc_configs: dict[int, int] = {}
 
         # is_renewal=True but prev_app_id=None
         app = _make_app(1, college="A", is_renewal=True, prev_app_id=None)
@@ -559,30 +573,30 @@ class TestRenewalWithNoPreviousApplicationId:
         results = _compute_suggestions(
             unique_items=[item],
             default_prefs=default_prefs,
-            prev_alloc_years=prev_alloc_years,
-            prior_years_map=prior_years_map,
+            prev_alloc_configs=prev_alloc_configs,
+            allowed_configs_by_sub_type=allowed,
             quota_tracker=quota_tracker,
-            academic_year=academic_year,
+            own_config_id=own_config_id,
         )
 
         assert len(results) == 1
-        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_year": 114}
+        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_config_id": 115}
 
 
 class TestUnknownCollegeGetsNoAllocation:
     """Student from college not in quota tracker gets null allocation."""
 
     def test_unknown_college_no_allocation(self, _compute_suggestions):
-        academic_year = 114
+        own_config_id = 115
         default_prefs = ["nstc"]
-        prior_years_map = {}
+        allowed = {"nstc": [115]}
         # Only college A has quota
         quota_tracker = _build_quota_tracker(
             {
-                ("nstc", 114, "A"): 5,
+                (115, "nstc", "A"): 5,
             }
         )
-        prev_alloc_years: dict[int, int] = {}
+        prev_alloc_configs: dict[int, int] = {}
 
         app = _make_app(1, college="B")  # College B not in tracker
         item = _make_item(101, rank_position=1, app=app)
@@ -590,14 +604,14 @@ class TestUnknownCollegeGetsNoAllocation:
         results = _compute_suggestions(
             unique_items=[item],
             default_prefs=default_prefs,
-            prev_alloc_years=prev_alloc_years,
-            prior_years_map=prior_years_map,
+            prev_alloc_configs=prev_alloc_configs,
+            allowed_configs_by_sub_type=allowed,
             quota_tracker=quota_tracker,
-            academic_year=academic_year,
+            own_config_id=own_config_id,
         )
 
         assert len(results) == 1
-        assert results[0] == {"ranking_item_id": 101, "sub_type_code": None, "allocation_year": None}
+        assert results[0] == {"ranking_item_id": 101, "sub_type_code": None, "allocation_config_id": None}
 
 
 class TestPreferenceOrderRespected:
@@ -607,6 +621,7 @@ class TestPreferenceOrderRespected:
     def test_moe_preferred_over_nstc(self, _compute_suggestions):
         """Student applied for both nstc and moe_1w but prefers moe_1w.
         Should be allocated to moe_1w even though default_prefs has nstc first."""
+        own_config_id = 115
         app = _make_app(
             1,
             college="C",
@@ -618,23 +633,24 @@ class TestPreferenceOrderRespected:
         results = _compute_suggestions(
             unique_items=[item],
             default_prefs=["nstc", "moe_1w"],  # System default: nstc first
-            prev_alloc_years={},
-            prior_years_map={},
+            prev_alloc_configs={},
+            allowed_configs_by_sub_type={"nstc": [115], "moe_1w": [115]},
             quota_tracker={
-                ("nstc", 114, "C"): 5,
-                ("moe_1w", 114, "C"): 5,
+                (115, "nstc", "C"): 5,
+                (115, "moe_1w", "C"): 5,
             },
-            academic_year=114,
+            own_config_id=own_config_id,
         )
 
         assert len(results) == 1
         assert results[0]["sub_type_code"] == "moe_1w"
-        assert results[0]["allocation_year"] == 114
+        assert results[0]["allocation_config_id"] == 115
 
     def test_no_preferences_uses_subtype_list_order(self, _compute_suggestions):
         """Student has no sub_type_preferences but scholarship_subtype_list
         is ['moe_1w', 'nstc']. Should use subtype_list order as fallback,
         not default_prefs."""
+        own_config_id = 115
         app = _make_app(
             1,
             college="C",
@@ -646,13 +662,13 @@ class TestPreferenceOrderRespected:
         results = _compute_suggestions(
             unique_items=[item],
             default_prefs=["nstc", "moe_1w"],
-            prev_alloc_years={},
-            prior_years_map={},
+            prev_alloc_configs={},
+            allowed_configs_by_sub_type={"nstc": [115], "moe_1w": [115]},
             quota_tracker={
-                ("nstc", 114, "C"): 5,
-                ("moe_1w", 114, "C"): 5,
+                (115, "nstc", "C"): 5,
+                (115, "moe_1w", "C"): 5,
             },
-            academic_year=114,
+            own_config_id=own_config_id,
         )
 
         assert len(results) == 1
@@ -660,6 +676,7 @@ class TestPreferenceOrderRespected:
 
     def test_only_moe_applied_not_allocated_to_nstc(self, _compute_suggestions):
         """Student only applied for moe_1w. Must NOT be allocated to nstc."""
+        own_config_id = 115
         app = _make_app(
             1,
             college="C",
@@ -671,13 +688,13 @@ class TestPreferenceOrderRespected:
         results = _compute_suggestions(
             unique_items=[item],
             default_prefs=["nstc", "moe_1w"],
-            prev_alloc_years={},
-            prior_years_map={},
+            prev_alloc_configs={},
+            allowed_configs_by_sub_type={"nstc": [115], "moe_1w": [115]},
             quota_tracker={
-                ("nstc", 114, "C"): 5,
-                ("moe_1w", 114, "C"): 5,
+                (115, "nstc", "C"): 5,
+                (115, "moe_1w", "C"): 5,
             },
-            academic_year=114,
+            own_config_id=own_config_id,
         )
 
         assert len(results) == 1

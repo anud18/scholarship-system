@@ -1,14 +1,18 @@
 """Integration test for Phase 6: challenge release + waitlist fill-in.
 
-Mirrors the spec Section 9.3 scenario:
+Mirrors the spec Section 9.3 scenario (updated for shared_quota_sources + allocation_config_id):
 
 Scholarship configuration::
 
-    quotas = {"nstc": {"114": 8, "113": 0}, "moe_1w": {"114": 6}}
+    current config (phase6-config) nstc=8/moe_1w=6; prior sibling phase6-config-113 nstc=1,
+    linked via shared_quota_sources.  has_college_quota = True.
+    pool_total("nstc") = 8 (own) + 1 (linked, 0 remaining) = 8 available for first-round.
 
   - 1 renewal application for student A: is_renewal=True,
-    sub_scholarship_type=nstc, renewal_year=113, academic_year=114,
-    status=approved. (Approved renewal occupies the only nstc[113] slot.)
+    sub_scholarship_type=nstc, status=approved,
+    allocation_config_id=prior_config.id  ← consumes the single phase6-config-113 nstc slot.
+    remaining(prior_config, nstc) = 0 before first-round.
+    remaining(config, nstc)      = 8 before first-round.
   - 1 challenge application from A: is_renewal=False,
     challenges_application_id=renewal_A.id, sub_scholarship_type=moe_1w,
     academic_year=114, status=under_review. Ranked #1 in moe_1w.
@@ -20,8 +24,10 @@ After ``execute_general_distribution``:
   - challenge_A.status == approved
   - renewal_A.status == cancelled_by_challenge
   - renewal_A.cancelled_due_to_application_id == challenge_A.id
-  - nstc rank #9 (the first pure-new waitlist candidate) is approved,
-    with allocation_year = 113 (the slot freed by A's cancelled renewal).
+  - nstc ranks 1..8 approved in first round (config has 8 own slots, prior_config has 0).
+  - nstc rank #9 filled in from waitlist after renewal_A's prior-config slot is freed.
+    CollegeRankingItem.allocation_config_id = prior_config.id (freed slot from sibling).
+  - nstc rank #10 still under_review.
 """
 
 import pytest
@@ -65,6 +71,7 @@ def _make_application(
     is_renewal: bool = False,
     renewal_year: int | None = None,
     challenges_application_id: int | None = None,
+    allocation_config_id: int | None = None,
     academic_year: int = CURRENT_ACADEMIC_YEAR,
 ) -> Application:
     return Application(
@@ -81,6 +88,7 @@ def _make_application(
         is_renewal=is_renewal,
         renewal_year=renewal_year,
         challenges_application_id=challenges_application_id,
+        allocation_config_id=allocation_config_id,
         agree_terms=True,
     )
 
@@ -156,6 +164,24 @@ async def test_challenge_success_releases_renewal_and_fills_waitlist(
     await db.commit()
     await db.refresh(sch)
 
+    # Prior-year sibling config: holds the single nstc slot that renewal_A consumes.
+    prior_config = ScholarshipConfiguration(
+        scholarship_type_id=sch.id,
+        academic_year=RENEWAL_YEAR,
+        semester=None,
+        config_name="Phase 6 Prior Config",
+        config_code="phase6-config-113",
+        amount=30000,
+        currency="TWD",
+        is_active=True,
+        has_college_quota=True,
+        quotas={"nstc": {"EE": 1}},  # one nstc slot in 113, consumed by A's renewal
+    )
+    db.add(prior_config)
+    await db.commit()
+    await db.refresh(prior_config)
+
+    # Current config links the prior sibling for nstc cross-year borrowing.
     config = ScholarshipConfiguration(
         scholarship_type_id=sch.id,
         academic_year=CURRENT_ACADEMIC_YEAR,
@@ -165,11 +191,13 @@ async def test_challenge_success_releases_renewal_and_fills_waitlist(
         amount=30000,
         currency="TWD",
         is_active=True,
-        quotas={"nstc": {"114": 8, "113": 0}, "moe_1w": {"114": 6}},
-        prior_quota_years={"nstc": [113], "moe_1w": []},
+        has_college_quota=True,
+        quotas={"nstc": {"EE": 8}, "moe_1w": {"EE": 6}},
+        shared_quota_sources=[{"source_config_code": "phase6-config-113", "sub_types": ["nstc"]}],
     )
     db.add(config)
     await db.commit()
+    await db.refresh(config)
 
     # ------------------------------------------------------------------- #
     # Users
@@ -188,7 +216,7 @@ async def test_challenge_success_releases_renewal_and_fills_waitlist(
         await db.refresh(u)
 
     # ------------------------------------------------------------------- #
-    # A's renewal (already approved, occupies nstc[113] slot)
+    # A's renewal (already approved, consumes the single prior_config nstc slot)
     # ------------------------------------------------------------------- #
     renewal_A = _make_application(
         user_id=user_A.id,
@@ -199,6 +227,7 @@ async def test_challenge_success_releases_renewal_and_fills_waitlist(
         review_stage=ReviewStage.quota_distributed,
         is_renewal=True,
         renewal_year=RENEWAL_YEAR,
+        allocation_config_id=prior_config.id,
     )
     db.add(renewal_A)
     await db.commit()
@@ -292,10 +321,10 @@ async def test_challenge_success_releases_renewal_and_fills_waitlist(
     # ------------------------------------------------------------------- #
     # Assert — summary stats
     # ------------------------------------------------------------------- #
-    assert result["approved_renewals"] == 1
+    # approved_renewals key is removed; only approved_challenges remains.
     assert result["approved_challenges"] == 1
-    # released: A's renewal freed up (nstc, 113) ×1
-    assert result["released_slots"] == {("nstc", RENEWAL_YEAR): 1}
+    # released: A's renewal freed up the prior config's nstc slot ×1
+    assert result["released_slots"] == {f"nstc:{prior_config.id}": 1}
     assert result["filled_in"] == 1
     assert result["unfilled"] == 0
 
@@ -314,7 +343,7 @@ async def test_challenge_success_releases_renewal_and_fills_waitlist(
     assert renewal_A.cancelled_due_to_application_id == challenge_A.id
 
     # ------------------------------------------------------------------- #
-    # Assert — first-round nstc winners are ranks 1..8, approved on nstc[114]
+    # Assert — first-round nstc winners are ranks 1..8 (own config has 8 slots)
     # ------------------------------------------------------------------- #
     for idx in range(8):
         await db.refresh(nstc_apps[idx])
@@ -322,20 +351,21 @@ async def test_challenge_success_releases_renewal_and_fills_waitlist(
             nstc_apps[idx].status == ApplicationStatus.approved
         ), f"nstc rank {idx + 1} should be approved (first-round winner)"
 
-    # Rank #9 (index 8) was filled-in from waitlist on the freed nstc[113] slot.
+    # Rank #9 (index 8) was filled-in from waitlist on the freed prior_config slot.
     await db.refresh(nstc_apps[8])
     assert (
         nstc_apps[8].status == ApplicationStatus.approved
     ), "nstc rank #9 should be promoted from waitlist after challenge release"
 
-    # Verify rank #9's CollegeRankingItem.allocation_year was set to 113
+    # Verify rank #9's CollegeRankingItem.allocation_config_id points at the
+    # prior config whose slot was freed by A's cancelled renewal.
     rank9_item = (
         (await db.execute(select(CollegeRankingItem).where(CollegeRankingItem.application_id == nstc_apps[8].id)))
         .scalars()
         .first()
     )
     assert rank9_item is not None
-    assert rank9_item.allocation_year == RENEWAL_YEAR
+    assert rank9_item.allocation_config_id == prior_config.id
 
     # Rank #10 should still be under_review (no more slots to fill)
     await db.refresh(nstc_apps[9])

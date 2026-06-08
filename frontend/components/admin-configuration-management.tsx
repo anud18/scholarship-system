@@ -169,6 +169,97 @@ interface AdminConfigurationManagementProps {
   ) => void;
 }
 
+function SharedQuotaSourcesPicker({
+  value,
+  onChange,
+  subTypes,
+  candidateConfigs,
+}: {
+  value: { source_config_code: string; sub_types: string[] }[];
+  onChange: (next: { source_config_code: string; sub_types: string[] }[]) => void;
+  subTypes: string[];
+  candidateConfigs: { config_code: string; academic_year: number }[];
+}) {
+  const entryFor = (code: string) =>
+    value.find(e => e.source_config_code === code);
+
+  const toggleConfig = (code: string, on: boolean) => {
+    if (on) {
+      onChange([...value, { source_config_code: code, sub_types: [] }]);
+    } else {
+      onChange(value.filter(e => e.source_config_code !== code));
+    }
+  };
+
+  const toggleSubType = (code: string, st: string, on: boolean) => {
+    onChange(
+      value.map(e => {
+        if (e.source_config_code !== code) return e;
+        const sub_types = on
+          ? [...e.sub_types, st]
+          : e.sub_types.filter(s => s !== st);
+        return { ...e, sub_types };
+      })
+    );
+  };
+
+  return (
+    <div>
+      <Label>共用前年度配額來源</Label>
+      <p className="mt-1 mb-2 text-sm text-muted-foreground">
+        勾選要借用剩餘名額的前年度配置（依代碼），並選擇可借用的子類型。
+      </p>
+      {candidateConfigs.length === 0 ? (
+        <p className="text-xs text-muted-foreground">無可借用的前年度配置</p>
+      ) : (
+        <div className="space-y-2">
+          {candidateConfigs.map(c => {
+            const entry = entryFor(c.config_code);
+            const checked = !!entry;
+            return (
+              <div key={c.config_code} className="border rounded-lg p-2">
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={e => toggleConfig(c.config_code, e.target.checked)}
+                  />
+                  {c.config_code}（{c.academic_year} 學年）
+                </label>
+                {checked && (
+                  <div className="mt-2 flex flex-wrap gap-3 pl-6">
+                    {subTypes.length === 0 ? (
+                      <span className="text-xs text-muted-foreground">
+                        請先設定本配置的配額子類型
+                      </span>
+                    ) : (
+                      subTypes.map(st => (
+                        <label
+                          key={st}
+                          className="flex items-center gap-1 text-xs"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={entry?.sub_types.includes(st) ?? false}
+                            onChange={e =>
+                              toggleSubType(c.config_code, st, e.target.checked)
+                            }
+                          />
+                          {st}
+                        </label>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AdminConfigurationManagement({
   scholarshipTypes,
   onScholarshipTypeUpdate,
@@ -211,6 +302,14 @@ export function AdminConfigurationManagement({
   const currentYear = new Date().getFullYear();
   const taiwanYear = currentYear - 1911;
   const academicYears = Array.from({ length: 5 }, (_, i) => taiwanYear - 2 + i);
+
+  // Prior-year configs eligible to borrow shared quota from (own-year excluded).
+  // Shared by the create + edit dialogs' SharedQuotaSourcesPicker.
+  const sharedQuotaCandidateConfigs = configurations.filter(
+    c =>
+      c.academic_year < (formData.academic_year ?? 0) &&
+      c.config_code !== formData.config_code
+  );
 
   // Load academy codes from database
   useEffect(() => {
@@ -505,6 +604,8 @@ export function AdminConfigurationManagement({
       quota_management_mode: "none",
       total_quota: 0,
       quotas: {},
+      project_numbers: {},
+      shared_quota_sources: [],
       whitelist_student_ids: {},
     });
     setShowCreateDialog(true);
@@ -533,6 +634,9 @@ export function AdminConfigurationManagement({
   const openEditDialog = (config: ScholarshipConfiguration) => {
     setSelectedConfig(config);
     setFormData({
+      // academic_year is the reference year the shared-quota picker filters
+      // prior-year candidates against; without it the picker is always empty.
+      academic_year: config.academic_year,
       config_name: config.config_name,
       config_code: config.config_code,
       description: config.description || "",
@@ -544,7 +648,8 @@ export function AdminConfigurationManagement({
       quota_management_mode: config.quota_management_mode || "none",
       total_quota: config.total_quota,
       quotas: config.quotas,
-      prior_quota_years: config.prior_quota_years || {},
+      project_numbers: config.project_numbers || {},
+      shared_quota_sources: config.shared_quota_sources || [],
       whitelist_student_ids: config.whitelist_student_ids,
       renewal_application_start_date: formatDateTimeLocal(
         config.renewal_application_start_date
@@ -1366,43 +1471,41 @@ export function AdminConfigurationManagement({
                     </div>
                   )}
 
-                {/* Display prior_quota_years if exists */}
-                {selectedConfig?.prior_quota_years &&
-                  Object.keys(selectedConfig.prior_quota_years).length > 0 && (
+                {/* Display shared_quota_sources if exists */}
+                {Array.isArray(selectedConfig?.shared_quota_sources) &&
+                  selectedConfig.shared_quota_sources.length > 0 && (
                     <div className="mt-4">
                       <h4 className="text-sm font-medium mb-2">
-                        可使用前年度配額
+                        共用前年度配額來源
                       </h4>
                       <div className="space-y-2">
-                        {Object.entries(selectedConfig.prior_quota_years).map(
-                          ([subType, years]: [string, unknown]) => (
-                            <div
-                              key={subType}
-                              className="flex items-center gap-2 text-sm"
-                            >
-                              <span className="font-medium min-w-[80px]">
-                                {subType}
+                        {selectedConfig.shared_quota_sources.map(source => (
+                          <div
+                            key={source.source_config_code}
+                            className="flex items-center gap-2 text-sm"
+                          >
+                            <span className="font-medium min-w-[80px]">
+                              {source.source_config_code}
+                            </span>
+                            {source.sub_types.length > 0 ? (
+                              <div className="flex gap-1 flex-wrap">
+                                {source.sub_types.map(st => (
+                                  <Badge
+                                    key={st}
+                                    variant="secondary"
+                                    className="text-xs"
+                                  >
+                                    {st}
+                                  </Badge>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                未指定子類型
                               </span>
-                              {Array.isArray(years) && years.length > 0 ? (
-                                <div className="flex gap-1">
-                                  {years.map((y: number) => (
-                                    <Badge
-                                      key={y}
-                                      variant="secondary"
-                                      className="text-xs"
-                                    >
-                                      {y} 學年
-                                    </Badge>
-                                  ))}
-                                </div>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">
-                                  僅限當年度
-                                </span>
-                              )}
-                            </div>
-                          )
-                        )}
+                            )}
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
@@ -1769,22 +1872,33 @@ export function AdminConfigurationManagement({
                 )}
 
                 {formData.quota_management_mode === "matrix_based" && (
+                  <SharedQuotaSourcesPicker
+                    value={
+                      Array.isArray(formData.shared_quota_sources)
+                        ? formData.shared_quota_sources
+                        : []
+                    }
+                    onChange={next =>
+                      setFormData(prev => ({ ...prev, shared_quota_sources: next }))
+                    }
+                    subTypes={Object.keys(
+                      (typeof formData.quotas === "object" && formData.quotas) || {}
+                    )}
+                    candidateConfigs={sharedQuotaCandidateConfigs}
+                  />
+                )}
+
+                {formData.quota_management_mode === "matrix_based" && (
                   <div>
-                    <Label>前年度配額設定 (JSON 格式)</Label>
-                    <div className="mt-1 mb-2 text-sm text-muted-foreground">
-                      <p>
-                        設定各子類型可使用的前年度配額，格式：
-                        {`{"nstc": [113, 112], "moe_1w": []}`}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        空陣列 [] 表示僅限當年度配額
-                      </p>
-                    </div>
+                    <Label>計畫編號 (JSON 格式)</Label>
+                    <p className="mt-1 mb-2 text-sm text-muted-foreground">
+                      每個子類型一組計畫編號，格式：{`{"nstc": "114R000001"}`}
+                    </p>
                     <Textarea
                       value={
-                        typeof formData.prior_quota_years === "object"
-                          ? JSON.stringify(formData.prior_quota_years, null, 2)
-                          : formData.prior_quota_years || ""
+                        typeof formData.project_numbers === "object"
+                          ? JSON.stringify(formData.project_numbers, null, 2)
+                          : formData.project_numbers || ""
                       }
                       onChange={e => {
                         try {
@@ -1793,17 +1907,17 @@ export function AdminConfigurationManagement({
                             : {};
                           setFormData(prev => ({
                             ...prev,
-                            prior_quota_years: parsed,
+                            project_numbers: parsed,
                           }));
                         } catch {
                           setFormData(prev => ({
                             ...prev,
-                            prior_quota_years: e.target.value,
+                            project_numbers: e.target.value,
                           }));
                         }
                       }}
-                      placeholder='{"nstc": [113], "moe_1w": []}'
-                      className="min-h-[80px] font-mono text-sm"
+                      placeholder='{"nstc": "114R000001"}'
+                      className="min-h-[60px] font-mono text-sm"
                     />
                   </div>
                 )}
@@ -2244,22 +2358,33 @@ export function AdminConfigurationManagement({
                 )}
 
                 {formData.quota_management_mode === "matrix_based" && (
+                  <SharedQuotaSourcesPicker
+                    value={
+                      Array.isArray(formData.shared_quota_sources)
+                        ? formData.shared_quota_sources
+                        : []
+                    }
+                    onChange={next =>
+                      setFormData(prev => ({ ...prev, shared_quota_sources: next }))
+                    }
+                    subTypes={Object.keys(
+                      (typeof formData.quotas === "object" && formData.quotas) || {}
+                    )}
+                    candidateConfigs={sharedQuotaCandidateConfigs}
+                  />
+                )}
+
+                {formData.quota_management_mode === "matrix_based" && (
                   <div>
-                    <Label>前年度配額設定 (JSON 格式)</Label>
-                    <div className="mt-1 mb-2 text-sm text-muted-foreground">
-                      <p>
-                        設定各子類型可使用的前年度配額，格式：
-                        {`{"nstc": [113, 112], "moe_1w": []}`}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        空陣列 [] 表示僅限當年度配額
-                      </p>
-                    </div>
+                    <Label>計畫編號 (JSON 格式)</Label>
+                    <p className="mt-1 mb-2 text-sm text-muted-foreground">
+                      每個子類型一組計畫編號，格式：{`{"nstc": "114R000001"}`}
+                    </p>
                     <Textarea
                       value={
-                        typeof formData.prior_quota_years === "object"
-                          ? JSON.stringify(formData.prior_quota_years, null, 2)
-                          : formData.prior_quota_years || ""
+                        typeof formData.project_numbers === "object"
+                          ? JSON.stringify(formData.project_numbers, null, 2)
+                          : formData.project_numbers || ""
                       }
                       onChange={e => {
                         try {
@@ -2268,17 +2393,17 @@ export function AdminConfigurationManagement({
                             : {};
                           setFormData(prev => ({
                             ...prev,
-                            prior_quota_years: parsed,
+                            project_numbers: parsed,
                           }));
                         } catch {
                           setFormData(prev => ({
                             ...prev,
-                            prior_quota_years: e.target.value,
+                            project_numbers: e.target.value,
                           }));
                         }
                       }}
-                      placeholder='{"nstc": [113], "moe_1w": []}'
-                      className="min-h-[80px] font-mono text-sm"
+                      placeholder='{"nstc": "114R000001"}'
+                      className="min-h-[60px] font-mono text-sm"
                     />
                   </div>
                 )}

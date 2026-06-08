@@ -122,6 +122,7 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
                     "K": 1,
                 },
             },
+            "project_numbers": {"nstc": "112R000001"},
             "amount": 40000,
             "currency": "TWD",
             "is_active": False,
@@ -159,6 +160,7 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
                     "K": 1,
                 },
             },
+            "project_numbers": {"nstc": "113R000001"},
             "amount": 40000,
             "currency": "TWD",
             "is_active": False,
@@ -211,16 +213,13 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
                     "K": 1,
                 },
             },
-            "prior_quota_years": {"nstc": [113, 112], "moe_1w": []},
+            "shared_quota_sources": [
+                {"source_config_code": "phd_113", "sub_types": ["nstc"]},
+                {"source_config_code": "phd_112", "sub_types": ["nstc"]},
+            ],
             "project_numbers": {
-                "nstc": {
-                    "114": "114R000001",
-                    "113": "113R000001",
-                    "112": "112R000001",
-                },
-                "moe_1w": {
-                    "114": "114E000001",
-                },
+                "nstc": "114R000001",
+                "moe_1w": "114E000001",
             },
             "amount": 40000,
             "currency": "TWD",
@@ -286,10 +285,13 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             session.add(config)
             logger.info(f"Created configuration: {config_data['config_code']}")
         else:
-            # Update prior_quota_years on existing configs if provided in seed data
-            if "prior_quota_years" in config_data and existing.prior_quota_years != config_data["prior_quota_years"]:
-                existing.prior_quota_years = config_data["prior_quota_years"]
-                logger.info(f"Updated prior_quota_years for: {config_data['config_code']}")
+            # Update shared_quota_sources on existing configs if provided in seed data
+            if (
+                "shared_quota_sources" in config_data
+                and existing.shared_quota_sources != config_data["shared_quota_sources"]
+            ):
+                existing.shared_quota_sources = config_data["shared_quota_sources"]
+                logger.info(f"Updated shared_quota_sources for: {config_data['config_code']}")
             # Update project_numbers on existing configs if provided in seed data
             if "project_numbers" in config_data and existing.project_numbers != config_data["project_numbers"]:
                 existing.project_numbers = config_data["project_numbers"]

@@ -16,7 +16,8 @@ export interface DistributionStudent {
   applied_sub_types: string[];
   rejected_sub_types: string[];
   allocated_sub_type: string | null;
-  allocation_year: number | null;
+  /** Config whose quota this student's slot consumes. Seed the checked column from (allocated_sub_type, allocation_config_id). */
+  allocation_config_id: number | null;
   /** Live funding flag. Cancel (revoke/suspend) sets this false to free the quota slot; restore sets it true. Seed the 核配 checkbox from this, NOT from allocated_sub_type (preserved across cancel). */
   is_allocated: boolean;
   status: string;
@@ -48,7 +49,12 @@ export interface CollegeQuota {
   remaining: number;
 }
 
-export interface YearQuota {
+/** Quota for one distributable config (own or linked source) under a sub_type. */
+export interface ConfigQuota {
+  config_id: number;
+  config_code: string;
+  academic_year: number;
+  is_own: boolean;
   total: number;
   allocated: number;
   remaining: number;
@@ -57,32 +63,36 @@ export interface YearQuota {
 
 export interface SubTypeQuotaStatus {
   display_name: string;
-  /** Multi-year quota data: year string → quota info */
-  by_year: Record<string, YearQuota>;
+  /** Distributable configs for this sub_type, keyed by config_id string. */
+  by_config: Record<string, ConfigQuota>;
 }
 
 export type QuotaStatus = Record<string, SubTypeQuotaStatus>;
 
-/** A flattened (sub_type × year) column descriptor for the distribution table */
-export interface SubTypeYearCol {
+/** A flattened (sub_type × source-config) column descriptor for the distribution table */
+export interface SubTypeConfigCol {
   sub_type: string;
-  year: number;
-  display_name: string; // e.g., "114年 國科會博士生獎學金"
+  config_id: number;
+  config_code: string;
+  academic_year: number;
+  is_own: boolean;
+  display_name: string; // e.g., "國科會 · phd_114"
   total: number;
-  remaining: number; // based on DB-confirmed allocations
-  key: string; // composite key: "nstc:114"
+  remaining: number; // live: pool_total − consumers, from /quota-status
+  key: string; // composite key: "nstc:42" (sub_type:config_id)
 }
 
 export interface AllocationItem {
   ranking_item_id: number;
   sub_type_code: string | null;
-  allocation_year: number | null;
+  /** The config whose quota this slot consumes (own config or a linked source). Null only for the whole-period sentinel. */
+  allocation_config_id: number | null;
 }
 
 export interface AllocationSuggestion {
   ranking_item_id: number;
   sub_type_code: string | null;
-  allocation_year: number | null;
+  allocation_config_id: number | null;
 }
 
 export interface AllocateRequest {
@@ -129,7 +139,10 @@ export interface RosterSummary {
   id: number;
   roster_code: string;
   sub_type: string;
-  allocation_year: number;
+  /** Consumed config id (pool key for this roster). */
+  allocation_config_id: number | null;
+  /** Frozen display snapshot = consumed config's academic_year. */
+  allocation_year: number | null;
   project_number: string | null;
   period_label: string;
   status: string;
@@ -166,7 +179,9 @@ export interface DistributionSummaryStudent {
 
 export interface DistributionSummaryGroup {
   sub_type: string;
-  allocation_year: number;
+  allocation_config_id: number | null;
+  /** Consumed config's academic_year, for the "XXX 年度" group label. */
+  allocation_year: number | null;
   count: number;
   students: DistributionSummaryStudent[];
 }
@@ -210,10 +225,13 @@ export interface DistributionStateRenewalGroup {
   applications: DistributionStateRenewalApp[];
 }
 
-/** Available pool per (sub_type, allocation_year): total / used / remaining. */
+/** Available pool per (sub_type, config): total / used / remaining. */
 export interface DistributionStateAvailableQuota {
   sub_type: string;
-  allocation_year: number;
+  config_id: number;
+  config_code: string;
+  academic_year: number;
+  is_own: boolean;
   total: number;
   used: number;
   remaining: number;
@@ -252,7 +270,7 @@ export interface ReleaseChainItem {
   /** The slot that would be freed. */
   freed_slot: {
     sub_type: string | null;
-    allocation_year: number | null;
+    allocation_config_id: number | null;
   };
   /** Suggested waitlist candidate (pure-new) to fill the freed slot. */
   suggested_fill_id: number | null;

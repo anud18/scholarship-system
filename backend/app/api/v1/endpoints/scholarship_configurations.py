@@ -40,6 +40,55 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+async def _validate_shared_quota_sources(
+    db: AsyncSession,
+    shared_quota_sources: Optional[List[Dict[str, Any]]],
+    requesting_academic_year: int,
+) -> None:
+    """Imperative link validation (spec §10 — no DB FK on source_config_code).
+
+    Each entry's source_config_code must resolve to an existing config with
+    academic_year strictly less than the requesting config's, and every listed
+    sub_type must be defined in that source config's quotas matrix. Fail-fast
+    with HTTP 400 so a dangling link never reaches the distribution pool reader.
+    """
+    if not shared_quota_sources:
+        return
+
+    for entry in shared_quota_sources:
+        source_code = entry.get("source_config_code")
+        sub_types = entry.get("sub_types") or []
+        if not source_code:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="共享配額來源缺少 source_config_code",
+            )
+
+        source_stmt = select(ScholarshipConfiguration).where(ScholarshipConfiguration.config_code == source_code)
+        source_result = await db.execute(source_stmt)
+        source_config = source_result.scalar_one_or_none()
+
+        if source_config is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"共享配額來源配置不存在: {source_code}",
+            )
+
+        if source_config.academic_year >= requesting_academic_year:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"共享配額來源 {source_code} 的學年度必須早於本配置",
+            )
+
+        defined_sub_types = set((source_config.quotas or {}).keys())
+        for st in sub_types:
+            if st not in defined_sub_types:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"共享配額來源 {source_code} 未定義子類型: {st}",
+                )
+
+
 # Utility functions
 def taiwan_to_western_year(taiwan_year: int) -> int:
     """Convert Taiwan calendar year (民國年) to Western calendar year"""
@@ -751,6 +800,13 @@ async def create_scholarship_configuration(
         if existing_config:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="此學年度/學期已存在配置")
 
+        # Validate cross-config borrow links before persisting (spec §10).
+        await _validate_shared_quota_sources(
+            db,
+            config_data.get("shared_quota_sources"),
+            requesting_academic_year=config_data["academic_year"],
+        )
+
         # Create new configuration
         from app.utils.date_utils import parse_date_field
 
@@ -784,7 +840,8 @@ async def create_scholarship_configuration(
             effective_start_date=parse_date_field(config_data.get("effective_start_date")),
             effective_end_date=parse_date_field(config_data.get("effective_end_date")),
             version=config_data.get("version", "1.0"),
-            prior_quota_years=config_data.get("prior_quota_years"),
+            project_numbers=config_data.get("project_numbers"),
+            shared_quota_sources=config_data.get("shared_quota_sources"),
             created_by=current_user.id,
         )
 
@@ -860,7 +917,7 @@ async def get_scholarship_configuration(
             "total_quota": config.total_quota,
             "quotas": config.quotas,
             "project_numbers": config.project_numbers,
-            "prior_quota_years": config.prior_quota_years,
+            "shared_quota_sources": config.shared_quota_sources,
             "renewal_application_start_date": (
                 config.renewal_application_start_date.isoformat() if config.renewal_application_start_date else None
             ),
@@ -1032,18 +1089,17 @@ async def update_scholarship_configuration(
         if "quotas" in config_data:
             config.quotas = config_data["quotas"]
             flag_modified(config, "quotas")
-        if "prior_quota_years" in config_data:
-            pqy = config_data["prior_quota_years"]
-            # Frontend textarea may send as string; parse to dict
-            if isinstance(pqy, str):
-                import json as _json
-
-                try:
-                    pqy = _json.loads(pqy)
-                except (ValueError, TypeError):
-                    pqy = {}
-            config.prior_quota_years = pqy
-            flag_modified(config, "prior_quota_years")
+        if "project_numbers" in config_data:
+            config.project_numbers = config_data["project_numbers"]
+            flag_modified(config, "project_numbers")
+        if "shared_quota_sources" in config_data:
+            # Validate links against the config's (possibly updated) academic_year.
+            requesting_year = config_data.get("academic_year", config.academic_year)
+            await _validate_shared_quota_sources(
+                db, config_data["shared_quota_sources"], requesting_academic_year=requesting_year
+            )
+            config.shared_quota_sources = config_data["shared_quota_sources"]
+            flag_modified(config, "shared_quota_sources")
 
         config.updated_by = current_user.id
 
@@ -1218,6 +1274,15 @@ async def duplicate_scholarship_configuration(
             whitelist_student_ids=(
                 source_config.whitelist_student_ids.copy() if source_config.whitelist_student_ids else {}
             ),
+            has_quota_limit=source_config.has_quota_limit,
+            has_college_quota=source_config.has_college_quota,
+            quota_management_mode=source_config.quota_management_mode,
+            total_quota=source_config.total_quota,
+            quotas=(source_config.quotas.copy() if source_config.quotas else None),
+            project_numbers=(source_config.project_numbers.copy() if source_config.project_numbers else None),
+            shared_quota_sources=(
+                [dict(s) for s in source_config.shared_quota_sources] if source_config.shared_quota_sources else None
+            ),
             requires_professor_recommendation=source_config.requires_professor_recommendation,
             requires_college_review=source_config.requires_college_review,
             is_active=True,
@@ -1319,7 +1384,7 @@ async def list_scholarship_configurations(
                 "total_quota": config.total_quota,
                 "quotas": config.quotas,
                 "project_numbers": config.project_numbers,
-                "prior_quota_years": config.prior_quota_years,
+                "shared_quota_sources": config.shared_quota_sources,
                 "is_active": config.is_active,
                 "allow_supplementary_import": config.allow_supplementary_import,
                 "renewal_application_start_date": (

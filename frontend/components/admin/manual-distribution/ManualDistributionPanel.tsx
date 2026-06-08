@@ -12,7 +12,7 @@ import {
 import type {
   DistributionStudent,
   QuotaStatus,
-  SubTypeYearCol,
+  SubTypeConfigCol,
   DistributionHistoryRecord,
   RestoreRequest,
   DistributionSummaryResult,
@@ -72,18 +72,18 @@ interface ManualDistributionPanelProps {
   scholarshipType: { id: number; code: string; name: string };
 }
 
-/** Local allocation state for a student: which (sub_type, year) they're assigned to */
+/** Local allocation state for a student: which (sub_type, config) they're assigned to */
 interface LocalAlloc {
   sub_type: string;
-  year: number;
+  config_id: number;
 }
 
 const ALL_DEPTS_OWN = "__college_all__";
 const ALL_DEPTS_SYSTEM = "__all__";
 
-/** Composite key for a (sub_type, year) column: "nstc:114" */
-function makeColKey(sub_type: string, year: number) {
-  return `${sub_type}:${year}`;
+/** Composite key for a (sub_type, config) column: "nstc:42" */
+function makeColKey(sub_type: string, config_id: number) {
+  return `${sub_type}:${config_id}`;
 }
 
 /**
@@ -196,7 +196,7 @@ export function ManualDistributionPanel({
     rosters: Array<{
       roster_code: string;
       sub_type: string;
-      allocation_year: number;
+      allocation_year: number | null;
       project_number: string | null;
       qualified_count: number;
       total_amount: string;
@@ -217,44 +217,47 @@ export function ManualDistributionPanel({
   } | null>(null);
 
   /**
-   * Flatten quota status into (sub_type × year) columns, ordered by:
+   * Flatten quota status into (sub_type × source-config) columns, ordered by:
    * - sub_type (by appearance order in quotaStatus keys)
-   * - year descending (current year first, then prior years)
+   * - own config first, then linked sources by descending academic_year
    */
-  const subTypeCols = useMemo<SubTypeYearCol[]>(() => {
-    const cols: SubTypeYearCol[] = [];
+  const subTypeCols = useMemo<SubTypeConfigCol[]>(() => {
+    const cols: SubTypeConfigCol[] = [];
     for (const [sub_type, stData] of Object.entries(quotaStatus)) {
-      const years = Object.keys(stData.by_year)
-        .map(Number)
-        .sort((a, b) => b - a); // descending: 114, 113, 112
-      const isMultiYear = years.length > 1;
+      const configs = Object.values(stData.by_config).sort((a, b) => {
+        if (a.is_own !== b.is_own) return a.is_own ? -1 : 1; // own first
+        return b.academic_year - a.academic_year; // then descending year
+      });
+      const isMulti = configs.length > 1;
       const shortName = getSubTypeShortName(sub_type, stData.display_name);
-      for (const year of years) {
-        const yData = stData.by_year[String(year)];
-        if (!yData || yData.total <= 0) continue;
-        // Multi-year sub-types (e.g. nstc): prefix with year → "114 國科會", "113 國科會"
-        // Single-year sub-types (e.g. moe_1w): just the short name → "教育部+1"
-        const display_name = isMultiYear ? `${year} ${shortName}` : shortName;
+      for (const cData of configs) {
+        if (cData.total <= 0) continue;
+        // Multi-config sub-types (e.g. nstc borrowing): label with config code → "國科會 · phd_114"
+        // Single-config sub-types (e.g. moe_1w): just the short name → "教育部+1"
+        const display_name = isMulti ? `${shortName} · ${cData.config_code}` : shortName;
         cols.push({
           sub_type,
-          year,
+          config_id: cData.config_id,
+          config_code: cData.config_code,
+          academic_year: cData.academic_year,
+          is_own: cData.is_own,
           display_name,
-          total: yData.total,
-          remaining: yData.remaining,
-          key: makeColKey(sub_type, year),
+          total: cData.total,
+          remaining: cData.remaining,
+          key: makeColKey(sub_type, cData.config_id),
         });
       }
     }
     return cols;
   }, [quotaStatus]);
 
-  /** Count how many local allocations are using each (sub_type, year) slot */
+  /** Count how many local allocations are using each (sub_type, config) slot */
   const localAllocCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const col of subTypeCols) counts[col.key] = 0;
     for (const [, alloc] of localAllocations) {
       if (alloc) {
-        const k = makeColKey(alloc.sub_type, alloc.year);
+        const k = makeColKey(alloc.sub_type, alloc.config_id);
         counts[k] = (counts[k] ?? 0) + 1;
       }
     }
@@ -285,10 +288,10 @@ export function ManualDistributionPanel({
         setStudents(studentsResp.data);
         const allocMap = new Map<number, LocalAlloc | null>();
         for (const s of studentsResp.data) {
-          if (s.is_allocated && s.allocated_sub_type) {
+          if (s.is_allocated && s.allocated_sub_type && s.allocation_config_id != null) {
             allocMap.set(s.ranking_item_id, {
               sub_type: s.allocated_sub_type,
-              year: s.allocation_year ?? selectedAcademicYear!,
+              config_id: s.allocation_config_id,
             });
           } else {
             allocMap.set(s.ranking_item_id, null);
@@ -316,12 +319,12 @@ export function ManualDistributionPanel({
         for (const suggestion of previewSuggestions) {
           if (
             suggestion.sub_type_code &&
-            suggestion.allocation_year &&
+            suggestion.allocation_config_id != null &&
             !allocMap.get(suggestion.ranking_item_id)
           ) {
             allocMap.set(suggestion.ranking_item_id, {
               sub_type: suggestion.sub_type_code,
-              year: suggestion.allocation_year,
+              config_id: suggestion.allocation_config_id,
             });
             hasPreview = true;
           }
@@ -437,7 +440,7 @@ export function ManualDistributionPanel({
         .map(([ranking_item_id, alloc]) => ({
           ranking_item_id,
           sub_type_code: alloc?.sub_type ?? null,
-          allocation_year: alloc?.year ?? null,
+          allocation_config_id: alloc?.config_id ?? null,
         }));
       setIsLoadingPreview(true);
       try {
@@ -474,16 +477,16 @@ export function ManualDistributionPanel({
   const handleCheckbox = (
     rankingItemId: number,
     sub_type: string,
-    year: number
+    config_id: number
   ) => {
     setLocalAllocations(prev => {
       const next = new Map(prev);
       const cur = next.get(rankingItemId);
       // Radio-like: clicking active → uncheck; clicking other → set exclusively
-      if (cur?.sub_type === sub_type && cur?.year === year) {
+      if (cur?.sub_type === sub_type && cur?.config_id === config_id) {
         next.set(rankingItemId, null);
       } else {
-        next.set(rankingItemId, { sub_type, year });
+        next.set(rankingItemId, { sub_type, config_id });
       }
       return next;
     });
@@ -499,7 +502,7 @@ export function ManualDistributionPanel({
         ([ranking_item_id, alloc]) => ({
           ranking_item_id,
           sub_type_code: alloc?.sub_type ?? null,
-          allocation_year: alloc?.year ?? null,
+          allocation_config_id: alloc?.config_id ?? null,
         })
       );
       const resp = await apiClient.manualDistribution.allocate({
@@ -562,10 +565,10 @@ export function ManualDistributionPanel({
           setStudents(studentsResp.data);
           const initial = new Map<number, LocalAlloc | null>();
           for (const s of studentsResp.data) {
-            if (s.is_allocated && s.allocated_sub_type) {
+            if (s.is_allocated && s.allocated_sub_type && s.allocation_config_id != null) {
               initial.set(s.ranking_item_id, {
                 sub_type: s.allocated_sub_type,
-                year: s.allocation_year ?? selectedAcademicYear!,
+                config_id: s.allocation_config_id,
               });
             } else {
               initial.set(s.ranking_item_id, null);
@@ -704,10 +707,10 @@ export function ManualDistributionPanel({
           setStudents(studentsResp.data);
           const initial = new Map<number, LocalAlloc | null>();
           for (const s of studentsResp.data) {
-            if (s.is_allocated && s.allocated_sub_type) {
+            if (s.is_allocated && s.allocated_sub_type && s.allocation_config_id != null) {
               initial.set(s.ranking_item_id, {
                 sub_type: s.allocated_sub_type,
-                year: s.allocation_year ?? selectedAcademicYear!,
+                config_id: s.allocation_config_id,
               });
             } else {
               initial.set(s.ranking_item_id, null);
@@ -1120,7 +1123,8 @@ export function ManualDistributionPanel({
                 >
                   <span className="font-mono">{r.roster_code}</span>
                   <span>
-                    {r.sub_type} {r.allocation_year} 年度
+                    {r.sub_type}
+                    {r.allocation_year != null ? ` ${r.allocation_year} 年度` : ""}
                   </span>
                   {r.project_number && (
                     <span className="text-blue-500">
@@ -1283,7 +1287,7 @@ export function ManualDistributionPanel({
                           className="px-2 py-1.5 border border-slate-200 whitespace-nowrap"
                         >
                           <span
-                            className={`font-semibold ${col.year < (selectedAcademicYear ?? 9999) ? "text-orange-600" : "text-slate-700"}`}
+                            className={`font-semibold ${col.academic_year < (selectedAcademicYear ?? 9999) ? "text-orange-600" : "text-slate-700"}`}
                           >
                             {col.display_name}
                           </span>
@@ -1397,7 +1401,7 @@ export function ManualDistributionPanel({
                                   );
                                   const isChecked =
                                     curAlloc?.sub_type === col.sub_type &&
-                                    curAlloc?.year === col.year;
+                                    curAlloc?.config_id === col.config_id;
                                   const localUsed =
                                     localAllocCounts[col.key] ?? 0;
                                   const atCapacity =
@@ -1457,7 +1461,7 @@ export function ManualDistributionPanel({
                                           handleCheckbox(
                                             student.ranking_item_id,
                                             col.sub_type,
-                                            col.year
+                                            col.config_id
                                           )
                                         }
                                       />
@@ -1629,7 +1633,7 @@ export function ManualDistributionPanel({
                 const remaining = col.total - used;
                 const isFull = remaining <= 0;
                 const isLow = !isFull && remaining <= 2;
-                const isPriorYear = col.year < (selectedAcademicYear ?? 9999);
+                const isPriorYear = col.academic_year < (selectedAcademicYear ?? 9999);
                 return (
                   <div
                     key={col.key}
@@ -2053,7 +2057,7 @@ function AvailableQuotasBlock({
               const isFull = q.remaining <= 0 && q.total > 0;
               return (
                 <div
-                  key={`${q.sub_type}-${q.allocation_year}`}
+                  key={`${q.sub_type}-${q.config_id}`}
                   className={`px-3 py-2 rounded-md border text-xs ${
                     isFull
                       ? "bg-slate-100 border-slate-200 text-slate-500"
@@ -2062,7 +2066,7 @@ function AvailableQuotasBlock({
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-medium text-slate-700">
-                      {formatSubTypeYear(q.sub_type, q.allocation_year)}
+                      {formatSubTypeYear(q.sub_type, q.academic_year)}
                     </span>
                     <span
                       className={`font-mono text-sm tabular-nums font-bold ${
@@ -2133,10 +2137,7 @@ function ReleasePreviewSection({
                 <ArrowRight className="h-3 w-3 text-amber-600" />
                 釋出{" "}
                 <span className="font-mono text-[#003d7a]">
-                  {formatSubTypeYear(
-                    item.freed_slot.sub_type,
-                    item.freed_slot.allocation_year
-                  )}
+                  {item.freed_slot.sub_type ?? "—"} · 配額池 #{item.freed_slot.allocation_config_id ?? "—"}
                 </span>{" "}
                 slot（取消續領 #{item.cancelled_application_id}）
               </div>
@@ -2153,10 +2154,7 @@ function ReleasePreviewSection({
                     <ArrowRight className="h-3 w-3 text-amber-600" />
                     分配至{" "}
                     <span className="font-mono text-[#003d7a]">
-                      {formatSubTypeYear(
-                        item.freed_slot.sub_type,
-                        item.freed_slot.allocation_year
-                      )}
+                      {item.freed_slot.sub_type ?? "—"} · 配額池 #{item.freed_slot.allocation_config_id ?? "—"}
                     </span>
                   </>
                 ) : (

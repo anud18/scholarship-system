@@ -30,8 +30,8 @@ def _build_scenario(db_sync):
     ub = _student(db_sync, "ep_b")
     app_b = _application(db_sync, ub, sch, config, app_id="APP-EP-B", std_code="333B")
     ranking = _ranking(db_sync, sch)
-    _ranking_item(db_sync, ranking, app_b, rank=1)
-    roster = _roster(db_sync, config, admin, code="ROSTER-EP-1")
+    _ranking_item(db_sync, ranking, app_b, rank=1, alloc_config_id=config.id)
+    roster = _roster(db_sync, config, admin, alloc_config_id=config.id, code="ROSTER-EP-1")
     db_sync.commit()
     return admin, roster, app_b
 
