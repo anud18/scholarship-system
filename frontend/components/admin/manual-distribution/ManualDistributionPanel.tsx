@@ -196,7 +196,7 @@ export function ManualDistributionPanel({
     rosters: Array<{
       roster_code: string;
       sub_type: string;
-      allocation_year: number;
+      allocation_year: number | null;
       project_number: string | null;
       qualified_count: number;
       total_amount: string;
@@ -1123,7 +1123,8 @@ export function ManualDistributionPanel({
                 >
                   <span className="font-mono">{r.roster_code}</span>
                   <span>
-                    {r.sub_type} {r.allocation_year} 年度
+                    {r.sub_type}
+                    {r.allocation_year != null ? ` ${r.allocation_year} 年度` : ""}
                   </span>
                   {r.project_number && (
                     <span className="text-blue-500">
@@ -1286,7 +1287,7 @@ export function ManualDistributionPanel({
                           className="px-2 py-1.5 border border-slate-200 whitespace-nowrap"
                         >
                           <span
-                            className={`font-semibold ${col.year < (selectedAcademicYear ?? 9999) ? "text-orange-600" : "text-slate-700"}`}
+                            className={`font-semibold ${col.academic_year < (selectedAcademicYear ?? 9999) ? "text-orange-600" : "text-slate-700"}`}
                           >
                             {col.display_name}
                           </span>
@@ -1400,7 +1401,7 @@ export function ManualDistributionPanel({
                                   );
                                   const isChecked =
                                     curAlloc?.sub_type === col.sub_type &&
-                                    curAlloc?.year === col.year;
+                                    curAlloc?.config_id === col.config_id;
                                   const localUsed =
                                     localAllocCounts[col.key] ?? 0;
                                   const atCapacity =
@@ -1460,7 +1461,7 @@ export function ManualDistributionPanel({
                                           handleCheckbox(
                                             student.ranking_item_id,
                                             col.sub_type,
-                                            col.year
+                                            col.config_id
                                           )
                                         }
                                       />
@@ -1632,7 +1633,7 @@ export function ManualDistributionPanel({
                 const remaining = col.total - used;
                 const isFull = remaining <= 0;
                 const isLow = !isFull && remaining <= 2;
-                const isPriorYear = col.year < (selectedAcademicYear ?? 9999);
+                const isPriorYear = col.academic_year < (selectedAcademicYear ?? 9999);
                 return (
                   <div
                     key={col.key}
@@ -2056,7 +2057,7 @@ function AvailableQuotasBlock({
               const isFull = q.remaining <= 0 && q.total > 0;
               return (
                 <div
-                  key={`${q.sub_type}-${q.allocation_year}`}
+                  key={`${q.sub_type}-${q.config_id}`}
                   className={`px-3 py-2 rounded-md border text-xs ${
                     isFull
                       ? "bg-slate-100 border-slate-200 text-slate-500"
@@ -2065,7 +2066,7 @@ function AvailableQuotasBlock({
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-medium text-slate-700">
-                      {formatSubTypeYear(q.sub_type, q.allocation_year)}
+                      {formatSubTypeYear(q.sub_type, q.academic_year)}
                     </span>
                     <span
                       className={`font-mono text-sm tabular-nums font-bold ${
