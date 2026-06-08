@@ -438,22 +438,32 @@ async def get_distribution_summary(
                     CollegeRankingItem.is_allocated.is_(True),
                 )
             )
-            .options(selectinload(CollegeRankingItem.application))
+            .options(
+                selectinload(CollegeRankingItem.application),
+                selectinload(CollegeRankingItem.allocation_config),
+            )
         )
         items_result = await db.execute(items_stmt)
         allocated_items = items_result.scalars().all()
 
-        # 按 (sub_type, allocation_year) 分組
+        # 按 (sub_type, allocation_config_id) 分組；顯示年度取自消耗的配置
         groups: dict[tuple, list] = {}
         for item in allocated_items:
             sub_type = item.allocated_sub_type or "general"
-            alloc_year = item.allocation_year or academic_year
-            key = (sub_type, alloc_year)
+            key = (sub_type, item.allocation_config_id)
             groups.setdefault(key, []).append(item)
 
         group_data = []
         total_allocated = 0
-        for (sub_type, alloc_year), items in sorted(groups.items()):
+        # None allocation_config_id (whole-period sentinel) sorts first via -1
+        for (sub_type, config_id), items in sorted(
+            groups.items(),
+            key=lambda kv: (kv[0][0], kv[0][1] if kv[0][1] is not None else -1),
+        ):
+            # Display year = consumed config's academic_year (falls back to the
+            # requesting year for whole-period rows with no linked config).
+            consumed = items[0].allocation_config if items else None
+            alloc_year = consumed.academic_year if consumed else academic_year
             students = []
             for item in items:
                 app = item.application
@@ -476,6 +486,7 @@ async def get_distribution_summary(
             group_data.append(
                 {
                     "sub_type": sub_type,
+                    "allocation_config_id": config_id,
                     "allocation_year": alloc_year,
                     "count": len(students),
                     "students": students,

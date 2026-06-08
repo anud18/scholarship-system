@@ -446,7 +446,10 @@ class ManualDistributionService:
                     "applied_sub_types": app.scholarship_subtype_list or [],
                     "rejected_sub_types": list(rejected_map.get(app.id, set())),
                     "allocated_sub_type": item.allocated_sub_type,
-                    "allocation_year": item.allocation_year,
+                    # Config whose quota this slot consumes — the frontend grid
+                    # seeds the checked column from (allocated_sub_type,
+                    # allocation_config_id). Superseded the legacy allocation_year.
+                    "allocation_config_id": item.allocation_config_id,
                     # Live funding flag — cancel (revoke/suspend) flips this to
                     # False to free the quota slot, restore flips it back. The
                     # frontend seeds the 核配 checkbox from this, not from

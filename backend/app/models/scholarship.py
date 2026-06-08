@@ -548,13 +548,10 @@ class ScholarshipConfiguration(Base):
         JSON, nullable=True
     )  # 計畫編號，依子類型 {sub_type: own-year-code} e.g. {"nstc": "114R000001", "moe_1w": "114E000001"}
 
-    # 跨配置共享配額來源（取代 prior_quota_years）— 依 config_code 連結前年度配置，per sub_type，無數量
+    # 跨配置共享配額來源 — 依 config_code 連結前年度配置，per sub_type，無數量
     shared_quota_sources = Column(
         JSON, nullable=True
     )  # [{"source_config_code": "phd_114", "sub_types": ["nstc"]}, ...]
-
-    # DEPRECATED (dropped in shared-quota MIGRATION 2): superseded by shared_quota_sources
-    prior_quota_years = Column(JSON, nullable=True)  # {"nstc": [113, 112], "moe_1w": []}
 
     # 金額設定 (從 ScholarshipType 移至此處)
     amount = Column(Integer, nullable=False)  # 獎學金金額（整數）

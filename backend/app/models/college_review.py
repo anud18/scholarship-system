@@ -157,9 +157,6 @@ class CollegeRankingItem(Base):
 
     # Matrix distribution fields
     allocated_sub_type = Column(String(50), nullable=True)  # Sub-type code allocated to (e.g., 'nstc', 'moe_1w')
-    allocation_year = Column(
-        Integer, nullable=True
-    )  # DEPRECATED (dropped in shared-quota MIGRATION 2): superseded by allocation_config_id
     allocation_config_id = Column(
         Integer, ForeignKey("scholarship_configurations.id"), nullable=True
     )  # Which config's quota this slot consumed (NULL only on whole-period sentinel rows)
