@@ -35,14 +35,14 @@ Excel 匯出 (`excel_export_service.py`)、人數統計 (`_recompute_roster_tota
 
 ### 3.1 Enum
 - `RosterAuditAction` 新增 **`ITEM_RESTORE = "item_restore"`**(`ITEM_ADD` / `ITEM_REMOVE` / `ITEM_UPDATE` 已存在)。
-- `action` 欄是 String-backed enum,加值**不需** DB migration(只改 `backend/app/models/roster_audit.py` 的 Python enum)。
+- **⚠️ 更正(2026-06-08,修 bug 後):`action` 欄並非 String-backed,而是 native PostgreSQL enum `rosterauditaction`**。只改 Python enum 會在寫入 `ITEM_RESTORE` 稽核列時於 PostgreSQL 觸發 500(`InvalidTextRepresentation: invalid input value for enum`);SQLite 測試 DB 不檢查 enum 故抓不到。**必須**新增 Alembic migration `ALTER TYPE rosterauditaction ADD VALUE IF NOT EXISTS 'item_restore'`(見 `backend/alembic/versions/add_item_restore_audit_001.py`)。
 
 ### 3.2 移除改為軟刪除
 - `reconcile_roster` 的 remove 路徑(`roster_service.py` 約 line 2119–2139):把 `self.db.delete(item)` 改成
   `item.is_included = False; item.exclusion_reason = "比對分發移除:不在分發名單"`。
 - `remove_item_from_locked_roster`(約 line 2167–2219):把 `self.db.delete(item)` 改成
   `item.is_included = False; item.exclusion_reason = f"鎖定後移除:{reason}"`。
-- 不需新欄位、不需 schema migration。
+- 不需新欄位、不需 table schema 變更;但 enum 加值需要一個 `ALTER TYPE ... ADD VALUE` migration(見 §3.1 更正)。
 
 ### 3.3 連帶調整(因為被移除的列現在會留著)
 1. **比對分發 diff**:`get_distribution_diff_for_roster` 與 `reconcile_roster` 計算 `allowed_remove`(孤兒)時,要**排除已軟移除的列**(`is_included=False`),否則同一人會被一直重複標記為「待移除」。

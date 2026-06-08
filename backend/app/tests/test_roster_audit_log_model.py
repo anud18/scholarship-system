@@ -168,3 +168,38 @@ def test_item_restore_action_exists():
     from app.models.roster_audit import RosterAuditAction
 
     assert RosterAuditAction.ITEM_RESTORE.value == "item_restore"
+
+
+def test_roster_audit_action_value_contract():
+    """Tripwire pinning the FULL RosterAuditAction value set.
+
+    `RosterAuditAction` maps to a NATIVE PostgreSQL enum (`rosterauditaction`).
+    Adding a Python member WITHOUT an `ALTER TYPE rosterauditaction ADD VALUE`
+    Alembic migration causes a production 500 on insert
+    (`InvalidTextRepresentation: invalid input value for enum`). The unit suite
+    runs on SQLite, which stores enums as plain strings and does NOT enforce the
+    constraint — so only this pin catches the drift.
+
+    If this fails because you ADDED a value: add an Alembic migration first
+    (see `add_item_restore_audit_001.py`), then update the expected set below.
+    """
+    from app.models.roster_audit import RosterAuditAction
+
+    assert {a.value for a in RosterAuditAction} == {
+        "create",
+        "update",
+        "delete",
+        "lock",
+        "unlock",
+        "export",
+        "download",
+        "student_verify",
+        "schedule_run",
+        "manual_run",
+        "dry_run",
+        "status_change",
+        "item_add",
+        "item_remove",
+        "item_update",
+        "item_restore",
+    }

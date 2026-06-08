@@ -1204,7 +1204,7 @@ git commit -m "feat(roster): add 操作紀錄 tab to roster detail dialog"
 
 Use the `playwright-test-and-debug` skill / localhost dev env.
 
-- [ ] **Step 1:** `docker compose -f docker-compose.dev.yml up -d` and confirm the container mounts THIS worktree (see "Running tests" caveat). Migrations: none needed (no schema change).
+- [ ] **Step 1:** `docker compose -f docker-compose.dev.yml up -d` and confirm the container mounts THIS worktree (see "Running tests" caveat). **Migration REQUIRED (corrected after bug):** `RosterAuditAction` is a native PG enum — run `alembic upgrade head` so `add_item_restore_audit_001` adds `item_restore` to the `rosterauditaction` enum, else restore 500s on PostgreSQL (SQLite tests don't catch it).
 - [ ] **Step 2:** Log in as `admin`, open a COMPLETED roster's 查看名單. Exclude a student (繳回) → confirm they now appear greyed with 「已移除」 + a 回復 button (previously they vanished).
 - [ ] **Step 3:** Click 回復 → confirm dialog → student returns to normal styling; 人數 unchanged while removed, +1 after restore; Excel-stale banner appears.
 - [ ] **Step 4:** Open 操作紀錄 tab → see 移除 then 回復 entries with operator + timestamp; filter by 回復 shows only restores.
