@@ -40,6 +40,55 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+async def _validate_shared_quota_sources(
+    db: AsyncSession,
+    shared_quota_sources: Optional[List[Dict[str, Any]]],
+    requesting_academic_year: int,
+) -> None:
+    """Imperative link validation (spec §10 — no DB FK on source_config_code).
+
+    Each entry's source_config_code must resolve to an existing config with
+    academic_year strictly less than the requesting config's, and every listed
+    sub_type must be defined in that source config's quotas matrix. Fail-fast
+    with HTTP 400 so a dangling link never reaches the distribution pool reader.
+    """
+    if not shared_quota_sources:
+        return
+
+    for entry in shared_quota_sources:
+        source_code = entry.get("source_config_code")
+        sub_types = entry.get("sub_types") or []
+        if not source_code:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="共享配額來源缺少 source_config_code",
+            )
+
+        source_stmt = select(ScholarshipConfiguration).where(ScholarshipConfiguration.config_code == source_code)
+        source_result = await db.execute(source_stmt)
+        source_config = source_result.scalar_one_or_none()
+
+        if source_config is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"共享配額來源配置不存在: {source_code}",
+            )
+
+        if source_config.academic_year >= requesting_academic_year:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"共享配額來源 {source_code} 的學年度必須早於本配置",
+            )
+
+        defined_sub_types = set((source_config.quotas or {}).keys())
+        for st in sub_types:
+            if st not in defined_sub_types:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"共享配額來源 {source_code} 未定義子類型: {st}",
+                )
+
+
 # Utility functions
 def taiwan_to_western_year(taiwan_year: int) -> int:
     """Convert Taiwan calendar year (民國年) to Western calendar year"""
