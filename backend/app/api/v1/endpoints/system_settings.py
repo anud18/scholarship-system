@@ -91,6 +91,19 @@ async def get_all_configurations(
 
 _ALLOWED_DOC_KEYS = {"regulations_url", "sample_document_url"}
 
+# Document formats accepted for admin-managed reference material
+# (申請文件範例檔 + 補充參考文件): PDF, Microsoft Office, and OpenDocument (ODF).
+# Note: 獎學金要點 (regulations_url) is intentionally excluded — it is rendered
+# inline via react-pdf and stays PDF-only (enforced separately below).
+_REFERENCE_DOC_EXTENSIONS = [".pdf", ".doc", ".docx", ".odt", ".ods", ".odp"]
+
+# MIME types for OpenDocument (ODF) formats, keyed by extension.
+_ODF_CONTENT_TYPES = {
+    ".odt": "application/vnd.oasis.opendocument.text",
+    ".ods": "application/vnd.oasis.opendocument.spreadsheet",
+    ".odp": "application/vnd.oasis.opendocument.presentation",
+}
+
 
 @router.get("/public-docs")
 async def get_public_docs(
@@ -149,7 +162,7 @@ async def upload_system_doc(
                 detail="獎學金要點僅接受 PDF 檔案",
             )
     else:
-        allowed_extensions = [".pdf", ".doc", ".docx"]
+        allowed_extensions = _REFERENCE_DOC_EXTENSIONS
 
     file_content = await file.read()
 
@@ -281,6 +294,11 @@ async def get_system_doc_file(
         content_type = "application/msword"
     elif object_name.endswith(".docx"):
         content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    else:
+        for odf_ext, odf_mime in _ODF_CONTENT_TYPES.items():
+            if object_name.endswith(odf_ext):
+                content_type = odf_mime
+                break
 
     from urllib.parse import quote
 
@@ -352,7 +370,7 @@ async def create_supplementary_doc(
     if len(stripped_title) > 200:
         raise HTTPException(status_code=400, detail="title must be <= 200 chars")
 
-    allowed_extensions = [".pdf", ".doc", ".docx"]
+    allowed_extensions = _REFERENCE_DOC_EXTENSIONS
     file_content = await file.read()
     validate_upload_file(
         filename=file.filename,
