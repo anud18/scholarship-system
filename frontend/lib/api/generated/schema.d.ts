@@ -7447,8 +7447,8 @@ export interface components {
             ranking_item_id: number;
             /** Sub Type Code */
             sub_type_code?: string | null;
-            /** Allocation Year */
-            allocation_year?: number | null;
+            /** Allocation Config Id */
+            allocation_config_id?: number | null;
         };
         /** ApiResponse[List[dict]] */
         ApiResponse_List_dict__: {
