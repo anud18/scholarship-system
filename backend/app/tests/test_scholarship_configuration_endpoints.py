@@ -710,3 +710,45 @@ class TestScholarshipConfigurationEndpointsIntegration:
         )
         assert response.status_code == 400
         assert "學年度" in response.json()["message"]
+
+    @pytest.mark.asyncio
+    async def test_duplicate_carries_quotas_project_numbers_and_links(
+        self,
+        authenticated_admin_client: AsyncClient,
+        db: AsyncSession,
+        test_scholarship_type,
+        test_admin_with_scholarship_access,
+    ):
+        """Duplicating a config must copy quotas, project_numbers and
+        shared_quota_sources into the new period (today it copies none)."""
+        source = ScholarshipConfiguration(
+            scholarship_type_id=test_scholarship_type.id,
+            academic_year=114,
+            semester=Semester.first,
+            config_name="Dup Source 114",
+            config_code="DUPSRC-114-1",
+            amount=40000,
+            has_college_quota=True,
+            quotas={"nstc": {"EE": 5}},
+            project_numbers={"nstc": "114R000001"},
+            shared_quota_sources=[{"source_config_code": "PRIOR-113-1", "sub_types": ["nstc"]}],
+            is_active=True,
+            created_by=test_admin_with_scholarship_access.id,
+        )
+        db.add(source)
+        await db.commit()
+        await db.refresh(source)
+
+        target_payload = {
+            "academic_year": 115,
+            "semester": "first",
+            "config_code": "DUPTGT-115-1",
+        }
+        response = await authenticated_admin_client.post(f"{BASE}/{source.id}/duplicate", json=target_payload)
+        assert response.status_code == 200, response.text
+        new_id = response.json()["data"]["id"]
+
+        body = (await authenticated_admin_client.get(f"{BASE}/{new_id}")).json()["data"]
+        assert body["quotas"] == {"nstc": {"EE": 5}}
+        assert body["project_numbers"] == {"nstc": "114R000001"}
+        assert body["shared_quota_sources"] == [{"source_config_code": "PRIOR-113-1", "sub_types": ["nstc"]}]

@@ -1274,6 +1274,15 @@ async def duplicate_scholarship_configuration(
             whitelist_student_ids=(
                 source_config.whitelist_student_ids.copy() if source_config.whitelist_student_ids else {}
             ),
+            has_quota_limit=source_config.has_quota_limit,
+            has_college_quota=source_config.has_college_quota,
+            quota_management_mode=source_config.quota_management_mode,
+            total_quota=source_config.total_quota,
+            quotas=(source_config.quotas.copy() if source_config.quotas else None),
+            project_numbers=(source_config.project_numbers.copy() if source_config.project_numbers else None),
+            shared_quota_sources=(
+                [dict(s) for s in source_config.shared_quota_sources] if source_config.shared_quota_sources else None
+            ),
             requires_professor_recommendation=source_config.requires_professor_recommendation,
             requires_college_review=source_config.requires_college_review,
             is_active=True,
