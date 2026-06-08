@@ -312,6 +312,17 @@ class ExportPackageService:
                 error_label=af.original_filename or af.object_name,
             )
 
+        # Student-uploaded 申請文件 — stored on the application itself,
+        # not as an ApplicationFile, so the app.files loop above misses it.
+        entry = _application_document_entry(
+            app.application_document_url,
+            app.application_document_original_filename,
+            base_path,
+            student_prefix,
+        )
+        if entry:
+            await _fetch_and_write(zf, self.minio, **entry)
+
     def _generate_summary_pdf(
         self,
         app: Application,
