@@ -42,12 +42,17 @@ def _config_semester_sql(alias: str) -> str:
 
     `alias` is the source-row table alias whose .semester we are matching against.
     """
+    # NB: scholarship_configurations.semester is the postgres ENUM `semester`,
+    # while college_rankings / manual_distribution_history.semester are VARCHAR.
+    # The service helpers only ever compare the column to a Python str value, so
+    # they never hit this; here we compare column-to-column, so cast the enum to
+    # text (enum = varchar has no operator in postgres).
     return (
         f"((cfg.semester IS NULL AND ({alias}.semester IS NULL "
         f"OR {alias}.semester IN ('annual', 'yearly'))) "
         f"OR (cfg.semester = 'yearly' AND ({alias}.semester IS NULL "
         f"OR {alias}.semester IN ('annual', 'yearly'))) "
-        f"OR (cfg.semester = {alias}.semester))"
+        f"OR (cfg.semester::text = {alias}.semester))"
     )
 
 
@@ -320,7 +325,7 @@ def upgrade() -> None:
                         "WHERE cfg.scholarship_type_id = :stid AND cfg.academic_year = :yr "
                         "AND ((cfg.semester IS NULL AND (:sem IS NULL OR :sem IN ('annual','yearly'))) "
                         "OR (cfg.semester = 'yearly' AND (:sem IS NULL OR :sem IN ('annual','yearly'))) "
-                        "OR (cfg.semester = :sem)) "
+                        "OR (cfg.semester::text = :sem)) "
                         "ORDER BY cfg.id DESC LIMIT 1"
                     ),
                     {"stid": h["scholarship_type_id"], "yr": yr, "sem": h["semester"]},
