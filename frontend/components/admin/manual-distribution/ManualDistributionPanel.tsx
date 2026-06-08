@@ -440,7 +440,7 @@ export function ManualDistributionPanel({
         .map(([ranking_item_id, alloc]) => ({
           ranking_item_id,
           sub_type_code: alloc?.sub_type ?? null,
-          allocation_year: alloc?.year ?? null,
+          allocation_config_id: alloc?.config_id ?? null,
         }));
       setIsLoadingPreview(true);
       try {
@@ -477,16 +477,16 @@ export function ManualDistributionPanel({
   const handleCheckbox = (
     rankingItemId: number,
     sub_type: string,
-    year: number
+    config_id: number
   ) => {
     setLocalAllocations(prev => {
       const next = new Map(prev);
       const cur = next.get(rankingItemId);
       // Radio-like: clicking active → uncheck; clicking other → set exclusively
-      if (cur?.sub_type === sub_type && cur?.year === year) {
+      if (cur?.sub_type === sub_type && cur?.config_id === config_id) {
         next.set(rankingItemId, null);
       } else {
-        next.set(rankingItemId, { sub_type, year });
+        next.set(rankingItemId, { sub_type, config_id });
       }
       return next;
     });
@@ -502,7 +502,7 @@ export function ManualDistributionPanel({
         ([ranking_item_id, alloc]) => ({
           ranking_item_id,
           sub_type_code: alloc?.sub_type ?? null,
-          allocation_year: alloc?.year ?? null,
+          allocation_config_id: alloc?.config_id ?? null,
         })
       );
       const resp = await apiClient.manualDistribution.allocate({
