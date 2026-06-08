@@ -288,10 +288,10 @@ export function ManualDistributionPanel({
         setStudents(studentsResp.data);
         const allocMap = new Map<number, LocalAlloc | null>();
         for (const s of studentsResp.data) {
-          if (s.is_allocated && s.allocated_sub_type) {
+          if (s.is_allocated && s.allocated_sub_type && s.allocation_config_id != null) {
             allocMap.set(s.ranking_item_id, {
               sub_type: s.allocated_sub_type,
-              year: s.allocation_year ?? selectedAcademicYear!,
+              config_id: s.allocation_config_id,
             });
           } else {
             allocMap.set(s.ranking_item_id, null);
@@ -319,12 +319,12 @@ export function ManualDistributionPanel({
         for (const suggestion of previewSuggestions) {
           if (
             suggestion.sub_type_code &&
-            suggestion.allocation_year &&
+            suggestion.allocation_config_id != null &&
             !allocMap.get(suggestion.ranking_item_id)
           ) {
             allocMap.set(suggestion.ranking_item_id, {
               sub_type: suggestion.sub_type_code,
-              year: suggestion.allocation_year,
+              config_id: suggestion.allocation_config_id,
             });
             hasPreview = true;
           }
@@ -565,10 +565,10 @@ export function ManualDistributionPanel({
           setStudents(studentsResp.data);
           const initial = new Map<number, LocalAlloc | null>();
           for (const s of studentsResp.data) {
-            if (s.is_allocated && s.allocated_sub_type) {
+            if (s.is_allocated && s.allocated_sub_type && s.allocation_config_id != null) {
               initial.set(s.ranking_item_id, {
                 sub_type: s.allocated_sub_type,
-                year: s.allocation_year ?? selectedAcademicYear!,
+                config_id: s.allocation_config_id,
               });
             } else {
               initial.set(s.ranking_item_id, null);
@@ -707,10 +707,10 @@ export function ManualDistributionPanel({
           setStudents(studentsResp.data);
           const initial = new Map<number, LocalAlloc | null>();
           for (const s of studentsResp.data) {
-            if (s.is_allocated && s.allocated_sub_type) {
+            if (s.is_allocated && s.allocated_sub_type && s.allocation_config_id != null) {
               initial.set(s.ranking_item_id, {
                 sub_type: s.allocated_sub_type,
-                year: s.allocation_year ?? selectedAcademicYear!,
+                config_id: s.allocation_config_id,
               });
             } else {
               initial.set(s.ranking_item_id, null);
