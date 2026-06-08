@@ -30,11 +30,6 @@ from app.services.college_ranking_export_service import (
     ExportRow,
 )
 
-# NOTE: imported at top is safe — export_package_service has no top-level
-# import of this module (it imports build_embedded_summary_tables lazily
-# inside generate_export_zip), so there is no import cycle.
-from app.services.export_package_service import _sanitize_filename
-
 logger = logging.getLogger(__name__)
 
 
@@ -67,6 +62,11 @@ async def build_embedded_summary_tables(
     The same dept_groups assembled by ExportPackageService is used directly,
     guaranteeing each table's rows match the student folders next to it.
     """
+    # Lazy import: keep this module's top level free of export_package_service
+    # (which pulls in reportlab) so callers that only need _sort_key — e.g. the
+    # summary-export endpoint — don't pay that import, and there is no cycle.
+    from app.services.export_package_service import _sanitize_filename
+
     all_apps = [app for apps in dept_groups.values() for app in apps]
 
     dynamic_fields, sub_type_labels, account_by_user, advisor_by_user = await load_export_aux_data(

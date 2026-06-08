@@ -88,3 +88,38 @@ async def test_export_zip_contains_summary_tables_matching_folders(monkeypatch):
         if n.startswith("1000_A系/") and n.count("/") == 2  # dept/student/file
     }
     assert table_codes == folder_codes == {"001", "002"}
+
+
+@pytest.mark.asyncio
+async def test_export_zip_degrades_when_summary_build_fails_wholesale(monkeypatch):
+    monkeypatch.setattr("app.services.export_package_service._ensure_font", lambda: None)
+
+    async def _boom(*a, **k):
+        raise RuntimeError("aux DB down")
+
+    # Wholesale failure of the summary-table builder (e.g. an aux-data DB error
+    # before the per-table try/except) must not lose the materials ZIP.
+    monkeypatch.setattr("app.services.export_package_service.build_embedded_summary_tables", _boom)
+
+    apps = [_mk_app(1, 11, "1000", "A系", "001", "甲")]
+    stype = SimpleNamespace(name="某獎學金", code="phd", sub_type_configs=[])
+
+    svc = ExportPackageService(db=None, minio_service=None)
+    monkeypatch.setattr(svc, "_get_scholarship_type", _coro_returning(stype))
+    monkeypatch.setattr(svc, "_query_applications", _coro_returning(apps))
+    monkeypatch.setattr(svc, "_generate_summary_pdf", lambda *a, **k: b"%PDF-1.4 fake")
+
+    buf, fname = await svc.generate_export_zip(
+        scholarship_type_id=1,
+        academic_year=114,
+        semester="first",
+        college_code="A",
+    )
+
+    names = zipfile.ZipFile(buf).namelist()
+    # Materials ZIP still produced (the student's summary PDF is present)
+    assert any(n.endswith("_學生資料彙整.pdf") for n in names)
+    # Wholesale failure degraded to a root error placeholder, not an aborted export
+    assert "_錯誤_申請總表生成失敗.txt" in names
+    # No summary workbooks were emitted
+    assert not any(n.endswith(".xlsx") for n in names)

@@ -33,6 +33,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.application import Application
 from app.models.scholarship import ScholarshipType
+from app.services.export_summary_tables import build_embedded_summary_tables
 from app.services.minio_service import MinIOService
 
 logger = logging.getLogger(__name__)
@@ -123,13 +124,17 @@ class ExportPackageService:
             key = f"{_sanitize_filename(dep_no)}_{_sanitize_filename(dep_name)}"
             dept_groups[key].append(app)
 
-        # 3.5 Build the embedded 申請總表 workbooks from the SAME dept_groups
-        # (lazy import avoids an import cycle with export_summary_tables).
-        from app.services.export_summary_tables import build_embedded_summary_tables
-
-        summary_tables = await build_embedded_summary_tables(
-            self.db, scholarship_type, dept_groups, college_name, academic_year
-        )
+        # 3.5 Build the embedded 申請總表 workbooks from the SAME dept_groups.
+        # Best-effort: the summary tables are a secondary artifact, so a wholesale
+        # failure here (e.g. an aux-data DB error before the per-table try/except)
+        # must not lose the primary materials ZIP — degrade to an error placeholder.
+        try:
+            summary_tables = await build_embedded_summary_tables(
+                self.db, scholarship_type, dept_groups, college_name, academic_year
+            )
+        except Exception as e:
+            logger.exception("embedded summary tables generation failed wholesale")
+            summary_tables = {"_錯誤_申請總表生成失敗.txt": f"申請總表生成失敗：{e}".encode("utf-8")}
 
         # 4. Build ZIP
         buf = io.BytesIO()
