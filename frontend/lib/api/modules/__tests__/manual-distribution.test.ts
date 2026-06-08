@@ -114,7 +114,7 @@ describe("createManualDistributionApi", () => {
 
   it("allocate POSTs /allocate with full AllocateRequest body", async () => {
     // Pin SECURITY: full body propagated as-is — allocations
-    // array drives WHO gets WHICH sub_type for WHICH year. Drift
+    // array drives WHO gets WHICH sub_type for WHICH config pool. Drift
     // would silently misallocate funds.
     mockedRaw.POST.mockResolvedValueOnce({});
     const api = createManualDistributionApi();
@@ -123,8 +123,8 @@ describe("createManualDistributionApi", () => {
       academic_year: 114,
       semester: "first",
       allocations: [
-        { ranking_item_id: 1, sub_type_code: "nstc", allocation_year: 114 },
-        { ranking_item_id: 2, sub_type_code: null, allocation_year: null },
+        { ranking_item_id: 1, sub_type_code: "nstc", allocation_config_id: 42 },
+        { ranking_item_id: 2, sub_type_code: null, allocation_config_id: null },
       ],
     });
     expect(mockedRaw.POST).toHaveBeenCalledWith(
@@ -135,8 +135,8 @@ describe("createManualDistributionApi", () => {
           academic_year: 114,
           semester: "first",
           allocations: [
-            { ranking_item_id: 1, sub_type_code: "nstc", allocation_year: 114 },
-            { ranking_item_id: 2, sub_type_code: null, allocation_year: null },
+            { ranking_item_id: 1, sub_type_code: "nstc", allocation_config_id: 42 },
+            { ranking_item_id: 2, sub_type_code: null, allocation_config_id: null },
           ],
         },
       }
