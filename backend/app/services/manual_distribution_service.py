@@ -749,6 +749,11 @@ class ManualDistributionService:
                 app.sub_scholarship_type = item.allocated_sub_type
                 app.approved_at = datetime.now(timezone.utc)
                 app.review_stage = ReviewStage.quota_distributed
+                # Backfill: an approved renewal must NEVER have NULL allocation_config_id
+                # (spec §9 — NULL would inflate §6.2 pool counts). Prefer the ranking
+                # item's consumed config; fall back to the app's own config.
+                if app.allocation_config_id is None:
+                    app.allocation_config_id = item.allocation_config_id or app.scholarship_configuration_id
                 approved_count += 1
             elif item.is_supplementary and not item.is_allocated:
                 # Supplementary students pending a second distribution pass —

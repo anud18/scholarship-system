@@ -2882,11 +2882,31 @@ class ApplicationService:
             target_academic_year,
             previous.semester.value if previous.semester else None,
         )
+
+        # Snapshot the config the prior award consumed so the renewal occupies
+        # the same shared-pool slot (spec §9). Fall back to the renewal's own
+        # scholarship_configuration_id when the prior slot is unresolved — an
+        # approved renewal must NEVER be left NULL (would inflate §6.2 pool).
+        from app.models.college_review import CollegeRankingItem
+
+        prior_slot_config_id = await self.db.scalar(
+            select(CollegeRankingItem.allocation_config_id)
+            .where(
+                CollegeRankingItem.application_id == previous.id,
+                CollegeRankingItem.is_allocated.is_(True),
+                CollegeRankingItem.allocation_config_id.isnot(None),
+            )
+            .order_by(CollegeRankingItem.id.desc())
+            .limit(1)
+        )
+        allocation_config_id = prior_slot_config_id or previous.scholarship_configuration_id
+
         new_app = Application(
             app_id=app_id,
             user_id=current_user.id,
             scholarship_type_id=previous.scholarship_type_id,
             scholarship_configuration_id=previous.scholarship_configuration_id,
+            allocation_config_id=allocation_config_id,
             scholarship_subtype_list=[previous.sub_scholarship_type] if previous.sub_scholarship_type else [],
             sub_scholarship_type=previous.sub_scholarship_type,
             sub_type_selection_mode=previous.sub_type_selection_mode,
