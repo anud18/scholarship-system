@@ -6373,6 +6373,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/payment-rosters/{roster_id}/items/{item_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Roster Item
+         * @description Re-include a soft-removed roster item (回復). Admin only. Works on
+         *     COMPLETED and LOCKED rosters; sets excel_stale; audits ITEM_RESTORE.
+         */
+        post: operations["restore_roster_item_api_v1_payment_rosters__roster_id__items__item_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/payment-rosters/{roster_id}/distribution-diff": {
         parameters: {
             query?: never;
@@ -9363,6 +9384,14 @@ export interface components {
         ReorderRequest: {
             /** Items */
             items: components["schemas"]["ReorderItem"][];
+        };
+        /**
+         * RestoreItemRequest
+         * @description Body for POST /payment-rosters/{roster_id}/items/{item_id}/restore
+         */
+        RestoreItemRequest: {
+            /** Reason Note */
+            reason_note?: string | null;
         };
         /** RestoreRequest */
         RestoreRequest: {
@@ -21007,6 +21036,42 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["RemoveLockedItemRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_roster_item_api_v1_payment_rosters__roster_id__items__item_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roster_id: number;
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreItemRequest"];
             };
         };
         responses: {
