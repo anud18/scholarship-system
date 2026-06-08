@@ -634,6 +634,9 @@ export function AdminConfigurationManagement({
   const openEditDialog = (config: ScholarshipConfiguration) => {
     setSelectedConfig(config);
     setFormData({
+      // academic_year is the reference year the shared-quota picker filters
+      // prior-year candidates against; without it the picker is always empty.
+      academic_year: config.academic_year,
       config_name: config.config_name,
       config_code: config.config_code,
       description: config.description || "",
