@@ -298,6 +298,7 @@ export function RosterDetailDialog({
       if (resp.success) {
         toast.success(`已回復 ${item.student_name}`);
         setExcelStale(true);
+        onRosterChanged?.();
         await loadRosterItems();
         await fetchAuditLogs();
       } else {
@@ -507,11 +508,11 @@ export function RosterDetailDialog({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {visibleItems.map((item, index) => {
+          {visibleItems.map((item) => {
             const removed = !item.is_included;
             return (
               <TableRow
-                key={index}
+                key={item.id}
                 className={removed ? "opacity-50 line-through" : undefined}
               >
                 <TableCell className="font-medium">

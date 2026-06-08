@@ -170,7 +170,7 @@ export function createPaymentRostersApi() {
 
     /**
      * 從已鎖定造冊中移除單一項目
-     * Hard-delete a single item from a LOCKED roster; sets excel_stale to true.
+     * Soft-remove a single item from a LOCKED roster (sets is_included=False; row survives for restore); sets excel_stale to true.
      */
     removeItemFromLockedRoster: async (
       roster_id: number,

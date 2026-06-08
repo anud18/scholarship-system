@@ -301,3 +301,18 @@ def test_restore_item_rejects_already_included(db_sync, locked_roster_two_items,
     svc = RosterService(db_sync)
     with pytest.raises(ValueError):
         svc.restore_item(roster.id, roster.items[0].id, admin_db_user_sync.id, "noop")  # already included
+
+
+def test_restore_item_rejects_non_completed_or_locked_roster(db_sync, locked_roster_two_items, admin_db_user_sync):
+    import pytest
+    from app.models.payment_roster import RosterStatus
+
+    roster = locked_roster_two_items
+    target = roster.items[0]
+    svc = RosterService(db_sync)
+    # Soft-remove while LOCKED (allowed), then move roster to a non-restorable status.
+    svc.remove_item_from_locked_roster(roster.id, target.id, admin_db_user_sync.id, "繳回")
+    roster.status = RosterStatus.DRAFT
+    db_sync.flush()
+    with pytest.raises(ValueError):
+        svc.restore_item(roster.id, target.id, admin_db_user_sync.id, "noop")

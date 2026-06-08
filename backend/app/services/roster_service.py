@@ -2251,6 +2251,11 @@ class RosterService:
         if roster is None:
             raise ValueError(f"Roster {roster_id} not found")
 
+        if roster.status not in (RosterStatus.COMPLETED, RosterStatus.LOCKED):
+            raise ValueError(
+                f"Roster {roster_id} must be COMPLETED or LOCKED to restore items " f"(status={roster.status.value})"
+            )
+
         item = self.db.get(PaymentRosterItem, item_id)
         if item is None or item.roster_id != roster_id:
             raise ValueError(f"Item {item_id} not found in roster {roster_id}")

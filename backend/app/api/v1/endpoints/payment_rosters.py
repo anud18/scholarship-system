@@ -2128,8 +2128,9 @@ def remove_locked_roster_item(
     db: Session = Depends(get_sync_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Hard-delete a single item from a LOCKED roster. Roster stays LOCKED;
-    excel_stale is set to True; audit log written."""
+    """Soft-remove a single item from a LOCKED roster (sets is_included=False;
+    row survives for restore). Roster stays LOCKED; excel_stale is set to True;
+    audit log written."""
     _require_admin(current_user)
     svc = RosterService(db)
     try:
