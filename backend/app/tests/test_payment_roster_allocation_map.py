@@ -22,5 +22,14 @@ def test_allocation_map_reads_allocation_config_id_not_year():
 
 def test_student_info_exposes_allocation_config_id():
     source = ENDPOINT.read_text(encoding="utf-8")
+    # student_info carries the consumed-config id so the UI can attribute each
+    # allocated slot to the config whose quota it drew from.
     assert 'allocation_map.get(application.id, {}).get("allocation_config_id")' in source
-    assert 'allocation_map.get(application.id, {}).get("allocation_year")' not in source
+    # The borrowed display year is exposed too: StudentRosterPreview renders
+    # "{allocation_year}年" so admins see which year's quota a shared-pool slot
+    # consumed. It MUST be derived from the consumed config's academic_year
+    # (`consumed_year_by_id`), never read off the dropped
+    # CollegeRankingItem.allocation_year column — that dropped-column read is
+    # separately forbidden by test_allocation_map_reads_allocation_config_id_not_year.
+    assert "consumed_year_by_id" in source
+    assert 'allocation_map.get(application.id, {}).get("allocation_year")' in source
