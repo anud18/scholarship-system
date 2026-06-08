@@ -85,9 +85,15 @@ def test_roster_schedule_status_values():
 
 
 def test_roster_audit_action_values():
-    """Pin: 15 audit action strings. CRITICAL: these are stored in
+    """Pin: 16 audit action strings. CRITICAL: these are stored in
     compliance audit logs. A rename would orphan historical rows from
-    their action category in the admin audit dashboard."""
+    their action category in the admin audit dashboard.
+
+    `RosterAuditAction` is a NATIVE PostgreSQL enum (`rosterauditaction`). If
+    this fails because you ADDED a value, you MUST also add an
+    `ALTER TYPE rosterauditaction ADD VALUE` Alembic migration (see
+    add_item_restore_audit_001.py) — otherwise inserting the new action 500s on
+    PostgreSQL (InvalidTextRepresentation); SQLite tests don't catch it."""
     assert RosterAuditAction.CREATE.value == "create"
     assert RosterAuditAction.UPDATE.value == "update"
     assert RosterAuditAction.DELETE.value == "delete"
@@ -103,7 +109,8 @@ def test_roster_audit_action_values():
     assert RosterAuditAction.ITEM_ADD.value == "item_add"
     assert RosterAuditAction.ITEM_REMOVE.value == "item_remove"
     assert RosterAuditAction.ITEM_UPDATE.value == "item_update"
-    assert len(list(RosterAuditAction)) == 15
+    assert RosterAuditAction.ITEM_RESTORE.value == "item_restore"
+    assert len(list(RosterAuditAction)) == 16
 
 
 def test_roster_audit_action_run_types_distinct():

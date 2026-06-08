@@ -1796,6 +1796,11 @@ class RosterService:
             .join(Application, PaymentRosterItem.application_id == Application.id)
             .filter(
                 PaymentRosterItem.roster_id == roster_id,
+                # Only items STILL active in the roster. A soft-removed item
+                # (is_included=False, e.g. 鎖定後移除 / 排除) has already been
+                # handled and must NOT linger in the 撤銷/停發 needs-attention
+                # panel (pre soft-delete it was hard-deleted, so it vanished).
+                PaymentRosterItem.is_included.is_(True),
                 Application.quota_allocation_status.in_(("revoked", "suspended")),
             )
             .all()
