@@ -6,7 +6,7 @@ Covers:
 The endpoint aggregates three views the admin Manual Distribution panel needs:
   * ``renewal_allocations`` — approved renewals grouped by
     ``(sub_type, renewal_year)`` with a ``has_challenge`` flag per renewal.
-  * ``available_quotas`` — per ``(sub_type, allocation_year)``: total / used /
+  * ``available_quotas`` — per ``(sub_type, config)``: total / used /
     remaining where ``used`` is approved renewals consumed from that pool.
   * ``candidates`` — non-renewal applicants ordered by
     ``CollegeRankingItem.rank_position`` with ``is_challenge`` and a

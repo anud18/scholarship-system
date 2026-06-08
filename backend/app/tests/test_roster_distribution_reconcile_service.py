@@ -337,7 +337,7 @@ def test_reconcile_writes_audit_logs(db_sync, diff_scenario):
 
 def test_distribution_diff_whole_period_roster_ignores_subtype_slice(db_sync):
     """Regression: a roster made by generate_roster (立即產生造冊) has
-    sub_type=NULL / allocation_year=NULL and holds EVERY allocated item across
+    sub_type=NULL / allocation_config_id=NULL and holds EVERY allocated item across
     sub_types. The diff must compare against the full allocated set, not a
     derived 'general' slice — that slice matches zero nstc items, so the diff
     would bogusly report to_add=[] and flag every real member as removable."""
