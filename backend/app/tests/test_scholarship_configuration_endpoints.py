@@ -558,3 +558,233 @@ class TestScholarshipConfigurationEndpointsIntegration:
         get_duplicate_response = await authenticated_admin_client.get(f"{BASE}/{duplicate_id}")
         assert get_duplicate_response.status_code == 200
         assert get_duplicate_response.json()["data"]["is_active"] is True
+
+    @pytest.mark.asyncio
+    async def test_create_persists_project_numbers_and_shared_quota_sources(
+        self,
+        authenticated_admin_client: AsyncClient,
+        db: AsyncSession,
+        test_scholarship_type,
+        test_admin_with_scholarship_access,
+    ):
+        """Create must persist the flattened project_numbers and the
+        shared_quota_sources link, and the GET response must echo both
+        (and no longer expose prior_quota_years)."""
+        # Prior-year source config the link will point at.
+        source = ScholarshipConfiguration(
+            scholarship_type_id=test_scholarship_type.id,
+            academic_year=113,
+            semester=Semester.first,
+            config_name="Source 113",
+            config_code="SRC-113-1",
+            amount=40000,
+            has_college_quota=True,
+            quotas={"nstc": {"EE": 5}},
+            is_active=True,
+        )
+        db.add(source)
+        await db.commit()
+
+        payload = {
+            "scholarship_type_id": test_scholarship_type.id,
+            "config_name": "Create With Pools",
+            "config_code": "POOLS-114-1",
+            "academic_year": 114,
+            "semester": "first",
+            "amount": 40000,
+            "currency": "TWD",
+            "project_numbers": {"nstc": "114R000001"},
+            "shared_quota_sources": [{"source_config_code": "SRC-113-1", "sub_types": ["nstc"]}],
+        }
+        response = await authenticated_admin_client.post(BASE, json=payload)
+        assert response.status_code == 200, response.text
+        config_id = response.json()["data"]["id"]
+
+        get_response = await authenticated_admin_client.get(f"{BASE}/{config_id}")
+        body = get_response.json()["data"]
+        assert body["project_numbers"] == {"nstc": "114R000001"}
+        assert body["shared_quota_sources"] == [{"source_config_code": "SRC-113-1", "sub_types": ["nstc"]}]
+        assert "prior_quota_years" not in body
+
+    @pytest.mark.asyncio
+    async def test_create_rejects_invalid_shared_quota_source(
+        self,
+        authenticated_admin_client: AsyncClient,
+        test_scholarship_type,
+    ):
+        """A link to a non-existent source config is rejected at create."""
+        payload = {
+            "scholarship_type_id": test_scholarship_type.id,
+            "config_name": "Bad Link",
+            "config_code": "BADLINK-114-1",
+            "academic_year": 114,
+            "semester": "first",
+            "amount": 40000,
+            "shared_quota_sources": [{"source_config_code": "NOPE-999", "sub_types": ["nstc"]}],
+        }
+        response = await authenticated_admin_client.post(BASE, json=payload)
+        assert response.status_code == 400
+        assert "NOPE-999" in response.json()["message"]
+
+    @pytest.mark.asyncio
+    async def test_update_persists_project_numbers_and_shared_quota_sources(
+        self,
+        authenticated_admin_client: AsyncClient,
+        db: AsyncSession,
+        test_scholarship_type,
+        test_admin_with_scholarship_access,
+    ):
+        """PUT must persist project_numbers and a validated shared_quota_sources
+        link with flag_modified so the JSON mutation is detected."""
+        source = ScholarshipConfiguration(
+            scholarship_type_id=test_scholarship_type.id,
+            academic_year=113,
+            semester=Semester.first,
+            config_name="Upd Source 113",
+            config_code="USRC-113-1",
+            amount=40000,
+            has_college_quota=True,
+            quotas={"nstc": {"EE": 5}},
+            is_active=True,
+        )
+        target = ScholarshipConfiguration(
+            scholarship_type_id=test_scholarship_type.id,
+            academic_year=114,
+            semester=Semester.first,
+            config_name="Upd Target 114",
+            config_code="UTGT-114-1",
+            amount=40000,
+            is_active=True,
+        )
+        db.add_all([source, target])
+        await db.commit()
+        await db.refresh(target)
+
+        update_payload = {
+            "project_numbers": {"nstc": "114R000099"},
+            "shared_quota_sources": [{"source_config_code": "USRC-113-1", "sub_types": ["nstc"]}],
+        }
+        response = await authenticated_admin_client.put(f"{BASE}/{target.id}", json=update_payload)
+        assert response.status_code == 200, response.text
+
+        get_response = await authenticated_admin_client.get(f"{BASE}/{target.id}")
+        body = get_response.json()["data"]
+        assert body["project_numbers"] == {"nstc": "114R000099"}
+        assert body["shared_quota_sources"] == [{"source_config_code": "USRC-113-1", "sub_types": ["nstc"]}]
+
+    @pytest.mark.asyncio
+    async def test_update_rejects_invalid_shared_quota_source(
+        self,
+        authenticated_admin_client: AsyncClient,
+        db: AsyncSession,
+        test_scholarship_type,
+    ):
+        """PUT with a non-prior-year link is rejected (source year >= this year)."""
+        future_source = ScholarshipConfiguration(
+            scholarship_type_id=test_scholarship_type.id,
+            academic_year=115,
+            semester=Semester.first,
+            config_name="Future 115",
+            config_code="FUT-115-1",
+            amount=40000,
+            has_college_quota=True,
+            quotas={"nstc": {"EE": 5}},
+            is_active=True,
+        )
+        target = ScholarshipConfiguration(
+            scholarship_type_id=test_scholarship_type.id,
+            academic_year=114,
+            semester=Semester.first,
+            config_name="Upd Target2 114",
+            config_code="UTGT2-114-1",
+            amount=40000,
+            is_active=True,
+        )
+        db.add_all([future_source, target])
+        await db.commit()
+        await db.refresh(target)
+
+        response = await authenticated_admin_client.put(
+            f"{BASE}/{target.id}",
+            json={"shared_quota_sources": [{"source_config_code": "FUT-115-1", "sub_types": ["nstc"]}]},
+        )
+        assert response.status_code == 400
+        assert "學年度" in response.json()["message"]
+
+    @pytest.mark.asyncio
+    async def test_duplicate_carries_quotas_project_numbers_and_links(
+        self,
+        authenticated_admin_client: AsyncClient,
+        db: AsyncSession,
+        test_scholarship_type,
+        test_admin_with_scholarship_access,
+    ):
+        """Duplicating a config must copy quotas, project_numbers and
+        shared_quota_sources into the new period (today it copies none)."""
+        source = ScholarshipConfiguration(
+            scholarship_type_id=test_scholarship_type.id,
+            academic_year=114,
+            semester=Semester.first,
+            config_name="Dup Source 114",
+            config_code="DUPSRC-114-1",
+            amount=40000,
+            has_college_quota=True,
+            quotas={"nstc": {"EE": 5}},
+            project_numbers={"nstc": "114R000001"},
+            shared_quota_sources=[{"source_config_code": "PRIOR-113-1", "sub_types": ["nstc"]}],
+            is_active=True,
+            created_by=test_admin_with_scholarship_access.id,
+        )
+        db.add(source)
+        await db.commit()
+        await db.refresh(source)
+
+        target_payload = {
+            "academic_year": 115,
+            "semester": "first",
+            "config_code": "DUPTGT-115-1",
+        }
+        response = await authenticated_admin_client.post(f"{BASE}/{source.id}/duplicate", json=target_payload)
+        assert response.status_code == 200, response.text
+        new_id = response.json()["data"]["id"]
+
+        body = (await authenticated_admin_client.get(f"{BASE}/{new_id}")).json()["data"]
+        assert body["quotas"] == {"nstc": {"EE": 5}}
+        assert body["project_numbers"] == {"nstc": "114R000001"}
+        assert body["shared_quota_sources"] == [{"source_config_code": "PRIOR-113-1", "sub_types": ["nstc"]}]
+
+    @pytest.mark.asyncio
+    async def test_list_emits_shared_quota_sources_not_prior_quota_years(
+        self,
+        authenticated_admin_client: AsyncClient,
+        db: AsyncSession,
+        test_scholarship_type,
+        test_admin_with_scholarship_access,
+    ):
+        """The list endpoint row must carry project_numbers + shared_quota_sources
+        and must NOT carry the dropped prior_quota_years key."""
+        cfg = ScholarshipConfiguration(
+            scholarship_type_id=test_scholarship_type.id,
+            academic_year=114,
+            semester=Semester.first,
+            config_name="List Row 114",
+            config_code="LISTROW-114-1",
+            amount=40000,
+            project_numbers={"nstc": "114R000001"},
+            shared_quota_sources=[{"source_config_code": "X-113-1", "sub_types": ["nstc"]}],
+            is_active=True,
+            created_by=test_admin_with_scholarship_access.id,
+        )
+        db.add(cfg)
+        await db.commit()
+        await db.refresh(cfg)
+
+        response = await authenticated_admin_client.get(
+            BASE, params={"scholarship_type_id": test_scholarship_type.id, "academic_year": 114}
+        )
+        assert response.status_code == 200
+        rows = response.json()["data"]
+        row = next(r for r in rows if r["config_code"] == "LISTROW-114-1")
+        assert row["project_numbers"] == {"nstc": "114R000001"}
+        assert row["shared_quota_sources"] == [{"source_config_code": "X-113-1", "sub_types": ["nstc"]}]
+        assert "prior_quota_years" not in row

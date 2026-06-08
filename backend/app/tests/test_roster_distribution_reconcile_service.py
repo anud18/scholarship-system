@@ -8,7 +8,6 @@ import pytest
 
 from app.core.exceptions import RosterLockedError
 from app.models.application import Application, ApplicationStatus
-from app.models.audit_log import AuditLog
 from app.models.college_review import CollegeRanking, CollegeRankingItem
 from app.models.payment_roster import (
     PaymentRoster,
@@ -117,14 +116,14 @@ def _ranking(db_sync, scholarship, *, sub_type="nstc"):
     return r
 
 
-def _ranking_item(db_sync, ranking, application, *, rank, sub_type="nstc", alloc_year=114, allocated=True):
+def _ranking_item(db_sync, ranking, application, *, rank, sub_type="nstc", alloc_config_id, allocated=True):
     it = CollegeRankingItem(
         ranking_id=ranking.id,
         application_id=application.id,
         rank_position=rank,
         is_allocated=allocated,
         allocated_sub_type=sub_type if allocated else None,
-        allocation_year=alloc_year if allocated else None,
+        allocation_config_id=alloc_config_id if allocated else None,
         status="allocated" if allocated else "ranked",
     )
     db_sync.add(it)
@@ -132,15 +131,18 @@ def _ranking_item(db_sync, ranking, application, *, rank, sub_type="nstc", alloc
     return it
 
 
-def _roster(db_sync, config, admin, *, status=RosterStatus.LOCKED, sub_type="nstc", alloc_year=114, code="ROSTER-RC-1"):
+def _roster(
+    db_sync, config, admin, *, status=RosterStatus.LOCKED, sub_type="nstc", alloc_config_id, code="ROSTER-RC-1"
+):
     r = PaymentRoster(
         roster_code=code,
         scholarship_configuration_id=config.id,
+        allocation_config_id=alloc_config_id,
         period_label="114",
         academic_year=114,
         roster_cycle=RosterCycle.YEARLY,
         sub_type=sub_type,
-        allocation_year=alloc_year,
+        allocation_year=114 if alloc_config_id is not None else None,
         status=status,
         trigger_type=RosterTriggerType.MANUAL,
         created_by=admin.id,
@@ -151,7 +153,7 @@ def _roster(db_sync, config, admin, *, status=RosterStatus.LOCKED, sub_type="nst
     return r
 
 
-def _roster_item(db_sync, roster, application, *, sub_type="nstc", alloc_year=114, amount=50000):
+def _roster_item(db_sync, roster, application, *, sub_type="nstc", amount=50000):
     it = PaymentRosterItem(
         roster_id=roster.id,
         application_id=application.id,
@@ -160,7 +162,8 @@ def _roster_item(db_sync, roster, application, *, sub_type="nstc", alloc_year=11
         scholarship_name="NSTC",
         scholarship_amount=amount,
         scholarship_subtype=sub_type,
-        allocation_year=alloc_year,
+        allocation_config_id=roster.allocation_config_id,
+        allocation_year=roster.allocation_year,
         allocated_sub_type=sub_type,
         is_included=True,
     )
@@ -184,10 +187,10 @@ def diff_scenario(db_sync):
     app_b = _application(db_sync, ub, sch, config, app_id="APP-RC-B", std_code="111B")
     app_c = _application(db_sync, uc, sch, config, app_id="APP-RC-C", std_code="111C")
     ranking = _ranking(db_sync, sch)
-    _ranking_item(db_sync, ranking, app_a, rank=1)  # allocated, in roster
-    _ranking_item(db_sync, ranking, app_b, rank=2)  # allocated, missing → to_add
-    _ranking_item(db_sync, ranking, app_c, rank=3, allocated=False)  # not allocated
-    roster = _roster(db_sync, config, admin)
+    _ranking_item(db_sync, ranking, app_a, rank=1, alloc_config_id=config.id)  # allocated, in roster
+    _ranking_item(db_sync, ranking, app_b, rank=2, alloc_config_id=config.id)  # allocated, missing → to_add
+    _ranking_item(db_sync, ranking, app_c, rank=3, alloc_config_id=None, allocated=False)  # not allocated
+    roster = _roster(db_sync, config, admin, alloc_config_id=config.id)
     _roster_item(db_sync, roster, app_a)  # matches distribution
     item_c = _roster_item(db_sync, roster, app_c)  # orphan → to_remove
     db_sync.commit()
@@ -242,9 +245,13 @@ def test_reconcile_adds_missing_and_removes_orphan(db_sync, diff_scenario):
     assert result["excel_stale"] is True
 
     db_sync.refresh(diff_scenario["roster"])
-    # roster now holds app_a (kept) + app_b (added); app_c removed → 2 items
-    assert diff_scenario["roster"].total_applications == 2
-    assert db_sync.get(PaymentRosterItem, diff_scenario["item_c"]) is None
+    # Soft-delete: 3 rows total (app_a kept + app_b added + app_c soft-removed),
+    # 2 qualified (is_included=True). total_applications counts all rows.
+    assert diff_scenario["roster"].total_applications == 3
+    assert diff_scenario["roster"].qualified_count == 2
+    removed_item = db_sync.get(PaymentRosterItem, diff_scenario["item_c"])
+    assert removed_item is not None
+    assert removed_item.is_included is False
     # added item is included (student_data has bank account, verification disabled)
     assert result["added"][0]["is_included"] is True
 
@@ -316,6 +323,8 @@ def test_reconcile_works_on_completed_roster(db_sync, diff_scenario):
 
 
 def test_reconcile_writes_audit_logs(db_sync, diff_scenario):
+    from app.models.roster_audit import RosterAuditAction, RosterAuditLog
+
     svc = RosterService(db_sync)
     svc.reconcile_roster(
         roster_id=diff_scenario["roster"].id,
@@ -324,16 +333,32 @@ def test_reconcile_writes_audit_logs(db_sync, diff_scenario):
         admin_user_id=diff_scenario["admin"].id,
         reason="sync",
     )
-    added_log = db_sync.query(AuditLog).filter(AuditLog.action == "roster.item_added_from_distribution").one()
-    assert added_log.new_values["application_id"] == diff_scenario["app_b"]
-    summary = db_sync.query(AuditLog).filter(AuditLog.action == "roster.reconciled").one()
-    assert summary.new_values["added"] == 1
-    assert summary.new_values["removed"] == 1
+    add_log = (
+        db_sync.query(RosterAuditLog)
+        .filter(
+            RosterAuditLog.roster_id == diff_scenario["roster"].id,
+            RosterAuditLog.action == RosterAuditAction.ITEM_ADD,
+        )
+        .first()
+    )
+    assert add_log is not None
+    assert add_log.audit_metadata["source"] == "reconcile"
+    assert add_log.audit_metadata["application_id"] == diff_scenario["app_b"]
+    remove_log = (
+        db_sync.query(RosterAuditLog)
+        .filter(
+            RosterAuditLog.roster_id == diff_scenario["roster"].id,
+            RosterAuditLog.action == RosterAuditAction.ITEM_REMOVE,
+        )
+        .first()
+    )
+    assert remove_log is not None
+    assert remove_log.audit_metadata["source"] == "reconcile"
 
 
 def test_distribution_diff_whole_period_roster_ignores_subtype_slice(db_sync):
     """Regression: a roster made by generate_roster (立即產生造冊) has
-    sub_type=NULL / allocation_year=NULL and holds EVERY allocated item across
+    sub_type=NULL / allocation_config_id=NULL and holds EVERY allocated item across
     sub_types. The diff must compare against the full allocated set, not a
     derived 'general' slice — that slice matches zero nstc items, so the diff
     would bogusly report to_add=[] and flag every real member as removable."""
@@ -347,10 +372,10 @@ def test_distribution_diff_whole_period_roster_ignores_subtype_slice(db_sync):
     app_b = _application(db_sync, ub, sch, config, app_id="APP-WP-B", std_code="222B")
     app_c = _application(db_sync, uc, sch, config, app_id="APP-WP-C", std_code="222C")
     ranking = _ranking(db_sync, sch)
-    _ranking_item(db_sync, ranking, app_a, rank=1)  # allocated nstc, already in roster
-    _ranking_item(db_sync, ranking, app_b, rank=2)  # allocated nstc, missing → to_add
-    _ranking_item(db_sync, ranking, app_c, rank=3, allocated=False)  # de-allocated → orphan
-    roster = _roster(db_sync, config, admin, sub_type=None, alloc_year=None, code="ROSTER-WP-1")
+    _ranking_item(db_sync, ranking, app_a, rank=1, alloc_config_id=config.id)  # allocated nstc, already in roster
+    _ranking_item(db_sync, ranking, app_b, rank=2, alloc_config_id=config.id)  # allocated nstc, missing → to_add
+    _ranking_item(db_sync, ranking, app_c, rank=3, alloc_config_id=None, allocated=False)  # de-allocated → orphan
+    roster = _roster(db_sync, config, admin, sub_type=None, alloc_config_id=None, code="ROSTER-WP-1")
     _roster_item(db_sync, roster, app_a)
     item_c = _roster_item(db_sync, roster, app_c)
     db_sync.commit()
@@ -374,8 +399,8 @@ def test_distribution_diff_excludes_to_add_missing_student_data(db_sync):
     app_b.student_data = {"std_cname": "乙"}  # no std_stdcode
     db_sync.flush()
     ranking = _ranking(db_sync, sch)
-    _ranking_item(db_sync, ranking, app_b, rank=1)
-    roster = _roster(db_sync, config, admin, code="ROSTER-FILT-1")
+    _ranking_item(db_sync, ranking, app_b, rank=1, alloc_config_id=config.id)
+    roster = _roster(db_sync, config, admin, alloc_config_id=config.id, code="ROSTER-FILT-1")
     db_sync.commit()
 
     svc = RosterService(db_sync)
@@ -392,8 +417,8 @@ def test_reconcile_add_missing_student_data_raises(db_sync):
     app_b.student_data = {"std_cname": "乙"}  # no std_stdcode
     db_sync.flush()
     ranking = _ranking(db_sync, sch)
-    _ranking_item(db_sync, ranking, app_b, rank=1)
-    roster = _roster(db_sync, config, admin, code="ROSTER-RC-GUARD-1")
+    _ranking_item(db_sync, ranking, app_b, rank=1, alloc_config_id=config.id)
+    roster = _roster(db_sync, config, admin, alloc_config_id=config.id, code="ROSTER-RC-GUARD-1")
     db_sync.commit()
 
     svc = RosterService(db_sync)
@@ -405,3 +430,64 @@ def test_reconcile_add_missing_student_data_raises(db_sync):
             admin_user_id=admin.id,
             reason=None,
         )
+
+
+def test_reconcile_remove_soft_deletes_and_audits(db_sync, diff_scenario):
+    from app.models.roster_audit import RosterAuditAction, RosterAuditLog
+    from app.models.payment_roster import PaymentRosterItem
+
+    svc = RosterService(db_sync)
+    svc.reconcile_roster(
+        roster_id=diff_scenario["roster"].id,
+        add_application_ids=[],
+        remove_item_ids=[diff_scenario["item_c"]],
+        admin_user_id=diff_scenario["admin"].id,
+        reason="比對移除",
+    )
+    item = db_sync.get(PaymentRosterItem, diff_scenario["item_c"])
+    assert item is not None  # soft, not hard
+    assert item.is_included is False
+    log = (
+        db_sync.query(RosterAuditLog)
+        .filter(
+            RosterAuditLog.roster_id == diff_scenario["roster"].id,
+            RosterAuditLog.action == RosterAuditAction.ITEM_REMOVE,
+        )
+        .first()
+    )
+    assert log is not None
+    assert log.audit_metadata["source"] == "reconcile"
+
+
+def test_reconcile_does_not_reflag_already_softremoved_orphan(db_sync, diff_scenario):
+    """After a soft-remove, the same orphan is no longer in allowed_remove, so a
+    second reconcile attempt on it is rejected as not-removable."""
+    svc = RosterService(db_sync)
+    svc.reconcile_roster(
+        roster_id=diff_scenario["roster"].id,
+        add_application_ids=[],
+        remove_item_ids=[diff_scenario["item_c"]],
+        admin_user_id=diff_scenario["admin"].id,
+        reason="first",
+    )
+    with pytest.raises(ValueError):
+        svc.reconcile_roster(
+            roster_id=diff_scenario["roster"].id,
+            add_application_ids=[],
+            remove_item_ids=[diff_scenario["item_c"]],
+            admin_user_id=diff_scenario["admin"].id,
+            reason="again",
+        )
+
+
+def test_diff_to_remove_excludes_softremoved_items(db_sync, diff_scenario):
+    svc = RosterService(db_sync)
+    svc.reconcile_roster(
+        roster_id=diff_scenario["roster"].id,
+        add_application_ids=[],
+        remove_item_ids=[diff_scenario["item_c"]],
+        admin_user_id=diff_scenario["admin"].id,
+        reason="soft",
+    )
+    diff = svc.get_distribution_diff_for_roster(diff_scenario["roster"].id)
+    assert all(e.item_id != diff_scenario["item_c"] for e in diff["to_remove"])

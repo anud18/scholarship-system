@@ -6364,10 +6364,32 @@ export interface paths {
         post?: never;
         /**
          * Remove Locked Roster Item
-         * @description Hard-delete a single item from a LOCKED roster. Roster stays LOCKED;
-         *     excel_stale is set to True; audit log written.
+         * @description Soft-remove a single item from a LOCKED roster (sets is_included=False;
+         *     row survives for restore). Roster stays LOCKED; excel_stale is set to True;
+         *     audit log written.
          */
         delete: operations["remove_locked_roster_item_api_v1_payment_rosters__roster_id__items__item_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payment-rosters/{roster_id}/items/{item_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Roster Item
+         * @description Re-include a soft-removed roster item (回復). Admin only. Works on
+         *     COMPLETED and LOCKED rosters; sets excel_stale; audits ITEM_RESTORE.
+         */
+        post: operations["restore_roster_item_api_v1_payment_rosters__roster_id__items__item_id__restore_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -7447,8 +7469,8 @@ export interface components {
             ranking_item_id: number;
             /** Sub Type Code */
             sub_type_code?: string | null;
-            /** Allocation Year */
-            allocation_year?: number | null;
+            /** Allocation Config Id */
+            allocation_config_id?: number | null;
         };
         /** ApiResponse[List[dict]] */
         ApiResponse_List_dict__: {
@@ -9363,6 +9385,14 @@ export interface components {
         ReorderRequest: {
             /** Items */
             items: components["schemas"]["ReorderItem"][];
+        };
+        /**
+         * RestoreItemRequest
+         * @description Body for POST /payment-rosters/{roster_id}/items/{item_id}/restore
+         */
+        RestoreItemRequest: {
+            /** Reason Note */
+            reason_note?: string | null;
         };
         /** RestoreRequest */
         RestoreRequest: {
@@ -21007,6 +21037,42 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["RemoveLockedItemRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_roster_item_api_v1_payment_rosters__roster_id__items__item_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roster_id: number;
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreItemRequest"];
             };
         };
         responses: {

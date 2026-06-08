@@ -35,6 +35,7 @@ from app.schemas.payment_roster import (
     ReconcileRequest,
     ReconcileResult,
     RemoveLockedItemRequest,
+    RestoreItemRequest,
     RevokedSuspendedListResponse,
 )
 from app.schemas.roster import (
@@ -60,6 +61,20 @@ def _require_admin(user: User) -> None:
     """Raise 403 if user is not admin or super_admin."""
     if user.role not in (UserRole.admin, UserRole.super_admin):
         raise HTTPException(status_code=403, detail="Admin role required")
+
+
+def _roster_item_dict_with_display_year(item: PaymentRosterItem, roster: PaymentRoster) -> dict:
+    """Serialize a roster item for the UI, resolving the display year.
+
+    Uses the per-item snapshot when set (the consumed/borrowed prior-year quota
+    for shared-quota allocations), else the roster's own academic_year — so
+    every 分發名單 row shows which year's quota it draws from. Monthly/legacy
+    rosters never snapshot allocation_year, so without this they'd show no year.
+    """
+    data = RosterItemResponse.model_validate(item).model_dump()
+    if data.get("allocation_year") is None:
+        data["allocation_year"] = roster.academic_year
+    return data
 
 
 def _generate_payment_roster_inner(
@@ -442,7 +457,7 @@ async def list_payment_rosters(
 
             # 添加關聯資料（已 eager loaded，避免 MissingGreenlet）
             if roster.items:
-                roster_dict["items"] = [RosterItemResponse.model_validate(item).model_dump() for item in roster.items]
+                roster_dict["items"] = [_roster_item_dict_with_display_year(item, roster) for item in roster.items]
             if roster.audit_logs:
                 roster_dict["audit_logs"] = [
                     RosterAuditLogResponse.model_validate(log).model_dump() for log in roster.audit_logs
@@ -585,10 +600,27 @@ async def preview_roster_students(
                 )
                 .all()
             )
+            # Resolve the display year per allocation: the CONSUMED config's
+            # academic_year (borrowing prior-year shared quota shows that year).
+            # allocation_config_id NULL ⇒ own requesting config ⇒ this year.
+            consumed_ids = {ri.allocation_config_id for ri in alloc_items if ri.allocation_config_id is not None}
+            consumed_year_by_id: dict = {}
+            if consumed_ids:
+                for cid, cyear in (
+                    db.query(ScholarshipConfiguration.id, ScholarshipConfiguration.academic_year)
+                    .filter(ScholarshipConfiguration.id.in_(consumed_ids))
+                    .all()
+                ):
+                    consumed_year_by_id[cid] = cyear
             for ri in alloc_items:
                 allocation_map[ri.application_id] = {
                     "allocated_sub_type": ri.allocated_sub_type,
-                    "allocation_year": ri.allocation_year,
+                    "allocation_config_id": ri.allocation_config_id,
+                    "allocation_year": (
+                        consumed_year_by_id.get(ri.allocation_config_id)
+                        if ri.allocation_config_id is not None
+                        else academic_year
+                    ),
                 }
 
         # Initialize summary statistics
@@ -634,6 +666,7 @@ async def preview_roster_students(
                 "rank_position": None,
                 "backup_info": [],
                 "allocated_sub_type": allocation_map.get(application.id, {}).get("allocated_sub_type"),
+                "allocation_config_id": allocation_map.get(application.id, {}).get("allocation_config_id"),
                 "allocation_year": allocation_map.get(application.id, {}).get("allocation_year"),
                 # Validation fields
                 "is_included": False,
@@ -1280,7 +1313,7 @@ async def get_roster_items(
 
         items_data = []
         for item in items:
-            item_dict = RosterItemResponse.model_validate(item).model_dump()
+            item_dict = _roster_item_dict_with_display_year(item, roster)
             # 從 application.student_data 補充學號/學院/系所資訊
             # (PaymentRosterItem 只存 student_id_number=身分證，學號需從快照取得)
             if item.application and item.application.student_data:
@@ -2080,9 +2113,11 @@ async def get_roster_audit_logs(
                         "level": log.level.value,
                         "title": log.title,
                         "description": log.description,
-                        "created_by_user_id": log.created_by_user_id,
-                        "created_at": log.created_at,
+                        "user_id": log.user_id,
+                        "user_name": log.user_name,
+                        "user_role": log.user_role,
                         "audit_metadata": log.audit_metadata,
+                        "created_at": log.created_at,
                     }
                     for log in logs
                 ],
@@ -2125,8 +2160,9 @@ def remove_locked_roster_item(
     db: Session = Depends(get_sync_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Hard-delete a single item from a LOCKED roster. Roster stays LOCKED;
-    excel_stale is set to True; audit log written."""
+    """Soft-remove a single item from a LOCKED roster (sets is_included=False;
+    row survives for restore). Roster stays LOCKED; excel_stale is set to True;
+    audit log written."""
     _require_admin(current_user)
     svc = RosterService(db)
     try:
@@ -2139,6 +2175,35 @@ def remove_locked_roster_item(
     except (ValueError, RosterLockedError) as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return {"success": True, "message": "已從造冊移除", "data": result}
+
+
+@router.post("/{roster_id}/items/{item_id}/restore")
+def restore_roster_item(
+    roster_id: int,
+    item_id: int,
+    request: RestoreItemRequest,
+    db: Session = Depends(get_sync_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Re-include a soft-removed roster item (回復). Admin only. Works on
+    COMPLETED and LOCKED rosters; sets excel_stale; audits ITEM_RESTORE."""
+    _require_admin(current_user)
+    svc = RosterService(db)
+    try:
+        result = svc.restore_item(
+            roster_id=roster_id,
+            item_id=item_id,
+            admin_user_id=current_user.id,
+            reason=request.reason_note,
+        )
+    except ValueError as e:
+        # restore_item raises typed exceptions for the precise codes: not-found
+        # → NotFoundError/RosterNotFoundError (404) and already-included →
+        # ConflictError (409), both handled by the global ScholarshipException
+        # handler. A plain ValueError reaching here is a 400 case (item belongs
+        # to another roster, or roster is not in a restorable status).
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    return {"success": True, "message": "已回復造冊明細", "data": result}
 
 
 @router.get("/{roster_id}/distribution-diff")

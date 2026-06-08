@@ -71,6 +71,10 @@ def _make_roster(roster_id: int = 1, academic_year: int = 114, ranking_id=None) 
         id=roster_id,
         ranking_id=ranking_id,
         academic_year=academic_year,
+        # whole-period sentinel → _create_roster_item falls back to the
+        # application's own scholarship_configuration as the consumed config
+        allocation_config_id=None,
+        allocation_year=academic_year,  # display snapshot
     )
 
 

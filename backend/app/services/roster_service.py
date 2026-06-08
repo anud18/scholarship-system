@@ -10,7 +10,14 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import and_, case as sa_case, func, or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.exceptions import RosterAlreadyExistsError, RosterGenerationError, RosterLockedError, RosterNotFoundError
+from app.core.exceptions import (
+    ConflictError,
+    NotFoundError,
+    RosterAlreadyExistsError,
+    RosterGenerationError,
+    RosterLockedError,
+    RosterNotFoundError,
+)
 from app.core.metrics import payment_rosters_total
 from app.core.pii_crypto import redact_dict_pii
 from app.models.application import Application
@@ -23,8 +30,7 @@ from app.models.payment_roster import (
     RosterTriggerType,
     StudentVerificationStatus,
 )
-from app.models.audit_log import AuditLog
-from app.models.roster_audit import RosterAuditAction, RosterAuditLevel
+from app.models.roster_audit import RosterAuditAction, RosterAuditLevel, RosterAuditLog
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
 from app.models.user import User
 from app.schemas.payment_roster import DistributionDiffEntry, RevokedSuspendedEntry
@@ -816,9 +822,8 @@ class RosterService:
                 f"Checked nested and flat structures. submitted_form_data keys: {list(form_data.keys())}"
             )
 
-        # 查詢 CollegeRankingItem 以取得備取資訊與分發資訊
+        # 查詢 CollegeRankingItem 以取得備取資訊與分發子類型
         backup_info = None
-        allocation_year = None
         allocated_sub_type = None
         from app.models.college_review import CollegeRanking, CollegeRankingItem
 
@@ -838,10 +843,9 @@ class RosterService:
                 if ranking_item.backup_allocations:
                     backup_info = ranking_item.backup_allocations
                     logger.info(f"Application {application.id} has backup allocations: {len(backup_info)} positions")
-                allocation_year = ranking_item.allocation_year
                 allocated_sub_type = ranking_item.allocated_sub_type
 
-        # 若無 ranking_id（月份造冊），從同學年度已分發排名中查詢
+        # 若無 ranking_id（月份造冊），從同學年度已分發排名中查詢子類型
         if not allocated_sub_type:
             alloc_item = (
                 self.db.query(CollegeRankingItem)
@@ -856,8 +860,17 @@ class RosterService:
                 .first()
             )
             if alloc_item:
-                allocation_year = allocation_year or alloc_item.allocation_year
                 allocated_sub_type = alloc_item.allocated_sub_type
+
+        # 載入消耗配置 (consumed config) — 借用前年度配額時不同於發放配置。
+        # allocation_config_id NULL ⇒ 全期 sentinel，退回造冊自身的發放配置。
+        consumed_config = None
+        if roster.allocation_config_id is not None:
+            consumed_config = self.db.get(ScholarshipConfiguration, roster.allocation_config_id)
+        if consumed_config is None:
+            consumed_config = application.scholarship_configuration
+        # allocation_year 顯示快照取自造冊（= 消耗配置學年度）
+        allocation_year = roster.allocation_year
 
         # 計算申請身分別
         application_identity = None
@@ -874,9 +887,10 @@ class RosterService:
             student_email=student_data.get("com_email", ""),
             bank_account=bank_account,  # From submitted_form_data, not student_data
             scholarship_name=application.scholarship_configuration.scholarship_type.name,
-            scholarship_amount=application.amount or application.scholarship_configuration.amount,
+            scholarship_amount=application.amount or consumed_config.amount,
             scholarship_subtype=application.sub_scholarship_type,
-            allocation_year=allocation_year,  # 消耗哪一年的配額（補發時不同於 academic_year）
+            allocation_config_id=roster.allocation_config_id,  # 消耗配置 id 快照
+            allocation_year=allocation_year,  # 消耗配置學年度顯示快照
             allocated_sub_type=allocated_sub_type,  # 分發到的子類型快照
             application_identity=application_identity,  # 申請身分快照
             verification_status=verification_status,
@@ -1443,10 +1457,10 @@ class RosterService:
         """
         從矩陣分發結果批次產生造冊
 
-        針對每個唯一的 (allocation_year, sub_type) 組合建立獨立的造冊。
+        針對每個唯一的 (allocation_config_id, sub_type) 組合建立獨立的造冊。
         例如：
-          - 115 學年度分發完成後，若有 nstc-115, nstc-114, nstc-113, moe_1w-115 四種組合，
-            則會產生 4 個造冊，各自包含對應學生。
+          - 115 學年度分發完成後，若 nstc 借用了 phd_114/phd_113 的配額，
+            產生 nstc·115、nstc·114、nstc·113、moe_1w·115 四個造冊，各自記錄消耗配置。
 
         Args:
             scholarship_type_id: 獎學金類型 ID
@@ -1507,7 +1521,7 @@ class RosterService:
                 f"找不到對應的獎學金配置：scholarship_type_id={scholarship_type_id}, " f"academic_year={academic_year}"
             )
 
-        # 3. 取得所有已分配的 ranking items，並按 (allocation_year, allocated_sub_type) 分組
+        # 3. 取得所有已分配的 ranking items，並按 (allocation_config_id, allocated_sub_type) 分組
         allocated_items = (
             self.db.query(CollegeRankingItem)
             .filter(
@@ -1522,30 +1536,41 @@ class RosterService:
         if not allocated_items:
             raise ValueError(f"排名 {ranking_ids} 沒有已分配的學生。請確認已完成手動分發並確認分發。")
 
-        # 分組：{(allocation_year, sub_type): [ranking_item, ...]}
+        # 分組：{(allocation_config_id, sub_type): [ranking_item, ...]}
+        # allocation_config_id NULL ⇒ 消耗本配置（requesting config）的配額。
         groups: Dict[tuple, List] = {}
         for item in allocated_items:
-            alloc_year = item.allocation_year or academic_year
+            alloc_config_id = item.allocation_config_id or scholarship_config.id
             sub_type = item.allocated_sub_type or "general"
-            key = (alloc_year, sub_type)
+            key = (alloc_config_id, sub_type)
             groups.setdefault(key, []).append(item)
+
+        # 預先載入每個分組的「消耗配置」(consumed config) — 借用配額時是前年度的同代碼配置
+        consumed_configs: Dict[int, ScholarshipConfiguration] = {scholarship_config.id: scholarship_config}
+        for alloc_config_id, _sub_type in groups:
+            if alloc_config_id not in consumed_configs:
+                consumed = self.db.get(ScholarshipConfiguration, alloc_config_id)
+                if consumed is None:
+                    raise ValueError(f"找不到消耗配置 scholarship_configuration_id={alloc_config_id}")
+                consumed_configs[alloc_config_id] = consumed
 
         logger.info(
             f"Rankings {ranking_ids}: found {len(allocated_items)} allocated items in {len(groups)} groups: "
-            + ", ".join(f"{sub_type}-{yr}({len(items)}人)" for (yr, sub_type), items in groups.items())
+            + ", ".join(f"{sub_type}-cfg{cid}({len(items)}人)" for (cid, sub_type), items in groups.items())
         )
 
-        # 4. 為每個分組建立造冊
+        # 4. 為每個分組建立造冊（以該分組的消耗配置為準）
         created_rosters: List[PaymentRoster] = []
 
-        for (alloc_year, sub_type), group_items in groups.items():
+        for (alloc_config_id, sub_type), group_items in groups.items():
             application_ids_in_group = {item.application_id for item in group_items}
+            consumed_config = consumed_configs[alloc_config_id]
 
             try:
                 roster = self._generate_one_sub_type_roster(
-                    scholarship_config=scholarship_config,
+                    requesting_config=scholarship_config,
+                    consumed_config=consumed_config,
                     ranking_ids=ranking_ids,
-                    allocation_year=alloc_year,
                     sub_type=sub_type,
                     application_ids_in_group=application_ids_in_group,
                     created_by_user_id=created_by_user_id,
@@ -1554,10 +1579,10 @@ class RosterService:
                 )
                 created_rosters.append(roster)
             except RosterAlreadyExistsError:
-                logger.info(f"Roster for ({alloc_year}, {sub_type}) already exists, skipping.")
+                logger.info(f"Roster for (cfg={alloc_config_id}, {sub_type}) already exists, skipping.")
                 continue
             except Exception:
-                logger.exception(f"Failed to generate roster for ({alloc_year}, {sub_type})")
+                logger.exception(f"Failed to generate roster for (cfg={alloc_config_id}, {sub_type})")
                 raise
 
         self.db.commit()
@@ -1566,9 +1591,9 @@ class RosterService:
 
     def _generate_one_sub_type_roster(
         self,
-        scholarship_config: ScholarshipConfiguration,
+        requesting_config: ScholarshipConfiguration,
+        consumed_config: ScholarshipConfiguration,
         ranking_ids: List[int],
-        allocation_year: int,
         sub_type: str,
         application_ids_in_group: set,
         created_by_user_id: int,
@@ -1576,32 +1601,36 @@ class RosterService:
         force_regenerate: bool,
     ) -> PaymentRoster:
         """
-        為特定 (allocation_year, sub_type) 組合產生一個造冊
+        為特定 (consumed_config, sub_type) 組合產生一個造冊。
+
+        計畫編號 / 金額 / allocation_year 顯示快照取自「消耗配置」(consumed_config)；
+        造冊歸屬於發放配置 (requesting_config)。借用前年度配額時兩者不同。
 
         Returns:
             PaymentRoster: 已建立的造冊
         """
-        academic_year = scholarship_config.academic_year
-        period_label = str(academic_year)  # 學年制：period_label = 學年度
+        academic_year = requesting_config.academic_year
+        period_label = str(consumed_config.academic_year)  # 以消耗配置的學年度為期間 key
+        allocation_year = consumed_config.academic_year  # 顯示快照
 
-        # 取得計畫編號
+        # 取得計畫編號（扁平：consumed_config.project_numbers[sub_type]，無年度 key）
         project_number = None
-        if scholarship_config.project_numbers:
-            sub_type_projects = scholarship_config.project_numbers.get(sub_type, {})
-            project_number = sub_type_projects.get(str(allocation_year))
+        if consumed_config.project_numbers:
+            project_number = consumed_config.project_numbers.get(sub_type)
 
-        # 產生造冊代碼（包含 sub_type 和 allocation_year 以確保唯一性）
-        roster_code = f"ROSTER-{academic_year}-{sub_type}-{allocation_year}-{scholarship_config.config_code}"
+        # 產生造冊代碼（包含 sub_type 與消耗配置代碼以確保唯一性）
+        roster_code = f"ROSTER-{academic_year}-{sub_type}-{consumed_config.config_code}-{requesting_config.config_code}"
 
-        # 檢查是否已存在
+        # 檢查是否已存在（unique key: scholarship_configuration_id + period_label
+        # + allocation_config_id + sub_type）
         existing_roster = (
             self.db.query(PaymentRoster)
             .filter(
                 and_(
-                    PaymentRoster.scholarship_configuration_id == scholarship_config.id,
+                    PaymentRoster.scholarship_configuration_id == requesting_config.id,
                     PaymentRoster.period_label == period_label,
                     PaymentRoster.sub_type == sub_type,
-                    PaymentRoster.allocation_year == allocation_year,
+                    PaymentRoster.allocation_config_id == consumed_config.id,
                 )
             )
             .first()
@@ -1631,18 +1660,21 @@ class RosterService:
             roster.total_amount = 0
             roster.verification_api_failures = 0
             roster.project_number = project_number
+            roster.allocation_config_id = consumed_config.id
+            roster.allocation_year = allocation_year
             self.db.query(PaymentRosterItem).filter(PaymentRosterItem.roster_id == roster.id).delete()
             logger.info(f"Regenerating roster {roster_code}")
         else:
             roster = PaymentRoster(
                 roster_code=roster_code,
-                scholarship_configuration_id=scholarship_config.id,
+                scholarship_configuration_id=requesting_config.id,
+                allocation_config_id=consumed_config.id,
                 ranking_id=ranking_ids[0] if ranking_ids else None,  # Use first ranking_id for reference
                 period_label=period_label,
                 academic_year=academic_year,
                 roster_cycle=RosterCycle.YEARLY,
                 sub_type=sub_type,
-                allocation_year=allocation_year,
+                allocation_year=allocation_year,  # 顯示快照 = 消耗配置學年度
                 project_number=project_number,
                 status=RosterStatus.PROCESSING,
                 trigger_type=RosterTriggerType.MANUAL,
@@ -1790,6 +1822,11 @@ class RosterService:
             .join(Application, PaymentRosterItem.application_id == Application.id)
             .filter(
                 PaymentRosterItem.roster_id == roster_id,
+                # Only items STILL active in the roster. A soft-removed item
+                # (is_included=False, e.g. 鎖定後移除 / 排除) has already been
+                # handled and must NOT linger in the 撤銷/停發 needs-attention
+                # panel (pre soft-delete it was hard-deleted, so it vanished).
+                PaymentRosterItem.is_included.is_(True),
                 Application.quota_allocation_status.in_(("revoked", "suspended")),
             )
             .all()
@@ -1837,6 +1874,48 @@ class RosterService:
         roster.disqualified_count = total_count - qualified
         roster.total_amount = total_amount
         return qualified, total_count, total_amount
+
+    _AUDIT_ACTION_LABELS = {
+        RosterAuditAction.ITEM_REMOVE: "移除",
+        RosterAuditAction.ITEM_ADD: "新增",
+        RosterAuditAction.ITEM_RESTORE: "回復",
+    }
+
+    def _write_roster_item_audit(
+        self,
+        roster_id: int,
+        action: "RosterAuditAction",
+        item: "PaymentRosterItem",
+        admin_user_id: int,
+        source: str,
+        reason: Optional[str] = None,
+    ) -> None:
+        """Add (not commit) one RosterAuditLog row for an item-level mutation.
+        Caller commits. `source` is one of exclude/reconcile/locked_remove/restore."""
+        user = self.db.get(User, admin_user_id)
+        student_id = None
+        if item.application is not None and item.application.student_data:
+            student_id = item.application.student_data.get("std_stdcode")
+        label = self._AUDIT_ACTION_LABELS.get(action, action.value)
+        self.db.add(
+            RosterAuditLog.create_audit_log(
+                roster_id=roster_id,
+                action=action,
+                title=f"{label} {item.student_name}",
+                description=f"{label} {item.student_name}（原因：{reason or '—'}）",
+                user_id=admin_user_id,
+                user_name=user.name if user else None,
+                user_role=(user.role.value if user and user.role else None),
+                audit_metadata={
+                    "student_name": item.student_name,
+                    "student_id": student_id,
+                    "application_id": item.application_id,
+                    "source": source,
+                    "reason": reason,
+                },
+                affected_items_count=1,
+            )
+        )
 
     def _resolve_distribution_for_roster(
         self, roster: PaymentRoster, config: Optional[ScholarshipConfiguration] = None
@@ -1890,24 +1969,25 @@ class RosterService:
         )
 
         # Whole-period roster (generate_roster / 立即產生造冊): sub_type and
-        # allocation_year are both NULL because that path holds EVERY allocated
-        # item in the ranking regardless of sub_type (mirrors
+        # allocation_config_id are both NULL because that path holds EVERY
+        # allocated item in the ranking regardless of sub_type (mirrors
         # _get_eligible_applications matrix mode). Slicing by a derived "general"
         # sub_type would exclude every nstc/moe item → empty diff. So for these,
         # the distribution is the full allocated set, no slicing.
-        if roster.sub_type is None and roster.allocation_year is None:
+        if roster.sub_type is None and roster.allocation_config_id is None:
             return {item.application_id: item for item in allocated}
 
         # Per-slice roster (generate_rosters_from_distribution): one roster per
-        # (allocation_year, sub_type) group — match that exact group.
-        roster_year = roster.allocation_year or config.academic_year
+        # (allocation_config_id, sub_type) group — match that exact group.
+        # allocation_config_id NULL on an item ⇒ consumed the requesting config.
+        roster_config_id = roster.allocation_config_id or config.id
         roster_sub = roster.sub_type or "general"
 
         result: dict = {}
         for item in allocated:
-            item_year = item.allocation_year or config.academic_year
+            item_config_id = item.allocation_config_id or config.id
             item_sub = item.allocated_sub_type or "general"
-            if item_year == roster_year and item_sub == roster_sub:
+            if item_config_id == roster_config_id and item_sub == roster_sub:
                 result[item.application_id] = item
         return result
 
@@ -1950,6 +2030,11 @@ class RosterService:
                     app_id,
                 )
                 continue
+            consumed = (
+                self.db.get(ScholarshipConfiguration, ranking_item.allocation_config_id)
+                if ranking_item.allocation_config_id is not None
+                else config
+            ) or config
             to_add.append(
                 DistributionDiffEntry(
                     application_id=app_id,
@@ -1958,10 +2043,10 @@ class RosterService:
                     student_name=std_name,
                     department_name=sd.get("trm_depname"),
                     college_name=sd.get("trm_academyname"),
-                    allocation_year=ranking_item.allocation_year,
+                    allocation_year=consumed.academic_year,
                     allocated_sub_type=ranking_item.allocated_sub_type,
                     application_identity=None,
-                    scholarship_amount=float(application.amount or config.amount or 0),
+                    scholarship_amount=float(application.amount or consumed.amount or 0),
                 )
             )
 
@@ -1974,6 +2059,9 @@ class RosterService:
         to_remove = []
         for item in existing_items:
             if item.application_id in allocated_map:
+                continue
+            if not item.is_included:
+                # Already soft-removed — not an actionable orphan anymore.
                 continue
             app = apps_by_id.get(item.application_id)
             sd = (app.student_data or {}) if app else {}
@@ -2072,7 +2160,7 @@ class RosterService:
             and ri.application is not None
             and ri.application.status == ApplicationStatus.approved
         }
-        allowed_remove = {it.id for it in existing_items if it.application_id not in allocated_map}
+        allowed_remove = {it.id for it in existing_items if it.is_included and it.application_id not in allocated_map}
 
         bad_add = [a for a in add_ids if a not in allowed_add]
         if bad_add:
@@ -2086,11 +2174,20 @@ class RosterService:
         for app_id in add_ids:
             application = self.db.get(Application, app_id)
             if application is None:
-                # Unreachable in practice (allowed_add is derived from loaded,
-                # approved applications) but guard so a deleted row yields a
-                # clean 400 instead of an AttributeError 500.
                 raise ValueError(f"Application {app_id} not found")
-            item = self._verify_and_create_item(roster, application)
+            # Defensive: if a (soft-removed) item already exists for this app,
+            # restore it instead of creating a duplicate row (no DB unique
+            # constraint protects us). Unreachable via the gated diff today,
+            # but keeps the invariant if gating changes.
+            existing = next((it for it in existing_items if it.application_id == app_id), None)
+            if existing is not None:
+                existing.is_included = True
+                existing.exclusion_reason = None
+                item = existing
+                action = RosterAuditAction.ITEM_RESTORE
+            else:
+                item = self._verify_and_create_item(roster, application)
+                action = RosterAuditAction.ITEM_ADD
             self.db.flush()
             added.append(
                 {
@@ -2100,42 +2197,27 @@ class RosterService:
                     "exclusion_reason": item.exclusion_reason,
                 }
             )
-            self.db.add(
-                AuditLog.create_log(
-                    user_id=admin_user_id,
-                    action="roster.item_added_from_distribution",
-                    resource_type="payment_roster",
-                    resource_id=str(roster_id),
-                    description=f"Added item {item.id} (application {app_id}) to roster from distribution",
-                    new_values={
-                        "item_id": item.id,
-                        "application_id": app_id,
-                        "is_included": item.is_included,
-                        "reason": reason,
-                    },
-                )
+            self._write_roster_item_audit(
+                roster_id=roster_id,
+                action=action,
+                item=item,
+                admin_user_id=admin_user_id,
+                source="reconcile",
+                reason=reason,
             )
 
         for item_id in remove_ids:
             item = items_by_id[item_id]
-            removed_app_id = item.application_id
-            removed_amount = item.scholarship_amount
-            self.db.delete(item)
-            removed.append({"item_id": item_id, "application_id": removed_app_id})
-            self.db.add(
-                AuditLog.create_log(
-                    user_id=admin_user_id,
-                    action="roster.item_removed_reconcile",
-                    resource_type="payment_roster",
-                    resource_id=str(roster_id),
-                    description=f"Removed item {item_id} (application {removed_app_id}) during reconcile",
-                    new_values={
-                        "item_id": item_id,
-                        "application_id": removed_app_id,
-                        "reason": reason,
-                        "removed_amount": float(removed_amount) if removed_amount else 0,
-                    },
-                )
+            item.is_included = False
+            item.exclusion_reason = "比對分發移除：不在分發名單"
+            removed.append({"item_id": item_id, "application_id": item.application_id})
+            self._write_roster_item_audit(
+                roster_id=roster_id,
+                action=RosterAuditAction.ITEM_REMOVE,
+                item=item,
+                admin_user_id=admin_user_id,
+                source="reconcile",
+                reason=reason,
             )
 
         self.db.flush()
@@ -2143,16 +2225,6 @@ class RosterService:
         if added or removed:
             roster.excel_stale = True
 
-        self.db.add(
-            AuditLog.create_log(
-                user_id=admin_user_id,
-                action="roster.reconciled",
-                resource_type="payment_roster",
-                resource_id=str(roster_id),
-                description=f"Reconciled roster: +{len(added)} / -{len(removed)}",
-                new_values={"added": len(added), "removed": len(removed), "reason": reason},
-            )
-        )
         self.db.commit()
 
         return {
@@ -2171,9 +2243,8 @@ class RosterService:
         admin_user_id: int,
         reason: Optional[str],
     ) -> dict:
-        """Hard-delete a PaymentRosterItem from a LOCKED roster. Recompute
-        roster totals, set excel_stale=True, write audit log. Roster stays
-        LOCKED."""
+        """Soft-remove a PaymentRosterItem from a LOCKED roster (sets is_included=False; row survives for restore).
+        Recompute roster totals, set excel_stale=True, write RosterAuditLog. Roster stays LOCKED."""
         roster = self.db.get(PaymentRoster, roster_id)
         if roster is None:
             raise ValueError(f"Roster {roster_id} not found")
@@ -2184,9 +2255,8 @@ class RosterService:
         if item is None or item.roster_id != roster_id:
             raise ValueError(f"Item {item_id} not found in roster {roster_id}")
 
-        removed_amount = item.scholarship_amount
-        removed_app_id = item.application_id
-        self.db.delete(item)
+        item.is_included = False
+        item.exclusion_reason = f"鎖定後移除：{reason}" if reason else "鎖定後移除"
         self.db.flush()
 
         # Recompute totals via the shared sync helper (persists
@@ -2194,25 +2264,74 @@ class RosterService:
         qualified, total_count, total_amount = self._recompute_roster_totals_sync(roster_id)
         roster.excel_stale = True
 
-        self.db.add(
-            AuditLog.create_log(
-                user_id=admin_user_id,
-                action="roster.item_removed_after_lock",
-                resource_type="payment_roster",
-                resource_id=str(roster_id),
-                description=(f"Removed item {item_id} (application {removed_app_id}) from LOCKED roster"),
-                new_values={
-                    "item_id": item_id,
-                    "application_id": removed_app_id,
-                    "reason": reason,
-                    "removed_amount": float(removed_amount) if removed_amount else 0,
-                },
-            )
+        self._write_roster_item_audit(
+            roster_id=roster_id,
+            action=RosterAuditAction.ITEM_REMOVE,
+            item=item,
+            admin_user_id=admin_user_id,
+            source="locked_remove",
+            reason=reason,
         )
         self.db.commit()
         return {
             "roster_id": roster_id,
             "removed_item_id": item_id,
+            "qualified_count": qualified,
+            "total_amount": float(total_amount),
+            "excel_stale": True,
+        }
+
+    def restore_item(
+        self,
+        roster_id: int,
+        item_id: int,
+        admin_user_id: int,
+        reason: Optional[str] = None,
+    ) -> dict:
+        """Re-include a soft-removed PaymentRosterItem. Works on COMPLETED and
+        LOCKED rosters. Recompute totals, set excel_stale=True, write
+        RosterAuditLog(ITEM_RESTORE).
+
+        Raises (mapped to HTTP by the global ScholarshipException handler / the
+        endpoint): RosterNotFoundError / NotFoundError -> 404, ConflictError
+        (already-included, idempotency) -> 409, ValueError (wrong roster / not a
+        restorable status) -> 400."""
+        roster = self.db.get(PaymentRoster, roster_id)
+        if roster is None:
+            raise RosterNotFoundError(str(roster_id))
+
+        if roster.status not in (RosterStatus.COMPLETED, RosterStatus.LOCKED):
+            raise ValueError(
+                f"Roster {roster_id} must be COMPLETED or LOCKED to restore items " f"(status={roster.status.value})"
+            )
+
+        item = self.db.get(PaymentRosterItem, item_id)
+        if item is None:
+            raise NotFoundError("Roster item", str(item_id))
+        if item.roster_id != roster_id:
+            raise ValueError(f"Item {item_id} does not belong to roster {roster_id}")
+        if item.is_included:
+            raise ConflictError("明細未被移除，無需回復")
+
+        item.is_included = True
+        item.exclusion_reason = None
+        self.db.flush()
+
+        qualified, total_count, total_amount = self._recompute_roster_totals_sync(roster_id)
+        roster.excel_stale = True
+
+        self._write_roster_item_audit(
+            roster_id=roster_id,
+            action=RosterAuditAction.ITEM_RESTORE,
+            item=item,
+            admin_user_id=admin_user_id,
+            source="restore",
+            reason=reason,
+        )
+        self.db.commit()
+        return {
+            "roster_id": roster_id,
+            "restored_item_id": item_id,
             "qualified_count": qualified,
             "total_amount": float(total_amount),
             "excel_stale": True,

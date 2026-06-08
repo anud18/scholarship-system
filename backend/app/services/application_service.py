@@ -533,6 +533,10 @@ class ApplicationService:
             scholarship_name=config.config_name or scholarship.name,
             amount=config.amount,
             scholarship_subtype_list=scholarship_subtype_list,
+            # Ordered sub-type preference list (志願序). The distribution service
+            # reads this first; without it, allocation falls back to selection
+            # order. The frontend computes the order (MOE/moe_1w forced first).
+            sub_type_preferences=application_data.sub_type_preferences,
             sub_type_selection_mode=sub_type_selection_mode,
             sub_scholarship_type=sub_scholarship_type,
             is_renewal=False,  # New applications are never renewals
@@ -1108,6 +1112,11 @@ class ApplicationService:
             # scalar — which submit_application's guard would then reject, blocking
             # the very correction the student is making.
             application.sub_scholarship_type = self._derive_sub_scholarship_type(update_data.scholarship_subtype_list)
+
+        # 更新志願序（如果提供）— persist the ordered preference list so the
+        # distribution service uses it instead of falling back to selection order.
+        if update_data.sub_type_preferences is not None:
+            application.sub_type_preferences = update_data.sub_type_preferences
 
         await self.db.commit()
         await self.db.refresh(application)
@@ -2882,11 +2891,31 @@ class ApplicationService:
             target_academic_year,
             previous.semester.value if previous.semester else None,
         )
+
+        # Snapshot the config the prior award consumed so the renewal occupies
+        # the same shared-pool slot (spec §9). Fall back to the renewal's own
+        # scholarship_configuration_id when the prior slot is unresolved — an
+        # approved renewal must NEVER be left NULL (would inflate §6.2 pool).
+        from app.models.college_review import CollegeRankingItem
+
+        prior_slot_config_id = await self.db.scalar(
+            select(CollegeRankingItem.allocation_config_id)
+            .where(
+                CollegeRankingItem.application_id == previous.id,
+                CollegeRankingItem.is_allocated.is_(True),
+                CollegeRankingItem.allocation_config_id.isnot(None),
+            )
+            .order_by(CollegeRankingItem.id.desc())
+            .limit(1)
+        )
+        allocation_config_id = prior_slot_config_id or previous.scholarship_configuration_id
+
         new_app = Application(
             app_id=app_id,
             user_id=current_user.id,
             scholarship_type_id=previous.scholarship_type_id,
             scholarship_configuration_id=previous.scholarship_configuration_id,
+            allocation_config_id=allocation_config_id,
             scholarship_subtype_list=[previous.sub_scholarship_type] if previous.sub_scholarship_type else [],
             sub_scholarship_type=previous.sub_scholarship_type,
             sub_type_selection_mode=previous.sub_type_selection_mode,

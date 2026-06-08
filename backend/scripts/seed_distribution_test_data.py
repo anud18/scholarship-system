@@ -158,7 +158,7 @@ async def main():
                     rank_position=idx,
                     status="ranked",
                     allocated_sub_type=None,
-                    allocation_year=None,
+                    allocation_config_id=None,
                 )
                 db.add(item)
 

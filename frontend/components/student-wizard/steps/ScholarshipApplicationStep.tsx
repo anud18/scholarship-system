@@ -106,6 +106,27 @@ interface ApplicationDocumentAttachment {
 // (see line ~610), so we narrow the `isUploaded` check via a localized type.
 type FileWithUploadedFlag = File & { isUploaded?: boolean };
 
+// The manual preference-ordering (排志願) UI is temporarily hidden per business
+// decision (2026-06). While hidden, students no longer rank their selected
+// sub-types by hand; instead MOE (moe_1w) is automatically unified as the first
+// preference when it is selected alongside another sub-type. Flip this flag back
+// to `true` to restore the manual ▲▼ ordering controls.
+const SHOW_PREFERENCE_ORDERING = false;
+const FORCED_FIRST_PREFERENCE = "moe_1w";
+
+// Reorders the derived preference list so that MOE (moe_1w) leads when the
+// manual ordering UI is hidden. No-op when the UI is shown, when fewer than two
+// sub-types are selected, or when moe_1w is not among them. Returns a new array
+// (never mutates the input).
+const applyForcedPreferenceOrder = (prefs: string[]): string[] => {
+  if (SHOW_PREFERENCE_ORDERING) return prefs;
+  if (prefs.length < 2 || !prefs.includes(FORCED_FIRST_PREFERENCE)) return prefs;
+  return [
+    FORCED_FIRST_PREFERENCE,
+    ...prefs.filter(p => p !== FORCED_FIRST_PREFERENCE),
+  ];
+};
+
 export function ScholarshipApplicationStep({
   onBack,
   onComplete,
@@ -585,7 +606,7 @@ export function ScholarshipApplicationStep({
     setSubTypePreferences(prev => {
       const kept = prev.filter(st => selectedSubTypes.includes(st));
       const newOnes = selectedSubTypes.filter(st => !prev.includes(st));
-      return [...kept, ...newOnes];
+      return applyForcedPreferenceOrder([...kept, ...newOnes]);
     });
   }, [selectedSubTypes]);
 
@@ -818,9 +839,12 @@ export function ScholarshipApplicationStep({
     setSelectedSubTypes(prev => (prev.length > 0 ? prev : [onlyValue]));
   }, [selectedScholarship]);
 
-  const handleScholarshipChange = (scholarshipCode: string) => {
+  const handleScholarshipChange = (configurationId: string) => {
+    // Identify by configuration_id, not code: the same scholarship type can have
+    // several concurrently-eligible year configs (e.g. 114 + 115) that share one
+    // type code, so code is not a unique selection key.
     const scholarship = eligibleScholarships.find(
-      s => s.code === scholarshipCode
+      s => String(s.configuration_id) === configurationId
     );
     setSelectedScholarship(scholarship || null);
     setSelectedSubTypes([]);
@@ -1417,7 +1441,11 @@ export function ScholarshipApplicationStep({
               {text.selectScholarship} <span className="text-red-500">*</span>
             </Label>
             <Select
-              value={selectedScholarship?.code || ""}
+              value={
+                selectedScholarship?.configuration_id != null
+                  ? String(selectedScholarship.configuration_id)
+                  : ""
+              }
               onValueChange={handleScholarshipChange}
             >
               <SelectTrigger>
@@ -1425,7 +1453,10 @@ export function ScholarshipApplicationStep({
               </SelectTrigger>
               <SelectContent>
                 {eligibleScholarships.map(scholarship => (
-                  <SelectItem key={scholarship.id} value={scholarship.code}>
+                  <SelectItem
+                    key={scholarship.configuration_id}
+                    value={String(scholarship.configuration_id)}
+                  >
                     {locale === "zh"
                       ? scholarship.name
                       : scholarship.name_en || scholarship.name}
@@ -1509,8 +1540,9 @@ export function ScholarshipApplicationStep({
                 </p>
               )}
 
-              {/* Sub-type preference ordering */}
-              {selectedSubTypes.length >= 2 && (
+              {/* Sub-type preference ordering (temporarily hidden — see
+                  SHOW_PREFERENCE_ORDERING) */}
+              {SHOW_PREFERENCE_ORDERING && selectedSubTypes.length >= 2 && (
                 <div className="mt-4">
                   <h4 className="text-sm font-semibold mb-2">
                     <span>2. </span>
@@ -2032,7 +2064,8 @@ export function ScholarshipApplicationStep({
                         })}
                       </div>
                     </div>
-                    {subTypePreferences.length >= 2 && (
+                    {SHOW_PREFERENCE_ORDERING &&
+                      subTypePreferences.length >= 2 && (
                       <div className="col-span-2">
                         <span className="text-gray-500">
                           {text.submitPreview.preferenceOrder}
