@@ -17,8 +17,8 @@ import { Label } from "@/components/ui/label";
 import apiClient from "@/lib/api";
 import type { SupplementaryDoc } from "@/lib/api/modules/system-settings";
 
-const ACCEPTED = ".pdf,.doc,.docx";
-const ACCEPTED_LABEL = "PDF · DOC · DOCX";
+const ACCEPTED = ".pdf,.doc,.docx,.odt,.ods,.odp";
+const ACCEPTED_LABEL = "PDF · DOC · DOCX · ODF";
 const MAX_SIZE_MB = 10;
 
 interface Props {

@@ -174,6 +174,38 @@ class TestUploadSupplementaryDoc:
         assert rows[0].title == "FAQ"
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "filename, content_type",
+        [
+            ("ref.odt", "application/vnd.oasis.opendocument.text"),
+            ("ref.ods", "application/vnd.oasis.opendocument.spreadsheet"),
+            ("ref.odp", "application/vnd.oasis.opendocument.presentation"),
+        ],
+    )
+    async def test_admin_uploads_odf(
+        self,
+        admin_client: AsyncClient,
+        fake_minio,
+        db: AsyncSession,
+        filename: str,
+        content_type: str,
+    ):
+        file_bytes = b"PK\x03\x04 odf zip bytes"
+        response = await admin_client.post(
+            "/api/v1/system-settings/supplementary-docs",
+            data={"title": "ODF Ref"},
+            files={"file": (filename, BytesIO(file_bytes), content_type)},
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["success"] is True
+        assert body["data"]["original_filename"] == filename
+        assert body["data"]["content_type"] == content_type
+        assert body["data"]["object_name"].startswith("system-docs/supp_")
+        assert body["data"]["object_name"].endswith(filename[filename.rfind(".") :])
+        fake_minio.client.put_object.assert_called_once()
+
+    @pytest.mark.asyncio
     async def test_non_admin_forbidden(self, student_client: AsyncClient, fake_minio):
         response = await student_client.post(
             "/api/v1/system-settings/supplementary-docs",

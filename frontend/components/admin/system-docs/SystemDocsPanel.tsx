@@ -68,8 +68,8 @@ const SLOTS: DocSlot[] = [
     key: "sample_document_url",
     title: "申請文件範例檔",
     subtitle: "提供學生填寫申請文件時的參考範例",
-    accepted: ".pdf,.doc,.docx",
-    acceptedLabel: "PDF · DOC · DOCX",
+    accepted: ".pdf,.doc,.docx,.odt,.ods,.odp",
+    acceptedLabel: "PDF · DOC · DOCX · ODF",
     Icon: FileArchive,
     accent: {
       ring: "ring-amber-200",

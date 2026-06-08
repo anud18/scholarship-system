@@ -41,6 +41,12 @@ export function previewMimeType(name: string): string {
   if (lower.endsWith(".doc")) return "application/msword";
   if (lower.endsWith(".docx"))
     return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (lower.endsWith(".odt"))
+    return "application/vnd.oasis.opendocument.text";
+  if (lower.endsWith(".ods"))
+    return "application/vnd.oasis.opendocument.spreadsheet";
+  if (lower.endsWith(".odp"))
+    return "application/vnd.oasis.opendocument.presentation";
   if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
   if (lower.endsWith(".png")) return "image/png";
   return "application/octet-stream";

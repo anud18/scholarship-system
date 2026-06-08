@@ -149,3 +149,41 @@ class TestSampleDocumentUploadStillAcceptsDocx:
         )
         assert res.status_code == 200
         fake_minio.client.put_object.assert_called_once()
+
+
+@pytest.mark.asyncio
+class TestSampleDocumentUploadAcceptsODF:
+    """申請文件範例檔 also accepts OpenDocument (ODF) formats."""
+
+    @pytest.mark.parametrize(
+        "filename, content_type",
+        [
+            ("sample.odt", "application/vnd.oasis.opendocument.text"),
+            ("sample.ods", "application/vnd.oasis.opendocument.spreadsheet"),
+            ("sample.odp", "application/vnd.oasis.opendocument.presentation"),
+        ],
+    )
+    async def test_accepts_odf_for_sample_document_url(
+        self, admin_client: AsyncClient, fake_minio, filename: str, content_type: str
+    ):
+        res = await _post_upload(
+            admin_client,
+            "sample_document_url",
+            filename=filename,
+            content_type=content_type,
+            body=b"PK\x03\x04 odf zip bytes",
+        )
+        assert res.status_code == 200, res.text
+        fake_minio.client.put_object.assert_called_once()
+
+    async def test_regulations_url_still_rejects_odt(self, admin_client: AsyncClient, fake_minio):
+        # 獎學金要點 must remain PDF-only — ODF must not leak into it.
+        res = await _post_upload(
+            admin_client,
+            "regulations_url",
+            filename="rules.odt",
+            content_type="application/vnd.oasis.opendocument.text",
+            body=b"PK\x03\x04 odf zip bytes",
+        )
+        assert res.status_code == 400
+        fake_minio.client.put_object.assert_not_called()
