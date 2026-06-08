@@ -800,6 +800,13 @@ async def create_scholarship_configuration(
         if existing_config:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="此學年度/學期已存在配置")
 
+        # Validate cross-config borrow links before persisting (spec §10).
+        await _validate_shared_quota_sources(
+            db,
+            config_data.get("shared_quota_sources"),
+            requesting_academic_year=config_data["academic_year"],
+        )
+
         # Create new configuration
         from app.utils.date_utils import parse_date_field
 
@@ -833,7 +840,8 @@ async def create_scholarship_configuration(
             effective_start_date=parse_date_field(config_data.get("effective_start_date")),
             effective_end_date=parse_date_field(config_data.get("effective_end_date")),
             version=config_data.get("version", "1.0"),
-            prior_quota_years=config_data.get("prior_quota_years"),
+            project_numbers=config_data.get("project_numbers"),
+            shared_quota_sources=config_data.get("shared_quota_sources"),
             created_by=current_user.id,
         )
 
@@ -909,7 +917,7 @@ async def get_scholarship_configuration(
             "total_quota": config.total_quota,
             "quotas": config.quotas,
             "project_numbers": config.project_numbers,
-            "prior_quota_years": config.prior_quota_years,
+            "shared_quota_sources": config.shared_quota_sources,
             "renewal_application_start_date": (
                 config.renewal_application_start_date.isoformat() if config.renewal_application_start_date else None
             ),

@@ -558,3 +558,70 @@ class TestScholarshipConfigurationEndpointsIntegration:
         get_duplicate_response = await authenticated_admin_client.get(f"{BASE}/{duplicate_id}")
         assert get_duplicate_response.status_code == 200
         assert get_duplicate_response.json()["data"]["is_active"] is True
+
+    @pytest.mark.asyncio
+    async def test_create_persists_project_numbers_and_shared_quota_sources(
+        self,
+        authenticated_admin_client: AsyncClient,
+        db: AsyncSession,
+        test_scholarship_type,
+        test_admin_with_scholarship_access,
+    ):
+        """Create must persist the flattened project_numbers and the
+        shared_quota_sources link, and the GET response must echo both
+        (and no longer expose prior_quota_years)."""
+        # Prior-year source config the link will point at.
+        source = ScholarshipConfiguration(
+            scholarship_type_id=test_scholarship_type.id,
+            academic_year=113,
+            semester=Semester.first,
+            config_name="Source 113",
+            config_code="SRC-113-1",
+            amount=40000,
+            has_college_quota=True,
+            quotas={"nstc": {"EE": 5}},
+            is_active=True,
+        )
+        db.add(source)
+        await db.commit()
+
+        payload = {
+            "scholarship_type_id": test_scholarship_type.id,
+            "config_name": "Create With Pools",
+            "config_code": "POOLS-114-1",
+            "academic_year": 114,
+            "semester": "first",
+            "amount": 40000,
+            "currency": "TWD",
+            "project_numbers": {"nstc": "114R000001"},
+            "shared_quota_sources": [{"source_config_code": "SRC-113-1", "sub_types": ["nstc"]}],
+        }
+        response = await authenticated_admin_client.post(BASE, json=payload)
+        assert response.status_code == 200, response.text
+        config_id = response.json()["data"]["id"]
+
+        get_response = await authenticated_admin_client.get(f"{BASE}/{config_id}")
+        body = get_response.json()["data"]
+        assert body["project_numbers"] == {"nstc": "114R000001"}
+        assert body["shared_quota_sources"] == [{"source_config_code": "SRC-113-1", "sub_types": ["nstc"]}]
+        assert "prior_quota_years" not in body
+
+    @pytest.mark.asyncio
+    async def test_create_rejects_invalid_shared_quota_source(
+        self,
+        authenticated_admin_client: AsyncClient,
+        test_scholarship_type,
+    ):
+        """A link to a non-existent source config is rejected at create."""
+        payload = {
+            "scholarship_type_id": test_scholarship_type.id,
+            "config_name": "Bad Link",
+            "config_code": "BADLINK-114-1",
+            "academic_year": 114,
+            "semester": "first",
+            "amount": 40000,
+            "shared_quota_sources": [{"source_config_code": "NOPE-999", "sub_types": ["nstc"]}],
+        }
+        response = await authenticated_admin_client.post(BASE, json=payload)
+        assert response.status_code == 400
+        assert "NOPE-999" in response.json()["message"]
