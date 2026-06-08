@@ -801,6 +801,12 @@ class ManualDistributionService:
                 app.review_stage = ReviewStage.quota_distributed
                 rejected_count += 1
 
+        # §10 quota gate — recount under SELECT FOR UPDATE before committing the
+        # finalize. Reject if any consumed config is oversubscribed.
+        requesting_config = await self._load_config(scholarship_type_id, academic_year, semester)
+        if requesting_config is not None:
+            await self._assert_round_not_oversubscribed(requesting_config)
+
         # Update rankings
         now = datetime.now(timezone.utc)
         for ranking in rankings:
@@ -818,7 +824,7 @@ class ManualDistributionService:
                 if item.is_allocated and item.allocated_sub_type:
                     allocations_snapshot[item.id] = {
                         "sub_type": item.allocated_sub_type,
-                        "allocation_year": item.allocation_year,
+                        "allocation_config_id": item.allocation_config_id,
                         "status": item.status,
                     }
 
@@ -943,8 +949,10 @@ class ManualDistributionService:
         #     (no professor reviews exist, so there is nothing to gate on)
         await self._assert_professor_approved(allocations)
 
-        # Quota validation is done real-time via the quota-status endpoint on the frontend.
-        # The frontend sends only valid allocations based on displayed remaining counts.
+        # Server-side quota enforcement is net-new (spec §10): the lock gate in
+        # allocate/finalize (_assert_round_not_oversubscribed) recounts remaining
+        # under SELECT FOR UPDATE on the consumed config rows and rejects
+        # oversubscription. The frontend remaining counts are advisory.
 
     async def _assert_professor_approved(self, allocations: list[dict[str, Any]]) -> None:
         """Block any allocation to a sub-type the professor did not approve.
