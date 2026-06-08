@@ -90,6 +90,15 @@ interface RosterItem {
   allocated_sub_type?: string;
 }
 
+type RosterAuditLogEntry = {
+  id: number;
+  action: string;
+  title: string;
+  description?: string | null;
+  user_name?: string | null;
+  created_at: string;
+};
+
 export function RosterDetailDialog({
   open,
   onOpenChange,
@@ -138,6 +147,12 @@ export function RosterDetailDialog({
   const [reExporting, setReExporting] = useState(false);
   const [showRemoved, setShowRemoved] = useState(true);
   const [restoringId, setRestoringId] = useState<number | null>(null);
+
+  const [auditLogs, setAuditLogs] = useState<RosterAuditLogEntry[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditFilter, setAuditFilter] = useState<
+    "all" | "item_remove" | "item_add" | "item_restore"
+  >("all");
 
   const canReconcile =
     period.roster_status === "completed" || period.roster_status === "locked";
@@ -253,6 +268,7 @@ export function RosterDetailDialog({
         toast.success(`已排除 ${excludeTarget.student_name} 的造冊明細`);
         setExcludeTarget(null);
         await loadRosterItems();
+        await fetchAuditLogs();
       } else {
         toast.error(response.message || "排除失敗");
       }
@@ -283,6 +299,7 @@ export function RosterDetailDialog({
         toast.success(`已回復 ${item.student_name}`);
         setExcelStale(true);
         await loadRosterItems();
+        await fetchAuditLogs();
       } else {
         toast.error(resp.message || "回復失敗");
       }
@@ -335,6 +352,7 @@ export function RosterDetailDialog({
         setPendingAction(null);
         // Independent refreshes — run in parallel to halve the post-apply wait.
         await Promise.all([loadRosterItems(), loadDistributionDiff()]);
+        await fetchAuditLogs();
         if (resp.data?.excel_stale) setExcelStale(true);
         // Propagate to parent so its 人數 badge updates without a page reload.
         onRosterChanged?.();
@@ -381,6 +399,7 @@ export function RosterDetailDialog({
   useEffect(() => {
     if (open && period.roster_id) {
       loadRosterItems();
+      fetchAuditLogs();
     }
   }, [open, period.roster_id]);
 
@@ -422,6 +441,22 @@ export function RosterDetailDialog({
       logger.error("Failed to load roster items", { error: error });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAuditLogs = async () => {
+    if (!period.roster_id) return;
+    setAuditLoading(true);
+    try {
+      const resp = await apiClient.paymentRosters.getAuditLogs(period.roster_id, {
+        limit: 200,
+      });
+      const raw = (resp.data as { items?: RosterAuditLogEntry[] })?.items ?? [];
+      setAuditLogs(raw);
+    } catch (e) {
+      logger.error("fetch roster audit logs failed", { error: e });
+    } finally {
+      setAuditLoading(false);
     }
   };
 
@@ -827,6 +862,63 @@ export function RosterDetailDialog({
                 </Button>
               )}
             </div>
+          )}
+        </div>
+
+        {/* 操作紀錄 (audit trail) panel */}
+        <div className="mt-4">
+          <div className="mb-2 flex items-center justify-between">
+            <h4 className="text-sm font-semibold">操作紀錄</h4>
+            <div className="flex gap-2 text-sm">
+              {(["all", "item_remove", "item_add", "item_restore"] as const).map(
+                f => (
+                  <button
+                    key={f}
+                    type="button"
+                    className={
+                      auditFilter === f
+                        ? "font-semibold underline"
+                        : "text-muted-foreground"
+                    }
+                    onClick={() => setAuditFilter(f)}
+                  >
+                    {
+                      {
+                        all: "全部",
+                        item_remove: "移除",
+                        item_add: "新增",
+                        item_restore: "回復",
+                      }[f]
+                    }
+                  </button>
+                )
+              )}
+            </div>
+          </div>
+          {auditLoading ? (
+            <div className="py-6 text-center text-muted-foreground">載入中…</div>
+          ) : (
+            <ul className="space-y-2 max-h-64 overflow-y-auto">
+              {auditLogs
+                .filter(l => auditFilter === "all" || l.action === auditFilter)
+                .map(l => (
+                  <li key={l.id} className="border rounded p-2 text-sm">
+                    <div className="font-medium">{l.title}</div>
+                    {l.description && (
+                      <div className="text-muted-foreground">{l.description}</div>
+                    )}
+                    <div className="text-xs text-muted-foreground">
+                      {l.user_name || "系統"} ·{" "}
+                      {new Date(l.created_at).toLocaleString("zh-TW")}
+                    </div>
+                  </li>
+                ))}
+              {auditLogs.length === 0 && (
+                <li className="py-6 text-center text-muted-foreground list-none">
+                  尚無操作紀錄
+                </li>
+              )}
+            </ul>
           )}
         </div>
       </DialogContent>
