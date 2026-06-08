@@ -1684,30 +1684,27 @@ class ManualDistributionService:
     ) -> dict[str, Any]:
         """Run general-phase distribution with challenge release and waitlist fill-in.
 
-        Spec Section 9.1 — algorithm:
-        1. Compute remaining quota = total - approved renewals per pool.
-        2. First-round: per sub_type, walk ranked candidates and assign each
-           to the next available (sub_type, allocation_year) pool.
-        3. For every approved challenge: cancel its renewal target with
-           status=cancelled_by_challenge, track the freed slot.
-        4. Fill released slots from the same-sub_type waitlist (pure-new
-           applicants only — preventing cascading releases).
-        5. Commit and return summary stats per spec Section 12.
+        Rebuilt onto the live shared pool (spec §6.3):
+        1. Per sub_type, seed working_remaining{config_id} from distributable_pool.
+        2. First-round: assign each ranked candidate to the next config with
+           positive working remaining (own first, then linked by year).
+        3. Each approved challenge cancels its renewal target; track the freed
+           slot keyed on the cancelled renewal's allocation_config_id.
+        4. Fill released slots from the same-sub_type waitlist, re-deriving
+           remaining(freed_config, st) rather than trusting a raw release count.
         """
         config = await self._get_active_config(scholarship_type_id, academic_year)
-        quotas = config.quotas or {}
+        sub_types = list((config.quotas or {}).keys())
 
-        # 1. Remaining quota after subtracting approved renewals.
-        used_by_renewal = await self._count_approved_renewals_per_pool(scholarship_type_id, academic_year)
-        remaining = self._build_remaining_quota(quotas, used_by_renewal)
-
-        # 2. First-round distribution per sub_type.
+        # 1+2. First-round distribution per sub_type.
         approved_challenges: list[Application] = []
-        for sub_type in quotas.keys():
+        for sub_type in sub_types:
+            pool = await self.distributable_pool(config, sub_type)
+            working_remaining: dict[int, int] = {c["config_id"]: c["remaining"] for c in pool}
             candidates = await self._get_general_candidates(scholarship_type_id, academic_year, sub_type)
             for cand in candidates:
-                pool_year = self._pick_pool(remaining, sub_type, config)
-                if pool_year is None:
+                picked = await self._pick_config(config, sub_type, working_remaining)
+                if picked is None:
                     break
                 app = cand.application
                 if app is None:
@@ -1719,15 +1716,14 @@ class ManualDistributionService:
                 app.approved_at = datetime.now(timezone.utc)
                 cand.is_allocated = True
                 cand.allocated_sub_type = sub_type
-                cand.allocation_year = pool_year
+                cand.allocation_config_id = picked
                 cand.status = "allocated"
                 cand.allocation_reason = "一般階段自動分發"
-                remaining[(sub_type, pool_year)] -= 1
+                working_remaining[picked] -= 1
                 if app.challenges_application_id is not None:
                     approved_challenges.append(app)
 
         # 3. Release handling — approved challenges cancel their renewal targets.
-        # Batch-load all referenced renewal applications to avoid N+1 queries.
         challenge_renewal_ids = [
             app.challenges_application_id for app in approved_challenges if app.challenges_application_id is not None
         ]
@@ -1740,6 +1736,7 @@ class ManualDistributionService:
                 ).all()
             }
 
+        # released keyed on (sub_type, freed_config_id) from the cancelled renewal.
         released: dict[tuple[str, int], int] = {}
         for challenge_app in approved_challenges:
             renewal_app = renewal_apps_by_id.get(challenge_app.challenges_application_id)
@@ -1752,14 +1749,40 @@ class ManualDistributionService:
                 continue
             renewal_app.status = ApplicationStatus.cancelled_by_challenge
             renewal_app.cancelled_due_to_application_id = challenge_app.id
-            freed_year = int(renewal_app.renewal_year) if renewal_app.renewal_year is not None else int(academic_year)
-            key = (renewal_app.sub_scholarship_type, freed_year)
+            freed_config_id = renewal_app.allocation_config_id
+            if freed_config_id is None:
+                logger.warning(
+                    "Cancelled renewal id=%s has no allocation_config_id — cannot release a slot",
+                    renewal_app.id,
+                )
+                continue
+            key = (renewal_app.sub_scholarship_type, freed_config_id)
             released[key] = released.get(key, 0) + 1
 
-        # 4. Fill released slots from waitlist of same sub_type.
+        # 4. Fill released slots from waitlist of same sub_type, re-deriving
+        # remaining(freed_config, st) after the cancellations above were flushed.
+        await self.db.flush()
         fill_in_count = 0
-        for (sub_type, alloc_year), count in released.items():
-            waitlist = await self._get_waitlist_candidates(scholarship_type_id, academic_year, sub_type, limit=count)
+        all_configs = {config.id: config}
+        for st in sub_types:
+            for c in await self._resolve_linked_configs(config, st):
+                all_configs[c.id] = c
+        for (sub_type, freed_config_id), _count in released.items():
+            freed_config = all_configs.get(freed_config_id)
+            if freed_config is None:
+                freed_config = (
+                    await self.db.execute(
+                        select(ScholarshipConfiguration).where(ScholarshipConfiguration.id == freed_config_id)
+                    )
+                ).scalar_one_or_none()
+                if freed_config is None:
+                    continue
+            available = await self.remaining(freed_config, sub_type)
+            if available <= 0:
+                continue
+            waitlist = await self._get_waitlist_candidates(
+                scholarship_type_id, academic_year, sub_type, limit=available
+            )
             for cand in waitlist:
                 app = cand.application
                 if app is None:
@@ -1771,7 +1794,7 @@ class ManualDistributionService:
                 app.approved_at = datetime.now(timezone.utc)
                 cand.is_allocated = True
                 cand.allocated_sub_type = sub_type
-                cand.allocation_year = alloc_year
+                cand.allocation_config_id = freed_config_id
                 cand.status = "allocated"
                 cand.allocation_reason = "釋出 slot 候補遞補"
                 fill_in_count += 1
@@ -1779,9 +1802,8 @@ class ManualDistributionService:
         await self.db.commit()
 
         return {
-            "approved_renewals": sum(used_by_renewal.values()),
             "approved_challenges": len(approved_challenges),
-            "released_slots": dict(released),
+            "released_slots": {f"{st}:{cid}": n for (st, cid), n in released.items()},
             "filled_in": fill_in_count,
             "unfilled": sum(released.values()) - fill_in_count,
         }
