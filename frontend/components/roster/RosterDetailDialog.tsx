@@ -30,7 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Loader2, Lock, LockOpen, X, AlertTriangle, RefreshCw } from "lucide-react";
+import { Loader2, Lock, LockOpen, X, AlertTriangle, RefreshCw, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import type { RevokedSuspendedList, DistributionDiff, DistributionDiffEntry } from "@/lib/api/modules/payment-rosters";
@@ -136,6 +136,8 @@ export function RosterDetailDialog({
   // otherwise "需重新匯出 Excel" only shows after a full page reload.
   const [excelStale, setExcelStale] = useState(false);
   const [reExporting, setReExporting] = useState(false);
+  const [showRemoved, setShowRemoved] = useState(true);
+  const [restoringId, setRestoringId] = useState<number | null>(null);
 
   const canReconcile =
     period.roster_status === "completed" || period.roster_status === "locked";
@@ -259,6 +261,36 @@ export function RosterDetailDialog({
       toast.error(message);
     } finally {
       setExcludeSubmitting(false);
+    }
+  };
+
+  const handleRestore = async (item: RosterItem) => {
+    if (!period.roster_id) return;
+    if (
+      !window.confirm(
+        `確定回復 ${item.student_name}？此操作會將造冊標記為「需重新匯出 Excel」`
+      )
+    ) {
+      return;
+    }
+    setRestoringId(item.id);
+    try {
+      const resp = await apiClient.paymentRosters.restoreRosterItem(
+        period.roster_id,
+        item.id
+      );
+      if (resp.success) {
+        toast.success(`已回復 ${item.student_name}`);
+        setExcelStale(true);
+        await loadRosterItems();
+      } else {
+        toast.error(resp.message || "回復失敗");
+      }
+    } catch (e) {
+      logger.error("restore roster item failed", { error: e });
+      toast.error("回復失敗");
+    } finally {
+      setRestoringId(null);
     }
   };
 
@@ -416,9 +448,9 @@ export function RosterDetailDialog({
   };
 
   const renderStudentTable = (items: RosterItem[]) => {
-    const includedItems = items.filter(item => item.is_included);
+    const visibleItems = showRemoved ? items : items.filter(item => item.is_included);
 
-    if (includedItems.length === 0) {
+    if (visibleItems.length === 0) {
       return (
         <div className="text-center py-8 text-muted-foreground">
           此學院無納入造冊的學生
@@ -440,59 +472,90 @@ export function RosterDetailDialog({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {includedItems.map((item, index) => (
-            <TableRow key={index}>
-              <TableCell className="font-medium">{item.student_name}</TableCell>
-              <TableCell className="font-mono text-sm">
-                {item.student_id || "-"}
-              </TableCell>
-              <TableCell>{item.department_name || "-"}</TableCell>
-              <TableCell>
-                <Badge
-                  variant={
-                    item.application_identity?.includes("續領")
-                      ? "secondary"
-                      : "outline"
-                  }
-                >
-                  {item.application_identity || "-"}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                {item.allocated_sub_type ? (
-                  <span className="text-sm">
-                    {item.allocation_year && (
-                      <span className="font-medium">
-                        {item.allocation_year}年{" "}
-                      </span>
-                    )}
-                    {item.allocated_sub_type === "nstc"
-                      ? "國科會"
-                      : item.allocated_sub_type === "moe_1w"
-                        ? "教育部(1萬)"
-                        : item.allocated_sub_type === "moe_2w"
-                          ? "教育部(2萬)"
-                          : item.allocated_sub_type}
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground">-</span>
-                )}
-              </TableCell>
-              <TableCell className="text-right font-medium">
-                {formatCurrency(item.scholarship_amount)}
-              </TableCell>
-              <TableCell className="text-right">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => openExcludeDialog(item)}
-                  title="排除此明細(學生繳回 / 放棄)"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </TableCell>
-            </TableRow>
-          ))}
+          {visibleItems.map((item, index) => {
+            const removed = !item.is_included;
+            return (
+              <TableRow
+                key={index}
+                className={removed ? "opacity-50 line-through" : undefined}
+              >
+                <TableCell className="font-medium">
+                  {item.student_name}
+                  {removed && (
+                    <Badge variant="destructive" className="ml-2 no-underline">
+                      已移除
+                    </Badge>
+                  )}
+                  {removed && item.exclusion_reason && (
+                    <span className="ml-2 text-xs text-muted-foreground no-underline">
+                      {item.exclusion_reason}
+                    </span>
+                  )}
+                </TableCell>
+                <TableCell className="font-mono text-sm">
+                  {item.student_id || "-"}
+                </TableCell>
+                <TableCell>{item.department_name || "-"}</TableCell>
+                <TableCell>
+                  <Badge
+                    variant={
+                      item.application_identity?.includes("續領")
+                        ? "secondary"
+                        : "outline"
+                    }
+                  >
+                    {item.application_identity || "-"}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  {item.allocated_sub_type ? (
+                    <span className="text-sm">
+                      {item.allocation_year && (
+                        <span className="font-medium">
+                          {item.allocation_year}年{" "}
+                        </span>
+                      )}
+                      {item.allocated_sub_type === "nstc"
+                        ? "國科會"
+                        : item.allocated_sub_type === "moe_1w"
+                          ? "教育部(1萬)"
+                          : item.allocated_sub_type === "moe_2w"
+                            ? "教育部(2萬)"
+                            : item.allocated_sub_type}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">-</span>
+                  )}
+                </TableCell>
+                <TableCell className="text-right font-medium">
+                  {formatCurrency(item.scholarship_amount)}
+                </TableCell>
+                <TableCell className="text-right">
+                  {removed ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={restoringId === item.id}
+                      onClick={() => handleRestore(item)}
+                      title="回復此明細（放回名單）"
+                      className="no-underline"
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => openExcludeDialog(item)}
+                      title="排除此明細（學生繳回 / 放棄）"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     );
@@ -720,6 +783,16 @@ export function RosterDetailDialog({
                 )}
               </span>
             </div>
+          </div>
+          <div className="mt-3">
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={showRemoved}
+                onChange={e => setShowRemoved(e.target.checked)}
+              />
+              顯示已移除
+            </label>
           </div>
 
           {period.roster_id && (
