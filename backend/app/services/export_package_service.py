@@ -101,6 +101,32 @@ def _application_document_entry(
     }
 
 
+async def _fetch_and_write(
+    zf: zipfile.ZipFile,
+    minio: MinIOService,
+    object_name: str,
+    zip_path: str,
+    error_path: str,
+    error_label: str,
+) -> None:
+    """Stream one MinIO object into the ZIP at `zip_path`.
+
+    On any failure, writes a `_錯誤_…txt` placeholder at `error_path`
+    instead so a single bad object never aborts the whole ZIP build.
+    """
+    try:
+        response = await asyncio.to_thread(minio.get_file_stream, object_name)
+        try:
+            file_bytes = await asyncio.to_thread(response.read)
+        finally:
+            response.close()
+            response.release_conn()
+        zf.writestr(zip_path, file_bytes)
+    except Exception as e:
+        logger.exception(f"Failed to fetch file {object_name}")
+        zf.writestr(error_path, f"檔案下載失敗：{error_label}\n錯誤：{str(e)}")
+
+
 CJK_FONT_PATH = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
 _font_registered = False
 
@@ -277,20 +303,14 @@ class ExportPackageService:
             else:
                 filename = f"{student_prefix}_{label}{ext}"
 
-            try:
-                response = await asyncio.to_thread(self.minio.get_file_stream, af.object_name)
-                try:
-                    file_bytes = await asyncio.to_thread(response.read)
-                finally:
-                    response.close()
-                    response.release_conn()
-                zf.writestr(f"{base_path}/{_sanitize_filename(filename)}", file_bytes)
-            except Exception as e:
-                logger.exception(f"Failed to fetch file {af.object_name} for app {app.id}")
-                zf.writestr(
-                    f"{base_path}/_錯誤_找不到檔案_{_sanitize_filename(label)}.txt",
-                    f"檔案下載失敗：{af.original_filename or af.object_name}\n錯誤：{str(e)}",
-                )
+            await _fetch_and_write(
+                zf,
+                self.minio,
+                object_name=af.object_name,
+                zip_path=f"{base_path}/{_sanitize_filename(filename)}",
+                error_path=f"{base_path}/_錯誤_找不到檔案_{_sanitize_filename(label)}.txt",
+                error_label=af.original_filename or af.object_name,
+            )
 
     def _generate_summary_pdf(
         self,

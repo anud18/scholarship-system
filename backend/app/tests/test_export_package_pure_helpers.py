@@ -24,6 +24,7 @@ from app.services.export_package_service import (
     _sanitize_filename,
     _ext_for_application_document,
     _application_document_entry,
+    _fetch_and_write,
     FILE_TYPE_LABELS,
     DEGREE_LABELS,
 )
@@ -227,3 +228,72 @@ class TestApplicationDocumentEntry:
         # the student folder (ZIP path-traversal guard).
         entry = _application_document_entry("application-documents/12_x.pdf", "x.pdf", "117_資工系", "310_a/b")
         assert "/" not in entry["zip_path"].rsplit("/", 1)[-1]
+
+
+class TestFetchAndWrite:
+    """Pin: the shared MinIO fetch-and-write used by both the
+    app.files loop and the 申請文件. On success the bytes land at
+    zip_path; on any MinIO error a placeholder .txt lands at
+    error_path instead (the ZIP build never aborts)."""
+
+    def test_success_writes_bytes_and_releases_connection(self):
+        import asyncio
+        import io
+        import zipfile
+        from unittest.mock import MagicMock
+
+        fake_response = MagicMock()
+        fake_response.read.return_value = b"PDF-BYTES"
+        minio = MagicMock()
+        minio.get_file_stream.return_value = fake_response
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            asyncio.run(
+                _fetch_and_write(
+                    zf,
+                    minio,
+                    object_name="application-documents/12_x.pdf",
+                    zip_path="dept/stu/stu_申請文件.pdf",
+                    error_path="dept/stu/_錯誤_找不到檔案_申請文件.txt",
+                    error_label="申請文件.pdf",
+                )
+            )
+
+        buf.seek(0)
+        with zipfile.ZipFile(buf) as zf:
+            assert zf.read("dept/stu/stu_申請文件.pdf") == b"PDF-BYTES"
+            assert "dept/stu/_錯誤_找不到檔案_申請文件.txt" not in zf.namelist()
+        fake_response.close.assert_called_once()
+        fake_response.release_conn.assert_called_once()
+
+    def test_failure_writes_error_placeholder(self):
+        import asyncio
+        import io
+        import zipfile
+        from unittest.mock import MagicMock
+
+        minio = MagicMock()
+        minio.get_file_stream.side_effect = Exception("object missing")
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            asyncio.run(
+                _fetch_and_write(
+                    zf,
+                    minio,
+                    object_name="application-documents/12_x.pdf",
+                    zip_path="dept/stu/stu_申請文件.pdf",
+                    error_path="dept/stu/_錯誤_找不到檔案_申請文件.txt",
+                    error_label="申請文件.pdf",
+                )
+            )
+
+        buf.seek(0)
+        with zipfile.ZipFile(buf) as zf:
+            names = zf.namelist()
+            assert "dept/stu/stu_申請文件.pdf" not in names
+            assert "dept/stu/_錯誤_找不到檔案_申請文件.txt" in names
+            content = zf.read("dept/stu/_錯誤_找不到檔案_申請文件.txt").decode("utf-8")
+            assert "object missing" in content
+            assert "申請文件.pdf" in content
