@@ -700,3 +700,10 @@ async def test_restore_endpoint_forbidden_for_non_admin(client_student: AsyncCli
     roster_id, item_id = locked_roster_with_removed_item
     resp = await client_student.post(f"/api/v1/payment-rosters/{roster_id}/items/{item_id}/restore", json={})
     assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_restore_endpoint_missing_item_returns_404(client_admin: AsyncClient, locked_roster_with_removed_item):
+    roster_id, _item_id = locked_roster_with_removed_item
+    resp = await client_admin.post(f"/api/v1/payment-rosters/{roster_id}/items/99999999/restore", json={})
+    assert resp.status_code == 404

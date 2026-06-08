@@ -316,3 +316,12 @@ def test_restore_item_rejects_non_completed_or_locked_roster(db_sync, locked_ros
     db_sync.flush()
     with pytest.raises(ValueError):
         svc.restore_item(roster.id, target.id, admin_db_user_sync.id, "noop")
+
+
+def test_restore_item_not_found_raises(db_sync, locked_roster_two_items, admin_db_user_sync):
+    import pytest
+
+    roster = locked_roster_two_items
+    svc = RosterService(db_sync)
+    with pytest.raises(ValueError, match="not found"):
+        svc.restore_item(roster.id, 99999999, admin_db_user_sync.id, "x")

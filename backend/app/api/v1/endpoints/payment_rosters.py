@@ -2166,8 +2166,14 @@ def restore_roster_item(
         )
     except ValueError as e:
         msg = str(e)
-        # "未被移除" is the idempotency conflict → 409; other ValueErrors → 400.
-        code = status.HTTP_409_CONFLICT if "未被移除" in msg else status.HTTP_400_BAD_REQUEST
+        # "未被移除" → 409 (idempotency conflict); "not found" (roster/item) → 404;
+        # everything else (wrong roster, bad status) → 400.
+        if "未被移除" in msg:
+            code = status.HTTP_409_CONFLICT
+        elif "not found" in msg:
+            code = status.HTTP_404_NOT_FOUND
+        else:
+            code = status.HTTP_400_BAD_REQUEST
         raise HTTPException(status_code=code, detail=msg) from e
     return {"success": True, "message": "已回復造冊明細", "data": result}
 

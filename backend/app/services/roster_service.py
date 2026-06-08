@@ -2257,8 +2257,10 @@ class RosterService:
             )
 
         item = self.db.get(PaymentRosterItem, item_id)
-        if item is None or item.roster_id != roster_id:
-            raise ValueError(f"Item {item_id} not found in roster {roster_id}")
+        if item is None:
+            raise ValueError(f"Item {item_id} not found")
+        if item.roster_id != roster_id:
+            raise ValueError(f"Item {item_id} does not belong to roster {roster_id}")
         if item.is_included:
             raise ValueError("明細未被移除，無需回復")
 
