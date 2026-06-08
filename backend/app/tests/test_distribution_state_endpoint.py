@@ -84,7 +84,7 @@ async def admin_client(client: AsyncClient, admin_user: User, db: AsyncSession):
 
 @pytest_asyncio.fixture
 async def scholarship_with_config(db: AsyncSession) -> ScholarshipType:
-    """Scholarship type + an active configuration with year-keyed quotas."""
+    """Scholarship type + an active config with a matrix quota + a linked prior config."""
     sch = ScholarshipType(
         code="phase8_sch",
         name="Phase 8 Test Scholarship",
@@ -94,6 +94,18 @@ async def scholarship_with_config(db: AsyncSession) -> ScholarshipType:
     await db.commit()
     await db.refresh(sch)
 
+    prior = ScholarshipConfiguration(
+        scholarship_type_id=sch.id,
+        academic_year=PRIOR_ACADEMIC_YEAR,
+        semester=None,
+        config_name="Phase 8 Prior",
+        config_code="phase8-config-113",
+        amount=30000,
+        currency="TWD",
+        is_active=True,
+        has_college_quota=True,
+        quotas={"nstc": {"A": 2}},
+    )
     config = ScholarshipConfiguration(
         scholarship_type_id=sch.id,
         academic_year=CURRENT_ACADEMIC_YEAR,
@@ -103,13 +115,11 @@ async def scholarship_with_config(db: AsyncSession) -> ScholarshipType:
         amount=30000,
         currency="TWD",
         is_active=True,
-        quotas={
-            "nstc": {"114": 8, "113": 2},
-            "moe_1w": {"114": 5},
-        },
-        prior_quota_years={"nstc": [PRIOR_ACADEMIC_YEAR], "moe_1w": []},
+        has_college_quota=True,
+        quotas={"nstc": {"A": 8}, "moe_1w": {"A": 5}},
+        shared_quota_sources=[{"source_config_code": "phase8-config-113", "sub_types": ["nstc"]}],
     )
-    db.add(config)
+    db.add_all([prior, config])
     await db.commit()
     return sch
 
@@ -273,19 +283,13 @@ async def test_returns_empty_state_when_no_data(
     assert data["renewal_allocations"] == []
     assert data["candidates"] == []
 
-    # available_quotas should mirror the config's year-keyed quotas with used=0
-    # and remaining=total since no approved renewals exist yet.
-    by_key = {(q["sub_type"], q["allocation_year"]): q for q in data["available_quotas"]}
-    assert ("nstc", 114) in by_key
-    assert by_key[("nstc", 114)] == {
-        "sub_type": "nstc",
-        "allocation_year": 114,
-        "total": 8,
-        "used": 0,
-        "remaining": 8,
-    }
-    assert by_key[("nstc", 113)]["remaining"] == 2
-    assert by_key[("moe_1w", 114)]["remaining"] == 5
+    # available_quotas keyed by config: own nstc total 8 (remaining 8), linked
+    # phase8-config-113 nstc total 2 (remaining 2), own moe_1w total 5.
+    by_key = {(q["sub_type"], q["config_code"]): q for q in data["available_quotas"]}
+    assert by_key[("nstc", "phase8-config")]["total"] == 8
+    assert by_key[("nstc", "phase8-config")]["remaining"] == 8
+    assert by_key[("nstc", "phase8-config-113")]["remaining"] == 2
+    assert by_key[("moe_1w", "phase8-config")]["remaining"] == 5
     assert len(data["available_quotas"]) == 3
 
 
@@ -338,6 +342,30 @@ async def test_groups_renewal_allocations_correctly(
         app_id_suffix="10004",
     )
 
+    # Point the approved nstc renewals at the own config so they consume its pool.
+    from sqlalchemy import select as _select
+
+    own_cfg = (
+        await db.execute(
+            _select(ScholarshipConfiguration).where(ScholarshipConfiguration.config_code == "phase8-config")
+        )
+    ).scalar_one()
+    ren_rows = (
+        (
+            await db.execute(
+                _select(Application).where(
+                    Application.scholarship_type_id == scholarship_with_config.id,
+                    Application.is_renewal.is_(True),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for r in ren_rows:
+        r.allocation_config_id = own_cfg.id
+    await db.commit()
+
     resp = await admin_client.get(
         "/api/v1/manual-distribution/state",
         params={
@@ -360,19 +388,12 @@ async def test_groups_renewal_allocations_correctly(
     assert len(by_key[("nstc", CURRENT_ACADEMIC_YEAR)]["applications"]) == 1
     assert len(by_key[("moe_1w", CURRENT_ACADEMIC_YEAR)]["applications"]) == 1
 
-    # available_quotas should reflect approved renewals subtracted from pool.
-    quotas_by_key = {(q["sub_type"], q["allocation_year"]): q for q in data["available_quotas"]}
-    assert quotas_by_key[("nstc", PRIOR_ACADEMIC_YEAR)] == {
-        "sub_type": "nstc",
-        "allocation_year": PRIOR_ACADEMIC_YEAR,
-        "total": 2,
-        "used": 2,
-        "remaining": 0,
-    }
-    assert quotas_by_key[("nstc", CURRENT_ACADEMIC_YEAR)]["used"] == 1
-    assert quotas_by_key[("nstc", CURRENT_ACADEMIC_YEAR)]["remaining"] == 7
-    assert quotas_by_key[("moe_1w", CURRENT_ACADEMIC_YEAR)]["used"] == 1
-    assert quotas_by_key[("moe_1w", CURRENT_ACADEMIC_YEAR)]["remaining"] == 4
+    quotas_by_key = {(q["sub_type"], q["config_code"]): q for q in data["available_quotas"]}
+    # 3 nstc renewals + 1 moe_1w renewal all consume own config (phase8-config).
+    assert quotas_by_key[("nstc", "phase8-config")]["used"] == 3
+    assert quotas_by_key[("nstc", "phase8-config")]["remaining"] == 5
+    assert quotas_by_key[("moe_1w", "phase8-config")]["used"] == 1
+    assert quotas_by_key[("moe_1w", "phase8-config")]["remaining"] == 4
 
 
 @pytest.mark.asyncio

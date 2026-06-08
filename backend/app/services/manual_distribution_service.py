@@ -1497,16 +1497,17 @@ class ManualDistributionService:
     async def _count_approved_renewals_per_pool(
         self, scholarship_type_id: int, academic_year: int
     ) -> dict[tuple[str, int], int]:
-        """Count approved renewals grouped by (sub_scholarship_type, renewal_year).
+        """Count approved renewals grouped by (sub_scholarship_type, allocation_config_id).
 
-        Used to compute remaining quota = total - already-consumed-by-renewals.
-        Renewals without an explicit renewal_year fall back to academic_year
-        (they came from this year's pool).
+        Renewals consume the config their prior slot consumed (spec §9), so the
+        quota key is allocation_config_id — one indexed query, no recursive
+        previous_application_id walk. Renewals with a NULL allocation_config_id
+        are skipped (an approved renewal should never be NULL — see §11.3).
         """
         stmt = (
             select(
                 Application.sub_scholarship_type,
-                Application.renewal_year,
+                Application.allocation_config_id,
                 func.count(Application.id),
             )
             .where(
@@ -1514,14 +1515,14 @@ class ManualDistributionService:
                 Application.academic_year == academic_year,
                 Application.is_renewal.is_(True),
                 Application.status == ApplicationStatus.approved,
+                Application.allocation_config_id.isnot(None),
             )
-            .group_by(Application.sub_scholarship_type, Application.renewal_year)
+            .group_by(Application.sub_scholarship_type, Application.allocation_config_id)
         )
         rows = (await self.db.execute(stmt)).all()
         result: dict[tuple[str, int], int] = {}
-        for sub_type, renewal_year, count in rows:
-            year = int(renewal_year) if renewal_year is not None else int(academic_year)
-            result[(sub_type, year)] = result.get((sub_type, year), 0) + int(count)
+        for sub_type, config_id, count in rows:
+            result[(sub_type, int(config_id))] = result.get((sub_type, int(config_id)), 0) + int(count)
         return result
 
     async def _get_general_candidates(
@@ -1809,7 +1810,6 @@ class ManualDistributionService:
         admin UI calls to render the panel.
         """
         config = await self._get_active_config(scholarship_type_id, academic_year)
-        quotas = config.quotas or {}
 
         # --- 1. Renewal allocations grouped by (sub_type, renewal_year) --- #
         renewal_apps_result = await self.db.execute(
@@ -1852,32 +1852,39 @@ class ManualDistributionService:
                 }
             )
 
-        # --- 2. Available quotas per (sub_type, allocation_year) --- #
-        used = await self._count_approved_renewals_per_pool(scholarship_type_id, academic_year)
+        # --- 2. Available quotas per (sub_type, config) — live shared pool --- #
         available_quotas: list[dict[str, Any]] = []
-        for sub_type, year_map in quotas.items():
-            # Skip legacy non-year-keyed entries (e.g. {college_code: int}).
-            if not isinstance(year_map, dict):
-                continue
-            for year_key, total in year_map.items():
-                try:
-                    year = int(year_key)
-                except (TypeError, ValueError):
-                    # Non-int keys (legacy college matrix) are not used by
-                    # the Phase 6 algorithm — skip silently.
+        # Collect all sub_types (own + linked sources) to build pool columns.
+        sub_types = set((config.quotas or {}).keys())
+        for entry in config.shared_quota_sources or []:
+            sub_types.update(entry.get("sub_types") or [])
+
+        # Build a lookup of all reachable configs (own + any linked source).
+        # We call _resolve_linked_configs per sub_type since it filters by sub_type.
+        all_configs: dict[int, ScholarshipConfiguration] = {config.id: config}
+        for sub_type in sub_types:
+            for linked_cfg in await self._resolve_linked_configs(config, sub_type):
+                all_configs[linked_cfg.id] = linked_cfg
+
+        for sub_type in sub_types:
+            for col in await self.distributable_pool(config, sub_type):
+                cfg = all_configs.get(col["config_id"])
+                if cfg is None:
                     continue
-                try:
-                    total_int = int(total)
-                except (TypeError, ValueError):
+                total = self.pool_total(cfg, sub_type)
+                if total <= 0:
                     continue
-                used_count = used.get((sub_type, year), 0)
+                remaining = col["remaining"]
                 available_quotas.append(
                     {
                         "sub_type": sub_type,
-                        "allocation_year": year,
-                        "total": total_int,
-                        "used": used_count,
-                        "remaining": total_int - used_count,
+                        "config_id": col["config_id"],
+                        "config_code": col["config_code"],
+                        "academic_year": col["academic_year"],
+                        "is_own": col["is_own"],
+                        "total": total,
+                        "used": total - remaining,
+                        "remaining": remaining,
                     }
                 )
 
