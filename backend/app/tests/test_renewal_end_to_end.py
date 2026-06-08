@@ -4,12 +4,18 @@ Spec Section 9.3 scenario:
 
 Doctoral scholarship, academic_year=114, quota pool::
 
-    nstc[113]: 10 slots  (prior year, N-year plan)
-    nstc[114]:  8 slots
-    moe_1w[114]: 6 slots
+    prior sibling config e2e-phd-config-113 (academic_year=113):
+        nstc: 10 slots  (linked as shared_quota_sources into e2e-phd-config)
+    current config e2e-phd-config (academic_year=114):
+        nstc: 8 slots (own-year)
+        moe_1w: 6 slots (own-year)
+
+    The two configs are linked via shared_quota_sources so nstc consumers can
+    draw from e2e-phd-config-113 after exhausting e2e-phd-config's 8 own slots.
 
 Renewal phase:
-  10 prior year (113) winners renew under nstc; all approved on nstc[113].
+  10 prior year (113) winners renew under nstc; all approved.
+  Their allocation_config_id is set to prior_config (e2e-phd-config-113).
   Two of them (A and B) will challenge moe_1w in the general phase.
 
 General phase candidates (academic_year=114):
@@ -21,10 +27,12 @@ Expected outcome:
   - A and B approved on moe_1w[114]; their renewals flip to
     cancelled_by_challenge with cancelled_due_to_application_id set.
   - The other 4 moe_1w pure-new (X..AA, ranks 3..6) approved on moe_1w[114].
-  - nstc ranks 1..8 (M..T) approved on nstc[114] first-round.
+  - nstc ranks 1..8 (M..T) approved on nstc[114] first-round
+    (allocation_config_id == e2e-phd-config / config.id).
   - nstc ranks 9, 10 (U, V) fill in on the two slots freed by A and B's
-    cancelled renewals — both promoted with allocation_year=113.
-  - released_slots == {("nstc", 113): 2}
+    cancelled renewals — both promoted with
+    allocation_config_id == e2e-phd-config-113 / prior_config.id.
+  - released_slots == {"nstc:{prior_config.id}": 2}
   - filled_in == 2, unfilled == 0
 
 This test wires up every service touched by the feature:
@@ -182,7 +190,8 @@ async def test_full_renewal_challenge_e2e(db: AsyncSession):
     See module docstring for the spec Section 9.3 scenario and expected outcome.
     """
     # ------------------------------------------------------------------- #
-    # 1. Scholarship type + configuration (10 nstc[113], 8 nstc[114], 6 moe_1w[114])
+    # 1. Scholarship type + two configs: prior sibling (113, 10 nstc) linked
+    #    to current (114, 8 nstc + 6 moe_1w) via shared_quota_sources.
     # ------------------------------------------------------------------- #
     scholarship = ScholarshipType(
         code="e2e_phd",
@@ -193,6 +202,22 @@ async def test_full_renewal_challenge_e2e(db: AsyncSession):
     await db.commit()
     await db.refresh(scholarship)
 
+    prior_config = ScholarshipConfiguration(
+        scholarship_type_id=scholarship.id,
+        academic_year=RENEWAL_YEAR,
+        semester=None,
+        config_name="E2E PhD Prior Config",
+        config_code="e2e-phd-config-113",
+        amount=40000,
+        currency="TWD",
+        is_active=True,
+        has_college_quota=True,
+        quotas={"nstc": {"EE": 10}},  # 10 nstc[113] slots — renewal pool
+    )
+    db.add(prior_config)
+    await db.commit()
+    await db.refresh(prior_config)
+
     config = ScholarshipConfiguration(
         scholarship_type_id=scholarship.id,
         academic_year=CURRENT_ACADEMIC_YEAR,
@@ -202,13 +227,15 @@ async def test_full_renewal_challenge_e2e(db: AsyncSession):
         amount=40000,
         currency="TWD",
         is_active=True,
+        has_college_quota=True,
         requires_professor_recommendation=True,
         requires_college_review=True,
-        quotas={"nstc": {"114": 8, "113": 10}, "moe_1w": {"114": 6}},
-        prior_quota_years={"nstc": [113], "moe_1w": []},
+        quotas={"nstc": {"EE": 8}, "moe_1w": {"EE": 6}},
+        shared_quota_sources=[{"source_config_code": "e2e-phd-config-113", "sub_types": ["nstc"]}],
     )
     db.add(config)
     await db.commit()
+    await db.refresh(config)
 
     # ------------------------------------------------------------------- #
     # 2. Users — 10 renewal candidates (A..J) plus pure-new pools
@@ -264,6 +291,8 @@ async def test_full_renewal_challenge_e2e(db: AsyncSession):
             target_academic_year=CURRENT_ACADEMIC_YEAR,
             renewal_year=RENEWAL_YEAR,
         )
+        # These renewals consume the prior-year (113) shared pool.
+        renewal.allocation_config_id = prior_config.id
         # Promote past student_draft so the renewal distribution service can pick it up.
         renewal.status = ApplicationStatus.under_review
         renewal.review_stage = ReviewStage.college_reviewed
@@ -281,7 +310,7 @@ async def test_full_renewal_challenge_e2e(db: AsyncSession):
     assert all(r.sub_scholarship_type == "nstc" for r in renewal_apps)
 
     # ------------------------------------------------------------------- #
-    # 5. Run renewal distribution — all 10 should be approved on nstc[113].
+    # 5. Run renewal distribution — all 10 should be approved.
     # ------------------------------------------------------------------- #
     renewal_service = RenewalDistributionService(db)
     renewal_result = await renewal_service.auto_approve_passed_reviews(
@@ -402,9 +431,9 @@ async def test_full_renewal_challenge_e2e(db: AsyncSession):
     # ------------------------------------------------------------------- #
     # 10. Assertions — summary stats.
     # ------------------------------------------------------------------- #
-    assert result["approved_renewals"] == 10
+    assert renewal_result["approved_count"] == 10
     assert result["approved_challenges"] == 2
-    assert result["released_slots"] == {("nstc", RENEWAL_YEAR): 2}
+    assert result["released_slots"] == {f"nstc:{prior_config.id}": 2}
     assert result["filled_in"] == 2
     assert result["unfilled"] == 0
     # Spec §10 invariant: released == filled_in + unfilled
@@ -444,8 +473,8 @@ async def test_full_renewal_challenge_e2e(db: AsyncSession):
         )
         assert item is not None
         assert (
-            item.allocation_year == CURRENT_ACADEMIC_YEAR
-        ), f"nstc rank {idx + 1} should occupy nstc[{CURRENT_ACADEMIC_YEAR}]"
+            item.allocation_config_id == config.id
+        ), f"nstc rank {idx + 1} should occupy current config nstc[{CURRENT_ACADEMIC_YEAR}]"
 
     # ------------------------------------------------------------------- #
     # 13. Assertions — nstc ranks 9, 10 (U, V) filled in on nstc[113].
@@ -466,8 +495,8 @@ async def test_full_renewal_challenge_e2e(db: AsyncSession):
         )
         assert item is not None
         assert (
-            item.allocation_year == RENEWAL_YEAR
-        ), f"nstc rank {idx + 1} should be promoted to nstc[{RENEWAL_YEAR}] (slot freed by cancelled renewal)"
+            item.allocation_config_id == prior_config.id
+        ), f"nstc rank {idx + 1} should be promoted to prior config (slot freed by cancelled renewal)"
 
     # ------------------------------------------------------------------- #
     # 14. Assertions — moe_1w pure-new winners (ranks 3..6) approved.
