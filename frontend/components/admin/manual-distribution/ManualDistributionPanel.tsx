@@ -2133,10 +2133,7 @@ function ReleasePreviewSection({
                 <ArrowRight className="h-3 w-3 text-amber-600" />
                 釋出{" "}
                 <span className="font-mono text-[#003d7a]">
-                  {formatSubTypeYear(
-                    item.freed_slot.sub_type,
-                    item.freed_slot.allocation_year
-                  )}
+                  {item.freed_slot.sub_type ?? "—"} · 配額池 #{item.freed_slot.allocation_config_id ?? "—"}
                 </span>{" "}
                 slot（取消續領 #{item.cancelled_application_id}）
               </div>
@@ -2153,10 +2150,7 @@ function ReleasePreviewSection({
                     <ArrowRight className="h-3 w-3 text-amber-600" />
                     分配至{" "}
                     <span className="font-mono text-[#003d7a]">
-                      {formatSubTypeYear(
-                        item.freed_slot.sub_type,
-                        item.freed_slot.allocation_year
-                      )}
+                      {item.freed_slot.sub_type ?? "—"} · 配額池 #{item.freed_slot.allocation_config_id ?? "—"}
                     </span>
                   </>
                 ) : (
