@@ -78,6 +78,7 @@ async def build_embedded_summary_tables(
     scholarship_name = scholarship_type.name or "獎學金"
     service = CollegeRankingExportService()
     sheet_name = f"{academic_year}學年"
+    base_name = f"{academic_year}學年度{scholarship_name}學生資料彙整表"
     result: Dict[str, bytes] = {}
 
     def _rows(apps: List[Application]) -> List[ExportRow]:
@@ -92,44 +93,47 @@ async def build_embedded_summary_tables(
             for app in ordered
         ]
 
-    # (a) one table per department folder
-    for dept_folder, apps in sorted(dept_groups.items()):
-        dept_name = _dept_name_from_apps(apps)
-        title = f"{academic_year}學年度{scholarship_name}學生資料彙整表 - {dept_name}"
+    async def _emit(rows: List[ExportRow], scope: str, ok_key: str, err_key: str, err_prefix: str) -> None:
+        """Render one workbook into result[ok_key]; on failure write a placeholder at err_key.
+
+        One bad table must not abort the whole ZIP.
+        """
         try:
-            xlsx = await asyncio.to_thread(
+            result[ok_key] = await asyncio.to_thread(
                 service.build_workbook,
-                rows=_rows(apps),
+                rows=rows,
                 dynamic_fields=dynamic_fields,
                 sub_type_labels=sub_type_labels,
-                title=title,
+                title=f"{base_name} - {scope}",
                 sheet_name=sheet_name,
             )
-            fname = f"{academic_year}學年度{scholarship_name}學生資料彙整表_{dept_name}.xlsx"
-            result[f"{dept_folder}/{_sanitize_filename(fname)}"] = xlsx
-        except Exception as e:  # one bad table must not abort the whole ZIP
-            logger.exception("dept summary table build failed: %s", dept_folder)
-            result[f"{dept_folder}/_錯誤_總表生成失敗.txt"] = f"系總表生成失敗：{e}".encode("utf-8")
+        except Exception as e:
+            logger.exception("summary table build failed: %s", scope)
+            result[err_key] = f"{err_prefix}：{e}".encode("utf-8")
 
-    # (b) college-level table: grouped by department folder, sorted within each group
+    # Single pass: build each department's table and accumulate the college-level rows
+    # (department-grouped, sorted within each group) so rows are sorted/built only once.
     college_rows: List[ExportRow] = []
-    for _dept_folder, apps in sorted(dept_groups.items()):
-        college_rows.extend(_rows(apps))
-    college_label = college_name or "全校"
-    title = f"{academic_year}學年度{scholarship_name}學生資料彙整表 - {college_label}"
-    try:
-        xlsx = await asyncio.to_thread(
-            service.build_workbook,
-            rows=college_rows,
-            dynamic_fields=dynamic_fields,
-            sub_type_labels=sub_type_labels,
-            title=title,
-            sheet_name=sheet_name,
+    for dept_folder, apps in sorted(dept_groups.items()):
+        dept_rows = _rows(apps)
+        college_rows.extend(dept_rows)
+        dept_name = _dept_name_from_apps(apps)
+        dept_fname = _sanitize_filename(f"{base_name}_{dept_name}.xlsx")
+        await _emit(
+            dept_rows,
+            dept_name,
+            f"{dept_folder}/{dept_fname}",
+            f"{dept_folder}/_錯誤_總表生成失敗.txt",
+            "系總表生成失敗",
         )
-        fname = f"{academic_year}學年度{scholarship_name}學生資料彙整表_{college_label}.xlsx"
-        result[_sanitize_filename(fname)] = xlsx
-    except Exception as e:
-        logger.exception("college summary table build failed")
-        result["_錯誤_學院總表生成失敗.txt"] = f"學院總表生成失敗：{e}".encode("utf-8")
+
+    college_label = college_name or "全校"
+    await _emit(
+        college_rows,
+        college_label,
+        _sanitize_filename(f"{base_name}_{college_label}.xlsx"),
+        "_錯誤_學院總表生成失敗.txt",
+        "學院總表生成失敗",
+    )
 
     return result

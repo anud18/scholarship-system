@@ -6,12 +6,17 @@ Application.__new__, which leaves _sa_instance_state unset).
 """
 
 import io
+from types import SimpleNamespace
 
 import pytest
 from openpyxl import load_workbook
 
 from app.models.application import Application
-from app.services.export_summary_tables import _dept_name_from_apps, _sort_key
+from app.services.export_summary_tables import (
+    _dept_name_from_apps,
+    _sort_key,
+    build_embedded_summary_tables,
+)
 
 
 def _mk_app(app_id, user_id, dep_no, dep_name, std_code, cname="某生", academy="某學院"):
@@ -48,11 +53,6 @@ class TestDeptNameFromApps:
     def test_falls_back_when_all_blank(self):
         apps = [_mk_app(1, 11, "1000", "", "001")]
         assert _dept_name_from_apps(apps) == "未知系所"
-
-
-from types import SimpleNamespace
-
-from app.services.export_summary_tables import build_embedded_summary_tables
 
 
 @pytest.fixture
