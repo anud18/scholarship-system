@@ -108,7 +108,7 @@ async def build_embedded_summary_tables(
                 sheet_name=sheet_name,
             )
         except Exception as e:
-            logger.exception("summary table build failed: %s", scope)
+            logger.exception("summary table build failed: %s", ok_key)
             result[err_key] = f"{err_prefix}：{e}".encode("utf-8")
 
     # Single pass: build each department's table and accumulate the college-level rows
