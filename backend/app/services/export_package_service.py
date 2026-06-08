@@ -77,6 +77,30 @@ def _ext_for_application_document(original_filename: Optional[str], object_name:
     return ""
 
 
+def _application_document_entry(
+    object_name: Optional[str],
+    original_filename: Optional[str],
+    base_path: str,
+    student_prefix: str,
+) -> Optional[Dict[str, str]]:
+    """Describe where the student-uploaded 申請文件 goes in the ZIP.
+
+    Returns None when the application has no 申請文件. Otherwise returns the
+    kwargs for `_fetch_and_write`: the source object name, the sanitized ZIP
+    path, the error-placeholder path, and a human label for the error text.
+    """
+    if not object_name:
+        return None
+    ext = _ext_for_application_document(original_filename, object_name)
+    filename = _sanitize_filename(f"{student_prefix}_申請文件{ext}")
+    return {
+        "object_name": object_name,
+        "zip_path": f"{base_path}/{filename}",
+        "error_path": f"{base_path}/_錯誤_找不到檔案_申請文件.txt",
+        "error_label": original_filename or object_name,
+    }
+
+
 CJK_FONT_PATH = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
 _font_registered = False
 

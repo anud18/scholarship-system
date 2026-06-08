@@ -23,6 +23,7 @@ import pytest
 from app.services.export_package_service import (
     _sanitize_filename,
     _ext_for_application_document,
+    _application_document_entry,
     FILE_TYPE_LABELS,
     DEGREE_LABELS,
 )
@@ -191,3 +192,38 @@ class TestExtForApplicationDocument:
         # A dot in a directory segment must not be treated as the
         # file extension — only the last path segment counts.
         assert _ext_for_application_document(None, "v1.2/objectname") == ""
+
+
+class TestApplicationDocumentEntry:
+    """Pin: descriptor for placing the student-uploaded 申請文件 into
+    the ZIP. Returns None when the application has no 申請文件."""
+
+    def test_returns_none_when_no_object_name(self):
+        assert _application_document_entry(None, "x.pdf", "117_資工系", "310_王小明") is None
+
+    def test_returns_none_when_object_name_empty(self):
+        assert _application_document_entry("", "x.pdf", "117_資工系", "310_王小明") is None
+
+    def test_builds_entry_with_expected_paths(self):
+        entry = _application_document_entry(
+            "application-documents/12_x.pdf",
+            "申請文件.pdf",
+            "117_資工系",
+            "310_王小明",
+        )
+        assert entry == {
+            "object_name": "application-documents/12_x.pdf",
+            "zip_path": "117_資工系/310_王小明_申請文件.pdf",
+            "error_path": "117_資工系/_錯誤_找不到檔案_申請文件.txt",
+            "error_label": "申請文件.pdf",
+        }
+
+    def test_error_label_falls_back_to_object_name(self):
+        entry = _application_document_entry("application-documents/12_x.pdf", None, "117_資工系", "310_王小明")
+        assert entry["error_label"] == "application-documents/12_x.pdf"
+
+    def test_zip_filename_is_sanitized(self):
+        # A student name containing a path separator must not escape
+        # the student folder (ZIP path-traversal guard).
+        entry = _application_document_entry("application-documents/12_x.pdf", "x.pdf", "117_資工系", "310_a/b")
+        assert "/" not in entry["zip_path"].rsplit("/", 1)[-1]
