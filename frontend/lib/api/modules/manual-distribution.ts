@@ -271,6 +271,8 @@ export interface ReleaseChainItem {
   freed_slot: {
     sub_type: string | null;
     allocation_config_id: number | null;
+    /** Frozen display snapshot = consumed config's academic_year. */
+    allocation_year: number | null;
   };
   /** Suggested waitlist candidate (pure-new) to fill the freed slot. */
   suggested_fill_id: number | null;
