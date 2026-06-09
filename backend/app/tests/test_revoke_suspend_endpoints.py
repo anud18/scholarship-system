@@ -33,6 +33,8 @@ def _make_mock_admin() -> Mock:
     u.id = 1
     u.role = UserRole.admin
     u.email = "admin@nycu.edu.tw"
+    u.name = "Admin User"
+    u.nycu_id = "admin001"
     return u
 
 
@@ -253,6 +255,7 @@ async def test_cancellation_sends_notification_email_to_admin(
     assert label in kwargs["subject"]
     assert allocated_application.app_id in kwargs["subject"]
     assert reason in kwargs["body"]
+    assert "Admin User 您好" in kwargs["body"]
 
 
 @pytest.mark.asyncio
