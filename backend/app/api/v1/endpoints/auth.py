@@ -364,7 +364,9 @@ async def portal_sso_verify(
 
         user_info = auth_result.get("user", {})
         nycu_id = user_info.get("nycu_id", "unknown")
-        logger.info(f"Redirecting user {nycu_id} to frontend via Portal verification: {redirect_url}")
+        # SECURITY: never log the redirect_url — it contains the access token in
+        # the query string, which would persist the credential in server logs.
+        logger.info(f"Redirecting user {nycu_id} to frontend via Portal verification")
 
         # Return redirect response
         # SECURITY: Token passed via URL parameter only (no cookie).

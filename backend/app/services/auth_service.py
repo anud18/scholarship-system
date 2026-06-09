@@ -97,13 +97,11 @@ class AuthService:
         # Add debug data in test/development mode or when explicitly requested
         from app.core.config import settings
 
-        is_debug_mode = (
-            settings.environment in ["development", "testing"]
-            or settings.portal_test_mode
-            or settings.debug
-            # Also include for test deployments (when host contains test indicators)
-            or any(indicator in settings.base_url.lower() for indicator in ["test", "140.113.7.148", "localhost"])
-        )
+        # SECURITY: only embed raw portal/student data in the JWT for explicit
+        # local development/testing. The previous URL-substring heuristic (matching
+        # "test"/host IPs in base_url) leaked PII into signed-but-unencrypted tokens
+        # on any staging host whose URL happened to contain those substrings.
+        is_debug_mode = settings.environment in ["development", "testing"] or settings.portal_test_mode
 
         if is_debug_mode:
             if portal_data:

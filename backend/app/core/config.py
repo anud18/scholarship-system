@@ -6,8 +6,12 @@ Handles all environment variables and application settings.
 import os
 from typing import List, Optional
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Well-known insecure default for the Student API HMAC key. Used only for local
+# development against the mock student API; must never reach a real deployment.
+_MOCK_STUDENT_API_HMAC_KEY = "4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a"
 
 
 class Settings(BaseSettings):
@@ -116,6 +120,9 @@ class Settings(BaseSettings):
     portal_jwt_server_url: str = "https://portal.test.nycu.edu.tw/jwt/portal"
     portal_test_mode: bool = False  # Set to True for testing with mock data
     portal_sso_timeout: float = 10.0  # Timeout for Portal JWT verification
+    # Callback URL the Portal redirects to after JWT verification. Must be
+    # configured per environment via PORTAL_CALLBACK_URL rather than hardcoded.
+    portal_callback_url: str = "http://localhost:8000/api/v1/auth/portal-sso/verify"
 
     # Super Admin Configuration
     super_admin_nycu_id: str = "super_admin"  # NYCU ID that should be granted super_admin role
@@ -127,9 +134,7 @@ class Settings(BaseSettings):
     student_api_enabled: bool = True
     student_api_base_url: str = "http://localhost:8080"  # Mock API in development
     student_api_account: str = "scholarship"
-    student_api_hmac_key: str = (
-        "4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a"  # Mock key for development
-    )
+    student_api_hmac_key: str = _MOCK_STUDENT_API_HMAC_KEY  # Mock key for development only
     student_api_timeout: float = 10.0
     student_api_encode_type: Optional[str] = "UTF-8"
 
@@ -305,6 +310,25 @@ class Settings(BaseSettings):
     def testing(self) -> bool:
         """Check if we're in a testing environment"""
         return bool(os.getenv("PYTEST_CURRENT_TEST") or os.getenv("CI") or os.getenv("TESTING"))
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self) -> "Settings":
+        """Fail fast if insecure development defaults leak into production.
+
+        Prevents a misconfigured production deployment from silently running with
+        the mock Student API HMAC key or mock SSO enabled.
+        """
+        if self.testing:
+            return self
+        if self.environment == "production":
+            if self.student_api_enabled and self.student_api_hmac_key == _MOCK_STUDENT_API_HMAC_KEY:
+                raise ValueError(
+                    "STUDENT_API_HMAC_KEY is using the development mock key in production. "
+                    "Set a real STUDENT_API_HMAC_KEY (or disable STUDENT_API_ENABLED)."
+                )
+            if self.enable_mock_sso:
+                raise ValueError("ENABLE_MOCK_SSO must be false in production.")
+        return self
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 

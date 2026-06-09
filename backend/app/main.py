@@ -8,7 +8,7 @@ import logging
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
@@ -21,6 +21,8 @@ from app.api.v1.api import api_router
 from app.core.config import settings
 from app.core.database_health import check_database_health
 from app.core.exceptions import ScholarshipException, scholarship_exception_handler
+from app.core.security import require_admin
+from app.models.user import User
 
 # Import Prometheus metrics
 from app.core.metrics import CONTENT_TYPE_LATEST, generate_latest, set_app_info, update_db_pool_metrics
@@ -313,8 +315,8 @@ async def health_check():
 
 # Database pool status endpoint (admin only)
 @app.get("/debug/pool-status")
-async def get_pool_status():
-    """Get current database connection pool status (for debugging)"""
+async def get_pool_status(current_user: User = Depends(require_admin)):
+    """Get current database connection pool status (for debugging, admin only)"""
     async_pool = async_engine.pool
     sync_pool = sync_engine.pool
 

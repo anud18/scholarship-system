@@ -78,7 +78,7 @@ class PortalSSOService:
                         settings.portal_jwt_server_url,
                         data={
                             "token": token,
-                            "callback_url": "https://140.113.7.148/api/v1/auth/portal-sso/verify",
+                            "callback_url": settings.portal_callback_url,
                         },
                         headers={"Content-Type": "application/x-www-form-urlencoded"},
                     )

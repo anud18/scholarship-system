@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple
 
+from fastapi import HTTPException
 from minio import Minio
 from minio.commonconfig import CopySource
 from minio.error import S3Error
@@ -17,6 +18,7 @@ from minio.error import S3Error
 from app.core.config import settings
 from app.core.exceptions import FileStorageError
 from app.core.metrics import file_uploads_total
+from app.core.path_security import secure_filename
 
 logger = logging.getLogger(__name__)
 
@@ -202,25 +204,24 @@ class MinIOService:
 
             # 檢查檔案大小
             if file_size > settings.max_file_size:
-                from fastapi import HTTPException
-
-                raise HTTPException(status_code=500, detail="File too large")
+                raise HTTPException(status_code=413, detail="File too large")
 
             # 檢查檔案類型
             if not file.filename:
-                from fastapi import HTTPException
+                raise HTTPException(status_code=400, detail="No filename provided")
 
-                raise HTTPException(status_code=500, detail="No filename provided")
+            # Sanitize the filename first (strips path components / unsafe chars)
+            # so a payload like "evil.pdf.exe" or "../../etc/passwd" cannot survive.
+            safe_filename = secure_filename(file.filename)
 
-            file_extension = file.filename.split(".")[-1].lower()
+            # Validate the extension on the *sanitized* name, taking the final
+            # extension only (defends against double-extension bypass).
+            file_extension = safe_filename.rsplit(".", 1)[-1].lower() if "." in safe_filename else ""
             if file_extension not in settings.allowed_file_types_list:
-                from fastapi import HTTPException
-
-                raise HTTPException(status_code=500, detail="Invalid file type")
+                raise HTTPException(status_code=415, detail="Invalid file type")
 
             # 生成object名稱
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            safe_filename = file.filename.replace(" ", "_")
             # 標準化 file_type 為複數形式
             if file_type == "doc":
                 folder_name = "documents"
@@ -247,14 +248,17 @@ class MinIOService:
 
             return object_name, file_size
 
+        except HTTPException:
+            # Validation errors (size/type/filename) carry their own status code
+            # and must not be masked as a generic 500.
+            file_uploads_total.labels(file_type=str(file_type), status="failed").inc()
+            raise
         except Exception as e:
             logger.exception(f"Failed to upload file {file.filename}")
 
             # Business metric: count failures so the dashboard can show
             # the success-rate ratio without needing log-scraping.
             file_uploads_total.labels(file_type=str(file_type), status="failed").inc()
-
-            from fastapi import HTTPException
 
             raise HTTPException(status_code=500, detail="File upload failed") from e
 

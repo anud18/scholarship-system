@@ -4,9 +4,11 @@ services:
     image: postgres:15-alpine
     container_name: scholarship_postgres_staging
     environment:
-      POSTGRES_DB: scholarship_db
-      POSTGRES_USER: scholarship_user
-      POSTGRES_PASSWORD: scholarship_pass
+      POSTGRES_DB: ${POSTGRES_DB:-scholarship_db}
+      POSTGRES_USER: ${POSTGRES_USER:-scholarship_user}
+      # SECURITY: never hardcode the password. Must be supplied via the
+      # environment (e.g. GitHub Actions secret / .env on the DB host).
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
     ports:
       - "5432:5432"
     volumes:
@@ -27,8 +29,10 @@ services:
       - "9000:9000"
       - "9001:9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin123
+      # SECURITY: never hardcode MinIO root credentials. Must be supplied via
+      # the environment (GitHub Actions secret / .env on the DB host).
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must be set}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set}
       # Allow Prometheus to scrape /minio/v2/metrics/cluster without a
       # bearer token. Newer MinIO images default to "jwt"; we want
       # "public" so Alloy → Prometheus pipeline works out of the box.

@@ -27,9 +27,21 @@ export async function GET(
     });
   } catch (err) {
     const message = err instanceof Error ? `${err.name}: ${err.message}\n${err.stack}` : String(err);
+    // SECURITY: escape the error text before embedding it in HTML so an error
+    // message containing markup cannot execute as script in the preview frame.
+    const escaped = message
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
     return new NextResponse(
-      `<pre style="font-family:monospace;padding:1rem;white-space:pre-wrap">${message}</pre>`,
-      { status: 500, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+      `<pre style="font-family:monospace;padding:1rem;white-space:pre-wrap">${escaped}</pre>`,
+      {
+        status: 500,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'",
+        },
+      }
     );
   }
 }

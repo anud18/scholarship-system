@@ -35,15 +35,34 @@ mkdir -p "${BACKUP_PATH}"
 log "Setting up secure authentication..."
 PGPASS_FILE="${HOME}/.pgpass.backup.$$"
 
-# Create .pgpass file with error handling
-if ! echo "${POSTGRES_HOST}:${POSTGRES_PORT}:${POSTGRES_DB}:${POSTGRES_USER}:${POSTGRES_PASSWORD}" > "${PGPASS_FILE}"; then
+# Ensure the credential file is removed on any exit (including signals), so the
+# password never lingers on disk if the script is interrupted.
+trap 'rm -f "${PGPASS_FILE}"' EXIT INT TERM
+
+# SECURITY: create the file with restrictive permissions BEFORE writing the
+# password, otherwise the secret is briefly world-readable (default umask)
+# between creation and the chmod. Tighten the umask for this section so the
+# initial create is already 600.
+_old_umask=$(umask)
+umask 077
+
+if ! : > "${PGPASS_FILE}"; then
     log "ERROR: Failed to create password file"
+    umask "${_old_umask}"
     exit 1
 fi
-
-# Set secure permissions with error handling
+# Belt-and-suspenders in case umask is ignored on the target filesystem.
 if ! chmod 600 "${PGPASS_FILE}"; then
     log "ERROR: Failed to set secure permissions on password file"
+    rm -f "${PGPASS_FILE}"
+    umask "${_old_umask}"
+    exit 1
+fi
+umask "${_old_umask}"
+
+# Now write the credentials into the already-secured file.
+if ! echo "${POSTGRES_HOST}:${POSTGRES_PORT}:${POSTGRES_DB}:${POSTGRES_USER}:${POSTGRES_PASSWORD}" > "${PGPASS_FILE}"; then
+    log "ERROR: Failed to write password file"
     rm -f "${PGPASS_FILE}"
     exit 1
 fi
