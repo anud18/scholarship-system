@@ -1,11 +1,11 @@
 ---
 name: playwright-test-and-debug
-description: Drive browser-based actions against the scholarship-system localhost dev env (http://localhost:3000) using the bundled Playwright CLI scripts, AND when something diverges from the codebase's spec, walk an integrated diagnose-and-fix loop — tail backend logs, query Postgres, classify the gap, and patch the responsible layer. Use this skill whenever the user asks to drive a quick local browser test, screenshot a page, log in as a seeded user (admin / cs_professor / cs_college / stuphd001 / stuunder1 / etc.) and click through a flow, debug why a localhost endpoint is returning 5xx or behaving unexpectedly, dump application/review/whitelist DB state, OR — most importantly — verify a recent code change end-to-end ("I just finished feature X / fixed bug Y, smoke-test that it works"). Treat any post-change verification request, any "make sure my localhost change works" prompt, any "the e2e test in frontend/e2e failed — figure out why" debugging request, and any "log in as <seeded user> and check the dashboard" exploratory request as a trigger. Do NOT use for staging (use `nycu-sso-login` for `ss.test.nycu.edu.tw`), and do NOT use for setting up a new `@playwright/test` runner from scratch (that's a project-config task, not session tooling).
+description: Drive browser-based actions against the scholarship-system localhost dev env (http://localhost:3000), AND when something diverges from the codebase's spec, walk an integrated diagnose-and-fix loop — tail backend logs, query Postgres, classify the gap, and patch the responsible layer. Use this skill whenever the user asks to drive a quick local browser test, screenshot a page, log in as a seeded user (admin / cs_professor / cs_college / stuphd001 / stuunder1 / etc.) and click through a flow, debug why a localhost endpoint is returning 5xx or behaving unexpectedly, dump application/review/whitelist DB state, OR — most importantly — verify a recent code change end-to-end ("I just finished feature X / fixed bug Y, smoke-test that it works"). Treat any post-change verification request, any "make sure my localhost change works" prompt, any "the e2e test in frontend/e2e failed — figure out why" debugging request, and any "log in as <seeded user> and check the dashboard" exploratory request as a trigger. Do NOT use for staging (use `nycu-sso-login` for `ss.test.nycu.edu.tw`), and do NOT use for setting up a new `@playwright/test` runner from scratch (that's a project-config task, not session tooling).
 ---
 
 # Playwright local test & debug (scholarship-system dev env)
 
-This skill encodes both halves of a real Claude Code testing session for the scholarship-system localhost dev env: (1) the Playwright CLI patterns to drive the browser, and (2) the diagnose-and-fix loop to actually close the gap when something doesn't behave as the codebase says it should. Without it, sessions re-derive both from scratch and tend to use them in isolation — drive a click, see a 500, and stop at "report failure".
+This skill encodes both halves of a real Claude Code testing session for the scholarship-system localhost dev env: (1) how to drive the browser — the **Webwright loop** (code-as-action, screenshot-per-step, self-verify) for multi-step flows, and the quick one-shot scripts for simple checks — and (2) the diagnose-and-fix loop to actually close the gap when something doesn't behave as the codebase says it should. Without it, sessions re-derive both from scratch and tend to use them in isolation — drive a click, see a 500, and stop at "report failure".
 
 The dev env (`docker compose -f docker-compose.dev.yml`) has full mock-SSO so logging in as any seeded user is a single POST — no Portal SSO dance, no rate limits.
 
@@ -35,6 +35,27 @@ The dev env (`docker compose -f docker-compose.dev.yml`) has full mock-SSO so lo
 ```
 
 ## Drive the browser — core patterns
+
+**Pick the approach by task shape:**
+
+| Task | Approach |
+|---|---|
+| One-shot: screenshot a page, log in once and look, a single UI/API check | The **quick one-shot scripts** below — fastest path, no ceremony |
+| **Multi-step flow or end-to-end change verification** (the default) | The **Webwright loop** — plan → instrumented run → screenshot-per-step → harsh self-verify |
+
+### Default for multi-step flows — the Webwright loop
+
+For any flow with more than one meaningful step (click through a queue, submit→review cascade, post-change end-to-end verification), drive the browser the **Webwright way** rather than ad-hoc one-off clicks. Follow the **`webwright`** skill's contract, with two localhost adaptations: **seed the context with a logged-in storage state** (don't launch fresh), and **use the bundled Node scripts** — adopt the *discipline*, not webwright's Python venv.
+
+1. **Plan.** Write `plan.md` with a numbered checklist of critical points — each independently verifiable from a screenshot AND/OR a log/DB line.
+2. **Bootstrap auth.** `STORAGE=$(scripts/build-storage-state.sh <user>)` → a logged-in `/tmp/auth-<user>.json` for the seeded user (sets both `auth_token` and the user blob `useAuth` needs).
+3. **Drive one step at a time** with Node Playwright (`NODE_PATH=$(npm root -g) node ...`), launching the context with `storageState: "$STORAGE"` so every step stays logged in. Keep the whole workspace under `/tmp` (matching this skill's /tmp convention — e.g. `/tmp/ptd-<task>/final_runs/run_<id>/`, `<id>` one higher than any existing run folder), so generated runs never touch the repo. Save a uniquely-named screenshot per critical point + an action-log line per constraint-relevant step. `scripts/with-session.js` already loads storage state and screenshots — extend it, or write an instrumented script in the run folder.
+4. **Cross-validate** each step against backend logs (`scripts/tail-logs.sh`) and Postgres (`scripts/db-query.sh`). This is the localhost upgrade over webwright's visual-only self-verify: you have stronger evidence than screenshots, so use it.
+5. **Self-verify** harshly against `plan.md` — tick a critical point only with concrete cited evidence (screenshot + log/DB row). On any failure, walk the diagnose-and-fix loop below, fix the responsible layer, and re-run in `final_runs/run_<id+1>/`.
+
+The one-shot scripts below remain the right tool for simple single-step checks — don't spin up a `plan.md` and a run folder to screenshot one page.
+
+### Quick one-shot scripts (fast path)
 
 ### Quick screenshot of any URL
 ```bash
@@ -166,8 +187,8 @@ This is the primary use case — when the user says "I just finished X, verify i
 
 3. **Establish baseline.** Run `scripts/check-stack.sh` and `scripts/dump-app-state.sh <relevant_id>` so the "before" state is on record. If the dev DB is dirty from prior testing, consider `scripts/reset-db.sh` first.
 
-4. **Drive the flow** via the bundled scripts. Mix UI and API deliberately:
-   - UI proves the round-trip works (frontend renders, API responds, DB updates)
+4. **Drive the flow** with the Webwright loop (the default for multi-step flows — see *Drive the browser*), bootstrapping a logged-in session via `scripts/build-storage-state.sh`. Mix UI and API deliberately:
+   - UI (Webwright loop — screenshot + action-log per critical point) proves the round-trip works (frontend renders, API responds, DB updates)
    - Direct API proves the contract (response shape, status codes)
 
 5. **Cross-validate at every step:**
@@ -512,6 +533,7 @@ curl -s "$SS_BASE/admin/email/scheduled?limit=5" \
 
 ## Cross-references
 
+- **`webwright`** (project skill) — the code-as-action browser loop this skill defaults to for multi-step flows (plan → instrument → screenshot → harsh self-verify). Here it runs against `localhost:3000` seeded with a logged-in storage state and cross-validated against logs/DB, using the bundled Node scripts rather than webwright's Python venv.
 - **`nycu-sso-login`** (project skill) — staging-only NYCU SSO; uses real Portal credentials. Ignore when working against `localhost:3000`.
 - **`frontend/e2e/`** (when it lands from the Ultraplan PR) — `@playwright/test` runner with fixtures/reporters. The diagnose-and-fix loop in this skill applies inside that test runner too — call `scripts/tail-logs.sh` / `scripts/db-query.sh` from inside a custom Playwright reporter.
 - **`backend/app/tests/conftest.py`** — pytest fixtures for similar workflow tests at the API layer; useful for cross-checking when "is this a backend bug?" vs "is the test wrong?"
