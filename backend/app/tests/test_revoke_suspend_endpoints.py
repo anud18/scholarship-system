@@ -233,60 +233,53 @@ async def test_revoke_non_allocated_returns_400(client_admin: AsyncClient, unall
     assert resp.status_code == 400
 
 
+_CANCEL_ACTIONS = [("revoke", "撤銷", "violated"), ("suspend", "停發", "leave")]
+_CANCEL_STATUS = {"revoke": "revoked", "suspend": "suspended"}
+
+
 @pytest.mark.asyncio
-async def test_revoke_sends_notification_email_to_admin(
-    client_admin: AsyncClient, allocated_application, email_send_mock
+@pytest.mark.parametrize("action,label,reason", _CANCEL_ACTIONS)
+async def test_cancellation_sends_notification_email_to_admin(
+    client_admin: AsyncClient, allocated_application, email_send_mock, action, label, reason
 ):
     resp = await client_admin.post(
-        f"/api/v1/manual-distribution/applications/{allocated_application.id}/revoke",
-        json={"reason": "violated"},
+        f"/api/v1/manual-distribution/applications/{allocated_application.id}/{action}",
+        json={"reason": reason},
     )
     assert resp.status_code == 200
     email_send_mock.assert_awaited_once()
     kwargs = email_send_mock.await_args.kwargs
     assert kwargs["to"] == "admin@nycu.edu.tw"
-    assert "撤銷" in kwargs["subject"]
+    assert label in kwargs["subject"]
     assert allocated_application.app_id in kwargs["subject"]
-    assert "violated" in kwargs["body"]
+    assert reason in kwargs["body"]
 
 
 @pytest.mark.asyncio
-async def test_suspend_sends_notification_email_to_admin(
-    client_admin: AsyncClient, allocated_application, email_send_mock
+@pytest.mark.parametrize("action,label,reason", _CANCEL_ACTIONS)
+async def test_failed_cancellation_does_not_send_email(
+    client_admin: AsyncClient, unallocated_application, email_send_mock, action, label, reason
 ):
     resp = await client_admin.post(
-        f"/api/v1/manual-distribution/applications/{allocated_application.id}/suspend",
-        json={"reason": "leave"},
-    )
-    assert resp.status_code == 200
-    email_send_mock.assert_awaited_once()
-    kwargs = email_send_mock.await_args.kwargs
-    assert kwargs["to"] == "admin@nycu.edu.tw"
-    assert "停發" in kwargs["subject"]
-    assert "leave" in kwargs["body"]
-
-
-@pytest.mark.asyncio
-async def test_revoke_failed_reason_does_not_send_email(
-    client_admin: AsyncClient, unallocated_application, email_send_mock
-):
-    resp = await client_admin.post(
-        f"/api/v1/manual-distribution/applications/{unallocated_application.id}/revoke",
-        json={"reason": "x"},
+        f"/api/v1/manual-distribution/applications/{unallocated_application.id}/{action}",
+        json={"reason": reason},
     )
     assert resp.status_code == 400
     email_send_mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_revoke_succeeds_even_if_email_fails(client_admin: AsyncClient, allocated_application, email_send_mock):
+@pytest.mark.parametrize("action,label,reason", _CANCEL_ACTIONS)
+async def test_cancellation_succeeds_even_if_email_fails(
+    client_admin: AsyncClient, allocated_application, email_send_mock, action, label, reason
+):
     email_send_mock.side_effect = RuntimeError("SMTP down")
     resp = await client_admin.post(
-        f"/api/v1/manual-distribution/applications/{allocated_application.id}/revoke",
-        json={"reason": "violated"},
+        f"/api/v1/manual-distribution/applications/{allocated_application.id}/{action}",
+        json={"reason": reason},
     )
     assert resp.status_code == 200
-    assert resp.json()["data"]["quota_allocation_status"] == "revoked"
+    assert resp.json()["data"]["quota_allocation_status"] == _CANCEL_STATUS[action]
 
 
 @pytest.mark.asyncio

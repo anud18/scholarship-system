@@ -5,9 +5,7 @@ Provides endpoints for admin to manually allocate scholarships to students.
 """
 
 import logging
-from datetime import datetime, timezone
 from typing import Optional
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
@@ -24,6 +22,7 @@ from app.models.user import User
 from app.schemas.application import RevokeRequest, SuspendRequest
 from app.services.email_service import EmailService
 from app.services.manual_distribution_service import ManualDistributionService
+from app.utils.date_utils import now_taipei_str
 
 logger = logging.getLogger(__name__)
 
@@ -728,7 +727,7 @@ async def _notify_admin_of_cancellation(
         student_data = application.student_data or {}
         student_name = student_data.get("std_cname", "")
         student_id = student_data.get("std_stdcode", "")
-        operated_at = datetime.now(timezone.utc).astimezone(ZoneInfo("Asia/Taipei")).strftime("%Y-%m-%d %H:%M")
+        operated_at = now_taipei_str()
 
         subject = f"【獎學金系統】{action_label}操作通知 - {application.app_id}"
         body = (
