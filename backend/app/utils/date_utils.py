@@ -3,7 +3,8 @@ Date and time utility functions for the scholarship system
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, tzinfo
+from functools import lru_cache
 from typing import Optional, Union
 from zoneinfo import ZoneInfo
 
@@ -12,19 +13,25 @@ import dateutil.parser
 logger = logging.getLogger(__name__)
 
 
+@lru_cache(maxsize=1)
+def _taipei_tz() -> tzinfo:
+    """Asia/Taipei tzinfo, falling back to UTC if tzdata is unavailable.
+
+    Cached so the missing-tzdata warning is logged at most once per process."""
+    try:
+        return ZoneInfo("Asia/Taipei")
+    except Exception:
+        logger.warning("Asia/Taipei timezone unavailable; falling back to UTC", exc_info=True)
+        return timezone.utc
+
+
 def now_taipei_str(format_string: str = "%Y-%m-%d %H:%M") -> str:
     """Current time converted to the institution's locale (Asia/Taipei), formatted.
 
     Use this for human-facing timestamps (emails, exports); UTC wall-clock
     would silently shift them 8 hours.
     """
-    now = datetime.now(timezone.utc)
-    try:
-        now = now.astimezone(ZoneInfo("Asia/Taipei"))
-    except Exception:
-        # Missing tzdata: fall back to UTC rather than failing the caller
-        logger.warning("Asia/Taipei timezone unavailable; falling back to UTC", exc_info=True)
-    return now.strftime(format_string)
+    return datetime.now(timezone.utc).astimezone(_taipei_tz()).strftime(format_string)
 
 
 def parse_date_field(date_input: Optional[Union[str, datetime]]) -> Optional[datetime]:
