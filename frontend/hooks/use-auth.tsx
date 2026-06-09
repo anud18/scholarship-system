@@ -132,7 +132,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (isLocalhost) {
         router.push("/dev-login");
       } else {
-        // In production, redirect to home page or SSO login
+        // In production, redirect to home page or SSO login.
+        // Flag that this is a real logout so the login page can warn that the
+        // NYCU Portal SSO session is NOT cleared (it's a host-only cookie on
+        // portal.test we can't touch cross-origin, and the Portal exposes no
+        // app-initiable logout) — otherwise the next click re-logs in instantly.
+        try {
+          sessionStorage.setItem("nycu_portal_logout_notice", "1");
+        } catch {
+          // sessionStorage may be unavailable (private mode); the notice is best-effort.
+        }
         router.push("/");
       }
     }
