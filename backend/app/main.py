@@ -316,7 +316,7 @@ async def health_check():
 # Database pool status endpoint (admin only)
 @app.get("/debug/pool-status")
 async def get_pool_status(current_user: User = Depends(require_admin)):
-    """Get current database connection pool status (for debugging, admin only)"""
+    """Get current database connection pool status (for debugging)"""
     async_pool = async_engine.pool
     sync_pool = sync_engine.pool
 
