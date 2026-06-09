@@ -24,7 +24,8 @@ from app.services.export_package_service import (
     _sanitize_filename,
     _ext_for_application_document,
     _application_document_entry,
-    _fetch_and_write,
+    _fetch_object_bytes,
+    _write_fetch_result,
     FILE_TYPE_LABELS,
     DEGREE_LABELS,
 )
@@ -230,16 +231,14 @@ class TestApplicationDocumentEntry:
         assert "/" not in entry["zip_path"].rsplit("/", 1)[-1]
 
 
-class TestFetchAndWrite:
-    """Pin: the shared MinIO fetch-and-write used by both the
-    app.files loop and the 申請文件. On success the bytes land at
-    zip_path; on any MinIO error a placeholder .txt lands at
-    error_path instead (the ZIP build never aborts)."""
+class TestFetchObjectBytes:
+    """Pin: the MinIO read used by every fetch job. On success the full
+    payload is returned and the connection is always closed + released;
+    on failure the exception propagates (the writer turns it into a
+    placeholder via _write_fetch_result)."""
 
-    def test_success_writes_bytes_and_releases_connection(self):
+    def test_success_returns_bytes_and_releases_connection(self):
         import asyncio
-        import io
-        import zipfile
         from unittest.mock import MagicMock
 
         fake_response = MagicMock()
@@ -247,47 +246,69 @@ class TestFetchAndWrite:
         minio = MagicMock()
         minio.get_file_stream.return_value = fake_response
 
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w") as zf:
-            asyncio.run(
-                _fetch_and_write(
-                    zf,
-                    minio,
-                    object_name="application-documents/12_x.pdf",
-                    zip_path="dept/stu/stu_申請文件.pdf",
-                    error_path="dept/stu/_錯誤_找不到檔案_申請文件.txt",
-                    error_label="申請文件.pdf",
-                )
-            )
+        data = asyncio.run(_fetch_object_bytes(minio, "application-documents/12_x.pdf"))
 
-        buf.seek(0)
-        with zipfile.ZipFile(buf) as zf:
-            assert zf.read("dept/stu/stu_申請文件.pdf") == b"PDF-BYTES"
-            assert "dept/stu/_錯誤_找不到檔案_申請文件.txt" not in zf.namelist()
+        assert data == b"PDF-BYTES"
         fake_response.close.assert_called_once()
         fake_response.release_conn.assert_called_once()
 
-    def test_failure_writes_error_placeholder(self):
+    def test_failure_propagates_exception(self):
         import asyncio
-        import io
-        import zipfile
         from unittest.mock import MagicMock
 
         minio = MagicMock()
         minio.get_file_stream.side_effect = Exception("object missing")
 
+        with pytest.raises(Exception, match="object missing"):
+            asyncio.run(_fetch_object_bytes(minio, "application-documents/12_x.pdf"))
+
+    def test_connection_released_even_when_read_fails(self):
+        import asyncio
+        from unittest.mock import MagicMock
+
+        fake_response = MagicMock()
+        fake_response.read.side_effect = Exception("connection reset")
+        minio = MagicMock()
+        minio.get_file_stream.return_value = fake_response
+
+        with pytest.raises(Exception, match="connection reset"):
+            asyncio.run(_fetch_object_bytes(minio, "application-documents/12_x.pdf"))
+        fake_response.close.assert_called_once()
+        fake_response.release_conn.assert_called_once()
+
+
+class TestWriteFetchResult:
+    """Pin: the writer step for one fetch job. On success the bytes land at
+    zip_path; on error a placeholder .txt lands at error_path instead
+    (the ZIP build never aborts)."""
+
+    JOB = {
+        "object_name": "application-documents/12_x.pdf",
+        "zip_path": "dept/stu/stu_申請文件.pdf",
+        "error_path": "dept/stu/_錯誤_找不到檔案_申請文件.txt",
+        "error_label": "申請文件.pdf",
+    }
+
+    def test_success_writes_bytes_at_zip_path(self):
+        import io
+        import zipfile
+
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as zf:
-            asyncio.run(
-                _fetch_and_write(
-                    zf,
-                    minio,
-                    object_name="application-documents/12_x.pdf",
-                    zip_path="dept/stu/stu_申請文件.pdf",
-                    error_path="dept/stu/_錯誤_找不到檔案_申請文件.txt",
-                    error_label="申請文件.pdf",
-                )
-            )
+            _write_fetch_result(zf, self.JOB, b"PDF-BYTES", None)
+
+        buf.seek(0)
+        with zipfile.ZipFile(buf) as zf:
+            assert zf.read("dept/stu/stu_申請文件.pdf") == b"PDF-BYTES"
+            assert "dept/stu/_錯誤_找不到檔案_申請文件.txt" not in zf.namelist()
+
+    def test_error_writes_placeholder_at_error_path(self):
+        import io
+        import zipfile
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            _write_fetch_result(zf, self.JOB, None, "object missing")
 
         buf.seek(0)
         with zipfile.ZipFile(buf) as zf:

@@ -86,9 +86,9 @@ def _application_document_entry(
 ) -> Optional[Dict[str, str]]:
     """Describe where the student-uploaded 申請文件 goes in the ZIP.
 
-    Returns None when the application has no 申請文件. Otherwise returns the
-    kwargs for `_fetch_and_write`: the source object name, the sanitized ZIP
-    path, the error-placeholder path, and a human label for the error text.
+    Returns None when the application has no 申請文件. Otherwise returns a
+    fetch job: the source object name, the sanitized ZIP path, the
+    error-placeholder path, and a human label for the error text.
     """
     if not object_name:
         return None
@@ -102,30 +102,96 @@ def _application_document_entry(
     }
 
 
-async def _fetch_and_write(
-    zf: zipfile.ZipFile,
-    minio: MinIOService,
-    object_name: str,
-    zip_path: str,
-    error_path: str,
-    error_label: str,
-) -> None:
-    """Stream one MinIO object into the ZIP at `zip_path`.
+def _application_paths(dept_folder: str, app: Application) -> Tuple[str, str]:
+    """ZIP folder for one application: (base_path, student_prefix)."""
+    student = app.student_data or {}
+    std_code = _sanitize_filename(student.get("std_stdcode", "unknown"))
+    std_name = _sanitize_filename(student.get("std_cname", "未知"))
+    student_prefix = f"{std_code}_{std_name}"
+    return f"{dept_folder}/{student_prefix}", student_prefix
 
-    On any failure, writes a `_錯誤_…txt` placeholder at `error_path`
-    instead so a single bad object never aborts the whole ZIP build.
-    """
-    try:
-        response = await asyncio.to_thread(minio.get_file_stream, object_name)
+
+def _collect_fetch_jobs(app: Application, base_path: str, student_prefix: str) -> List[Dict[str, str]]:
+    """Fetch jobs for one application's MinIO objects: the uploaded
+    ApplicationFile records plus the student-uploaded 申請文件 (stored on the
+    application itself, not as an ApplicationFile)."""
+    jobs: List[Dict[str, str]] = []
+
+    type_totals = Counter(af.file_type or "other" for af in app.files)
+    file_type_counter: Dict[str, int] = defaultdict(int)
+    for af in app.files:
+        ft = af.file_type or "other"
+        file_type_counter[ft] += 1
+        count = file_type_counter[ft]
+        label = FILE_TYPE_LABELS.get(ft, "其他文件")
+
+        # Determine file extension from original filename or mime_type
+        ext = ""
+        if af.original_filename and "." in af.original_filename:
+            ext = "." + af.original_filename.rsplit(".", 1)[1]
+        elif af.mime_type and "/" in af.mime_type:
+            ext_map = {"application/pdf": ".pdf", "image/jpeg": ".jpg", "image/png": ".png"}
+            ext = ext_map.get(af.mime_type, "")
+
+        # Add sequence number only if multiple files of same type
+        if type_totals[ft] > 1:
+            filename = f"{student_prefix}_{label}_{count}{ext}"
+        else:
+            filename = f"{student_prefix}_{label}{ext}"
+
+        jobs.append(
+            {
+                "object_name": af.object_name,
+                "zip_path": f"{base_path}/{_sanitize_filename(filename)}",
+                "error_path": f"{base_path}/_錯誤_找不到檔案_{_sanitize_filename(label)}.txt",
+                "error_label": af.original_filename or af.object_name,
+            }
+        )
+
+    entry = _application_document_entry(
+        app.application_document_url,
+        app.application_document_original_filename,
+        base_path,
+        student_prefix,
+    )
+    if entry:
+        jobs.append(entry)
+
+    return jobs
+
+
+# How many MinIO objects may be in flight / held in memory at once while the
+# ZIP is being assembled. The writer releases a slot only after the payload is
+# written into the ZIP, so peak extra memory is bounded by this many files.
+_FETCH_CONCURRENCY = 8
+
+
+async def _fetch_object_bytes(minio: MinIOService, object_name: str) -> bytes:
+    """Read one MinIO object fully in a worker thread (connection always released)."""
+
+    def _read() -> bytes:
+        response = minio.get_file_stream(object_name)
         try:
-            file_bytes = await asyncio.to_thread(response.read)
+            return response.read()
         finally:
             response.close()
             response.release_conn()
-        zf.writestr(zip_path, file_bytes)
-    except Exception as e:
-        logger.exception(f"Failed to fetch file {object_name}")
-        zf.writestr(error_path, f"檔案下載失敗：{error_label}\n錯誤：{str(e)}")
+
+    return await asyncio.to_thread(_read)
+
+
+def _write_fetch_result(
+    zf: zipfile.ZipFile,
+    job: Dict[str, str],
+    data: Optional[bytes],
+    error: Optional[str],
+) -> None:
+    """Write fetched bytes at the job's zip_path, or a `_錯誤_…txt` placeholder
+    at its error_path so a single bad object never aborts the whole ZIP build."""
+    if error is None:
+        zf.writestr(job["zip_path"], data)
+    else:
+        zf.writestr(job["error_path"], f"檔案下載失敗：{job['error_label']}\n錯誤：{error}")
 
 
 CJK_FONT_PATH = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
@@ -202,14 +268,56 @@ class ExportPackageService:
             logger.exception("embedded summary tables generation failed wholesale")
             summary_tables = {"_錯誤_申請總表生成失敗.txt": f"申請總表生成失敗：{e}".encode("utf-8")}
 
-        # 4. Build ZIP
+        # 4. Build ZIP. The dominant cost is one MinIO round trip per student
+        # file, so all fetch jobs are collected up front and run as windowed
+        # concurrent tasks while the summary PDFs render in a worker thread.
+        fetch_jobs: List[Dict[str, str]] = []
+        pdf_specs: List[Tuple[str, str, Application]] = []
+        for dept_folder, apps in sorted(dept_groups.items()):
+            for app in apps:
+                base_path, student_prefix = _application_paths(dept_folder, app)
+                pdf_specs.append((base_path, student_prefix, app))
+                fetch_jobs.extend(_collect_fetch_jobs(app, base_path, student_prefix))
+
+        window = asyncio.Semaphore(_FETCH_CONCURRENCY)
+
+        async def _windowed_fetch(job: Dict[str, str]) -> Tuple[Optional[bytes], Optional[str]]:
+            # The slot is released by the writer loop only after the payload is
+            # written into the ZIP, keeping held payloads bounded by the window.
+            await window.acquire()
+            try:
+                return await _fetch_object_bytes(self.minio, job["object_name"]), None
+            except Exception as e:
+                logger.exception(f"Failed to fetch file {job['object_name']}")
+                return None, str(e)
+
+        tasks = [asyncio.create_task(_windowed_fetch(job)) for job in fetch_jobs]
+
         buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            for dept_folder, apps in sorted(dept_groups.items()):
-                for app in apps:
-                    await self._add_application_to_zip(zf, dept_folder, app, scholarship_name, academic_year, semester)
-            for inner_path, payload in summary_tables.items():
-                zf.writestr(inner_path, payload)
+        try:
+            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                # Summary PDFs render off the event loop while fetches progress.
+                for base_path, student_prefix, app in pdf_specs:
+                    try:
+                        pdf_bytes = await asyncio.to_thread(
+                            self._generate_summary_pdf, app, scholarship_name, academic_year, semester
+                        )
+                        zf.writestr(f"{base_path}/{student_prefix}_學生資料彙整.pdf", pdf_bytes)
+                    except Exception as e:
+                        logger.exception(f"Failed to generate summary PDF for app {app.id}")
+                        zf.writestr(f"{base_path}/_錯誤_彙整PDF生成失敗.txt", f"PDF 生成失敗：{str(e)}")
+
+                for job, task in zip(fetch_jobs, tasks):
+                    data, error = await task
+                    _write_fetch_result(zf, job, data, error)
+                    window.release()
+
+                for inner_path, payload in summary_tables.items():
+                    zf.writestr(inner_path, payload)
+        except BaseException:
+            for task in tasks:
+                task.cancel()
+            raise
 
         buf.seek(0)
 
@@ -272,77 +380,6 @@ class ExportPackageService:
             ]
 
         return applications
-
-    async def _add_application_to_zip(
-        self,
-        zf: zipfile.ZipFile,
-        dept_folder: str,
-        app: Application,
-        scholarship_name: str,
-        academic_year: int,
-        semester: Optional[str],
-    ) -> None:
-        """Add one application's files + summary PDF to the ZIP."""
-        student = app.student_data or {}
-        std_code = _sanitize_filename(student.get("std_stdcode", "unknown"))
-        std_name = _sanitize_filename(student.get("std_cname", "未知"))
-        student_folder = f"{std_code}_{std_name}"
-        base_path = f"{dept_folder}/{student_folder}"
-
-        # Generate summary PDF
-        student_prefix = f"{std_code}_{std_name}"
-        try:
-            pdf_bytes = self._generate_summary_pdf(app, scholarship_name, academic_year, semester)
-            zf.writestr(f"{base_path}/{student_prefix}_學生資料彙整.pdf", pdf_bytes)
-        except Exception as e:
-            logger.exception(f"Failed to generate summary PDF for app {app.id}")
-            zf.writestr(
-                f"{base_path}/_錯誤_彙整PDF生成失敗.txt",
-                f"PDF 生成失敗：{str(e)}",
-            )
-
-        # Add uploaded files from ApplicationFile records
-        type_totals = Counter(af.file_type or "other" for af in app.files)
-        file_type_counter: Dict[str, int] = defaultdict(int)
-        for af in app.files:
-            ft = af.file_type or "other"
-            file_type_counter[ft] += 1
-            count = file_type_counter[ft]
-            label = FILE_TYPE_LABELS.get(ft, "其他文件")
-
-            # Determine file extension from original filename or mime_type
-            ext = ""
-            if af.original_filename and "." in af.original_filename:
-                ext = "." + af.original_filename.rsplit(".", 1)[1]
-            elif af.mime_type and "/" in af.mime_type:
-                ext_map = {"application/pdf": ".pdf", "image/jpeg": ".jpg", "image/png": ".png"}
-                ext = ext_map.get(af.mime_type, "")
-
-            # Add sequence number only if multiple files of same type
-            if type_totals[ft] > 1:
-                filename = f"{student_prefix}_{label}_{count}{ext}"
-            else:
-                filename = f"{student_prefix}_{label}{ext}"
-
-            await _fetch_and_write(
-                zf,
-                self.minio,
-                object_name=af.object_name,
-                zip_path=f"{base_path}/{_sanitize_filename(filename)}",
-                error_path=f"{base_path}/_錯誤_找不到檔案_{_sanitize_filename(label)}.txt",
-                error_label=af.original_filename or af.object_name,
-            )
-
-        # Student-uploaded 申請文件 — stored on the application itself,
-        # not as an ApplicationFile, so the app.files loop above misses it.
-        entry = _application_document_entry(
-            app.application_document_url,
-            app.application_document_original_filename,
-            base_path,
-            student_prefix,
-        )
-        if entry:
-            await _fetch_and_write(zf, self.minio, **entry)
 
     def _generate_summary_pdf(
         self,
