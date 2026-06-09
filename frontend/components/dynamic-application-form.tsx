@@ -38,6 +38,10 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { logger } from "@/lib/utils/logger";
+import {
+  isValidTaiwanMobile,
+  TAIWAN_MOBILE_MESSAGE,
+} from "@/lib/utils/application-helpers";
 import { getTranslation } from "@/lib/i18n";
 import type {
   ApplicationField,
@@ -89,6 +93,7 @@ export function DynamicApplicationForm({
   const [fileData, setFileData] = useState<FileData>(initialFiles);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [previewFile, setPreviewFile] = useState<{
     url: string;
     filename: string;
@@ -158,10 +163,57 @@ export function DynamicApplicationForm({
     }
   };
 
+  // Field-level validation shown inline as soon as the student finishes the
+  // field (on blur), instead of surprising them at submit time. Mirrors the
+  // submit-time guard in ScholarshipApplicationStep / the backend check.
+  const validateFieldValue = (
+    fieldName: string,
+    value: unknown
+  ): string | null => {
+    if (
+      fieldName === "contact_phone" &&
+      typeof value === "string" &&
+      value !== "" &&
+      !isValidTaiwanMobile(value)
+    ) {
+      return TAIWAN_MOBILE_MESSAGE;
+    }
+    return null;
+  };
+
   const handleFieldChange = (fieldName: string, value: unknown) => {
     const newFormData = { ...formData, [fieldName]: value };
     setFormData(newFormData);
     onFieldChange?.(fieldName, value);
+
+    // Once a field already shows an error, re-validate live so the message
+    // clears the moment the student fixes the value (don't nag mid-typing
+    // on untouched fields).
+    if (fieldErrors[fieldName]) {
+      const error = validateFieldValue(fieldName, value);
+      setFieldErrors(prev => {
+        const next = { ...prev };
+        if (error) {
+          next[fieldName] = error;
+        } else {
+          delete next[fieldName];
+        }
+        return next;
+      });
+    }
+  };
+
+  const handleFieldBlur = (fieldName: string, value: unknown) => {
+    const error = validateFieldValue(fieldName, value);
+    setFieldErrors(prev => {
+      const next = { ...prev };
+      if (error) {
+        next[fieldName] = error;
+      } else {
+        delete next[fieldName];
+      }
+      return next;
+    });
   };
 
   const handleFileChange = (documentType: string, files: File[]) => {
@@ -300,6 +352,7 @@ export function DynamicApplicationForm({
           .validation_rules ?? undefined;
         const pattern = rules?.pattern;
         const patternMessage = rules?.patternMessage;
+        const fieldError = fieldErrors[field.field_name];
         return (
           <div key={field.field_name} className="space-y-2">
             <Label htmlFor={field.field_name}>
@@ -315,13 +368,18 @@ export function DynamicApplicationForm({
               onChange={e =>
                 handleFieldChange(field.field_name, e.target.value)
               }
+              onBlur={e => handleFieldBlur(field.field_name, e.target.value)}
               placeholder={placeholder}
               maxLength={field.max_length}
               required={field.is_required}
               pattern={pattern}
               title={patternMessage}
-              className={`w-full ${isFixedField ? "bg-blue-50 border-blue-200" : ""}`}
+              aria-invalid={fieldError ? true : undefined}
+              className={`w-full ${isFixedField ? "bg-blue-50 border-blue-200" : ""} ${fieldError ? "border-red-500 focus-visible:ring-red-500" : ""}`}
             />
+            {fieldError && (
+              <p className="text-sm text-red-600">{fieldError}</p>
+            )}
             {patternMessage && (
               <p className="text-xs text-muted-foreground">{patternMessage}</p>
             )}
