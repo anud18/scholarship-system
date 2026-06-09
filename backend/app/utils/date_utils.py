@@ -18,7 +18,13 @@ def now_taipei_str(format_string: str = "%Y-%m-%d %H:%M") -> str:
     Use this for human-facing timestamps (emails, exports); UTC wall-clock
     would silently shift them 8 hours.
     """
-    return datetime.now(timezone.utc).astimezone(ZoneInfo("Asia/Taipei")).strftime(format_string)
+    now = datetime.now(timezone.utc)
+    try:
+        now = now.astimezone(ZoneInfo("Asia/Taipei"))
+    except Exception:
+        # Missing tzdata: fall back to UTC rather than failing the caller
+        logger.warning("Asia/Taipei timezone unavailable; falling back to UTC", exc_info=True)
+    return now.strftime(format_string)
 
 
 def parse_date_field(date_input: Optional[Union[str, datetime]]) -> Optional[datetime]:

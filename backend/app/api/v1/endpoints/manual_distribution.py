@@ -723,15 +723,20 @@ async def _notify_admin_of_cancellation(
 
     try:
         result = await db.execute(select(Application).where(Application.id == application_id))
-        application = result.scalar_one()
+        application = result.scalar_one_or_none()
+        if application is None:
+            logger.warning("Application %s not found; skipping %s notification email", application_id, action_label)
+            return
         student_data = application.student_data or {}
         student_name = student_data.get("std_cname", "")
         student_id = student_data.get("std_stdcode", "")
         operated_at = now_taipei_str()
+        # name is nullable until SSO populates it on first login
+        admin_name = admin_user.name or admin_user.nycu_id
 
         subject = f"【獎學金系統】{action_label}操作通知 - {application.app_id}"
         body = (
-            f"{admin_user.name} 您好：\n\n"
+            f"{admin_name} 您好：\n\n"
             f"您已對下列獎學金申請執行「{action_label}」操作：\n\n"
             f"申請編號：{application.app_id}\n"
             f"學生姓名：{student_name}（{student_id}）\n"
