@@ -426,10 +426,11 @@ export interface ApplicationCreate {
 }
 
 // Backend `GET /api/v1/admin/dashboard/stats` returns both the canonical
-// snake_case fields and a set of camelCase aliases for the legacy
-// admin-management-interface UI. Until that UI is migrated off the alias
-// shape, the canonical type exposes both. `storageUsed` is optional because
-// the backend does not currently compute it.
+// snake_case fields and a set of legacy camelCase aliases. The legacy UI
+// that consumed the alias shape has been removed, but the backend still
+// emits both, so the canonical type exposes both until the endpoint drops
+// the aliases. `storageUsed` is optional because the backend does not
+// currently compute it.
 //
 // Both `apiClient.admin.getDashboardStats()` and the legacy alias
 // `apiClient.admin.getSystemStats()` resolve to this same shape.

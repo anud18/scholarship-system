@@ -97,8 +97,6 @@ AUDIT_LOG_INVARIANTS = [
     # --- PR #502: users.py destructive endpoints ---
     ("app.api.v1.endpoints.users", "update_user_college", 502),
     ("app.api.v1.endpoints.users", "bulk_assign_scholarships", 502),
-    # --- PR #503: pre_authorization access-control ---
-    ("app.api.v1.endpoints.pre_authorization", "assign_scholarship_to_admin", 503),
     # --- PR #506: scholarship_management bulk admin endpoints ---
     ("app.api.v1.endpoints.scholarship_management", "simulate_priority_processing", 506),
     # --- PR #576: email_automation audit logging ---

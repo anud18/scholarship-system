@@ -132,11 +132,6 @@ app.add_middleware(
 if settings.enable_metrics:
     app.add_middleware(MetricsMiddleware)
 
-# Add schema validation middleware (development only)
-# Temporarily disabled due to logger scoping issue
-# if settings.debug:
-#     app.add_middleware(SchemaValidationMiddleware)
-
 
 # Request tracing middleware
 @app.middleware("http")

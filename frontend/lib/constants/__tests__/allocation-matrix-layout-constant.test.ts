@@ -24,8 +24,7 @@ describe("ALLOCATION_MATRIX_LAYOUT constant", () => {
   // ─── Grid dimensions ────────────────────────────────────────────────
 
   it("rank column is 220px wide", () => {
-    // Pin: the sticky first column width. Pill geometry math
-    // in useGridMetrics depends on this.
+    // Pin: the sticky first column width the matrix grid CSS is built around.
     expect(ALLOCATION_MATRIX_LAYOUT.RANK_COLUMN_WIDTH).toBe(220);
   });
 
