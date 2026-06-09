@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.exceptions import AuthenticationError, ConflictError
 from app.models.user import EmployeeStatus, User, UserRole
 from app.schemas.user import TokenResponse, UserCreate, UserLogin, UserResponse
@@ -248,8 +249,15 @@ class TestAuthService:
 
     @pytest.mark.smoke
     @pytest.mark.asyncio
-    async def test_create_tokens(self, service, mock_user):
-        """Test token creation for authenticated user"""
+    async def test_create_tokens(self, service, mock_user, monkeypatch):
+        """Test token creation for authenticated user.
+
+        Pinned to production-like settings so the result is deterministic:
+        debug data (portal/student/debug_mode) must NOT be embedded outside
+        development/testing/portal_test_mode.
+        """
+        monkeypatch.setattr(settings, "environment", "production")
+        monkeypatch.setattr(settings, "portal_test_mode", False)
         with (
             patch("app.services.auth_service.create_access_token") as mock_access_token,
             patch("app.services.auth_service.create_refresh_token") as mock_refresh_token,
@@ -275,12 +283,11 @@ class TestAuthService:
 
             result = await service.create_tokens(mock_user)
 
-            # Verify token data
+            # Verify token data (no debug_mode in production)
             expected_token_data = {
                 "sub": str(mock_user.id),
                 "nycu_id": mock_user.nycu_id,
                 "role": mock_user.role.value,
-                "debug_mode": True,
             }
 
             mock_access_token.assert_called_once_with(expected_token_data)
