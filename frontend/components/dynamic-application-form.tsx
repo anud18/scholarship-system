@@ -104,12 +104,28 @@ export function DynamicApplicationForm({
 
   // Load form configuration
   useEffect(() => {
+    // Switching scholarships swaps the whole field set; drop any inline
+    // errors from the previous form.
+    setFieldErrors({});
     loadFormConfiguration();
   }, [scholarshipType]);
 
   // Update form data when initial values change
   useEffect(() => {
     setFormData(initialValues);
+    // Re-validate fields that currently show an error against the incoming
+    // values so stale messages don't survive a parent-driven rehydration
+    // (e.g. loading a saved draft).
+    setFieldErrors(prev => {
+      const next: Record<string, string> = {};
+      Object.keys(prev).forEach(fieldName => {
+        const error = validateFieldValue(fieldName, initialValues[fieldName]);
+        if (error) {
+          next[fieldName] = error;
+        }
+      });
+      return next;
+    });
   }, [initialValues]);
 
   // Update file data when initial files change
@@ -353,6 +369,7 @@ export function DynamicApplicationForm({
         const pattern = rules?.pattern;
         const patternMessage = rules?.patternMessage;
         const fieldError = fieldErrors[field.field_name];
+        const errorId = `${field.field_name}-error`;
         return (
           <div key={field.field_name} className="space-y-2">
             <Label htmlFor={field.field_name}>
@@ -375,10 +392,13 @@ export function DynamicApplicationForm({
               pattern={pattern}
               title={patternMessage}
               aria-invalid={fieldError ? true : undefined}
+              aria-describedby={fieldError ? errorId : undefined}
               className={`w-full ${isFixedField ? "bg-blue-50 border-blue-200" : ""} ${fieldError ? "border-red-500 focus-visible:ring-red-500" : ""}`}
             />
             {fieldError && (
-              <p className="text-sm text-red-600">{fieldError}</p>
+              <p id={errorId} className="text-sm text-red-600">
+                {fieldError}
+              </p>
             )}
             {patternMessage && (
               <p className="text-xs text-muted-foreground">{patternMessage}</p>
