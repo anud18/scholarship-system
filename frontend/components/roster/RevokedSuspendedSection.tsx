@@ -45,10 +45,11 @@ export function RevokedSuspendedSection({
             <div>
               <div>
                 <span className="font-medium">{s.student_name}</span>
-                <span className="text-slate-500">
-                  {" "}
-                  ({maskIdNumber(s.student_id_number)})
-                </span>
+                {s.student_id_number && (
+                  <span className="text-slate-500">
+                    {` (${maskIdNumber(s.student_id_number)})`}
+                  </span>
+                )}
                 <span className="text-xs text-slate-500 ml-2">
                   {verb}於 {new Date(s.event_at).toLocaleDateString()}
                 </span>
