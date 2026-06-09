@@ -5,7 +5,9 @@ Provides endpoints for admin to manually allocate scholarships to students.
 """
 
 import logging
+from datetime import datetime, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
@@ -16,8 +18,11 @@ from app.core.deps import get_current_admin_user, get_db
 from app.db.deps import get_sync_db
 from app.models.application import Application
 from app.models.college_review import CollegeRanking, CollegeRankingItem, ManualDistributionHistory
+from app.models.email_management import EmailCategory
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
+from app.models.user import User
 from app.schemas.application import RevokeRequest, SuspendRequest
+from app.services.email_service import EmailService
 from app.services.manual_distribution_service import ManualDistributionService
 
 logger = logging.getLogger(__name__)
@@ -697,6 +702,64 @@ async def import_received_months(
     }
 
 
+async def _notify_admin_of_cancellation(
+    db: AsyncSession,
+    application_id: int,
+    admin_user: User,
+    action_label: str,
+    reason: str,
+) -> None:
+    """Email the acting admin a record of a 停發/撤銷 operation.
+
+    Best-effort: runs after the action is committed, and any failure is logged
+    without affecting the API response."""
+    if not admin_user.email:
+        logger.warning(
+            "Admin %s has no email address; skipping %s notification for application %s",
+            admin_user.id,
+            action_label,
+            application_id,
+        )
+        return
+
+    try:
+        result = await db.execute(select(Application).where(Application.id == application_id))
+        application = result.scalar_one()
+        student_data = application.student_data or {}
+        student_name = student_data.get("std_cname", "")
+        student_id = student_data.get("std_stdcode", "")
+        operated_at = datetime.now(timezone.utc).astimezone(ZoneInfo("Asia/Taipei")).strftime("%Y-%m-%d %H:%M")
+
+        subject = f"【獎學金系統】{action_label}操作通知 - {application.app_id}"
+        body = (
+            f"{admin_user.name} 您好：\n\n"
+            f"您已對下列獎學金申請執行「{action_label}」操作：\n\n"
+            f"申請編號：{application.app_id}\n"
+            f"學生姓名：{student_name}（{student_id}）\n"
+            f"獎學金：{application.scholarship_name or ''}\n"
+            f"{action_label}原因：{reason}\n"
+            f"操作時間：{operated_at}\n\n"
+            "此郵件為系統自動發送的操作紀錄通知，請勿直接回覆。"
+        )
+
+        await EmailService().send_email(
+            to=admin_user.email,
+            subject=subject,
+            body=body,
+            db=db,
+            email_category=EmailCategory.system,
+            application_id=application_id,
+            sent_by_user_id=admin_user.id,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to send %s notification email to admin %s for application %s",
+            action_label,
+            admin_user.email,
+            application_id,
+        )
+
+
 @router.post("/applications/{application_id}/revoke")
 async def revoke_application_allocation(
     application_id: int,
@@ -713,6 +776,7 @@ async def revoke_application_allocation(
             reason=request.reason,
         )
         await db.commit()
+        await _notify_admin_of_cancellation(db, application_id, current_user, "撤銷", request.reason)
         return {"success": True, "message": "已撤銷", "data": result}
     except ValueError as e:
         msg = str(e)
@@ -737,6 +801,7 @@ async def suspend_application_allocation(
             reason=request.reason,
         )
         await db.commit()
+        await _notify_admin_of_cancellation(db, application_id, current_user, "停發", request.reason)
         return {"success": True, "message": "已停發", "data": result}
     except ValueError as e:
         msg = str(e)
