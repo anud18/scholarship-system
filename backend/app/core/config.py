@@ -318,7 +318,14 @@ class Settings(BaseSettings):
         Prevents a misconfigured production deployment from silently running with
         the mock Student API HMAC key or mock SSO enabled.
         """
-        if self.testing:
+        # Only bypass under an actual test runner. Note: the loose ``self.testing``
+        # property treats any non-empty TESTING value (even "false") as truthy, so
+        # we check explicitly here to avoid accidentally disabling the production
+        # safety checks when TESTING is set to a non-empty, non-"true" value.
+        in_test_runner = bool(os.getenv("PYTEST_CURRENT_TEST") or os.getenv("CI")) or (
+            os.getenv("TESTING", "").lower() == "true"
+        )
+        if in_test_runner:
             return self
         if self.environment == "production":
             if self.student_api_enabled and self.student_api_hmac_key == _MOCK_STUDENT_API_HMAC_KEY:

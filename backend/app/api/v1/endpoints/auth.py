@@ -324,9 +324,10 @@ async def portal_sso_verify(
         "student_id": student_id,
     }
 
-    # Log only non-None parameters
-    non_none_params = {k: v for k, v in received_params.items() if v is not None}
-    logger.info(f"Portal SSO received parameters: {non_none_params}")
+    # SECURITY: log only which parameter NAMES were provided, never their values —
+    # several of these fields carry the SSO JWT / access token.
+    present_params = [k for k, v in received_params.items() if v is not None]
+    logger.info(f"Portal SSO received parameters: {present_params}")
 
     # Extract data from form parameters (try multiple possible token field names)
     final_token = token or jwt or jwt_token or access_token or id_token

@@ -254,7 +254,9 @@ class MinIOService:
             file_uploads_total.labels(file_type=str(file_type), status="failed").inc()
             raise
         except Exception as e:
-            logger.exception(f"Failed to upload file {file.filename}")
+            # SECURITY: sanitize the client-supplied filename before logging to
+            # avoid log injection / control-character confusion.
+            logger.exception(f"Failed to upload file {secure_filename(file.filename or '')}")
 
             # Business metric: count failures so the dashboard can show
             # the success-rate ratio without needing log-scraping.

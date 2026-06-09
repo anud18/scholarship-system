@@ -40,6 +40,8 @@ export async function GET(
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
           'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'",
+          'X-Frame-Options': 'SAMEORIGIN',
+          'Cache-Control': 'no-store',
         },
       }
     );
