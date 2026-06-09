@@ -20,7 +20,7 @@ export async function GET(
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
         'Content-Security-Policy':
-          "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data: https:;",
+          "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data: https:; base-uri 'none'; form-action 'none'; frame-ancestors 'self';",
         'X-Frame-Options': 'SAMEORIGIN',
         'Cache-Control': 'no-store',
       },
@@ -39,7 +39,8 @@ export async function GET(
         status: 500,
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
-          'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'",
+          'Content-Security-Policy':
+            "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
           'X-Frame-Options': 'SAMEORIGIN',
           'Cache-Control': 'no-store',
         },

@@ -238,7 +238,9 @@ class MinIOService:
                 content_type=file.content_type,
             )
 
-            logger.info(f"Uploaded file {file.filename} as {object_name}")
+            # Log the sanitized filename (object_name is already safe) to avoid
+            # log injection from control characters in the client-supplied name.
+            logger.info(f"Uploaded file {safe_filename} as {object_name}")
 
             # Business metric: count successful application-file uploads.
             # file_type already discriminates document categories (doc,

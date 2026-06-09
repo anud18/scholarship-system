@@ -383,8 +383,10 @@ async function handleRosterPreview(
           "Content-Type": "text/html; charset=utf-8",
           // Defense-in-depth: the template only needs inline styles; block all
           // scripts so any markup that slips through escaping cannot execute.
+          // base-uri/form-action are NOT covered by default-src, so set them
+          // explicitly; frame-ancestors mirrors X-Frame-Options in CSP.
           "Content-Security-Policy":
-            "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:",
+            "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
           "X-Frame-Options": "SAMEORIGIN",
         },
       });
