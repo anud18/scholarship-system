@@ -1,4 +1,5 @@
 import type { RevokedSuspendedEntry } from "@/lib/api/modules/payment-rosters";
+import { maskIdNumber } from "@/lib/utils/mask";
 
 interface RevokedSuspendedSectionProps {
   kind: "revoked" | "suspended";
@@ -44,7 +45,10 @@ export function RevokedSuspendedSection({
             <div>
               <div>
                 <span className="font-medium">{s.student_name}</span>
-                <span className="text-slate-500"> ({s.student_id_number})</span>
+                <span className="text-slate-500">
+                  {" "}
+                  ({maskIdNumber(s.student_id_number)})
+                </span>
                 <span className="text-xs text-slate-500 ml-2">
                   {verb}於 {new Date(s.event_at).toLocaleDateString()}
                 </span>
