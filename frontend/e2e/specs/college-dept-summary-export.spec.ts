@@ -39,13 +39,14 @@ import { apiAs } from "../helpers/api";
 import { deleteApplicationCascade, getActiveConfig, getApplication, pool } from "../helpers/db";
 import { attachRunState, newRunState, pushTrace, type RunState } from "../helpers/runState";
 import { captureDiagnostics } from "../helpers/diagnose";
+import { BACKEND_URL } from "../helpers/env";
 
 const STUDENT_ID = "stuphd001";
 const SCHOLARSHIP_CODE = "phd";
 const SUB_TYPE = "nstc";
 /** std_depno returned by the mock SIS API for stuphd001 */
 const DEPT_CODE = "3551";
-const API_V1 = "http://localhost:8000/api/v1";
+const API_V1 = `${BACKEND_URL}/api/v1`;
 
 async function purgeStudentApps(studentNycuId: string, scholarshipCode: string): Promise<void> {
   const { rows } = await pool.query<{ app_id: string }>(

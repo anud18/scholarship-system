@@ -1,0 +1,267 @@
+# Staging E2E — full Playwright suite against an EPHEMERAL replica of the
+# live staging deployment, on the staging host itself.
+#
+# What "replica" means here:
+#   - backend/frontend images = exactly what is deployed right now (resolved
+#     via `docker inspect scholarship_*_staging`), NOT a rebuild.
+#   - database = pg_dump snapshot of the live staging DB taken at run start,
+#     restored into a throwaway Postgres.
+#   - outbound email = captured by a bundled Mailpit (full SMTP pipeline runs,
+#     nothing leaves the VM; inspect at host port 18025 during a run).
+#
+# Why a replica instead of testing the live site and restoring it after:
+#   restoring a pre-test dump would delete any legitimate writes made during
+#   the window, a failed restore would brick staging overnight, and the suite
+#   needs mock SSO which must never be enabled on the live endpoint.
+#
+# Zero-residue guarantee: live staging is only ever READ (one pg_dump, two
+# docker inspect). The replica lives in compose project `staging-e2e` and is
+# `down -v`-ed in an always() step; a final assert fails the run if anything
+# survived.
+#
+# Rollout: workflow_dispatch only for now. Once green, add a cron entry
+# (e.g. '30 18 * * *' = 02:30 Asia/Taipei, clear of the 01:00 nightly).
+
+name: Staging E2E
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+# Same group as the Deployment Pipeline → never runs concurrently with a
+# staging deploy (which would swap images / restart containers under us).
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '22'
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  COMPOSE: docker compose -p staging-e2e -f docker-compose.staging-e2e.yml
+  DUMP: /tmp/staging-e2e.dump
+  REPLICA_DB_URL: postgresql://scholarship_user:scholarship_pass@localhost:15432/scholarship_db
+
+jobs:
+  staging-e2e:
+    name: E2E against staging replica
+    runs-on: [self-hosted, scholarship, test]
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Resource guard (fail fast, touch nothing)
+        run: |
+          avail_kb=$(df --output=avail / | tail -1 | tr -d ' ')
+          avail_gb=$((avail_kb / 1024 / 1024))
+          mem_avail_mb=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo)
+          echo "disk_avail=${avail_gb}GB mem_avail=${mem_avail_mb}MB"
+          if [ "$avail_gb" -lt 5 ] || [ "$mem_avail_mb" -lt 2048 ]; then
+            echo "::error::Staging host lacks headroom for the replica (need >=5GB disk, >=2GB RAM available). Aborting before creating anything."
+            exit 1
+          fi
+
+      # Topology note: staging is TWO VMs. The runner lives on the AP VM
+      # (backend/frontend/nginx containers); Postgres + MinIO live on the DB
+      # VM and are only reachable over the network — `docker exec
+      # scholarship_postgres_staging` does NOT work here. All DB access goes
+      # through a postgres:15-alpine client container using the same
+      # STAGING_DATABASE_URL_SYNC the backend uses.
+      - name: Verify live staging stack is healthy
+        env:
+          STAGING_DB_URL: ${{ secrets.STAGING_DATABASE_URL_SYNC }}
+        run: |
+          docker inspect --format '{{.Name}} {{.State.Status}}' \
+            scholarship_backend_staging scholarship_frontend_staging
+          curl -fsS http://localhost:8000/health > /dev/null
+          docker run --rm postgres:15-alpine pg_isready -d "$STAGING_DB_URL"
+
+      - name: Resolve currently deployed images
+        id: images
+        run: |
+          backend=$(docker inspect scholarship_backend_staging --format '{{.Config.Image}}')
+          frontend=$(docker inspect scholarship_frontend_staging --format '{{.Config.Image}}')
+          echo "backend=$backend"  | tee -a "$GITHUB_OUTPUT"
+          echo "frontend=$frontend" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Snapshot staging DB (read-only against live)
+        env:
+          STAGING_DB_URL: ${{ secrets.STAGING_DATABASE_URL_SYNC }}
+        run: |
+          # pg_dump runs in a client container on the AP VM, over the network
+          # to the DB VM (~15MB database as of 2026-06 — seconds, not minutes).
+          docker run --rm postgres:15-alpine \
+            pg_dump "$STAGING_DB_URL" -Fc > "$DUMP"
+          ls -lh "$DUMP"
+
+      - name: Pre-clean any leftover replica from a crashed run
+        run: $COMPOSE down -v --remove-orphans 2>/dev/null || true
+
+      - name: Start replica Postgres and restore the snapshot
+        env:
+          BACKEND_IMAGE: ${{ steps.images.outputs.backend }}
+          FRONTEND_IMAGE: ${{ steps.images.outputs.frontend }}
+          PII_ENCRYPTION_KEYS: ${{ secrets.PII_ENCRYPTION_KEYS }}
+          PII_ENCRYPTION_ACTIVE_VERSION: ${{ secrets.PII_ENCRYPTION_ACTIVE_VERSION }}
+          MINIO_BUCKET: ${{ secrets.STAGING_MINIO_BUCKET }}
+        run: |
+          $COMPOSE up -d --wait postgres
+          # --clean/--if-exists tolerate the fresh DB; pg_restore exits 1 on
+          # ignorable warnings, so verify with a row-count probe instead.
+          docker exec -i staging_e2e_postgres \
+            pg_restore -U scholarship_user -d scholarship_db \
+            --clean --if-exists --no-owner --no-acl < "$DUMP" || true
+          users=$(docker exec staging_e2e_postgres \
+            psql -U scholarship_user -d scholarship_db -tAc "SELECT count(*) FROM users")
+          echo "restored users rows: $users"
+          test "$users" -gt 0
+
+      - name: Start the rest of the replica stack
+        env:
+          BACKEND_IMAGE: ${{ steps.images.outputs.backend }}
+          FRONTEND_IMAGE: ${{ steps.images.outputs.frontend }}
+          PII_ENCRYPTION_KEYS: ${{ secrets.PII_ENCRYPTION_KEYS }}
+          PII_ENCRYPTION_ACTIVE_VERSION: ${{ secrets.PII_ENCRYPTION_ACTIVE_VERSION }}
+          MINIO_BUCKET: ${{ secrets.STAGING_MINIO_BUCKET }}
+        run: |
+          $COMPOSE up -d --build
+          for i in $(seq 1 90); do
+            if curl -fsS http://localhost:18000/health > /dev/null 2>&1 \
+               && curl -fsS http://localhost:13000 > /dev/null 2>&1; then
+              echo "Replica up after ~$((i*2))s"
+              break
+            fi
+            sleep 2
+          done
+          curl -fsS http://localhost:18000/health > /dev/null
+          curl -fsS http://localhost:13000 > /dev/null
+
+      - name: Migrate + seed e2e fixtures (idempotent, replica only)
+        run: |
+          docker exec staging_e2e_backend alembic upgrade head
+          docker exec staging_e2e_backend python -m app.seed || echo "seed completed with warnings"
+
+      - name: Route replica email to Mailpit + ensure MinIO bucket
+        env:
+          MINIO_BUCKET: ${{ secrets.STAGING_MINIO_BUCKET }}
+        run: |
+          # SMTP settings live in system_settings (restored from the staging
+          # dump → they point at the real NYCU relay). Repoint them at the
+          # bundled Mailpit so the full send pipeline runs without any mail
+          # leaving the VM.
+          docker exec staging_e2e_postgres psql -U scholarship_user -d scholarship_db -c "
+            UPDATE system_settings SET value = 'mailpit' WHERE key = 'smtp_host';
+            UPDATE system_settings SET value = '1025'    WHERE key = 'smtp_port';
+            UPDATE system_settings SET value = 'false'   WHERE key = 'smtp_use_tls';
+          "
+          # Empty bucket is enough — specs upload what they later read.
+          docker run --rm --network staging-e2e_default --entrypoint sh \
+            minio/mc:latest -c \
+            "mc alias set replica http://minio:9000 minioadmin minioadmin123 && mc mb -p replica/${MINIO_BUCKET:-scholarship-documents}"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Playwright browsers
+        working-directory: ./frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run full Playwright suite against the replica
+        working-directory: ./frontend
+        run: npx playwright test
+        env:
+          E2E_FRONTEND_URL: http://localhost:13000
+          E2E_BACKEND_URL: http://localhost:18000
+          E2E_DATABASE_URL: ${{ env.REPLICA_DB_URL }}
+
+      - name: Dump replica logs on failure
+        if: failure()
+        run: $COMPOSE logs --tail=300 || true
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-report-staging-e2e
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 14
+
+      - name: Tear down replica (zero residue)
+        if: always()
+        run: |
+          $COMPOSE down -v --remove-orphans || true
+          rm -f "$DUMP"
+
+      - name: Assert zero residue
+        if: always()
+        run: |
+          leftover=$(docker ps -a --filter "name=staging_e2e_" --format '{{.Names}}')
+          volumes=$(docker volume ls --filter "name=staging-e2e_" --format '{{.Name}}')
+          if [ -n "$leftover" ] || [ -n "$volumes" ]; then
+            echo "::error::Replica residue survived teardown: containers=[$leftover] volumes=[$volumes]"
+            exit 1
+          fi
+          echo "Clean: no replica containers or volumes remain."
+
+  file-issue-on-failure:
+    name: File issue on failure
+    runs-on: ubuntu-latest
+    needs: [staging-e2e]
+    if: failure()
+    permissions:
+      issues: write
+
+    steps:
+      - name: gh issue create
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          today=$(date -u +%F)
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          gh label create staging-e2e-failure \
+            --repo ${{ github.repository }} \
+            --color "d73a4a" \
+            --description "Auto-filed by the staging-e2e replica lane" \
+            2>/dev/null || true
+          existing=$(gh issue list \
+            --repo ${{ github.repository }} \
+            --label staging-e2e-failure \
+            --state open \
+            --search "in:title $today" \
+            --json number \
+            --jq '.[0].number' || echo '')
+          body=$(cat <<EOF
+          The staging-e2e lane (full Playwright suite against an ephemeral
+          replica of the live staging deployment) failed.
+
+          - Run: $run_url
+          - staging-e2e: ${{ needs.staging-e2e.result }}
+
+          The replica uses the images deployed on staging at run time plus a
+          fresh snapshot of the staging DB, so a failure here usually means
+          either a real bug surfaced by staging's data shape, or the deployed
+          image pair is broken. Live staging itself was not modified.
+
+          (Auto-filed by .github/workflows/staging-e2e.yml. Close once a
+          subsequent run is green.)
+          EOF
+          )
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo ${{ github.repository }} --body "$body"
+          else
+            gh issue create \
+              --repo ${{ github.repository }} \
+              --title "Staging E2E $today: replica lane failed" \
+              --body "$body" \
+              --label staging-e2e-failure
+          fi

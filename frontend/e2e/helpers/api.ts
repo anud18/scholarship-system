@@ -1,4 +1,6 @@
-const API_V1 = "http://localhost:8000/api/v1";
+import { BACKEND_URL } from "./env";
+
+const API_V1 = `${BACKEND_URL}/api/v1`;
 
 export interface ApiResult<T> {
   status: number;
