@@ -64,3 +64,60 @@ describe("middleware Content-Security-Policy", () => {
     expect(csp).toContain(`'nonce-${nonce}'`);
   });
 });
+
+describe("middleware framing for same-origin preview proxies", () => {
+  // Regression guard for the iframe "refused to connect" bug: a same-origin
+  // /api/v1/preview* response rendered inside an <iframe> must NOT carry
+  // `frame-ancestors 'none'` / `X-Frame-Options: DENY`, or the browser refuses
+  // to frame it. `frame-src 'self'` on the PARENT page (the #885 fix) is not
+  // enough — the CHILD response must also permit being framed same-origin.
+  // nginx must agree (see nginx /api/v1/preview block); a DENY/SAMEORIGIN split
+  // across the two layers is treated as invalid and still blocks.
+  const originalEnv = process.env.NODE_ENV;
+  afterEach(() => {
+    Object.defineProperty(process.env, "NODE_ENV", { value: originalEnv, configurable: true });
+  });
+  function setNodeEnv(value: string) {
+    Object.defineProperty(process.env, "NODE_ENV", { value, configurable: true });
+  }
+
+  const PREVIEW_ROUTES = [
+    "https://ss.test.nycu.edu.tw/api/v1/preview?fileId=1&applicationId=1&type=pdf",
+    "https://ss.test.nycu.edu.tw/api/v1/preview-terms?scholarshipType=phd",
+    "https://ss.test.nycu.edu.tw/api/v1/preview-document-example?documentId=1",
+  ];
+
+  it.each(PREVIEW_ROUTES)("prod: %s is framable same-origin (SAMEORIGIN + frame-ancestors 'self')", (url) => {
+    setNodeEnv("production");
+    const res = middleware(mockRequest(url));
+    const csp = res.headers.get("Content-Security-Policy") ?? "";
+    expect(res.headers.get("X-Frame-Options")).toBe("SAMEORIGIN");
+    expect(csp).toContain("frame-ancestors 'self'");
+    expect(csp).not.toContain("frame-ancestors 'none'");
+    // the rest of the strict CSP is unchanged
+    expect(csp).toContain("object-src 'none'");
+  });
+
+  it("dev: /api/v1/preview is framable same-origin", () => {
+    setNodeEnv("development");
+    const res = middleware(mockRequest("http://localhost:3000/api/v1/preview?fileId=1&type=pdf"));
+    const csp = res.headers.get("Content-Security-Policy") ?? "";
+    expect(res.headers.get("X-Frame-Options")).toBe("SAMEORIGIN");
+    expect(csp).toContain("frame-ancestors 'self'");
+  });
+
+  it("non-preview routes keep the strict DENY / frame-ancestors 'none' posture", () => {
+    setNodeEnv("production");
+    for (const url of [
+      "https://ss.test.nycu.edu.tw/",
+      "https://ss.test.nycu.edu.tw/student/apply",
+      "https://ss.test.nycu.edu.tw/api/v1/applications/87",
+    ]) {
+      const res = middleware(mockRequest(url));
+      const csp = res.headers.get("Content-Security-Policy") ?? "";
+      expect(res.headers.get("X-Frame-Options")).toBe("DENY");
+      expect(csp).toContain("frame-ancestors 'none'");
+      expect(csp).not.toContain("frame-ancestors 'self'");
+    }
+  });
+});
