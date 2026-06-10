@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timezone, tzinfo
 from functools import lru_cache
 from typing import Optional, Union
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import dateutil.parser
 
@@ -20,16 +20,17 @@ def _taipei_tz() -> tzinfo:
     Cached so the missing-tzdata warning is logged at most once per process."""
     try:
         return ZoneInfo("Asia/Taipei")
-    except Exception:
+    except ZoneInfoNotFoundError:
         logger.warning("Asia/Taipei timezone unavailable; falling back to UTC", exc_info=True)
         return timezone.utc
 
 
-def now_taipei_str(format_string: str = "%Y-%m-%d %H:%M") -> str:
+def now_taipei_str(format_string: str = "%Y-%m-%d %H:%M %z") -> str:
     """Current time converted to the institution's locale (Asia/Taipei), formatted.
 
     Use this for human-facing timestamps (emails, exports); UTC wall-clock
-    would silently shift them 8 hours.
+    would silently shift them 8 hours. The default format includes the UTC
+    offset so a tzdata-fallback timestamp can't be mistaken for Taipei time.
     """
     return datetime.now(timezone.utc).astimezone(_taipei_tz()).strftime(format_string)
 
