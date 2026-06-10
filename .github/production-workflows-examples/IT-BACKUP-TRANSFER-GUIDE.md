@@ -6,31 +6,41 @@
 
 ### 重要資訊
 
-- **備份位置**: `/var/backups/scholarship-system/`
-- **DB VM 限制**: Database VM 無法連接外網
-- **自動清理**: Server 上的備份會保留 7 天後自動刪除
+Production 採雙主機架構：**AP VM**（應用程式、有外網、安裝 GitHub self-hosted runner）與 **DB VM**（資料庫、**無外網**、僅 AP VM 可透過內網 SSH 連線）。
+
+備份由 `backup.yml` workflow 在 AP VM runner 上執行：SSH 到 DB VM 執行 pg_dump、驗證完整性後，再將備份**拉回 AP VM** 作為異地副本（DB VM 無外網，無法主動推送備份到任何地方）。
+
+- **備份位置（IT 請從 AP VM 搬移）**:
+  - AP VM 副本: `/opt/scholarship/backups/database/YYYYMMDD/` ← **搬移來源**
+  - DB VM 主備份: `/opt/scholarship/postgres/backups/YYYYMMDD/`（僅供災難復原，IT 一般不需登入 DB VM）
+- **自動清理**: AP VM 副本保留 14 天、DB VM 主備份保留 30 天後自動刪除
 - **備份頻率**:
-  - 每日 02:00 UTC 完整備份
-  - 每 6 小時增量備份
+  - 每日 02:00（台北時間）：DB VM 容器內 cron 自動備份（獨立於 GitHub Actions）
+  - 每日 03:30（台北時間）：`backup.yml` workflow 備份 + 驗證 + 拉回 AP VM
+  - 每週日：workflow 額外執行完整還原測試（restore 到暫存資料庫驗證）
 
 ## 📁 備份目錄結構
 
 ```
-/var/backups/scholarship-system/
-├── database/
-│   ├── 20250125/
-│   │   ├── database-backup-20250125-020015.sql.gz
-│   │   └── database-backup-20250125-020015.sql.gz.sha256
-│   ├── 20250126/
-│   └── 20250127/
-├── files/
-│   ├── 20250125/
-│   │   ├── files-backup-20250125-020045.tar.gz
-│   │   └── files-backup-20250125-020045.tar.gz.sha256
-│   ├── 20250126/
-│   └── 20250127/
-└── backup-manifest-YYYYMMDD.txt  # 備份清單檔案
+# AP VM（搬移來源）
+/opt/scholarship/backups/database/
+├── 20260610/
+│   ├── scholarship_db_backup_20260610_033012.dump        # pg_dump custom format（已壓縮）
+│   └── scholarship_db_backup_20260610_033012.dump.sha256
+├── 20260609/
+└── 20260608/
+
+# DB VM（主備份，結構相同）
+/opt/scholarship/postgres/backups/
+└── YYYYMMDD/
+    ├── scholarship_db_backup_*.dump
+    └── scholarship_db_backup_*.dump.sha256
 ```
+
+> ⚠️ 下方範例腳本中的 `/var/backups/scholarship-system` 與 `database-backup-*.sql.gz` 為舊版路徑/檔名。
+> 實際操作時請將 `BACKUP_SOURCE` 改為 AP VM 的 `/opt/scholarship/backups`，
+> 檔名格式為 `scholarship_db_backup_*.dump`（搭配同名 `.sha256` 檔驗證）。
+> 目前 workflow 僅備份資料庫；MinIO 檔案備份不在此 workflow 範圍內。
 
 ## 🔍 每日檢查清單
 

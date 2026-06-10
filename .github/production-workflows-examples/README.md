@@ -20,7 +20,7 @@ warning: here-document at line 10 delimited by end-of-file (wanted `FOOTER_EOF')
 | `auto-tag-on-merge.yml` ⭐ | 自動建立 Git tag 和 Release | PR merge 到 main | **必要** |
 | `deploy.yml` | 部署應用程式到 production | Push to main / 手動觸發 | 選用 |
 | `health-check.yml` | 監控應用程式健康狀態 | 每 15 分鐘 / 手動觸發 | 選用 |
-| `backup.yml` | 備份資料庫和檔案 | 每日 2AM UTC / 手動觸發 | 選用 |
+| `backup.yml` | 備份資料庫（DB VM 備份 → 驗證 → 拉回 AP VM 副本） | 每日 19:30 UTC（台北 03:30）/ 手動觸發 | 選用 |
 
 ### ⭐ Auto-Tag Workflow (推薦必裝)
 
@@ -111,12 +111,16 @@ cp /path/to/development-repo/.github/production-workflows-examples/backup.yml \
 
 #### 備份相關 (backup.yml)
 
+`backup.yml` 在 **AP VM 的 self-hosted runner** 上執行（DB VM 無外網，無法直接被 GitHub-hosted runner 連線），使用與 `setting-env.yml` 相同的 DB VM SSH secrets：
+
 | Secret Name | Description | Example |
 |-------------|-------------|---------|
-| `AWS_ACCESS_KEY_ID` | AWS access key | `AKIAIOSFODNN7EXAMPLE` |
-| `AWS_SECRET_ACCESS_KEY` | AWS secret key | `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY` |
-| `AWS_REGION` | AWS region (optional) | `us-east-1` |
-| `BACKUP_S3_BUCKET` | S3 bucket name | `production-backups` |
+| `DB_HOST` | DB VM 內網 hostname/IP | `10.0.1.100` |
+| `DB_VM_USER` | DB VM SSH 使用者 | `ubuntu` |
+| `DB_VM_SSH_KEY` | DB VM SSH private key | `-----BEGIN OPENSSH PRIVATE KEY-----` |
+| `DB_VM_SSH_PORT` | DB VM SSH port | `8822` |
+
+詳細設定步驟見 `SECRETS-SETUP-GUIDE.md`。
 
 #### 通知相關 (health-check.yml, optional)
 
@@ -187,31 +191,6 @@ cat ~/.ssh/production_deploy
 2. Create new token with name "GitHub Actions"
 3. Copy token and add to secrets as `DOCKER_PASSWORD`
 
-### AWS IAM 權限
-
-為備份創建專用的 IAM user：
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "s3:PutObject",
-        "s3:GetObject",
-        "s3:ListBucket",
-        "s3:DeleteObject"
-      ],
-      "Resource": [
-        "arn:aws:s3:::your-backup-bucket",
-        "arn:aws:s3:::your-backup-bucket/*"
-      ]
-    }
-  ]
-}
-```
-
 ## 📋 檢查清單
 
 在啟用 workflows 之前：
@@ -234,11 +213,11 @@ cat ~/.ssh/production_deploy
 
 ### Backup Workflow
 
-- [ ] AWS 憑證已設定
-- [ ] S3 bucket 已創建
-- [ ] Bucket 政策允許上傳/刪除
-- [ ] SSH 憑證已設定
-- [ ] 測試備份和還原流程
+- [ ] Self-hosted runner 已安裝在 AP VM 並上線
+- [ ] DB VM SSH secrets 已設定（`DB_HOST`、`DB_VM_USER`、`DB_VM_SSH_KEY`、`DB_VM_SSH_PORT`）
+- [ ] AP VM `/opt/scholarship/backups` 有足夠磁碟空間
+- [ ] DB VM 備份目錄 `/opt/scholarship/postgres/backups` 存在且有足夠空間
+- [ ] 測試備份和還原流程（手動觸發並勾選 `verify_restore`）
 
 ## 🔍 測試 Workflows
 
@@ -264,12 +243,15 @@ gh workflow run health-check.yml
 ### 測試備份
 
 ```bash
-# Test backup workflow
-gh workflow run backup.yml
+# Test backup workflow (optionally with full restore test)
+gh workflow run backup.yml -f verify_restore=true
 
-# Verify S3
-aws s3 ls s3://your-backup-bucket/database/
-aws s3 ls s3://your-backup-bucket/files/
+# Verify the off-server copy on AP VM
+ls -lh /opt/scholarship/backups/database/$(date +%Y%m%d)/
+
+# Verify checksum
+cd /opt/scholarship/backups/database/$(date +%Y%m%d)
+sha256sum -c scholarship_db_backup_*.dump.sha256
 ```
 
 ## 📊 監控
@@ -309,15 +291,17 @@ sudo systemctl status ssh
 sudo ufw status
 ```
 
-### Backup 失敗: S3 Access Denied
+### Backup 失敗: 無法 SSH 到 DB VM
 
 ```bash
-# Test AWS credentials
-aws s3 ls s3://your-backup-bucket/
+# 在 AP VM (runner) 上手動測試 SSH 連線
+ssh -p <DB_VM_SSH_PORT> -i ~/.ssh/db_vm_deploy <DB_VM_USER>@<DB_HOST> "echo ok"
 
-# Verify IAM permissions
-aws iam get-user
-aws iam list-attached-user-policies --user-name backup-user
+# 檢查 DB VM 上 postgres 容器狀態
+ssh -p <DB_VM_SSH_PORT> <DB_VM_USER>@<DB_HOST> "docker ps --filter name=scholarship_postgres"
+
+# 檢查 DB VM 備份目錄磁碟空間
+ssh -p <DB_VM_SSH_PORT> <DB_VM_USER>@<DB_HOST> "df -h /opt/scholarship/postgres/backups"
 ```
 
 ### Health Check 持續失敗

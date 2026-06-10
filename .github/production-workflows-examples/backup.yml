@@ -1,525 +1,433 @@
-# Example Production Backup Workflow
-# Copy this file to your production repository at: .github/workflows/backup.yml
+# Production Database Backup Workflow
+# Copy this file to the production repository at: .github/workflows/backup.yml
 #
-# NOTE: This workflow creates backups on the production server.
-# Database VM does NOT have internet access, so backups are stored locally
-# for IT staff to transfer to external storage.
+# =============================================================================
+# ARCHITECTURE (two servers, DB VM has NO internet)
+# =============================================================================
+#
+#   GitHub Actions
+#     └── self-hosted runner on AP VM (internet + internal network)
+#           └── SSH → DB VM (offline; reachable only from AP VM)
+#                 ├── 1. run pg_dump via the postgres containers
+#                 ├── 2. verify checksum + archive readability (pg_restore --list)
+#                 └── 3. optional full restore test into a temporary database
+#           └── SCP ← pull the verified dump back to the AP VM (off-server copy)
+#
+# Because the DB VM cannot reach the internet, it can NOT:
+#   - run a GitHub Actions runner
+#   - push backups to cloud/object storage
+#   - report failures anywhere
+# Therefore ALL orchestration happens from the AP VM runner, and the AP VM
+# PULLS the backup over the internal network. The copy on the AP VM is the
+# one IT staff transfer to external backup storage
+# (see IT-BACKUP-TRANSFER-GUIDE.md).
+#
+# Backup layers after this workflow runs:
+#   1. DB VM  /opt/scholarship/postgres/backups/YYYYMMDD/  (primary, 30 days)
+#      - also written independently by the scholarship_postgres_backup
+#        cron container at 02:00 (docker-compose.prod-db.yml)
+#   2. AP VM  /opt/scholarship/backups/database/YYYYMMDD/  (off-server copy, 14 days)
+#
+# Required repository secrets (same as setting-env.yml, see SECRETS-SETUP-GUIDE.md):
+#   DB_HOST          - DB VM hostname/IP (internal network)
+#   DB_VM_USER       - SSH username on DB VM
+#   DB_VM_SSH_KEY    - SSH private key for DB VM
+#   DB_VM_SSH_PORT   - SSH port on DB VM (e.g. 8822)
+#
+# Restore (run on DB VM):
+#   docker exec -i scholarship_postgres_prod pg_restore \
+#     -U scholarship_user -d scholarship_db --clean --if-exists --no-owner \
+#     /backups/YYYYMMDD/scholarship_db_backup_YYYYMMDD_HHMMSS.dump
 
-name: Backup Production Data
+name: Backup Production Database
 
 on:
   schedule:
-    - cron: '0 2 * * *'  # Daily at 2 AM UTC
-    - cron: '0 */6 * * *'  # Every 6 hours (for more frequent backups)
+    # 19:30 UTC = 03:30 Asia/Taipei, deliberately AFTER the DB VM's own
+    # in-container cron backup at 02:00 so the two never overlap.
+    - cron: '30 19 * * *'
   workflow_dispatch:
     inputs:
-      backup_type:
-        description: 'Type of backup'
-        required: true
-        type: choice
-        options:
-          - full
-          - database-only
-          - files-only
-        default: 'full'
-      retention_days:
-        description: 'Keep backups for N days'
+      verify_restore:
+        description: 'Run full restore test into a temporary database (slower)'
         required: false
-        type: number
-        default: 7
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: production-db-backup
+  cancel-in-progress: false
 
 env:
-  # Backup directory on production server (must exist and be writable)
-  BACKUP_DIR: /var/backups/scholarship-system
-  RETENTION_DAYS: 7  # Keep backups for 7 days on server
+  # Bind mount of the postgres_backups volume on the DB VM (docker-compose.prod-db.yml)
+  DB_BACKUP_DIR: /opt/scholarship/postgres/backups
+  # Off-server copy on the AP VM - IT staff transfer to external storage from here
+  AP_BACKUP_DIR: /opt/scholarship/backups/database
+  # Staging dir on DB VM (backup files are root-owned; staged copies are chowned
+  # to the SSH user so scp can read them)
+  DB_STAGING_DIR: /tmp/scholarship-db-backup-stage
+  DB_RETENTION_DAYS: 30
+  AP_RETENTION_DAYS: 14
 
 jobs:
   backup-database:
     name: Backup PostgreSQL Database
-    runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'schedule' ||
-      github.event.inputs.backup_type == 'full' ||
-      github.event.inputs.backup_type == 'database-only'
+    # Self-hosted runner installed on the AP VM - the only machine that can
+    # reach both GitHub and the offline DB VM.
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 60
 
     steps:
-      - name: Create database backup on server
-        id: db-backup
+      #########################################################################
+      # STEP 1: Setup SSH connection to DB VM
+      #########################################################################
+      - name: Setup SSH to DB VM
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
-          SERVER_HOST: ${{ secrets.PRODUCTION_SERVER }}
-          SERVER_USER: ${{ secrets.PRODUCTION_USER }}
-          RETENTION: ${{ github.event.inputs.retention_days || env.RETENTION_DAYS }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_VM_SSH_KEY: ${{ secrets.DB_VM_SSH_KEY }}
+          DB_VM_SSH_PORT: ${{ secrets.DB_VM_SSH_PORT }}
         run: |
-          BACKUP_TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          BACKUP_DATE=$(date +%Y%m%d)
-          BACKUP_FILE="database-backup-${BACKUP_TIMESTAMP}.sql.gz"
+          echo "::add-mask::$DB_VM_SSH_KEY"
 
           mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
+          chmod 700 ~/.ssh
+          echo "$DB_VM_SSH_KEY" > ~/.ssh/db_backup_key
+          chmod 600 ~/.ssh/db_backup_key
 
-          # Create backup directory structure on server
-          ssh -i ~/.ssh/deploy_key "$SERVER_USER@$SERVER_HOST" << ENDSSH
-            # Ensure backup directory exists
-            sudo mkdir -p ${BACKUP_DIR}/database/${BACKUP_DATE}
-            sudo chown -R $SERVER_USER:$SERVER_USER ${BACKUP_DIR}
-            chmod 750 ${BACKUP_DIR}
+          if ! grep -q "$DB_HOST" ~/.ssh/known_hosts 2>/dev/null; then
+            ssh-keyscan -p "$DB_VM_SSH_PORT" -H "$DB_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          fi
 
-            echo "📁 Backup directory: ${BACKUP_DIR}/database/${BACKUP_DATE}"
+      #########################################################################
+      # STEP 2: Preflight checks on DB VM
+      #########################################################################
+      - name: Preflight checks on DB VM
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_VM_USER: ${{ secrets.DB_VM_USER }}
+          DB_VM_SSH_PORT: ${{ secrets.DB_VM_SSH_PORT }}
+        run: |
+          set -o pipefail
 
-            # Create database backup
-            cd /opt/scholarship-system
-            docker compose exec -T postgres pg_dump \
-              -U scholarship_user \
-              -d scholarship_db \
-              --format=custom \
-              --compress=9 \
-              | gzip > ${BACKUP_DIR}/database/${BACKUP_DATE}/${BACKUP_FILE}
+          cat > preflight.sh <<'SCRIPT'
+          set -euo pipefail
+          BACKUP_DIR="$1"
 
-            # Verify backup was created
-            if [ -f ${BACKUP_DIR}/database/${BACKUP_DATE}/${BACKUP_FILE} ]; then
-              BACKUP_SIZE=\$(du -h ${BACKUP_DIR}/database/${BACKUP_DATE}/${BACKUP_FILE} | cut -f1)
-              echo "✅ Database backup created: ${BACKUP_FILE} (\${BACKUP_SIZE})"
-              echo "📍 Location: ${BACKUP_DIR}/database/${BACKUP_DATE}/${BACKUP_FILE}"
+          DOCKER=docker
+          docker info >/dev/null 2>&1 || DOCKER="sudo docker"
 
-              # Set permissions for IT access
-              chmod 640 ${BACKUP_DIR}/database/${BACKUP_DATE}/${BACKUP_FILE}
-            else
-              echo "::error::Failed to create database backup"
+          echo "Connected to DB VM: $(hostname)"
+
+          if ! $DOCKER ps --format '{{.Names}}' | grep -qx scholarship_postgres_prod; then
+            echo "::error::postgres container (scholarship_postgres_prod) is not running on DB VM"
+            exit 1
+          fi
+
+          HEALTH=$($DOCKER inspect --format '{{.State.Health.Status}}' scholarship_postgres_prod 2>/dev/null || echo "unknown")
+          echo "postgres container health: $HEALTH"
+          if [ "$HEALTH" != "healthy" ]; then
+            echo "::error::postgres container is not healthy (status: $HEALTH)"
+            exit 1
+          fi
+
+          sudo mkdir -p "$BACKUP_DIR"
+          AVAIL_KB=$(df -Pk "$BACKUP_DIR" | awk 'NR==2 {print $4}')
+          echo "Free space at $BACKUP_DIR: $((AVAIL_KB / 1024)) MB"
+          if [ "$AVAIL_KB" -lt 1048576 ]; then
+            echo "::error::Less than 1 GB free on DB VM backup volume"
+            exit 1
+          fi
+
+          echo "Preflight checks passed"
+          SCRIPT
+
+          ssh -p "$DB_VM_SSH_PORT" -i ~/.ssh/db_backup_key -o ConnectTimeout=10 \
+            "$DB_VM_USER@$DB_HOST" "bash -s -- '$DB_BACKUP_DIR'" < preflight.sh
+
+      #########################################################################
+      # STEP 3: Create backup on DB VM
+      #########################################################################
+      - name: Create database backup on DB VM
+        id: backup
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_VM_USER: ${{ secrets.DB_VM_USER }}
+          DB_VM_SSH_PORT: ${{ secrets.DB_VM_SSH_PORT }}
+        run: |
+          set -o pipefail
+
+          cat > run_backup.sh <<'SCRIPT'
+          set -euo pipefail
+          BACKUP_DIR="$1"
+          RETENTION_DAYS="$2"
+          STAGING="$3"
+
+          DOCKER=docker
+          docker info >/dev/null 2>&1 || DOCKER="sudo docker"
+
+          # Prefer the maintained backup script in the cron sidecar container
+          # (scripts/backup.sh: timestamped custom-format dump + sha256 + retention).
+          if $DOCKER ps --format '{{.Names}}' | grep -qx scholarship_postgres_backup; then
+            echo "Running backup via scholarship_postgres_backup container..."
+            $DOCKER exec scholarship_postgres_backup /backup.sh
+          else
+            echo "Backup container not running - falling back to direct pg_dump"
+            TS=$(date +%Y%m%d_%H%M%S)
+            DATE=$(date +%Y%m%d)
+            FILE="scholarship_db_backup_${TS}.dump"
+            $DOCKER exec scholarship_postgres_prod sh -c "
+              set -e
+              mkdir -p /backups/${DATE}
+              pg_dump -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" \
+                --format=custom --compress=9 \
+                --file=/backups/${DATE}/${FILE}
+              cd /backups/${DATE}
+              sha256sum ${FILE} > ${FILE}.sha256
+              chmod 640 ${FILE} ${FILE}.sha256
+            "
+          fi
+
+          # Retention: prune dated YYYYMMDD directories older than cutoff
+          CUTOFF=$(date -d "${RETENTION_DAYS} days ago" +%Y%m%d)
+          for dir in "$BACKUP_DIR"/*/; do
+            [ -d "$dir" ] || continue
+            name=$(basename "$dir")
+            if echo "$name" | grep -qE '^[0-9]{8}$' && [ "$name" -lt "$CUTOFF" ]; then
+              echo "Pruning old backup directory: $name (retention: ${RETENTION_DAYS} days)"
+              sudo rm -rf "$dir"
+            fi
+          done
+
+          # Locate the dump that was just created
+          LATEST=$(sudo find "$BACKUP_DIR" -type f -name 'scholarship_db_backup_*.dump' \
+            -printf '%T@ %p\n' | sort -rn | head -n1 | cut -d' ' -f2-)
+          if [ -z "$LATEST" ]; then
+            echo "::error::No backup file found after backup run"
+            exit 1
+          fi
+
+          # Sanity check: the newest dump must actually be from this run
+          AGE=$(( $(date +%s) - $(sudo stat -c %Y "$LATEST") ))
+          if [ "$AGE" -ge 900 ]; then
+            echo "::error::Newest dump is ${AGE}s old - this run did not produce a new backup"
+            exit 1
+          fi
+
+          # Stage dump + checksum for scp (backup files are root-owned 640)
+          sudo rm -rf "$STAGING"
+          mkdir -p "$STAGING"
+          sudo cp "$LATEST" "${LATEST}.sha256" "$STAGING"/
+          sudo chown "$(id -un)" "$STAGING"/*
+          chmod 600 "$STAGING"/*
+
+          SIZE=$(du -h "$STAGING/$(basename "$LATEST")" | cut -f1)
+          echo "Backup created: $(basename "$LATEST") ($SIZE)"
+          echo "RESULT_BACKUP_FILE=$(basename "$LATEST")"
+          echo "RESULT_BACKUP_REL=${LATEST#"${BACKUP_DIR}"/}"
+          echo "RESULT_BACKUP_SIZE=${SIZE}"
+          SCRIPT
+
+          ssh -p "$DB_VM_SSH_PORT" -i ~/.ssh/db_backup_key \
+            "$DB_VM_USER@$DB_HOST" \
+            "bash -s -- '$DB_BACKUP_DIR' '$DB_RETENTION_DAYS' '$DB_STAGING_DIR'" \
+            < run_backup.sh | tee backup.log
+
+          {
+            echo "backup_file=$(grep '^RESULT_BACKUP_FILE=' backup.log | tail -n1 | cut -d= -f2-)"
+            echo "backup_rel=$(grep '^RESULT_BACKUP_REL=' backup.log | tail -n1 | cut -d= -f2-)"
+            echo "backup_size=$(grep '^RESULT_BACKUP_SIZE=' backup.log | tail -n1 | cut -d= -f2-)"
+          } >> "$GITHUB_OUTPUT"
+
+      #########################################################################
+      # STEP 4: Verify backup integrity on DB VM
+      #########################################################################
+      - name: Verify backup integrity on DB VM
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_VM_USER: ${{ secrets.DB_VM_USER }}
+          DB_VM_SSH_PORT: ${{ secrets.DB_VM_SSH_PORT }}
+          BACKUP_REL: ${{ steps.backup.outputs.backup_rel }}
+        run: |
+          set -o pipefail
+
+          # Full restore test: when requested via workflow_dispatch, or
+          # automatically on Sundays for scheduled runs.
+          FULL_RESTORE="${{ github.event.inputs.verify_restore || 'false' }}"
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$(date +%u)" = "7" ]; then
+            FULL_RESTORE="true"
+          fi
+          echo "Full restore test: $FULL_RESTORE"
+
+          cat > verify_backup.sh <<'SCRIPT'
+          set -euo pipefail
+          STAGING="$1"
+          REL="$2"
+          FULL_RESTORE="$3"
+
+          DOCKER=docker
+          docker info >/dev/null 2>&1 || DOCKER="sudo docker"
+
+          # 1. Checksum
+          cd "$STAGING"
+          sha256sum -c ./*.sha256
+          echo "Checksum verification passed"
+
+          # 2. Archive readability (cheap, every run)
+          $DOCKER exec scholarship_postgres_prod sh -c "pg_restore --list '/backups/${REL}' >/dev/null"
+          echo "Archive readability check passed (pg_restore --list)"
+
+          # 3. Optional full restore into a temporary database
+          if [ "$FULL_RESTORE" = "true" ]; then
+            echo "Running full restore test into temporary database backup_verify..."
+            $DOCKER exec scholarship_postgres_prod sh -c "
+              set -e
+              psql -U \"\$POSTGRES_USER\" -d postgres -c 'DROP DATABASE IF EXISTS backup_verify;'
+              psql -U \"\$POSTGRES_USER\" -d postgres -c 'CREATE DATABASE backup_verify;'
+              pg_restore -U \"\$POSTGRES_USER\" -d backup_verify --no-owner --no-privileges '/backups/${REL}'
+            "
+            TABLES=$($DOCKER exec scholarship_postgres_prod sh -c \
+              "psql -U \"\$POSTGRES_USER\" -d backup_verify -t -A -c \"SELECT count(*) FROM information_schema.tables WHERE table_schema='public';\"")
+            echo "Tables in restored database: $TABLES"
+            $DOCKER exec scholarship_postgres_prod sh -c \
+              "psql -U \"\$POSTGRES_USER\" -d postgres -c 'DROP DATABASE backup_verify;'"
+            if [ "$TABLES" -le 0 ]; then
+              echo "::error::Full restore test produced no tables"
               exit 1
             fi
+            echo "Full restore test passed ($TABLES tables)"
+          fi
+          SCRIPT
 
-            # Create checksum for integrity verification
-            cd ${BACKUP_DIR}/database/${BACKUP_DATE}
-            sha256sum ${BACKUP_FILE} > ${BACKUP_FILE}.sha256
-            echo "🔐 Checksum created"
-          ENDSSH
+          ssh -p "$DB_VM_SSH_PORT" -i ~/.ssh/db_backup_key \
+            "$DB_VM_USER@$DB_HOST" \
+            "bash -s -- '$DB_STAGING_DIR' '$BACKUP_REL' '$FULL_RESTORE'" \
+            < verify_backup.sh
 
-          echo "backup_file=${BACKUP_FILE}" >> $GITHUB_OUTPUT
-          echo "backup_date=${BACKUP_DATE}" >> $GITHUB_OUTPUT
-
-      - name: Cleanup old backups on server
+      #########################################################################
+      # STEP 5: Pull off-server copy to AP VM
+      # (DB VM cannot push anywhere - the AP VM must pull)
+      #########################################################################
+      - name: Pull backup copy to AP VM
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
-          SERVER_HOST: ${{ secrets.PRODUCTION_SERVER }}
-          SERVER_USER: ${{ secrets.PRODUCTION_USER }}
-          RETENTION: ${{ github.event.inputs.retention_days || env.RETENTION_DAYS }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_VM_USER: ${{ secrets.DB_VM_USER }}
+          DB_VM_SSH_PORT: ${{ secrets.DB_VM_SSH_PORT }}
+          BACKUP_FILE: ${{ steps.backup.outputs.backup_file }}
         run: |
-          ssh -i ~/.ssh/deploy_key "$SERVER_USER@$SERVER_HOST" << ENDSSH
-            # Calculate cutoff date
-            CUTOFF_DATE=\$(date -d "${RETENTION} days ago" +%Y%m%d)
-            echo "🗑️  Cleaning up backups older than \${CUTOFF_DATE}"
+          set -o pipefail
 
-            # Find and delete old backup directories
-            cd ${BACKUP_DIR}/database
-            for dir in */; do
-              dir_date=\${dir%/}  # Remove trailing slash
-              if [ "\$dir_date" -lt "\$CUTOFF_DATE" ] 2>/dev/null; then
-                echo "Deleting old backup: \$dir_date"
-                rm -rf "\$dir_date"
-              fi
-            done
+          DEST_DIR="${AP_BACKUP_DIR}/$(date +%Y%m%d)"
+          sudo mkdir -p "$DEST_DIR"
+          sudo chown -R "$(id -un)" "$AP_BACKUP_DIR"
+          chmod 750 "$AP_BACKUP_DIR"
 
-            echo "✅ Cleanup completed"
-          ENDSSH
+          scp -P "$DB_VM_SSH_PORT" -i ~/.ssh/db_backup_key \
+            "$DB_VM_USER@$DB_HOST:$DB_STAGING_DIR/$BACKUP_FILE" \
+            "$DB_VM_USER@$DB_HOST:$DB_STAGING_DIR/$BACKUP_FILE.sha256" \
+            "$DEST_DIR/"
 
-      - name: Test backup integrity
-        id: integrity-check
+          # Verify the transferred copy
+          cd "$DEST_DIR"
+          sha256sum -c "${BACKUP_FILE}.sha256"
+          chmod 640 "$BACKUP_FILE" "${BACKUP_FILE}.sha256"
+          echo "Off-server copy verified: $DEST_DIR/$BACKUP_FILE"
+
+          # Retention: prune dated YYYYMMDD directories on the AP VM
+          CUTOFF=$(date -d "${AP_RETENTION_DAYS} days ago" +%Y%m%d)
+          for dir in "$AP_BACKUP_DIR"/*/; do
+            [ -d "$dir" ] || continue
+            name=$(basename "$dir")
+            if echo "$name" | grep -qE '^[0-9]{8}$' && [ "$name" -lt "$CUTOFF" ]; then
+              echo "Pruning old AP VM copy: $name (retention: ${AP_RETENTION_DAYS} days)"
+              rm -rf "$dir"
+            fi
+          done
+
+          echo "Current AP VM backup inventory:"
+          du -sh "$AP_BACKUP_DIR"/*/ 2>/dev/null || true
+
+      #########################################################################
+      # STEP 6: Cleanup (always runs)
+      #########################################################################
+      - name: Cleanup staging and SSH key
+        if: always()
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
-          SERVER_HOST: ${{ secrets.PRODUCTION_SERVER }}
-          SERVER_USER: ${{ secrets.PRODUCTION_USER }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_VM_USER: ${{ secrets.DB_VM_USER }}
+          DB_VM_SSH_PORT: ${{ secrets.DB_VM_SSH_PORT }}
         run: |
-          BACKUP_FILE="${{ steps.db-backup.outputs.backup_file }}"
-          BACKUP_DATE="${{ steps.db-backup.outputs.backup_date }}"
+          if [ -f ~/.ssh/db_backup_key ]; then
+            ssh -p "$DB_VM_SSH_PORT" -i ~/.ssh/db_backup_key -o ConnectTimeout=10 \
+              "$DB_VM_USER@$DB_HOST" "sudo rm -rf '$DB_STAGING_DIR'" || true
+            rm -f ~/.ssh/db_backup_key
+          fi
+          rm -f preflight.sh run_backup.sh verify_backup.sh backup.log
 
-          ssh -i ~/.ssh/deploy_key "$SERVER_USER@$SERVER_HOST" << ENDSSH
-            cd /opt/scholarship-system
-
-            # Verify checksum
-            cd ${BACKUP_DIR}/database/${BACKUP_DATE}
-            if sha256sum -c ${BACKUP_FILE}.sha256; then
-              echo "✅ Checksum verification passed"
-            else
-              echo "::error::Checksum verification failed"
-              exit 1
-            fi
-
-            # Test backup can be restored (to temporary database)
-            docker compose exec -T postgres psql -U scholarship_user -d postgres << 'EOSQL'
-              DROP DATABASE IF EXISTS backup_test;
-              CREATE DATABASE backup_test;
-          EOSQL
-
-            # Decompress and restore backup
-            gunzip -c ${BACKUP_DIR}/database/${BACKUP_DATE}/${BACKUP_FILE} | \
-              docker compose exec -T postgres pg_restore \
-                -U scholarship_user \
-                -d backup_test \
-                --no-owner \
-                2>&1 | head -20
-
-            # Verify tables exist
-            TABLE_COUNT=\$(docker compose exec -T postgres psql \
-              -U scholarship_user \
-              -d backup_test \
-              -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';" | tr -d ' ')
-
-            echo "Tables in restored backup: \$TABLE_COUNT"
-
-            if [ "\$TABLE_COUNT" -gt 0 ]; then
-              echo "✅ Backup integrity verified (\$TABLE_COUNT tables)"
-            else
-              echo "::error::Backup integrity check failed (no tables found)"
-              exit 1
-            fi
-
-            # Cleanup test database
-            docker compose exec -T postgres psql -U scholarship_user -d postgres \
-              -c "DROP DATABASE backup_test;"
-
-            echo "success=true" >> $GITHUB_OUTPUT
-          ENDSSH
-
-  backup-files:
-    name: Backup Application Files
-    runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'schedule' ||
-      github.event.inputs.backup_type == 'full' ||
-      github.event.inputs.backup_type == 'files-only'
-
-    steps:
-      - name: Backup uploaded files and configs
-        id: files-backup
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
-          SERVER_HOST: ${{ secrets.PRODUCTION_SERVER }}
-          SERVER_USER: ${{ secrets.PRODUCTION_USER }}
-        run: |
-          BACKUP_TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          BACKUP_DATE=$(date +%Y%m%d)
-          BACKUP_FILE="files-backup-${BACKUP_TIMESTAMP}.tar.gz"
-
-          mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
-
-          # Create files backup on server
-          ssh -i ~/.ssh/deploy_key "$SERVER_USER@$SERVER_HOST" << ENDSSH
-            # Ensure backup directory exists
-            sudo mkdir -p ${BACKUP_DIR}/files/${BACKUP_DATE}
-            sudo chown -R $SERVER_USER:$SERVER_USER ${BACKUP_DIR}
-            chmod 750 ${BACKUP_DIR}
-
-            cd /opt/scholarship-system
-
-            # Backup uploaded files, configs, and important data
-            tar -czf ${BACKUP_DIR}/files/${BACKUP_DATE}/${BACKUP_FILE} \
-              backend/uploads/ \
-              docker-compose.yml \
-              .env \
-              2>/dev/null || true
-
-            # Verify backup was created
-            if [ -f ${BACKUP_DIR}/files/${BACKUP_DATE}/${BACKUP_FILE} ]; then
-              BACKUP_SIZE=\$(du -h ${BACKUP_DIR}/files/${BACKUP_DATE}/${BACKUP_FILE} | cut -f1)
-              echo "✅ Files backup created: ${BACKUP_FILE} (\${BACKUP_SIZE})"
-              echo "📍 Location: ${BACKUP_DIR}/files/${BACKUP_DATE}/${BACKUP_FILE}"
-
-              # Set permissions for IT access
-              chmod 640 ${BACKUP_DIR}/files/${BACKUP_DATE}/${BACKUP_FILE}
-
-              # Create checksum
-              cd ${BACKUP_DIR}/files/${BACKUP_DATE}
-              sha256sum ${BACKUP_FILE} > ${BACKUP_FILE}.sha256
-              echo "🔐 Checksum created"
-            else
-              echo "::error::Failed to create files backup"
-              exit 1
-            fi
-          ENDSSH
-
-          echo "backup_file=${BACKUP_FILE}" >> $GITHUB_OUTPUT
-          echo "backup_date=${BACKUP_DATE}" >> $GITHUB_OUTPUT
-
-      - name: Cleanup old file backups
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
-          SERVER_HOST: ${{ secrets.PRODUCTION_SERVER }}
-          SERVER_USER: ${{ secrets.PRODUCTION_USER }}
-          RETENTION: ${{ github.event.inputs.retention_days || env.RETENTION_DAYS }}
-        run: |
-          ssh -i ~/.ssh/deploy_key "$SERVER_USER@$SERVER_HOST" << ENDSSH
-            # Calculate cutoff date
-            CUTOFF_DATE=\$(date -d "${RETENTION} days ago" +%Y%m%d)
-            echo "🗑️  Cleaning up file backups older than \${CUTOFF_DATE}"
-
-            # Find and delete old backup directories
-            cd ${BACKUP_DIR}/files
-            for dir in */; do
-              dir_date=\${dir%/}
-              if [ "\$dir_date" -lt "\$CUTOFF_DATE" ] 2>/dev/null; then
-                echo "Deleting old backup: \$dir_date"
-                rm -rf "\$dir_date"
-              fi
-            done
-
-            echo "✅ Cleanup completed"
-          ENDSSH
-
-  verify-backups:
-    name: Verify & Report Backups
-    needs: [backup-database, backup-files]
-    if: always()
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: List and verify backups on server
-        id: list-backups
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
-          SERVER_HOST: ${{ secrets.PRODUCTION_SERVER }}
-          SERVER_USER: ${{ secrets.PRODUCTION_USER }}
-        run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
-
-          # List backups and calculate sizes
-          ssh -i ~/.ssh/deploy_key "$SERVER_USER@$SERVER_HOST" << 'ENDSSH'
-            echo "📦 Backup Inventory"
-            echo "===================="
-            echo ""
-            echo "📍 Location: ${BACKUP_DIR}"
-            echo ""
-
-            # Database backups
-            echo "🗄️  Database Backups:"
-            if [ -d "${BACKUP_DIR}/database" ]; then
-              cd ${BACKUP_DIR}/database
-              for dir in */; do
-                if [ -d "$dir" ]; then
-                  echo "  📅 ${dir%/}:"
-                  find "$dir" -type f -name "*.sql.gz" -exec du -h {} \; | \
-                    sed 's/^/    /'
-                fi
-              done
-              TOTAL_DB_SIZE=$(du -sh . 2>/dev/null | cut -f1)
-              echo ""
-              echo "  Total database backups size: ${TOTAL_DB_SIZE}"
-            else
-              echo "  No database backups found"
-            fi
-
-            echo ""
-            echo "📁 File Backups:"
-            if [ -d "${BACKUP_DIR}/files" ]; then
-              cd ${BACKUP_DIR}/files
-              for dir in */; do
-                if [ -d "$dir" ]; then
-                  echo "  📅 ${dir%/}:"
-                  find "$dir" -type f -name "*.tar.gz" -exec du -h {} \; | \
-                    sed 's/^/    /'
-                fi
-              done
-              TOTAL_FILES_SIZE=$(du -sh . 2>/dev/null | cut -f1)
-              echo ""
-              echo "  Total file backups size: ${TOTAL_FILES_SIZE}"
-            else
-              echo "  No file backups found"
-            fi
-
-            echo ""
-            echo "💾 Total Backup Storage:"
-            du -sh ${BACKUP_DIR} 2>/dev/null || echo "  Unable to calculate"
-          ENDSSH
-
-      - name: Generate backup manifest for IT
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
-          SERVER_HOST: ${{ secrets.PRODUCTION_SERVER }}
-          SERVER_USER: ${{ secrets.PRODUCTION_USER }}
-        run: |
-          TODAY=$(date +%Y%m%d)
-
-          ssh -i ~/.ssh/deploy_key "$SERVER_USER@$SERVER_HOST" << ENDSSH
-            # Create manifest file for IT to reference
-            MANIFEST_FILE="${BACKUP_DIR}/backup-manifest-${TODAY}.txt"
-
-            cat > "\${MANIFEST_FILE}" <<'MANIFEST'
-====================================================================
-Scholarship System - Backup Manifest
-Generated: $(date '+%Y-%m-%d %H:%M:%S %Z')
-====================================================================
-
-BACKUP LOCATION: ${BACKUP_DIR}
-
-⚠️  ACTION REQUIRED BY IT:
-   These backups are stored on the production server and should be
-   transferred to external backup storage according to the backup policy.
-
-====================================================================
-DATABASE BACKUPS
-====================================================================
-
-MANIFEST
-
-            # List database backups
-            if [ -d "${BACKUP_DIR}/database" ]; then
-              cd ${BACKUP_DIR}/database
-              for dir in */; do
-                if [ -d "\$dir" ]; then
-                  echo "Date: \${dir%/}" >> "\${MANIFEST_FILE}"
-                  find "\$dir" -type f \( -name "*.sql.gz" -o -name "*.sha256" \) \
-                    -exec ls -lh {} \; | \
-                    awk '{printf "  - %s %s %s (%s)\n", \$9, \$6, \$7, \$5}' >> "\${MANIFEST_FILE}"
-                  echo "" >> "\${MANIFEST_FILE}"
-                fi
-              done
-            fi
-
-            cat >> "\${MANIFEST_FILE}" <<'MANIFEST'
-====================================================================
-FILE BACKUPS
-====================================================================
-
-MANIFEST
-
-            # List file backups
-            if [ -d "${BACKUP_DIR}/files" ]; then
-              cd ${BACKUP_DIR}/files
-              for dir in */; do
-                if [ -d "\$dir" ]; then
-                  echo "Date: \${dir%/}" >> "\${MANIFEST_FILE}"
-                  find "\$dir" -type f \( -name "*.tar.gz" -o -name "*.sha256" \) \
-                    -exec ls -lh {} \; | \
-                    awk '{printf "  - %s %s %s (%s)\n", \$9, \$6, \$7, \$5}' >> "\${MANIFEST_FILE}"
-                  echo "" >> "\${MANIFEST_FILE}"
-                fi
-              done
-            fi
-
-            cat >> "\${MANIFEST_FILE}" <<'MANIFEST'
-====================================================================
-CHECKSUM VERIFICATION
-====================================================================
-
-To verify backup integrity before transfer:
-
-  cd ${BACKUP_DIR}/database/YYYYMMDD
-  sha256sum -c database-backup-*.sha256
-
-  cd ${BACKUP_DIR}/files/YYYYMMDD
-  sha256sum -c files-backup-*.sha256
-
-====================================================================
-TRANSFER INSTRUCTIONS FOR IT
-====================================================================
-
-1. Verify checksums before transfer
-2. Transfer entire daily directories to backup storage
-3. Verify transfer completion
-4. Files are kept on server for ${RETENTION_DAYS} days
-5. After successful external backup, old files are auto-cleaned
-
-====================================================================
-MANIFEST
-
-            chmod 644 "\${MANIFEST_FILE}"
-            echo "✅ Manifest created: \${MANIFEST_FILE}"
-
-            # Display manifest
-            cat "\${MANIFEST_FILE}"
-          ENDSSH
-
+      #########################################################################
+      # STEP 7: Report
+      #########################################################################
       - name: Generate backup report
+        if: success()
         run: |
-          cat >> $GITHUB_STEP_SUMMARY <<EOF
-          # 💾 Backup Report
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          # Database Backup Report
 
-          ## Status
+          | | |
+          |---|---|
+          | **Status** | Success |
+          | **Backup file** | \`${{ steps.backup.outputs.backup_file }}\` |
+          | **Size** | ${{ steps.backup.outputs.backup_size }} |
+          | **Timestamp** | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |
 
-          - Database Backup: ${{ needs.backup-database.result == 'success' && '✅ Success' || '❌ Failed' }}
-          - Files Backup: ${{ needs.backup-files.result == 'success' && '✅ Success' || '❌ Failed' }}
+          ## Backup locations
 
-          ## Details
+          | Location | Path | Retention |
+          |---|---|---|
+          | DB VM (primary) | \`${DB_BACKUP_DIR}/${{ steps.backup.outputs.backup_rel }}\` | ${DB_RETENTION_DAYS} days |
+          | AP VM (off-server copy) | \`${AP_BACKUP_DIR}/$(date +%Y%m%d)/${{ steps.backup.outputs.backup_file }}\` | ${AP_RETENTION_DAYS} days |
 
-          - **Timestamp**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-          - **Backup Type**: ${{ github.event.inputs.backup_type || 'Scheduled (Full)' }}
-          - **Retention on Server**: ${{ github.event.inputs.retention_days || env.RETENTION_DAYS }} days
-          - **Server**: ${{ secrets.PRODUCTION_SERVER }}
+          ## For IT department
 
-          ## Backup Location
+          Transfer the AP VM copy to external backup storage
+          (see IT-BACKUP-TRANSFER-GUIDE.md). Verify the checksum before transfer:
 
+          \`\`\`bash
+          cd ${AP_BACKUP_DIR}/$(date +%Y%m%d)
+          sha256sum -c ${{ steps.backup.outputs.backup_file }}.sha256
           \`\`\`
-          ${BACKUP_DIR}/
-          ├── database/
-          │   └── $(date +%Y%m%d)/
-          │       ├── database-backup-*.sql.gz
-          │       └── database-backup-*.sha256
-          └── files/
-              └── $(date +%Y%m%d)/
-                  ├── files-backup-*.tar.gz
-                  └── files-backup-*.sha256
-          \`\`\`
-
-          ## For IT Department
-
-          ⚠️ **Action Required**: Backups are ready for transfer to external storage.
-
-          - Manifest file: \`${BACKUP_DIR}/backup-manifest-$(date +%Y%m%d).txt\`
-          - Verify checksums before transfer
-          - Transfer entire daily directories
-          - Backups auto-cleanup after ${RETENTION_DAYS} days
-
-          ## Next Scheduled Backup
-
-          - Daily: 02:00 UTC
-          - Additional: Every 6 hours
-
-          ## Restore Instructions
-
-          See production documentation for restore procedures.
           EOF
 
-      - name: Notify on failure
-        if: needs.backup-database.result == 'failure' || needs.backup-files.result == 'failure'
+      - name: Create issue on failure
+        if: failure()
         uses: actions/github-script@v7
         with:
           script: |
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: '🚨 Production Backup Failed',
-              body: `
-              ## Backup Failure
-
-              One or more backup jobs have failed.
-
-              - Database Backup: ${{ needs.backup-database.result }}
-              - Files Backup: ${{ needs.backup-files.result }}
-
-              **Timestamp**: ${new Date().toISOString()}
-
-              [View Workflow Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-
-              ## Action Required
-
-              1. Check workflow logs for errors
-              2. Verify server disk space
-              3. Check database connectivity
-              4. Retry backup immediately
-              5. Notify IT if issue persists
-
-              ## Server Information
-
-              - Server: ${{ secrets.PRODUCTION_SERVER }}
-              - Backup Directory: \`${BACKUP_DIR}\`
-              `,
-              labels: ['production', 'backup', 'urgent']
-            })
+              title: `🚨 Production database backup failed (${new Date().toISOString().slice(0, 10)})`,
+              body: [
+                '## Database Backup Failure',
+                '',
+                `**Workflow run**: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+                `**Trigger**: ${context.eventName}`,
+                `**Timestamp**: ${new Date().toISOString()}`,
+                '',
+                '## Action required',
+                '',
+                '1. Check the workflow logs for the failing step',
+                '2. Verify the AP VM runner can SSH to the DB VM (`DB_HOST`/`DB_VM_SSH_PORT`)',
+                '3. Verify the postgres container is healthy on the DB VM',
+                '4. Check disk space on both the DB VM backup volume and the AP VM',
+                '5. Re-run the workflow once fixed (`workflow_dispatch`)',
+                '',
+                'Note: the DB VM also runs an independent in-container cron backup at 02:00,',
+                'so a single workflow failure does not mean there is no backup for today -',
+                'but it does mean no verified off-server copy was created.',
+              ].join('\n'),
+              labels: ['production', 'backup', 'urgent'],
+            });
