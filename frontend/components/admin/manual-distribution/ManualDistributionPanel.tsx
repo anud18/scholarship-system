@@ -11,6 +11,7 @@ import {
 } from "@/lib/api/modules/college";
 import type {
   DistributionStudent,
+  LocalAlloc,
   QuotaStatus,
   SubTypeConfigCol,
   DistributionHistoryRecord,
@@ -20,6 +21,10 @@ import type {
   AllocationSuggestion,
   DistributionState,
   ReleaseChainItem,
+} from "@/lib/api/modules/manual-distribution";
+import {
+  getSavedAllocation,
+  makeColKey,
 } from "@/lib/api/modules/manual-distribution";
 import { User } from "@/types/user";
 import { Button } from "@/components/ui/button";
@@ -53,6 +58,7 @@ import {
   AllocationStatusControl,
   type AllocationStatus,
 } from "@/components/admin/manual-distribution/AllocationStatusControl";
+import { CollegeQuotaMatrix } from "@/components/admin/manual-distribution/CollegeQuotaMatrix";
 import {
   Loader2,
   Save,
@@ -72,18 +78,18 @@ interface ManualDistributionPanelProps {
   scholarshipType: { id: number; code: string; name: string };
 }
 
-/** Local allocation state for a student: which (sub_type, config) they're assigned to */
-interface LocalAlloc {
-  sub_type: string;
-  config_id: number;
-}
-
 const ALL_DEPTS_OWN = "__college_all__";
 const ALL_DEPTS_SYSTEM = "__all__";
 
-/** Composite key for a (sub_type, config) column: "nstc:42" */
-function makeColKey(sub_type: string, config_id: number) {
-  return `${sub_type}:${config_id}`;
+/** Seed local allocation state from the server snapshot (null = unallocated). */
+function seedAllocations(
+  students: DistributionStudent[]
+): Map<number, LocalAlloc | null> {
+  const allocMap = new Map<number, LocalAlloc | null>();
+  for (const s of students) {
+    allocMap.set(s.ranking_item_id, getSavedAllocation(s));
+  }
+  return allocMap;
 }
 
 /**
@@ -123,7 +129,7 @@ export function ManualDistributionPanel({
   // Use the ID directly from the prop (provided by the admin available-combinations endpoint)
   const scholarshipTypeId = scholarshipType.id;
 
-  const { departments } = useReferenceData();
+  const { departments, academies } = useReferenceData();
   const [summaryDept, setSummaryDept] = useState<string>("");
 
   const visibleDepartments = useMemo(() => {
@@ -224,7 +230,7 @@ export function ManualDistributionPanel({
   const subTypeCols = useMemo<SubTypeConfigCol[]>(() => {
     const cols: SubTypeConfigCol[] = [];
     for (const [sub_type, stData] of Object.entries(quotaStatus)) {
-      const configs = Object.values(stData.by_config).sort((a, b) => {
+      const configs = [...stData.by_config].sort((a, b) => {
         if (a.is_own !== b.is_own) return a.is_own ? -1 : 1; // own first
         return b.academic_year - a.academic_year; // then descending year
       });
@@ -285,18 +291,7 @@ export function ManualDistributionPanel({
       ]);
 
       if (studentsResp.success && studentsResp.data) {
-        setStudents(studentsResp.data);
-        const allocMap = new Map<number, LocalAlloc | null>();
-        for (const s of studentsResp.data) {
-          if (s.is_allocated && s.allocated_sub_type && s.allocation_config_id != null) {
-            allocMap.set(s.ranking_item_id, {
-              sub_type: s.allocated_sub_type,
-              config_id: s.allocation_config_id,
-            });
-          } else {
-            allocMap.set(s.ranking_item_id, null);
-          }
-        }
+        const allocMap = seedAllocations(studentsResp.data);
 
         // Load preview separately (optional — failure should not break the page)
         let previewSuggestions: AllocationSuggestion[] = [];
@@ -329,8 +324,10 @@ export function ManualDistributionPanel({
             hasPreview = true;
           }
         }
+        // Commit students together with their seeded allocations so no render
+        // sees new students against stale local state (the matrix reads both).
+        setStudents(studentsResp.data);
         setPreviewApplied(hasPreview);
-
         setLocalAllocations(allocMap);
       }
       if (quotaResp.success && quotaResp.data) {
@@ -338,6 +335,40 @@ export function ManualDistributionPanel({
       }
     } finally {
       setIsLoading(false);
+    }
+  }, [scholarshipTypeId, selectedAcademicYear, selectedSemester]);
+
+  /**
+   * Refetch students + quota status together and reseed local allocations
+   * from the server snapshot. Shared by save / finalize / restore so the
+   * matrix always sees a consistent server state after a mutation. Unlike
+   * fetchData, this does NOT clear saveMessage or apply auto-preview
+   * suggestions.
+   */
+  const reloadServerSnapshot = useCallback(async () => {
+    if (!scholarshipTypeId || !selectedAcademicYear || !selectedSemester)
+      return;
+    const [studentsResp, quotaResp] = await Promise.all([
+      apiClient.manualDistribution.getStudents(
+        scholarshipTypeId,
+        selectedAcademicYear,
+        selectedSemester
+      ),
+      apiClient.manualDistribution.getQuotaStatus(
+        scholarshipTypeId,
+        selectedAcademicYear,
+        selectedSemester
+      ),
+    ]);
+    if (studentsResp.success && studentsResp.data) {
+      setStudents(studentsResp.data);
+      setLocalAllocations(seedAllocations(studentsResp.data));
+      // The reseed is server-only, so any auto-preview suggestions are gone
+      // (saved or discarded) — clear the "已自動預設分配" notice.
+      setPreviewApplied(false);
+    }
+    if (quotaResp.success && quotaResp.data) {
+      setQuotaStatus(quotaResp.data);
     }
   }, [scholarshipTypeId, selectedAcademicYear, selectedSemester]);
 
@@ -516,16 +547,15 @@ export function ManualDistributionPanel({
           type: "success",
           text: `已儲存 ${resp.data?.updated_count ?? 0} 筆分配`,
         });
-        const quotaResp = await apiClient.manualDistribution.getQuotaStatus(
-          scholarshipTypeId,
-          selectedAcademicYear,
-          selectedSemester
-        );
-        if (quotaResp.success && quotaResp.data) setQuotaStatus(quotaResp.data);
+        // Reload students AND quota together (same pattern as finalize/restore)
+        // so the matrix sees a consistent server snapshot — refetching quota
+        // alone would leave `students` stale and double-count saved allocations.
+        await reloadServerSnapshot();
       } else {
         setSaveMessage({ type: "error", text: resp.message || "儲存失敗" });
       }
-    } catch {
+    } catch (error) {
+      logger.error("Save error", { error: error });
       setSaveMessage({ type: "error", text: "儲存時發生錯誤" });
     } finally {
       setIsSaving(false);
@@ -548,37 +578,7 @@ export function ManualDistributionPanel({
           type: "success",
           text: `分發完成：核准 ${resp.data.approved_count} 人，拒絕 ${resp.data.rejected_count} 人`,
         });
-        // Reload data directly instead of using fetchData
-        const [studentsResp, quotaResp] = await Promise.all([
-          apiClient.manualDistribution.getStudents(
-            scholarshipTypeId,
-            selectedAcademicYear,
-            selectedSemester
-          ),
-          apiClient.manualDistribution.getQuotaStatus(
-            scholarshipTypeId,
-            selectedAcademicYear,
-            selectedSemester
-          ),
-        ]);
-        if (studentsResp.success && studentsResp.data) {
-          setStudents(studentsResp.data);
-          const initial = new Map<number, LocalAlloc | null>();
-          for (const s of studentsResp.data) {
-            if (s.is_allocated && s.allocated_sub_type && s.allocation_config_id != null) {
-              initial.set(s.ranking_item_id, {
-                sub_type: s.allocated_sub_type,
-                config_id: s.allocation_config_id,
-              });
-            } else {
-              initial.set(s.ranking_item_id, null);
-            }
-          }
-          setLocalAllocations(initial);
-        }
-        if (quotaResp.success && quotaResp.data) {
-          setQuotaStatus(quotaResp.data);
-        }
+        await reloadServerSnapshot();
       } else {
         setSaveMessage({ type: "error", text: resp.message || "確認分發失敗" });
       }
@@ -677,7 +677,7 @@ export function ManualDistributionPanel({
   };
 
   const handleRestore = async (historyId: number) => {
-    if (!scholarshipTypeId) return;
+    if (!scholarshipTypeId || !selectedAcademicYear || !selectedSemester) return;
     setIsRestoring(true);
     try {
       const resp = await apiClient.manualDistribution.restoreFromHistory(
@@ -690,37 +690,7 @@ export function ManualDistributionPanel({
           text: `成功還原 ${resp.data.restored_count} 筆分配紀錄`,
         });
         setShowHistoryDialog(false);
-        // Reload data by calling the fetch function directly
-        const [studentsResp, quotaResp] = await Promise.all([
-          apiClient.manualDistribution.getStudents(
-            scholarshipTypeId,
-            selectedAcademicYear!,
-            selectedSemester!
-          ),
-          apiClient.manualDistribution.getQuotaStatus(
-            scholarshipTypeId,
-            selectedAcademicYear!,
-            selectedSemester!
-          ),
-        ]);
-        if (studentsResp.success && studentsResp.data) {
-          setStudents(studentsResp.data);
-          const initial = new Map<number, LocalAlloc | null>();
-          for (const s of studentsResp.data) {
-            if (s.is_allocated && s.allocated_sub_type && s.allocation_config_id != null) {
-              initial.set(s.ranking_item_id, {
-                sub_type: s.allocated_sub_type,
-                config_id: s.allocation_config_id,
-              });
-            } else {
-              initial.set(s.ranking_item_id, null);
-            }
-          }
-          setLocalAllocations(initial);
-        }
-        if (quotaResp.success && quotaResp.data) {
-          setQuotaStatus(quotaResp.data);
-        }
+        await reloadServerSnapshot();
       } else {
         setSaveMessage({ type: "error", text: resp.message || "還原失敗" });
       }
@@ -1163,6 +1133,13 @@ export function ManualDistributionPanel({
           state={distributionState}
           isLoading={isLoadingState}
         />
+        <CollegeQuotaMatrix
+          cols={subTypeCols}
+          quotaStatus={quotaStatus}
+          students={students}
+          localAllocations={localAllocations}
+          academies={academies}
+        />
         <ReleasePreviewSection
           releaseChain={releasePreview}
           isLoading={isLoadingPreview}
@@ -1416,12 +1393,19 @@ export function ManualDistributionPanel({
                                     isChallenge &&
                                     challengeMeta?.challenged_renewal
                                       ?.sub_type === col.sub_type;
+                                  // Freeze edits while a mutation is in flight:
+                                  // its success path reseeds localAllocations
+                                  // from the server, which would silently
+                                  // revert any tick made mid-request.
+                                  const isMutating =
+                                    isSaving || isFinalizing || isRestoring;
                                   const disabled =
                                     !isApplied ||
                                     isRejected ||
                                     atCapacity ||
                                     isFallbackColumn ||
-                                    isCancelled;
+                                    isCancelled ||
+                                    isMutating;
                                   return (
                                     <td
                                       key={col.key}

@@ -177,10 +177,7 @@ class ManualDistributionService:
         """
         quotas = config.quotas or {}
         if config.has_college_quota:
-            sub_type_quotas = quotas.get(sub_type, {})
-            if not isinstance(sub_type_quotas, dict):
-                return 0
-            return sum(sub_type_quotas.values())
+            return sum(self._matrix_row(config, sub_type).values())
         scalar = quotas.get(sub_type, 0)
         try:
             scalar_int = int(scalar)
@@ -188,10 +185,50 @@ class ManualDistributionService:
             scalar_int = 0
         return scalar_int or int(config.total_quota or 0)
 
+    @staticmethod
+    def _matrix_row(config: ScholarshipConfiguration, sub_type: str) -> dict[str, int]:
+        """Normalized per-college quota row for one sub_type.
+
+        Single owner of the quotas-matrix parsing tolerance: a non-dict row
+        yields {}, and malformed cell values coerce to 0 — so pool_total and
+        _college_breakdown can never disagree about the same row.
+        """
+        row = (config.quotas or {}).get(sub_type, {})
+        if not isinstance(row, dict):
+            return {}
+        normalized: dict[str, int] = {}
+        for code, value in row.items():
+            try:
+                normalized[code] = int(value or 0)
+            except (TypeError, ValueError):
+                normalized[code] = 0
+        return normalized
+
+    @staticmethod
+    def _winner_filters(config_id: int, sub_type: str) -> tuple:
+        """Shared half-1 predicates: allocated non-renewal winners."""
+        return (
+            CollegeRankingItem.is_allocated.is_(True),
+            CollegeRankingItem.allocated_sub_type == sub_type,
+            CollegeRankingItem.allocation_config_id == config_id,
+            Application.is_renewal.is_(False),
+        )
+
+    @staticmethod
+    def _renewal_filters(config_id: int, sub_type: str) -> tuple:
+        """Shared half-2 predicates: approved renewals."""
+        return (
+            Application.is_renewal.is_(True),
+            Application.status == ApplicationStatus.approved,
+            Application.sub_scholarship_type == sub_type,
+            Application.allocation_config_id == config_id,
+        )
+
     async def consumers_count(self, config_id: int, sub_type: str) -> int:
         """Count every LIVE consumer of (config_id, sub_type) anywhere (spec §6.2).
 
-        Guaranteed two-half partition:
+        Guaranteed two-half partition (predicates shared with
+        consumers_by_college via _winner_filters/_renewal_filters):
           half 1 — general/manual winners: allocated CollegeRankingItem whose
                    application is NOT a renewal (is_renewal==False guard).
           half 2 — approved renewals: Application(is_renewal, approved).
@@ -206,24 +243,37 @@ class ManualDistributionService:
         winners_stmt = (
             select(func.count(CollegeRankingItem.id))
             .join(Application, CollegeRankingItem.application_id == Application.id)
-            .where(
-                CollegeRankingItem.is_allocated.is_(True),
-                CollegeRankingItem.allocated_sub_type == sub_type,
-                CollegeRankingItem.allocation_config_id == config_id,
-                Application.is_renewal.is_(False),
-            )
+            .where(*self._winner_filters(config_id, sub_type))
         )
         winners = (await self.db.execute(winners_stmt)).scalar_one()
 
-        renewals_stmt = select(func.count(Application.id)).where(
-            Application.is_renewal.is_(True),
-            Application.status == ApplicationStatus.approved,
-            Application.sub_scholarship_type == sub_type,
-            Application.allocation_config_id == config_id,
-        )
+        renewals_stmt = select(func.count(Application.id)).where(*self._renewal_filters(config_id, sub_type))
         renewals = (await self.db.execute(renewals_stmt)).scalar_one()
 
         return int(winners) + int(renewals)
+
+    async def consumers_by_college(self, config_id: int, sub_type: str) -> dict[str, int]:
+        """Per-college split of consumers_count — SAME two-half partition.
+
+        Attribution: application.student_data["std_academyno"]; a missing or
+        empty academyno lands in the "" bucket (rendered 未知 in the UI).
+        Invariant (tripwire-tested): sum(values) == consumers_count(config_id,
+        sub_type) — both methods build their where-clauses from the shared
+        _winner_filters/_renewal_filters helpers, so the predicates cannot
+        drift.
+        """
+        winners_stmt = (
+            select(Application.student_data)
+            .join(CollegeRankingItem, CollegeRankingItem.application_id == Application.id)
+            .where(*self._winner_filters(config_id, sub_type))
+        )
+        renewals_stmt = select(Application.student_data).where(*self._renewal_filters(config_id, sub_type))
+        counts: dict[str, int] = {}
+        for stmt in (winners_stmt, renewals_stmt):
+            for student_data in (await self.db.execute(stmt)).scalars():
+                college = (student_data or {}).get("std_academyno", "") or ""
+                counts[college] = counts.get(college, 0) + 1
+        return counts
 
     async def remaining(self, config: ScholarshipConfiguration, sub_type: str) -> int:
         """Global live remaining = pool_total - consumers_count (spec §6.2).
@@ -498,7 +548,9 @@ class ManualDistributionService:
           "nstc": {
             "display_name": "國科會",
             "by_config": [
-              {"config_id", "config_code", "academic_year", "is_own", "total", "remaining"},
+              {"config_id", "config_code", "academic_year", "is_own", "total",
+               "remaining", "by_college"},  # by_college: {code: {total, allocated,
+                                            # remaining}} for matrix configs, else None
               ...  # own config first, then linked source configs by descending year
             ]
           },
@@ -547,6 +599,7 @@ class ManualDistributionService:
                         "is_own": col["is_own"],
                         "total": total,
                         "remaining": col["remaining"],
+                        "by_college": await self._college_breakdown(cfg, sub_type),
                     }
                 )
             quota_status[sub_type] = {
@@ -555,6 +608,37 @@ class ManualDistributionService:
             }
 
         return quota_status
+
+    async def _college_breakdown(
+        self,
+        cfg: ScholarshipConfiguration | None,
+        sub_type: str,
+    ) -> dict[str, dict[str, int]] | None:
+        """Per-college quota grid for one (config, sub_type) column (advisory).
+
+        None for non-matrix configs (no per-college split exists). Colleges
+        appear when they have quota > 0 in the matrix OR live consumers;
+        remaining is NOT clamped — negative flags over-allocation in the UI.
+        The enforced gate stays the global per-(config, sub_type) recount in
+        _assert_round_not_oversubscribed.
+        """
+        if cfg is None or not cfg.has_college_quota:
+            return None
+        matrix = self._matrix_row(cfg, sub_type)
+        allocated_by_college = await self.consumers_by_college(cfg.id, sub_type)
+
+        breakdown: dict[str, dict[str, int]] = {}
+        for code in sorted(set(matrix) | set(allocated_by_college)):
+            college_total = matrix.get(code, 0)
+            allocated = allocated_by_college.get(code, 0)
+            if college_total <= 0 and allocated <= 0:
+                continue
+            breakdown[code] = {
+                "total": college_total,
+                "allocated": allocated,
+                "remaining": college_total - allocated,
+            }
+        return breakdown
 
     async def _load_config(
         self,

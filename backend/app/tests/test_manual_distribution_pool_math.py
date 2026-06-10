@@ -88,6 +88,7 @@ async def _make_application(
     status: ApplicationStatus,
     app_id: str,
     allocation_config_id: int | None = None,
+    student_data: dict | None = None,
 ) -> Application:
     app = Application(
         app_id=app_id,
@@ -101,6 +102,7 @@ async def _make_application(
         is_renewal=is_renewal,
         allocation_config_id=allocation_config_id,
         agree_terms=True,
+        student_data=student_data,
     )
     db.add(app)
     await db.commit()
@@ -584,3 +586,205 @@ async def test_pick_config_prefers_own_then_descending_year(db: AsyncSession):
     # Nothing left → None.
     wr = {requesting.id: 0, newer.id: 0, older.id: 0}
     assert await svc._pick_config(requesting, "nstc", wr) is None
+
+
+# --------------------------------------------------------------------------- #
+# 2.4 consumers_by_college — per-college split of consumers_count
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.asyncio
+async def test_consumers_by_college_attributes_winner_and_renewal(db: AsyncSession):
+    st = await _make_type(db, code="cbc1")
+    cfg = await _make_config(
+        db,
+        scholarship_type_id=st.id,
+        config_code="cbc1_115",
+        academic_year=115,
+        quotas={"nstc": {"E": 5, "C": 5}},
+    )
+    ranking = await _make_ranking(db, scholarship_type_id=st.id, sub_type_code="nstc", academic_year=115)
+
+    u1 = await _make_user(db, nycu_id="cbc1s1")
+    winner = await _make_application(
+        db,
+        user_id=u1.id,
+        scholarship_type_id=st.id,
+        academic_year=115,
+        sub_scholarship_type="nstc",
+        is_renewal=False,
+        status=ApplicationStatus.submitted,
+        app_id="APP-115-0-10001",
+        student_data={"std_academyno": "E"},
+    )
+    await _make_item(
+        db,
+        ranking_id=ranking.id,
+        application_id=winner.id,
+        rank=1,
+        is_allocated=True,
+        allocated_sub_type="nstc",
+        allocation_config_id=cfg.id,
+    )
+
+    u2 = await _make_user(db, nycu_id="cbc1s2")
+    await _make_application(
+        db,
+        user_id=u2.id,
+        scholarship_type_id=st.id,
+        academic_year=115,
+        sub_scholarship_type="nstc",
+        is_renewal=True,
+        status=ApplicationStatus.approved,
+        app_id="APP-115-0-10002",
+        allocation_config_id=cfg.id,
+        student_data={"std_academyno": "C"},
+    )
+
+    svc = ManualDistributionService(db)
+    assert await svc.consumers_by_college(cfg.id, "nstc") == {"E": 1, "C": 1}
+
+
+@pytest.mark.asyncio
+async def test_consumers_by_college_missing_academyno_lands_in_empty_bucket(db: AsyncSession):
+    st = await _make_type(db, code="cbc2")
+    cfg = await _make_config(
+        db,
+        scholarship_type_id=st.id,
+        config_code="cbc2_115",
+        academic_year=115,
+        quotas={"nstc": {"E": 5}},
+    )
+    ranking = await _make_ranking(db, scholarship_type_id=st.id, sub_type_code="nstc", academic_year=115)
+    u = await _make_user(db, nycu_id="cbc2s1")
+    # student_data omitted entirely (None) — must land in the "" bucket
+    winner = await _make_application(
+        db,
+        user_id=u.id,
+        scholarship_type_id=st.id,
+        academic_year=115,
+        sub_scholarship_type="nstc",
+        is_renewal=False,
+        status=ApplicationStatus.submitted,
+        app_id="APP-115-0-10003",
+    )
+    await _make_item(
+        db,
+        ranking_id=ranking.id,
+        application_id=winner.id,
+        rank=1,
+        is_allocated=True,
+        allocated_sub_type="nstc",
+        allocation_config_id=cfg.id,
+    )
+
+    u2 = await _make_user(db, nycu_id="cbc2s2")
+    # student_data present but std_academyno is empty — must also land in ""
+    winner_empty = await _make_application(
+        db,
+        user_id=u2.id,
+        scholarship_type_id=st.id,
+        academic_year=115,
+        sub_scholarship_type="nstc",
+        is_renewal=False,
+        status=ApplicationStatus.submitted,
+        app_id="APP-115-0-10005",
+        student_data={"std_academyno": ""},
+    )
+    await _make_item(
+        db,
+        ranking_id=ranking.id,
+        application_id=winner_empty.id,
+        rank=2,
+        is_allocated=True,
+        allocated_sub_type="nstc",
+        allocation_config_id=cfg.id,
+    )
+
+    svc = ManualDistributionService(db)
+    assert await svc.consumers_by_college(cfg.id, "nstc") == {"": 2}
+
+
+@pytest.mark.asyncio
+async def test_consumers_by_college_renewal_with_ranking_item_counted_once(db: AsyncSession):
+    """Mirror of the consumers_count is_renewal partition guard: a restored
+    renewal has BOTH an approved renewal Application and an allocated
+    CollegeRankingItem — it must be attributed exactly once."""
+    st = await _make_type(db, code="cbc3")
+    cfg = await _make_config(
+        db,
+        scholarship_type_id=st.id,
+        config_code="cbc3_115",
+        academic_year=115,
+        quotas={"nstc": {"E": 5}},
+    )
+    ranking = await _make_ranking(db, scholarship_type_id=st.id, sub_type_code="nstc", academic_year=115)
+    u = await _make_user(db, nycu_id="cbc3s1")
+    renewal = await _make_application(
+        db,
+        user_id=u.id,
+        scholarship_type_id=st.id,
+        academic_year=115,
+        sub_scholarship_type="nstc",
+        is_renewal=True,
+        status=ApplicationStatus.approved,
+        app_id="APP-115-0-10004",
+        allocation_config_id=cfg.id,
+        student_data={"std_academyno": "E"},
+    )
+    await _make_item(
+        db,
+        ranking_id=ranking.id,
+        application_id=renewal.id,
+        rank=1,
+        is_allocated=True,
+        allocated_sub_type="nstc",
+        allocation_config_id=cfg.id,
+    )
+
+    svc = ManualDistributionService(db)
+    assert await svc.consumers_by_college(cfg.id, "nstc") == {"E": 1}
+
+
+@pytest.mark.asyncio
+async def test_consumers_by_college_sums_to_consumers_count(db: AsyncSession):
+    """Drift tripwire (spec invariant): the per-college split MUST stay
+    filter-identical to consumers_count."""
+    st = await _make_type(db, code="cbc4")
+    cfg = await _make_config(
+        db,
+        scholarship_type_id=st.id,
+        config_code="cbc4_115",
+        academic_year=115,
+        quotas={"nstc": {"E": 5, "C": 5}},
+    )
+    ranking = await _make_ranking(db, scholarship_type_id=st.id, sub_type_code="nstc", academic_year=115)
+    for i, (college, is_renewal) in enumerate([("E", False), ("C", False), ("E", True)]):
+        u = await _make_user(db, nycu_id=f"cbc4s{i}")
+        app = await _make_application(
+            db,
+            user_id=u.id,
+            scholarship_type_id=st.id,
+            academic_year=115,
+            sub_scholarship_type="nstc",
+            is_renewal=is_renewal,
+            status=ApplicationStatus.approved if is_renewal else ApplicationStatus.submitted,
+            app_id=f"APP-115-0-1010{i}",
+            allocation_config_id=cfg.id if is_renewal else None,
+            student_data={"std_academyno": college},
+        )
+        if not is_renewal:
+            await _make_item(
+                db,
+                ranking_id=ranking.id,
+                application_id=app.id,
+                rank=i + 1,
+                is_allocated=True,
+                allocated_sub_type="nstc",
+                allocation_config_id=cfg.id,
+            )
+
+    svc = ManualDistributionService(db)
+    by_college = await svc.consumers_by_college(cfg.id, "nstc")
+    assert by_college == {"E": 2, "C": 1}
+    assert sum(by_college.values()) == await svc.consumers_count(cfg.id, "nstc")
