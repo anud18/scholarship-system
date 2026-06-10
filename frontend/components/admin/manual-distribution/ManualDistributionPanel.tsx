@@ -53,6 +53,7 @@ import {
   AllocationStatusControl,
   type AllocationStatus,
 } from "@/components/admin/manual-distribution/AllocationStatusControl";
+import { CollegeQuotaMatrix } from "@/components/admin/manual-distribution/CollegeQuotaMatrix";
 import {
   Loader2,
   Save,
@@ -123,7 +124,7 @@ export function ManualDistributionPanel({
   // Use the ID directly from the prop (provided by the admin available-combinations endpoint)
   const scholarshipTypeId = scholarshipType.id;
 
-  const { departments } = useReferenceData();
+  const { departments, academies } = useReferenceData();
   const [summaryDept, setSummaryDept] = useState<string>("");
 
   const visibleDepartments = useMemo(() => {
@@ -516,11 +517,36 @@ export function ManualDistributionPanel({
           type: "success",
           text: `已儲存 ${resp.data?.updated_count ?? 0} 筆分配`,
         });
-        const quotaResp = await apiClient.manualDistribution.getQuotaStatus(
-          scholarshipTypeId,
-          selectedAcademicYear,
-          selectedSemester
-        );
+        // Reload students AND quota together (same pattern as finalize/restore)
+        // so the matrix sees a consistent server snapshot — refetching quota
+        // alone would leave `students` stale and double-count saved allocations.
+        const [studentsResp, quotaResp] = await Promise.all([
+          apiClient.manualDistribution.getStudents(
+            scholarshipTypeId,
+            selectedAcademicYear,
+            selectedSemester
+          ),
+          apiClient.manualDistribution.getQuotaStatus(
+            scholarshipTypeId,
+            selectedAcademicYear,
+            selectedSemester
+          ),
+        ]);
+        if (studentsResp.success && studentsResp.data) {
+          setStudents(studentsResp.data);
+          const initial = new Map<number, LocalAlloc | null>();
+          for (const s of studentsResp.data) {
+            if (s.is_allocated && s.allocated_sub_type && s.allocation_config_id != null) {
+              initial.set(s.ranking_item_id, {
+                sub_type: s.allocated_sub_type,
+                config_id: s.allocation_config_id,
+              });
+            } else {
+              initial.set(s.ranking_item_id, null);
+            }
+          }
+          setLocalAllocations(initial);
+        }
         if (quotaResp.success && quotaResp.data) setQuotaStatus(quotaResp.data);
       } else {
         setSaveMessage({ type: "error", text: resp.message || "儲存失敗" });
@@ -1162,6 +1188,13 @@ export function ManualDistributionPanel({
         <AvailableQuotasBlock
           state={distributionState}
           isLoading={isLoadingState}
+        />
+        <CollegeQuotaMatrix
+          cols={subTypeCols}
+          quotaStatus={quotaStatus}
+          students={students}
+          localAllocations={localAllocations}
+          academies={academies}
         />
         <ReleasePreviewSection
           releaseChain={releasePreview}
