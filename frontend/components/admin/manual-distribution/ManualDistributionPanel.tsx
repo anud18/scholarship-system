@@ -342,6 +342,48 @@ export function ManualDistributionPanel({
     }
   }, [scholarshipTypeId, selectedAcademicYear, selectedSemester]);
 
+  /**
+   * Refetch students + quota status together and reseed local allocations
+   * from the server snapshot. Shared by save / finalize / restore so the
+   * matrix always sees a consistent server state after a mutation. Unlike
+   * fetchData, this does NOT clear saveMessage or apply auto-preview
+   * suggestions.
+   */
+  const reloadServerSnapshot = useCallback(async () => {
+    if (!scholarshipTypeId || !selectedAcademicYear || !selectedSemester)
+      return;
+    const [studentsResp, quotaResp] = await Promise.all([
+      apiClient.manualDistribution.getStudents(
+        scholarshipTypeId,
+        selectedAcademicYear,
+        selectedSemester
+      ),
+      apiClient.manualDistribution.getQuotaStatus(
+        scholarshipTypeId,
+        selectedAcademicYear,
+        selectedSemester
+      ),
+    ]);
+    if (studentsResp.success && studentsResp.data) {
+      setStudents(studentsResp.data);
+      const initial = new Map<number, LocalAlloc | null>();
+      for (const s of studentsResp.data) {
+        if (s.is_allocated && s.allocated_sub_type && s.allocation_config_id != null) {
+          initial.set(s.ranking_item_id, {
+            sub_type: s.allocated_sub_type,
+            config_id: s.allocation_config_id,
+          });
+        } else {
+          initial.set(s.ranking_item_id, null);
+        }
+      }
+      setLocalAllocations(initial);
+    }
+    if (quotaResp.success && quotaResp.data) {
+      setQuotaStatus(quotaResp.data);
+    }
+  }, [scholarshipTypeId, selectedAcademicYear, selectedSemester]);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
@@ -520,38 +562,12 @@ export function ManualDistributionPanel({
         // Reload students AND quota together (same pattern as finalize/restore)
         // so the matrix sees a consistent server snapshot — refetching quota
         // alone would leave `students` stale and double-count saved allocations.
-        const [studentsResp, quotaResp] = await Promise.all([
-          apiClient.manualDistribution.getStudents(
-            scholarshipTypeId,
-            selectedAcademicYear,
-            selectedSemester
-          ),
-          apiClient.manualDistribution.getQuotaStatus(
-            scholarshipTypeId,
-            selectedAcademicYear,
-            selectedSemester
-          ),
-        ]);
-        if (studentsResp.success && studentsResp.data) {
-          setStudents(studentsResp.data);
-          const initial = new Map<number, LocalAlloc | null>();
-          for (const s of studentsResp.data) {
-            if (s.is_allocated && s.allocated_sub_type && s.allocation_config_id != null) {
-              initial.set(s.ranking_item_id, {
-                sub_type: s.allocated_sub_type,
-                config_id: s.allocation_config_id,
-              });
-            } else {
-              initial.set(s.ranking_item_id, null);
-            }
-          }
-          setLocalAllocations(initial);
-        }
-        if (quotaResp.success && quotaResp.data) setQuotaStatus(quotaResp.data);
+        await reloadServerSnapshot();
       } else {
         setSaveMessage({ type: "error", text: resp.message || "儲存失敗" });
       }
-    } catch {
+    } catch (error) {
+      logger.error("Save error", { error: error });
       setSaveMessage({ type: "error", text: "儲存時發生錯誤" });
     } finally {
       setIsSaving(false);
@@ -575,36 +591,7 @@ export function ManualDistributionPanel({
           text: `分發完成：核准 ${resp.data.approved_count} 人，拒絕 ${resp.data.rejected_count} 人`,
         });
         // Reload data directly instead of using fetchData
-        const [studentsResp, quotaResp] = await Promise.all([
-          apiClient.manualDistribution.getStudents(
-            scholarshipTypeId,
-            selectedAcademicYear,
-            selectedSemester
-          ),
-          apiClient.manualDistribution.getQuotaStatus(
-            scholarshipTypeId,
-            selectedAcademicYear,
-            selectedSemester
-          ),
-        ]);
-        if (studentsResp.success && studentsResp.data) {
-          setStudents(studentsResp.data);
-          const initial = new Map<number, LocalAlloc | null>();
-          for (const s of studentsResp.data) {
-            if (s.is_allocated && s.allocated_sub_type && s.allocation_config_id != null) {
-              initial.set(s.ranking_item_id, {
-                sub_type: s.allocated_sub_type,
-                config_id: s.allocation_config_id,
-              });
-            } else {
-              initial.set(s.ranking_item_id, null);
-            }
-          }
-          setLocalAllocations(initial);
-        }
-        if (quotaResp.success && quotaResp.data) {
-          setQuotaStatus(quotaResp.data);
-        }
+        await reloadServerSnapshot();
       } else {
         setSaveMessage({ type: "error", text: resp.message || "確認分發失敗" });
       }
@@ -717,36 +704,7 @@ export function ManualDistributionPanel({
         });
         setShowHistoryDialog(false);
         // Reload data by calling the fetch function directly
-        const [studentsResp, quotaResp] = await Promise.all([
-          apiClient.manualDistribution.getStudents(
-            scholarshipTypeId,
-            selectedAcademicYear!,
-            selectedSemester!
-          ),
-          apiClient.manualDistribution.getQuotaStatus(
-            scholarshipTypeId,
-            selectedAcademicYear!,
-            selectedSemester!
-          ),
-        ]);
-        if (studentsResp.success && studentsResp.data) {
-          setStudents(studentsResp.data);
-          const initial = new Map<number, LocalAlloc | null>();
-          for (const s of studentsResp.data) {
-            if (s.is_allocated && s.allocated_sub_type && s.allocation_config_id != null) {
-              initial.set(s.ranking_item_id, {
-                sub_type: s.allocated_sub_type,
-                config_id: s.allocation_config_id,
-              });
-            } else {
-              initial.set(s.ranking_item_id, null);
-            }
-          }
-          setLocalAllocations(initial);
-        }
-        if (quotaResp.success && quotaResp.data) {
-          setQuotaStatus(quotaResp.data);
-        }
+        await reloadServerSnapshot();
       } else {
         setSaveMessage({ type: "error", text: resp.message || "還原失敗" });
       }
