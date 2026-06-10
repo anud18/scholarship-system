@@ -138,7 +138,9 @@ test.describe("Student saves draft, updates, then submits an application", () =>
         contact_phone: {
           field_id: "contact_phone",
           field_type: "text",
-          value: "0912-345-678",
+          // Must satisfy the Taiwan-mobile format guard (PR #923): pure
+          // digits, 09 + 8 digits — submit rejects anything else with 422.
+          value: "0912345678",
           required: false,
         },
       },
@@ -187,7 +189,7 @@ test.describe("Student saves draft, updates, then submits an application", () =>
     expect(
       persistedFields.contact_phone?.value,
       `expected GET to return our updated contact_phone, got body=${JSON.stringify(getRes.body)}`,
-    ).toBe("0912-345-678");
+    ).toBe("0912345678");
 
     // 4. Submit the draft. submit_application requires status in
     //    {draft, returned} (ApplicationService.submit_application), so this
