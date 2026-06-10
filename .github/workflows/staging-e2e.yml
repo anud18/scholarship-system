@@ -142,14 +142,15 @@ jobs:
           $COMPOSE up -d --build
           for i in $(seq 1 90); do
             if curl -fsS http://localhost:18000/health > /dev/null 2>&1 \
-               && curl -fsS http://localhost:13000 > /dev/null 2>&1; then
+               && curl -fsS http://localhost:13080 > /dev/null 2>&1; then
               echo "Replica up after ~$((i*2))s"
               break
             fi
             sleep 2
           done
           curl -fsS http://localhost:18000/health > /dev/null
-          curl -fsS http://localhost:13000 > /dev/null
+          # 13080 = replica nginx (browser entrypoint, mirrors live routing)
+          curl -fsS http://localhost:13080 > /dev/null
 
       - name: Migrate + seed e2e fixtures (idempotent, replica only)
         run: |
@@ -201,7 +202,9 @@ jobs:
         working-directory: ./frontend
         run: npx playwright test
         env:
-          E2E_FRONTEND_URL: http://localhost:13000
+          # Browser traffic enters through the replica nginx (13080) just like
+          # live staging; direct backend access (18000) for API fixtures.
+          E2E_FRONTEND_URL: http://localhost:13080
           E2E_BACKEND_URL: http://localhost:18000
           E2E_DATABASE_URL: ${{ env.REPLICA_DB_URL }}
 
@@ -210,7 +213,7 @@ jobs:
         # Plain `docker logs` per container — does not parse the compose file,
         # so it works regardless of env/interpolation state.
         run: |
-          for c in staging_e2e_backend staging_e2e_frontend staging_e2e_postgres staging_e2e_mock_student_api staging_e2e_mailpit; do
+          for c in staging_e2e_backend staging_e2e_frontend staging_e2e_nginx staging_e2e_postgres staging_e2e_mock_student_api staging_e2e_mailpit; do
             echo "===== $c ====="
             docker logs --tail 400 "$c" 2>&1 || true
           done

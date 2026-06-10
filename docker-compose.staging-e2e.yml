@@ -164,9 +164,29 @@ services:
     environment:
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: 1
+      # Read at RUNTIME by the Next API route handlers (preview/download
+      # proxies). The catch-all /api rewrite however was baked at image BUILD
+      # time with the localhost fallback — which is why browser /api traffic
+      # must go through the nginx service below, exactly like live staging.
       INTERNAL_API_URL: http://backend:8000
     depends_on:
       - backend
+    restart: "no"
+
+  # Mirrors live staging's nginx routing (path split from
+  # nginx.staging.conf) so browser /api calls reach the backend instead of
+  # the frontend image's build-baked localhost rewrite. The e2e suite's
+  # E2E_FRONTEND_URL points here.
+  nginx:
+    image: nginx:alpine
+    container_name: staging_e2e_nginx
+    ports:
+      - "13080:80"
+    volumes:
+      - ./nginx/nginx.staging-e2e.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
     restart: "no"
 
 volumes:
