@@ -19,6 +19,7 @@ import { apiAs } from "../helpers/api";
 import { getActiveConfig, getWhitelist } from "../helpers/db";
 import { attachRunState, newRunState, pushTrace, type RunState } from "../helpers/runState";
 import { captureDiagnostics } from "../helpers/diagnose";
+import { BACKEND_URL } from "../helpers/env";
 
 const SCHOLARSHIP_CODE = "undergraduate_freshman";
 const STUDENT = "stuunder1";
@@ -50,7 +51,7 @@ test.describe("Whitelist removal revokes access to undergraduate_freshman", () =
     // Best-effort: never leave the grant behind if the removal step failed.
     if (configId && whitelisted) {
       try {
-        const r = await fetch("http://localhost:8000/api/v1/auth/mock-sso/login", {
+        const r = await fetch(`${BACKEND_URL}/api/v1/auth/mock-sso/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ nycu_id: "admin" }),

@@ -15,8 +15,8 @@
  *     1. csphd0001 submits phd/nstc application
  *     2. cs_college creates ranking (force_new=true) — auto-includes the app
  *   Test 1: GET ranking → items array has csphd0001, college_rejected=false
- *   Test 2: POST import-excel [rank=1] → updated_count=1, rejected_count=0
- *   Test 3: POST import-excel [rank="N"] → updated_count=1, rejected_count=1
+ *   Test 2: POST import-excel [rank=1, full roster] → all rows updated, rejected_count=0
+ *   Test 3: POST import-excel [rank="N", full roster] → all rows updated, rejected_count=1
  *   Test 4: GET ranking after "N" import → college_rejected=true
  *   afterAll: SQL cleanup (ranking items → ranking → application)
  *
@@ -68,6 +68,50 @@ test.describe("College ranking import-excel @nightly", () => {
   let fixtureAppId: string | undefined;
   let fixtureAppDbId: number | undefined;
   let collegeToken: string;
+
+  /**
+   * Build an import payload covering EVERY student in the ranking — the
+   * backend strictly requires the import set to equal the ranking's
+   * application set (排名連續、學號完全吻合). Against the dev seed the ranking
+   * only contains csphd0001, but on the staging-replica lane the force_new
+   * ranking sweeps in the real staging applications for the same
+   * (scholarship, year), so a single-row payload 422s with
+   * 「以下學號未包含在匯入檔案中」.
+   */
+  async function buildFullImportRows(
+    fixtureRank: number | "N",
+  ): Promise<Array<{ student_id: string; student_name: string; rank_position: number | "N" }>> {
+    const res = await apiAs<{
+      success: boolean;
+      data: {
+        items: Array<{
+          student_id: string;
+          student_name?: string;
+          application: { id: number };
+        }>;
+      };
+    }>(collegeToken, "GET", `/college-review/rankings/${rankingId}`);
+    if (!res.ok || !res.body.success) {
+      throw new Error(
+        `buildFullImportRows: GET ranking ${rankingId} failed HTTP ${res.status} body=${JSON.stringify(res.body)}`,
+      );
+    }
+    const items = res.body.data.items ?? [];
+    let nextRank = fixtureRank === "N" ? 1 : 2;
+    return items.map((item) =>
+      item.application.id === fixtureAppDbId
+        ? {
+            student_id: item.student_id,
+            student_name: STUDENT_NAME,
+            rank_position: fixtureRank,
+          }
+        : {
+            student_id: item.student_id,
+            student_name: item.student_name ?? "學生",
+            rank_position: nextRank++,
+          },
+    );
+  }
 
   test.beforeAll(async () => {
     const config = await getActiveConfig(SCHOLARSHIP_CODE);
@@ -223,8 +267,9 @@ test.describe("College ranking import-excel @nightly", () => {
   );
 
   test(
-    "@nightly POST import-excel [rank=1] → updated_count=1, rejected_count=0",
+    "@nightly POST import-excel [rank=1] → all rows updated, rejected_count=0",
     async () => {
+      const rows = await buildFullImportRows(1);
       const res = await apiAs<{
         success: boolean;
         data: {
@@ -237,13 +282,7 @@ test.describe("College ranking import-excel @nightly", () => {
         collegeToken,
         "POST",
         `/college-review/rankings/${rankingId}/import-excel`,
-        [
-          {
-            student_id: STUDENT_STD_CODE,
-            student_name: STUDENT_NAME,
-            rank_position: 1,
-          },
-        ],
+        rows,
       );
       pushTrace(runState, res.traceId);
 
@@ -253,15 +292,16 @@ test.describe("College ranking import-excel @nightly", () => {
       ).toBe(true);
       expect(res.body.success).toBe(true);
       expect(res.body.data.ranking_id).toBe(rankingId);
-      expect(res.body.data.updated_count).toBe(1);
+      expect(res.body.data.updated_count).toBe(rows.length);
       expect(res.body.data.rejected_count).toBe(0);
-      expect(res.body.data.total_imported).toBe(1);
+      expect(res.body.data.total_imported).toBe(rows.length);
     },
   );
 
   test(
-    "@nightly POST import-excel [rank='N'] → updated_count=1, rejected_count=1",
+    "@nightly POST import-excel [rank='N'] → all rows updated, rejected_count=1",
     async () => {
+      const rows = await buildFullImportRows("N");
       const res = await apiAs<{
         success: boolean;
         data: {
@@ -274,13 +314,7 @@ test.describe("College ranking import-excel @nightly", () => {
         collegeToken,
         "POST",
         `/college-review/rankings/${rankingId}/import-excel`,
-        [
-          {
-            student_id: STUDENT_STD_CODE,
-            student_name: STUDENT_NAME,
-            rank_position: "N",
-          },
-        ],
+        rows,
       );
       pushTrace(runState, res.traceId);
 
@@ -289,7 +323,9 @@ test.describe("College ranking import-excel @nightly", () => {
         `import-excel (N) failed: HTTP ${res.status} body=${JSON.stringify(res.body)}`,
       ).toBe(true);
       expect(res.body.success).toBe(true);
-      expect(res.body.data.updated_count).toBe(1);
+      // updated_count counts every imported row ("N" rows included);
+      // rejected_count counts only our fixture's "N".
+      expect(res.body.data.updated_count).toBe(rows.length);
       expect(res.body.data.rejected_count).toBe(1);
     },
   );

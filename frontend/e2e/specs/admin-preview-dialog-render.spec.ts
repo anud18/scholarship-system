@@ -39,9 +39,10 @@ import { apiAs } from "../helpers/api";
 import { deleteApplicationCascade, getActiveConfig, pool } from "../helpers/db";
 import { attachRunState, newRunState, pushTrace, type RunState } from "../helpers/runState";
 import { captureDiagnostics } from "../helpers/diagnose";
+import { BACKEND_URL, FRONTEND_URL } from "../helpers/env";
 
-const API_V1 = "http://localhost:8000/api/v1";
-const FRONTEND = "http://localhost:3000";
+const API_V1 = `${BACKEND_URL}/api/v1`;
+const FRONTEND = FRONTEND_URL;
 
 const STUDENT_ID = "stuphd001";
 const ADMIN_ID = "super_admin";
