@@ -678,8 +678,31 @@ async def test_consumers_by_college_missing_academyno_lands_in_empty_bucket(db: 
         allocation_config_id=cfg.id,
     )
 
+    u2 = await _make_user(db, nycu_id="cbc2s2")
+    # student_data present but std_academyno is empty — must also land in ""
+    winner_empty = await _make_application(
+        db,
+        user_id=u2.id,
+        scholarship_type_id=st.id,
+        academic_year=115,
+        sub_scholarship_type="nstc",
+        is_renewal=False,
+        status=ApplicationStatus.submitted,
+        app_id="APP-115-0-10005",
+        student_data={"std_academyno": ""},
+    )
+    await _make_item(
+        db,
+        ranking_id=ranking.id,
+        application_id=winner_empty.id,
+        rank=2,
+        is_allocated=True,
+        allocated_sub_type="nstc",
+        allocation_config_id=cfg.id,
+    )
+
     svc = ManualDistributionService(db)
-    assert await svc.consumers_by_college(cfg.id, "nstc") == {"": 1}
+    assert await svc.consumers_by_college(cfg.id, "nstc") == {"": 2}
 
 
 @pytest.mark.asyncio

@@ -188,10 +188,31 @@ class ManualDistributionService:
             scalar_int = 0
         return scalar_int or int(config.total_quota or 0)
 
+    @staticmethod
+    def _winner_filters(config_id: int, sub_type: str) -> tuple:
+        """Shared half-1 predicates: allocated non-renewal winners."""
+        return (
+            CollegeRankingItem.is_allocated.is_(True),
+            CollegeRankingItem.allocated_sub_type == sub_type,
+            CollegeRankingItem.allocation_config_id == config_id,
+            Application.is_renewal.is_(False),
+        )
+
+    @staticmethod
+    def _renewal_filters(config_id: int, sub_type: str) -> tuple:
+        """Shared half-2 predicates: approved renewals."""
+        return (
+            Application.is_renewal.is_(True),
+            Application.status == ApplicationStatus.approved,
+            Application.sub_scholarship_type == sub_type,
+            Application.allocation_config_id == config_id,
+        )
+
     async def consumers_count(self, config_id: int, sub_type: str) -> int:
         """Count every LIVE consumer of (config_id, sub_type) anywhere (spec §6.2).
 
-        Guaranteed two-half partition:
+        Guaranteed two-half partition (predicates shared with
+        consumers_by_college via _winner_filters/_renewal_filters):
           half 1 — general/manual winners: allocated CollegeRankingItem whose
                    application is NOT a renewal (is_renewal==False guard).
           half 2 — approved renewals: Application(is_renewal, approved).
@@ -206,21 +227,11 @@ class ManualDistributionService:
         winners_stmt = (
             select(func.count(CollegeRankingItem.id))
             .join(Application, CollegeRankingItem.application_id == Application.id)
-            .where(
-                CollegeRankingItem.is_allocated.is_(True),
-                CollegeRankingItem.allocated_sub_type == sub_type,
-                CollegeRankingItem.allocation_config_id == config_id,
-                Application.is_renewal.is_(False),
-            )
+            .where(*self._winner_filters(config_id, sub_type))
         )
         winners = (await self.db.execute(winners_stmt)).scalar_one()
 
-        renewals_stmt = select(func.count(Application.id)).where(
-            Application.is_renewal.is_(True),
-            Application.status == ApplicationStatus.approved,
-            Application.sub_scholarship_type == sub_type,
-            Application.allocation_config_id == config_id,
-        )
+        renewals_stmt = select(func.count(Application.id)).where(*self._renewal_filters(config_id, sub_type))
         renewals = (await self.db.execute(renewals_stmt)).scalar_one()
 
         return int(winners) + int(renewals)
@@ -231,24 +242,16 @@ class ManualDistributionService:
         Attribution: application.student_data["std_academyno"]; a missing or
         empty academyno lands in the "" bucket (rendered 未知 in the UI).
         Invariant (tripwire-tested): sum(values) == consumers_count(config_id,
-        sub_type) — keep the filters of both methods identical.
+        sub_type) — both methods build their where-clauses from the shared
+        _winner_filters/_renewal_filters helpers, so the predicates cannot
+        drift.
         """
         winners_stmt = (
             select(Application.student_data)
             .join(CollegeRankingItem, CollegeRankingItem.application_id == Application.id)
-            .where(
-                CollegeRankingItem.is_allocated.is_(True),
-                CollegeRankingItem.allocated_sub_type == sub_type,
-                CollegeRankingItem.allocation_config_id == config_id,
-                Application.is_renewal.is_(False),
-            )
+            .where(*self._winner_filters(config_id, sub_type))
         )
-        renewals_stmt = select(Application.student_data).where(
-            Application.is_renewal.is_(True),
-            Application.status == ApplicationStatus.approved,
-            Application.sub_scholarship_type == sub_type,
-            Application.allocation_config_id == config_id,
-        )
+        renewals_stmt = select(Application.student_data).where(*self._renewal_filters(config_id, sub_type))
         counts: dict[str, int] = {}
         for stmt in (winners_stmt, renewals_stmt):
             for (student_data,) in (await self.db.execute(stmt)).all():
