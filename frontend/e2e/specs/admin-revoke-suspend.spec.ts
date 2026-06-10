@@ -895,4 +895,53 @@ test.describe("locked roster dialog — revoked student panel + item removal", (
       ).not.toBeNull();
     },
   );
+
+  test(
+    "@nightly revoke/suspend queues the admin notification email (email_history row, #938)",
+    async () => {
+      // #938 wired _notify_admin_of_cancellation into the revoke/suspend
+      // endpoints; #946 moved SMTP delivery to a background task. The durable,
+      // SMTP-independent signal is the email_history audit row that
+      // EmailService.send_email always writes (status sent OR failed). The
+      // fixture above already revoked lockedFixtureAppDbId and suspended
+      // lockedFixtureSuspendAppDbId — assert both notifications were queued.
+      // Poll: the send runs AFTER the API response, and a dev SMTP timeout can
+      // delay the history write.
+      for (const [appDbId, label] of [
+        [lockedFixtureAppDbId, "撤銷"],
+        [lockedFixtureSuspendAppDbId, "停發"],
+      ] as Array<[number | undefined, string]>) {
+        expect(appDbId, `fixture app for ${label} missing`).toBeTruthy();
+        await expect
+          .poll(
+            async () => {
+              const { rows } = await pool.query<{ subject: string; recipient_email: string }>(
+                `SELECT subject, recipient_email
+                   FROM email_history
+                  WHERE application_id = $1
+                    AND subject LIKE $2
+                  ORDER BY id DESC
+                  LIMIT 1`,
+                [appDbId, `%${label}操作通知%`],
+              );
+              return rows[0] ?? null;
+            },
+            {
+              timeout: 60_000,
+              message: `no email_history row for ${label} notification of application ${appDbId} — the #938 admin-notification wiring regressed`,
+            },
+          )
+          .not.toBeNull();
+
+        const { rows } = await pool.query<{ recipient_email: string }>(
+          `SELECT recipient_email FROM email_history
+            WHERE application_id = $1 AND subject LIKE $2
+            ORDER BY id DESC LIMIT 1`,
+          [appDbId, `%${label}操作通知%`],
+        );
+        // The notification goes to the ACTING admin (the fixture acted as 'admin').
+        expect(rows[0].recipient_email).toBe("admin@nycu.edu.tw");
+      }
+    },
+  );
 });
