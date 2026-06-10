@@ -46,6 +46,7 @@ export interface DistributionStudent {
 export interface CollegeQuota {
   total: number;
   allocated: number;
+  /** total − allocated; NOT clamped — negative means over-allocated (advisory). */
   remaining: number;
 }
 
@@ -56,9 +57,9 @@ export interface ConfigQuota {
   academic_year: number;
   is_own: boolean;
   total: number;
-  allocated: number;
   remaining: number;
-  by_college: Record<string, CollegeQuota>;
+  /** Per-college grid keyed by college code (""=unknown); null for non-matrix configs. */
+  by_college: Record<string, CollegeQuota> | null;
 }
 
 export interface SubTypeQuotaStatus {
