@@ -1,5 +1,6 @@
-const FRONTEND_URL = "http://localhost:3000";
-const BACKEND_HEALTH_URL = "http://localhost:8000/health";
+import { BACKEND_URL, FRONTEND_URL } from "./helpers/env";
+
+const BACKEND_HEALTH_URL = `${BACKEND_URL}/health`;
 
 const BRING_UP_HINT = `
 E2E pre-flight failed.

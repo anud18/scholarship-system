@@ -1,0 +1,168 @@
+# =============================================================================
+# Ephemeral staging-replica stack for the staging-e2e lane
+# (.github/workflows/staging-e2e.yml)
+#
+# Runs ON the staging host, NEXT TO the live staging stack, with the SAME
+# backend/frontend images currently deployed (resolved by the workflow via
+# `docker inspect scholarship_*_staging`) and a pg_dump snapshot of the live
+# staging DB restored into a throwaway Postgres.
+#
+# Design rules:
+#   - Live staging is never written to. This stack is created fresh, the e2e
+#     suite runs against it, and `docker compose -p staging-e2e down -v`
+#     removes every container/volume/network afterwards.
+#   - No host port collides with the live stack (5432/8000/3000/9000/443):
+#       postgres 15432 / backend 18000 / frontend 13000 / minio 19000-19001 /
+#       mailpit UI 18025.
+#   - Outbound email goes to the bundled Mailpit (fake SMTP + HTTP API), never
+#     to the real NYCU relay — the workflow points system_settings.smtp_host
+#     at `mailpit` after restoring the dump. The full send pipeline still
+#     executes, and delivered mail is inspectable at http://localhost:18025.
+#   - Mock SSO is enabled HERE ONLY (the replica is bound to localhost ports
+#     on the staging host; the live site keeps ENABLE_MOCK_SSO=false).
+#   - PII_ENCRYPTION_KEYS must be the live staging keys, otherwise the
+#     restored dump's encrypted columns cannot be decrypted.
+#
+# Usage (from the workflow):
+#   BACKEND_IMAGE=... FRONTEND_IMAGE=... PII_ENCRYPTION_KEYS=... \
+#     docker compose -p staging-e2e -f docker-compose.staging-e2e.yml up -d
+# =============================================================================
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: staging_e2e_postgres
+    environment:
+      POSTGRES_DB: scholarship_db
+      POSTGRES_USER: scholarship_user
+      POSTGRES_PASSWORD: scholarship_pass
+    ports:
+      - "15432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scholarship_user -d scholarship_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: "no"
+
+  redis:
+    image: redis:7-alpine
+    container_name: staging_e2e_redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: "no"
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: staging_e2e_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    ports:
+      - "19000:9000"
+      - "19001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 10s
+      retries: 12
+    restart: "no"
+
+  # Fake SMTP sink with an HTTP API (http://localhost:18025/api/v1/messages).
+  # The workflow repoints system_settings.smtp_host/smtp_port here, so the
+  # real EmailService → aiosmtplib pipeline is exercised end-to-end without a
+  # single byte leaving the VM.
+  mailpit:
+    image: axllent/mailpit:v1.21
+    container_name: staging_e2e_mailpit
+    ports:
+      - "18025:8025"
+    restart: "no"
+
+  mock-student-api:
+    build:
+      context: ./mock-student-api
+      dockerfile: Dockerfile
+    container_name: staging_e2e_mock_student_api
+    command: uvicorn main:app --host 0.0.0.0 --port 8080
+    environment:
+      DATABASE_URL: postgresql://scholarship_user:scholarship_pass@postgres:5432/scholarship_db
+      MOCK_HMAC_KEY_HEX: 4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a
+      STRICT_TIME_CHECK: "false"
+      STRICT_ENCODE_CHECK: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    image: ${BACKEND_IMAGE:?set BACKEND_IMAGE to the currently deployed staging backend image}
+    container_name: staging_e2e_backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "18000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://scholarship_user:scholarship_pass@postgres:5432/scholarship_db
+      DATABASE_URL_SYNC: postgresql://scholarship_user:scholarship_pass@postgres:5432/scholarship_db
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: staging-e2e-throwaway-secret-key
+      DEBUG: "true"
+      CORS_ORIGINS: "http://localhost:13000,http://localhost:18000"
+      ENVIRONMENT: development
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin123
+      MINIO_BUCKET: ${MINIO_BUCKET:-scholarship-documents}
+      MINIO_SECURE: "false"
+      # MUST be the live staging keys so the restored dump decrypts.
+      PII_ENCRYPTION_KEYS: ${PII_ENCRYPTION_KEYS:?pass the staging PII keys}
+      PII_ENCRYPTION_ACTIVE_VERSION: ${PII_ENCRYPTION_ACTIVE_VERSION:-v1}
+      # Replica-only auth: mock SSO on, real Portal off.
+      ENABLE_MOCK_SSO: "true"
+      PORTAL_SSO_ENABLED: "false"
+      BASE_URL: http://localhost:18000
+      FRONTEND_URL: http://localhost:13000
+      FRONTEND_INTERNAL_URL: http://frontend:3000
+      BYPASS_TIME_RESTRICTIONS: "false"
+      # SIS API → bundled mock (the e2e fixture students only exist there).
+      STUDENT_API_ENABLED: "true"
+      STUDENT_API_BASE_URL: http://mock-student-api:8080
+      STUDENT_API_ACCOUNT: scholarship
+      STUDENT_API_HMAC_KEY: 4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a
+      STUDENT_API_TIMEOUT: "10.0"
+      STUDENT_API_ENCODE_TYPE: "UTF-8"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      mock-student-api:
+        condition: service_started
+    restart: "no"
+
+  frontend:
+    image: ${FRONTEND_IMAGE:?set FRONTEND_IMAGE to the currently deployed staging frontend image}
+    container_name: staging_e2e_frontend
+    ports:
+      - "13000:3000"
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: 1
+      INTERNAL_API_URL: http://backend:8000
+    depends_on:
+      - backend
+    restart: "no"
+
+volumes:
+  postgres_data:
+  minio_data:

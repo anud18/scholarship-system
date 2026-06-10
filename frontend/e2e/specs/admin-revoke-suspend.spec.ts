@@ -35,6 +35,7 @@ import {
   type RunState,
 } from "../helpers/runState";
 import { captureDiagnostics } from "../helpers/diagnose";
+import { BACKEND_URL, FRONTEND_URL } from "../helpers/env";
 
 test.describe.configure({ mode: "serial" });
 
@@ -50,7 +51,7 @@ const SETUP_SCHOLARSHIP = "phd";
 const SETUP_SCHOLARSHIP_NAME = "博士生獎學金"; // display name of "phd" in seed data
 
 async function getApiToken(nycuId: string): Promise<string> {
-  const r = await fetch("http://localhost:8000/api/v1/auth/mock-sso/login", {
+  const r = await fetch(`${BACKEND_URL}/api/v1/auth/mock-sso/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ nycu_id: nycuId }),
@@ -257,7 +258,7 @@ test.describe("admin revoke dialog — confirm disabled until reason filled", ()
       const adminLogin = await loginAs(browser, "admin");
       pushTrace(runState, adminLogin.traceId);
       const page = await adminLogin.context.newPage();
-      await page.goto("http://localhost:3000/");
+      await page.goto(`${FRONTEND_URL}/`);
 
       await page.getByRole("tab", { name: "獎學金分發" }).click();
       await page.getByRole("tab", { name: SETUP_SCHOLARSHIP_NAME }).waitFor({ timeout: 10_000 });
@@ -290,7 +291,7 @@ test.describe("admin revoke dialog — confirm disabled until reason filled", ()
       const adminLogin = await loginAs(browser, "admin");
       pushTrace(runState, adminLogin.traceId);
       const page = await adminLogin.context.newPage();
-      await page.goto("http://localhost:3000/");
+      await page.goto(`${FRONTEND_URL}/`);
 
       await page.getByRole("tab", { name: "獎學金分發" }).click();
       await page.getByRole("tab", { name: SETUP_SCHOLARSHIP_NAME }).waitFor({ timeout: 10_000 });
@@ -345,7 +346,7 @@ test.describe("admin revoke dialog — confirm disabled until reason filled", ()
       const page = await adminLogin.context.newPage();
 
       // loginAs injects auth_token + user into localStorage; navigate root.
-      await page.goto("http://localhost:3000/");
+      await page.goto(`${FRONTEND_URL}/`);
 
       // Admin defaults to the "dashboard" tab.  Click "獎學金分發".
       await page.getByRole("tab", { name: "獎學金分發" }).click();

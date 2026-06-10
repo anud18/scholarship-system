@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { FRONTEND_URL } from "./e2e/helpers/env";
 
 export default defineConfig({
   testDir: "./e2e/specs",
@@ -14,7 +15,7 @@ export default defineConfig({
   globalSetup: "./e2e/global-setup.ts",
   globalTeardown: "./e2e/global-teardown.ts",
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: FRONTEND_URL,
     trace: "retain-on-failure",
     video: "retain-on-failure",
     screenshot: "only-on-failure",

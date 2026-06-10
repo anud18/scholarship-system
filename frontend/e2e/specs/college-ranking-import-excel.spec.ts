@@ -32,6 +32,7 @@ import {
   type RunState,
 } from "../helpers/runState";
 import { captureDiagnostics } from "../helpers/diagnose";
+import { BACKEND_URL } from "../helpers/env";
 
 const STUDENT_NYCU_ID = "csphd0001";
 const STUDENT_STD_CODE = "csphd0001"; // std_stdcode returned by mock SIS API
@@ -43,7 +44,7 @@ const SUB_TYPE = "nstc";
 test.describe.configure({ mode: "serial" });
 
 async function getApiToken(nycuId: string): Promise<string> {
-  const r = await fetch("http://localhost:8000/api/v1/auth/mock-sso/login", {
+  const r = await fetch(`${BACKEND_URL}/api/v1/auth/mock-sso/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ nycu_id: nycuId }),

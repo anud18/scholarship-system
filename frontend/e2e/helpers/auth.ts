@@ -1,6 +1,7 @@
 import type { Browser, BrowserContext } from "@playwright/test";
+import { BACKEND_URL, FRONTEND_URL } from "./env";
 
-const API_BASE = "http://localhost:8000";
+const API_BASE = BACKEND_URL;
 
 export interface LoginResult {
   context: BrowserContext;
@@ -33,7 +34,7 @@ export async function loginAs(browser: Browser, nycuId: string): Promise<LoginRe
     throw new Error(`mock-sso login for ${nycuId}: missing numeric user.id`);
   }
 
-  const context = await browser.newContext({ baseURL: "http://localhost:3000" });
+  const context = await browser.newContext({ baseURL: FRONTEND_URL });
   // useAuth (frontend/hooks/use-auth.tsx:38-62) reads BOTH 'auth_token' and 'user'.
   await context.addInitScript(
     ({ t, u }: { t: string; u: string }) => {
