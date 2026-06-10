@@ -532,7 +532,9 @@ class ManualDistributionService:
           "nstc": {
             "display_name": "國科會",
             "by_config": [
-              {"config_id", "config_code", "academic_year", "is_own", "total", "remaining"},
+              {"config_id", "config_code", "academic_year", "is_own", "total",
+               "remaining", "by_college"},  # by_college: {code: {total, allocated,
+                                            # remaining}} for matrix configs, else None
               ...  # own config first, then linked source configs by descending year
             ]
           },
@@ -581,6 +583,7 @@ class ManualDistributionService:
                         "is_own": col["is_own"],
                         "total": total,
                         "remaining": col["remaining"],
+                        "by_college": await self._college_breakdown(cfg, col["config_id"], sub_type),
                     }
                 )
             quota_status[sub_type] = {
@@ -589,6 +592,46 @@ class ManualDistributionService:
             }
 
         return quota_status
+
+    async def _college_breakdown(
+        self,
+        cfg: ScholarshipConfiguration | None,
+        config_id: int,
+        sub_type: str,
+    ) -> dict[str, dict[str, int]] | None:
+        """Per-college quota grid for one (config, sub_type) column (advisory).
+
+        None for non-matrix configs (no per-college split exists). Colleges
+        appear when they have quota > 0 in the matrix OR live consumers;
+        remaining is NOT clamped — negative flags over-allocation in the UI.
+        The enforced gate stays the global per-(config, sub_type) recount in
+        _assert_round_not_oversubscribed.
+        """
+        if cfg is None or not cfg.has_college_quota:
+            return None
+        matrix = (cfg.quotas or {}).get(sub_type, {})
+        if not isinstance(matrix, dict):
+            matrix = {}
+        allocated_by_college = await self.consumers_by_college(config_id, sub_type)
+
+        breakdown: dict[str, dict[str, int]] = {}
+        for code in sorted(set(matrix) | set(allocated_by_college)):
+            try:
+                college_total = int(matrix.get(code, 0) or 0)
+            except (TypeError, ValueError):
+                college_total = 0
+            allocated = allocated_by_college.get(code, 0)
+            if college_total <= 0 and allocated <= 0:
+                continue
+            breakdown = {
+                **breakdown,
+                code: {
+                    "total": college_total,
+                    "allocated": allocated,
+                    "remaining": college_total - allocated,
+                },
+            }
+        return breakdown
 
     async def _load_config(
         self,
