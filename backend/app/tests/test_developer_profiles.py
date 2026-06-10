@@ -370,12 +370,6 @@ class TestDeveloperProfileAPI:
 
         assert response.status_code in (400, 422)
 
-    @pytest.mark.xfail(
-        reason="real bug: quick_setup_developer hardcodes email_domain='dev.local'; "
-        "UserResponse rejects the reserved '.local' TLD as an invalid email, so mock-sso "
-        "login of any quick-setup dev user fails with 400 (cannot serialize the user).",
-        strict=False,
-    )
     async def test_developer_profile_authentication_flow(self, client: AsyncClient):
         """Test complete authentication flow with developer profiles"""
         # Create a developer profile
@@ -402,7 +396,9 @@ class TestDeveloperProfileAPI:
         assert auth_response.status_code == 200
         user_data = auth_response.json()
         assert user_data["success"] is True
-        assert user_data["data"]["username"] == test_username
+        # User model exposes nycu_id (the `username` column was renamed); the
+        # dev-profile "username" IS the nycu_id the mock-SSO login was made with.
+        assert user_data["data"]["nycu_id"] == test_username
 
 
 class TestProductionSafety:
