@@ -104,7 +104,11 @@ services:
     restart: "no"
 
   backend:
-    image: ${BACKEND_IMAGE:?set BACKEND_IMAGE to the currently deployed staging backend image}
+    # No `:?` here — required-var errors would break EVERY compose invocation
+    # that runs without env (down/logs/pre-clean), which is exactly what
+    # silently kept the first run's replica alive. The workflow validates
+    # these explicitly before `up`.
+    image: ${BACKEND_IMAGE:-ghcr.io/anud18/scholarship-system-backend:latest}
     container_name: staging_e2e_backend
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     ports:
@@ -123,7 +127,9 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET:-scholarship-documents}
       MINIO_SECURE: "false"
       # MUST be the live staging keys so the restored dump decrypts.
-      PII_ENCRYPTION_KEYS: ${PII_ENCRYPTION_KEYS:?pass the staging PII keys}
+      # (Validated by the workflow before `up`; no `:?` so that env-less
+      # compose invocations like `down -v` still parse.)
+      PII_ENCRYPTION_KEYS: ${PII_ENCRYPTION_KEYS:-}
       PII_ENCRYPTION_ACTIVE_VERSION: ${PII_ENCRYPTION_ACTIVE_VERSION:-v1}
       # Replica-only auth: mock SSO on, real Portal off.
       ENABLE_MOCK_SSO: "true"
@@ -151,7 +157,7 @@ services:
     restart: "no"
 
   frontend:
-    image: ${FRONTEND_IMAGE:?set FRONTEND_IMAGE to the currently deployed staging frontend image}
+    image: ${FRONTEND_IMAGE:-ghcr.io/anud18/scholarship-system-frontend:latest}
     container_name: staging_e2e_frontend
     ports:
       - "13000:3000"

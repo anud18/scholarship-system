@@ -100,6 +100,18 @@ jobs:
       - name: Pre-clean any leftover replica from a crashed run
         run: $COMPOSE down -v --remove-orphans 2>/dev/null || true
 
+      - name: Validate required secrets/inputs
+        env:
+          BACKEND_IMAGE: ${{ steps.images.outputs.backend }}
+          FRONTEND_IMAGE: ${{ steps.images.outputs.frontend }}
+          PII_ENCRYPTION_KEYS: ${{ secrets.PII_ENCRYPTION_KEYS }}
+        run: |
+          # The compose file deliberately has no `:?` required-var guards (they
+          # would break env-less invocations like `down -v`), so enforce here.
+          test -n "$BACKEND_IMAGE"  || { echo "::error::could not resolve deployed backend image"; exit 1; }
+          test -n "$FRONTEND_IMAGE" || { echo "::error::could not resolve deployed frontend image"; exit 1; }
+          test -n "$PII_ENCRYPTION_KEYS" || { echo "::error::secrets.PII_ENCRYPTION_KEYS missing — replica cannot decrypt the staging dump"; exit 1; }
+
       - name: Start replica Postgres and restore the snapshot
         env:
           BACKEND_IMAGE: ${{ steps.images.outputs.backend }}
@@ -144,9 +156,12 @@ jobs:
           docker exec staging_e2e_backend alembic upgrade head
           docker exec staging_e2e_backend python -m app.seed || echo "seed completed with warnings"
 
-      - name: Route replica email to Mailpit + ensure MinIO bucket
+      - name: Route replica email to Mailpit + mirror MinIO bucket
         env:
           MINIO_BUCKET: ${{ secrets.STAGING_MINIO_BUCKET }}
+          STAGING_MINIO_ENDPOINT: ${{ secrets.STAGING_MINIO_ENDPOINT }}
+          STAGING_MINIO_ACCESS_KEY: ${{ secrets.STAGING_MINIO_ACCESS_KEY }}
+          STAGING_MINIO_SECRET_KEY: ${{ secrets.STAGING_MINIO_SECRET_KEY }}
         run: |
           # SMTP settings live in system_settings (restored from the staging
           # dump → they point at the real NYCU relay). Repoint them at the
@@ -157,10 +172,18 @@ jobs:
             UPDATE system_settings SET value = '1025'    WHERE key = 'smtp_port';
             UPDATE system_settings SET value = 'false'   WHERE key = 'smtp_use_tls';
           "
-          # Empty bucket is enough — specs upload what they later read.
+          # Mirror the live bucket into the replica (read-only against live).
+          # The restored DB references objects that live in staging MinIO —
+          # e.g. the 獎學金要點 regulations PDF and previously uploaded
+          # documents — so an empty bucket breaks preview/regulations specs.
           docker run --rm --network staging-e2e_default --entrypoint sh \
-            minio/mc:latest -c \
-            "mc alias set replica http://minio:9000 minioadmin minioadmin123 && mc mb -p replica/${MINIO_BUCKET:-scholarship-documents}"
+            minio/mc:latest -c "
+              mc alias set live    http://${STAGING_MINIO_ENDPOINT} ${STAGING_MINIO_ACCESS_KEY} ${STAGING_MINIO_SECRET_KEY} &&
+              mc alias set replica http://minio:9000 minioadmin minioadmin123 &&
+              mc mb -p replica/${MINIO_BUCKET:-scholarship-documents} &&
+              mc mirror --overwrite live/${MINIO_BUCKET:-scholarship-documents} replica/${MINIO_BUCKET:-scholarship-documents} &&
+              mc du replica/${MINIO_BUCKET:-scholarship-documents}
+            "
 
       - uses: actions/setup-node@v5
         with:
@@ -184,7 +207,13 @@ jobs:
 
       - name: Dump replica logs on failure
         if: failure()
-        run: $COMPOSE logs --tail=300 || true
+        # Plain `docker logs` per container — does not parse the compose file,
+        # so it works regardless of env/interpolation state.
+        run: |
+          for c in staging_e2e_backend staging_e2e_frontend staging_e2e_postgres staging_e2e_mock_student_api staging_e2e_mailpit; do
+            echo "===== $c ====="
+            docker logs --tail 400 "$c" 2>&1 || true
+          done
 
       - name: Upload Playwright report
         if: always()
