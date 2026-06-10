@@ -95,6 +95,13 @@ services:
       # Mock SSO Configuration
       ENABLE_MOCK_SSO: "true"
       MOCK_SSO_DOMAIN: dev.university.edu
+      # SMTP: point at a closed local port so sends fail FAST (connection
+      # refused) instead of hanging 60s against the unreachable campus relay
+      # (140.113.7.200:25). Email delivery is not expected to work in dev;
+      # what matters is that the failed attempt is recorded in email_history
+      # immediately — e2e specs assert on that row.
+      SMTP_HOST: 127.0.0.1
+      SMTP_PORT: "2525"
       # Student API Configuration (Mock)
       STUDENT_API_ENABLED: "true"
       STUDENT_API_BASE_URL: "http://mock-student-api:8080"
