@@ -5,9 +5,23 @@ surface non-allocated as 400."""
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 from app.models.user import User, UserRole, UserType
+
+
+@pytest.fixture(autouse=True)
+def email_send_mock(monkeypatch):
+    """Stub out SMTP so the admin-notification email never hits the network.
+
+    Autouse: every endpoint test in this file goes through the revoke/suspend
+    endpoints, which now send a best-effort notification to the acting admin."""
+    from app.services.email_service import EmailService
+
+    mock = AsyncMock(return_value=None)
+    monkeypatch.setattr(EmailService, "send_email", mock)
+    return mock
+
 
 # ---------------------------------------------------------------------------
 # Helpers: build mock users for dependency injection
@@ -19,6 +33,8 @@ def _make_mock_admin() -> Mock:
     u.id = 1
     u.role = UserRole.admin
     u.email = "admin@nycu.edu.tw"
+    u.name = "Admin User"
+    u.nycu_id = "admin001"
     return u
 
 
@@ -217,6 +233,56 @@ async def test_revoke_non_allocated_returns_400(client_admin: AsyncClient, unall
         json={"reason": "x"},
     )
     assert resp.status_code == 400
+
+
+_CANCEL_ACTIONS = [("revoke", "撤銷", "violated"), ("suspend", "停發", "leave")]
+_CANCEL_STATUS = {"revoke": "revoked", "suspend": "suspended"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action,label,reason", _CANCEL_ACTIONS)
+async def test_cancellation_sends_notification_email_to_admin(
+    client_admin: AsyncClient, allocated_application, email_send_mock, action, label, reason
+):
+    resp = await client_admin.post(
+        f"/api/v1/manual-distribution/applications/{allocated_application.id}/{action}",
+        json={"reason": reason},
+    )
+    assert resp.status_code == 200
+    email_send_mock.assert_awaited_once()
+    kwargs = email_send_mock.await_args.kwargs
+    assert kwargs["to"] == "admin@nycu.edu.tw"
+    assert label in kwargs["subject"]
+    assert allocated_application.app_id in kwargs["subject"]
+    assert reason in kwargs["body"]
+    assert "Admin User 您好" in kwargs["body"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action,label,reason", _CANCEL_ACTIONS)
+async def test_failed_cancellation_does_not_send_email(
+    client_admin: AsyncClient, unallocated_application, email_send_mock, action, label, reason
+):
+    resp = await client_admin.post(
+        f"/api/v1/manual-distribution/applications/{unallocated_application.id}/{action}",
+        json={"reason": reason},
+    )
+    assert resp.status_code == 400
+    email_send_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action,label,reason", _CANCEL_ACTIONS)
+async def test_cancellation_succeeds_even_if_email_fails(
+    client_admin: AsyncClient, allocated_application, email_send_mock, action, label, reason
+):
+    email_send_mock.side_effect = RuntimeError("SMTP down")
+    resp = await client_admin.post(
+        f"/api/v1/manual-distribution/applications/{allocated_application.id}/{action}",
+        json={"reason": reason},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["data"]["quota_allocation_status"] == _CANCEL_STATUS[action]
 
 
 @pytest.mark.asyncio
