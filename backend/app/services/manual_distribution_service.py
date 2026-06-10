@@ -225,6 +225,37 @@ class ManualDistributionService:
 
         return int(winners) + int(renewals)
 
+    async def consumers_by_college(self, config_id: int, sub_type: str) -> dict[str, int]:
+        """Per-college split of consumers_count — SAME two-half partition.
+
+        Attribution: application.student_data["std_academyno"]; a missing or
+        empty academyno lands in the "" bucket (rendered 未知 in the UI).
+        Invariant (tripwire-tested): sum(values) == consumers_count(config_id,
+        sub_type) — keep the filters of both methods identical.
+        """
+        winners_stmt = (
+            select(Application.student_data)
+            .join(CollegeRankingItem, CollegeRankingItem.application_id == Application.id)
+            .where(
+                CollegeRankingItem.is_allocated.is_(True),
+                CollegeRankingItem.allocated_sub_type == sub_type,
+                CollegeRankingItem.allocation_config_id == config_id,
+                Application.is_renewal.is_(False),
+            )
+        )
+        renewals_stmt = select(Application.student_data).where(
+            Application.is_renewal.is_(True),
+            Application.status == ApplicationStatus.approved,
+            Application.sub_scholarship_type == sub_type,
+            Application.allocation_config_id == config_id,
+        )
+        counts: dict[str, int] = {}
+        for stmt in (winners_stmt, renewals_stmt):
+            for (student_data,) in (await self.db.execute(stmt)).all():
+                college = (student_data or {}).get("std_academyno", "") or ""
+                counts = {**counts, college: counts.get(college, 0) + 1}
+        return counts
+
     async def remaining(self, config: ScholarshipConfiguration, sub_type: str) -> int:
         """Global live remaining = pool_total - consumers_count (spec §6.2).
 
