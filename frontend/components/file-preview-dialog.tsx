@@ -35,10 +35,20 @@ export function FilePreviewDialog({
   const [isLoading, setIsLoading] = useState(true);
   const t = (k: string) => getTranslation(locale, k);
 
-  // Reset loading state when dialog opens or file changes
+  // Reset loading state when dialog opens or file changes.
+  //
+  // The skeleton overlay is gated on `isLoading`, and `isLoading` is otherwise
+  // only cleared by the iframe's onLoad/onError. That is reliable for images
+  // (<img> fires onLoad), but Chrome's built-in PDF viewer frequently NEVER
+  // fires the iframe load event — which left the skeleton covering an
+  // opacity-0 iframe forever, so a PDF preview showed a permanent "loading…"
+  // even though the proxy returned the file (HTTP 200). Fall back to clearing
+  // the loading state on a short timer so the preview always becomes visible.
   useEffect(() => {
     if (isOpen && file) {
       setIsLoading(true);
+      const fallback = setTimeout(() => setIsLoading(false), 1500);
+      return () => clearTimeout(fallback);
     }
   }, [isOpen, file?.url]);
 
