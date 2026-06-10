@@ -43,11 +43,11 @@ Each entry of `by_config` gains a `by_college` field:
         "is_own": true,
         "total": 35,
         "remaining": 7,
-        "by_college": [                       // NEW; null for non-matrix configs
-          {"college_code": "E", "college_name": "電機學院", "total": 15, "used": 13, "remaining": 2},
-          {"college_code": "C", "college_name": "資訊學院", "total": 12, "used": 10, "remaining": 2},
-          {"college_code": "",  "college_name": "未知",     "total": 0,  "used": 1,  "remaining": -1}
-        ]
+        "by_college": {                       // NEW; null for non-matrix configs
+          "E": {"total": 15, "allocated": 13, "remaining": 2},
+          "C": {"total": 12, "allocated": 10, "remaining": 2},
+          "":  {"total": 0,  "allocated": 1,  "remaining": -1}   // 未知 bucket
+        }
       }
     ]
   }
@@ -56,11 +56,16 @@ Each entry of `by_config` gains a `by_college` field:
 
 Rules:
 
+- The shape matches the frontend `CollegeQuota` type that ALREADY exists in
+  `frontend/lib/api/modules/manual-distribution.ts` (`{total, allocated,
+  remaining}` keyed by college code) — the type predates the backend support;
+  this feature makes the backend actually send it. The field is named
+  `allocated` (not `used`) for that reason.
 - `total` reads the config's `quotas[sub_type][college_code]` matrix. Works
   identically for the own config and each linked prior-year config (both store
   the same matrix shape). For configs with `has_college_quota == False`,
   `by_college` is `null` (scalar pool; no per-college split exists).
-- `used` comes from a new service method
+- `allocated` (the "used" count) comes from a new service method
   `consumers_by_college(config_id, sub_type) -> dict[str, int]` using the SAME
   two-half consumer partition as `consumers_count` (spec §6.2):
   1. allocated `CollegeRankingItem`s whose application is NOT a renewal
@@ -72,19 +77,20 @@ Rules:
   `auto_allocate_preview` already uses. Grouping happens in Python over the
   loaded rows (no JSON-path SQL).
 - A consumer with missing/empty `std_academyno` lands in the `""` bucket
-  (rendered 「未知」). The `""` row is included only when its `used > 0`.
-- Colleges appear in `by_college` if they are in the quota matrix OR have
-  `used > 0`; a consumer from a college absent from the matrix gets `total: 0`.
-- `remaining = total - used`, **not clamped** — negative values are reported
+  (rendered 「未知」). The `""` row is included only when its `allocated > 0`.
+- Colleges appear in `by_college` if they have quota > 0 in the matrix OR have
+  `allocated > 0`; a consumer from a college absent from the matrix gets
+  `total: 0`.
+- `remaining = total - allocated`, **not clamped** — negative values are reported
   as-is and flagged in the UI. This is safe because per-college numbers are
   advisory; the enforced gate remains the global per-(config × sub_type)
   recount under `SELECT FOR UPDATE` (`_assert_round_not_oversubscribed`).
 - Per-college totals must satisfy `sum(by_college[].total) == total` for matrix
   configs (same source data as `pool_total`), and
-  `sum(by_college[].used) == consumers_count(config_id, sub_type)`.
-- `college_name` reuses the same name source as
-  `get_students_for_distribution` (student_data-derived names); fall back to
-  the raw code when no name is known.
+  `sum(by_college[].allocated) == consumers_count(config_id, sub_type)`.
+- No `college_name` in the payload: the frontend resolves display names via
+  `getAcademyName(code, academies)` from `useReferenceData`, falling back to a
+  lookup in the loaded `students` array, then the raw code.
 - Response stays in the standard `{success, message, data}` wrapper.
 
 ### Invariants / consistency
@@ -107,7 +113,8 @@ Rendered in `ManualDistributionPanel` adjacent to the existing
   「共用往年」 badge. Columns with `total <= 0` stay excluded (same rule as
   today's `subTypeCols`).
 - **Rows**: union of `college_code`s across all columns' `by_college`, sorted
-  by code. Row label `college_name || college_code`. If at least one column is
+  by code. Row label resolved via `getAcademyName(code, academies)` →
+  students-array lookup → raw code; the `""` code renders 「未知」. If a column is
   a non-matrix config (`by_college === null`), it renders `—` in every college
   row; no separate 不分學院 row in v1 (the config-level card already shows its
   numbers).
