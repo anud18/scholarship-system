@@ -177,16 +177,32 @@ class ManualDistributionService:
         """
         quotas = config.quotas or {}
         if config.has_college_quota:
-            sub_type_quotas = quotas.get(sub_type, {})
-            if not isinstance(sub_type_quotas, dict):
-                return 0
-            return sum(sub_type_quotas.values())
+            return sum(self._matrix_row(config, sub_type).values())
         scalar = quotas.get(sub_type, 0)
         try:
             scalar_int = int(scalar)
         except (TypeError, ValueError):
             scalar_int = 0
         return scalar_int or int(config.total_quota or 0)
+
+    @staticmethod
+    def _matrix_row(config: ScholarshipConfiguration, sub_type: str) -> dict[str, int]:
+        """Normalized per-college quota row for one sub_type.
+
+        Single owner of the quotas-matrix parsing tolerance: a non-dict row
+        yields {}, and malformed cell values coerce to 0 — so pool_total and
+        _college_breakdown can never disagree about the same row.
+        """
+        row = (config.quotas or {}).get(sub_type, {})
+        if not isinstance(row, dict):
+            return {}
+        normalized: dict[str, int] = {}
+        for code, value in row.items():
+            try:
+                normalized[code] = int(value or 0)
+            except (TypeError, ValueError):
+                normalized[code] = 0
+        return normalized
 
     @staticmethod
     def _winner_filters(config_id: int, sub_type: str) -> tuple:
@@ -254,9 +270,9 @@ class ManualDistributionService:
         renewals_stmt = select(Application.student_data).where(*self._renewal_filters(config_id, sub_type))
         counts: dict[str, int] = {}
         for stmt in (winners_stmt, renewals_stmt):
-            for (student_data,) in (await self.db.execute(stmt)).all():
+            for student_data in (await self.db.execute(stmt)).scalars():
                 college = (student_data or {}).get("std_academyno", "") or ""
-                counts = {**counts, college: counts.get(college, 0) + 1}
+                counts[college] = counts.get(college, 0) + 1
         return counts
 
     async def remaining(self, config: ScholarshipConfiguration, sub_type: str) -> int:
@@ -583,7 +599,7 @@ class ManualDistributionService:
                         "is_own": col["is_own"],
                         "total": total,
                         "remaining": col["remaining"],
-                        "by_college": await self._college_breakdown(cfg, col["config_id"], sub_type),
+                        "by_college": await self._college_breakdown(cfg, sub_type),
                     }
                 )
             quota_status[sub_type] = {
@@ -596,7 +612,6 @@ class ManualDistributionService:
     async def _college_breakdown(
         self,
         cfg: ScholarshipConfiguration | None,
-        config_id: int,
         sub_type: str,
     ) -> dict[str, dict[str, int]] | None:
         """Per-college quota grid for one (config, sub_type) column (advisory).
@@ -609,27 +624,19 @@ class ManualDistributionService:
         """
         if cfg is None or not cfg.has_college_quota:
             return None
-        matrix = (cfg.quotas or {}).get(sub_type, {})
-        if not isinstance(matrix, dict):
-            matrix = {}
-        allocated_by_college = await self.consumers_by_college(config_id, sub_type)
+        matrix = self._matrix_row(cfg, sub_type)
+        allocated_by_college = await self.consumers_by_college(cfg.id, sub_type)
 
         breakdown: dict[str, dict[str, int]] = {}
         for code in sorted(set(matrix) | set(allocated_by_college)):
-            try:
-                college_total = int(matrix.get(code, 0) or 0)
-            except (TypeError, ValueError):
-                college_total = 0
+            college_total = matrix.get(code, 0)
             allocated = allocated_by_college.get(code, 0)
             if college_total <= 0 and allocated <= 0:
                 continue
-            breakdown = {
-                **breakdown,
-                code: {
-                    "total": college_total,
-                    "allocated": allocated,
-                    "remaining": college_total - allocated,
-                },
+            breakdown[code] = {
+                "total": college_total,
+                "allocated": allocated,
+                "remaining": college_total - allocated,
             }
         return breakdown
 

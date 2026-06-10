@@ -5,17 +5,21 @@ import { Building2 } from "lucide-react";
 import type {
   CollegeQuota,
   DistributionStudent,
+  LocalAlloc,
   QuotaStatus,
   SubTypeConfigCol,
 } from "@/lib/api/modules/manual-distribution";
-import { getAcademyName } from "@/hooks/use-reference-data";
+import {
+  getSavedAllocation,
+  makeColKey,
+} from "@/lib/api/modules/manual-distribution";
 
 interface CollegeQuotaMatrixProps {
   cols: SubTypeConfigCol[];
   quotaStatus: QuotaStatus;
   students: DistributionStudent[];
   /** ranking_item_id → current local allocation (null = unallocated). */
-  localAllocations: Map<number, { sub_type: string; config_id: number } | null>;
+  localAllocations: Map<number, LocalAlloc | null>;
   academies: Array<{ code: string; name: string }>;
 }
 
@@ -25,6 +29,9 @@ function cellKey(collegeCode: string, colKey: string) {
   return `${collegeCode}|${colKey}`;
 }
 
+/** A cell for a college the matrix has no quota/consumers for (staged-only). */
+const ZERO_QUOTA_CELL: CollegeQuota = { total: 0, allocated: 0, remaining: 0 };
+
 /**
  * College × (sub_type × config) remaining-quota matrix (advisory display).
  *
@@ -33,6 +40,10 @@ function cellKey(collegeCode: string, colKey: string) {
  * server-saved allocation. The delta form avoids double-counting: server
  * `allocated` already includes saved allocations, and `localAllocations` is
  * seeded from them (plus auto-preview suggestions).
+ *
+ * Renewal students are excluded from the delta: the backend counts a
+ * renewal's consumption via its approved Application, not its ranking item,
+ * so checkbox changes on a renewal row don't move quota server-side.
  */
 export function CollegeQuotaMatrix({
   cols,
@@ -48,46 +59,69 @@ export function CollegeQuotaMatrix({
       delta[k] = (delta[k] ?? 0) + amount;
     };
     for (const s of students) {
+      if (s.is_renewal) continue;
       const college = s.college_code || "";
-      if (s.is_allocated && s.allocated_sub_type && s.allocation_config_id != null) {
-        bump(college, `${s.allocated_sub_type}:${s.allocation_config_id}`, -1);
+      const saved = getSavedAllocation(s);
+      if (saved) {
+        bump(college, makeColKey(saved.sub_type, saved.config_id), -1);
       }
       const local = localAllocations.get(s.ranking_item_id);
       if (local) {
-        bump(college, `${local.sub_type}:${local.config_id}`, +1);
+        bump(college, makeColKey(local.sub_type, local.config_id), +1);
       }
     }
     return delta;
   }, [students, localAllocations]);
 
+  // Per visible column: the server's per-college grid (null = non-matrix config).
+  const byColKey = useMemo(() => {
+    const map: Record<string, Record<string, CollegeQuota> | null> = {};
+    for (const col of cols) {
+      const cData = (quotaStatus[col.sub_type]?.by_config ?? []).find(
+        c => c.config_id === col.config_id
+      );
+      map[col.key] = cData?.by_college ?? null;
+    }
+    return map;
+  }, [cols, quotaStatus]);
+
+  // Rows: colleges known to the server, plus colleges that only exist as
+  // staged (unsaved) allocations into a matrix column — those must surface
+  // so over-allocating a zero-quota college warns BEFORE saving.
   const collegeRows = useMemo(() => {
     const codes = new Set<string>();
-    for (const stData of Object.values(quotaStatus)) {
-      for (const cData of Object.values(stData.by_config)) {
-        for (const code of Object.keys(cData.by_college ?? {})) {
-          codes.add(code);
-        }
+    for (const col of cols) {
+      for (const code of Object.keys(byColKey[col.key] ?? {})) {
+        codes.add(code);
+      }
+    }
+    for (const [key, delta] of Object.entries(localDelta)) {
+      if (delta === 0) continue;
+      const sep = key.indexOf("|");
+      const college = key.slice(0, sep);
+      const colKey = key.slice(sep + 1);
+      if (byColKey[colKey] != null) {
+        codes.add(college);
       }
     }
     return Array.from(codes).sort((a, b) => a.localeCompare(b));
-  }, [quotaStatus]);
+  }, [cols, byColKey, localDelta]);
 
-  const byColKey = useMemo(() => {
-    const map: Record<string, Record<string, CollegeQuota> | null> = {};
-    for (const [subType, stData] of Object.entries(quotaStatus)) {
-      for (const cData of Object.values(stData.by_config)) {
-        map[`${subType}:${cData.config_id}`] = cData.by_college ?? null;
+  const collegeNames = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const academy of academies) {
+      names.set(academy.code, academy.name);
+    }
+    for (const s of students) {
+      if (s.college_code && s.college_name && !names.has(s.college_code)) {
+        names.set(s.college_code, s.college_name);
       }
     }
-    return map;
-  }, [quotaStatus]);
+    return names;
+  }, [academies, students]);
 
-  const resolveCollegeName = (code: string): string => {
-    if (!code) return UNKNOWN_COLLEGE_LABEL;
-    const fromReference = getAcademyName(code, academies);
-    if (fromReference !== code && fromReference !== "-") return fromReference;
-    return students.find(s => s.college_code === code)?.college_name || code;
-  };
+  const resolveCollegeName = (code: string): string =>
+    code ? (collegeNames.get(code) ?? code) : UNKNOWN_COLLEGE_LABEL;
 
   if (cols.length === 0 || collegeRows.length === 0) return null;
 
@@ -106,12 +140,16 @@ export function CollegeQuotaMatrix({
         <table className="w-full text-xs">
           <thead>
             <tr className="text-slate-500">
-              <th className="text-left font-medium py-1.5 pr-3 whitespace-nowrap">
+              <th
+                scope="col"
+                className="text-left font-medium py-1.5 pr-3 whitespace-nowrap"
+              >
                 學院
               </th>
               {cols.map(col => (
                 <th
                   key={col.key}
+                  scope="col"
                   className="text-center font-medium py-1.5 px-2 whitespace-nowrap"
                 >
                   {col.display_name}
@@ -127,11 +165,22 @@ export function CollegeQuotaMatrix({
           <tbody>
             {collegeRows.map(code => (
               <tr key={code || "__unknown__"} className="border-t border-slate-100">
-                <td className="py-1.5 pr-3 font-medium text-slate-700 whitespace-nowrap">
+                <th
+                  scope="row"
+                  className="text-left py-1.5 pr-3 font-medium text-slate-700 whitespace-nowrap"
+                >
                   {resolveCollegeName(code)}
-                </td>
+                </th>
                 {cols.map(col => {
-                  const entry = byColKey[col.key]?.[code];
+                  const colColleges = byColKey[col.key];
+                  const delta = localDelta[cellKey(code, col.key)] ?? 0;
+                  // Synthesize a 0/0 cell when a matrix column only has
+                  // staged allocations for this college (no server entry).
+                  const entry =
+                    colColleges?.[code] ??
+                    (colColleges != null && delta !== 0
+                      ? ZERO_QUOTA_CELL
+                      : undefined);
                   if (!entry) {
                     return (
                       <td key={col.key} className="py-1.5 px-2 text-center text-slate-300">
@@ -139,8 +188,7 @@ export function CollegeQuotaMatrix({
                       </td>
                     );
                   }
-                  const liveRemaining =
-                    entry.remaining - (localDelta[cellKey(code, col.key)] ?? 0);
+                  const liveRemaining = entry.remaining - delta;
                   const tone =
                     liveRemaining < 0
                       ? "text-red-600 font-bold"

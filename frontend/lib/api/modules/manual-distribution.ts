@@ -64,11 +64,34 @@ export interface ConfigQuota {
 
 export interface SubTypeQuotaStatus {
   display_name: string;
-  /** Distributable configs for this sub_type, keyed by config_id string. */
-  by_config: Record<string, ConfigQuota>;
+  /** Distributable configs for this sub_type (own config first, then linked sources). */
+  by_config: ConfigQuota[];
 }
 
 export type QuotaStatus = Record<string, SubTypeQuotaStatus>;
+
+/** Local allocation state for a student: which (sub_type, config) they're assigned to */
+export interface LocalAlloc {
+  sub_type: string;
+  config_id: number;
+}
+
+/** Composite key for a (sub_type, config) column: "nstc:42" */
+export function makeColKey(sub_type: string, config_id: number): string {
+  return `${sub_type}:${config_id}`;
+}
+
+/**
+ * The student's SERVER-SAVED allocation, or null. `is_allocated` is the live
+ * funding flag (`allocated_sub_type` is preserved across cancel), so all three
+ * fields must agree. Single source of truth for seeding local allocation state
+ * and for the matrix's saved-side delta.
+ */
+export function getSavedAllocation(s: DistributionStudent): LocalAlloc | null {
+  return s.is_allocated && s.allocated_sub_type && s.allocation_config_id != null
+    ? { sub_type: s.allocated_sub_type, config_id: s.allocation_config_id }
+    : null;
+}
 
 /** A flattened (sub_type × source-config) column descriptor for the distribution table */
 export interface SubTypeConfigCol {
