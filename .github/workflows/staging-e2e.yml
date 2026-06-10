@@ -19,13 +19,17 @@
 # `down -v`-ed in an always() step; a final assert fails the run if anything
 # survived.
 #
-# Rollout: workflow_dispatch only for now. Once green, add a cron entry
-# (e.g. '30 18 * * *' = 02:30 Asia/Taipei, clear of the 01:00 nightly).
-
 name: Staging E2E
 
 on:
   workflow_dispatch:
+  schedule:
+    # 02:30 Asia/Taipei — clear of the 01:00 nightly lane and normal deploy
+    # hours. NOTE: a deploy queued in the shared `deploy-<ref>` concurrency
+    # group CANCELS a pending run of this workflow (GitHub keeps one pending
+    # run per group), so an overnight deploy simply skips that night's run
+    # rather than racing it.
+    - cron: '30 18 * * *'
 
 permissions:
   contents: read
