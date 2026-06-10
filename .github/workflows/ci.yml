@@ -180,9 +180,12 @@ jobs:
       - name: Frontend Lint & Format Check
         if: matrix.check == 'frontend-lint' && needs.changes.outputs.frontend == 'true'
         working-directory: ./frontend
+        # No `|| echo` fallback: that swallowed the exit code, so the
+        # frontend-lint gate could NEVER fail — lint errors sailed through
+        # green. Lint is clean today; keep it hard-gated.
         run: |
           npm ci
-          npm run lint || echo "Linting issues found"
+          npm run lint
 
       - name: Dependency Vulnerability Check
         if: matrix.check == 'dependency-check'
