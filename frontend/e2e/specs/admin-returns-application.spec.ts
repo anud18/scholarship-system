@@ -168,7 +168,9 @@ test.describe("Admin returns application; student edits and re-submits", () => {
         contact_phone: {
           field_id: "contact_phone",
           field_type: "text",
-          value: "0987-654-321",
+          // Must satisfy the Taiwan-mobile format guard (PR #923): pure
+          // digits, 09 + 8 digits — re-submit rejects anything else with 422.
+          value: "0987654321",
           required: false,
         },
       },

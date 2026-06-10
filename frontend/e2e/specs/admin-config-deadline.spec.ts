@@ -58,6 +58,10 @@ import { captureDiagnostics } from "../helpers/diagnose";
 
 const STUDENT_NYCU_ID = "stuphd001";
 const SCHOLARSHIP_CODE = "phd";
+// phd defines real sub-types (nstc / moe_1w), and submission rejects the
+// "general" fallback for such scholarships (PR #845) — so both apply calls
+// must select a concrete sub-type or they 422 for the wrong reason.
+const SUB_TYPE = "nstc";
 const ACADEMIC_YEAR = 115;
 const CONFIG_CODE = "phd_115_e2e_deadline";
 const CONFIG_NAME = "E2E Deadline Test 115";
@@ -269,8 +273,8 @@ test.describe("Admin config CRUD pins application_end_date deadline enforcement"
     }>(studentLogin.token, "POST", "/applications?is_draft=false", {
       scholarship_type: SCHOLARSHIP_CODE,
       configuration_id: createdConfigId,
-      scholarship_subtype_list: [],
-      sub_type_preferences: null,
+      scholarship_subtype_list: [SUB_TYPE],
+      sub_type_preferences: [SUB_TYPE],
       form_data: { fields: {}, documents: [] },
       agree_terms: true,
     });
@@ -324,8 +328,8 @@ test.describe("Admin config CRUD pins application_end_date deadline enforcement"
     }>(studentLogin.token, "POST", "/applications?is_draft=false", {
       scholarship_type: SCHOLARSHIP_CODE,
       configuration_id: createdConfigId,
-      scholarship_subtype_list: [],
-      sub_type_preferences: null,
+      scholarship_subtype_list: [SUB_TYPE],
+      sub_type_preferences: [SUB_TYPE],
       form_data: { fields: {}, documents: [] },
       agree_terms: true,
     });

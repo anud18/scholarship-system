@@ -7,13 +7,14 @@ Provides endpoints for admin to manually allocate scholarships to students.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_admin_user, get_db
 from app.db.deps import get_sync_db
+from app.db.session import AsyncSessionLocal
 from app.models.application import Application
 from app.models.college_review import CollegeRanking, CollegeRankingItem, ManualDistributionHistory
 from app.models.email_management import EmailCategory
@@ -701,17 +702,51 @@ async def import_received_months(
     }
 
 
+async def _send_cancellation_email(
+    to: str,
+    subject: str,
+    body: str,
+    action_label: str,
+    application_id: int,
+    sent_by_user_id: int,
+) -> None:
+    """Background task: deliver a prepared 停發/撤銷 notification email.
+
+    Opens its own session — it runs after the request's session is closed.
+    Best-effort: any failure is logged and never surfaces to the admin."""
+    try:
+        async with AsyncSessionLocal() as session:
+            await EmailService().send_email(
+                to=to,
+                subject=subject,
+                body=body,
+                db=session,
+                email_category=EmailCategory.system,
+                application_id=application_id,
+                sent_by_user_id=sent_by_user_id,
+            )
+    except Exception:
+        logger.exception(
+            "Failed to send %s notification email to admin %s for application %s",
+            action_label,
+            to,
+            application_id,
+        )
+
+
 async def _notify_admin_of_cancellation(
     db: AsyncSession,
+    background_tasks: BackgroundTasks,
     application_id: int,
     admin_user: User,
     action_label: str,
     reason: str,
 ) -> None:
-    """Email the acting admin a record of a 停發/撤銷 operation.
+    """Queue a record of a 停發/撤銷 operation to be emailed to the acting admin.
 
-    Best-effort: runs after the action is committed, and any failure is logged
-    without affecting the API response."""
+    The message is composed here (the action is already committed), but the
+    SMTP delivery runs as a background task AFTER the response is sent — an
+    unreachable/slow mail server must not stall the revoke/suspend API."""
     if not admin_user.email:
         logger.warning(
             "Admin %s has no email address; skipping %s notification for application %s",
@@ -746,18 +781,18 @@ async def _notify_admin_of_cancellation(
             "此郵件為系統自動發送的操作紀錄通知，請勿直接回覆。"
         )
 
-        await EmailService().send_email(
-            to=admin_user.email,
-            subject=subject,
-            body=body,
-            db=db,
-            email_category=EmailCategory.system,
-            application_id=application_id,
-            sent_by_user_id=admin_user.id,
+        background_tasks.add_task(
+            _send_cancellation_email,
+            admin_user.email,
+            subject,
+            body,
+            action_label,
+            application_id,
+            admin_user.id,
         )
     except Exception:
         logger.exception(
-            "Failed to send %s notification email to admin %s for application %s",
+            "Failed to queue %s notification email to admin %s for application %s",
             action_label,
             admin_user.email,
             application_id,
@@ -768,6 +803,7 @@ async def _notify_admin_of_cancellation(
 async def revoke_application_allocation(
     application_id: int,
     request: RevokeRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_admin_user),
 ):
@@ -780,7 +816,7 @@ async def revoke_application_allocation(
             reason=request.reason,
         )
         await db.commit()
-        await _notify_admin_of_cancellation(db, application_id, current_user, "撤銷", request.reason)
+        await _notify_admin_of_cancellation(db, background_tasks, application_id, current_user, "撤銷", request.reason)
         return {"success": True, "message": "已撤銷", "data": result}
     except ValueError as e:
         msg = str(e)
@@ -793,6 +829,7 @@ async def revoke_application_allocation(
 async def suspend_application_allocation(
     application_id: int,
     request: SuspendRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_admin_user),
 ):
@@ -805,7 +842,7 @@ async def suspend_application_allocation(
             reason=request.reason,
         )
         await db.commit()
-        await _notify_admin_of_cancellation(db, application_id, current_user, "停發", request.reason)
+        await _notify_admin_of_cancellation(db, background_tasks, application_id, current_user, "停發", request.reason)
         return {"success": True, "message": "已停發", "data": result}
     except ValueError as e:
         msg = str(e)

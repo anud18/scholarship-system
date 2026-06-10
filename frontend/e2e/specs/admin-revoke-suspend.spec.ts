@@ -416,6 +416,22 @@ test.describe("admin revoke dialog — confirm disabled until reason filled", ()
 // Second student for describe #2 suspend sub-fixture (csphd0002).
 const SETUP_STUDENT2 = "csphd0002";
 
+// Roster generation marks an item is_included=false ("缺少銀行帳戶資訊") when
+// the application has no bank account, and get_revoked_suspended_for_roster
+// only returns is_included=true items (PR #916 soft-delete gate) — so the
+// fixture applications must carry one for the revoked entry to surface.
+const SETUP_FORM_DATA = {
+  fields: {
+    bank_account: {
+      field_id: "bank_account",
+      field_type: "text",
+      value: "0001234567890123",
+      required: false,
+    },
+  },
+  documents: [],
+};
+
 test.describe("locked roster dialog — revoked student panel + item removal", () => {
   let runState: RunState;
   let lockedFixtureAppId: string | undefined;
@@ -482,7 +498,7 @@ test.describe("locked roster dialog — revoked student panel + item removal", (
       configuration_id: config.id,
       scholarship_subtype_list: [SETUP_SUB_TYPE],
       sub_type_preferences: [SETUP_SUB_TYPE],
-      form_data: { fields: {}, documents: [] },
+      form_data: SETUP_FORM_DATA,
       agree_terms: true,
     });
     if (!createRes.ok || !createRes.body.success) {
@@ -504,7 +520,7 @@ test.describe("locked roster dialog — revoked student panel + item removal", (
       configuration_id: config.id,
       scholarship_subtype_list: [SETUP_SUB_TYPE],
       sub_type_preferences: [SETUP_SUB_TYPE],
-      form_data: { fields: {}, documents: [] },
+      form_data: SETUP_FORM_DATA,
       agree_terms: true,
     });
     if (!createRes2.ok || !createRes2.body.success) {
