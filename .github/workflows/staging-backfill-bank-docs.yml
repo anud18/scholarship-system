@@ -1,0 +1,48 @@
+name: "Staging maintenance — backfill placeholder bank docs"
+
+# Manually-triggered staging maintenance job.
+#
+# Runs `app.scripts.backfill_placeholder_bank_docs` inside the staging backend
+# container (same runner + docker access the deploy pipeline uses for
+# `alembic upgrade head` / `python -m app.seed`). Defaults to a zero-write
+# dry-run (census); set `apply=true` to actually re-copy the real bank-account
+# proof documents over legacy 19-byte "Placeholder content" rows.
+#
+# The script is idempotent, never deletes, and skips any application whose
+# owner has no real `UserProfile.bank_document_object_name` source.
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Apply the backfill (default = dry-run / census only)"
+        type: boolean
+        default: false
+
+# Never run two backfills against staging concurrently.
+concurrency:
+  group: staging-backfill-bank-docs
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    name: Backfill placeholder bank docs (staging)
+    runs-on: [self-hosted, scholarship, test]
+    steps:
+      - name: Confirm staging backend container is up
+        run: |
+          docker inspect -f '{{.State.Running}}' scholarship_backend_staging
+
+      - name: Run backfill (dry-run / census)
+        if: ${{ inputs.apply != true }}
+        run: |
+          echo "::notice::Running backfill in DRY-RUN mode (zero writes — census only)"
+          docker exec scholarship_backend_staging \
+            python -m app.scripts.backfill_placeholder_bank_docs --dry-run
+
+      - name: Run backfill (apply)
+        if: ${{ inputs.apply == true }}
+        run: |
+          echo "::warning::Running backfill in APPLY mode — re-copying real bank docs over placeholders"
+          docker exec scholarship_backend_staging \
+            python -m app.scripts.backfill_placeholder_bank_docs
