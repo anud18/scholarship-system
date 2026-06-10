@@ -26,6 +26,20 @@ export function middleware(request: NextRequest) {
   // Determine environment-specific CSP policy
   const isDevelopment = process.env.NODE_ENV === "development";
 
+  // Same-origin file-preview proxies (`/api/v1/preview`, `/api/v1/preview-terms`,
+  // `/api/v1/preview-document-example`) are rendered INSIDE an <iframe> by the app
+  // (file-preview-dialog, application-detail-dialog, review dialogs, the student
+  // wizard, …). The global clickjacking posture (`frame-ancestors 'none'` +
+  // `X-Frame-Options: DENY`) would make the browser refuse to frame these
+  // responses ("<host> refused to connect") — so for these routes ONLY we relax
+  // framing to same-origin. `frame-src 'self'` on the parent page is not enough:
+  // the CHILD response must also permit being framed. (This is the third distinct
+  // root cause of "preview fails" — alongside the clone-placeholder and the
+  // read-path file-data wiring — and the asymmetry that nginx's file-proxy block
+  // already carries SAMEORIGIN while /api/v1/preview did not is how it recurred.)
+  const isFramablePreview = request.nextUrl.pathname.startsWith("/api/v1/preview");
+  const frameAncestors = isFramablePreview ? "frame-ancestors 'self'" : "frame-ancestors 'none'";
+
   if (isDevelopment) {
     // Development CSP: Relaxed for HMR and debugging
     const csp = [
@@ -36,7 +50,7 @@ export function middleware(request: NextRequest) {
       "frame-src 'self' blob:", // inline file preview: same-origin /api proxy + just-selected blob: PDFs
       "font-src 'self'",
       "connect-src 'self' ws: wss:", // WebSocket for HMR
-      "frame-ancestors 'none'",
+      frameAncestors,
       "base-uri 'self'",
       "form-action 'self'",
     ].join("; ");
@@ -59,7 +73,7 @@ export function middleware(request: NextRequest) {
       "connect-src 'self' https://*.nycu.edu.tw",
       "base-uri 'self'",
       `form-action 'self' ${portalHost}`,
-      "frame-ancestors 'none'",
+      frameAncestors,
       "object-src 'none'",
       "upgrade-insecure-requests",
     ].join("; ");
@@ -67,8 +81,11 @@ export function middleware(request: NextRequest) {
     response.headers.set("Content-Security-Policy", csp);
   }
 
-  // Additional security headers (defense in depth)
-  response.headers.set("X-Frame-Options", "DENY");
+  // Additional security headers (defense in depth). Same-origin preview proxies
+  // must stay framable by the app itself, so SAMEORIGIN (not DENY) for those —
+  // a mixed DENY/SAMEORIGIN pair across nginx + middleware is treated as invalid
+  // and still blocks, so both layers must agree (see nginx /api/v1/preview block).
+  response.headers.set("X-Frame-Options", isFramablePreview ? "SAMEORIGIN" : "DENY");
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
 
