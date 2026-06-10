@@ -249,6 +249,21 @@ jobs:
           fi
           docker compose up -d
 
+      - name: Reload nginx config
+        run: |
+          # nginx.staging.conf is bind-mounted read-only; `docker compose up -d`
+          # does NOT recreate the nginx container when only the mounted file's
+          # contents change, so config edits (e.g. preview-iframe X-Frame-Options)
+          # would silently stay inactive until a manual reload. Validate, then
+          # hot-reload — never leave a broken config running.
+          if docker exec scholarship_nginx_staging nginx -t; then
+            docker exec scholarship_nginx_staging nginx -s reload
+            echo "✅ nginx config validated and reloaded"
+          else
+            echo "::error::nginx config test failed — keeping previously-loaded config"
+            exit 1
+          fi
+
       - name: Run database migrations
         run: |
           echo "Running Alembic migrations..."
