@@ -81,38 +81,21 @@ class MinIOService:
                     self.client.make_bucket(bucket_name)
                     logger.info(f"Created MinIO bucket: {bucket_name}")
 
-                    # Set bucket policy for roster files (private by default)
-                    if bucket_name == self.roster_bucket:
-                        self._set_bucket_policy(bucket_name, private=True)
+                    # NOTE: no explicit deny-all bucket policy here anymore.
+                    # Buckets are private by default (anonymous GET → 403 with
+                    # no policy attached — verified against RustFS 1.0.0-beta.8
+                    # by app/scripts/storage_compat_check.py). The old
+                    # deny-all s3:GetObject policy was written for MinIO,
+                    # where root credentials bypass bucket policies; RustFS
+                    # enforces an explicit Deny against the OWNER as well
+                    # (AWS-faithful semantics), which 403'd the backend's own
+                    # roster downloads.
 
         except Exception as e:
             logger.exception("Failed to ensure buckets exist")
             from fastapi import HTTPException
 
             raise HTTPException(status_code=500, detail="MinIO bucket initialization failed") from e
-
-    def _set_bucket_policy(self, bucket_name: str, private: bool = True):
-        """設定bucket政策"""
-        try:
-            if private:
-                # Private bucket policy - no public access
-                policy = {
-                    "Version": "2012-10-17",
-                    "Statement": [
-                        {
-                            "Effect": "Deny",
-                            "Principal": "*",
-                            "Action": "s3:GetObject",
-                            "Resource": f"arn:aws:s3:::{bucket_name}/*",
-                        }
-                    ],
-                }
-                import json
-
-                self.client.set_bucket_policy(bucket_name, json.dumps(policy))
-
-        except Exception:
-            logger.warning(f"Failed to set bucket policy for {bucket_name}", exc_info=True)
 
     def upload_roster_file(
         self,
@@ -432,7 +415,10 @@ class MinIOService:
             str: 預簽名URL
         """
         try:
-            url = self.client.presigned_url(
+            # SDK method is get_presigned_url — `client.presigned_url` does
+            # not exist (this wrapper had zero callers, so the AttributeError
+            # never fired; surfaced by storage_compat_check).
+            url = self.client.get_presigned_url(
                 method=method,
                 bucket_name=self.roster_bucket,
                 object_name=object_name,

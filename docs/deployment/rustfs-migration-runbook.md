@@ -1,0 +1,132 @@
+# RustFS Migration Runbook — staging / prod / staging-e2e
+
+Status: **dev has already switched** (see `docker-compose.dev.yml`, PR `feat/dev-rustfs-swap`).
+This runbook is the prepared, not-yet-executed cutover plan for the remaining
+environments. The backend keeps the generic python `minio` SDK and all
+`MINIO_*` env names — RustFS serves the same S3 API on the same
+`MINIO_ENDPOINT`, so **no application code or GitHub secret changes** are part
+of the cutover.
+
+## Verified compatibility baseline (dev, 2026-06-11)
+
+- Image: `rustfs/rustfs:1.0.0-beta.8`
+- `app/scripts/storage_compat_check.py` → **14/14 PASS** (put/get/stat,
+  copy+CopySource, remove, presigned GET/PUT, 10MB multipart checksum,
+  metadata round-trip, default-private anonymous-403, dual-bucket
+  auto-create, health-check cycle, seeded regulations PDF)
+- Storage-touching e2e subset green (student-draft-document-preview,
+  admin-preview-dialog-render, batch-import-upload, roster-admin,
+  roster-generation, regulations-pdf-canvas)
+- Credential envs `RUSTFS_ACCESS_KEY`/`RUSTFS_SECRET_KEY` verified honored on
+  this tag (positive + negative test — upstream rustfs/rustfs#1058 regression
+  guard); default `rustfsadmin` creds rejected.
+- `/health` endpoint + in-image `curl` verified for compose healthchecks.
+
+### Two real semantic differences found (already handled in code)
+
+1. **Explicit `Deny` bucket policies bind the OWNER too.** MinIO lets root
+   credentials bypass bucket policies; RustFS enforces an explicit Deny
+   against everyone (AWS-faithful). The old deny-all `s3:GetObject` policy on
+   the roster bucket therefore 403'd the backend's own roster downloads.
+   → `MinIOService` no longer attaches any bucket policy; buckets are
+   private by default (anonymous GET → 403 with no policy attached —
+   verified). **Cutover step: do NOT carry old bucket policies over.**
+2. **`client.presigned_url` does not exist** in the minio SDK —
+   `MinIOService.get_presigned_url` was latently broken (zero callers, mocked
+   in tests). Fixed to `client.get_presigned_url`.
+
+Also note: the minio SDK rejects **non-ASCII metadata client-side**
+(identical on MinIO and RustFS) — not a RustFS delta.
+
+## Preconditions (gate — all must hold)
+
+- [ ] Dev has baked ≥ 2 weeks with no storage incidents
+- [ ] Re-pin to the latest verified RustFS tag and re-run the Step-0 spike
+      (positive + negative credential test, `/health`, curl-in-image)
+- [ ] `storage_compat_check.py` 14/14 PASS against a scratch RustFS of that tag
+- [ ] Monitoring replacement ready (see "Monitoring gap" below) — staging
+      cutover MUST NOT proceed with zero storage alerting
+- [ ] Maintenance window agreed (backend writes must stop during final delta
+      mirror)
+
+## Data migration (per environment; staging-db first)
+
+MinIO's on-disk erasure format is NOT readable by RustFS — data moves over
+the S3 API with `mc` (the MinIO client is a generic S3 client and works
+against RustFS; the staging-e2e workflow already uses `mc mirror` this way).
+
+```bash
+# 1. Stand up RustFS side-by-side on alternate ports (e.g. 9100/9101),
+#    same docker network as the existing MinIO. New named volume.
+#    If using BIND mounts: chown -R 10001:10001 <dir> (RustFS runs uid 10001).
+
+# 2. Mirror both buckets (run from a container on the same network):
+docker run --rm --network <net> --entrypoint sh minio/mc:latest -c '
+  mc alias set old http://minio:9000        "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" &&
+  mc alias set new http://rustfs:9000       "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" &&
+  mc mb --ignore-existing new/scholarship-files new/roster-files &&
+  mc mirror --preserve old/scholarship-files new/scholarship-files &&
+  mc mirror --preserve old/roster-files      new/roster-files &&
+  mc diff old/scholarship-files new/scholarship-files &&
+  mc diff old/roster-files      new/roster-files'
+
+# 3. Validate: object counts match (mc du old/... vs new/...), spot-check
+#    SHA256 of a sample of objects referenced by application_files /
+#    payment_rosters rows, and confirm anonymous GET on a roster object → 403.
+```
+
+## Compose diffs per environment
+
+Apply the same shape as the dev swap (`docker-compose.dev.yml` is the
+reference diff):
+
+| File | Changes |
+|---|---|
+| `docker-compose.staging-db.yml` | image → pinned `rustfs/rustfs:<tag>`; env `MINIO_ROOT_USER/PASSWORD` → `RUSTFS_ACCESS_KEY/SECRET_KEY` (same values; backend-side MINIO_* secrets unchanged); drop `command: server /data --console-address ":9001"`; add `RUSTFS_VOLUMES: /data`; healthcheck `/minio/health/live` → `/health`; **remove `MINIO_PROMETHEUS_AUTH_TYPE: public`** (no such endpoint); new volume `rustfs_staging_data` (keep `minio_staging_data` untouched = rollback) |
+| `docker-compose.prod-db.yml` | same, plus: drop the `minio_config:/root/.minio` mount (RustFS doesn't use it); resource limits can carry over; **fix the dead env**: prod backend (`docker-compose.prod.yml`) sets `MINIO_BUCKET_NAME`, but config.py binds `MINIO_BUCKET` — same silently-ignored-env bug fixed in dev; align before or during cutover and confirm which bucket name prod data actually lives in (it has been the default `scholarship-files` if the env never bound) |
+| `docker-compose.staging-e2e.yml` | same swap for the ephemeral replica (ports 19000/19001); the `mc mirror` seeding step in `.github/workflows/staging-e2e.yml` keeps working as-is |
+
+GitHub secrets (`STAGING_MINIO_*`, `MINIO_*`): **no changes** — names and
+values stay; they configure the backend client, not the server.
+
+## Cutover order (per environment)
+
+1. Stop backend (maintenance window) — prevents writes during delta sync
+2. Final `mc mirror` delta + `mc diff` (must be empty)
+3. Switch compose to RustFS block; `docker compose up -d` storage + backend
+4. `docker exec <backend> python -m app.scripts.storage_compat_check` → 14/14
+5. Smoke e2e (staging: the storage-touching @nightly subset; or manual
+   upload→preview→roster-download spot check)
+6. Watch logs for `S3Error` for the first hour
+
+## Rollback
+
+Old MinIO volume is never touched. Revert the compose block to the MinIO
+image + old volume, `docker compose up -d`, done. Caveat: objects written
+AFTER cutover exist only in RustFS — `mc mirror new old` them back before
+reverting if any writes happened.
+
+## Monitoring gap (tracked in the GitHub issue created with this runbook)
+
+staging-db-vm Alloy scrapes `minio:9000/minio/v2/metrics/{cluster,bucket,node}`
+(3 jobs) feeding the Grafana `minio-monitoring` dashboard. RustFS serves none
+of these. At cutover those scrapes will fail and any up-based alerts will
+fire. **Disable the three scrape jobs in the same change that swaps the
+compose**, and ship replacement observability first:
+- blackbox probe of `:9000/health` (storage-down alerting), and/or
+- S3 synthetic canary (timed put/get/delete via a cron job), and/or
+- RustFS native observability (OTel) once its Prometheus story stabilizes.
+
+Acceptance for staging cutover: equivalent storage-down + disk-usage
+alerting exists.
+
+## Risk register
+
+| Risk | Mitigation |
+|---|---|
+| rustfs#1058 (credential envs ignored in some builds) | Step-0 spike repeats positive+negative credential test on every re-pin |
+| Explicit Deny policies block owner | No bucket policies post-migration; compat check pins anonymous-403-by-default + owner-GET-ok |
+| UID 10001 vs bind-mount perms | `chown -R 10001:10001` any bind mounts (prod-db uses bind mounts under `/opt/scholarship/minio/...` — new dirs needed) |
+| Beta maturity / read latency | bake-in on dev + staging before prod; rollback volume preserved |
+| Lifecycle rules | not used by this system (none configured) — re-check before enabling any |
+| `MINIO_BUCKET_NAME` dead env in prod compose | fix to `MINIO_BUCKET` during cutover; verify actual bucket name in prod data first |

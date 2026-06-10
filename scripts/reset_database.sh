@@ -171,7 +171,7 @@ main() {
         echo "   - PostgreSQL: http://localhost:5432"
         echo "   - Backend API: http://localhost:8000"
         echo "   - Frontend: http://localhost:3000"
-        echo "   - MinIO: http://localhost:9000"
+        echo "   - Object storage (RustFS): http://localhost:9000"
         echo ""
         echo "🔧 有用的指令:"
         echo "   - 檢查日誌: docker compose -f docker-compose.dev.yml logs -f"

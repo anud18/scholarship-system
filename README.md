@@ -33,7 +33,7 @@ This scholarship management system provides a complete lifecycle solution for ac
 - **End-to-End Workflow**: Application creation, configurable review pipelines, quota management, automated notifications, and historical reporting
 - **Bilingual Support**: Traditional Chinese and English with dynamic content switching
 - **Configuration-Driven**: Add new scholarship types through database configuration without code changes
-- **Secure File Handling**: Three-layer file architecture with MinIO object storage
+- **Secure File Handling**: Three-layer file architecture with S3-compatible object storage (RustFS in dev; MinIO in staging/prod until migrated)
 - **Development-Friendly**: Mock SSO and student information services for local development
 
 ## Core Features
@@ -52,7 +52,7 @@ This scholarship management system provides a complete lifecycle solution for ac
 
 ### 3. Three-Layer File Upload Architecture
 ```
-Frontend → Next.js Proxy → FastAPI → MinIO
+Frontend → Next.js Proxy → FastAPI → Object Storage (S3 API)
 ```
 - Token authentication via Next.js proxy
 - Internal Docker network communication
@@ -89,7 +89,7 @@ All endpoints return consistent format:
 - **FastAPI** - High-performance async web framework
 - **PostgreSQL 15** - Primary relational database with async support
 - **Redis** - Caching and session management
-- **MinIO** - S3-compatible object storage
+- **RustFS** - S3-compatible object storage (Apache 2.0 MinIO replacement; dev env)
 - **SQLAlchemy 2.0** - Async ORM
 - **Alembic** - Database migrations
 - **Pydantic v2** - Data validation and serialization
@@ -196,7 +196,7 @@ make init-all
 ```
 
 This single command will:
-1. Start all Docker services (PostgreSQL, Redis, MinIO, backend, frontend)
+1. Start all Docker services (PostgreSQL, Redis, RustFS, backend, frontend)
 2. Initialize lookup tables (degrees, departments, enrollment types)
 3. Create test users and sample scholarships
 4. Wait 10-15 minutes for complete initialization
@@ -205,7 +205,7 @@ After initialization completes:
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:8000
 - **API Documentation**: http://localhost:8000/docs
-- **MinIO Console**: http://localhost:9001
+- **RustFS Console**: http://localhost:9001 (minioadmin/minioadmin123)
 
 Test user accounts (see [Database Management](#database-management) for credentials).
 
@@ -246,7 +246,7 @@ make install
 # 2. Setup environment files
 make setup
 
-# 3. Start PostgreSQL, Redis, and MinIO
+# 3. Start PostgreSQL, Redis, and RustFS (object storage)
 # (Use Docker Compose for infrastructure only)
 docker compose -f docker-compose.dev.yml up -d postgres redis minio
 

@@ -37,23 +37,35 @@ services:
       timeout: 5s
       retries: 5
 
-  # MinIO Object Storage
+  # RustFS Object Storage (S3-compatible MinIO replacement; service keeps the
+  # `minio` name so the network alias — and every MINIO_ENDPOINT=minio:9000
+  # consumer — stays unchanged. The backend still talks the generic S3 API via
+  # the python `minio` SDK.)
+  #
+  # Tag pinned + verified 2026-06-11: RUSTFS_ACCESS_KEY/SECRET_KEY are honored
+  # in docker mode on 1.0.0-beta.8 (positive test) AND the default
+  # rustfsadmin/rustfsadmin creds are rejected (negative test — guards
+  # upstream issue rustfs/rustfs#1058, where some builds ignored these envs).
+  # `curl -f :9000/health` confirmed working inside this image.
   minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
-    container_name: scholarship_minio_dev
+    image: rustfs/rustfs:1.0.0-beta.8
+    container_name: scholarship_rustfs_dev
     ports:
       - "9000:9000"
-      - "9001:9001"
+      - "9001:9001"  # RustFS web console (same port MinIO's console used)
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin123
+      RUSTFS_ACCESS_KEY: minioadmin
+      RUSTFS_SECRET_KEY: minioadmin123
+      RUSTFS_VOLUMES: /data
     volumes:
-      - minio_dev_data:/data
+      # RustFS cannot read MinIO's on-disk erasure format — fresh volume +
+      # reseed (./scripts/reset_database.sh). minio_dev_data is kept declared
+      # below as an instant-rollback escape hatch; remove after bake-in.
+      - rustfs_dev_data:/data
     networks:
       - scholarship_dev_network
-    command: server /data --console-address ":9001"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
       interval: 30s
       timeout: 20s
       retries: 3
@@ -86,7 +98,13 @@ services:
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin123
-      MINIO_BUCKET_NAME: scholarship-documents
+      # Was MINIO_BUCKET_NAME — a dead env: config.py's `minio_bucket` field
+      # binds MINIO_BUCKET, so the old name was silently ignored and docker
+      # dev always used the default "scholarship-files". Fixed to the real
+      # name; value matches scripts/write_dev_env.sh so host-side and docker
+      # runs finally agree. (Fresh storage volume + reseed makes the bucket
+      # rename a non-event.)
+      MINIO_BUCKET: scholarship-documents
       MINIO_SECURE: "false"
       # PII Encryption (issue #73): leave empty in dev to use the deterministic
       # dev key. In staging/prod a KMS sidecar populates these vars.
@@ -196,6 +214,11 @@ volumes:
     driver: local
   redis_dev_data:
     driver: local
+  rustfs_dev_data:
+    driver: local
+  # rollback escape hatch: the pre-RustFS MinIO data, left untouched. To roll
+  # back, restore the old minio/minio image block and point it at this volume.
+  # Remove after the RustFS swap has baked in.
   minio_dev_data:
     driver: local
 

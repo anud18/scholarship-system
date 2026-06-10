@@ -8,7 +8,7 @@ Ensure these ports are available:
 - `5432` - PostgreSQL
 - `6379` - Redis
 - `9000` - MinIO API
-- `9001` - MinIO Console
+- `9001` - RustFS Console (object storage)
 
 ## Start the System
 
@@ -28,7 +28,7 @@ docker compose -f docker-compose.dev.yml logs -f [service_name]
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:8000
 - **API Documentation**: http://localhost:8000/docs
-- **MinIO Console**: http://localhost:9001 (admin/admin123)
+- **RustFS Console**: http://localhost:9001 (minioadmin/minioadmin123)
 
 ## Stop Services
 
