@@ -1263,6 +1263,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/applications/history/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Historical Applications
+         * @description Export the filtered 歷史申請 view to XLSX (issue #985 / G23).
+         *
+         *     Same filters and deleted-records policy as GET /applications/history
+         *     (soft-deleted rows are included and flagged), but unpaginated — the
+         *     export is the audit-friendly artifact 財務稽核 previously had to
+         *     screenshot together by hand.
+         */
+        get: operations["export_historical_applications_api_v1_admin_applications_history_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/applications/{id}/assign-professor": {
         parameters: {
             query?: never;
@@ -12762,6 +12787,46 @@ export interface operations {
                 page?: number;
                 /** @description Page size */
                 size?: number;
+                /** @description Filter by status */
+                status?: string | null;
+                /** @description Filter by scholarship type */
+                scholarship_type?: string | null;
+                /** @description Filter by academic year */
+                academic_year?: number | null;
+                /** @description Filter by semester */
+                semester?: string | null;
+                /** @description Search by student name or ID */
+                search?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_historical_applications_api_v1_admin_applications_history_export_get: {
+        parameters: {
+            query?: {
                 /** @description Filter by status */
                 status?: string | null;
                 /** @description Filter by scholarship type */
