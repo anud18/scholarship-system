@@ -90,13 +90,13 @@ async def seeded(db):
 
     roster = PaymentRoster(
         roster_code="G15-ROSTER",
-        roster_name="G15 Roster",
+        scholarship_configuration_id=cfg.id,
         period_label="114-10",
         academic_year=114,
         roster_cycle=RosterCycle.MONTHLY,
         trigger_type=RosterTriggerType.MANUAL,
         status=RosterStatus.LOCKED,
-        created_by_user_id=admin.id,
+        created_by=admin.id,
     )
     db.add(roster)
     await db.flush()
