@@ -16,6 +16,7 @@ from app.core.deps import get_current_admin_user, get_db
 from app.db.deps import get_sync_db
 from app.db.session import AsyncSessionLocal
 from app.models.application import Application
+from app.models.audit_log import AuditAction, AuditLog
 from app.models.college_review import CollegeRanking, CollegeRankingItem, ManualDistributionHistory
 from app.models.email_management import EmailCategory
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
@@ -261,6 +262,7 @@ async def allocate(
             request.academic_year,
             request.semester,
             [a.model_dump() for a in request.allocations],
+            admin_user_id=current_user.id,
         )
         await db.commit()
         return {
@@ -285,6 +287,7 @@ async def finalize(
             request.scholarship_type_id,
             request.academic_year,
             request.semester,
+            admin_user_id=current_user.id,
         )
         await db.commit()
         return {
@@ -370,6 +373,7 @@ async def restore_from_history(
             history.academic_year,
             history.semester,
             history.allocations_snapshot,
+            admin_user_id=current_user.id,
         )
 
         await db.commit()
@@ -886,12 +890,25 @@ async def restore_application_allocation(
             admin_user_id=current_user.id,
         )
         await db.commit()
+        # G9 (#971): link the restore to the original revoke/suspend log row.
+        original_log = await db.execute(
+            select(AuditLog.id)
+            .where(
+                AuditLog.resource_type == "application",
+                AuditLog.resource_id == str(application_id),
+                AuditLog.action.in_((AuditAction.revoke.value, AuditAction.suspend.value)),
+            )
+            .order_by(AuditLog.id.desc())
+            .limit(1)
+        )
+        original_log_id = original_log.scalar_one_or_none()
         await ApplicationAuditService(db).log_application_restore(
             application_id=application_id,
             app_id=result.get("app_id", f"APP-{application_id}"),
             user=current_user,
             prior_status=result.get("restored_from", "unknown"),
             prior_reason=result.get("restored_reason"),
+            original_cancellation_log_id=original_log_id,
             request=http_request,
         )
         return {"success": True, "message": "已恢復", "data": result}

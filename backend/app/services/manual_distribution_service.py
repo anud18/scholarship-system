@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.models.application import Application
+from app.models.audit_log import AuditAction, AuditLog
 from app.models.college_review import CollegeRanking, CollegeRankingItem, ManualDistributionHistory
 from app.models.enums import ApplicationStatus, ReviewStage
 from app.models.review import ApplicationReview, ApplicationReviewItem
@@ -668,6 +669,7 @@ class ManualDistributionService:
         academic_year: int,
         semester: str,
         allocations: list[dict[str, Any]],
+        admin_user_id: Optional[int] = None,
     ) -> dict[str, Any]:
         """
         Save manual allocation selections.
@@ -697,6 +699,15 @@ class ManualDistributionService:
             if not item:
                 continue
 
+            # G3 (#965): capture the prior slot state — 「誰把哪個名額配給誰」
+            # must be reconstructable from audit_logs, not only from the
+            # undo-oriented ManualDistributionHistory snapshot.
+            prior_state = {
+                "is_allocated": item.is_allocated,
+                "allocated_sub_type": item.allocated_sub_type,
+                "allocation_config_id": item.allocation_config_id,
+            }
+
             if sub_type:
                 allowed = await self._allowed_config_ids(requesting_config, sub_type)
                 if alloc_config_id not in allowed:
@@ -713,6 +724,27 @@ class ManualDistributionService:
                 item.allocation_config_id = None
                 item.status = "ranked"
                 item.allocation_reason = None
+
+            if admin_user_id is not None and item.application_id is not None:
+                self.db.add(
+                    AuditLog.create_log(
+                        user_id=admin_user_id,
+                        action=AuditAction.execute_distribution.value,
+                        resource_type="application",
+                        resource_id=str(item.application_id),
+                        description=(
+                            f"manual allocation: ranking_item {item.id} -> "
+                            f"{sub_type or 'unallocated'} (config {alloc_config_id})"
+                        ),
+                        old_values=prior_state,
+                        new_values={
+                            "is_allocated": item.is_allocated,
+                            "allocated_sub_type": item.allocated_sub_type,
+                            "allocation_config_id": item.allocation_config_id,
+                        },
+                        meta_data={"ranking_item_id": item.id},
+                    )
+                )
 
             updated_count += 1
 
@@ -763,6 +795,7 @@ class ManualDistributionService:
                     operation_type="save",
                     change_summary=f"Saved {updated_count} allocation(s)",
                     total_allocated=total_allocated,
+                    created_by=admin_user_id,
                 )
                 self.db.add(history)
                 await self.db.flush()
@@ -777,6 +810,7 @@ class ManualDistributionService:
         scholarship_type_id: int,
         academic_year: int,
         semester: str,
+        admin_user_id: Optional[int] = None,
     ) -> dict[str, Any]:
         """
         Finalize manual distribution:
@@ -829,6 +863,10 @@ class ManualDistributionService:
             if app.quota_allocation_status in ("revoked", "suspended"):
                 continue
 
+            prior_app_state = {
+                "status": app.status.value if hasattr(app.status, "value") else str(app.status),
+                "quota_allocation_status": app.quota_allocation_status,
+            }
             if item.is_allocated and item.allocated_sub_type:
                 app.status = ApplicationStatus.approved
                 app.quota_allocation_status = "allocated"
@@ -840,6 +878,24 @@ class ManualDistributionService:
                 # item's consumed config; fall back to the app's own config.
                 if app.allocation_config_id is None:
                     app.allocation_config_id = item.allocation_config_id or app.scholarship_configuration_id
+                if admin_user_id is not None:
+                    self.db.add(
+                        AuditLog.create_log(
+                            user_id=admin_user_id,
+                            action=AuditAction.execute_distribution.value,
+                            resource_type="application",
+                            resource_id=str(app.id),
+                            description=f"distribution finalized: {app.app_id} approved ({item.allocated_sub_type})",
+                            old_values=prior_app_state,
+                            new_values={
+                                "status": "approved",
+                                "quota_allocation_status": "allocated",
+                                "sub_scholarship_type": item.allocated_sub_type,
+                                "allocation_config_id": app.allocation_config_id,
+                            },
+                            meta_data={"app_id": app.app_id, "ranking_item_id": item.id},
+                        )
+                    )
                 approved_count += 1
             elif item.is_supplementary and not item.is_allocated:
                 # Supplementary students pending a second distribution pass —
@@ -856,6 +912,22 @@ class ManualDistributionService:
                 item.status = "rejected"
                 app.quota_allocation_status = "rejected"
                 app.review_stage = ReviewStage.quota_distributed
+                if admin_user_id is not None:
+                    self.db.add(
+                        AuditLog.create_log(
+                            user_id=admin_user_id,
+                            action=AuditAction.execute_distribution.value,
+                            resource_type="application",
+                            resource_id=str(app.id),
+                            description=f"distribution finalized: {app.app_id} not allocated (quota rejected)",
+                            old_values=prior_app_state,
+                            new_values={
+                                "status": prior_app_state["status"],
+                                "quota_allocation_status": "rejected",
+                            },
+                            meta_data={"app_id": app.app_id, "ranking_item_id": item.id},
+                        )
+                    )
                 rejected_count += 1
 
         # §10 quota gate — recount under SELECT FOR UPDATE before committing the
@@ -893,6 +965,7 @@ class ManualDistributionService:
                 operation_type="finalize",
                 change_summary=f"Distribution finalized: {approved_count} approved, {rejected_count} rejected",
                 total_allocated=approved_count,
+                created_by=admin_user_id,
             )
             self.db.add(history)
             await self.db.flush()
@@ -912,6 +985,7 @@ class ManualDistributionService:
         academic_year: int,
         semester: str,
         allocations_snapshot: dict[str, Any],
+        admin_user_id: Optional[int] = None,
     ) -> dict[str, Any]:
         """
         Restore allocations from a historical snapshot.
@@ -974,6 +1048,7 @@ class ManualDistributionService:
                 operation_type="revert",
                 change_summary=f"Restored {restored_count} allocation(s) from history",
                 total_allocated=restored_count,
+                created_by=admin_user_id,
             )
             self.db.add(history)
             await self.db.flush()

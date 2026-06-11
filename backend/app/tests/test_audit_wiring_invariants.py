@@ -54,6 +54,17 @@ REQUIRED_WIRING = {
         "suspend_application_allocation",
         "restore_application_allocation",
     ],
+    # G3 (#965): allocation decisions audit at the service layer (the
+    # endpoints pass admin_user_id through).
+    "services/manual_distribution_service.py": [
+        "allocate",
+        "finalize",
+    ],
+    # G8 (#970): rank overwrites must leave old/new traces.
+    "api/v1/endpoints/college_review/ranking_management.py": [
+        "import_ranking_from_excel",
+        "update_ranking_order",
+    ],
 }
 
 

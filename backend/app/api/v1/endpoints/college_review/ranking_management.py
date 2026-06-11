@@ -645,9 +645,37 @@ async def update_ranking_order(
         service = CollegeReviewService(db)
         # #63: block once college-review deadline has passed (admins bypass).
         await service.assert_ranking_within_deadline_by_ranking(ranking_id, current_user)
+
+        # G8 (#970): capture the prior order — rank overwrites previously left
+        # no trace, so 「核配當時的名次」 could not be reconstructed.
+        prior_rows = await db.execute(
+            select(CollegeRankingItem.application_id, CollegeRankingItem.rank_position).where(
+                CollegeRankingItem.ranking_id == ranking_id
+            )
+        )
+        old_order = {str(app_id): pos for app_id, pos in prior_rows.all()}
+
         ranking = await service.update_ranking_order(
             ranking_id=ranking_id, new_order=[item.model_dump() for item in new_order]
         )
+
+        db.add(
+            AuditLog.create_log(
+                user_id=current_user.id,
+                action=AuditAction.update.value,
+                resource_type="college_ranking",
+                resource_id=str(ranking_id),
+                description=f"ranking order updated ({len(new_order)} item(s))",
+                old_values={"rank_positions": old_order},
+                new_values={
+                    "rank_positions": {
+                        str(i["application_id"]): i.get("rank_position")
+                        for i in (item.model_dump() for item in new_order)
+                    }
+                },
+            )
+        )
+        await db.commit()
 
         return ApiResponse(
             success=True,
@@ -1081,6 +1109,12 @@ async def import_ranking_from_excel(
         # college_rejected=True is the college-level "N" marker. status stays
         # 'ranked' so admin retains ability to allocate.
         rejected_index = 0
+        # G8 (#970): snapshot prior state — the import overwrites ranks and
+        # college_rejected flags in place.
+        prior_ranks = {
+            sid: {"rank_position": ri.rank_position, "college_rejected": ri.college_rejected}
+            for sid, ri in student_id_to_item.items()
+        }
         for sid, rank_item in student_id_to_item.items():
             if sid not in import_map:
                 continue
@@ -1098,6 +1132,26 @@ async def import_ranking_from_excel(
             updated_count += 1
 
         ranking.total_applications = len(ranking.items)
+
+        db.add(
+            AuditLog.create_log(
+                user_id=current_user.id,
+                action=AuditAction.import_.value,
+                resource_type="college_ranking",
+                resource_id=str(ranking_id),
+                description=(f"ranking import-excel: {updated_count} updated, {rejected_count} rejected (N)"),
+                old_values={"rank_positions": prior_ranks},
+                new_values={
+                    "rank_positions": {
+                        sid: {
+                            "rank_position": ri.rank_position,
+                            "college_rejected": ri.college_rejected,
+                        }
+                        for sid, ri in student_id_to_item.items()
+                    }
+                },
+            )
+        )
         await db.commit()
 
         return ApiResponse(
