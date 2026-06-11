@@ -38,6 +38,13 @@ export interface PaymentRecord {
   scholarship_subtype: string | null;
   allocation_year: number | null;
   locked_at: string | null;
+  // G25 (#987): post-payment revocation/suspension context — null for
+  // legacy items without a linked application.
+  quota_allocation_status: string | null;
+  revoked_at: string | null;
+  revoke_reason: string | null;
+  suspended_at: string | null;
+  suspend_reason: string | null;
 }
 
 export interface HistorySummary {

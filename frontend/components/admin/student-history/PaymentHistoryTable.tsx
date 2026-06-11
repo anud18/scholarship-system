@@ -14,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import type { PaymentRecord } from "@/lib/api/modules/student-history";
 
 interface PaymentHistoryTableProps {
@@ -61,7 +62,27 @@ export function PaymentHistoryTable({ records }: PaymentHistoryTableProps) {
             {records.map((r, idx) => (
               <TableRow key={`${r.roster_id}-${idx}`}>
                 <TableCell className="font-mono">{r.period_label}</TableCell>
-                <TableCell>{r.scholarship_name}</TableCell>
+                <TableCell>
+                  {r.scholarship_name}
+                  {r.quota_allocation_status === "revoked" && (
+                    <Badge
+                      variant="destructive"
+                      className="ml-2 text-xs"
+                      title={r.revoke_reason ?? undefined}
+                    >
+                      已撤銷
+                    </Badge>
+                  )}
+                  {r.quota_allocation_status === "suspended" && (
+                    <Badge
+                      variant="destructive"
+                      className="ml-2 text-xs"
+                      title={r.suspend_reason ?? undefined}
+                    >
+                      已停發
+                    </Badge>
+                  )}
+                </TableCell>
                 <TableCell>{r.scholarship_subtype ?? "—"}</TableCell>
                 <TableCell className="text-right font-mono">
                   {formatAmount(r.scholarship_amount)}
