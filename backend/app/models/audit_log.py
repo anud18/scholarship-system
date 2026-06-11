@@ -48,6 +48,14 @@ class AuditAction(enum.Enum):
     # to a user (e.g. Excel ranking export).
     pii_access = "pii_access"
 
+    # Allocation lifecycle (issue #980 / audit gap G18): 撤銷/停發/回復.
+    # Previously written as ad-hoc `application.<verb>` strings bypassing
+    # this enum — normalized so the audit vocabulary stays typed and the
+    # contract suite covers them.
+    revoke = "revoke"
+    suspend = "suspend"
+    restore = "restore"
+
 
 class AuditLog(Base):
     """Audit log model for tracking user activities"""

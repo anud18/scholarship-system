@@ -12,6 +12,7 @@ from app.core.deps import get_db
 from app.core.path_security import validate_upload_file
 from app.core.security import get_current_user, require_admin
 from app.models.enums import Semester
+from app.models.audit_log import AuditAction, AuditLog
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User
 from app.schemas.response import ApiResponse
@@ -430,6 +431,18 @@ async def add_student_to_whitelist(
     if student_id not in scholarship.whitelist_student_ids:
         scholarship.whitelist_student_ids.append(student_id)
         scholarship.whitelist_enabled = True
+    # 白名單控制誰能申請 — 異動必須留稽核軌跡 (issue #972 / G10)。
+    db.add(
+        AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.update.value,
+            resource_type="scholarship_type",
+            resource_id=str(id),
+            resource_name=scholarship.name,
+            description=f"whitelist: add student {student_id} to {scholarship.code} (dev endpoint)",
+            new_values={"added_student_id": student_id, "whitelist_size": len(scholarship.whitelist_student_ids)},
+        )
+    )
     await db.commit()
     return ApiResponse(
         success=True,
@@ -661,6 +674,19 @@ async def toggle_scholarship_whitelist(
     scholarship.whitelist_enabled = request.enabled
     scholarship.updated_by = current_user.id
 
+    # 白名單開關決定資格 gate — 異動必須留稽核軌跡 (issue #972 / G10)。
+    db.add(
+        AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.update.value,
+            resource_type="scholarship_type",
+            resource_id=str(id),
+            resource_name=scholarship.name,
+            description=f"whitelist: toggle {scholarship.code} enabled {previous_state} -> {request.enabled}",
+            old_values={"whitelist_enabled": previous_state},
+            new_values={"whitelist_enabled": request.enabled},
+        )
+    )
     await db.commit()
     await db.refresh(scholarship)
 

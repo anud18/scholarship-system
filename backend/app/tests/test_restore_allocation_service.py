@@ -150,7 +150,11 @@ async def test_restore_flips_status_and_clears_metadata(db, allocated_applicatio
     assert allocated_application.suspend_reason is None
     assert result["restored_from"] == "revoked"
 
-    # An audit log row records the restore transition.
+    # G18 (#980): the service no longer writes the legacy ad-hoc audit row —
+    # the endpoint emits AuditAction.restore via ApplicationAuditService
+    # (wiring pinned by test_audit_wiring_invariants.py). The service instead
+    # returns the context the endpoint logs, including the original
+    # cancellation reason it just cleared from the application row.
     logs = (
         (
             await db.execute(
@@ -163,7 +167,9 @@ async def test_restore_flips_status_and_clears_metadata(db, allocated_applicatio
         .scalars()
         .all()
     )
-    assert len(logs) == 1
+    assert logs == []
+    assert result["app_id"] == allocated_application.app_id
+    assert result["restored_reason"] is not None
 
 
 @pytest.mark.asyncio

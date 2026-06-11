@@ -233,19 +233,23 @@ async def test_revoke_non_allocated_raises(db, unallocated_application, admin_db
 
 
 @pytest.mark.asyncio
-async def test_revoke_writes_audit_log(db, allocated_application, admin_db_user):
+async def test_revoke_result_carries_audit_context_and_writes_no_adhoc_log(db, allocated_application, admin_db_user):
+    """G18 (#980): audit moved to the endpoint via ApplicationAuditService.
+
+    The service must (a) no longer emit the legacy `application.revoke`
+    ad-hoc row, and (b) return everything the endpoint's typed audit call
+    needs (app_id + affected rosters). The endpoint-side wiring is pinned by
+    test_audit_wiring_invariants.py; the row shape by the contract suite.
+    """
     from sqlalchemy import select
 
     svc = ManualDistributionService(db)
-    await svc.revoke_allocation(allocated_application.id, admin_db_user.id, "reason text")
+    result = await svc.revoke_allocation(allocated_application.id, admin_db_user.id, "reason text")
     await db.commit()
     rows = (await db.execute(select(AuditLog).where(AuditLog.action == "application.revoke"))).scalars().all()
-    assert len(rows) == 1
-    log = rows[0]
-    assert log.resource_id == str(allocated_application.id)
-    assert log.user_id == admin_db_user.id
-    assert log.new_values["reason"] == "reason text"
-    assert "affected_unlocked_rosters" in log.new_values
+    assert rows == []
+    assert result["app_id"] == allocated_application.app_id
+    assert "affected_unlocked_rosters" in result
 
 
 # ---------------------------------------------------------------------------
@@ -275,11 +279,13 @@ async def test_suspend_then_revoke_raises_conflict(db, allocated_application, ad
 
 
 @pytest.mark.asyncio
-async def test_suspend_writes_audit_log_with_suspend_action(db, allocated_application, admin_db_user):
+async def test_suspend_result_carries_audit_context_and_writes_no_adhoc_log(db, allocated_application, admin_db_user):
+    """G18 (#980): see the revoke twin above."""
     from sqlalchemy import select
 
     svc = ManualDistributionService(db)
-    await svc.suspend_allocation(allocated_application.id, admin_db_user.id, "x")
+    result = await svc.suspend_allocation(allocated_application.id, admin_db_user.id, "x")
     await db.commit()
-    log = (await db.execute(select(AuditLog).where(AuditLog.action == "application.suspend"))).scalar_one()
-    assert log.resource_id == str(allocated_application.id)
+    rows = (await db.execute(select(AuditLog).where(AuditLog.action == "application.suspend"))).scalars().all()
+    assert rows == []
+    assert result["app_id"] == allocated_application.app_id

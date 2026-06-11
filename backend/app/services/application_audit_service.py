@@ -289,6 +289,82 @@ class ApplicationAuditService:
             meta_data={"app_id": app_id},
         )
 
+    async def log_application_revoke(
+        self,
+        application_id: int,
+        app_id: str,
+        user: User,
+        reason: str,
+        affected_unlocked_rosters: Optional[list] = None,
+        request: Optional[Request] = None,
+    ) -> Optional[AuditLog]:
+        """記錄撤銷獎學金分發 (issue #980 / G18)"""
+        return await self.log_application_operation(
+            application_id=application_id,
+            action=AuditAction.revoke,
+            user=user,
+            request=request,
+            description=f"撤銷申請 {app_id} 的獎學金分發，原因: {reason}",
+            old_values={"quota_allocation_status": "allocated"},
+            new_values={
+                "quota_allocation_status": "revoked",
+                "reason": reason,
+                "affected_unlocked_rosters": affected_unlocked_rosters or [],
+            },
+            meta_data={"app_id": app_id},
+        )
+
+    async def log_application_suspend(
+        self,
+        application_id: int,
+        app_id: str,
+        user: User,
+        reason: str,
+        affected_unlocked_rosters: Optional[list] = None,
+        request: Optional[Request] = None,
+    ) -> Optional[AuditLog]:
+        """記錄停發獎學金分發 (issue #980 / G18)"""
+        return await self.log_application_operation(
+            application_id=application_id,
+            action=AuditAction.suspend,
+            user=user,
+            request=request,
+            description=f"停發申請 {app_id} 的獎學金分發，原因: {reason}",
+            old_values={"quota_allocation_status": "allocated"},
+            new_values={
+                "quota_allocation_status": "suspended",
+                "reason": reason,
+                "affected_unlocked_rosters": affected_unlocked_rosters or [],
+            },
+            meta_data={"app_id": app_id},
+        )
+
+    async def log_application_restore(
+        self,
+        application_id: int,
+        app_id: str,
+        user: User,
+        prior_status: str,
+        prior_reason: Optional[str] = None,
+        request: Optional[Request] = None,
+    ) -> Optional[AuditLog]:
+        """記錄回復獎學金分發 (issue #980 / G18)
+
+        ``prior_reason`` preserves the original revoke/suspend reason that the
+        restore operation clears from the application row — without it the
+        original cancellation context would survive only in earlier log rows.
+        """
+        return await self.log_application_operation(
+            application_id=application_id,
+            action=AuditAction.restore,
+            user=user,
+            request=request,
+            description=f"回復申請 {app_id} 的獎學金分發（原狀態: {prior_status}）",
+            old_values={"quota_allocation_status": prior_status, "reason": prior_reason},
+            new_values={"quota_allocation_status": "allocated"},
+            meta_data={"app_id": app_id},
+        )
+
     async def log_application_create(
         self,
         application_id: int,
