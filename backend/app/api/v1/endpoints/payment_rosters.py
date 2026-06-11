@@ -51,6 +51,7 @@ from app.services.excel_export_service import ExcelExportService
 from app.services.roster_service import RosterService
 from app.services.student_verification_service import StudentVerificationService
 from app.utils.academic_period import get_roster_period_dates
+from app.utils.pii_masking import mask_id_number
 
 logger = logging.getLogger(__name__)
 
@@ -663,7 +664,9 @@ async def preview_roster_students(
                 "application_id": application.id,
                 "student_name": student_name or "",
                 "student_id": student_id_number or "",
-                "student_id_number": student_data.get("std_pid", ""),
+                # 身分證字號 masked at the response boundary — only the display
+                # is needed here, so the full national ID never leaves the server.
+                "student_id_number": mask_id_number(student_data.get("std_pid", "")),
                 "email": student_data.get("com_email", ""),
                 "college": college,
                 "department": student_data.get("std_depno", ""),
