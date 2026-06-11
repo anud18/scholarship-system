@@ -38,6 +38,28 @@ of the cutover.
 Also note: the minio SDK rejects **non-ASCII metadata client-side**
 (identical on MinIO and RustFS) — not a RustFS delta.
 
+### Deep-scan results (2026-06-11, verified empirically against dev RustFS)
+
+- **`mc mirror` rehearsal PASSED end-to-end**: a real MinIO
+  (RELEASE.2025-09-07) was stood up next to dev RustFS and mirrored with
+  `mc mirror --preserve` — all objects arrived with **custom
+  `x-amz-meta-*` metadata, content-type, AND special-character keys
+  (`file with space+plus.xlsx`) intact**; `mc diff` empty. The migration
+  tooling path is proven, not assumed.
+- **Ranged reads work**: `get_object(offset, length)` returns correct
+  byte ranges on RustFS (currently unused by the app, but proxies/browsers
+  may rely on Range semantics later).
+- **No ETag dependency**: the app never stores or compares ETags (multipart
+  ETag format differences are therefore irrelevant).
+- **No URI-scheme dependency in the DB**: `payment_rosters.minio_object_name`
+  stores the bare object name; the `minio://...` string in
+  `upload_roster_file`'s return value is never persisted.
+- **Roster hash integrity check was DEAD** (on MinIO too): it read the bare
+  `file-hash` metadata key, but the SDK returns custom metadata PREFIXED
+  (`x-amz-meta-file-hash`) — so `stored_hash` was always `None` and the
+  SHA256 verification silently never ran. Fixed in this PR; the check is now
+  live (verified against RustFS).
+
 ## Preconditions (gate — all must hold)
 
 - [ ] Dev has baked ≥ 2 weeks with no storage incidents
@@ -48,6 +70,21 @@ Also note: the minio SDK rejects **non-ASCII metadata client-side**
       cutover MUST NOT proceed with zero storage alerting
 - [ ] Maintenance window agreed (backend writes must stop during final delta
       mirror)
+- [ ] **Versioning audit** (compliance — the SRS names "MinIO Versioning,
+      7-year retention" as the backup story): on the live side run
+      `mc version info live/<bucket>` for BOTH buckets. If versioning is
+      enabled, `mc mirror` copies **only the latest version** — version
+      history does NOT migrate. The frozen old MinIO volume then becomes the
+      retention archive: keep it (and its snapshots) for the full retention
+      window, and record that decision. Do not enable RustFS versioning
+      ("under testing" features) as a substitute without its own validation.
+- [ ] **Bucket inventory**: `mc ls live` on the live side — confirm the only
+      buckets are `scholarship-files`(or the env's `MINIO_BUCKET` value) and
+      `roster-files`. Any extra bucket (manual uploads, console experiments)
+      must be explicitly mirrored or explicitly declared abandoned.
+- [ ] **Key audit**: scan for problematic object keys before mirroring —
+      `mc ls --recursive live/<bucket> | grep -P '[^\x20-\x7e]'` (non-ASCII)
+      — rehearsal proved spaces/`+` survive, but eyeball anything exotic.
 
 ## Data migration (per environment; staging-db first)
 
@@ -84,7 +121,7 @@ reference diff):
 |---|---|
 | `docker-compose.staging-db.yml` | image → pinned `rustfs/rustfs:<tag>`; env `MINIO_ROOT_USER/PASSWORD` → `RUSTFS_ACCESS_KEY/SECRET_KEY` (same values; backend-side MINIO_* secrets unchanged); drop `command: server /data --console-address ":9001"`; add `RUSTFS_VOLUMES: /data`; healthcheck `/minio/health/live` → `/health`; **remove `MINIO_PROMETHEUS_AUTH_TYPE: public`** (no such endpoint); new volume `rustfs_staging_data` (keep `minio_staging_data` untouched = rollback) |
 | `docker-compose.prod-db.yml` | same, plus: drop the `minio_config:/root/.minio` mount (RustFS doesn't use it); resource limits can carry over; **fix the dead env**: prod backend (`docker-compose.prod.yml`) sets `MINIO_BUCKET_NAME`, but config.py binds `MINIO_BUCKET` — same silently-ignored-env bug fixed in dev; align before or during cutover and confirm which bucket name prod data actually lives in (it has been the default `scholarship-files` if the env never bound) |
-| `docker-compose.staging-e2e.yml` | same swap for the ephemeral replica (ports 19000/19001); the `mc mirror` seeding step in `.github/workflows/staging-e2e.yml` keeps working as-is |
+| `docker-compose.staging-e2e.yml` | same swap for the ephemeral replica (ports 19000/19001); the `mc mirror` seeding step in `.github/workflows/staging-e2e.yml` keeps working as-is. **Swap the replica image in the SAME change as the staging-db cutover** — a MinIO replica fronting a RustFS live store would re-introduce the semantic differences (owner-Deny policies, etc.) that e2e is supposed to catch |
 
 GitHub secrets (`STAGING_MINIO_*`, `MINIO_*`): **no changes** — names and
 values stay; they configure the backend client, not the server.
@@ -130,3 +167,6 @@ alerting exists.
 | Beta maturity / read latency | bake-in on dev + staging before prod; rollback volume preserved |
 | Lifecycle rules | not used by this system (none configured) — re-check before enabling any |
 | `MINIO_BUCKET_NAME` dead env in prod compose | fix to `MINIO_BUCKET` during cutover; verify actual bucket name in prod data first |
+| Versioned-bucket history does not migrate (`mc mirror` copies latest only) | versioning audit precondition; frozen MinIO volume = retention archive for the compliance window |
+| Prod volume snapshots/backups still target the OLD MinIO dir | update snapshot/backup config to the new RustFS data dir (`/opt/scholarship/rustfs/...`) at cutover; `scripts/backup.sh` only covers postgres — object-storage backup is volume-level |
+| staging-e2e MinIO replica masking RustFS semantics | swap the replica image in the same change as staging-db |

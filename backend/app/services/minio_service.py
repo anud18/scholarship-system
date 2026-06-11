@@ -355,8 +355,11 @@ class MinIOService:
             response.close()
             response.release_conn()
 
-            # 驗證檔案hash (如果metadata中有的話)
-            stored_hash = stat.metadata.get("file-hash")
+            # 驗證檔案hash (如果metadata中有的話)。
+            # Custom metadata comes back PREFIXED (x-amz-meta-*) from the SDK's
+            # stat headers — the bare "file-hash" lookup was always None, so
+            # this integrity check had silently never run (on MinIO either).
+            stored_hash = stat.metadata.get("x-amz-meta-file-hash")
             if stored_hash:
                 actual_hash = hashlib.sha256(file_content).hexdigest()
                 if stored_hash != actual_hash:
