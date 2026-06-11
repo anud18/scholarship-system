@@ -63,7 +63,13 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    # RESTRICT (issue #983 / G21): audit rows carry NO independent actor
+    # snapshot, so user_id must never be nulled or cascaded away — deleting a
+    # users row that audit history points at would either anonymize or
+    # destroy the trail. Accounts with audit history are deactivated, not
+    # deleted. (Explicit RESTRICT pins what was previously an implicit
+    # NO ACTION default.)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
 
     # 活動資訊
     action = Column(String(50), nullable=False)
