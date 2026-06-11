@@ -55,9 +55,14 @@ class RosterItemResponse(BaseModel):
     allocation_year: Optional[int] = None
     bank_account: Optional[str] = None
     verification_status: StudentVerificationStatus
+    verification_message: Optional[str] = None
     verification_snapshot: Optional[Dict[str, Any]] = None
     is_included: bool
     exclusion_reason: Optional[str] = None
+    # 資格驗證快照（造冊產生當下；failed_rules/warning_rules/details 都在快照內）
+    rule_validation_result: Optional[Dict[str, Any]] = None
+    # PaymentRosterItem.is_eligible model property; None = 無快照（較舊造冊）
+    is_eligible: Optional[bool] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
     # 學生學院/系所資訊（從 application.student_data 取得，非 ORM 欄位）

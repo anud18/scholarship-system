@@ -63,7 +63,12 @@ def _require_admin(user: User) -> None:
         raise HTTPException(status_code=403, detail="Admin role required")
 
 
-def _roster_item_dict_with_display_year(item: PaymentRosterItem, roster: PaymentRoster) -> dict:
+# Large per-item JSON snapshots that only the 查看名單 detail view reads;
+# list views serialize many rosters × items and must not ship them.
+_HEAVY_ITEM_FIELDS = {"rule_validation_result", "verification_snapshot"}
+
+
+def _roster_item_dict_with_display_year(item: PaymentRosterItem, roster: PaymentRoster, *, slim: bool = False) -> dict:
     """Serialize a roster item for the UI, resolving the display year.
 
     Uses the per-item snapshot when set (the consumed/borrowed prior-year quota
@@ -71,7 +76,7 @@ def _roster_item_dict_with_display_year(item: PaymentRosterItem, roster: Payment
     every 分發名單 row shows which year's quota it draws from. Monthly/legacy
     rosters never snapshot allocation_year, so without this they'd show no year.
     """
-    data = RosterItemResponse.model_validate(item).model_dump()
+    data = RosterItemResponse.model_validate(item).model_dump(exclude=_HEAVY_ITEM_FIELDS if slim else None)
     if data.get("allocation_year") is None:
         data["allocation_year"] = roster.academic_year
     return data
@@ -457,7 +462,9 @@ async def list_payment_rosters(
 
             # 添加關聯資料（已 eager loaded，避免 MissingGreenlet）
             if roster.items:
-                roster_dict["items"] = [_roster_item_dict_with_display_year(item, roster) for item in roster.items]
+                roster_dict["items"] = [
+                    _roster_item_dict_with_display_year(item, roster, slim=True) for item in roster.items
+                ]
             if roster.audit_logs:
                 roster_dict["audit_logs"] = [
                     RosterAuditLogResponse.model_validate(log).model_dump() for log in roster.audit_logs

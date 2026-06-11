@@ -35,6 +35,11 @@ import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import type { RevokedSuspendedList, DistributionDiff, DistributionDiffEntry } from "@/lib/api/modules/payment-rosters";
 import { RevokedSuspendedSection } from "@/components/roster/RevokedSuspendedSection";
+import {
+  EligibilityBadge,
+  EligibilityDetailDialog,
+  type EligibilityDetailItem,
+} from "@/components/roster/EligibilityDetailDialog";
 
 interface Period {
   label: string;
@@ -71,7 +76,7 @@ interface RosterDetailDialogProps {
   onRosterChanged?: () => void;
 }
 
-interface RosterItem {
+interface RosterItem extends EligibilityDetailItem {
   id: number;
   student_name: string;
   student_id: string;
@@ -120,6 +125,9 @@ export function RosterDetailDialog({
 
   const [isLocking, setIsLocking] = useState(false);
   const [isUnlocking, setIsUnlocking] = useState(false);
+
+  // 資格對比 detail dialog state
+  const [eligibilityTarget, setEligibilityTarget] = useState<RosterItem | null>(null);
 
   // #66: exclude-item dialog state
   const [excludeTarget, setExcludeTarget] = useState<RosterItem | null>(null);
@@ -507,6 +515,8 @@ export function RosterDetailDialog({
             <TableHead>系所</TableHead>
             <TableHead>申請身分</TableHead>
             <TableHead>分發獎學金</TableHead>
+            <TableHead>符合資格</TableHead>
+            <TableHead>資格詳情</TableHead>
             <TableHead className="text-right">金額</TableHead>
             <TableHead className="text-right w-20">操作</TableHead>
           </TableRow>
@@ -566,6 +576,20 @@ export function RosterDetailDialog({
                   ) : (
                     <span className="text-muted-foreground">-</span>
                   )}
+                </TableCell>
+                <TableCell>
+                  <EligibilityBadge item={item} />
+                </TableCell>
+                <TableCell>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-primary no-underline"
+                    onClick={() => setEligibilityTarget(item)}
+                    title="查看資格對比結果"
+                  >
+                    詳情
+                  </Button>
                 </TableCell>
                 <TableCell className="text-right font-medium">
                   {formatCurrency(item.scholarship_amount)}
@@ -925,6 +949,12 @@ export function RosterDetailDialog({
           )}
         </div>
       </DialogContent>
+
+      {/* 資格對比 detail dialog */}
+      <EligibilityDetailDialog
+        item={eligibilityTarget}
+        onClose={() => setEligibilityTarget(null)}
+      />
 
       {/* 比對分發名單 — single-row confirm */}
       <Dialog

@@ -53,3 +53,28 @@ def test_keeps_borrowed_snapshot_over_roster_year():
     # allocation_year=114; the fallback must NOT overwrite it with 115.
     out = _roster_item_dict_with_display_year(_item(allocation_year=114), SimpleNamespace(academic_year=115))
     assert out["allocation_year"] == 114
+
+
+# ─── slim mode (list endpoints) ─────────────────────────────────────
+
+
+_ROSTER = SimpleNamespace(academic_year=114)
+_SNAPSHOT = {"is_eligible": True, "failed_rules": [], "warning_rules": [], "details": {}}
+
+
+def test_slim_drops_heavy_snapshot_fields():
+    # The roster LIST endpoint serializes every item of every roster on the
+    # page; no list consumer reads the per-item JSON snapshots, so slim mode
+    # must drop them while keeping the scalar 符合資格 flag.
+    item = _item(rule_validation_result=_SNAPSHOT, is_eligible=True)
+    out = _roster_item_dict_with_display_year(item, _ROSTER, slim=True)
+    assert "rule_validation_result" not in out
+    assert "verification_snapshot" not in out
+    assert out["is_eligible"] is True
+
+
+def test_full_mode_keeps_snapshot_for_detail_view():
+    # The 查看名單 detail view needs the full rule-comparison snapshot.
+    item = _item(rule_validation_result=_SNAPSHOT, is_eligible=True)
+    out = _roster_item_dict_with_display_year(item, _ROSTER)
+    assert out["rule_validation_result"] == _SNAPSHOT

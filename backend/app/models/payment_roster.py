@@ -273,8 +273,20 @@ class PaymentRosterItem(Base):
 
     @property
     def is_qualified(self) -> bool:
-        """檢查是否合格"""
+        """撥款合格：學籍驗證通過 + 納入造冊 + 有郵局帳號"""
         return self.verification_status == StudentVerificationStatus.VERIFIED and self.is_included and self.bank_account
+
+    @property
+    def is_eligible(self) -> bool | None:
+        """規則資格：造冊產生當下的獎學金規則驗證快照判定。
+
+        Distinct from is_qualified (payment readiness) — this reflects the
+        rule engine's verdict frozen at generation time. None when the item
+        predates rule-validation snapshots.
+        """
+        if not self.rule_validation_result:
+            return None
+        return bool(self.rule_validation_result.get("is_eligible", not self.failed_rules))
 
     def generate_excel_remarks(self, period_label: str, scholarship_code: str) -> str:
         """產生Excel說明欄內容"""

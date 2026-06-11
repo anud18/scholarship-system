@@ -232,6 +232,27 @@ def test_item_response_display_fields_optional():
     assert r.allocated_sub_type is None
 
 
+def test_item_response_eligibility_fields_optional():
+    # Pin: the 符合資格 column fields (rule_validation_result,
+    # verification_message, is_eligible) are Optional so legacy items
+    # without a validation snapshot still serialize (is_eligible=None
+    # renders as "-" in the UI).
+    r = RosterItemResponse(
+        id=1,
+        roster_id=1,
+        application_id=1,
+        student_id_number="A1",
+        student_name="王",
+        scholarship_amount=Decimal("1000"),
+        verification_status=StudentVerificationStatus.VERIFIED,
+        is_included=True,
+        created_at=datetime(2025, 10, 22, tzinfo=timezone.utc),
+    )
+    assert r.rule_validation_result is None
+    assert r.verification_message is None
+    assert r.is_eligible is None
+
+
 # ─── RosterStatisticsResponse ───────────────────────────────────────
 
 
