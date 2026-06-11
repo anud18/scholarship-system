@@ -4,11 +4,15 @@ Audit log model for tracking system activities
 
 import enum
 
-from sqlalchemy import JSON, Column, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, Index, Integer, String, Text, event
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.base_class import Base
+
+
+class AuditLogImmutableError(RuntimeError):
+    """Raised when application code tries to mutate or delete an audit row."""
 
 
 class AuditAction(enum.Enum):
@@ -140,3 +144,26 @@ class AuditLog(Base):
             description=description,
             **kwargs,
         )
+
+
+# ── Append-only guard (issue #966 / gap G4) ──────────────────────────────
+# ISO 27001 A.8.15: event logs must not be modifiable or deletable by any
+# privilege level. The PostgreSQL trigger (migration
+# audit_logs_immutability_001) enforces this at the database; these ORM
+# listeners enforce the same property on every backend (incl. the sqlite
+# test DB) and fail fast when application code regresses. A sanctioned
+# destruction workflow must bypass the ORM on purpose (raw SQL +
+# `SET LOCAL app.audit_purge = 'allowed'`), never silently.
+
+
+@event.listens_for(AuditLog, "before_update")
+def _audit_log_block_update(mapper, connection, target):  # noqa: ARG001
+    raise AuditLogImmutableError(f"audit_logs is append-only: refusing UPDATE of AuditLog id={target.id}")
+
+
+@event.listens_for(AuditLog, "before_delete")
+def _audit_log_block_delete(mapper, connection, target):  # noqa: ARG001
+    raise AuditLogImmutableError(
+        f"audit_logs is append-only: refusing DELETE of AuditLog id={target.id} "
+        "(sanctioned destruction must use the raw-SQL purge workflow)"
+    )
