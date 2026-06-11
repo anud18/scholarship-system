@@ -519,6 +519,24 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                                       續領
                                     </Badge>
                                   )}
+                                  {application.is_deleted && (
+                                    <Badge
+                                      variant="destructive"
+                                      className="text-xs mt-1"
+                                      title={application.deletion_reason ?? undefined}
+                                    >
+                                      已刪除
+                                    </Badge>
+                                  )}
+                                  {application.revoked_at && (
+                                    <Badge
+                                      variant="destructive"
+                                      className="text-xs mt-1"
+                                      title={application.revoke_reason ?? undefined}
+                                    >
+                                      已撤銷
+                                    </Badge>
+                                  )}
                                 </div>
                               </TableCell>
                               <TableCell>

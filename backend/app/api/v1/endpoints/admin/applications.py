@@ -26,7 +26,7 @@ from app.core.security import require_admin
 from app.db.deps import get_db
 from app.models.application import Application, ApplicationStatus
 from app.models.college_review import CollegeRankingItem
-from app.models.enums import Semester
+from app.models.enums import Semester, ReviewStage
 from app.models.payment_roster import PaymentRosterItem
 from app.models.scholarship import ScholarshipType
 from app.models.user import User
@@ -196,7 +196,15 @@ async def get_historical_applications(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get historical applications with advanced filtering (admin only)"""
+    """Get historical applications with advanced filtering (admin only).
+
+    Deleted-records policy (issue #974 / G12): soft-deleted applications are
+    INCLUDED here on purpose — the history view is the retention surface, and
+    a 獎學金 record must stay reviewable for its statutory retention period.
+    Each row carries deleted_at/deletion_reason + is_deleted so the UI badges
+    them; the operational list endpoint (GET /applications) keeps excluding
+    them via deleted_at IS NULL.
+    """
 
     # Build base query with joins
     stmt = (
@@ -314,6 +322,17 @@ async def get_historical_applications(
             # Review information
             professor_name=getattr(row, "professor_name", None),
             reviewer_name=getattr(row, "reviewer_name", None),
+            # Revocation / deletion context (#975 G13, #974 G12)
+            revoked_at=app.revoked_at,
+            revoked_by=app.revoked_by,
+            revoke_reason=app.revoke_reason,
+            suspended_at=app.suspended_at,
+            suspended_by=app.suspended_by,
+            suspend_reason=app.suspend_reason,
+            deleted_at=app.deleted_at,
+            deleted_by_id=app.deleted_by_id,
+            deletion_reason=app.deletion_reason,
+            is_deleted=app.deleted_at is not None,
         )
 
         historical_applications.append(historical_app)
@@ -487,6 +506,17 @@ async def delete_application(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="只有在學生申請階段（草稿或已送出）的申請才可刪除",
+        )
+
+    # G30 (#992): status alone is not enough — an application can sit at
+    # status=submitted while review_stage already advanced (e.g.
+    # professor_reviewed). Once ANY review work exists the row is part of the
+    # decision chain and must be preserved, exactly as the docstring promises.
+    stage_value = app.review_stage.value if hasattr(app.review_stage, "value") else app.review_stage
+    if stage_value and stage_value not in (ReviewStage.student_draft.value, ReviewStage.student_submitted.value):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="申請已進入審核流程（review_stage 已推進），不可刪除",
         )
 
     app_id_str = app.app_id

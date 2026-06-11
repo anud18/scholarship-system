@@ -757,6 +757,24 @@ class HistoricalApplicationResponse(BaseModel):
     # Note: review_score, review_comments, rejection_reason removed
     # Get these from ApplicationReview if needed
 
+    # Revocation / suspension context (issue #975 / G13): the DB stores who
+    # revoked an allocation, when and why — compliance review must see it in
+    # the history view, not only via direct DB access.
+    revoked_at: Optional[datetime] = None
+    revoked_by: Optional[int] = None
+    revoke_reason: Optional[str] = None
+    suspended_at: Optional[datetime] = None
+    suspended_by: Optional[int] = None
+    suspend_reason: Optional[str] = None
+
+    # Soft-deletion context (issue #974 / G12 policy: soft-deleted
+    # applications REMAIN visible in the history view — they are retained
+    # records, not vanished ones — and are flagged so the UI can badge them).
+    deleted_at: Optional[datetime] = None
+    deleted_by_id: Optional[int] = None
+    deletion_reason: Optional[str] = None
+    is_deleted: bool = False
+
     # Status helpers
     @classmethod
     def get_status_label(cls, status: str) -> str:
