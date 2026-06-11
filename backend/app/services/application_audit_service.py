@@ -346,6 +346,7 @@ class ApplicationAuditService:
         user: User,
         prior_status: str,
         prior_reason: Optional[str] = None,
+        original_cancellation_log_id: Optional[int] = None,
         request: Optional[Request] = None,
     ) -> Optional[AuditLog]:
         """記錄回復獎學金分發 (issue #980 / G18)
@@ -362,7 +363,9 @@ class ApplicationAuditService:
             description=f"回復申請 {app_id} 的獎學金分發（原狀態: {prior_status}）",
             old_values={"quota_allocation_status": prior_status, "reason": prior_reason},
             new_values={"quota_allocation_status": "allocated"},
-            meta_data={"app_id": app_id},
+            # G9 (#971): link back to the revoke/suspend log row so the
+            # decision chain (撤銷 → 回復) is traversable without heuristics.
+            meta_data={"app_id": app_id, "original_cancellation_log_id": original_cancellation_log_id},
         )
 
     async def log_application_create(
