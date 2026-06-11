@@ -82,7 +82,7 @@ async def test_first_correction_preserves_original_fields(db, app_with_bank_fiel
     await svc.manual_review_bank_info(
         application_id=app_with_bank_fields.id,
         account_number_approved=None,
-        account_number_corrected="7000999988887777",
+        account_number_corrected="70009999888877",
         account_holder_approved=True,
         account_holder_corrected=None,
         review_notes="G19 test correction",
@@ -92,7 +92,7 @@ async def test_first_correction_preserves_original_fields(db, app_with_bank_fiel
     await db.refresh(app_with_bank_fields)
 
     # The live form now carries the corrected value...
-    assert app_with_bank_fields.submitted_form_data["fields"]["postal_account"]["value"] == "7000999988887777"
+    assert app_with_bank_fields.submitted_form_data["fields"]["postal_account"]["value"] == "70009999888877"
     # ...but the student's original is permanently preserved.
     original = app_with_bank_fields.meta_data["original_bank_fields"]
     assert original["fields"]["postal_account"] == "0001234567890123"
@@ -108,7 +108,7 @@ async def test_second_correction_does_not_clobber_original(db, app_with_bank_fie
     await svc.manual_review_bank_info(
         application_id=app_with_bank_fields.id,
         account_number_approved=None,
-        account_number_corrected="1111111111111111",
+        account_number_corrected="11111111111111",
         account_holder_approved=None,
         account_holder_corrected=None,
         review_notes="first",
@@ -118,7 +118,7 @@ async def test_second_correction_does_not_clobber_original(db, app_with_bank_fie
     await svc.manual_review_bank_info(
         application_id=app_with_bank_fields.id,
         account_number_approved=None,
-        account_number_corrected="2222222222222222",
+        account_number_corrected="22222222222222",
         account_holder_approved=None,
         account_holder_corrected=None,
         review_notes="second",
@@ -129,4 +129,4 @@ async def test_second_correction_does_not_clobber_original(db, app_with_bank_fie
 
     # original = the STUDENT's value, not the first correction.
     assert app_with_bank_fields.meta_data["original_bank_fields"]["fields"]["postal_account"] == "0001234567890123"
-    assert app_with_bank_fields.submitted_form_data["fields"]["postal_account"]["value"] == "2222222222222222"
+    assert app_with_bank_fields.submitted_form_data["fields"]["postal_account"]["value"] == "22222222222222"
