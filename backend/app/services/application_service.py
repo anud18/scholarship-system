@@ -17,6 +17,7 @@ from app.core.cache import invalidate as cache_invalidate
 from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFoundError, ValidationError
 from app.core.metrics import scholarship_applications_total, scholarship_reviews_total
 from app.core.schema_validation import serialize_value
+from app.models.audit_log import AuditAction, AuditLog
 from app.models.application import Application, ApplicationStatus
 from app.models.enums import REVIEWABLE_APPLICATION_STATUSES, ReviewStage, Semester
 from app.models.review import ApplicationReview, ApplicationReviewItem
@@ -1985,17 +1986,44 @@ class ApplicationService:
             # Hard delete for draft applications
             logger.info(f"Performing hard delete for draft application {application.app_id}")
 
-            # Delete associated files from MinIO
+            # Delete associated files from MinIO. delete_file() never raises —
+            # it swallows errors internally and returns False (issue #982 /
+            # G20: the old try/except was dead code and the bool was ignored,
+            # so failures orphaned objects with no trace).
             deleted_files_count = 0
+            orphaned_objects = []
             if application.files:
                 for app_file in application.files:
                     if app_file.object_name:
-                        try:
-                            minio_service.delete_file(app_file.object_name)
+                        if minio_service.delete_file(app_file.object_name):
                             deleted_files_count += 1
                             logger.info(f"Deleted file from MinIO: {app_file.object_name}")
-                        except Exception:
-                            logger.exception(f"Failed to delete file {app_file.object_name} from MinIO")
+                        else:
+                            orphaned_objects.append(app_file.object_name)
+                            logger.error(
+                                "MinIO deletion failed for %s (application %s) — object orphaned",
+                                app_file.object_name,
+                                application.app_id,
+                            )
+
+            if orphaned_objects:
+                # Leave a queryable trace so the orphans can be swept later —
+                # DB deletion proceeds regardless (storage cleanup must not
+                # block the user-facing operation).
+                self.db.add(
+                    AuditLog.create_log(
+                        user_id=current_user.id,
+                        action=AuditAction.delete.value,
+                        resource_type="application",
+                        resource_id=str(application.id),
+                        description=(
+                            f"MinIO cleanup incomplete for {application.app_id}: "
+                            f"{len(orphaned_objects)} orphaned object(s)"
+                        ),
+                        status="failed",
+                        meta_data={"app_id": application.app_id, "orphaned_objects": orphaned_objects},
+                    )
+                )
 
             logger.info(f"Deleted {deleted_files_count} files from MinIO for application {application.app_id}")
 

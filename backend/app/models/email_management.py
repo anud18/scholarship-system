@@ -69,7 +69,15 @@ class EmailHistory(Base):
     email_category = Column(String(100), nullable=True, index=True)
 
     # Related entities (for permission filtering)
-    application_id = Column(Integer, ForeignKey("applications.id"), nullable=True, index=True)
+    application_id = Column(
+        # SET NULL (issue #979 / G17): emails are delivery EVIDENCE — they must
+        # survive the referenced application being hard-deleted (and must not
+        # make that deletion fail with an FK violation).
+        Integer,
+        ForeignKey("applications.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=True, index=True)
 
     # Sender information
@@ -153,7 +161,15 @@ class ScheduledEmail(Base):
     )
 
     # Related entities (for permission filtering)
-    application_id = Column(Integer, ForeignKey("applications.id"), nullable=True, index=True)
+    application_id = Column(
+        # SET NULL (issue #979 / G17): emails are delivery EVIDENCE — they must
+        # survive the referenced application being hard-deleted (and must not
+        # make that deletion fail with an FK violation).
+        Integer,
+        ForeignKey("applications.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=True, index=True)
 
     # Approval workflow
