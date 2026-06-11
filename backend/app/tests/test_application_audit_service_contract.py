@@ -197,3 +197,56 @@ class TestApplicationAuditServiceContract:
         assert row.meta_data["deletion_reason"] == "duplicate submission"
         assert row.meta_data["scholarship_type_id"] == 42
         assert row.meta_data["student_name"] == "王小明"
+
+    # ── Allocation lifecycle (issue #980 / audit gap G18) ──────────────
+    # revoke/suspend/restore previously wrote ad-hoc strings
+    # ("application.revoke") via AuditLog.create_log directly, bypassing
+    # this service AND this contract suite. These rows pin the normalized
+    # API so the high-risk money operations stay inside the audited
+    # vocabulary.
+
+    async def test_log_application_revoke(self, db, audit_user):
+        svc = ApplicationAuditService(db)
+        await svc.log_application_revoke(
+            application_id=1011,
+            app_id="APP-113-1-00011",
+            user=audit_user,
+            reason="違反獎學金要點",
+            affected_unlocked_rosters=[3, 7],
+        )
+        row = await _last_log_for(db, 1011)
+        assert row.action == AuditAction.revoke.value
+        assert row.old_values["quota_allocation_status"] == "allocated"
+        assert row.new_values["quota_allocation_status"] == "revoked"
+        assert row.new_values["reason"] == "違反獎學金要點"
+        assert row.new_values["affected_unlocked_rosters"] == [3, 7]
+
+    async def test_log_application_suspend(self, db, audit_user):
+        svc = ApplicationAuditService(db)
+        await svc.log_application_suspend(
+            application_id=1012,
+            app_id="APP-113-1-00012",
+            user=audit_user,
+            reason="休學",
+        )
+        row = await _last_log_for(db, 1012)
+        assert row.action == AuditAction.suspend.value
+        assert row.new_values["quota_allocation_status"] == "suspended"
+        assert row.new_values["reason"] == "休學"
+
+    async def test_log_application_restore(self, db, audit_user):
+        svc = ApplicationAuditService(db)
+        # prior_reason preserves the original cancellation reason that the
+        # restore operation clears from the application row (G9 linkage).
+        await svc.log_application_restore(
+            application_id=1013,
+            app_id="APP-113-1-00013",
+            user=audit_user,
+            prior_status="suspended",
+            prior_reason="休學",
+        )
+        row = await _last_log_for(db, 1013)
+        assert row.action == AuditAction.restore.value
+        assert row.old_values["quota_allocation_status"] == "suspended"
+        assert row.old_values["reason"] == "休學"
+        assert row.new_values["quota_allocation_status"] == "allocated"

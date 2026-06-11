@@ -152,7 +152,11 @@ def test_all_action_values_are_unique_strings():
 
 
 def test_known_action_count_for_change_review():
-    """Pin: 24 actions defined. A refactor adding an action without
+    """Pin: 27 actions defined. A refactor adding an action without
     updating the audit dashboard's allowlist would silently hide the
-    new events. This test forces a code review when count changes."""
-    assert len(list(AuditAction)) == 24
+    new events. This test forces a code review when count changes.
+
+    2026-06-11 (#980 / G18): +3 — revoke / suspend / restore moved from
+    ad-hoc `application.<verb>` strings into the enum. No frontend switch
+    enumerates AuditAction values, so no UI allowlist needed updating."""
+    assert len(list(AuditAction)) == 27

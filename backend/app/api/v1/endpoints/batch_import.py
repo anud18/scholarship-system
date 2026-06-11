@@ -21,7 +21,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.path_security import validate_object_name_minio
 from app.core.security import get_current_user
 from app.db.deps import get_db
-from app.models.application import Application, ApplicationStatus
+from app.models.application import Application, ApplicationFile, ApplicationStatus
+from app.models.audit_log import AuditAction, AuditLog
 from app.models.batch_import import BatchImport
 from app.models.enums import BatchImportStatus
 from app.models.scholarship import ScholarshipType
@@ -261,6 +262,24 @@ async def upload_batch_import_data(
         ],
     }
 
+    # 批次匯入可大量建立申請 — 從上傳起留稽核軌跡 (issue #964 / G2)。
+    db.add(
+        AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.create.value,
+            resource_type="batch_import",
+            resource_id=str(batch_import.id),
+            resource_name=file.filename,
+            description=f"batch import upload: {file.filename} ({len(parsed_data)} records)",
+            new_values={
+                "scholarship_type_id": scholarship.id,
+                "academic_year": academic_year,
+                "semester": normalized_semester,
+                "total_records": len(parsed_data),
+                "error_count": len(validation_errors),
+            },
+        )
+    )
     await db.commit()
 
     # Return preview (first 10 rows) and validation summary
@@ -372,6 +391,16 @@ async def update_batch_record(
 
     # Update in database
     batch_import.parsed_data["data"] = parsed_data
+    db.add(
+        AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.update.value,
+            resource_type="batch_import",
+            resource_id=str(batch_id),
+            description=f"batch import: update record #{request.record_index}",
+            new_values={"record_index": request.record_index, "updates": request.updates},
+        )
+    )
     await db.commit()
 
     return {
@@ -607,6 +636,16 @@ async def delete_batch_record(
                 w["row_number"] -= 1
         batch_import.parsed_data["warnings"] = warnings
 
+    db.add(
+        AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.delete.value,
+            resource_type="batch_import",
+            resource_id=str(batch_id),
+            description=f"batch import: delete record #{record_index}",
+            old_values={"record_index": record_index, "deleted_record": deleted_record},
+        )
+    )
     await db.commit()
 
     return {
@@ -926,6 +965,16 @@ async def upload_batch_documents(
             error_count += 1
 
     # Commit all ApplicationFile records
+    db.add(
+        AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.update.value,
+            resource_type="batch_import",
+            resource_id=str(batch_id),
+            description=f"batch import: upload documents ZIP ({matched_count} matched, {unmatched_count} unmatched)",
+            new_values={"matched_count": matched_count, "unmatched_count": unmatched_count, "error_count": error_count},
+        )
+    )
     await db.commit()
 
     response_data = BatchDocumentUploadResponse(
@@ -1080,6 +1129,29 @@ async def confirm_batch_import(
             update(Application)
             .where(Application.batch_import_id == batch_id)
             .values(status=ApplicationStatus.under_review.value)
+        )
+        # 每筆由批次建立的申請各留一筆稽核 (issue #964 / G2) — 沒有這些紀錄，
+        # 數百筆申請的「誰建立、來自哪個檔案」將無從追溯。
+        for created_id in created_ids:
+            db.add(
+                AuditLog.create_log(
+                    user_id=current_user.id,
+                    action=AuditAction.import_.value,
+                    resource_type="application",
+                    resource_id=str(created_id),
+                    description=f"application created via batch import {batch_id} ({batch_import.file_name})",
+                    meta_data={"batch_id": batch_id, "file_name": batch_import.file_name},
+                )
+            )
+        db.add(
+            AuditLog.create_log(
+                user_id=current_user.id,
+                action=AuditAction.import_.value,
+                resource_type="batch_import",
+                resource_id=str(batch_id),
+                description=f"batch import confirmed: {len(created_ids)} application(s) created, {len(creation_errors)} failed",
+                new_values={"created_application_ids": list(created_ids), "failed_count": len(creation_errors)},
+            )
         )
         await db.commit()
 
@@ -1422,9 +1494,53 @@ async def delete_batch_import(
     # Get application count for response
     application_count = len(applications)
 
+    # Collect the applications' uploaded files BEFORE deleting — the DB rows
+    # cascade away with the applications, but the MinIO objects do not
+    # (issue #964 / G2: orphaned objects accumulated silently).
+    application_ids = [a.id for a in applications]
+    orphan_candidates = []
+    if application_ids:
+        files_result = await db.execute(
+            select(ApplicationFile).where(ApplicationFile.application_id.in_(application_ids))
+        )
+        orphan_candidates = [(f.application_id, f.object_name) for f in files_result.scalars().all() if f.object_name]
+
+    # 每筆被刪除的申請各留一筆稽核 (G2) — 批次刪除後仍能解釋申請為何消失。
+    for application in applications:
+        db.add(
+            AuditLog.create_log(
+                user_id=current_user.id,
+                action=AuditAction.delete.value,
+                resource_type="application",
+                resource_id=str(application.id),
+                description=f"application hard-deleted with batch import {batch_id} ({batch_import.file_name})",
+                meta_data={
+                    "batch_id": batch_id,
+                    "app_id": application.app_id,
+                    "scholarship_type_id": application.scholarship_type_id,
+                    "academic_year": application.academic_year,
+                },
+            )
+        )
+
     # Delete related applications
     for application in applications:
         await db.delete(application)
+
+    # Delete the applications' MinIO objects (best-effort, logged on failure).
+    if orphan_candidates:
+        minio_cleanup = MinIOService()
+        for app_db_id, object_name in orphan_candidates:
+            try:
+                minio_cleanup.delete_file(bucket_name=settings.minio_bucket, object_name=object_name)
+            except Exception:
+                logger.error(
+                    "Failed to delete MinIO object %s for application %s during batch %s deletion",
+                    object_name,
+                    app_db_id,
+                    batch_id,
+                    exc_info=True,
+                )
 
     # Delete MinIO file if exists
     if batch_import.file_path:
@@ -1436,6 +1552,22 @@ async def delete_batch_import(
             # Continue with batch deletion even if MinIO deletion fails
 
     # Delete batch import record
+    db.add(
+        AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.delete.value,
+            resource_type="batch_import",
+            resource_id=str(batch_id),
+            resource_name=batch_import.file_name,
+            description=f"batch import deleted with {application_count} application(s)",
+            old_values={
+                "file_name": batch_import.file_name,
+                "scholarship_type_id": batch_import.scholarship_type_id,
+                "academic_year": batch_import.academic_year,
+                "deleted_application_count": application_count,
+            },
+        )
+    )
     await db.delete(batch_import)
     await db.commit()
 

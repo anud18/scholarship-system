@@ -23,6 +23,7 @@ from app.db.deps import get_db
 # Student model removed - student data now fetched from external API
 from app.models.application import Application, ApplicationStatus
 from app.models.enums import Semester
+from app.models.audit_log import AuditAction, AuditLog
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import AdminScholarship, User
 from app.schemas.response import ApiResponse
@@ -1547,6 +1548,17 @@ async def batch_add_whitelist(
         config.add_student_to_whitelist(nycu_id, sub_type)
         added_count += 1
 
+    # 白名單控制申請資格 — 異動必須留稽核軌跡 (issue #972 / G10)。
+    db.add(
+        AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.update.value,
+            resource_type="scholarship_configuration",
+            resource_id=str(id),
+            description=f"whitelist: batch add {added_count} student(s) to config {config.config_code}",
+            new_values={"added_students": [st["nycu_id"] for st in request.students], "added_count": added_count},
+        )
+    )
     # Mark the field as modified for JSON update
     flag_modified(config, "whitelist_student_ids")
     config.updated_by = current_user.id
@@ -1594,6 +1606,21 @@ async def batch_remove_whitelist(
         if removed:
             removed_count += 1
 
+    # 白名單控制申請資格 — 異動必須留稽核軌跡 (issue #972 / G10)。
+    db.add(
+        AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.update.value,
+            resource_type="scholarship_configuration",
+            resource_id=str(id),
+            description=f"whitelist: batch remove {removed_count} student(s) from config {config.config_code}",
+            new_values={
+                "removed_students": request.nycu_ids,
+                "sub_type": request.sub_type,
+                "removed_count": removed_count,
+            },
+        )
+    )
     # Mark the field as modified for JSON update
     flag_modified(config, "whitelist_student_ids")
     config.updated_by = current_user.id
@@ -1665,6 +1692,22 @@ async def import_whitelist_excel(
     if added_count > 0:
         flag_modified(config, "whitelist_student_ids")
         config.updated_by = current_user.id
+        # 白名單控制申請資格 — 異動必須留稽核軌跡 (issue #972 / G10)。
+        db.add(
+            AuditLog.create_log(
+                user_id=current_user.id,
+                action=AuditAction.import_.value,
+                resource_type="scholarship_configuration",
+                resource_id=str(id),
+                description=f"whitelist: import {added_count} student(s) from Excel into config {config.config_code}",
+                new_values={
+                    "imported_students": [st["nycu_id"] for st in success_data],
+                    "added_count": added_count,
+                    "error_count": len(all_errors),
+                    "filename": file.filename,
+                },
+            )
+        )
         await db.commit()
         await invalidate("refdata:")
 

@@ -17,7 +17,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.models.application import Application
-from app.models.audit_log import AuditLog
 from app.models.college_review import CollegeRanking, CollegeRankingItem, ManualDistributionHistory
 from app.models.enums import ApplicationStatus, ReviewStage
 from app.models.review import ApplicationReview, ApplicationReviewItem
@@ -1370,6 +1369,9 @@ class ManualDistributionService:
             raise ValueError(
                 f"Application {application_id} is not revoked/suspended " f"(quota_allocation_status={prior_status})"
             )
+        # Capture the original cancellation reason BEFORE clearing it below —
+        # the endpoint's audit log preserves it as old_values (G18/G9).
+        prior_reason = app.revoke_reason if prior_status == "revoked" else app.suspend_reason
 
         ranking_items_result = await self.db.execute(
             select(CollegeRankingItem).where(CollegeRankingItem.application_id == application_id)
@@ -1395,22 +1397,18 @@ class ManualDistributionService:
             if ri.allocated_sub_type:
                 ri.is_allocated = True
 
-        log = AuditLog.create_log(
-            user_id=admin_user_id,
-            action="application.restore",
-            resource_type="application",
-            resource_id=str(application_id),
-            description=f"restore application {application_id} from {prior_status}",
-            new_values={"from": prior_status, "to": "allocated"},
-        )
-        self.db.add(log)
+        # Audit logging moved to the endpoint (ApplicationAuditService.
+        # log_application_restore) so the row carries the acting User +
+        # request IP/UA and the action lives in the AuditAction enum (G18).
         await self.db.flush()
 
         return {
             "application_id": application_id,
+            "app_id": app.app_id,
             "ranking_item_id": ranking_item_id,
             "quota_allocation_status": app.quota_allocation_status,
             "restored_from": prior_status,
+            "restored_reason": prior_reason,
             "restored_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -1490,23 +1488,16 @@ class ManualDistributionService:
         for roster_id in affected_roster_ids:
             await self._recompute_roster_totals(roster_id)
 
-        # 7. Audit log
-        action = "application.revoke" if mode == "revoke" else "application.suspend"
-        log = AuditLog.create_log(
-            user_id=admin_user_id,
-            action=action,
-            resource_type="application",
-            resource_id=str(application_id),
-            description=f"{mode} application {application_id}",
-            new_values={"reason": reason, "affected_unlocked_rosters": affected_roster_ids},
-        )
-        self.db.add(log)
-
+        # 7. Audit logging moved to the endpoint (ApplicationAuditService.
+        # log_application_revoke / log_application_suspend) so the row carries
+        # the acting User + request IP/UA and the action lives in the
+        # AuditAction enum instead of an ad-hoc string (G18).
         await self.db.flush()
 
         timestamp_key = "revoked_at" if mode == "revoke" else "suspended_at"
         return {
             "application_id": application_id,
+            "app_id": app.app_id,
             "ranking_item_id": ranking_item_id,
             "quota_allocation_status": app.quota_allocation_status,
             timestamp_key: now.isoformat(),

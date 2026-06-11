@@ -7,7 +7,7 @@ Provides endpoints for admin to manually allocate scholarships to students.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +21,7 @@ from app.models.email_management import EmailCategory
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User
 from app.schemas.application import RevokeRequest, SuspendRequest
+from app.services.application_audit_service import ApplicationAuditService
 from app.services.email_service import EmailService
 from app.services.manual_distribution_service import ManualDistributionService
 from app.utils.date_utils import now_taipei_str
@@ -806,6 +807,7 @@ async def revoke_application_allocation(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_admin_user),
+    http_request: Request = None,
 ):
     """撤銷已分發學生：從未鎖定造冊移除 + 標記 application 為 cancelled/revoked。"""
     service = ManualDistributionService(db)
@@ -816,6 +818,14 @@ async def revoke_application_allocation(
             reason=request.reason,
         )
         await db.commit()
+        await ApplicationAuditService(db).log_application_revoke(
+            application_id=application_id,
+            app_id=result.get("app_id", f"APP-{application_id}"),
+            user=current_user,
+            reason=request.reason,
+            affected_unlocked_rosters=result.get("affected_unlocked_rosters"),
+            request=http_request,
+        )
         await _notify_admin_of_cancellation(db, background_tasks, application_id, current_user, "撤銷", request.reason)
         return {"success": True, "message": "已撤銷", "data": result}
     except ValueError as e:
@@ -832,6 +842,7 @@ async def suspend_application_allocation(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_admin_user),
+    http_request: Request = None,
 ):
     """停發已分發學生：從未鎖定造冊移除 + 標記 application 為 cancelled/suspended。"""
     service = ManualDistributionService(db)
@@ -842,6 +853,14 @@ async def suspend_application_allocation(
             reason=request.reason,
         )
         await db.commit()
+        await ApplicationAuditService(db).log_application_suspend(
+            application_id=application_id,
+            app_id=result.get("app_id", f"APP-{application_id}"),
+            user=current_user,
+            reason=request.reason,
+            affected_unlocked_rosters=result.get("affected_unlocked_rosters"),
+            request=http_request,
+        )
         await _notify_admin_of_cancellation(db, background_tasks, application_id, current_user, "停發", request.reason)
         return {"success": True, "message": "已停發", "data": result}
     except ValueError as e:
@@ -856,6 +875,7 @@ async def restore_application_allocation(
     application_id: int,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_admin_user),
+    http_request: Request = None,
 ):
     """恢復已撤銷/停發學生為正常分發（quota_allocation_status -> allocated）。
     不會自動還原造冊項目，需重新生成造冊。"""
@@ -866,6 +886,14 @@ async def restore_application_allocation(
             admin_user_id=current_user.id,
         )
         await db.commit()
+        await ApplicationAuditService(db).log_application_restore(
+            application_id=application_id,
+            app_id=result.get("app_id", f"APP-{application_id}"),
+            user=current_user,
+            prior_status=result.get("restored_from", "unknown"),
+            prior_reason=result.get("restored_reason"),
+            request=http_request,
+        )
         return {"success": True, "message": "已恢復", "data": result}
     except ValueError as e:
         msg = str(e)

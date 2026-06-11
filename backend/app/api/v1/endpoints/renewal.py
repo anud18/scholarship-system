@@ -18,7 +18,7 @@ fields from `ScholarshipConfiguration` for the *current* academic year
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -31,6 +31,8 @@ from app.models.enums import ApplicationStatus
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User
 from app.schemas.renewal import CreateChallengeRequest, CreateRenewalRequest
+from app.models.audit_log import AuditAction
+from app.services.application_audit_service import ApplicationAuditService
 from app.services.application_service import ApplicationService
 from app.services.renewal_audit_service import RenewalAuditService
 from app.services.renewal_distribution_service import RenewalDistributionService
@@ -130,6 +132,7 @@ async def create_renewal_application(
     body: CreateRenewalRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     """Create a renewal application from a prior approved application.
 
@@ -189,6 +192,24 @@ async def create_renewal_application(
     await db.commit()
     await db.refresh(new_app)
 
+    # Audit the creation (issue #973 / G11) — renewal applications previously
+    # left no trace while ordinary creations do.
+    await ApplicationAuditService(db).log_application_operation(
+        application_id=new_app.id,
+        action=AuditAction.create,
+        user=current_user,
+        request=request,
+        description=f"建立續領申請 {new_app.app_id}（自 {prev.app_id}）",
+        new_values={
+            "app_id": new_app.app_id,
+            "is_renewal": True,
+            "previous_application_id": new_app.previous_application_id,
+            "sub_scholarship_type": new_app.sub_scholarship_type,
+            "academic_year": new_app.academic_year,
+        },
+        meta_data={"app_id": new_app.app_id, "renewal": True},
+    )
+
     return {
         "success": True,
         "message": "續領申請已建立",
@@ -210,6 +231,7 @@ async def create_challenge_application(
     body: CreateChallengeRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     """Create a challenge application from an approved renewal.
 
@@ -284,6 +306,22 @@ async def create_challenge_application(
     )
     await db.commit()
     await db.refresh(new_app)
+
+    # Audit the creation (issue #973 / G11).
+    await ApplicationAuditService(db).log_application_operation(
+        application_id=new_app.id,
+        action=AuditAction.create,
+        user=current_user,
+        request=request,
+        description=f"建立挑戰申請 {new_app.app_id}（挑戰 {renewal.app_id}，目標 {body.target_sub_type}）",
+        new_values={
+            "app_id": new_app.app_id,
+            "challenges_application_id": new_app.challenges_application_id,
+            "sub_scholarship_type": new_app.sub_scholarship_type,
+            "academic_year": new_app.academic_year,
+        },
+        meta_data={"app_id": new_app.app_id, "challenge": True},
+    )
 
     return {
         "success": True,
