@@ -5,10 +5,11 @@ import logging
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ScholarshipException
+from app.models.application import Application
 from app.models.payment_roster import PaymentRoster, PaymentRosterItem, RosterStatus
 from app.schemas.student_scholarship_history import (
     AcademicBasicInfo,
@@ -69,14 +70,21 @@ class StudentScholarshipHistoryService:
 
         ``student_number`` is the 學號 (std_stdcode) the admin looks up by, so it
         must match PaymentRosterItem.student_number — NOT student_id_number, which
-        holds the national ID (身分證字號) for the Excel payment column."""
+        holds the national ID (身分證字號) for the Excel payment column.
+
+        Soft-deleted applications are excluded (issue #977 / G15): a roster
+        item whose application was since soft-deleted must not surface in the
+        payment history view. The outerjoin keeps legacy items whose
+        application_id is NULL (imported rows) visible."""
         stmt = (
             select(PaymentRosterItem, PaymentRoster)
             .join(PaymentRoster, PaymentRosterItem.roster_id == PaymentRoster.id)
+            .outerjoin(Application, PaymentRosterItem.application_id == Application.id)
             .where(
                 PaymentRosterItem.student_number == student_number,
                 PaymentRosterItem.is_included.is_(True),
                 PaymentRoster.status.in_([RosterStatus.COMPLETED, RosterStatus.LOCKED]),
+                or_(Application.id.is_(None), Application.deleted_at.is_(None)),
             )
             .order_by(
                 PaymentRoster.academic_year.desc(),

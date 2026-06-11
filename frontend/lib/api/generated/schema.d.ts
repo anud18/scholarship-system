@@ -1245,7 +1245,14 @@ export interface paths {
         };
         /**
          * Get Historical Applications
-         * @description Get historical applications with advanced filtering (admin only)
+         * @description Get historical applications with advanced filtering (admin only).
+         *
+         *     Deleted-records policy (issue #974 / G12): soft-deleted applications are
+         *     INCLUDED here on purpose — the history view is the retention surface, and
+         *     a 獎學金 record must stay reviewable for its statutory retention period.
+         *     Each row carries deleted_at/deletion_reason + is_deleted so the UI badges
+         *     them; the operational list endpoint (GET /applications) keeps excluding
+         *     them via deleted_at IS NULL.
          */
         get: operations["get_historical_applications_api_v1_admin_applications_history_get"];
         put?: never;

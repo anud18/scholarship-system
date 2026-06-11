@@ -974,6 +974,21 @@ export interface HistoricalApplication {
   // Review information
   professor_name?: string;
   reviewer_name?: string;
+
+  // Revocation / suspension context (#975 / G13)
+  revoked_at?: string | null;
+  revoked_by?: number | null;
+  revoke_reason?: string | null;
+  suspended_at?: string | null;
+  suspended_by?: number | null;
+  suspend_reason?: string | null;
+
+  // Soft-deletion context (#974 / G12: deleted applications stay visible in
+  // history, flagged so the UI badges them)
+  deleted_at?: string | null;
+  deleted_by_id?: number | null;
+  deletion_reason?: string | null;
+  is_deleted?: boolean;
 }
 
 export interface HistoricalApplicationFilters {
