@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { logger } from "@/lib/utils/logger";
+import { maskIdNumber } from "@/lib/utils/mask";
 import {
   Dialog,
   DialogContent,
@@ -302,7 +303,7 @@ function StudentPreviewDisplay({
             />
             <FieldDisplay
               label={locale === "zh" ? "身分證字號" : "ID Number"}
-              value={previewData?.basic?.std_pid}
+              value={maskIdNumber(previewData?.basic?.std_pid) || undefined}
               locale={locale}
             />
             <FieldDisplay

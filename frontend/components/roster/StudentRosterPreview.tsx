@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { logger } from "@/lib/utils/logger";
+import { maskIdNumber } from "@/lib/utils/mask";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -208,7 +209,7 @@ export function StudentRosterPreview({
                 {student.student_id}
               </TableCell>
               <TableCell className="font-mono text-sm whitespace-nowrap">
-                {student.student_id_number}
+                {maskIdNumber(student.student_id_number)}
               </TableCell>
               <TableCell className="text-sm whitespace-nowrap">
                 {student.email}
