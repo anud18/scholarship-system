@@ -2243,6 +2243,7 @@ class RosterService:
         item_id: int,
         admin_user_id: int,
         reason: Optional[str],
+        reason_category: Optional[str] = None,
     ) -> dict:
         """Soft-remove a PaymentRosterItem from a LOCKED roster (sets is_included=False; row survives for restore).
         Recompute roster totals, set excel_stale=True, write RosterAuditLog. Roster stays LOCKED."""
@@ -2257,7 +2258,10 @@ class RosterService:
             raise ValueError(f"Item {item_id} not found in roster {roster_id}")
 
         item.is_included = False
-        item.exclusion_reason = f"鎖定後移除：{reason}" if reason else "鎖定後移除"
+        # G26 (#988): keep the structured category in front of the free text
+        # so removals are classifiable (e.g. "鎖定後移除[withdrawal]：休學").
+        category_tag = f"[{reason_category}]" if reason_category else ""
+        item.exclusion_reason = f"鎖定後移除{category_tag}：{reason}" if reason else f"鎖定後移除{category_tag}"
         self.db.flush()
 
         # Recompute totals via the shared sync helper (persists

@@ -5,7 +5,7 @@ Payment roster Pydantic schemas
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Literal, Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -308,10 +308,27 @@ class RosterScheduleResponse(RosterScheduleBase):
         return self.is_enabled and bool(self.cron_expression)
 
 
+# G26 (#988): structured removal-reason vocabulary so 鎖定後移除 is
+# statistically auditable — free text alone cannot be classified. Stored as
+# String(50), configuration-driven style (no DB enum); the free-text reason
+# stays as the supplementary detail.
+LOCKED_ITEM_REMOVAL_CATEGORIES = (
+    "withdrawal",  # 退學/休學
+    "verification_failed",  # 學籍/帳戶驗證失敗
+    "duplicate",  # 重複造冊
+    "revoked",  # 獎學金遭撤銷
+    "admin_decision",  # 行政決定
+    "other",  # 其他（請於 reason 補充）
+)
+
+
 class RemoveLockedItemRequest(BaseModel):
     """Body for DELETE /payment-rosters/{roster_id}/items/{item_id}"""
 
     reason: Optional[str] = Field(None, max_length=500)
+    reason_category: Optional[Literal[LOCKED_ITEM_REMOVAL_CATEGORIES]] = Field(
+        None, description="結構化移除理由分類 (G26/#988)"
+    )
 
 
 class RestoreItemRequest(BaseModel):

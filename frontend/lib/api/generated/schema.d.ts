@@ -9380,6 +9380,11 @@ export interface components {
         RemoveLockedItemRequest: {
             /** Reason */
             reason?: string | null;
+            /**
+             * Reason Category
+             * @description 結構化移除理由分類 (G26/#988)
+             */
+            reason_category?: ("withdrawal" | "verification_failed" | "duplicate" | "revoked" | "admin_decision" | "other") | null;
         };
         /** ReorderItem */
         ReorderItem: {

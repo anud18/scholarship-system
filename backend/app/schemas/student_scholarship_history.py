@@ -53,6 +53,16 @@ class PaymentRecord(BaseModel):
     allocation_year: Optional[int] = None
     locked_at: Optional[datetime] = None
 
+    # G25 (#987): post-payment revocation/suspension context. A student whose
+    # allocation was revoked AFTER the roster locked still shows up here (the
+    # payment happened / was finalized) — the viewer must see that context
+    # instead of an unqualified「已領取」row.
+    quota_allocation_status: Optional[str] = None
+    revoked_at: Optional[datetime] = None
+    revoke_reason: Optional[str] = None
+    suspended_at: Optional[datetime] = None
+    suspend_reason: Optional[str] = None
+
 
 class HistorySummary(BaseModel):
     """Aggregates across all payment_records."""

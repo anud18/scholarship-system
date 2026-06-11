@@ -2178,6 +2178,7 @@ def remove_locked_roster_item(
             item_id=item_id,
             admin_user_id=current_user.id,
             reason=request.reason,
+            reason_category=request.reason_category,
         )
     except (ValueError, RosterLockedError) as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

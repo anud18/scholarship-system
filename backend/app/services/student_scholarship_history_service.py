@@ -77,7 +77,7 @@ class StudentScholarshipHistoryService:
         payment history view. The outerjoin keeps legacy items whose
         application_id is NULL (imported rows) visible."""
         stmt = (
-            select(PaymentRosterItem, PaymentRoster)
+            select(PaymentRosterItem, PaymentRoster, Application)
             .join(PaymentRoster, PaymentRosterItem.roster_id == PaymentRoster.id)
             .outerjoin(Application, PaymentRosterItem.application_id == Application.id)
             .where(
@@ -105,8 +105,15 @@ class StudentScholarshipHistoryService:
                 scholarship_subtype=item.scholarship_subtype,
                 allocation_year=item.allocation_year,
                 locked_at=roster.locked_at,
+                # G25 (#987): post-payment revocation context from the
+                # (outer-joined) application — None for legacy items.
+                quota_allocation_status=app.quota_allocation_status if app else None,
+                revoked_at=app.revoked_at if app else None,
+                revoke_reason=app.revoke_reason if app else None,
+                suspended_at=app.suspended_at if app else None,
+                suspend_reason=app.suspend_reason if app else None,
             )
-            for item, roster in rows
+            for item, roster, app in rows
         ]
         snapshot_name = rows[0][0].student_name if rows else None
         return records, snapshot_name
