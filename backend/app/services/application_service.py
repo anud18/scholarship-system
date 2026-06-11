@@ -1542,10 +1542,66 @@ class ApplicationService:
 
         return response_applications
 
+    # G16 (#978): legal staff transitions for PATCH /applications/{id}/status.
+    # Anything outside this table needs an admin/super_admin override WITH a
+    # written reason (and the endpoint's audit row records old→new+reason).
+    # `draft` and `deleted` are never reachable through this endpoint — drafts
+    # belong to the student flow, deletion to the delete endpoints.
+    _STAFF_STATUS_TRANSITIONS: Dict[str, set] = {
+        ApplicationStatus.submitted.value: {
+            ApplicationStatus.under_review.value,
+            ApplicationStatus.pending_documents.value,
+            ApplicationStatus.returned.value,
+            ApplicationStatus.approved.value,
+            ApplicationStatus.partial_approved.value,
+            ApplicationStatus.rejected.value,
+            ApplicationStatus.cancelled.value,
+            ApplicationStatus.manual_excluded.value,
+        },
+        ApplicationStatus.under_review.value: {
+            ApplicationStatus.pending_documents.value,
+            ApplicationStatus.returned.value,
+            ApplicationStatus.approved.value,
+            ApplicationStatus.partial_approved.value,
+            ApplicationStatus.rejected.value,
+            ApplicationStatus.cancelled.value,
+            ApplicationStatus.manual_excluded.value,
+        },
+        ApplicationStatus.pending_documents.value: {
+            ApplicationStatus.under_review.value,
+            ApplicationStatus.returned.value,
+            ApplicationStatus.approved.value,
+            ApplicationStatus.partial_approved.value,
+            ApplicationStatus.rejected.value,
+            ApplicationStatus.cancelled.value,
+        },
+        # Forward movement out of `returned` happens via the student's own
+        # resubmit; staff may only cancel.
+        ApplicationStatus.returned.value: {ApplicationStatus.cancelled.value},
+        # Reversing a final decision is an override-only operation.
+        ApplicationStatus.approved.value: {ApplicationStatus.cancelled.value},
+        ApplicationStatus.partial_approved.value: {ApplicationStatus.cancelled.value},
+        ApplicationStatus.rejected.value: set(),
+        ApplicationStatus.withdrawn.value: set(),
+        ApplicationStatus.cancelled.value: set(),
+        ApplicationStatus.manual_excluded.value: {ApplicationStatus.under_review.value},
+        ApplicationStatus.cancelled_by_challenge.value: set(),
+        ApplicationStatus.draft.value: set(),
+        ApplicationStatus.deleted.value: set(),
+    }
+
     async def update_application_status(
         self, application_id: int, user: User, status_update: ApplicationStatusUpdate
     ) -> ApplicationResponse:
-        """Update application status (staff only)"""
+        """Update application status (staff only).
+
+        G16 (#978): transitions are validated against
+        ``_STAFF_STATUS_TRANSITIONS``. An illegal transition is allowed only
+        as an explicit admin/super_admin override carrying a written reason —
+        previously ANY staff account could set ANY status (approved→draft,
+        submitted→approved, …), making the review flow bypassable without a
+        trace.
+        """
         if not (
             user.has_role(UserRole.admin)
             or user.has_role(UserRole.college)
@@ -1561,6 +1617,34 @@ class ApplicationService:
         if not application:
             raise NotFoundError("Application", str(application_id))
 
+        # ── G16 transition gate ──────────────────────────────────────────
+        old_status = application.status.value if hasattr(application.status, "value") else str(application.status)
+        new_status = status_update.status
+        if new_status != old_status:
+            allowed = self._STAFF_STATUS_TRANSITIONS.get(old_status, set())
+            if new_status not in allowed:
+                is_admin = user.has_role(UserRole.admin) or user.has_role(UserRole.super_admin)
+                override_reason = getattr(status_update, "comments", None) or getattr(
+                    status_update, "rejection_reason", None
+                )
+                if new_status in (ApplicationStatus.draft.value, ApplicationStatus.deleted.value):
+                    raise ValidationError(
+                        f"狀態 '{new_status}' 不可經由狀態更新設定（draft 屬學生流程、deleted 屬刪除流程）"
+                    )
+                if not (is_admin and override_reason):
+                    raise ValidationError(
+                        f"不允許的狀態轉移：{old_status} → {new_status}。"
+                        f"僅 admin 可強制覆寫，且必須附上理由（comments）。"
+                    )
+                logger.warning(
+                    "Admin override status transition %s -> %s on application %s by user %s: %s",
+                    old_status,
+                    new_status,
+                    application.app_id,
+                    user.id,
+                    override_reason,
+                )
+
         # Update status
         application.status = status_update.status
         application.reviewer_id = user.id
@@ -1571,7 +1655,12 @@ class ApplicationService:
             application.approved_at = datetime.now(timezone.utc)
             application.status_name = ScholarshipI18n.get_application_status_text(ApplicationStatus.approved.value)
         elif status_update.status == ApplicationStatus.rejected.value:
+            # G16: a rejected application must not keep its approved_at —
+            # otherwise「某期間核准清單」queries include later-rejected rows.
+            application.approved_at = None
             application.status_name = ScholarshipI18n.get_application_status_text(ApplicationStatus.rejected.value)
+        elif status_update.status in (ApplicationStatus.returned.value, ApplicationStatus.cancelled.value):
+            application.approved_at = None
 
         # Persist admin comments / rejection reason as an ApplicationReview row
         if getattr(status_update, "comments", None) or getattr(status_update, "rejection_reason", None):

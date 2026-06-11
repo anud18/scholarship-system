@@ -569,6 +569,19 @@ class BankVerificationService:
             if "fields" not in updated_form_data:
                 updated_form_data["fields"] = {}
 
+            # G19 (#981): capture the student's pre-correction values BEFORE
+            # any overwrite. submitted_form_data is the submission snapshot —
+            # silently rewriting it destroys「學生當時實際填了什麼」.
+            def _field_value(key: str):
+                field = (application.submitted_form_data or {}).get("fields", {}).get(key)
+                return field.get("value") if isinstance(field, dict) else None
+
+            prior_bank_fields = {
+                key: _field_value(key)
+                for key in ("postal_account", "bank_account", "account_number", "account_holder", "account_name")
+                if _field_value(key) is not None
+            }
+
             # Track what was updated
             account_number_updated = False
             account_holder_updated = False
@@ -659,6 +672,17 @@ class BankVerificationService:
             from sqlalchemy.orm.attributes import flag_modified
 
             application.meta_data = application.meta_data or {}
+            # G19: the FIRST correction permanently preserves the student's
+            # original bank fields; later corrections keep their own
+            # prior_values in verification_details below.
+            if (account_number_corrected or account_holder_corrected) and "original_bank_fields" not in (
+                application.meta_data or {}
+            ):
+                application.meta_data["original_bank_fields"] = {
+                    "fields": prior_bank_fields,
+                    "preserved_at": datetime.now(timezone.utc).isoformat(),
+                    "preserved_reason": "first manual bank correction (G19/#981)",
+                }
             application.meta_data["bank_verification"] = {
                 "overall_status": overall_status,
                 "account_number_status": account_number_status,
@@ -686,11 +710,21 @@ class BankVerificationService:
                     "account_number": {
                         "status": account_number_status,
                         "corrected_value": account_number_corrected,
+                        "prior_values": {
+                            k: prior_bank_fields.get(k)
+                            for k in ("postal_account", "bank_account", "account_number")
+                            if k in prior_bank_fields
+                        },
                         "approved": account_number_approved,
                     },
                     "account_holder": {
                         "status": account_holder_status,
                         "corrected_value": account_holder_corrected,
+                        "prior_values": {
+                            k: prior_bank_fields.get(k)
+                            for k in ("account_holder", "account_name")
+                            if k in prior_bank_fields
+                        },
                         "approved": account_holder_approved,
                     },
                     "notes": review_notes,
