@@ -33,6 +33,7 @@ import { createApplicationFieldsApi } from './modules/application-fields';
 import { createUserProfilesApi } from './modules/user-profiles';
 import { createEmailManagementApi } from './modules/email-management';
 import { createAdminApi } from './modules/admin';
+import { createAuditLogsApi } from './modules/audit-logs';
 import { createDocumentRequestsApi } from './modules/document-requests';
 import { createPaymentRostersApi } from './modules/payment-rosters';
 import { createRosterSchedulesApi } from './modules/roster-schedules';
@@ -159,6 +160,7 @@ class ExtendedApiClient extends ApiClient {
   private _userProfiles?: ReturnType<typeof createUserProfilesApi>;
   private _emailManagement?: ReturnType<typeof createEmailManagementApi>;
   private _admin?: ReturnType<typeof createAdminApi>;
+  private _auditLogs?: ReturnType<typeof createAuditLogsApi>;
   private _documentRequests?: ReturnType<typeof createDocumentRequestsApi>;
   private _paymentRosters?: ReturnType<typeof createPaymentRostersApi>;
   private _rosterSchedules?: ReturnType<typeof createRosterSchedulesApi>;
@@ -256,6 +258,11 @@ class ExtendedApiClient extends ApiClient {
   get emailManagement(): ReturnType<typeof createEmailManagementApi> {
     if (!this._emailManagement) this._emailManagement = createEmailManagementApi();
     return this._emailManagement;
+  }
+
+  get auditLogs(): ReturnType<typeof createAuditLogsApi> {
+    if (!this._auditLogs) this._auditLogs = createAuditLogsApi();
+    return this._auditLogs;
   }
 
   get admin(): ReturnType<typeof createAdminApi> {

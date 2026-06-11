@@ -2427,6 +2427,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/audit-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Audit Logs
+         * @description Paginated, filterable system-wide audit-log listing (admin only).
+         */
+        get: operations["list_audit_logs_api_v1_admin_audit_logs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/scholarships": {
         parameters: {
             query?: never;
@@ -14935,6 +14955,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    list_audit_logs_api_v1_admin_audit_logs_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+                /** @description e.g. application / college_ranking / batch_import */
+                resource_type?: string | null;
+                /** @description Exact resource id (string match) */
+                resource_id?: string | null;
+                /** @description AuditAction value, e.g. revoke / delete / import */
+                action?: string | null;
+                /** @description Acting user id */
+                user_id?: number | null;
+                date_from?: string | null;
+                date_to?: string | null;
+                /** @description Substring match on description / resource_name */
+                search?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

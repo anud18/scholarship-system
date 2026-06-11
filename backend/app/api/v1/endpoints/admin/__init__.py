@@ -25,6 +25,7 @@ from fastapi import APIRouter
 # Import all modularized routers (✅ All Completed)
 from .announcements import router as announcements_router
 from .applications import router as applications_router
+from .audit_logs import router as audit_logs_router
 from .bank_verification import router as bank_verification_router
 from .cache import router as cache_router
 from .configurations import router as configurations_router
@@ -60,5 +61,6 @@ router.include_router(
     tags=["Admin - Student History"],
 )
 router.include_router(cache_router, tags=["Admin - Cache"])
+router.include_router(audit_logs_router, tags=["Admin - Audit Logs"])
 
 __all__ = ["router"]
