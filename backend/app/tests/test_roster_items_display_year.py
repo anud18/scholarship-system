@@ -53,3 +53,35 @@ def test_keeps_borrowed_snapshot_over_roster_year():
     # allocation_year=114; the fallback must NOT overwrite it with 115.
     out = _roster_item_dict_with_display_year(_item(allocation_year=114), SimpleNamespace(academic_year=115))
     assert out["allocation_year"] == 114
+
+
+# ─── is_eligible derivation (符合資格 column) ───────────────────────
+
+
+_ROSTER = SimpleNamespace(academic_year=114)
+
+
+def test_is_eligible_prefers_snapshot_verdict():
+    # The generation-time snapshot verdict wins, even when failed_rules is
+    # empty (e.g. a verification-error snapshot stores is_eligible=False).
+    item = _item(rule_validation_result={"is_eligible": False, "failed_rules": [], "details": {}})
+    assert _roster_item_dict_with_display_year(item, _ROSTER)["is_eligible"] is False
+
+
+def test_is_eligible_snapshot_true_passes_through():
+    item = _item(
+        rule_validation_result={"is_eligible": True, "failed_rules": [], "details": {}},
+        failed_rules=[],
+        warning_rules=["GPA 偏低"],
+    )
+    out = _roster_item_dict_with_display_year(item, _ROSTER)
+    assert out["is_eligible"] is True
+    assert out["warning_rules"] == ["GPA 偏低"]
+
+
+def test_is_eligible_legacy_falls_back_to_failed_rules():
+    # Legacy items (no rule_validation_result snapshot): eligible iff no
+    # failed_rules were recorded.
+    assert _roster_item_dict_with_display_year(_item(), _ROSTER)["is_eligible"] is True
+    item = _item(failed_rules=["不符合獎學金規則: GPA < 3.0"])
+    assert _roster_item_dict_with_display_year(item, _ROSTER)["is_eligible"] is False

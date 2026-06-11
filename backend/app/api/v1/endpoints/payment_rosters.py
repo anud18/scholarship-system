@@ -74,6 +74,10 @@ def _roster_item_dict_with_display_year(item: PaymentRosterItem, roster: Payment
     data = RosterItemResponse.model_validate(item).model_dump()
     if data.get("allocation_year") is None:
         data["allocation_year"] = roster.academic_year
+    # 符合資格 flag for the 查看名單 table — prefer the generation-time snapshot
+    # verdict; legacy items without a snapshot fall back to "no failed rules".
+    rule_result = data.get("rule_validation_result") or {}
+    data["is_eligible"] = bool(rule_result.get("is_eligible", not data.get("failed_rules")))
     return data
 
 

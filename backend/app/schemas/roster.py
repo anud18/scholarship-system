@@ -55,9 +55,16 @@ class RosterItemResponse(BaseModel):
     allocation_year: Optional[int] = None
     bank_account: Optional[str] = None
     verification_status: StudentVerificationStatus
+    verification_message: Optional[str] = None
     verification_snapshot: Optional[Dict[str, Any]] = None
     is_included: bool
     exclusion_reason: Optional[str] = None
+    # 資格驗證結果（造冊產生時快照，儲存於 DB）
+    rule_validation_result: Optional[Dict[str, Any]] = None
+    failed_rules: Optional[List[str]] = None
+    warning_rules: Optional[List[str]] = None
+    # 是否符合資格 — derived from rule_validation_result by the serializer helper
+    is_eligible: Optional[bool] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
     # 學生學院/系所資訊（從 application.student_data 取得，非 ORM 欄位）
