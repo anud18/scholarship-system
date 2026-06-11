@@ -74,7 +74,6 @@ async def dist_fixture(db):
         academic_year=114,
         semester=None,
         sub_type_code="nstc",
-        college_code="C",
         created_by=admin.id,
     )
     db.add(ranking)
