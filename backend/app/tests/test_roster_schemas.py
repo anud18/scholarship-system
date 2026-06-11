@@ -233,9 +233,10 @@ def test_item_response_display_fields_optional():
 
 
 def test_item_response_eligibility_fields_optional():
-    # Pin: the 符合資格 column fields (rule_validation_result, failed_rules,
-    # warning_rules, verification_message, is_eligible) are Optional so
-    # legacy items without a validation snapshot still serialize.
+    # Pin: the 符合資格 column fields (rule_validation_result,
+    # verification_message, is_eligible) are Optional so legacy items
+    # without a validation snapshot still serialize (is_eligible=None
+    # renders as "-" in the UI).
     r = RosterItemResponse(
         id=1,
         roster_id=1,
@@ -248,8 +249,6 @@ def test_item_response_eligibility_fields_optional():
         created_at=datetime(2025, 10, 22, tzinfo=timezone.utc),
     )
     assert r.rule_validation_result is None
-    assert r.failed_rules is None
-    assert r.warning_rules is None
     assert r.verification_message is None
     assert r.is_eligible is None
 

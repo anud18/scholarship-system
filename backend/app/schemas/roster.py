@@ -59,11 +59,9 @@ class RosterItemResponse(BaseModel):
     verification_snapshot: Optional[Dict[str, Any]] = None
     is_included: bool
     exclusion_reason: Optional[str] = None
-    # 資格驗證結果（造冊產生時快照，儲存於 DB）
+    # 資格驗證快照（造冊產生當下；failed_rules/warning_rules/details 都在快照內）
     rule_validation_result: Optional[Dict[str, Any]] = None
-    failed_rules: Optional[List[str]] = None
-    warning_rules: Optional[List[str]] = None
-    # 是否符合資格 — derived from rule_validation_result by the serializer helper
+    # PaymentRosterItem.is_eligible model property; None = 無快照（較舊造冊）
     is_eligible: Optional[bool] = None
     created_at: datetime
     updated_at: Optional[datetime] = None

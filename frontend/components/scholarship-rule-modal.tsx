@@ -18,6 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Save, X } from "lucide-react";
 import { ScholarshipRule, SubTypeOption, api } from "@/lib/api";
+import { RULE_OPERATORS } from "@/lib/constants/rule-operators";
 
 interface ScholarshipRuleModalProps {
   isOpen: boolean;
@@ -33,19 +34,6 @@ interface ScholarshipRuleModalProps {
 const RULE_TYPES = [
   { value: "student", label: "學生資料" },
   { value: "student_term", label: "學生學期資料" },
-];
-
-const OPERATORS = [
-  { value: "==", label: "等於 (==)" },
-  { value: "!=", label: "不等於 (!=)" },
-  { value: ">", label: "大於 (>)" },
-  { value: "<", label: "小於 (<)" },
-  { value: ">=", label: "大於等於 (>=)" },
-  { value: "<=", label: "小於等於 (<=)" },
-  { value: "in", label: "包含於 (in)" },
-  { value: "not_in", label: "不包含於 (not_in)" },
-  { value: "contains", label: "包含 (contains)" },
-  { value: "not_contains", label: "不包含 (not_contains)" },
 ];
 
 const STUDENT_FIELDS = [
@@ -447,7 +435,7 @@ export function ScholarshipRuleModal({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {OPERATORS.map(op => (
+                  {RULE_OPERATORS.map(op => (
                     <SelectItem key={op.value} value={op.value}>
                       {op.label}
                     </SelectItem>

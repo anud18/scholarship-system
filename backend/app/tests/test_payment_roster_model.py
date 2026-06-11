@@ -11,11 +11,12 @@ The lock-state transitions are immutability invariants: a locked
 roster MUST NOT be re-locked (would overwrite the `locked_by`
 attribution → audit-trail forgery).
 
-7 helpers / properties covered (15 cases):
+8 helpers / properties covered:
 - `PaymentRoster.is_locked / can_be_modified / is_completed`
 - `PaymentRoster.lock()`
 - `PaymentRoster.generate_excel_filename()`
 - `PaymentRosterItem.is_qualified`
+- `PaymentRosterItem.is_eligible`
 - `PaymentRosterItem.generate_excel_remarks()`
 """
 
@@ -151,6 +152,31 @@ def test_is_qualified_false_when_no_bank_account():
     """Missing bank account blocks payment (can't wire money to nowhere)."""
     assert not _item(bank_account=None).is_qualified
     assert not _item(bank_account="").is_qualified
+
+
+# ─── PaymentRosterItem.is_eligible ─────────────────────────────────
+
+
+def test_is_eligible_none_without_snapshot():
+    """Items predating rule-validation snapshots have no verdict; the
+    UI renders '-' rather than a reconstructed (possibly stale) one."""
+    assert _item(rule_validation_result=None).is_eligible is None
+    assert _item(rule_validation_result={}).is_eligible is None
+
+
+def test_is_eligible_reflects_snapshot_verdict():
+    """The generation-time verdict wins — including a False verdict with
+    empty failed_rules (e.g. a verification-error snapshot)."""
+    assert _item(rule_validation_result={"is_eligible": True, "failed_rules": []}).is_eligible is True
+    assert _item(rule_validation_result={"is_eligible": False, "failed_rules": []}).is_eligible is False
+
+
+def test_is_eligible_distinct_from_is_qualified():
+    """規則資格 (is_eligible) vs 撥款合格 (is_qualified): a student can
+    pass the scholarship rules yet be unpayable (no bank account)."""
+    item = _item(bank_account=None, rule_validation_result={"is_eligible": True})
+    assert item.is_eligible is True
+    assert not item.is_qualified
 
 
 # ─── PaymentRosterItem.generate_excel_remarks ──────────────────────

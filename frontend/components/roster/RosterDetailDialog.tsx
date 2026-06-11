@@ -38,7 +38,7 @@ import { RevokedSuspendedSection } from "@/components/roster/RevokedSuspendedSec
 import {
   EligibilityBadge,
   EligibilityDetailDialog,
-  type RuleValidationResult,
+  type EligibilityDetailItem,
 } from "@/components/roster/EligibilityDetailDialog";
 
 interface Period {
@@ -76,7 +76,7 @@ interface RosterDetailDialogProps {
   onRosterChanged?: () => void;
 }
 
-interface RosterItem {
+interface RosterItem extends EligibilityDetailItem {
   id: number;
   student_name: string;
   student_id: string;
@@ -93,12 +93,6 @@ interface RosterItem {
   exclusion_reason?: string | null;
   application_identity?: string;
   allocated_sub_type?: string;
-  // 資格驗證快照（造冊產生當下）
-  is_eligible?: boolean;
-  failed_rules?: string[];
-  warning_rules?: string[];
-  verification_message?: string | null;
-  rule_validation_result?: RuleValidationResult | null;
 }
 
 type RosterAuditLogEntry = {
