@@ -36,6 +36,7 @@ from app.models.user import User
 from app.schemas.payment_roster import DistributionDiffEntry, RevokedSuspendedEntry
 from app.services.audit_service import audit_service
 from app.services.student_verification_service import StudentVerificationService
+from app.utils.pii_masking import mask_id_number
 
 logger = logging.getLogger(__name__)
 
@@ -1837,7 +1838,10 @@ class RosterService:
             entry = RevokedSuspendedEntry(
                 application_id=app.id,
                 student_name=item.student_name,
-                student_id_number=item.student_id_number,
+                # 身分證字號 masked for the needs-attention panel (display only).
+                # The roster Excel export reads item.student_id_number directly
+                # and keeps the full national ID for the payment process.
+                student_id_number=mask_id_number(item.student_id_number),
                 event_at=(app.revoked_at if app.quota_allocation_status == "revoked" else app.suspended_at),
                 reason=(app.revoke_reason if app.quota_allocation_status == "revoked" else app.suspend_reason),
                 item_id=item.id,

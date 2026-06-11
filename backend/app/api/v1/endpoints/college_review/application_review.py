@@ -24,6 +24,7 @@ from app.schemas.college_review import StudentTermData
 from app.schemas.response import ApiResponse
 from app.services.college_review_service import CollegeReviewService, ReviewPermissionError
 from app.services.student_service import StudentService
+from app.utils.pii_masking import mask_id_number
 
 from ._helpers import _check_academic_year_permission, _check_scholarship_permission
 
@@ -205,11 +206,17 @@ async def get_student_preview(
                         logger.debug(f"Could not fetch term data for {student_id} {year}-{term}: {str(term_err)}")
                         continue
 
+        # Mask 身分證字號 at the response boundary — the preview is display
+        # only, so the full national ID never leaves the server.
+        basic = dict(student_data)
+        if "std_pid" in basic:
+            basic["std_pid"] = mask_id_number(basic.get("std_pid"))
+
         return ApiResponse(
             success=True,
             message="Student preview retrieved successfully",
             data={
-                "basic": student_data,
+                "basic": basic,
                 "recent_terms": [term.model_dump() for term in recent_terms],
             },
         )

@@ -107,7 +107,7 @@ def locked_roster_two_items(db_sync, admin_db_user_sync):
             PaymentRosterItem(
                 roster_id=r.id,
                 application_id=a1.id,
-                student_id_number="B1",
+                student_id_number="A123456789",
                 student_name="W",
                 scholarship_name="NSTC",
                 scholarship_amount=40000,
@@ -116,7 +116,7 @@ def locked_roster_two_items(db_sync, admin_db_user_sync):
             PaymentRosterItem(
                 roster_id=r.id,
                 application_id=a2.id,
-                student_id_number="B2",
+                student_id_number="B987654321",
                 student_name="L",
                 scholarship_name="NSTC",
                 scholarship_amount=40000,
@@ -134,8 +134,10 @@ def test_get_revoked_suspended_splits_by_status(db_sync, locked_roster_two_items
     out = svc.get_revoked_suspended_for_roster(locked_roster_two_items.id)
     assert len(out["revoked"]) == 1
     assert len(out["suspended"]) == 1
-    assert out["revoked"][0].student_id_number == "B1"
-    assert out["suspended"][0].student_id_number == "B2"
+    # 身分證字號 is masked at the response boundary (keep first char + last 3),
+    # so the needs-attention panel never receives the full national ID.
+    assert out["revoked"][0].student_id_number == "A******789"
+    assert out["suspended"][0].student_id_number == "B******321"
 
 
 def test_remove_item_from_locked_roster_deletes_item_and_marks_stale(
@@ -170,7 +172,7 @@ def test_remove_suspended_item_from_locked_roster_deletes_item_and_marks_stale(
     roster. remove_item_from_locked_roster is status-agnostic (deletes by
     item_id), so the suspend remove-path the new UI exposes behaves identically
     to the revoked one — recompute totals, set excel_stale, stay LOCKED."""
-    suspended_item = next(i for i in locked_roster_two_items.items if i.student_id_number == "B2")
+    suspended_item = next(i for i in locked_roster_two_items.items if i.student_id_number == "B987654321")
     item_id = suspended_item.id
     svc = RosterService(db_sync)
     svc.remove_item_from_locked_roster(
