@@ -1662,8 +1662,15 @@ class ApplicationService:
         elif status_update.status in (ApplicationStatus.returned.value, ApplicationStatus.cancelled.value):
             application.approved_at = None
 
-        # Persist admin comments / rejection reason as an ApplicationReview row
-        if getattr(status_update, "comments", None) or getattr(status_update, "rejection_reason", None):
+        # Persist the decision as an ApplicationReview row. G32 (#994): also
+        # when NO comments were given — silent approvals/rejections previously
+        # left no review row at all, so the deciding actor was untraceable
+        # from the review data (only reviewer_id, overwritten by the next
+        # status touch).
+        if status_update.status in (
+            ApplicationStatus.approved.value,
+            ApplicationStatus.rejected.value,
+        ) or (getattr(status_update, "comments", None) or getattr(status_update, "rejection_reason", None)):
             combined_comments = getattr(status_update, "comments", None) or getattr(
                 status_update, "rejection_reason", None
             )
