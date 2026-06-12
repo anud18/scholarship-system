@@ -59,8 +59,11 @@ services:
       RUSTFS_VOLUMES: /data
     volumes:
       # RustFS cannot read MinIO's on-disk erasure format — fresh volume +
-      # reseed (./scripts/reset_database.sh). minio_dev_data is kept declared
-      # below as an instant-rollback escape hatch; remove after bake-in.
+      # reseed (./scripts/reset_database.sh re-creates DB content incl. the
+      # regulations PDF; it does NOT wipe this volume — to fully reset storage
+      # use `docker volume rm scholarship-system_rustfs_dev_data` while down).
+      # minio_dev_data is kept declared below as an instant-rollback escape
+      # hatch; remove after bake-in.
       - rustfs_dev_data:/data
     networks:
       - scholarship_dev_network
@@ -218,6 +221,8 @@ volumes:
     driver: local
   # rollback escape hatch: the pre-RustFS MinIO data, left untouched. To roll
   # back, restore the old minio/minio image block and point it at this volume.
+  # WARNING: `docker compose down -v` DELETES this volume along with the rest —
+  # if you need the rollback path, avoid `-v` until the swap has baked in.
   # Remove after the RustFS swap has baked in.
   minio_dev_data:
     driver: local

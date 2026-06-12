@@ -38,7 +38,7 @@ Configure these secrets in: **Settings → Secrets and variables → Actions**
 | `MINIO_PORT` | MinIO API port | `9000` |
 | `MINIO_ACCESS_KEY` | MinIO access key | `your-minio-access-key` |
 | `MINIO_SECRET_KEY` | MinIO secret key | `your-minio-secret-key` |
-| `MINIO_BUCKET_NAME` | Storage bucket name | `scholarship-documents-prod` |
+| `MINIO_BUCKET` | Storage bucket name | `scholarship-documents-prod` |
 
 ---
 

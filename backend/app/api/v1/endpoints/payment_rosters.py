@@ -1688,7 +1688,11 @@ async def download_roster_excel(
                 # 直接返回二進制檔案內容
                 from fastapi.responses import Response
 
-                filename = metadata.get("original-filename", f"{roster.roster_code}.xlsx")
+                # Custom metadata comes back PREFIXED (x-amz-meta-*) — the bare
+                # key was always None, so the timestamped original filename was
+                # never used (same dead-key class as the minio_service
+                # file-hash fix).
+                filename = metadata.get("x-amz-meta-original-filename", f"{roster.roster_code}.xlsx")
                 content_type = metadata.get(
                     "Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )

@@ -1430,7 +1430,12 @@ async def delete_batch_import(
     if batch_import.file_path:
         try:
             minio_service = MinIOService()
-            minio_service.delete_file(bucket_name=settings.minio_bucket, object_name=batch_import.file_path)
+            # delete_file takes only object_name (targets the default bucket). The old
+            # bucket_name= kwarg raised TypeError on EVERY call — swallowed by the
+            # except below — so batch deletes silently orphaned the uploaded PII
+            # file in storage while reporting success (surfaced by the RustFS
+            # migration audit; identical on MinIO).
+            minio_service.delete_file(object_name=batch_import.file_path)
         except Exception:
             logger.warning("Failed to delete batch import file from MinIO", exc_info=True)
             # Continue with batch deletion even if MinIO deletion fails

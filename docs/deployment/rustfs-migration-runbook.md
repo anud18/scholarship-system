@@ -82,6 +82,20 @@ Also note: the minio SDK rejects **non-ASCII metadata client-side**
       buckets are `scholarship-files`(or the env's `MINIO_BUCKET` value) and
       `roster-files`. Any extra bucket (manual uploads, console experiments)
       must be explicitly mirrored or explicitly declared abandoned.
+- [ ] **TLS gate (prod)**: prod backend connects with `MINIO_SECURE=true`
+      (docker-compose.prod.yml default) and prod-db mounts
+      `minio_config:/root/.minio`, whose `certs/` dir is how MinIO serves TLS.
+      ALL validation so far ran secure=false. Before prod cutover: inspect the
+      volume for `certs/`, determine where RustFS gets its TLS cert
+      (`RUSTFS_TLS_PATH`), and rehearse a backend connection with
+      `minio_secure=True` against RustFS+cert (the SDK validates against
+      certifi — private CAs need the CA bundled). Do NOT drop the old
+      `minio_config` mount until the cert story is replaced.
+- [ ] **Version-upgrade gate**: the image is a pinned PRERELEASE; on-disk
+      format stability across RustFS versions is NOT guaranteed. Before
+      adopting ANY new tag (incl. beta→beta): clone the data volume, boot the
+      new image against the clone, run `storage_compat_check` + a checksum
+      sweep. Never in-place upgrade the only copy.
 - [ ] **Key audit**: scan for problematic object keys before mirroring —
       `mc ls --recursive live/<bucket> | grep -P '[^\x20-\x7e]'` (non-ASCII)
       — rehearsal proved spaces/`+` survive, but eyeball anything exotic.
@@ -101,15 +115,32 @@ against RustFS; the staging-e2e workflow already uses `mc mirror` this way).
 docker run --rm --network <net> --entrypoint sh minio/mc:latest -c '
   mc alias set old http://minio:9000        "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" &&
   mc alias set new http://rustfs:9000       "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" &&
-  mc mb --ignore-existing new/scholarship-files new/roster-files &&
-  mc mirror --preserve old/scholarship-files new/scholarship-files &&
+  mc mb --ignore-existing "new/${MINIO_BUCKET}" new/roster-files &&
+  mc mirror --preserve "old/${MINIO_BUCKET}" "new/${MINIO_BUCKET}" &&
   mc mirror --preserve old/roster-files      new/roster-files &&
-  mc diff old/scholarship-files new/scholarship-files &&
+  mc diff "old/${MINIO_BUCKET}" "new/${MINIO_BUCKET}" &&
   mc diff old/roster-files      new/roster-files'
+# MINIO_BUCKET differs per env: staging/staging-e2e = scholarship-documents (or
+# the STAGING_MINIO_BUCKET secret), prod = "scholarship-files" (the compose
+# sets only the DEAD MINIO_BUCKET_NAME env, so the config default applies —
+# confirm against `mc ls old` before mirroring).
 
-# 3. Validate: object counts match (mc du old/... vs new/...), spot-check
-#    SHA256 of a sample of objects referenced by application_files /
-#    payment_rosters rows, and confirm anonymous GET on a roster object → 403.
+# 3. Validate: object counts match (mc du old/... vs new/...), confirm
+#    anonymous GET on a roster object → 403, and stat-check EVERY DB location
+#    that references storage objects (the complete inventory — missing one
+#    means orphaned references that 404 at download time):
+#      application_files.object_name
+#      applications.application_document_url
+#      applications.submitted_form_data -> documents[].object_name (JSON)
+#      user_profiles.bank_document_object_name (+ derived _photo_url)
+#      student_bank_accounts.passbook_cover_object_name
+#      payment_rosters.minio_object_name           (ROSTER bucket)
+#      batch_imports.file_path
+#      supplementary_docs.object_name
+#      application_documents.example_file_url
+#      scholarship_types.terms_document_url
+#      system_settings.value for keys regulations_url / sample_document_url
+#    payment_rosters.excel_file_hash (SHA256) can byte-verify roster objects.
 ```
 
 ## Compose diffs per environment
@@ -125,6 +156,20 @@ reference diff):
 
 GitHub secrets (`STAGING_MINIO_*`, `MINIO_*`): **no changes** — names and
 values stay; they configure the backend client, not the server.
+
+## ⚠️ CRITICAL merge-ordering hazard (staging)
+
+`deploy-monitoring-stack.yml` auto-triggers on any push to main touching
+`monitoring/**`, scp's the REPO's `docker-compose.staging-db.yml` to the VM,
+`docker rm -f scholarship_minio_staging`, and `up -d minio`. **If the RustFS
+staging-db compose block merges to main BEFORE the data-migration maintenance
+window, the next monitoring push destroys the live staging MinIO and boots an
+EMPTY RustFS — every staging file download 404s with zero data migrated.**
+Sequencing rule: the staging-db compose swap must merge in the SAME change
+window as the executed data migration (or the monitoring workflow's
+storage-recreate step must be temporarily disabled first). The same workflow
+also hardcodes the container name `scholarship_minio_staging` — keep that
+container name (or update the workflow in the same PR).
 
 ## Cutover order (per environment)
 
@@ -170,3 +215,6 @@ alerting exists.
 | Versioned-bucket history does not migrate (`mc mirror` copies latest only) | versioning audit precondition; frozen MinIO volume = retention archive for the compliance window |
 | Prod volume snapshots/backups still target the OLD MinIO dir | update snapshot/backup config to the new RustFS data dir (`/opt/scholarship/rustfs/...`) at cutover; `scripts/backup.sh` only covers postgres — object-storage backup is volume-level |
 | staging-e2e MinIO replica masking RustFS semantics | swap the replica image in the same change as staging-db |
+| **RustFS beta.8 leaks prior object data on overwrite** (live-proven: each overwrite of a >inline-size key leaves the previous dataDir on disk; DELETE leaves orphans too; no background reclaim) | watch `du`-vs-`mc du` divergence during bake-in; avoid fixed-key overwrites (seed_regulations re-seeds leak ~240KB each); track upstream rustfs/rustfs for a fix before prod |
+| Volume snapshot restores to an unreadable store | restore drill in the checklist: tar full `/data` INCLUDING `.rustfs.sys` (format.json/IAM/bucket metadata), untar to fresh volume, boot RustFS, pass compat check + checksum sweep |
+| Pre-existing batch-import delete bug orphaned PII files in storage (fixed in this PR) | before mirroring, sweep `batch-imports/` prefix for objects with no matching batch_imports.file_path row; decide migrate-or-purge |

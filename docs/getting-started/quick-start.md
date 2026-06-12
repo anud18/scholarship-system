@@ -28,7 +28,7 @@ docker compose -f docker-compose.dev.yml logs -f [service_name]
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:8000
 - **API Documentation**: http://localhost:8000/docs
-- **RustFS Console**: http://localhost:9001 (minioadmin/minioadmin123)
+- **RustFS Console**: http://localhost:9001/rustfs/console/ (minioadmin/minioadmin123 — the bare :9001 root returns 403)
 
 ## Stop Services
 
