@@ -1,6 +1,24 @@
 # Production Workflows Examples
 
-這個目錄包含用於 **production repository** 的 workflow 範例。這些 workflows 是專門為 production 環境設計的，不會從 development repository 同步過去。
+這個目錄包含用於 **production repository** 的 workflows。
+
+## 🚚 自動安裝（2026-06-13 起）
+
+**不需要再手動複製。** `mirror-to-production.yml` 是進入私有 prod repo 的唯一通道，
+因此它會在每次 mirror 時自動把本目錄的 workflows 安裝到 prod repo 的
+`.github/workflows/`：
+
+- prod repo **還沒有**的檔案 → 自動安裝（首次 mirror 即完成 CI/CD bootstrap）
+- prod repo **已有**的檔案 → 一律不覆寫（prod 端客製優先）；若範本與 prod 版本
+  不同，mirror log 會以 notice 提示，由人工決定是否移植
+- `README.md` / `SECRETS-SETUP-GUIDE.md` / `IT-BACKUP-TRANSFER-GUIDE.md`
+  會放到 prod repo 的 `.github/production-setup/`（mirror 會剝除其餘 *.md）
+
+> ⚠️ 前提：`GH_PAT` secret 必須具備 **`workflow` scope**，否則推送
+> `.github/workflows/**` 會被 GitHub 拒絕（"refusing to allow a Personal
+> Access Token to create or update workflow"）。
+
+以下原手動安裝說明保留作參考（適用於需要在 prod repo 直接修改的情境）。
 
 ## ⚠️ 重要：關於 Here-Document 錯誤
 
