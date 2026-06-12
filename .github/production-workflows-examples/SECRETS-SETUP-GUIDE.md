@@ -326,6 +326,39 @@ openssl rand -base64 24
 
 ---
 
+### PII Encryption Secrets (REQUIRED — go-live blocker P4)
+
+The backend encrypts 身分證字號 (`std_pid`) at rest with AES-256-GCM. Missing
+or malformed keys hard-fail the encrypt migration and every PII read.
+
+| Secret | Description | Example | Required |
+|--------|-------------|---------|----------|
+| `PII_ENCRYPTION_KEYS` | JSON map of {version: base64url 32-byte key} | `{"v1":"<key>"}` | ✅ Yes |
+| `PII_ENCRYPTION_ACTIVE_VERSION` | Version used for NEW encryptions | `v1` | ✅ Yes |
+
+```bash
+# Generate a key
+python -c 'import os,base64;print(base64.urlsafe_b64encode(os.urandom(32)).rstrip(b"=").decode())'
+gh secret set PII_ENCRYPTION_KEYS --body '{"v1":"<KEY>"}'
+gh secret set PII_ENCRYPTION_ACTIVE_VERSION --body 'v1'
+```
+
+- 🔐 **Losing a key version = the PII encrypted with it is permanently
+  unreadable.** Keep an offline copy in the team's secure vault.
+- 🔐 Old versions stay in the map until the retention period of the LAST row
+  (and backup) encrypted with them expires — see
+  `docs/security/pii-key-retention-runbook.md` for the rotation procedure.
+- 🔐 Production keys MUST differ from staging keys.
+
+### Super Admin Secret (REQUIRED)
+
+| Secret | Description | Example | Required |
+|--------|-------------|---------|----------|
+| `SUPER_ADMIN_NYCU_ID` | NYCU ID granted super_admin at Portal SSO login | `E12345` | ✅ Yes |
+
+Without it the in-code default `super_admin` applies and no real 承辦人
+account can ever elevate.
+
 ### Email Configuration Secrets
 
 These secrets configure SMTP for sending system emails (notifications, password resets, etc.).

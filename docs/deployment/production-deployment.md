@@ -194,12 +194,19 @@ sudo -u postgres createdb scholarship_prod -O scholarship_prod
 # Run migrations
 docker compose -f docker-compose.prod.yml run --rm backend alembic upgrade head
 
-# Create initial admin user
-docker compose -f docker-compose.prod.yml run --rm backend python -c "
-from app.core.init_db import create_initial_admin
-create_initial_admin()
-"
+# Seed the production baseline (admin user, lookup tables, system settings,
+# email templates — NEVER test users). `create_initial_admin()` referenced in
+# older versions of this doc does not exist.
+docker compose -f docker-compose.prod.yml run --rm backend python -m app.seed --prod
 ```
+
+> **Destructive-migration guard**: migration `06e8a66d9437` TRUNCATEs all
+> application tables. On a FRESH production database it is a no-op and passes
+> automatically. If you ever restore an existing dump and then re-run
+> `alembic upgrade head`, the guard refuses with a `RuntimeError` whenever
+> real `applications` rows would be destroyed — that refusal is a feature.
+> Do NOT set `ALLOW_DESTRUCTIVE_MIGRATIONS=true` unless you are executing a
+> sanctioned, documented data reset.
 
 ### 4. Deploy Services
 
@@ -438,7 +445,10 @@ curl -f https://scholarship.university.edu/health
 - **Recovery Time Objective (RTO)**: 4 hours
 - **Recovery Point Objective (RPO)**: 1 hour
 - **Backup Frequency**: Daily database, hourly file sync
-- **Failover**: Automated with health checks
+- **Failover**: ⚠️ NOT yet automated — the HA diagram above is the target
+  architecture. The current deployment is a SINGLE PostgreSQL instance; RTO/RPO
+  rest entirely on the daily backups + manual restore. Communicate this to
+  stakeholders before go-live.
 
 ## Maintenance Procedures
 

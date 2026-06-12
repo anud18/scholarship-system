@@ -1,5 +1,19 @@
-# Example Production Deployment Workflow
-# Copy this file to your production repository at: .github/workflows/deploy.yml
+# Production Deployment Workflow (issue #74 / go-live blocker P5)
+# Copy this file to the PRIVATE production repository at .github/workflows/deploy.yml
+#
+# Modeled on the PROVEN staging deploy job (dev repo deploy-pipeline.yml
+# deploy-staging) instead of the previous SSH-based template, which was
+# unusable: ubuntu-latest runner (cannot reach campus VMs), no migration/seed,
+# no nginx validation, placeholder smoke URLs, and a `git checkout HEAD~1`
+# "rollback" that would have desynced the working tree from the images.
+#
+# Prerequisites (one-time, see SECRETS-SETUP-GUIDE.md):
+#   - A self-hosted runner registered on the production AP VM with labels
+#     [self-hosted, linux] (same pattern as setting-env.yml).
+#   - GitHub `production` environment with required reviewers (blocker P6).
+#   - Repository variable PRODUCTION_URL = https://ss.nycu.edu.tw
+#   - All secrets listed in the validate-secrets job below.
+#   - docker-compose.prod-db.yml stack already running on the DB VM.
 
 name: Deploy to Production
 
@@ -9,147 +23,348 @@ on:
       - main
   workflow_dispatch:
     inputs:
-      environment:
-        description: 'Target environment'
-        required: true
-        type: choice
-        options:
-          - production
-          - staging
-        default: 'production'
+      tag:
+        description: 'Image tag to deploy (default: build from current commit)'
+        required: false
+        type: string
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
 
 jobs:
-  deploy:
-    name: Deploy Application
+  # ── Gate 0: fail fast on misconfigured secrets BEFORE touching anything ──
+  # Closes go-live blockers P3/P4/P7/P8: config.py ships staging/dev defaults
+  # (portal.test auth, localhost student API, "(測試)" mail sender), so a
+  # missing secret would not crash — it would silently run production against
+  # test infrastructure. The backend boot guard (#936) is the second line of
+  # defense; this is the first.
+  validate-secrets:
+    name: Validate Production Secrets
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment || 'production' }}
+    steps:
+      - name: Validate
+        env:
+          DOMAIN: ${{ secrets.DOMAIN }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+          MINIO_HOST: ${{ secrets.MINIO_HOST }}
+          MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+          MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+          PII_ENCRYPTION_KEYS: ${{ secrets.PII_ENCRYPTION_KEYS }}
+          PORTAL_JWT_SERVER_URL: ${{ secrets.PORTAL_JWT_SERVER_URL }}
+          STUDENT_API_BASE_URL: ${{ secrets.STUDENT_API_BASE_URL }}
+          STUDENT_API_HMAC_KEY: ${{ secrets.STUDENT_API_HMAC_KEY }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_FROM_NAME: ${{ secrets.EMAIL_FROM_NAME }}
+          SUPER_ADMIN_NYCU_ID: ${{ secrets.SUPER_ADMIN_NYCU_ID }}
+        run: |
+          fail=0
+          err() { echo "::error::$1"; fail=1; }
 
+          [ -n "$DOMAIN" ] || err "DOMAIN is not set"
+          [ -n "$DB_HOST" ] || err "DB_HOST is not set"
+          [ -n "$DB_PASSWORD" ] || err "DB_PASSWORD is not set"
+          [ -n "$REDIS_PASSWORD" ] || err "REDIS_PASSWORD is not set"
+          [ -n "$MINIO_HOST" ] || err "MINIO_HOST is not set"
+          [ -n "$MINIO_ACCESS_KEY" ] || err "MINIO_ACCESS_KEY is not set"
+          [ -n "$MINIO_SECRET_KEY" ] || err "MINIO_SECRET_KEY is not set"
+          [ -n "$SUPER_ADMIN_NYCU_ID" ] || err "SUPER_ADMIN_NYCU_ID is not set (no one could elevate to super_admin)"
+
+          [ "${#SECRET_KEY}" -ge 32 ] || err "SECRET_KEY must be >= 32 chars (and MUST differ from staging)"
+
+          # P4: PII keys — missing keys hard-fail the encrypt migration / first
+          # PII read; malformed JSON fails at boot. Catch both here.
+          if [ -z "$PII_ENCRYPTION_KEYS" ]; then
+            err "PII_ENCRYPTION_KEYS is not set. Generate a key per docs/architecture/pii-encryption.md then set '{\"v1\":\"<KEY>\"}'"
+          elif ! echo "$PII_ENCRYPTION_KEYS" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null; then
+            err "PII_ENCRYPTION_KEYS is not valid JSON"
+          fi
+
+          # P3: production must never authenticate against the staging portal.
+          case "$PORTAL_JWT_SERVER_URL" in
+            "") err "PORTAL_JWT_SERVER_URL is not set (config.py would default to portal.test — STAGING auth)" ;;
+            *portal.test*) err "PORTAL_JWT_SERVER_URL points at portal.test (staging) — set the production Portal endpoint" ;;
+            https://*) : ;;
+            *) err "PORTAL_JWT_SERVER_URL must be https://" ;;
+          esac
+
+          # P8: student API must be the real campus API, with a real HMAC key.
+          case "$STUDENT_API_BASE_URL" in
+            "") err "STUDENT_API_BASE_URL is not set (would default to the localhost mock; verification fails SILENTLY)" ;;
+            *localhost*|*127.0.0.1*|*mock*) err "STUDENT_API_BASE_URL looks like a mock/localhost endpoint: $STUDENT_API_BASE_URL" ;;
+          esac
+          if [ "$STUDENT_API_HMAC_KEY" = "4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a" ]; then
+            err "STUDENT_API_HMAC_KEY is the well-known MOCK key"
+          fi
+
+          # P7: real applicants must not receive '(測試)' mail from ss-test.
+          [ -n "$SMTP_HOST" ] || err "SMTP_HOST is not set (would default to the staging relay)"
+          case "$EMAIL_FROM" in
+            "") err "EMAIL_FROM is not set (would default to ss-test.aa@nycu.edu.tw)" ;;
+            *ss-test*) err "EMAIL_FROM still uses the staging address: $EMAIL_FROM" ;;
+          esac
+          case "$EMAIL_FROM_NAME" in
+            "") err "EMAIL_FROM_NAME is not set (would default to '(測試)獎學金申請與簽核系統')" ;;
+            *測試*) err "EMAIL_FROM_NAME still contains 測試: $EMAIL_FROM_NAME" ;;
+          esac
+
+          [ "$fail" -eq 0 ] || exit 1
+          echo "✅ All production secrets validated"
+
+  build-images:
+    name: Build & Push Images
+    runs-on: ubuntu-latest
+    needs: validate-secrets
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            VERSION="${{ github.event.inputs.tag }}"
+          else
+            # Prefer the auto-tag-on-merge tag; fall back to short SHA.
+            VERSION=$(git describe --tags --exact-match 2>/dev/null || git rev-parse --short HEAD)
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Deploying version: $VERSION"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Docker Hub (or your registry)
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push backend image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./backend
           push: true
           tags: |
-            your-org/scholarship-backend:latest
-            your-org/scholarship-backend:${{ github.sha }}
-          cache-from: type=registry,ref=your-org/scholarship-backend:buildcache
-          cache-to: type=registry,ref=your-org/scholarship-backend:buildcache,mode=max
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/scholarship-system-backend:${{ steps.version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/scholarship-system-backend:latest
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
 
       - name: Build and push frontend image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./frontend
           push: true
           tags: |
-            your-org/scholarship-frontend:latest
-            your-org/scholarship-frontend:${{ github.sha }}
-          cache-from: type=registry,ref=your-org/scholarship-frontend:buildcache
-          cache-to: type=registry,ref=your-org/scholarship-frontend:buildcache,mode=max
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/scholarship-system-frontend:${{ steps.version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/scholarship-system-frontend:latest
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
 
-      - name: Deploy to production server
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
-          SERVER_HOST: ${{ secrets.PRODUCTION_SERVER }}
-          SERVER_USER: ${{ secrets.PRODUCTION_USER }}
+  deploy:
+    name: Deploy to Production
+    # The runner lives ON the production AP VM (campus network) — GitHub-hosted
+    # runners cannot reach it. Register with: [self-hosted, linux].
+    runs-on: [self-hosted, linux]
+    needs: [validate-secrets, build-images]
+    environment:
+      name: production
+      url: ${{ vars.PRODUCTION_URL }}
+
+    # One env block shared by deploy + rollback so the compose interpolation
+    # is identical in both paths. Covers every ${VAR} in docker-compose.prod.yml.
+    env:
+      TAG: ${{ needs.build-images.outputs.version }}
+      DOMAIN: ${{ secrets.DOMAIN }}
+      SECRET_KEY: ${{ secrets.SECRET_KEY }}
+      CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
+      DB_HOST: ${{ secrets.DB_HOST }}
+      DB_PORT: ${{ secrets.DB_PORT }}
+      DB_USER: ${{ secrets.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      DB_NAME: ${{ secrets.DB_NAME }}
+      REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+      MINIO_HOST: ${{ secrets.MINIO_HOST }}
+      MINIO_PORT: ${{ secrets.MINIO_PORT }}
+      MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+      MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+      MINIO_BUCKET_NAME: ${{ secrets.MINIO_BUCKET_NAME }}
+      MINIO_SECURE: ${{ secrets.MINIO_SECURE }}
+      PII_ENCRYPTION_KEYS: ${{ secrets.PII_ENCRYPTION_KEYS }}
+      PII_ENCRYPTION_ACTIVE_VERSION: ${{ secrets.PII_ENCRYPTION_ACTIVE_VERSION }}
+      SMTP_HOST: ${{ secrets.SMTP_HOST }}
+      SMTP_PORT: ${{ secrets.SMTP_PORT }}
+      SMTP_USER: ${{ secrets.SMTP_USER }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+      EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+      EMAIL_FROM_NAME: ${{ secrets.EMAIL_FROM_NAME }}
+      PORTAL_SSO_ENABLED: "true"
+      PORTAL_JWT_SERVER_URL: ${{ secrets.PORTAL_JWT_SERVER_URL }}
+      PORTAL_TEST_MODE: "false"
+      STUDENT_API_ENABLED: "true"
+      STUDENT_API_BASE_URL: ${{ secrets.STUDENT_API_BASE_URL }}
+      STUDENT_API_ACCOUNT: ${{ secrets.STUDENT_API_ACCOUNT }}
+      STUDENT_API_HMAC_KEY: ${{ secrets.STUDENT_API_HMAC_KEY }}
+      SUPER_ADMIN_NYCU_ID: ${{ secrets.SUPER_ADMIN_NYCU_ID }}
+      NEXT_PUBLIC_NYCU_PORTAL_URL: ${{ secrets.NEXT_PUBLIC_NYCU_PORTAL_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull images
         run: |
-          # Setup SSH
-          mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
+          docker pull ${{ env.REGISTRY }}/${{ github.repository_owner }}/scholarship-system-backend:${TAG}
+          docker pull ${{ env.REGISTRY }}/${{ github.repository_owner }}/scholarship-system-frontend:${TAG}
 
-          # Deploy via SSH
-          ssh -i ~/.ssh/deploy_key "$SERVER_USER@$SERVER_HOST" << 'ENDSSH'
-            cd /opt/scholarship-system
-
-            # Pull latest images
-            docker compose pull
-
-            # Backup database
-            docker compose exec -T postgres pg_dump -U scholarship_user scholarship_db > backup-$(date +%Y%m%d-%H%M%S).sql
-
-            # Restart services with zero downtime
-            docker compose up -d --remove-orphans
-
-            # Wait for health checks
-            sleep 10
-
-            # Verify services are healthy
-            docker compose ps
-          ENDSSH
-
-          echo "✅ Deployment completed successfully"
-
-      - name: Run smoke tests
+      - name: Prepare deployment files
         run: |
-          # Wait for application to be ready
-          sleep 30
+          mkdir -p ~/scholarship-production/logs/nginx
+          cp docker-compose.prod.yml ~/scholarship-production/docker-compose.yml
+          if [ -d nginx ]; then cp -r nginx ~/scholarship-production/; fi
+          if [ -d monitoring ]; then
+            sudo rm -rf ~/scholarship-production/monitoring
+            cp -r monitoring ~/scholarship-production/
+          fi
 
-          # Test API health
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" https://api.production.example.com/health)
-          if [ "$RESPONSE" != "200" ]; then
-            echo "::error::API health check failed"
+      - name: Save last-good deployment tag
+        run: |
+          CURRENT_RUNNING=""
+          if docker inspect scholarship_backend_prod >/dev/null 2>&1; then
+            CURRENT_RUNNING=$(docker inspect --format='{{index .Config.Labels "org.opencontainers.image.version"}}' scholarship_backend_prod 2>/dev/null || echo "")
+          fi
+          if [ -n "$CURRENT_RUNNING" ]; then
+            echo "$CURRENT_RUNNING" > ~/scholarship-production/last-good-tag
+            echo "Saved running tag: $CURRENT_RUNNING"
+          fi
+
+      - name: Start new containers
+        run: |
+          cd ~/scholarship-production
+          docker compose down || true
+          docker compose up -d
+
+      - name: Validate and reload nginx config
+        run: |
+          # Config is bind-mounted read-only; `compose up -d` does not reload
+          # nginx when only the file contents change. Validate first — never
+          # leave a broken config running.
+          if docker exec scholarship_nginx_prod nginx -t; then
+            docker exec scholarship_nginx_prod nginx -s reload
+            echo "✅ nginx config validated and reloaded"
+          else
+            echo "::error::nginx config test failed — keeping previously-loaded config"
             exit 1
           fi
 
-          # Test frontend
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" https://production.example.com)
-          if [ "$RESPONSE" != "200" ]; then
-            echo "::error::Frontend health check failed"
+      - name: Run database migrations
+        run: |
+          # NO error swallowing: a half-applied migration with a green deploy
+          # is the worst possible state (and /health does not verify schema).
+          docker exec scholarship_backend_prod alembic upgrade head
+          docker exec scholarship_backend_prod alembic current
+
+      - name: Seed production baseline
+        run: |
+          # --prod creates ONLY admin/lookup/settings/email templates — never
+          # test users. Idempotent. Must succeed (no '|| echo' swallowing).
+          docker exec scholarship_backend_prod python -m app.seed --prod
+
+      - name: Health check
+        run: |
+          # Backend has no published port in production (expose-only) —
+          # check from inside the container, then end-to-end through nginx.
+          max_retries=10
+          retry_count=0
+          until docker exec scholarship_backend_prod curl -fsS http://localhost:8000/health >/dev/null 2>&1 || [ $retry_count -eq $max_retries ]; do
+            echo "Backend not ready yet... ($retry_count/$max_retries)"
+            sleep 5
+            retry_count=$((retry_count + 1))
+          done
+          if [ $retry_count -eq $max_retries ]; then
+            echo "::error::Backend health check failed"
+            docker logs --tail 100 scholarship_backend_prod
             exit 1
           fi
+          echo "✅ Backend healthy"
 
+          retry_count=0
+          until curl -fsk https://localhost/health >/dev/null 2>&1 || [ $retry_count -eq $max_retries ]; do
+            echo "nginx→backend not ready yet... ($retry_count/$max_retries)"
+            sleep 5
+            retry_count=$((retry_count + 1))
+          done
+          if [ $retry_count -eq $max_retries ]; then
+            echo "::error::End-to-end health check via nginx failed"
+            docker logs --tail 50 scholarship_nginx_prod
+            exit 1
+          fi
+          echo "✅ nginx → backend healthy"
+
+      - name: Smoke tests
+        run: |
+          curl -fsk "https://localhost/health" -H "Host: ${DOMAIN}" >/dev/null || exit 1
+          curl -fsk "https://localhost/api/v1/docs" -H "Host: ${DOMAIN}" >/dev/null || exit 1
+          # Frontend through nginx
+          code=$(curl -sk -o /dev/null -w '%{http_code}' "https://localhost/" -H "Host: ${DOMAIN}")
+          [ "$code" = "200" ] || { echo "::error::Frontend returned $code"; exit 1; }
           echo "✅ Smoke tests passed"
 
-      - name: Notify on success
+      - name: Record successful deployment tag
         if: success()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const message = `
-            🚀 **Deployment Successful**
-
-            - Environment: ${{ github.event.inputs.environment || 'production' }}
-            - Commit: ${context.sha.substring(0, 7)}
-            - Deployed by: ${context.actor}
-            - URL: https://production.example.com
-            `;
-
-            // Post to Slack/Discord/etc or create deployment
-            console.log(message);
-
-      - name: Rollback on failure
-        if: failure()
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
-          SERVER_HOST: ${{ secrets.PRODUCTION_SERVER }}
-          SERVER_USER: ${{ secrets.PRODUCTION_USER }}
         run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
+          echo "${TAG}" > ~/scholarship-production/last-good-tag
+          echo "Saved last-good tag: ${TAG}"
 
-          ssh -i ~/.ssh/deploy_key "$SERVER_USER@$SERVER_HOST" << 'ENDSSH'
-            cd /opt/scholarship-system
+      - name: Rollback to last-good deployment
+        if: failure()
+        run: |
+          cd ~/scholarship-production
+          if [ -f last-good-tag ]; then
+            PREV_TAG=$(cat last-good-tag)
+            echo "::warning::Deploy of ${TAG} failed — rolling back to ${PREV_TAG}"
+            TAG=$PREV_TAG docker compose up -d
+            sleep 15
+            if docker exec scholarship_backend_prod curl -fsS http://localhost:8000/health >/dev/null 2>&1; then
+              echo "::notice::Rollback to ${PREV_TAG} succeeded."
+            else
+              echo "::error::Rollback health check ALSO failed — manual intervention required."
+              echo "::error::If a migration was applied, evaluate 'alembic downgrade' or restore the latest backup (see DR runbook)."
+            fi
+          else
+            echo "::warning::No last-good-tag — cannot auto-rollback."
+          fi
 
-            # Rollback to previous version
-            docker compose down
-            git checkout HEAD~1
-            docker compose pull
-            docker compose up -d
-          ENDSSH
-
-          echo "⚠️ Rolled back to previous version"
+      - name: Deployment summary
+        if: success()
+        run: |
+          {
+            echo "## ✅ Production Deployment Successful"
+            echo ""
+            echo "**Version**: ${TAG}"
+            echo "**URL**: ${{ vars.PRODUCTION_URL }}"
+            echo "**Migrations**: $(docker exec scholarship_backend_prod alembic current 2>/dev/null | tail -1)"
+          } >> "$GITHUB_STEP_SUMMARY"

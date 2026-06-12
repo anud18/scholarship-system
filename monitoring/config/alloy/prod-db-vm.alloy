@@ -96,6 +96,33 @@ prometheus.scrape "postgres_exporter" {
   scrape_interval = "15s"
 }
 
+// MinIO ships built-in Prometheus metrics on the same port as the API
+// (P9 / issue #74: these three scrapes existed on staging only — prod MinIO
+// dashboards would show No data).
+prometheus.scrape "minio" {
+  targets    = [{ __address__ = "minio:9000" }]
+  forward_to = [prometheus.relabel.add_labels.receiver]
+  job_name   = "minio"
+  scrape_interval = "15s"
+  metrics_path = "/minio/v2/metrics/cluster"
+}
+
+prometheus.scrape "minio_bucket" {
+  targets    = [{ __address__ = "minio:9000" }]
+  forward_to = [prometheus.relabel.add_labels.receiver]
+  job_name   = "minio"
+  scrape_interval = "30s"
+  metrics_path = "/minio/v2/metrics/bucket"
+}
+
+prometheus.scrape "minio_node" {
+  targets    = [{ __address__ = "minio:9000" }]
+  forward_to = [prometheus.relabel.add_labels.receiver]
+  job_name   = "minio"
+  scrape_interval = "15s"
+  metrics_path = "/minio/v2/metrics/node"
+}
+
 prometheus.relabel "add_labels" {
   forward_to = [prometheus.remote_write.default.receiver]
   rule {

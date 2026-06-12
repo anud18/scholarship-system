@@ -84,6 +84,14 @@ services:
       STUDENT_API_ENCODE_TYPE: ${STUDENT_API_ENCODE_TYPE:-UTF-8}
       # Mock SSO disabled in production
       ENABLE_MOCK_SSO: "false"
+      # NYCU ID granted super_admin on Portal SSO login (portal_sso_service
+      # .py:198). Was missing here (issue #74 review): without it the default
+      # "super_admin" applies and no real承辦人 account can ever elevate.
+      SUPER_ADMIN_NYCU_ID: ${SUPER_ADMIN_NYCU_ID}
+      # Public origin for ABSOLUTE URLs in file download links, email links
+      # and API responses (P1 / issue #74 go-live blocker — config.py defaults
+      # to http://localhost:8000; staging hit this as issue #889/#891).
+      BASE_URL: https://${DOMAIN}
       # Frontend URLs
       FRONTEND_URL: https://${DOMAIN}  # External URL (for user redirects)
       FRONTEND_INTERNAL_URL: http://frontend:3000  # Internal Docker network URL (for API calls)
