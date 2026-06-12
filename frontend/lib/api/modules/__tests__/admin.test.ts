@@ -364,9 +364,7 @@ describe("createAdminApi", () => {
       "scholarship-permissions"
     );
     expect(mockedRaw.PUT.mock.calls[0][0]).toContain("scholarship-permissions");
-    expect(mockedRaw.DELETE.mock.calls[0][0]).toContain(
-      "scholarship-permissions"
-    );
+    expect(mockedRaw.DELETE.mock.calls[0][0]).toContain("scholarship-permissions");
   });
 
   // ─── Email template CRUD ──────────────────────────────────────────
@@ -481,7 +479,7 @@ describe("createAdminApi", () => {
     // Pin: conditional spread (NOT included as undefined) when
     // changeReason is undefined. Pin so refactor doesn't send
     // change_reason: undefined which audit log treats as
-    // "explicitly null".
+    // \"explicitly null\".
     mockedRaw.PUT.mockResolvedValueOnce({});
     const api = createAdminApi();
     await api.updateConfigurationsBulk([{ key: "x", value: 1 }]);
@@ -491,11 +489,11 @@ describe("createAdminApi", () => {
 
   // ─── Method count invariant ───────────────────────────────────────
 
-  it("module exposes exactly 77 methods", async () => {
-    // Pin: 77 methods is the current admin surface. Pin so
+  it("module exposes exactly 79 methods", async () => {
+    // Pin: 79 methods is the current admin surface. Pin so
     // refactor adding/removing methods requires explicit review.
     // SECURITY-critical surface — every change should be deliberate.
     const api = createAdminApi();
-    expect(Object.keys(api).length).toBe(78);
+    expect(Object.keys(api).length).toBe(79);
   });
 });
