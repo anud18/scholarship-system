@@ -55,7 +55,7 @@ def http(url: str, method: str = "GET", data: bytes | None = None) -> tuple[int,
     """Bare HTTP request with NO credentials (for presigned/anonymous checks)."""
     req = urllib.request.Request(url, data=data, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310
             return resp.status, resp.read()
     except urllib.error.HTTPError as e:
         return e.code, e.read()
