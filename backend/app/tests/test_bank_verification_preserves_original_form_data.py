@@ -4,13 +4,13 @@ manual_review_bank_info overwrites submitted_form_data in place. The first
 correction must permanently preserve the student's original bank fields
 (meta_data.original_bank_fields), and every correction must record the
 prior values it replaced in verification_details — otherwise「學生當時
-實際填了什麼」is unanswerable.
+實際填了什麼」 is unanswerable.
 """
 
 import pytest
 import pytest_asyncio
 
-from app.models.application import Application
+from app.models.application import Application, ApplicationFile
 from app.models.enums import ReviewStage
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType, SubTypeSelectionMode
 from app.models.user import User, UserRole, UserType
@@ -68,10 +68,25 @@ async def app_with_bank_fields(db):
                     "required": True,
                 },
             },
-            "documents": [],
+            "documents": [
+                {
+                    "document_id": "bank_account_cover",
+                    "filename": "bank_cover_g19.jpg",
+                }
+            ],
         },
     )
     db.add(app_row)
+    await db.flush()
+
+    bank_file = ApplicationFile(
+        application_id=app_row.id,
+        filename="bank_cover_g19.jpg",
+        object_name="tests/g19/bank_cover_g19.jpg",
+        mime_type="image/jpeg",
+    )
+    db.add(bank_file)
+
     await db.commit()
     await db.refresh(app_row)
     return app_row
