@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import require_admin
 from app.db.deps import get_db
 from app.models.system_setting import EmailTemplate
+from app.models.audit_log import AuditAction, AuditLog
 from app.models.user import User
 from app.schemas.common import EmailTemplateSchema, EmailTemplateUpdateSchema
 from app.services.system_setting_service import EmailTemplateService
@@ -83,6 +84,29 @@ async def update_email_template(
         )
     )
 
+    # G31 (#993): EmailHistory stores每封信的完整內容, but TEMPLATE changes had
+    # no before/after snapshot — comparing「當時範本 vs 現狀」was impossible.
+    db.add(
+        AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.update.value,
+            resource_type="email_template",
+            resource_id=str(template.key),
+            description=f"email template '{template.key}' updated",
+            old_values={
+                "subject_template": existing_template.subject_template,
+                "body_template": existing_template.body_template,
+                "cc": existing_template.cc,
+                "bcc": existing_template.bcc,
+            },
+            new_values={
+                "subject_template": template.subject_template,
+                "body_template": template.body_template,
+                "cc": template.cc,
+                "bcc": template.bcc,
+            },
+        )
+    )
     await db.execute(stmt)
     await db.commit()
 
@@ -239,6 +263,16 @@ async def update_scholarship_email_template(
 ):
     """Update an existing per-scholarship email template (404 if not configured)."""
     payload = template_data.model_dump(exclude_unset=True)
+    # G31 (#993): snapshot the prior version before the in-place update.
+    prior = await EmailTemplateService.get_scholarship_template(db, scholarship_type_id, template_key)
+    prior_values = (
+        {
+            "subject_template": prior.subject_template,
+            "body_template": prior.body_template,
+        }
+        if prior
+        else None
+    )
     template = await EmailTemplateService.update_scholarship_template(db, scholarship_type_id, template_key, payload)
     if template is None:
         raise HTTPException(
@@ -248,6 +282,19 @@ async def update_scholarship_email_template(
                 f"scholarship_type_id={scholarship_type_id}"
             ),
         )
+
+    db.add(
+        AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.update.value,
+            resource_type="email_template",
+            resource_id=f"{scholarship_type_id}:{template_key}",
+            description=f"scholarship email template '{template_key}' (type {scholarship_type_id}) updated",
+            old_values=prior_values,
+            new_values={k: v for k, v in payload.items() if k in ("subject_template", "body_template", "cc", "bcc")},
+        )
+    )
+    await db.commit()
 
     logger.info(
         "scholarship-email-template updated: scholarship_type_id=%s key=%s by user_id=%s fields=%s",
