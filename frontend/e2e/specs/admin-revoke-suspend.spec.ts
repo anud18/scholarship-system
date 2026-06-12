@@ -944,4 +944,74 @@ test.describe("locked roster dialog — revoked student panel + item removal", (
       }
     },
   );
+  test(
+    "@nightly suspend is queryable via /admin/audit-logs and visible in 學生領取歷史 (G29 #991)",
+    async ({ browser }) => {
+      // The fixture suspended csphd0002 AFTER the roster locked (its item is
+      // untouched by earlier tests — the revoked student's item gets removed
+      // by the DELETE test above, so the suspend twin is the stable probe).
+      // Two compliance read paths must surface it:
+      //   1. the system-wide audit-log endpoint (#1007) carries the typed
+      //      suspend event with the reason;
+      //   2. 學生領取歷史 (#1005) shows the paid row WITH the suspension
+      //      context instead of an unqualified 已領取.
+      const adminLogin = await loginAs(browser, "admin");
+      pushTrace(runState, adminLogin.traceId);
+
+      // 1. Audit-log queryability.
+      const auditRes = await apiAs<{
+        success: boolean;
+        data: {
+          items: Array<{
+            action: string;
+            resource_id: string;
+            new_values: { reason?: string } | null;
+            actor_nycu_id: string | null;
+          }>;
+        };
+      }>(
+        adminLogin.token,
+        "GET",
+        `/admin/audit-logs?resource_type=application&resource_id=${lockedFixtureSuspendAppDbId}&action=suspend`,
+      );
+      pushTrace(runState, auditRes.traceId);
+      expect(
+        auditRes.ok,
+        `GET /admin/audit-logs failed: HTTP ${auditRes.status} body=${JSON.stringify(auditRes.body)}`,
+      ).toBe(true);
+      const suspendEvents = auditRes.body.data.items;
+      expect(
+        suspendEvents.length,
+        `no suspend audit event for application ${lockedFixtureSuspendAppDbId}`,
+      ).toBeGreaterThan(0);
+      expect(suspendEvents[0].new_values?.reason).toContain("E2E locked-roster fixture");
+      expect(suspendEvents[0].actor_nycu_id).toBe("admin");
+
+      // 2. 學生領取歷史 suspension context.
+      const historyRes = await apiAs<{
+        success: boolean;
+        data: {
+          payment_records: Array<{
+            quota_allocation_status: string | null;
+            suspend_reason: string | null;
+            suspended_at: string | null;
+          }>;
+        };
+      }>(adminLogin.token, "GET", `/admin/student-history/${SETUP_STUDENT2}`);
+      pushTrace(runState, historyRes.traceId);
+      expect(
+        historyRes.ok,
+        `GET student-history failed: HTTP ${historyRes.status} body=${JSON.stringify(historyRes.body)}`,
+      ).toBe(true);
+      const suspendedRecords = historyRes.body.data.payment_records.filter(
+        (r) => r.quota_allocation_status === "suspended",
+      );
+      expect(
+        suspendedRecords.length,
+        "suspended-after-lock payment must carry suspension context in 學生領取歷史 (G25)",
+      ).toBeGreaterThan(0);
+      expect(suspendedRecords[0].suspend_reason).toContain("E2E locked-roster fixture");
+      expect(suspendedRecords[0].suspended_at).toBeTruthy();
+    },
+  );
 });
