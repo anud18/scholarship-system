@@ -13,6 +13,9 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
+from urllib.parse import quote
+
+from fastapi.responses import StreamingResponse
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import delete as sqla_delete
@@ -346,6 +349,139 @@ async def get_historical_applications(
         "message": "Historical applications retrieved successfully",
         "data": response_data.model_dump() if hasattr(response_data, "model_dump") else response_data.dict(),
     }
+
+
+@router.get("/applications/history/export")
+async def export_historical_applications(
+    status: Optional[str] = Query(None, description="Filter by status"),
+    scholarship_type: Optional[str] = Query(None, description="Filter by scholarship type"),
+    academic_year: Optional[int] = Query(None, description="Filter by academic year"),
+    semester: Optional[str] = Query(None, description="Filter by semester"),
+    search: Optional[str] = Query(None, description="Search by student name or ID"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Export the filtered 歷史申請 view to XLSX (issue #985 / G23).
+
+    Same filters and deleted-records policy as GET /applications/history
+    (soft-deleted rows are included and flagged), but unpaginated — the
+    export is the audit-friendly artifact 財務稽核 previously had to
+    screenshot together by hand.
+    """
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    stmt = (
+        select(
+            Application,
+            User.name.label("student_name"),
+            User.nycu_id.label("student_nycu_id"),
+            User.email.label("student_email"),
+            ScholarshipType.name.label("scholarship_name"),
+            ScholarshipType.code.label("scholarship_type_code"),
+        )
+        .join(User, Application.user_id == User.id)
+        .outerjoin(ScholarshipType, Application.scholarship_type_id == ScholarshipType.id)
+    )
+    if status:
+        stmt = stmt.where(Application.status == status)
+    if scholarship_type:
+        stmt = stmt.where(ScholarshipType.code == scholarship_type)
+    if academic_year:
+        stmt = stmt.where(Application.academic_year == academic_year)
+    if semester and semester != "all":
+        if semester == "first":
+            stmt = stmt.where(Application.semester == Semester.first)
+        elif semester == "second":
+            stmt = stmt.where(Application.semester == Semester.second)
+        elif semester == "yearly":
+            stmt = stmt.where(Application.semester == Semester.yearly)
+    if search:
+        search_term = f"%{search}%"
+        stmt = stmt.where(
+            or_(
+                User.name.ilike(search_term),
+                User.nycu_id.ilike(search_term),
+                User.email.ilike(search_term),
+                Application.app_id.ilike(search_term),
+                ScholarshipType.name.ilike(search_term),
+            )
+        )
+    stmt = stmt.order_by(Application.created_at.desc())
+
+    result = await db.execute(stmt)
+    rows = result.fetchall()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "歷史申請"
+    headers = [
+        "申請編號",
+        "學生姓名",
+        "學號",
+        "Email",
+        "獎學金",
+        "子類型",
+        "金額",
+        "學年",
+        "學期",
+        "狀態",
+        "是否續領",
+        "提交時間",
+        "核准時間",
+        "撤銷時間",
+        "撤銷原因",
+        "停發時間",
+        "停發原因",
+        "已刪除",
+        "刪除時間",
+        "刪除原因",
+        "建立時間",
+    ]
+    ws.append(headers)
+
+    def _dt(value):
+        return value.strftime("%Y-%m-%d %H:%M") if value else ""
+
+    for row in rows:
+        app = row.Application
+        ws.append(
+            [
+                app.app_id,
+                row.student_name,
+                row.student_nycu_id,
+                row.student_email,
+                row.scholarship_name,
+                app.sub_scholarship_type or "",
+                float(app.amount) if app.amount is not None else "",
+                app.academic_year,
+                app.semester.value if app.semester else "yearly",
+                app.status.value if hasattr(app.status, "value") else str(app.status),
+                "是" if app.is_renewal else "否",
+                _dt(app.submitted_at),
+                _dt(app.approved_at),
+                _dt(app.revoked_at),
+                app.revoke_reason or "",
+                _dt(app.suspended_at),
+                app.suspend_reason or "",
+                "是" if app.deleted_at is not None else "否",
+                _dt(app.deleted_at),
+                app.deletion_reason or "",
+                _dt(app.created_at),
+            ]
+        )
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    filename = f"歷史申請_{academic_year or 'all'}.xlsx"
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    )
 
 
 @router.put("/applications/{id}/assign-professor")

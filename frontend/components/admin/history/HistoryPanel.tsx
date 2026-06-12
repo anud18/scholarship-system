@@ -41,7 +41,7 @@ import {
   getDisplayStatusInfo,
 } from "@/lib/utils/application-helpers";
 import { Locale } from "@/lib/validators";
-import { AlertCircle, Eye, FileText, RefreshCw } from "lucide-react";
+import { AlertCircle, Download, Eye, FileText, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 interface User {
@@ -156,6 +156,32 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
       setLoadingHistoricalApplications(false);
     }
   }, [historicalApplicationsFilters, activeHistoricalTab, user]);
+
+  // 匯出目前篩選後的歷史申請為 Excel (#985 / G23)
+  const [exporting, setExporting] = useState(false);
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    try {
+      const blob = await apiClient.admin.exportHistoricalApplications({
+        ...historicalApplicationsFilters,
+        scholarship_type:
+          activeHistoricalTab === "all" ? undefined : activeHistoricalTab,
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `歷史申請_${historicalApplicationsFilters.academic_year ?? "all"}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (error: unknown) {
+      logger.error("匯出歷史申請失敗", { error });
+      setHistoricalApplicationsError("匯出歷史申請失敗");
+    } finally {
+      setExporting(false);
+    }
+  }, [historicalApplicationsFilters, activeHistoricalTab]);
 
   // 獲取所有歷史申請以建立 tab 列表
   const fetchAllHistoricalApplicationsForTabs = useCallback(async () => {
@@ -392,17 +418,28 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                 <div className="text-sm text-gray-600">
                   共 {historicalApplicationsPagination.total} 筆申請記錄
                 </div>
-                <Button
-                  onClick={fetchHistoricalApplications}
-                  disabled={loadingHistoricalApplications}
-                  variant="outline"
-                  size="sm"
-                >
-                  <RefreshCw
-                    className={`h-4 w-4 mr-2 ${loadingHistoricalApplications ? "animate-spin" : ""}`}
-                  />
-                  刷新
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleExport}
+                    disabled={exporting || loadingHistoricalApplications}
+                    variant="outline"
+                    size="sm"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    {exporting ? "匯出中…" : "匯出 Excel"}
+                  </Button>
+                  <Button
+                    onClick={fetchHistoricalApplications}
+                    disabled={loadingHistoricalApplications}
+                    variant="outline"
+                    size="sm"
+                  >
+                    <RefreshCw
+                      className={`h-4 w-4 mr-2 ${loadingHistoricalApplications ? "animate-spin" : ""}`}
+                    />
+                    刷新
+                  </Button>
+                </div>
               </div>
 
               {/* 錯誤顯示 */}

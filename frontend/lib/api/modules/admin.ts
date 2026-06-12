@@ -116,6 +116,38 @@ export function createAdminApi() {
     },
 
     /**
+     * Export the filtered 歷史申請 view to XLSX (#985 / G23).
+     * Returns a Blob for download.
+     */
+    exportHistoricalApplications: async (
+      filters?: Omit<HistoricalApplicationFilters, "page" | "size">
+    ): Promise<Blob> => {
+      const token = typedClient.getToken();
+      const baseURL =
+        typeof window !== "undefined" ? "" : process.env.INTERNAL_API_URL || "http://localhost:8000";
+      const params = new URLSearchParams();
+      if (filters?.status) params.set("status", filters.status);
+      if (filters?.scholarship_type) params.set("scholarship_type", filters.scholarship_type);
+      if (filters?.academic_year != null) params.set("academic_year", String(filters.academic_year));
+      if (filters?.semester) params.set("semester", filters.semester);
+      if (filters?.search) params.set("search", filters.search);
+      const qs = params.toString();
+      const response = await fetch(
+        `${baseURL}/api/v1/admin/applications/history/export${qs ? `?${qs}` : ""}`,
+        {
+          method: "GET",
+          headers: {
+            ...(token && { Authorization: `Bearer ${token}` }),
+          },
+        }
+      );
+      if (!response.ok) {
+        throw new Error("匯出歷史申請失敗");
+      }
+      return response.blob();
+    },
+
+    /**
      * Update application status
      * Type-safe: Path parameter and request body validated against OpenAPI
      */
