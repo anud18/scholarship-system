@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.core.exceptions import AuthorizationError, NotFoundError
+from app.models.audit_log import AuditAction, AuditLog
 from app.models.application import Application
 from app.models.enums import ReviewStage
 from app.models.review import ApplicationReview, ApplicationReviewItem
@@ -369,6 +370,23 @@ class ReviewService:
         rejected_items = [item for item in items if item.get("recommendation") == "reject"]
 
         if not rejected_items:
+            # G7 (#969): decision_reason is an append-only narrative. When a
+            # re-review APPROVES everything but earlier rejection text exists,
+            # append an explicit closing line — otherwise the stale rejection
+            # reads as the current decision.
+            if application.decision_reason:
+                role_value = reviewer.role.value if hasattr(reviewer.role, "value") else str(reviewer.role).lower()
+                role_name = {
+                    "professor": "教授",
+                    "college": "學院",
+                    "admin": "管理員",
+                    "super_admin": "系統管理員",
+                }.get(role_value, role_value)
+                timestamp = reviewed_at.strftime("%Y-%m-%d %H:%M:%S")
+                application.decision_reason += (
+                    f"\n\n[{timestamp}] {role_name} ({reviewer.name}): 重新審核後同意"
+                    f"（上方先前退件理由保留供稽核，不再適用）"
+                )
             return
 
         # 角色名稱對應 - 先提取 role 字符串值
@@ -515,6 +533,56 @@ class ReviewService:
 
         return application.status
 
+    def _snapshot_review(self, review) -> Dict[str, Any]:
+        """Serializable snapshot of a review + its sub-type items (G6/#968)."""
+        return {
+            "recommendation": review.recommendation,
+            "comments": review.comments,
+            "reviewed_at": review.reviewed_at.isoformat() if review.reviewed_at else None,
+            "items": [
+                {
+                    "sub_type_code": item.sub_type_code,
+                    "recommendation": item.recommendation,
+                    "comments": item.comments,
+                }
+                for item in (review.items or [])
+            ],
+        }
+
+    def _audit_review_revision(
+        self,
+        review,
+        reviewer_id: int,
+        old_snapshot: Dict[str, Any] | None,
+        new_items: List[Dict[str, Any]],
+        overall_recommendation: str,
+        combined_comments: str,
+    ) -> None:
+        """G6 (#968): re-reviews overwrite in place and hard-delete old items —
+        the ONLY durable version history is this audit row. old_values carries
+        the full prior review (incl. per-sub-type decisions); new_values the
+        replacement. Browse via the 稽核日誌 tab (resource_type
+        application_review)."""
+        self.db.add(
+            AuditLog.create_log(
+                user_id=reviewer_id,
+                action=(AuditAction.update.value if old_snapshot else AuditAction.create.value),
+                resource_type="application_review",
+                resource_id=str(review.id),
+                description=(
+                    f"review {'revised' if old_snapshot else 'created'} for application "
+                    f"{review.application_id}: {overall_recommendation}"
+                ),
+                old_values=old_snapshot,
+                new_values={
+                    "recommendation": overall_recommendation,
+                    "comments": combined_comments,
+                    "items": new_items,
+                },
+                meta_data={"application_id": review.application_id},
+            )
+        )
+
     async def create_review(
         self,
         application_id: int,
@@ -555,6 +623,10 @@ class ReviewService:
         existing_review = result.scalar_one_or_none()
 
         if existing_review:
+            # G6 (#968): preserve the prior version BEFORE overwriting — the
+            # old recommendation/comments/items would otherwise be lost.
+            prior_snapshot = self._snapshot_review(existing_review)
+
             # 更新現有記錄
             existing_review.recommendation = overall_recommendation
             existing_review.comments = combined_comments
@@ -576,8 +648,17 @@ class ReviewService:
                 reviewed_at=datetime.now(timezone.utc),
             )
             self.db.add(review)
+            prior_snapshot = None
 
         await self.db.flush()  # 取得 review.id
+        self._audit_review_revision(
+            review,
+            reviewer_id=reviewer_id,
+            old_snapshot=prior_snapshot,
+            new_items=items,
+            overall_recommendation=overall_recommendation,
+            combined_comments=combined_comments,
+        )
 
         # 建立新的子項目審查記錄
         for item in items:
@@ -656,6 +737,9 @@ class ReviewService:
         if not review:
             return None
 
+        # G6 (#968): preserve the prior version before the in-place overwrite.
+        prior_snapshot = self._snapshot_review(review)
+
         # 刪除舊的子項目
         for old_item in review.items:
             await self.db.delete(old_item)
@@ -684,6 +768,15 @@ class ReviewService:
         review.comments = combined_comments
         review.reviewed_at = datetime.now(timezone.utc)
 
+        self._audit_review_revision(
+            review,
+            reviewer_id=review.reviewer_id,
+            old_snapshot=prior_snapshot,
+            new_items=items,
+            overall_recommendation=overall_recommendation,
+            combined_comments=combined_comments,
+        )
+
         await self.db.commit()
         await self.db.refresh(review)
 
@@ -691,8 +784,9 @@ class ReviewService:
         reviewer = await self.db.get(User, review.reviewer_id)
         application = await self.db.get(Application, review.application_id)
         if application and reviewer:
-            # 清除舊的 decision_reason（因為是更新）
-            # 在實務上可能需要更複雜的邏輯來處理
+            # decision_reason is append-only by design (the audit narrative);
+            # update_decision_reason appends the latest verdict — including an
+            # explicit 同意 closing line when nothing is rejected (G7/#969).
             await self.update_decision_reason(application, reviewer, items, review.reviewed_at)
 
         # 更新申請狀態
