@@ -53,7 +53,9 @@ class PortalSSOService:
                 # Post token to Portal JWT server for verification
                 # Portal expects form data, not JSON
                 # Try multiple parameter combinations that Portal might expect
-                logger.info(f"Attempting Portal JWT verification with token: {token[:50]}...")
+                # SECURITY: do not log any portion of the token — even a prefix is
+                # a sensitive credential fragment.
+                logger.info("Attempting Portal JWT verification")
 
                 # First attempt: just the token
                 response = await client.post(
@@ -78,13 +80,14 @@ class PortalSSOService:
                         settings.portal_jwt_server_url,
                         data={
                             "token": token,
-                            "callback_url": "https://140.113.7.148/api/v1/auth/portal-sso/verify",
+                            "callback_url": settings.portal_callback_url,
                         },
                         headers={"Content-Type": "application/x-www-form-urlencoded"},
                     )
 
                 if response.status_code != 200:
-                    logger.error(f"Portal JWT verification failed: {response.status_code} - {response.text}")
+                    # SECURITY: don't log response body — it may echo the token / PII.
+                    logger.error(f"Portal JWT verification failed: {response.status_code}")
                     raise AuthenticationError(f"Portal token verification failed: {response.status_code}")
 
                 portal_data = response.json()
@@ -94,11 +97,12 @@ class PortalSSOService:
                     # Extract user data from nested structure
                     user_data = portal_data["data"]
                     if not self._validate_portal_response(user_data):
-                        logger.error(f"Invalid user data in portal response: {user_data}")
+                        # SECURITY: log only the field names, not the PII values.
+                        logger.error(f"Invalid user data in portal response; keys: {list(user_data.keys())}")
                         raise AuthenticationError("Invalid user data format")
                     return user_data
                 else:
-                    logger.error(f"Invalid portal response format: {portal_data}")
+                    logger.error("Invalid portal response format")
                     raise AuthenticationError("Invalid portal response format")
 
         except httpx.TimeoutException as exc:

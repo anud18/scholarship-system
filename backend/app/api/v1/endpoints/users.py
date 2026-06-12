@@ -142,8 +142,15 @@ async def update_my_profile(
     # This automatically stays in sync with schema changes
     allowed_fields = set(update_data.model_fields.keys())
 
+    # SECURITY: privilege-controlling fields must never be self-editable via the
+    # profile endpoint, otherwise any authenticated user could escalate to
+    # super_admin by sending {"role": "super_admin"}.
+    self_protected_fields = {"role", "user_type", "status", "college_code"}
+
     update_dict = update_data.model_dump(exclude_unset=True)
     for field, value in update_dict.items():
+        if field in self_protected_fields:
+            continue
         if field in allowed_fields and hasattr(current_user, field):
             setattr(current_user, field, value)
 
@@ -354,6 +361,17 @@ async def update_user(
     allowed_fields = set(update_data.model_fields.keys())
 
     update_dict = update_data.model_dump(exclude_unset=True)
+
+    # SECURITY: restrict role changes to prevent privilege escalation.
+    # A plain admin must not be able to grant roles (e.g. promote themselves or
+    # another account to super_admin); only super_admin may change roles, and no
+    # one may change their own role.
+    if "role" in update_dict and update_dict["role"] != user.role:
+        if user.id == current_user.id:
+            raise HTTPException(status_code=403, detail="Cannot change your own role")
+        if not current_user.is_super_admin():
+            raise HTTPException(status_code=403, detail="Only super admin can change user roles")
+
     for field, value in update_dict.items():
         if field in allowed_fields and hasattr(user, field):
             setattr(user, field, value)

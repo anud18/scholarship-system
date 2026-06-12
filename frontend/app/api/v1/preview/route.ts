@@ -381,6 +381,13 @@ async function handleRosterPreview(
       return new NextResponse(htmlContent, {
         headers: {
           "Content-Type": "text/html; charset=utf-8",
+          // Defense-in-depth: the template only needs inline styles; block all
+          // scripts so any markup that slips through escaping cannot execute.
+          // base-uri/form-action are NOT covered by default-src, so set them
+          // explicitly; frame-ancestors mirrors X-Frame-Options in CSP.
+          "Content-Security-Policy":
+            "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+          "X-Frame-Options": "SAMEORIGIN",
         },
       });
     }
@@ -425,6 +432,21 @@ interface RosterPreviewPayload {
   };
 }
 
+// SECURITY: escape any backend-provided value before interpolating it into the
+// HTML template below. Without this, roster codes, column headers, validation
+// errors, or cell values containing markup (e.g. "<img src=x onerror=...>") would
+// execute as script in the rendered preview (stored/reflected XSS).
+function escapeHtml(value: unknown): string {
+  const str =
+    value === null || value === undefined ? '' : String(value);
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function generateRosterPreviewHTML(data: RosterPreviewPayload): string {
   const { roster_code, preview_data, total_rows, column_headers, validation_result } = data;
 
@@ -434,7 +456,7 @@ function generateRosterPreviewHTML(data: RosterPreviewPayload): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>造冊預覽 - ${roster_code}</title>
+  <title>造冊預覽 - ${escapeHtml(roster_code)}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -549,7 +571,7 @@ function generateRosterPreviewHTML(data: RosterPreviewPayload): string {
   <div class="container">
     <div class="header">
       <h1>📋 造冊預覽</h1>
-      <p>造冊代碼: ${roster_code}</p>
+      <p>造冊代碼: ${escapeHtml(roster_code)}</p>
     </div>
 
     <div class="info-bar">
@@ -567,7 +589,7 @@ function generateRosterPreviewHTML(data: RosterPreviewPayload): string {
     <div class="validation">
       <h3>⚠️ 驗證警告</h3>
       <ul>
-        ${validation_result.errors?.map((error: string) => `<li>${error}</li>`).join('') || ''}
+        ${validation_result.errors?.map((error: string) => `<li>${escapeHtml(error)}</li>`).join('') || ''}
       </ul>
     </div>
     ` : ''}
@@ -577,7 +599,7 @@ function generateRosterPreviewHTML(data: RosterPreviewPayload): string {
       <table>
         <thead>
           <tr>
-            ${column_headers?.map((header: string) => `<th>${header}</th>`).join('') || '<th>無資料</th>'}
+            ${column_headers?.map((header: string) => `<th>${escapeHtml(header)}</th>`).join('') || '<th>無資料</th>'}
           </tr>
         </thead>
         <tbody>
@@ -588,7 +610,7 @@ function generateRosterPreviewHTML(data: RosterPreviewPayload): string {
               ${row
                 .map(
                   cell =>
-                    `<td>${cell !== null && cell !== undefined ? cell : '-'}</td>`
+                    `<td>${cell !== null && cell !== undefined ? escapeHtml(cell) : '-'}</td>`
                 )
                 .join('')}
             </tr>

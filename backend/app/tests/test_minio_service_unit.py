@@ -79,7 +79,7 @@ async def test_upload_file_rejects_large_file(minio_service, monkeypatch):
     with pytest.raises(HTTPException) as exc:
         await MinIOService.upload_file(minio_service, upload, application_id=1, file_type="doc")
 
-    assert exc.value.status_code == 500  # currently wrapped inside generic handler
+    assert exc.value.status_code == 413  # too large -> Request Entity Too Large
     minio_service.client.put_object.assert_not_called()
 
 
@@ -92,7 +92,22 @@ async def test_upload_file_invalid_extension(minio_service, monkeypatch):
     with pytest.raises(HTTPException) as exc:
         await MinIOService.upload_file(minio_service, upload, application_id=1, file_type="doc")
 
-    assert exc.value.status_code == 500  # currently wrapped inside generic handler
+    assert exc.value.status_code == 415  # unsupported media type
+    minio_service.client.put_object.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_upload_file_double_extension_bypass_blocked(minio_service, monkeypatch):
+    """A double-extension payload (report.pdf.exe) must be rejected by the
+    final-extension check, not silently accepted as a PDF."""
+    monkeypatch.setattr("app.services.minio_service.settings", _make_settings(allowed_file_types_list=["pdf"]))
+
+    upload = _build_upload_file("report.pdf.exe", b"data")
+
+    with pytest.raises(HTTPException) as exc:
+        await MinIOService.upload_file(minio_service, upload, application_id=1, file_type="doc")
+
+    assert exc.value.status_code == 415
     minio_service.client.put_object.assert_not_called()
 
 
