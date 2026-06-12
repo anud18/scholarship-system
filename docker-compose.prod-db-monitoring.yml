@@ -57,7 +57,11 @@ services:
     image: prometheuscommunity/postgres-exporter:v0.18.1
     container_name: postgres_exporter_prod
     environment:
-      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-scholarship_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-scholarship_db}?sslmode=require"
+      # Postgres in this compose has no SSL configured, so sslmode=disable
+      # matches reality. With sslmode=require the exporter shows up=1
+      # (process running) but every pg_* metric is missing — the same bug
+      # was fixed on staging in commit 888ee744 and never backported (P9).
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-scholarship_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-scholarship_db}?sslmode=disable"
     ports:
       - "9187:9187"
     networks:

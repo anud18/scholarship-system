@@ -1,0 +1,230 @@
+apiVersion: 1
+# Application log-based alerts (Loki) — PRODUCTION variant (P9 / issue #74).
+# Duplicated from rules-application-logs.yml with loki-prod-uid +
+# environment="prod" labels (matching prod-*.alloy relabel rules) so
+# production error logs alert through the same GitHub-issue pipeline.
+#
+# These rules query Loki tenants instead of Prometheus, so they catch
+# things metrics can't see: stack traces, application-level ERROR lines,
+# unhandled exceptions. They go through the same notification policy as
+# Prometheus alerts, so a firing rule eventually opens / updates a GitHub
+# issue via the repository_dispatch webhook.
+#
+# Grafana alert pipeline for Loki count_over_time queries needs three
+# stages: A (query) -> B (reduce last) -> C (threshold). Without the
+# reducer, evaluation fails with "looks like time series data, only
+# reduced data can be alerted on."
+groups:
+  - orgId: 1
+    name: application_logs_prod
+    folder: Alerts
+    interval: 1m
+    rules:
+      # Detects an abnormal rate of ERROR-level log lines. Threshold tuned
+      # for the post-2026-05-15 traceback-preservation sweep (PRs #574-#588):
+      # every endpoint + service emits `logger.exception(...)` at ERROR
+      # level on caught-exception paths, so the baseline ERROR rate during
+      # normal traffic + integration tests can easily exceed >5/5min. The
+      # raised threshold + 5m cooldown only fires on genuine spikes that
+      # indicate an upstream dependency outage or a hot-path regression.
+      - uid: alert-backend-error-spike-prod
+        title: BackendErrorSpike (production)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki-prod-uid
+            model:
+              datasource:
+                type: loki
+                uid: loki-prod-uid
+              expr: |
+                sum(count_over_time({environment="prod", container=~"scholarship_backend.*"} |~ "(?i)\\bERROR\\b" [5m]))
+              refId: A
+              queryType: instant
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: B
+              type: reduce
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              refId: C
+              type: threshold
+              conditions:
+                - evaluator:
+                    params: [50]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    type: last
+                  type: query
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        labels:
+          severity: warning
+          category: application
+          environment: staging
+        annotations:
+          summary: "Backend error log spike (>50/5min) on {{ $labels.environment }}"
+          description: "scholarship_backend has emitted more than 50 ERROR-level log lines in the last 5 minutes — above the post-sweep baseline. Investigate via Loki: {environment=\"prod\", container=~\"scholarship_backend.*\"} |~ \"ERROR\""
+        isPaused: false
+
+      # Detects a sustained burst of Python tracebacks. Threshold tuned for
+      # the post-2026-05-15 traceback-preservation sweep (PRs #574–#588):
+      # every endpoint + service now emits `logger.exception(...)` on
+      # error paths, so background-noise tracebacks are *expected* and
+      # don't represent a crash. A genuine unhandled-exception storm
+      # still produces tens of stack traces per minute and trips the
+      # raised threshold + 5m cooldown.
+      - uid: alert-backend-traceback-prod
+        title: BackendUnhandledTraceback (production)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki-prod-uid
+            model:
+              datasource:
+                type: loki
+                uid: loki-prod-uid
+              expr: |
+                sum(count_over_time({environment="prod", container=~"scholarship_backend.*"} |= "Traceback (most recent call last)" [5m]))
+              refId: A
+              queryType: instant
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: B
+              type: reduce
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              refId: C
+              type: threshold
+              conditions:
+                - evaluator:
+                    params: [25]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    type: last
+                  type: query
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        labels:
+          severity: high
+          category: application
+          environment: staging
+        annotations:
+          summary: "Backend traceback burst (>25/5min) on {{ $labels.environment }}"
+          description: "More than 25 Python tracebacks appeared in scholarship_backend logs over a 5-minute window — that exceeds the expected background rate from `logger.exception(...)` and suggests an unhandled-exception storm. Investigate via Loki: {environment=\"prod\", container=~\"scholarship_backend.*\"} |= \"Traceback\""
+        isPaused: false
+
+      - uid: alert-postgres-error-log-prod
+        title: PostgresErrorLog (production)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki-prod-uid
+            model:
+              datasource:
+                type: loki
+                uid: loki-prod-uid
+              expr: |
+                sum(count_over_time({environment="prod", container="scholarship_postgres_prod"} |~ "(?i)\\b(ERROR|FATAL)\\b" [5m]))
+              refId: A
+              queryType: instant
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              refId: B
+              type: reduce
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              refId: C
+              type: threshold
+              conditions:
+                - evaluator:
+                    params: [3]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    type: last
+                  type: query
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        labels:
+          severity: warning
+          category: database
+          environment: staging
+        annotations:
+          summary: "Postgres ERROR/FATAL log spike on {{ $labels.environment }}"
+          description: "scholarship_postgres_prod emitted >3 ERROR/FATAL lines in 5 minutes. Inspect via Loki: {environment=\"prod\", container=\"scholarship_postgres_prod\"} |~ \"ERROR|FATAL\""
+        isPaused: false
