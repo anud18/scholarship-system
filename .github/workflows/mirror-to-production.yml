@@ -189,6 +189,23 @@ jobs:
 
           echo "::endgroup::"
 
+      - name: Stage production workflow templates
+        # The mirror strips .github/workflows AND production-workflows-examples
+        # from the tree, but this workflow is the ONLY channel into the private
+        # prod repo — its CI/CD has to be carried over from here. Stage the
+        # templates before the removal steps so the install step (after
+        # production-workflow preservation) can seed them.
+        run: |
+          echo "::group::Staging production workflow templates"
+          rm -rf /tmp/prod-workflow-templates
+          if [ -d ".github/production-workflows-examples" ]; then
+            cp -r .github/production-workflows-examples /tmp/prod-workflow-templates
+            echo "::notice::Staged $(ls /tmp/prod-workflow-templates | wc -l) template file(s)"
+          else
+            echo "::warning::.github/production-workflows-examples not found — nothing to stage"
+          fi
+          echo "::endgroup::"
+
       - name: Remove development workflows
         run: |
           echo "::group::Removing development workflows"
@@ -430,6 +447,93 @@ jobs:
           # Cleanup temp directory
           rm -rf /tmp/production-workflows
 
+          echo "::endgroup::"
+
+      - name: Install production workflows from templates
+        id: install-workflows
+        env:
+          PRESERVED_COUNT: ${{ steps.preserve-workflows.outputs.preserved_count }}
+        run: |
+          echo "::group::Installing production workflows from templates"
+
+          # Bootstrap + drift policy:
+          #   - A workflow file the prod repo ALREADY has (just preserved from
+          #     prod-repo/main) wins — prod-side customizations are never
+          #     overwritten by the mirror.
+          #   - A workflow file the prod repo does NOT have yet is installed
+          #     from the staged templates (first mirror seeds the whole CI/CD).
+          #   - When a template differs from the preserved prod copy we only
+          #     surface a notice so the diff can be ported deliberately.
+          #
+          # NOTE: pushing .github/workflows/** to the prod repo requires the
+          # GH_PAT to carry the `workflow` scope — without it the push step
+          # fails with "refusing to allow a Personal Access Token to create or
+          # update workflow".
+          INSTALLED=""
+          SKIPPED=""
+          DIFFERS=""
+
+          if [ ! -d /tmp/prod-workflow-templates ]; then
+            echo "::warning::No staged templates — skipping install"
+            echo "installed=" >> $GITHUB_OUTPUT
+            echo "::endgroup::"
+            exit 0
+          fi
+
+          mkdir -p .github/workflows .github/production-setup
+
+          for f in deploy.yml health-check.yml backup.yml auto-tag-on-merge.yml setting-env.yml; do
+            src="/tmp/prod-workflow-templates/$f"
+            [ -f "$src" ] || continue
+            dest=".github/workflows/$f"
+            if [ -f "$dest" ]; then
+              if cmp -s "$src" "$dest"; then
+                SKIPPED="$SKIPPED $f"
+              else
+                DIFFERS="$DIFFERS $f"
+                echo "::notice::$f: prod repo has a customized copy — template differs, NOT overwriting (port changes manually if intended)"
+              fi
+            else
+              cp "$src" "$dest"
+              INSTALLED="$INSTALLED $f"
+              echo "::notice::Installed $f"
+            fi
+          done
+
+          # Operational guides ride along under .github/production-setup/ —
+          # the mirror removes all *.md from the app tree, but the operator
+          # working in the prod repo still needs these.
+          for g in README.md SECRETS-SETUP-GUIDE.md IT-BACKUP-TRANSFER-GUIDE.md; do
+            if [ -f "/tmp/prod-workflow-templates/$g" ]; then
+              cp "/tmp/prod-workflow-templates/$g" ".github/production-setup/$g"
+            fi
+          done
+
+          git add .github/workflows/ .github/production-setup/ 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: install/update production CI-CD from templates
+
+          Installed:${INSTALLED:- (none)}
+          Already present (identical):${SKIPPED:- (none)}
+          Present but template differs (NOT overwritten):${DIFFERS:- (none)}
+
+          Seeded from dev-repo .github/production-workflows-examples/ — this
+          mirror is the only channel into this repository, so its CI/CD is
+          versioned and delivered through it. Prod-side customizations are
+          never overwritten.
+          "
+            echo "::notice::✅ Production CI/CD committed"
+          else
+            echo "::notice::Nothing to install — prod workflows already up to date"
+          fi
+
+          {
+            echo "## Production CI/CD install"
+            echo "- Installed:${INSTALLED:- (none)}"
+            echo "- Already present:${SKIPPED:- (none)}"
+            echo "- Differs (not overwritten):${DIFFERS:- (none)}"
+          } >> $GITHUB_STEP_SUMMARY
+          echo "installed=${INSTALLED}" >> $GITHUB_OUTPUT
           echo "::endgroup::"
 
       - name: Calculate next version
