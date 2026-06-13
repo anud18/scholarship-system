@@ -666,7 +666,7 @@ gh secret list
 PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p 5432 -U "$DB_USER" -d "$DB_NAME" -c "SELECT version();"
 
 # Test MinIO connectivity
-curl -I http://$MINIO_HOST:9000/minio/health/live
+curl -I http://$MINIO_HOST:9000/health
 ```
 
 **Test SMTP:**
@@ -811,7 +811,7 @@ gh secret set PORTAL_JWT_SERVER_URL -b "https://portal.nycu.edu.tw/api/auth"
 2. **Check MinIO health:**
    ```bash
    ssh db-vm
-   curl http://localhost:9000/minio/health/live
+   curl http://localhost:9000/health
    ```
 
 3. **Verify MINIO_HOST secret:**
@@ -823,7 +823,7 @@ gh secret set PORTAL_JWT_SERVER_URL -b "https://portal.nycu.edu.tw/api/auth"
 4. **Test from AP VM:**
    ```bash
    # On AP VM
-   curl http://$MINIO_HOST:9000/minio/health/live
+   curl http://$MINIO_HOST:9000/health
    ```
 
 ---

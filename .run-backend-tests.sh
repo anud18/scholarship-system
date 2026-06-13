@@ -37,7 +37,7 @@ exec docker run --rm -t --user root \
     -e MINIO_ACCESS_KEY=test \
     -e MINIO_SECRET_KEY=test \
     -e MINIO_ENDPOINT=localhost:9000 \
-    -e MINIO_BUCKET_NAME=test-bucket \
+    -e MINIO_BUCKET=test-bucket \
     -e STUDENT_API_ENABLED=false \
     ghcr.io/anud18/scholarship-system-backend:latest \
     python -m pytest \

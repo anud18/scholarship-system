@@ -17,7 +17,7 @@ docker compose -f docker-compose.dev.yml logs -f
 docker compose -f docker-compose.dev.yml restart backend
 ```
 
-This spins up the full stack (backend, frontend, database, MinIO, mock student API) with hot-reload enabled.
+This spins up the full stack (backend, frontend, database, RustFS object storage (S3 API, service name `minio`), mock student API) with hot-reload enabled.
 
 ## Core Development Principles
 
@@ -673,7 +673,7 @@ return new NextResponse(fileBuffer, {
 ```bash
 # Backend
 MINIO_ENDPOINT=minio:9000
-MINIO_BUCKET=scholarship-system
+MINIO_BUCKET=scholarship-documents
 
 # Frontend
 NEXT_PUBLIC_API_URL=http://localhost:8000

@@ -16,7 +16,7 @@ This guide will help you test the Scholarship Application and Approval Managemen
    - `5432` - PostgreSQL Database
    - `6379` - Redis Cache
    - `9000` - MinIO API
-   - `9001` - MinIO Console
+   - `9001` - RustFS Console (dev)
 
 ## Quick Start
 
@@ -82,7 +82,7 @@ Once all services are running:
 | **Database** | localhost:5432 | PostgreSQL database (scholarship_db) |
 | **Redis** | localhost:6379 | Cache and session storage |
 | **MinIO API** | http://localhost:9000 | Object storage API |
-| **MinIO Console** | http://localhost:9001 | Object storage management UI (minioadmin/minioadmin123) |
+| **RustFS Console (dev)** | http://localhost:9001/rustfs/console/ | Object storage management UI (minioadmin/minioadmin123) |
 
 ## Database Connection
 
@@ -239,7 +239,7 @@ REDIS_URL=redis://redis:6379/0
 MINIO_ENDPOINT=minio:9000
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin123
-MINIO_BUCKET_NAME=scholarship-documents
+MINIO_BUCKET=scholarship-documents
 MINIO_SECURE=false
 
 # Security
