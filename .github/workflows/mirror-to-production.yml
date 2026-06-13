@@ -480,8 +480,15 @@ jobs:
             exit 0
           fi
 
-          mkdir -p .github/workflows .github/production-setup
+          mkdir -p .github/workflows
 
+          # Carry over ONLY the executable CI/CD — the .yml workflows. The
+          # prod repo's security scanning is strict, so we do NOT push the
+          # setup guides (SECRETS-SETUP-GUIDE.md etc. are full of example
+          # secret values + `gh secret set` snippets that trip secret
+          # scanners). Operators read those guides in the DEV repo's
+          # .github/production-workflows-examples/ — they already have access
+          # there since they dispatch this mirror.
           for f in deploy.yml health-check.yml backup.yml auto-tag-on-merge.yml setting-env.yml; do
             src="/tmp/prod-workflow-templates/$f"
             [ -f "$src" ] || continue
@@ -500,16 +507,7 @@ jobs:
             fi
           done
 
-          # Operational guides ride along under .github/production-setup/ —
-          # the mirror removes all *.md from the app tree, but the operator
-          # working in the prod repo still needs these.
-          for g in README.md SECRETS-SETUP-GUIDE.md IT-BACKUP-TRANSFER-GUIDE.md; do
-            if [ -f "/tmp/prod-workflow-templates/$g" ]; then
-              cp "/tmp/prod-workflow-templates/$g" ".github/production-setup/$g"
-            fi
-          done
-
-          git add .github/workflows/ .github/production-setup/ 2>/dev/null || true
+          git add .github/workflows/ 2>/dev/null || true
           if ! git diff --cached --quiet; then
             git commit -m "chore: install/update production CI-CD from templates
 

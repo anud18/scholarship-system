@@ -11,8 +11,11 @@
 - prod repo **還沒有**的檔案 → 自動安裝（首次 mirror 即完成 CI/CD bootstrap）
 - prod repo **已有**的檔案 → 一律不覆寫（prod 端客製優先）；若範本與 prod 版本
   不同，mirror log 會以 notice 提示，由人工決定是否移植
-- `README.md` / `SECRETS-SETUP-GUIDE.md` / `IT-BACKUP-TRANSFER-GUIDE.md`
-  會放到 prod repo 的 `.github/production-setup/`（mirror 會剝除其餘 *.md）
+
+> 📦 **只帶必要的可執行 CI/CD（.yml workflows）過去。** prod repo 資安掃描嚴格，
+> 因此本目錄的設定指南（`SECRETS-SETUP-GUIDE.md` 等含大量 example secret 值與
+> `gh secret set` 指令，會被 secret scanner 誤報）**不會**推到 prod repo。
+> 操作者請在 **dev repo 的本目錄**閱讀這些指南（dispatch mirror 即代表已有存取權）。
 
 > ⚠️ 前提：`GH_PAT` secret 必須具備 **`workflow` scope**，否則推送
 > `.github/workflows/**` 會被 GitHub 拒絕（"refusing to allow a Personal
