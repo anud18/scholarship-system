@@ -79,8 +79,25 @@ jobs:
           STAGING_DB_URL: ${{ secrets.STAGING_DATABASE_URL_SYNC }}
         run: |
           docker inspect --format '{{.Name}} {{.State.Status}}' \
-            scholarship_backend_staging scholarship_frontend_staging
-          curl -fsS http://localhost:8000/health > /dev/null
+            scholarship_backend_staging scholarship_frontend_staging || true
+          # Retry: a deploy that briefly OOM'd or a mid-restart container can
+          # make /health blip for seconds and self-recover (the 2026-06-12
+          # false alarm, #1016). Only fail — and open an issue — if staging is
+          # STILL unhealthy after a short window, so a transient blip doesn't
+          # cost a debug cycle.
+          ok=0
+          for i in $(seq 1 12); do
+            if curl -fsS --max-time 10 http://localhost:8000/health > /dev/null 2>&1; then
+              ok=1; echo "backend /health OK (attempt $i)"; break
+            fi
+            echo "backend /health not ready (attempt $i/12) — retrying in 10s"
+            sleep 10
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "::error::Live staging backend /health did not recover after ~2 min — staging itself is unhealthy (NOT a replica/test problem). Check the latest Deployment Pipeline run; a failed migration (OOM/exit 137) + failed rollback leaves staging down."
+            docker logs --tail 50 scholarship_backend_staging 2>&1 || true
+            exit 1
+          fi
           docker run --rm postgres:15-alpine pg_isready -d "$STAGING_DB_URL"
 
       - name: Resolve currently deployed images
