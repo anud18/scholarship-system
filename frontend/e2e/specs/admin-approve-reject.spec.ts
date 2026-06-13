@@ -22,7 +22,7 @@
  *   2. Admin PATCHes /admin/applications/{id}/status → {status: "approved"}
  *      → HTTP 200; DB: status=approved, approved_at is non-null.
  *   3. Admin PATCHes same application → {status: "rejected", rejection_reason: "…"}
- *      → HTTP 200; DB: status=rejected, approved_at is STILL non-null (preserved).
+ *      → HTTP 200; DB: status=rejected, approved_at is now NULL (cleared by G16).
  *
  * Route: PATCH /api/v1/admin/applications/{id}/status
  * Auth: require_admin (admin or super_admin).
@@ -88,7 +88,7 @@ test.describe("Admin PATCH /admin/applications/{id}/status: approve then reject"
     }
   });
 
-  test("@nightly stuphd001 submit → admin approve (approved_at set) → admin reject (approved_at preserved)", async ({
+  test("@nightly stuphd001 submit → admin approve (approved_at set) → admin reject (approved_at cleared)", async ({
     browser,
   }) => {
     // 0. Pre-clean.
@@ -154,9 +154,9 @@ test.describe("Admin PATCH /admin/applications/{id}/status: approve then reject"
       "approved_at must be set after approval — only the approve branch writes this column",
     ).not.toBeNull();
 
-    // 3. Admin rejects the same application.
-    //    Key: approved_at is NOT cleared by the reject branch (service only writes
-    //    status_name on reject; approved_at is untouched).
+    // 3. Admin rejects the same application (rejection_reason satisfies the
+    //    G16 admin-override requirement for the approved→rejected transition,
+    //    and the reject branch clears approved_at).
     const rejectRes = await apiAs<{ success: boolean; message: string }>(
       adminLogin.token,
       "PATCH",
@@ -173,12 +173,16 @@ test.describe("Admin PATCH /admin/applications/{id}/status: approve then reject"
     ).toBe(true);
     expect(rejectRes.body.success).toBe(true);
 
-    // DB: status=rejected, approved_at is still set (preserved from prior approval).
+    // DB: status=rejected, approved_at CLEARED. G16 (#978/#1004): rejecting
+    // an approved application nulls approved_at so period-scoped「核准清單」
+    // queries don't count later-rejected rows. (approved→rejected is an
+    // illegal transition, so this also exercises the admin-override path,
+    // which the rejection_reason above satisfies.)
     const afterReject = await getApplication(appId);
     expect(afterReject!.status).toBe("rejected");
     expect(
       afterReject!.approved_at,
-      "approved_at must be preserved (non-null) after rejection — the reject branch does not clear it",
-    ).not.toBeNull();
+      "approved_at must be CLEARED after rejection (G16 #1004) — a rejected application is not in any approved list",
+    ).toBeNull();
   });
 });
