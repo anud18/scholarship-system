@@ -85,7 +85,11 @@ jobs:
           AP_ARCH="$(dpkg --print-architecture)"
           AP_CODENAME="$(lsb_release -cs 2>/dev/null || echo unknown)"
           echo "   arch=$AP_ARCH  ubuntu=$AP_CODENAME  host=$(hostname)"
-          if sudo -n true 2>/dev/null; then ok "passwordless sudo available"; else warn "sudo will prompt — a non-interactive runner step that needs sudo could hang. Configure passwordless sudo for the runner user if a later step stalls."; fi
+          # HARD gate: this preflight only runs for setup/full-check, which execute
+          # ~13 LOCAL sudo commands non-interactively. A runner that hits a sudo
+          # password prompt HANGS forever (no TTY to answer), so fail fast here
+          # with the fix instead of stalling mid-Docker-install.
+          if sudo -n true 2>/dev/null; then ok "passwordless sudo available"; else err "AP runner user has NO passwordless sudo — setup/full-check would HANG at the first local sudo (Docker install). Configure NOPASSWD sudo for the runner user (SECRETS-SETUP-GUIDE.md → 'Sudo Requirements for AP Runner User')."; fi
           AP_DISK_GB="$(df -BG --output=avail / | tail -1 | tr -dc '0-9')"
           echo "   root free: ${AP_DISK_GB}G"
           [ "${AP_DISK_GB:-0}" -ge 5 ] || err "AP VM has <5G free on / — image save/transfer needs headroom"
