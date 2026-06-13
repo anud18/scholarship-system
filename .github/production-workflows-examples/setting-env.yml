@@ -29,6 +29,10 @@ jobs:
   setup-environment:
     name: ${{ github.event.inputs.action == 'validate' && 'Validate Environment' || github.event.inputs.action == 'setup' && 'Setup Environment' || 'Full Check & Setup' }}
     runs-on: [self-hosted, linux]
+    # Bounded so a hung SSH/sudo prompt or an offline runner doesn't wait
+    # forever. If the job sits queued, the AP VM runner service is likely down
+    # — SSH in and run: sudo systemctl status actions.runner.*
+    timeout-minutes: 60
 
     steps:
       #########################################################################
@@ -36,6 +40,103 @@ jobs:
       #########################################################################
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      #########################################################################
+      # STEP 1.5: Pre-flight gate — surface EVERY iteration-causing gotcha at
+      # once, before any long/destructive operation runs. The failures that
+      # otherwise force back-and-forth debugging (unreachable DB VM, no sudo,
+      # AP/DB arch or Ubuntu-version mismatch that breaks the .deb transfer,
+      # no disk) are all checked here with one consolidated report.
+      #########################################################################
+      - name: Pre-flight checks
+        if: github.event.inputs.action == 'setup' || github.event.inputs.action == 'full-check'
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_VM_USER: ${{ secrets.DB_VM_USER }}
+          DB_VM_SSH_KEY: ${{ secrets.DB_VM_SSH_KEY }}
+          DB_VM_SSH_PORT: ${{ secrets.DB_VM_SSH_PORT }}
+        run: |
+          set -uo pipefail
+          fail=0
+          err()  { echo "::error::$1"; fail=1; }
+          ok()   { echo "   ✅ $1"; }
+          warn() { echo "   ⚠️  $1"; }
+
+          echo "=========================================="
+          echo "Pre-flight checks (fail fast, fix in one pass)"
+          echo "=========================================="
+
+          # ── required DB-VM secrets ───────────────────────────────────────
+          echo ""
+          echo "🔑 DB VM SSH secrets:"
+          [ -n "${DB_HOST:-}" ]        || err "DB_HOST secret is empty"
+          [ -n "${DB_VM_USER:-}" ]     || err "DB_VM_USER secret is empty"
+          [ -n "${DB_VM_SSH_KEY:-}" ]  || err "DB_VM_SSH_KEY secret is empty"
+          DB_VM_SSH_PORT="${DB_VM_SSH_PORT:-22}"
+          echo "   port = $DB_VM_SSH_PORT"
+          if [ "$fail" -eq 1 ]; then
+            echo "::error::Missing DB VM secrets — cannot continue."
+            exit 1
+          fi
+
+          # ── AP VM (this runner) ──────────────────────────────────────────
+          echo ""
+          echo "🖥️  AP VM (runner host):"
+          AP_ARCH="$(dpkg --print-architecture)"
+          AP_CODENAME="$(lsb_release -cs 2>/dev/null || echo unknown)"
+          echo "   arch=$AP_ARCH  ubuntu=$AP_CODENAME  host=$(hostname)"
+          if sudo -n true 2>/dev/null; then ok "passwordless sudo available"; else warn "sudo will prompt — a non-interactive runner step that needs sudo could hang. Configure passwordless sudo for the runner user if a later step stalls."; fi
+          AP_DISK_GB="$(df -BG --output=avail / | tail -1 | tr -dc '0-9')"
+          echo "   root free: ${AP_DISK_GB}G"
+          [ "${AP_DISK_GB:-0}" -ge 5 ] || err "AP VM has <5G free on / — image save/transfer needs headroom"
+
+          # ── DB VM reachability + parity ──────────────────────────────────
+          echo ""
+          echo "🔌 DB VM connectivity:"
+          echo "::add-mask::$DB_VM_SSH_KEY"
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$DB_VM_SSH_KEY" > ~/.ssh/preflight_key
+          chmod 600 ~/.ssh/preflight_key
+          SSH="ssh -p $DB_VM_SSH_PORT -i $HOME/.ssh/preflight_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o BatchMode=yes"
+          if $SSH "$DB_VM_USER@$DB_HOST" "echo ok" >/tmp/preflight_ssh 2>&1; then
+            ok "SSH to $DB_VM_USER@$DB_HOST:$DB_VM_SSH_PORT works"
+            DB_ARCH="$($SSH "$DB_VM_USER@$DB_HOST" 'dpkg --print-architecture' 2>/dev/null || echo unknown)"
+            DB_CODENAME="$($SSH "$DB_VM_USER@$DB_HOST" 'lsb_release -cs' 2>/dev/null || echo unknown)"
+            echo "   DB VM: arch=$DB_ARCH  ubuntu=$DB_CODENAME"
+            if $SSH "$DB_VM_USER@$DB_HOST" "sudo -n true" 2>/dev/null; then ok "DB VM passwordless sudo"; else warn "DB VM sudo may prompt — the offline Docker install uses sudo over SSH and will FAIL if it prompts. Configure passwordless sudo on the DB VM."; fi
+
+            # The offline Docker install downloads .debs on THIS VM and ships
+            # them to the DB VM — they only install if arch AND Ubuntu release
+            # match. This is the #1 silent failure of the transfer path.
+            if [ "$AP_ARCH" != "$DB_ARCH" ]; then
+              err "ARCH MISMATCH: AP=$AP_ARCH vs DB=$DB_ARCH — transferred .deb packages will not install on the DB VM. Pre-install Docker on the DB VM, or use a matching-arch AP VM."
+            elif [ "$AP_CODENAME" != "$DB_CODENAME" ]; then
+              err "UBUNTU MISMATCH: AP=$AP_CODENAME vs DB=$DB_CODENAME — .debs built for $AP_CODENAME may fail on the DB VM. Align the VM images, or pre-install Docker on the DB VM."
+            else
+              ok "AP/DB arch + Ubuntu release match ($AP_ARCH/$AP_CODENAME) — .deb transfer is valid"
+            fi
+
+            # If the DB VM can reach Docker's apt mirror, the fragile
+            # download-transfer-dpkg dance (which doesn't carry transitive
+            # deps) can be avoided — flag it so the operator knows.
+            if $SSH "$DB_VM_USER@$DB_HOST" "curl -fsS -o /dev/null --max-time 10 https://download.docker.com/linux/ubuntu/gpg" 2>/dev/null; then
+              warn "DB VM CAN reach download.docker.com — consider installing Docker DIRECTLY on the DB VM (more robust than the offline .deb transfer, which omits transitive deps)."
+            else
+              echo "   (DB VM cannot reach download.docker.com — offline .deb transfer path will be used)"
+            fi
+          else
+            err "Cannot SSH to the DB VM. Output:"
+            sed 's/^/      /' /tmp/preflight_ssh || true
+            echo "::error::Check DB_HOST/DB_VM_USER/DB_VM_SSH_PORT, that DB_VM_SSH_KEY matches an authorized_keys entry on the DB VM, and that the firewall allows the runner→DB VM on port $DB_VM_SSH_PORT."
+          fi
+          rm -f ~/.ssh/preflight_key /tmp/preflight_ssh
+
+          echo ""
+          if [ "$fail" -eq 1 ]; then
+            echo "::error::Pre-flight FAILED — fix the ❌ items above, then re-run. Nothing was changed."
+            exit 1
+          fi
+          echo "✅ Pre-flight passed — proceeding with setup."
 
       #########################################################################
       # STEP 2: Validate Docker Setup Secrets (Simplified)
@@ -139,8 +240,8 @@ jobs:
           # Check if bc is installed (needed for floating-point comparison)
           if ! command -v bc &> /dev/null; then
             echo "📦 Installing bc (required for LVM checks)..."
-            sudo apt-get update > /dev/null 2>&1
-            sudo apt-get install -y bc > /dev/null 2>&1
+            sudo apt-get update
+            sudo apt-get install -y bc
           fi
 
           # Check VG free space
@@ -270,7 +371,7 @@ jobs:
           echo ""
 
           echo "📦 Installing ca-certificates, curl, gnupg..."
-          if sudo apt-get update > /dev/null 2>&1 && sudo apt-get install -y ca-certificates curl gnupg lsb-release libmagic1 > /dev/null 2>&1; then
+          if sudo apt-get update && sudo apt-get install -y ca-certificates curl gnupg lsb-release libmagic1; then
             echo "   ✅ Prerequisites installed"
           else
             echo "   ❌ Failed to install prerequisites"
@@ -288,7 +389,7 @@ jobs:
 
           echo "🔑 Adding Docker GPG key..."
           sudo install -m 0755 -d /etc/apt/keyrings
-          if curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg > /dev/null 2>&1; then
+          if curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg; then
             sudo chmod a+r /etc/apt/keyrings/docker.gpg
             echo "   ✅ Docker GPG key added"
           else
@@ -310,7 +411,7 @@ jobs:
           echo ""
 
           echo "📥 Updating package index..."
-          if sudo apt-get update > /dev/null 2>&1; then
+          if sudo apt-get update; then
             echo "   ✅ Package index updated"
           else
             echo "   ❌ Failed to update package index"
@@ -318,7 +419,7 @@ jobs:
           fi
 
           echo "🐳 Installing Docker packages..."
-          if sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin > /dev/null 2>&1; then
+          if sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin; then
             echo "   ✅ Docker packages installed"
           else
             echo "   ❌ Failed to install Docker packages"
@@ -434,9 +535,9 @@ jobs:
           echo ""
 
           DOCKER_INSTALLED=false
-          if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=10 "$DB_VM_USER@$DB_HOST" "docker --version &>/dev/null && docker compose version &>/dev/null" 2>/dev/null; then
-            DOCKER_VERSION=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "docker --version" 2>/dev/null || echo "unknown")
-            COMPOSE_VERSION=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "docker compose version" 2>/dev/null || echo "unknown")
+          if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "docker --version &>/dev/null && docker compose version &>/dev/null" 2>/dev/null; then
+            DOCKER_VERSION=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "docker --version" 2>/dev/null || echo "unknown")
+            COMPOSE_VERSION=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "docker compose version" 2>/dev/null || echo "unknown")
 
             echo "✅ Docker is already installed on DB VM:"
             echo "   $DOCKER_VERSION"
@@ -466,18 +567,18 @@ jobs:
           echo "---"
 
           # Check if bc is installed on DB VM (needed for floating-point comparison)
-          ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "
+          ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "
             if ! command -v bc &> /dev/null; then
               echo '📦 Installing bc (required for LVM checks)...'
-              sudo apt-get update > /dev/null 2>&1
-              sudo apt-get install -y bc > /dev/null 2>&1
+              sudo apt-get update
+              sudo apt-get install -y bc
               echo '   ✅ bc installed'
             fi
           "
 
           # Check VG free space and extend if needed
           echo "🔍 Checking available disk space in volume group..."
-          ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "
+          ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "
             VG_FREE=\$(sudo vgs --noheadings -o vg_free --units g ubuntu-vg 2>/dev/null | tr -d ' G' || echo '0')
             echo \"   Available space: \${VG_FREE}G\"
             echo \"\"
@@ -510,7 +611,7 @@ jobs:
           echo "🕐 Step 1.5.2: NTP Time Synchronization"
           echo "---"
 
-          ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "
+          ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "
             echo 'Configuring NTP time sync with time.stdtime.gov.tw...'
 
             # Backup existing config
@@ -585,7 +686,7 @@ jobs:
 
           # Update package index
           echo "📦 Updating package index..."
-          if sudo apt-get update > /dev/null 2>&1; then
+          if sudo apt-get update; then
             echo "   ✅ Package index updated"
           else
             echo "   ❌ Failed to update package index"
@@ -606,16 +707,44 @@ jobs:
             "docker-compose-plugin"
           )
 
-          for PKG in "${PACKAGES[@]}"; do
-            echo "   Downloading $PKG..."
-            if sudo apt-get download "$PKG" > /dev/null 2>&1; then
-              echo "   ✅ $PKG downloaded"
+          # Download each package AND its full recursive dependency closure.
+          # `apt-get download <pkg>` alone fetches ONLY the named package — its
+          # transitive deps (containerd.io→runc, docker-ce→libltdl7, …) would be
+          # missing, and an OFFLINE DB VM can't `apt-get -f install` them. This
+          # is the historical #1 cause of the offline install failing.
+          echo "🔎 Resolving recursive dependencies..."
+          DEP_NAMES=$(
+            for PKG in "${PACKAGES[@]}"; do
+              apt-cache depends --recurse --no-recommends --no-suggests \
+                --no-conflicts --no-breaks --no-replaces --no-enhances "$PKG"
+            done | grep -E '^\w' | sort -u
+          )
+          echo "   $(echo "$DEP_NAMES" | wc -l) packages in the dependency closure"
+          echo ""
+
+          echo "📥 Downloading packages (already-installed base libs are fetched too so the offline VM has every .deb)..."
+          DL_FAIL=0
+          for PKG in $DEP_NAMES; do
+            # Virtual packages can't be downloaded — skip them (a real provider
+            # is already in the closure). Everything else MUST download.
+            if apt-get download "$PKG" 2>/tmp/dl_err; then
+              :
+            elif grep -qiE "virtual|no download|can't select" /tmp/dl_err; then
+              echo "   ↷ skip virtual/unavailable: $PKG"
             else
-              echo "   ❌ Failed to download $PKG"
-              rm -rf "$DOCKER_TEMP" ~/.ssh/db_vm_key
-              exit 1
+              echo "   ❌ Failed to download $PKG:"
+              sed 's/^/        /' /tmp/dl_err
+              DL_FAIL=1
             fi
           done
+          rm -f /tmp/dl_err
+          if [ "$DL_FAIL" -eq 1 ]; then
+            echo "   ❌ One or more required packages failed to download — see errors above."
+            rm -rf "$DOCKER_TEMP" ~/.ssh/db_vm_key
+            exit 1
+          fi
+          DEB_COUNT=$(ls "$DOCKER_TEMP"/*.deb 2>/dev/null | wc -l)
+          echo "   ✅ Downloaded $DEB_COUNT .deb package(s)"
           echo ""
 
           # Show downloaded packages
@@ -634,7 +763,7 @@ jobs:
           echo ""
 
           echo "📤 Transferring Docker packages to DB VM ($TOTAL_SIZE)..."
-          if scp -P $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o StrictHostKeyChecking=no "$DOCKER_TEMP"/*.deb "$DB_VM_USER@$DB_HOST:/tmp/"; then
+          if scp -P $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DOCKER_TEMP"/*.deb "$DB_VM_USER@$DB_HOST:/tmp/"; then
             echo "   ✅ All packages transferred successfully"
           else
             echo "   ❌ Failed to transfer packages"
@@ -651,49 +780,48 @@ jobs:
           echo "=========================================="
           echo ""
 
-          echo "📦 Installing ca-certificates, curl, gnupg, lsb-release..."
-          if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sudo apt-get update > /dev/null 2>&1 && sudo apt-get install -y ca-certificates curl gnupg lsb-release > /dev/null 2>&1"; then
-            echo "   ✅ Prerequisites installed"
-          else
-            echo "   ⚠️  Warning: Could not install prerequisites (may already be installed)"
-          fi
-          echo ""
+          # (Prerequisites like ca-certificates are part of the .deb closure
+          # downloaded above, so no separate online install on the DB VM is
+          # needed — it is offline.)
 
           #####################################################################
-          # Step 5: Install Docker on DB VM
+          # Step 5: Install Docker on DB VM (single dpkg pass — dpkg orders it)
           #####################################################################
           echo "=========================================="
           echo "Step 5: Installing Docker on DB VM"
           echo "=========================================="
           echo ""
 
-          echo "🐳 Installing Docker packages..."
-          echo "   This will install in order: containerd → docker-ce-cli → docker-ce → plugins"
+          echo "🐳 Installing ALL transferred .deb packages in one pass..."
+          echo "   (dpkg -i with every .deb at once resolves install order itself;"
+          echo "    full output is shown so any failure is diagnosable in one run.)"
           echo ""
-
-          # Install packages in correct order
-          INSTALL_ORDER=(
-            "containerd.io"
-            "docker-ce-cli"
-            "docker-ce"
-            "docker-buildx-plugin"
-            "docker-compose-plugin"
-          )
-
-          for PKG in "${INSTALL_ORDER[@]}"; do
-            echo "   Installing $PKG..."
-            if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "cd /tmp && sudo dpkg -i ${PKG}_*.deb 2>&1" | grep -qE "Unpacking|Setting up"; then
-              echo "   ✅ $PKG installed"
-            else
-              echo "   ⚠️  $PKG may already be installed or had warnings"
+          # Capture combined output AND the real exit code — no grep, no
+          # suppression. `dpkg -i /tmp/*.deb` installs everything; a non-zero
+          # exit means a genuine failure (unmet dep, corrupt .deb) that MUST
+          # stop the workflow rather than be reported as success.
+          DPKG_OUT=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "cd /tmp && sudo dpkg -i ./*.deb" 2>&1) && DPKG_RC=0 || DPKG_RC=$?
+          echo "$DPKG_OUT" | sed 's/^/   /'
+          echo ""
+          if [ "${DPKG_RC:-1}" -ne 0 ]; then
+            echo "   ⚠️  dpkg reported issues (rc=$DPKG_RC) — attempting dependency fix with the local .deb set..."
+            # On the offline VM, every dep is present as a .deb in /tmp, so a
+            # local apt fix can satisfy them. Output is shown, not suppressed.
+            FIX_OUT=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "cd /tmp && sudo apt-get -f install -y --no-download -o Dir::Cache::archives=/tmp" 2>&1) && FIX_RC=0 || FIX_RC=$?
+            echo "$FIX_OUT" | sed 's/^/   /'
+            # Re-run dpkg to confirm everything configured.
+            RECHECK=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "cd /tmp && sudo dpkg -i ./*.deb" 2>&1) && RECHECK_RC=0 || RECHECK_RC=$?
+            if [ "${RECHECK_RC:-1}" -ne 0 ]; then
+              echo "   ❌ Docker packages still not fully installed on the DB VM after the dependency fix:"
+              echo "$RECHECK" | sed 's/^/      /'
+              echo "::error::Offline Docker install failed on the DB VM. Missing dependency .debs, an arch/Ubuntu mismatch, or a corrupt transfer. The dpkg output above names the unmet package(s)."
+              rm -rf "$DOCKER_TEMP" ~/.ssh/db_vm_key
+              exit 1
             fi
-          done
-          echo ""
-
-          # Fix any dependency issues
-          echo "🔧 Fixing any missing dependencies..."
-          ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sudo apt-get -f install -y > /dev/null 2>&1" || true
-          echo "   ✅ Dependencies resolved"
+            echo "   ✅ Dependencies resolved and packages configured"
+          else
+            echo "   ✅ All Docker packages installed"
+          fi
           echo ""
 
           #####################################################################
@@ -705,7 +833,7 @@ jobs:
           echo ""
 
           echo "🚀 Starting Docker daemon..."
-          if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sudo systemctl enable --now docker > /dev/null 2>&1"; then
+          if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "sudo systemctl enable --now docker > /dev/null 2>&1"; then
             echo "   ✅ Docker service enabled and started"
           else
             echo "   ❌ Failed to start Docker service"
@@ -716,7 +844,7 @@ jobs:
 
           # Add user to docker group (optional, for non-root access)
           echo "👤 Adding $DB_VM_USER to docker group..."
-          ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sudo usermod -aG docker $DB_VM_USER" > /dev/null 2>&1 || true
+          ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "sudo usermod -aG docker $DB_VM_USER" > /dev/null 2>&1 || true
           echo "   ✅ User added to docker group (requires re-login to take effect)"
           echo ""
 
@@ -734,8 +862,8 @@ jobs:
 
           # Test Docker
           echo "🔍 Testing Docker installation..."
-          DOCKER_VERSION=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sudo docker --version" 2>/dev/null || echo "")
-          COMPOSE_VERSION=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sudo docker compose version" 2>/dev/null || echo "")
+          DOCKER_VERSION=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "sudo docker --version" 2>/dev/null || echo "")
+          COMPOSE_VERSION=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "sudo docker compose version" 2>/dev/null || echo "")
 
           if [ -n "$DOCKER_VERSION" ] && [ -n "$COMPOSE_VERSION" ]; then
             echo "   ✅ $DOCKER_VERSION"
@@ -749,7 +877,7 @@ jobs:
 
           # Test Docker daemon
           echo "🔍 Testing Docker daemon..."
-          if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sudo docker ps > /dev/null 2>&1"; then
+          if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "sudo docker ps > /dev/null 2>&1"; then
             echo "   ✅ Docker daemon is running"
           else
             echo "   ❌ Docker daemon is not responding"
@@ -773,7 +901,7 @@ jobs:
 
           # Remove remote packages
           echo "🧹 Removing package files from DB VM..."
-          ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "rm /tmp/*.deb" > /dev/null 2>&1 || true
+          ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "rm /tmp/*.deb" > /dev/null 2>&1 || true
           echo "   ✅ Remote packages removed"
 
           # Remove SSH key
@@ -814,9 +942,21 @@ jobs:
           # Mask SSH key
           echo "::add-mask::$DB_VM_SSH_KEY"
 
-          # Define images to transfer (match docker-compose.prod-db.yml)
-          POSTGRES_IMAGE="postgres:15-alpine"
-          MINIO_IMAGE="minio/minio:latest"
+          # Read the EXACT image refs from docker-compose.prod-db.yml so they
+          # can never drift from what the DB stack actually runs. (The old
+          # hardcoded "minio/minio:latest" did not match the pinned RELEASE tag
+          # in prod-db.yml — deploy would then fail with "image not found".)
+          get_image() { awk -v svc="  $1:" '$0==svc{f=1;next} f&&/image:/{print $2; exit}' docker-compose.prod-db.yml; }
+          POSTGRES_IMAGE="$(get_image postgres)"
+          MINIO_IMAGE="$(get_image minio)"
+          if [ -z "$POSTGRES_IMAGE" ] || [ -z "$MINIO_IMAGE" ]; then
+            echo "::error::Could not read postgres/minio image from docker-compose.prod-db.yml (postgres='$POSTGRES_IMAGE' minio='$MINIO_IMAGE')."
+            exit 1
+          fi
+          echo "ℹ️  DB images (from docker-compose.prod-db.yml):"
+          echo "   postgres: $POSTGRES_IMAGE"
+          echo "   minio:    $MINIO_IMAGE"
+          echo ""
 
           # Temporary directory for tar files
           TEMP_DIR="/tmp/db-images-$$"
@@ -831,7 +971,7 @@ jobs:
           echo ""
 
           echo "📦 Pulling $POSTGRES_IMAGE..."
-          if docker pull "$POSTGRES_IMAGE"; then
+          if sudo docker pull "$POSTGRES_IMAGE"; then
             echo "   ✅ PostgreSQL image pulled successfully"
           else
             echo "   ❌ Failed to pull PostgreSQL image"
@@ -841,7 +981,7 @@ jobs:
           echo ""
 
           echo "📦 Pulling $MINIO_IMAGE..."
-          if docker pull "$MINIO_IMAGE"; then
+          if sudo docker pull "$MINIO_IMAGE"; then
             echo "   ✅ MinIO image pulled successfully"
           else
             echo "   ❌ Failed to pull MinIO image"
@@ -859,7 +999,7 @@ jobs:
           echo ""
 
           echo "💾 Saving $POSTGRES_IMAGE to tar..."
-          if docker save "$POSTGRES_IMAGE" -o "$TEMP_DIR/postgres.tar"; then
+          if sudo docker save "$POSTGRES_IMAGE" -o "$TEMP_DIR/postgres.tar"; then
             POSTGRES_SIZE=$(du -h "$TEMP_DIR/postgres.tar" | cut -f1)
             echo "   ✅ Saved: $TEMP_DIR/postgres.tar ($POSTGRES_SIZE)"
           else
@@ -870,7 +1010,7 @@ jobs:
           echo ""
 
           echo "💾 Saving $MINIO_IMAGE to tar..."
-          if docker save "$MINIO_IMAGE" -o "$TEMP_DIR/minio.tar"; then
+          if sudo docker save "$MINIO_IMAGE" -o "$TEMP_DIR/minio.tar"; then
             MINIO_SIZE=$(du -h "$TEMP_DIR/minio.tar" | cut -f1)
             echo "   ✅ Saved: $TEMP_DIR/minio.tar ($MINIO_SIZE)"
           else
@@ -904,7 +1044,7 @@ jobs:
 
           # Test SSH connection
           echo "   Testing SSH connection to $DB_VM_USER@$DB_HOST..."
-          if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=10 -o StrictHostKeyChecking=no "$DB_VM_USER@$DB_HOST" "echo 'SSH connection successful'" 2>/dev/null; then
+          if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "echo 'SSH connection successful'" 2>/dev/null; then
             echo "   ✅ SSH connection verified"
           else
             echo "   ❌ SSH connection failed"
@@ -927,8 +1067,8 @@ jobs:
           echo "=========================================="
           echo ""
 
-          POSTGRES_EXISTS=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sudo docker images -q $POSTGRES_IMAGE 2>/dev/null" || echo "")
-          MINIO_EXISTS=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sudo docker images -q $MINIO_IMAGE 2>/dev/null" || echo "")
+          POSTGRES_EXISTS=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "sudo docker images -q $POSTGRES_IMAGE 2>/dev/null" || echo "")
+          MINIO_EXISTS=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "sudo docker images -q $MINIO_IMAGE 2>/dev/null" || echo "")
 
           if [ -n "$POSTGRES_EXISTS" ]; then
             echo "   ℹ️  $POSTGRES_IMAGE already exists on DB VM (skipping transfer)"
@@ -958,20 +1098,24 @@ jobs:
           # Transfer PostgreSQL image
           if [ "$SKIP_POSTGRES" = false ]; then
             echo "📤 Transferring postgres.tar to DB VM ($POSTGRES_SIZE)..."
-            if scp -P $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o StrictHostKeyChecking=no "$TEMP_DIR/postgres.tar" "$DB_VM_USER@$DB_HOST:/tmp/postgres.tar"; then
+            if scp -P $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$TEMP_DIR/postgres.tar" "$DB_VM_USER@$DB_HOST:/tmp/postgres.tar"; then
               echo "   ✅ Transfer complete"
 
               echo "   Loading image on DB VM..."
-              if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sudo docker load -i /tmp/postgres.tar"; then
+              if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "sudo docker load -i /tmp/postgres.tar"; then
                 echo "   ✅ PostgreSQL image loaded successfully"
 
                 # Cleanup remote tar file
-                ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "rm /tmp/postgres.tar"
+                ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "rm /tmp/postgres.tar"
               else
                 echo "   ❌ Failed to load PostgreSQL image on DB VM"
+                rm -rf "$TEMP_DIR" ~/.ssh/db_vm_key
+                exit 1
               fi
             else
               echo "   ❌ Failed to transfer postgres.tar"
+              rm -rf "$TEMP_DIR" ~/.ssh/db_vm_key
+              exit 1
             fi
             echo ""
           fi
@@ -979,20 +1123,24 @@ jobs:
           # Transfer MinIO image
           if [ "$SKIP_MINIO" = false ]; then
             echo "📤 Transferring minio.tar to DB VM ($MINIO_SIZE)..."
-            if scp -P $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o StrictHostKeyChecking=no "$TEMP_DIR/minio.tar" "$DB_VM_USER@$DB_HOST:/tmp/minio.tar"; then
+            if scp -P $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$TEMP_DIR/minio.tar" "$DB_VM_USER@$DB_HOST:/tmp/minio.tar"; then
               echo "   ✅ Transfer complete"
 
               echo "   Loading image on DB VM..."
-              if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sudo docker load -i /tmp/minio.tar"; then
+              if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "sudo docker load -i /tmp/minio.tar"; then
                 echo "   ✅ MinIO image loaded successfully"
 
                 # Cleanup remote tar file
-                ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "rm /tmp/minio.tar"
+                ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "rm /tmp/minio.tar"
               else
                 echo "   ❌ Failed to load MinIO image on DB VM"
+                rm -rf "$TEMP_DIR" ~/.ssh/db_vm_key
+                exit 1
               fi
             else
               echo "   ❌ Failed to transfer minio.tar"
+              rm -rf "$TEMP_DIR" ~/.ssh/db_vm_key
+              exit 1
             fi
             echo ""
           fi
@@ -1005,15 +1153,19 @@ jobs:
           echo "=========================================="
           echo ""
 
-          echo "🔍 Checking loaded images on DB VM..."
-          IMAGES_OUTPUT=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sudo docker images --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}' | grep -E '(postgres|minio)'" || echo "")
-
-          if [ -n "$IMAGES_OUTPUT" ]; then
-            echo "$IMAGES_OUTPUT"
-            echo ""
-            echo "✅ Required images are available on DB VM"
-          else
-            echo "⚠️  Warning: Could not verify images on DB VM"
+          echo "🔍 Verifying BOTH required images are present on the DB VM..."
+          # Query image IDs directly (exit-code based) — a missing image here
+          # means deploy.yml would later fail with "image not found", so it
+          # must stop the setup now, not pass with a warning.
+          PG_ID=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "sudo docker images -q $POSTGRES_IMAGE" 2>/dev/null || echo "")
+          MN_ID=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "sudo docker images -q $MINIO_IMAGE" 2>/dev/null || echo "")
+          MISSING=""
+          [ -n "$PG_ID" ] && echo "   ✅ $POSTGRES_IMAGE present ($PG_ID)" || MISSING="$MISSING $POSTGRES_IMAGE"
+          [ -n "$MN_ID" ] && echo "   ✅ $MINIO_IMAGE present ($MN_ID)"   || MISSING="$MISSING $MINIO_IMAGE"
+          if [ -n "$MISSING" ]; then
+            echo "::error::Image(s) not present on the DB VM after load:$MISSING — deploy would fail with 'image not found'. Re-run; if it persists check 'sudo docker images' on the DB VM."
+            rm -rf "$TEMP_DIR" ~/.ssh/db_vm_key
+            exit 1
           fi
           echo ""
 
@@ -1121,7 +1273,7 @@ jobs:
 
           # Test without sudo
           echo "🔍 Testing: docker ps (without sudo on DB VM)..."
-          if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "docker ps" > /dev/null 2>&1; then
+          if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "docker ps" > /dev/null 2>&1; then
             echo "   ✅ SUCCESS: Docker works without sudo on DB VM"
             DB_DOCKER_STATUS="works"
           else
@@ -1130,7 +1282,7 @@ jobs:
             # Try with sg docker
             echo ""
             echo "🔄 Attempting to activate docker group with 'sg docker'..."
-            if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sg docker -c 'docker ps'" > /dev/null 2>&1; then
+            if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "sg docker -c 'docker ps'" > /dev/null 2>&1; then
               echo "   ✅ SUCCESS: Docker group activated with 'sg docker -c'"
               echo "   ℹ️  Note: This activation is session-specific"
               DB_DOCKER_STATUS="sg_works"
@@ -1199,6 +1351,33 @@ jobs:
           echo "Note: Group membership changes require re-login to take effect."
           echo "      Until then, use 'sudo docker' or 'sg docker -c \"docker ...\"'"
           echo ""
+
+      #########################################################################
+      # STEP 8.5: Create the deploy working directory + volume mounts
+      # docker-compose.prod.yml has RELATIVE bind mounts (./backend/uploads,
+      # ./logs/backend, ./logs/nginx). deploy.yml runs compose from
+      # ~/scholarship-production, so those dirs must exist there or Docker
+      # creates them root-owned and the backend can't write uploads/logs.
+      #########################################################################
+      - name: Create deploy directory structure on AP VM
+        if: github.event.inputs.action == 'setup' || github.event.inputs.action == 'full-check'
+        run: |
+          set -uo pipefail
+          DEPLOY_DIR="$HOME/scholarship-production"
+          echo "📁 Creating $DEPLOY_DIR and its volume directories..."
+          mkdir -p "$DEPLOY_DIR/backend/uploads" \
+                   "$DEPLOY_DIR/logs/backend" \
+                   "$DEPLOY_DIR/logs/nginx"
+          # The backend + nginx containers run as NON-root users and must be
+          # able to write uploads/logs into these bind mounts. u+rwX only would
+          # leave them unwritable by the container uid; 777 on the mount dirs is
+          # the pragmatic choice for a single-tenant VM (the parent dir is owned
+          # by the deploy user, and these hold no secrets).
+          chmod 777 "$DEPLOY_DIR/backend/uploads" "$DEPLOY_DIR/logs/backend" "$DEPLOY_DIR/logs/nginx"
+          echo "   ✅ Created:"
+          find "$DEPLOY_DIR" -maxdepth 2 -type d | sed 's/^/      /'
+          echo ""
+          echo "ℹ️  deploy.yml copies docker-compose.prod.yml here as docker-compose.yml at deploy time."
 
       #########################################################################
       # STEP 9: Final Summary

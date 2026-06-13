@@ -38,10 +38,31 @@ warning: here-document at line 10 delimited by end-of-file (wanted `FOOTER_EOF')
 
 | 檔案 | 用途 | 觸發時機 | 狀態 |
 |------|------|----------|------|
+| `bootstrap-ap-runner.sh` 🅾️ | **兩台空 VM 的步驟 0** — 把 bare AP VM 變成可跑 action 的 self-hosted runner | 在 AP VM 手動執行一次 | **必要(前置)** |
+| `setting-env.yml` | 在 AP VM 裝 Docker、SSH 到 DB VM 裝 Docker+傳 image、建部署目錄 | runner 就緒後手動觸發 | **必要** |
 | `auto-tag-on-merge.yml` ⭐ | 自動建立 Git tag 和 Release | PR merge 到 main | **必要** |
-| `deploy.yml` | 部署應用程式到 production | Push to main / 手動觸發 | 選用 |
+| `deploy.yml` | 部署應用程式到 production | Push to main / 手動觸發 | **必要** |
 | `health-check.yml` | 監控應用程式健康狀態 | 每 15 分鐘 / 手動觸發 | 選用 |
 | `backup.yml` | 備份資料庫和檔案 | 每日 2AM UTC / 手動觸發 | 選用 |
+
+### 🅾️ 步驟 0：bare VM 的 bootstrap（雞生蛋問題）
+
+所有 workflow 都 `runs-on: [self-hosted, linux]`。**空的 AP VM 上沒有 runner,任何 action 都跑不了** —— 必須先手動把 runner 裝起來。`bootstrap-ap-runner.sh` 就是這一步:裝 Docker + 把 GitHub Actions runner 註冊成 systemd service。
+
+> 此 `.sh` **只存在於 dev repo 的本目錄**(mirror 只帶可執行的 `.yml` 過去,且空 VM 本來也收不到)。操作者直接從這裡複製到 AP VM 執行。
+
+```bash
+# 1) 在 prod repo 取得 runner 註冊 token(約 1 小時有效)
+gh api -X POST repos/<OWNER>/<PROD_REPO>/actions/runners/registration-token --jq .token
+
+# 2) 把本目錄的 bootstrap-ap-runner.sh 複製到 AP VM,然後:
+chmod +x bootstrap-ap-runner.sh
+./bootstrap-ap-runner.sh --repo-url https://github.com/<OWNER>/<PROD_REPO> --token <TOKEN>
+```
+
+腳本特性:`set -euo pipefail` + ERR trap(失敗會印出**確切失敗行號與指令**)、全程輸出同時寫入 `/tmp/bootstrap-ap-runner-*.log`、可重複執行(idempotent)。跑完 AP VM 就能跑 action;DB VM **不需要** runner(`setting-env.yml` 透過 SSH 操作它)。
+
+完成步驟 0 後,執行 `setting-env.yml`(action=`full-check`)。它在開頭有 **pre-flight 關卡**,會把會造成反覆 debug 的坑一次抓完(DB VM 連不上、沒有 sudo、AP/DB 架構或 Ubuntu 版本不一致導致 .deb 裝不上、磁碟不足),全部以可行動的 `::error::` 訊息回報,在動任何長指令之前就擋下。
 
 ### ⭐ Auto-Tag Workflow (推薦必裝)
 
