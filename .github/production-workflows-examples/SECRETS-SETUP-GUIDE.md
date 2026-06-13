@@ -191,6 +191,28 @@ ssh -p 8822 -i ~/.ssh/db_vm_deploy -v ubuntu@<DB_VM_IP>
 #      ssh-keyscan -p 8822 -H <DB_VM_IP> >> ~/.ssh/known_hosts
 ```
 
+**Sudo Requirements for AP Runner User (the self-hosted runner host):**
+
+`setting-env.yml` runs NON-INTERACTIVELY as the runner and executes ~13 local
+sudo commands (Docker install, apt keyrings, LVM extend, timesyncd, systemctl).
+Without passwordless sudo the run **hangs forever** at the first password
+prompt — the workflow's pre-flight now hard-fails early if it's missing, but
+you must configure it ON THE AP VM as the runner user before running
+`setting-env.yml`:
+
+```bash
+# On the AP VM, as the runner user (NOT root):
+sudo visudo
+# Method 1 (simpler, less secure) — full passwordless sudo:
+<runner-user> ALL=(ALL) NOPASSWD: ALL
+
+# Method 2 (recommended) — same command list as the DB VM section below
+# (apt-get / dpkg / systemctl docker / usermod -aG docker / vgs / lvextend / timedatectl).
+```
+
+(The interactive bootstrap-ap-runner.sh tolerates a sudo prompt; setting-env.yml
+does not. This is the AP-side equivalent of the DB-VM requirement below.)
+
 **Sudo Requirements for DB VM User:**
 
 The workflow automates Docker installation and image management, which requires sudo privileges. Configure passwordless sudo for the `DB_VM_USER`:
@@ -276,7 +298,7 @@ These secrets configure the connection from AP VM to MinIO object storage on DB 
 | `MINIO_PORT` | MinIO API port | `9000` | ⚠️ Optional (default: 9000) |
 | `MINIO_ROOT_USER` | MinIO admin username | `minioadmin` | ✅ Yes |
 | `MINIO_ROOT_PASSWORD` | MinIO admin password | `MinIO@Secure2024!` | ✅ Yes |
-| `MINIO_BUCKET_NAME` | MinIO bucket name | `scholarship-documents` | ⚠️ Optional (default: scholarship-documents) |
+| `MINIO_BUCKET` | MinIO bucket name | `scholarship-documents` | ⚠️ Optional (default: scholarship-documents) |
 
 **How to obtain:**
 - Set during DB VM initial setup (Section 4.4 of installation manual: `.env.db`)

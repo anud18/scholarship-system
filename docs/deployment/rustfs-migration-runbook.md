@@ -208,12 +208,12 @@ alerting exists.
 |---|---|
 | rustfs#1058 (credential envs ignored in some builds) | Step-0 spike repeats positive+negative credential test on every re-pin |
 | Explicit Deny policies block owner | No bucket policies post-migration; compat check pins anonymous-403-by-default + owner-GET-ok |
-| UID 10001 vs bind-mount perms | `chown -R 10001:10001` any bind mounts (prod-db uses bind mounts under `/opt/scholarship/minio/...` — new dirs needed) |
+| UID 10001 vs bind-mount perms | prod compose now uses RELATIVE bind mounts under the DB-VM deploy dir (`./minio/data`, `./minio/config`), Docker-auto-created; if RustFS (uid 10001) can't write them, `chown -R 10001:10001 <deploy-dir>/minio` |
 | Beta maturity / read latency | bake-in on dev + staging before prod; rollback volume preserved |
 | Lifecycle rules | not used by this system (none configured) — re-check before enabling any |
 | `MINIO_BUCKET_NAME` dead env in prod compose | fix to `MINIO_BUCKET` during cutover; verify actual bucket name in prod data first |
 | Versioned-bucket history does not migrate (`mc mirror` copies latest only) | versioning audit precondition; frozen MinIO volume = retention archive for the compliance window |
-| Prod volume snapshots/backups still target the OLD MinIO dir | update snapshot/backup config to the new RustFS data dir (`/opt/scholarship/rustfs/...`) at cutover; `scripts/backup.sh` only covers postgres — object-storage backup is volume-level |
+| Prod volume snapshots/backups target the storage data dir | prod data lives under the DB-VM deploy dir (`<deploy-dir>/minio/data`, `<deploy-dir>/postgres/data`) via relative binds — back up by snapshotting the whole deploy dir; `scripts/backup.sh` only covers postgres |
 | staging-e2e MinIO replica masking RustFS semantics | swap the replica image in the same change as staging-db |
 | **RustFS beta.8 leaks prior object data on overwrite** (live-proven: each overwrite of a >inline-size key leaves the previous dataDir on disk; DELETE leaves orphans too; no background reclaim) | watch `du`-vs-`mc du` divergence during bake-in; avoid fixed-key overwrites (seed_regulations re-seeds leak ~240KB each); track upstream rustfs/rustfs for a fix before prod |
 | Volume snapshot restores to an unreadable store | restore drill in the checklist: tar full `/data` INCLUDING `.rustfs.sys` (format.json/IAM/bucket metadata), untar to fresh volume, boot RustFS, pass compat check + checksum sweep |

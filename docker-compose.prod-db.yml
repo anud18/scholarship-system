@@ -13,8 +13,8 @@ services:
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - postgres_prod_data:/var/lib/postgresql/data
-      - postgres_backups:/backups
+      - ./postgres/data:/var/lib/postgresql/data
+      - ./postgres/backups:/backups
       - ./database-init:/docker-entrypoint-initdb.d:ro
     networks:
       - scholarship_prod_db_network
@@ -50,8 +50,8 @@ services:
       - "${MINIO_API_PORT:-9000}:9000"
       - "${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
-      - minio_prod_data:/data
-      - minio_config:/root/.minio
+      - ./minio/data:/data
+      - ./minio/config:/root/.minio
     networks:
       - scholarship_prod_db_network
     command: server /data --console-address ":9001"
@@ -92,7 +92,7 @@ services:
       BACKUP_SCHEDULE: ${BACKUP_SCHEDULE:-0 2 * * *}  # Daily at 2 AM
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
     volumes:
-      - postgres_backups:/backups
+      - ./postgres/backups:/backups
       - ./scripts/backup.sh:/backup.sh:ro
     networks:
       - scholarship_prod_db_network
@@ -163,32 +163,10 @@ services:
   # Run monitoring services separately with:
   # docker-compose -f docker-compose.prod-db-monitoring.yml up -d
 
-volumes:
-  postgres_prod_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /opt/scholarship/postgres/data
-  postgres_backups:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /opt/scholarship/postgres/backups
-  minio_prod_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /opt/scholarship/minio/data
-  minio_config:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /opt/scholarship/minio/config
-
+# No named volumes: persistent data uses relative bind mounts (./postgres/data,
+# ./postgres/backups, ./minio/data, ./minio/config) that the Docker daemon
+# auto-creates under the deploy directory — no /opt/scholarship host provisioning
+# needed. Back up by snapshotting the whole deploy dir.
 networks:
   scholarship_prod_db_network:
     driver: bridge

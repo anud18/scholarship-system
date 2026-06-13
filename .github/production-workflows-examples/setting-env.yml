@@ -85,7 +85,11 @@ jobs:
           AP_ARCH="$(dpkg --print-architecture)"
           AP_CODENAME="$(lsb_release -cs 2>/dev/null || echo unknown)"
           echo "   arch=$AP_ARCH  ubuntu=$AP_CODENAME  host=$(hostname)"
-          if sudo -n true 2>/dev/null; then ok "passwordless sudo available"; else warn "sudo will prompt — a non-interactive runner step that needs sudo could hang. Configure passwordless sudo for the runner user if a later step stalls."; fi
+          # HARD gate: this preflight only runs for setup/full-check, which execute
+          # ~13 LOCAL sudo commands non-interactively. A runner that hits a sudo
+          # password prompt HANGS forever (no TTY to answer), so fail fast here
+          # with the fix instead of stalling mid-Docker-install.
+          if sudo -n true 2>/dev/null; then ok "passwordless sudo available"; else err "AP runner user has NO passwordless sudo — setup/full-check would HANG at the first local sudo (Docker install). Configure NOPASSWD sudo for the runner user (SECRETS-SETUP-GUIDE.md → 'Sudo Requirements for AP Runner User')."; fi
           AP_DISK_GB="$(df -BG --output=avail / | tail -1 | tr -dc '0-9')"
           echo "   root free: ${AP_DISK_GB}G"
           [ "${AP_DISK_GB:-0}" -ge 5 ] || err "AP VM has <5G free on / — image save/transfer needs headroom"
@@ -97,6 +101,7 @@ jobs:
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
           printf '%s\n' "$DB_VM_SSH_KEY" > ~/.ssh/preflight_key
           chmod 600 ~/.ssh/preflight_key
+          trap 'rm -f ~/.ssh/preflight_key /tmp/preflight_ssh' EXIT  # never leave the DB-VM key on the shared runner
           SSH="ssh -p $DB_VM_SSH_PORT -i $HOME/.ssh/preflight_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o BatchMode=yes"
           if $SSH "$DB_VM_USER@$DB_HOST" "echo ok" >/tmp/preflight_ssh 2>&1; then
             ok "SSH to $DB_VM_USER@$DB_HOST:$DB_VM_SSH_PORT works"
@@ -300,9 +305,11 @@ jobs:
 
           # Restart and enable time sync
           echo "🔄 Restarting time synchronization service..."
-          sudo systemctl restart systemd-timesyncd
-          sudo timedatectl set-ntp true
-          echo "   ✅ Time synchronization enabled"
+          # Non-critical: a masked timesyncd or blocked NTP server must NOT abort
+          # provisioning (the whole step runs under `set -e`).
+          sudo systemctl restart systemd-timesyncd || echo "::warning::systemd-timesyncd restart failed (non-critical) — continuing"
+          sudo timedatectl set-ntp true || echo "::warning::timedatectl set-ntp failed (non-critical) — continuing"
+          echo "   ✅ Time synchronization enabled (or skipped if unavailable)"
           echo ""
 
           # Verify configuration
@@ -520,6 +527,7 @@ jobs:
           chmod 700 ~/.ssh
           echo "$DB_VM_SSH_KEY" > ~/.ssh/db_vm_key
           chmod 600 ~/.ssh/db_vm_key
+          trap 'rm -f ~/.ssh/db_vm_key' EXIT  # always wipe the root-equiv DB-VM key, even on a set -e abort
 
           # Add to known_hosts if needed
           if [ ! -f ~/.ssh/known_hosts ] || ! grep -q "$DB_HOST" ~/.ssh/known_hosts; then
@@ -569,10 +577,14 @@ jobs:
           # Check if bc is installed on DB VM (needed for floating-point comparison)
           ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$DB_VM_USER@$DB_HOST" "
             if ! command -v bc &> /dev/null; then
-              echo '📦 Installing bc (required for LVM checks)...'
-              sudo apt-get update
-              sudo apt-get install -y bc
-              echo '   ✅ bc installed'
+              echo '📦 Installing bc (optional LVM auto-extend check)...'
+              # Non-critical: an offline/locked-down DB VM may fail this apt
+              # install; do NOT let it abort the whole provisioning run.
+              if sudo apt-get update && sudo apt-get install -y bc; then
+                echo '   ✅ bc installed'
+              else
+                echo '   ⚠️  bc unavailable — skipping LVM auto-extend on the DB VM'
+              fi
             fi
           "
 
@@ -1035,6 +1047,7 @@ jobs:
           # Write SSH private key
           echo "$DB_VM_SSH_KEY" > ~/.ssh/db_vm_key
           chmod 600 ~/.ssh/db_vm_key
+          trap 'rm -f ~/.ssh/db_vm_key' EXIT  # always wipe the root-equiv DB-VM key, even on a set -e abort
 
           # Add DB_HOST to known_hosts (disable strict host key checking for automation)
           if [ ! -f ~/.ssh/known_hosts ] || ! grep -q "$DB_HOST" ~/.ssh/known_hosts; then
@@ -1194,9 +1207,15 @@ jobs:
           echo "- $POSTGRES_IMAGE"
           echo "- $MINIO_IMAGE"
           echo ""
-          echo "Next: Admin can start DB services with:"
+          echo "Next: start the DB stack ON THE DB VM. The Docker IMAGES are loaded,"
+          echo "but the compose file + init scripts + DB env are NOT auto-delivered —"
+          echo "place them on the DB VM first (data dirs auto-create via relative binds):"
           echo "  ssh -p $DB_VM_SSH_PORT $DB_VM_USER@$DB_HOST"
-          echo "  cd /srv/naass/app/naass"
+          echo "  mkdir -p ~/scholarship-production-db && cd ~/scholarship-production-db"
+          echo "  # copy these from the repo onto the DB VM (scp or git clone):"
+          echo "  #   docker-compose.prod-db.yml, database-init/, scripts/backup.sh"
+          echo "  # create .env with the DB secrets the compose interpolates:"
+          echo "  #   POSTGRES_DB / POSTGRES_USER / POSTGRES_PASSWORD / MINIO_ROOT_USER / MINIO_ROOT_PASSWORD (see SECRETS-SETUP-GUIDE.md)"
           echo "  docker compose -f docker-compose.prod-db.yml up -d"
           echo ""
 
@@ -1268,6 +1287,7 @@ jobs:
           chmod 700 ~/.ssh
           echo "$DB_VM_SSH_KEY" > ~/.ssh/db_vm_key
           chmod 600 ~/.ssh/db_vm_key
+          trap 'rm -f ~/.ssh/db_vm_key' EXIT  # always wipe the root-equiv DB-VM key, even on a set -e abort
 
           DB_DOCKER_STATUS="unknown"
 
@@ -1367,13 +1387,14 @@ jobs:
           echo "📁 Creating $DEPLOY_DIR and its volume directories..."
           mkdir -p "$DEPLOY_DIR/backend/uploads" \
                    "$DEPLOY_DIR/logs/backend" \
-                   "$DEPLOY_DIR/logs/nginx"
+                   "$DEPLOY_DIR/logs/nginx" \
+                   "$DEPLOY_DIR/app/redis/data"
           # The backend + nginx containers run as NON-root users and must be
           # able to write uploads/logs into these bind mounts. u+rwX only would
           # leave them unwritable by the container uid; 777 on the mount dirs is
           # the pragmatic choice for a single-tenant VM (the parent dir is owned
           # by the deploy user, and these hold no secrets).
-          chmod 777 "$DEPLOY_DIR/backend/uploads" "$DEPLOY_DIR/logs/backend" "$DEPLOY_DIR/logs/nginx"
+          chmod 777 "$DEPLOY_DIR/backend/uploads" "$DEPLOY_DIR/logs/backend" "$DEPLOY_DIR/logs/nginx" "$DEPLOY_DIR/app/redis/data"
           echo "   ✅ Created:"
           find "$DEPLOY_DIR" -maxdepth 2 -type d | sed 's/^/      /'
           echo ""
@@ -1406,9 +1427,9 @@ jobs:
             echo "✅ Setup completed"
             echo ""
             echo "Next steps:"
-            echo "1. Review .env.prod file: cat .env.prod"
+            echo "1. App credentials are injected by deploy.yml at deploy time (this workflow does NOT write a .env)"
             echo "2. Ensure .env.prod is not committed: git status"
-            echo "3. Verify directory structure: ls -la /opt/scholarship/"
+            echo "3. Verify directory structure: ls -la ~/scholarship-production/"
             echo "4. Deploy application with: docker compose -f docker-compose.prod.yml up -d"
           else
             echo "✅ Full check and setup completed"
