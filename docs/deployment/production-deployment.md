@@ -97,7 +97,7 @@ REDIS_PASSWORD=<redis-password>
 MINIO_ENDPOINT=prod-minio:9000
 MINIO_ACCESS_KEY=<minio-access-key>
 MINIO_SECRET_KEY=<minio-secret-key>
-MINIO_BUCKET_NAME=scholarship-documents
+MINIO_BUCKET=scholarship-documents
 
 # Email
 SMTP_HOST=smtp.university.edu

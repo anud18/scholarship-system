@@ -276,7 +276,7 @@ These secrets configure the connection from AP VM to MinIO object storage on DB 
 | `MINIO_PORT` | MinIO API port | `9000` | ⚠️ Optional (default: 9000) |
 | `MINIO_ROOT_USER` | MinIO admin username | `minioadmin` | ✅ Yes |
 | `MINIO_ROOT_PASSWORD` | MinIO admin password | `MinIO@Secure2024!` | ✅ Yes |
-| `MINIO_BUCKET_NAME` | MinIO bucket name | `scholarship-documents` | ⚠️ Optional (default: scholarship-documents) |
+| `MINIO_BUCKET` | MinIO bucket name | `scholarship-documents` | ⚠️ Optional (default: scholarship-documents) |
 
 **How to obtain:**
 - Set during DB VM initial setup (Section 4.4 of installation manual: `.env.db`)

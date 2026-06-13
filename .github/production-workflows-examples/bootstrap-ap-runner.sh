@@ -59,16 +59,20 @@ trap 'on_err "$LINENO"' ERR
 REPO_URL=""
 REG_TOKEN=""
 LABELS="self-hosted,linux"
+# GitHub deprecates runners older than ~30 days and stops dispatching jobs
+# to them. Bump this (and the checksum below if you add one) when re-bootstrapping;
+# override per-run with --runner-version. Check the latest at
+# https://github.com/actions/runner/releases before provisioning.
 RUNNER_VERSION="2.319.1"
 RUNNER_NAME="$(hostname)-ap"
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --repo-url)        REPO_URL="$2"; shift 2 ;;
-    --token)           REG_TOKEN="$2"; shift 2 ;;
-    --labels)          LABELS="$2"; shift 2 ;;
-    --runner-version)  RUNNER_VERSION="$2"; shift 2 ;;
-    --name)            RUNNER_NAME="$2"; shift 2 ;;
+    --repo-url)        REPO_URL="${2:?--repo-url requires a value}"; shift 2 ;;
+    --token)           REG_TOKEN="${2:?--token requires a value}"; shift 2 ;;
+    --labels)          LABELS="${2:?--labels requires a value}"; shift 2 ;;
+    --runner-version)  RUNNER_VERSION="${2:?--runner-version requires a value}"; shift 2 ;;
+    --name)            RUNNER_NAME="${2:?--name requires a value}"; shift 2 ;;
     -h|--help)         grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)                 die "Unknown argument: $1 (use --help)" ;;
   esac

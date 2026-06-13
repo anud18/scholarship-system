@@ -10,7 +10,7 @@ services:
     expose:
       - "6379"
     volumes:
-      - redis_prod_data:/data
+      - ./app/redis/data:/data  # relative bind — Docker auto-creates under the deploy dir (was an absolute device:bind that nothing provisioned)
     networks:
       - scholarship_prod_network
     # --maxmemory + allkeys-lru: cache namespace (cache:v1:*) is fully
@@ -57,7 +57,7 @@ services:
       MINIO_ENDPOINT: ${MINIO_HOST}:${MINIO_PORT:-9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-scholarship-documents}
+      MINIO_BUCKET: ${MINIO_BUCKET:-scholarship-documents}
       MINIO_SECURE: ${MINIO_SECURE:-true}
       # PII Encryption keys (issue #73). JSON map of {version: base64url 32-byte key}.
       # Required in production. Populated by the KMS sidecar at deploy time.
@@ -334,14 +334,9 @@ services:
         max-size: "5m"
         max-file: "3"
 
-volumes:
-  redis_prod_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /opt/scholarship/app/redis/data
-
+# No named volumes: all persistent data uses relative bind mounts (./app/redis/data,
+# ./backend/uploads, ./logs) that the Docker daemon auto-creates under the deploy
+# directory — no host-path provisioning needed (matches the staging pattern).
 networks:
   scholarship_prod_network:
     driver: bridge

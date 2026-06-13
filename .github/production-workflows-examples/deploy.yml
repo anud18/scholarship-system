@@ -209,7 +209,7 @@ jobs:
       MINIO_PORT: ${{ secrets.MINIO_PORT }}
       MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
       MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
-      MINIO_BUCKET_NAME: ${{ secrets.MINIO_BUCKET_NAME }}
+      MINIO_BUCKET: ${{ secrets.MINIO_BUCKET }}
       MINIO_SECURE: ${{ secrets.MINIO_SECURE }}
       PII_ENCRYPTION_KEYS: ${{ secrets.PII_ENCRYPTION_KEYS }}
       PII_ENCRYPTION_ACTIVE_VERSION: ${{ secrets.PII_ENCRYPTION_ACTIVE_VERSION }}
@@ -232,6 +232,21 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+
+      # First-run ordering guard: a push to main can fire this deploy before
+      # the AP VM has been provisioned by setting-env.yml (Docker installed,
+      # deploy dir created, DB stack up on the DB VM). Deploying onto a
+      # half-set-up VM half-breaks production. Fail fast with a clear message
+      # instead — the operator runs setting-env.yml first, then re-triggers.
+      - name: Preflight — AP VM is provisioned
+        run: |
+          set -uo pipefail
+          fail=0
+          command -v docker >/dev/null 2>&1 || { echo "::error::Docker not installed on this runner/VM — run setting-env.yml (action: setup) first."; fail=1; }
+          docker compose version >/dev/null 2>&1 || { echo "::error::docker compose v2 plugin missing — run setting-env.yml first."; fail=1; }
+          [ -d "$HOME/scholarship-production" ] || { echo "::error::~/scholarship-production deploy dir missing — run setting-env.yml (action: setup) first."; fail=1; }
+          [ "$fail" -eq 0 ] || { echo "::error::AP VM is not provisioned — aborting deploy (this prevents an out-of-order first-run deploy)."; exit 1; }
+          echo "✅ AP VM provisioning preflight passed"
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
