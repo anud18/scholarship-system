@@ -4651,7 +4651,7 @@ export interface paths {
          * @description Generate the 學生資料彙整表 Excel for a ranking.
          *
          *     Auth: admin/super_admin OR a college user whose `college_code` matches the
-         *     ranking creator's `college_code` (rankings are scoped per college via creator).
+         *     ranking's own `college_code` (authoritative per-college ownership).
          */
         get: operations["export_ranking_excel_api_v1_college_review_rankings__ranking_id__export_excel_get"];
         put?: never;

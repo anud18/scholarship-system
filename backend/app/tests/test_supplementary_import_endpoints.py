@@ -148,6 +148,11 @@ async def ranking(
         sub_type_code="nstc",
         academic_year=114,
         ranking_name="Test",
+        # Rankings are college-owned (issue #1034); production create_ranking stores the
+        # creator's college here, and authorization is checked against it. Keep the
+        # fixture in sync so authz passes for the owning college and the SIS
+        # other-college content filter (what this suite targets) is actually reached.
+        college_code=college_user.college_code,
         created_by=college_user.id,
         is_finalized=True,
         distribution_executed=True,
