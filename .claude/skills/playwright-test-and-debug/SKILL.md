@@ -1,6 +1,6 @@
 ---
 name: playwright-test-and-debug
-description: Drive browser-based actions against the scholarship-system localhost dev env (http://localhost:3000), AND when something diverges from the codebase's spec, walk an integrated diagnose-and-fix loop — tail backend logs, query Postgres, classify the gap, and patch the responsible layer. Use this skill whenever the user asks to drive a quick local browser test, screenshot a page, log in as a seeded user (admin / cs_professor / cs_college / stuphd001 / stuunder1 / etc.) and click through a flow, debug why a localhost endpoint is returning 5xx or behaving unexpectedly, dump application/review/whitelist DB state, OR — most importantly — verify a recent code change end-to-end ("I just finished feature X / fixed bug Y, smoke-test that it works"). Treat any post-change verification request, any "make sure my localhost change works" prompt, any "the e2e test in frontend/e2e failed — figure out why" debugging request, and any "log in as <seeded user> and check the dashboard" exploratory request as a trigger. Do NOT use for staging (use `nycu-sso-login` for `ss.test.nycu.edu.tw`), and do NOT use for setting up a new `@playwright/test` runner from scratch (that's a project-config task, not session tooling).
+description: Drive browser-based actions against the scholarship-system localhost dev env (http://localhost:3000), AND when something diverges from the codebase's spec, walk an integrated diagnose-and-fix loop — tail backend logs, query Postgres, classify the gap, and patch the responsible layer. Use this skill whenever the user asks to drive a quick local browser test, screenshot a page, log in as a seeded user (admin / cs_professor / cs_college / stuphd001 / stuunder1 / etc.) and click through a flow, debug why a localhost endpoint is returning 5xx or behaving unexpectedly, dump application/review/whitelist DB state, OR — most importantly — verify a recent code change end-to-end ("I just finished feature X / fixed bug Y, smoke-test that it works"). Treat any post-change verification request, any "make sure my localhost change works" prompt, any "the e2e test in frontend/e2e failed — figure out why" debugging request, and any "log in as <seeded user> and check the dashboard" exploratory request as a trigger. Includes a ready-made multi-college ranking→distribution→roster end-to-end driver (`scripts/verify-multi-college-distribution.js`) for the #1029/#1034 college-pipeline regression. Do NOT use for staging (use `nycu-sso-login` for `ss.test.nycu.edu.tw`), and do NOT use for setting up a new `@playwright/test` runner from scratch (that's a project-config task, not session tooling).
 ---
 
 # Playwright local test & debug (scholarship-system dev env)
@@ -257,6 +257,9 @@ SELECT created_at, action, status, description, trace_id
 | JWT 401 mid-script | Tokens expire (~30 min) | Re-login via `scripts/login-mock-sso.sh`; don't retry-loop |
 | Frontend shows dev login picker even after injecting `auth_token` | `useAuth` requires BOTH `auth_token` AND `user`/`dev_user` in localStorage | Use `scripts/build-storage-state.sh <nycu_id>` — it sets both |
 | `ORDER BY role` returns unexpected order (e.g. students before admins) | Postgres enum columns sort by **declaration order**, not alphabetical. The enum is declared `student, professor, college, admin, super_admin`, so `ORDER BY role` puts students first | Either `ORDER BY role::text` (alphabetical) or live with declaration order |
+| Admin 獎學金分發 grid is empty even though finalized rankings exist | The panel's 學期 `<select>` defaults to the FIRST semester, which usually has no data | Explicitly `selectOption({label:'全年'})` (yearly) / the right semester before reading the grid — `/manual-distribution/students` returns `[]` for the wrong semester |
+| Playwright wait on a college name (`電機學院`) never resolves in the distribution panel | The 所屬學院 filter `<option>`s carry that text but are **hidden** (closed `<select>`) | Wait on the visible `儲存目前配置` button instead; read colleges from the filter's `<option>` values via `evaluateAll` |
+| College `建立新排名` makes a `sub_type_code="default"` ranking, not `nstc` | The UI uses the config's first sub-type (`subTypes[0]`), which is `default` (aggregates all sub-types) | Expected — `get_students_for_distribution` reads **every** finalized ranking regardless of `sub_type`, so distribution still works |
 
 ## Regression test scenarios
 
@@ -528,6 +531,67 @@ curl -s "$SS_BASE/admin/email/scheduled?limit=5" \
 
 **Key DB tables** (localhost only, via `scripts/db-query.sh`):
 `applications` (status, professor_id), `scheduled_emails` (recipient_email, html_body, status).
+
+---
+
+### Multi-college ranking → distribution → roster (#1029 / #1034)
+
+Verifies the full college pipeline across **multiple colleges**: each college reviewer
+finalizes its own ranking, then admin distributes and generates rosters. The regression
+this guards (#1034): **finalizing one college's ranking must NOT un-finalize the others**,
+and admin distribution must surface **all** colleges — not just the last one finalized.
+
+**Trigger when**: `college_review_service.py`, `manual_distribution_service.py`,
+`roster_service.py`, or anything under `api/v1/endpoints/college_review/` changes.
+
+**Actors**: one `college` reviewer per target college + `admin`. College reviewers are
+scoped by `users.college_code`; a ranking is auto-populated with that college's apps
+(college = `student_data->>'std_academyno'`). The seed set ships `college`/`cs_college`
+(both code `C`); this session also created `hum_college`(A), `bio_college`(B), `ee_college`(E).
+If your target colleges lack a reviewer, create one per code first.
+
+**Setup — confirm there are submitted apps across ≥2 colleges** (else rankings are empty):
+```bash
+scripts/db-query.sh "SELECT student_data->>'std_academyno' college, sub_scholarship_type, count(*)
+  FROM applications WHERE scholarship_type_id=2 AND academic_year=114 AND status='submitted'
+  GROUP BY 1,2 ORDER BY 1;"   # status must be in REVIEWABLE_APPLICATION_STATUSES
+scripts/db-query.sh "SELECT nycu_id, college_code FROM users WHERE role='college' ORDER BY college_code;"
+```
+
+**Run the bundled driver** (Playwright UI + DB ground-truth at every step):
+```bash
+NODE_PATH=$(npm root -g) \
+COLLEGES='A:hum_college,B:bio_college,C:cs_college,E:ee_college' \
+TYPE_TAB='博士生獎學金' YEAR_LABEL='114 學年度' SEM_LABEL='全年' \
+OUT=/tmp/mc-verify node scripts/verify-multi-college-distribution.js
+```
+Exit 0 ⇒ all colleges stayed finalized, distribution surfaced all of them, **and** the
+distribution run completed without error. Screenshots + `result.json` + `log.txt` land in `$OUT`. The script starts from a clean slate — if rankings
+already exist (re-run), `scripts/reset-db.sh` first, since college `建立新排名` always
+`force_new`s a duplicate.
+
+**What it asserts (and the exact UI it drives):**
+1. Per college (login → tab `學生排序` → `建立新排名` → `確認排名`, toast `排名已成功鎖定`):
+   after each finalize, `SELECT DISTINCT college_code FROM college_rankings WHERE is_finalized`
+   must be a **superset** of all colleges finalized so far. Progression should be
+   `[A] → [A,B] → [A,B,C] → [A,B,C,E]` — any drop is the #1034 regression.
+2. Admin (`獎學金分發` tab → type tab → pick `學年度`+`全年` → `儲存目前配置` → `確認分發` →
+   dialog `確認執行分發？` → `確認執行`): the 所屬學院 filter lists **all** colleges; result
+   message `分發完成：核准 N 人，拒絕 M 人`; DB shows `distribution_executed=true` and the
+   apps flip to `approved`.
+3. Roster (`生成造冊` → `確認產生造冊？` → `確認產生`): `payment_rosters` count > 0 (one per
+   sub-type group). Cross-check: `scripts/db-query.sh "SELECT count(*) FROM payment_rosters;"`.
+
+**Manual cross-check (no browser)** — the backend half, useful when the UI step flakes:
+```bash
+TOKEN=$(scripts/login-mock-sso.sh admin | jq -r .data.access_token)
+curl -s "http://localhost:8000/api/v1/manual-distribution/students?scholarship_type_id=2&academic_year=114&semester=yearly" \
+  -H "Authorization: Bearer $TOKEN" | jq '.data | group_by(.college_code) | map({(.[0].college_code): length}) | add'
+# expect every target college present, e.g. {"A":2,"B":2,"C":3,"E":2}; semester=first returns [] (omitting semester is a 422)
+```
+
+**Key tables**: `college_rankings` (`college_code`, `is_finalized`, `distribution_executed`),
+`college_ranking_items`, `applications` (`status`), `payment_rosters`.
 
 ---
 
