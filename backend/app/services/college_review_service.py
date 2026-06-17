@@ -784,7 +784,12 @@ class CollegeReviewService:
             if ranking.is_finalized:
                 raise RankingModificationError("Ranking is already finalized")
 
-            # Ensure only one ranking per scholarship/sub-type/term is finalized at a time
+            # Ensure only one ranking per scholarship/sub-type/term/COLLEGE is finalized at
+            # a time. The college_code predicate is essential: rankings are per-college
+            # (issue #1034), so finalizing one college's ranking must NOT un-finalize
+            # another college's — without it college B's finalize would reset college A's
+            # is_finalized=False and admin distribution (which reads only finalized rankings)
+            # would again surface just one college.
             semester_conditions = []
             if self._is_yearly_semester(ranking.semester):
                 semester_conditions.append(CollegeRanking.semester.is_(None))
@@ -796,6 +801,11 @@ class CollegeReviewService:
                 else:
                     semester_conditions.append(CollegeRanking.semester.is_(None))
 
+            if ranking.college_code is None:
+                college_condition = CollegeRanking.college_code.is_(None)
+            else:
+                college_condition = CollegeRanking.college_code == ranking.college_code
+
             other_rankings_stmt = (
                 select(CollegeRanking)
                 .where(
@@ -804,6 +814,7 @@ class CollegeReviewService:
                     CollegeRanking.sub_type_code == ranking.sub_type_code,
                     CollegeRanking.academic_year == ranking.academic_year,
                     or_(*semester_conditions),
+                    college_condition,
                     CollegeRanking.is_finalized.is_(True),
                 )
                 .with_for_update()

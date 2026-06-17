@@ -454,6 +454,7 @@ class ManualDistributionService:
         system_months = await self._bulk_system_received_months(items, scholarship_type_id, academic_year, semester)
 
         students = []
+        seen_app_ids: set[int] = set()
         for item in items:
             app = item.application
             if not app:
@@ -462,6 +463,15 @@ class ManualDistributionService:
             # Skip soft-deleted applications
             if app.deleted_at is not None:
                 continue
+
+            # Deduplicate by application_id (keep first seen) — mirrors
+            # get_auto_allocation_suggestions. Normally each application belongs to
+            # exactly one college's single finalized ranking, but a NULL-college
+            # (admin/global) or "default" sub-type ranking finalized alongside a
+            # per-college one could otherwise list the same student twice.
+            if app.id in seen_app_ids:
+                continue
+            seen_app_ids.add(app.id)
 
             student_data = app.student_data or {}
 
