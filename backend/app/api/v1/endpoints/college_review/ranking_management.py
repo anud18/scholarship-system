@@ -47,6 +47,7 @@ from app.services.supplementary_import_service import SupplementaryImportService
 from ._helpers import (
     _check_academic_year_permission,
     _check_scholarship_permission,
+    assert_can_manage_ranking,
     load_export_aux_data,
     normalize_semester_value,
 )
@@ -71,8 +72,11 @@ async def get_rankings(
 
         # Apply filters
         if current_user.role not in [UserRole.admin, UserRole.super_admin]:
-            # Regular college users can only see their own rankings
-            stmt = stmt.where(CollegeRanking.created_by == current_user.id)
+            # College reviewers see their college's ranking. Scope by college_code (not
+            # created_by) so every reviewer of the same college shares one ranking and
+            # different colleges stay isolated — matches create_ranking's reuse scoping
+            # (issue #1034).
+            stmt = stmt.where(CollegeRanking.college_code == current_user.college_code)
 
         if academic_year:
             stmt = stmt.where(CollegeRanking.academic_year == academic_year)
@@ -282,6 +286,11 @@ async def get_ranking(
 
         if not ranking:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
+
+        # College-scope the detail read: a reviewer may only see their own college's
+        # ranking (admins may see any). Prevents cross-college access to student PII /
+        # rejection reasons via ranking-id enumeration.
+        assert_can_manage_ranking(ranking, current_user)
 
         # Build sub-type metadata for UI display
         sub_type_metadata_map: Dict[str, Dict[str, str]] = {}
@@ -598,12 +607,8 @@ async def update_ranking(
         if not ranking:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
 
-        # Check permissions - only creator or admin can update
-        if ranking.created_by != current_user.id and current_user.role not in [UserRole.admin, UserRole.super_admin]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only the ranking creator or admin can update this ranking",
-            )
+        # Check permissions - the owning college's reviewers or an admin can update
+        assert_can_manage_ranking(ranking, current_user)
 
         # Check if ranking is finalized - cannot update finalized rankings
         if ranking.is_finalized:
@@ -645,6 +650,16 @@ async def update_ranking_order(
         service = CollegeReviewService(db)
         # #63: block once college-review deadline has passed (admins bypass).
         await service.assert_ranking_within_deadline_by_ranking(ranking_id, current_user)
+
+        # Authorize: only the owning college's reviewers or an admin may reorder. This
+        # write path previously had no ownership check, so any college reviewer could
+        # reorder another college's ranking (and overwrite Application.final_ranking_position).
+        ranking_row = (
+            await db.execute(select(CollegeRanking).where(CollegeRanking.id == ranking_id))
+        ).scalar_one_or_none()
+        if not ranking_row:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
+        assert_can_manage_ranking(ranking_row, current_user)
 
         # G8 (#970): capture the prior order — rank overwrites previously left
         # no trace, so 「核配當時的名次」 could not be reconstructed.
@@ -699,6 +714,8 @@ async def update_ranking_order(
     except CollegeReviewError as e:
         logger.exception("College review error during ranking update")
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Unexpected error updating ranking order")
         raise HTTPException(
@@ -726,15 +743,8 @@ async def finalize_ranking(
         if not ranking_check:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
 
-        # Check permissions - only creator or admin can finalize
-        if ranking_check.created_by != current_user.id and current_user.role not in [
-            UserRole.admin,
-            UserRole.super_admin,
-        ]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only the ranking creator or admin can finalize this ranking",
-            )
+        # Check permissions - the owning college's reviewers or an admin can finalize
+        assert_can_manage_ranking(ranking_check, current_user)
 
         # Capture old state for audit log
         old_values = {
@@ -797,6 +807,8 @@ async def finalize_ranking(
     except CollegeReviewError as e:
         logger.exception("College review error during finalization")
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Unexpected error finalizing ranking")
         raise HTTPException(
@@ -824,15 +836,8 @@ async def unfinalize_ranking(
         if not ranking_check:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
 
-        # Check permissions - only creator or admin can unfinalize
-        if ranking_check.created_by != current_user.id and current_user.role not in [
-            UserRole.admin,
-            UserRole.super_admin,
-        ]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only the ranking creator or admin can unfinalize this ranking",
-            )
+        # Check permissions - the owning college's reviewers or an admin can unfinalize
+        assert_can_manage_ranking(ranking_check, current_user)
 
         # Capture old state for audit log
         old_values = {
@@ -893,6 +898,8 @@ async def unfinalize_ranking(
     except CollegeReviewError as e:
         logger.exception("College review error during unfinalization")
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Unexpected error unfinalizing ranking")
         raise HTTPException(
@@ -925,12 +932,8 @@ async def delete_ranking(
         if not ranking:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
 
-        # Check permissions - only creator or admin can delete
-        if ranking.created_by != current_user.id and current_user.role not in [UserRole.admin, UserRole.super_admin]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only the ranking creator or admin can delete this ranking",
-            )
+        # Check permissions - the owning college's reviewers or an admin can delete
+        assert_can_manage_ranking(ranking, current_user)
 
         # Check if ranking is finalized - cannot delete finalized rankings
         if ranking.is_finalized:
@@ -1023,15 +1026,8 @@ async def import_ranking_from_excel(
         if not ranking:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
 
-        # Check permissions - only creator or admin can import
-        if ranking.created_by != current_user.id and current_user.role not in [
-            UserRole.admin,
-            UserRole.super_admin,
-        ]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only the ranking creator or admin can import to this ranking",
-            )
+        # Check permissions - the owning college's reviewers or an admin can import
+        assert_can_manage_ranking(ranking, current_user)
 
         if ranking.is_finalized:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot modify finalized ranking")
@@ -1186,7 +1182,7 @@ async def export_ranking_excel(
     """Generate the 學生資料彙整表 Excel for a ranking.
 
     Auth: admin/super_admin OR a college user whose `college_code` matches the
-    ranking creator's `college_code` (rankings are scoped per college via creator).
+    ranking's own `college_code` (authoritative per-college ownership).
     """
 
     # 1. Load ranking + items with applications
@@ -1203,13 +1199,10 @@ async def export_ranking_excel(
     if ranking is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到該學院排序資料")
 
-    # 2. Authorization — admin OK; college users must share creator's college_code.
-    # Both codes must be non-empty strings; empty strings are not a valid match.
-    if current_user.role not in (UserRole.admin, UserRole.super_admin):
-        creator_college = (getattr(ranking.creator, "college_code", None) or "").strip()
-        user_college = (current_user.college_code or "").strip()
-        if not creator_college or not user_college or creator_college != user_college:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限匯出此學院之資料")
+    # 2. Authorization — admin OK; college users must own this ranking's college.
+    # Use the authoritative ranking.college_code (immutable snapshot), not the live
+    # creator.college_code, so authz stays correct if the creator is later reassigned.
+    assert_can_manage_ranking(ranking, current_user)
 
     # 2b. Scholarship + academic-year permission checks (mirrors export_package.py pattern)
     if not await _check_scholarship_permission(current_user, ranking.scholarship_type_id, db):
@@ -1342,6 +1335,12 @@ async def supplementary_import(
     if not ranking:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
 
+    # Authorize BEFORE reading the config flag, so a cross-college caller gets a clear
+    # "no permission" 403 (not a misleading "feature not open") and we don't leak another
+    # college's allow_supplementary_import state. College users may only import to their
+    # own college's ranking; authorize on the authoritative ranking.college_code.
+    assert_can_manage_ranking(ranking, current_user)
+
     # Look up the matching scholarship configuration to read the flag.
     # Normalize semester via the canonical helper so "yearly" / Semester.yearly /
     # NULL all resolve consistently (see CollegeReviewService.assert_ranking_within_deadline).
@@ -1360,13 +1359,6 @@ async def supplementary_import(
     cfg = (await db.execute(cfg_stmt)).scalar_one_or_none()
     if not cfg or not cfg.allow_supplementary_import:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="補充匯入功能尚未開放")
-
-    # College users may only import to rankings from their own college.
-    # (require_college rejects admin/super_admin upstream, so no role-branching needed here.)
-    creator_college = (getattr(ranking.creator, "college_code", None) or "").strip()
-    user_college = (current_user.college_code or "").strip()
-    if not creator_college or not user_college or creator_college != user_college:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限操作此學院之排名")
 
     # Build label→code map from scholarship sub_type_configs
     label_to_code = {
@@ -1439,7 +1431,9 @@ async def supplementary_import(
     # Use the canonical extractor so we honor std_academyno → academy_code →
     # college_code → std_college precedence (some SIS records carry the field
     # under a different key).
-    expected_college = (getattr(ranking.creator, "college_code", None) or "").strip()
+    # Use the ranking's authoritative college_code (immutable snapshot), consistent
+    # with the authorization check above and stable if the creator is reassigned.
+    expected_college = (ranking.college_code or "").strip()
     if expected_college:
         mismatched = []
         for sid, data in student_data_map.items():

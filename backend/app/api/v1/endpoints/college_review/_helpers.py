@@ -5,6 +5,7 @@ Shared helper functions for college review endpoints
 import logging
 from typing import Any, Iterable, Optional
 
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +17,33 @@ from app.models.user_profile import UserProfile
 from app.services.college_ranking_export_service import DynamicFieldSpec
 
 logger = logging.getLogger(__name__)
+
+
+def assert_can_manage_ranking(ranking: Any, user: User) -> None:
+    """Authorize a college reviewer (or admin) to act on a specific ranking.
+
+    Rankings are college-owned (issue #1034): every reviewer of the owning college
+    — not only the original creator — may manage them, and admins/super_admins may
+    manage any. This keeps the write/read-by-id paths consistent with create/list
+    (already college-scoped) and blocks cross-college access. Authoritative source is
+    the ranking's own college_code column (NULL = admin/global ranking).
+
+    Raises HTTP 403 when the user is neither an admin nor a reviewer of the owning
+    college.
+    """
+    if user.is_admin() or user.is_super_admin():
+        return
+    # Both codes must be present and non-empty to match — an empty/whitespace code is
+    # not a valid college and must never satisfy the comparison (mirrors the defensive
+    # `(... or "").strip()` checks in export-excel / supplementary-import).
+    ranking_college = (getattr(ranking, "college_code", None) or "").strip()
+    user_college = (getattr(user, "college_code", None) or "").strip()
+    if ranking_college and user_college and ranking_college == user_college:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="只有該學院的審核員或管理員可以操作此排名",
+    )
 
 
 def normalize_semester_value(value: Optional[Any]) -> Optional[str]:

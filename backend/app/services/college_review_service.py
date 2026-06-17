@@ -455,14 +455,35 @@ class CollegeReviewService:
         normalized_semester = self._normalize_semester_value(semester)
         is_yearly_semester = self._is_yearly_semester(semester)
 
+        # Resolve the creator's college up front: rankings are scoped per college, so
+        # the college owns the row and drives both the reuse lookup and the application
+        # filter below. NULL college_code means an admin/super_admin global ranking.
+        from app.models.user import User
+
+        creator_stmt = select(User).where(User.id == creator_id)
+        creator_result = await self.db.execute(creator_stmt)
+        creator = creator_result.scalar_one_or_none()
+        creator_college = creator.college_code if creator else None
+
         if not force_new:
-            # Check if an unfinished ranking already exists (reuse to prevent duplicates)
+            # Reuse an existing unfinalized ranking for the same (type, sub_type, year,
+            # semester, college). Scoping by college_code — not created_by — means every
+            # reviewer of a college shares that college's single ranking, while different
+            # colleges never collide. Without college scoping the first college's ranking
+            # was handed to every other college (they could not see it and their
+            # applications were never ranked), so only one college survived into admin
+            # distribution. See issue #1034.
             existing_conditions = [
                 CollegeRanking.scholarship_type_id == scholarship_type_id,
                 CollegeRanking.sub_type_code == sub_type_code,
                 CollegeRanking.academic_year == academic_year,
                 CollegeRanking.is_finalized.is_(False),
             ]
+
+            if creator_college is None:
+                existing_conditions.append(CollegeRanking.college_code.is_(None))
+            else:
+                existing_conditions.append(CollegeRanking.college_code == creator_college)
 
             if normalized_semester is None:
                 existing_conditions.append(
@@ -496,13 +517,7 @@ class CollegeReviewService:
             # If semester is None, get all applications
             semester_filter = True
 
-        # Get creator's college code for filtering applications
-        from app.models.user import User
-
-        creator_stmt = select(User).where(User.id == creator_id)
-        creator_result = await self.db.execute(creator_stmt)
-        creator = creator_result.scalar_one_or_none()
-        creator_college = creator.college_code if creator else None
+        # creator_college resolved above (rankings are college-scoped)
 
         # Get all applications for the scholarship type (if sub_type_code is "default", include all sub-types)
         logger.debug(
@@ -623,6 +638,7 @@ class CollegeReviewService:
             sub_type_code=sub_type_code,
             academic_year=academic_year,
             semester=normalized_semester,
+            college_code=creator_college,
             ranking_name=ranking_name or f"{sub_type_code} Ranking AY{academic_year}",
             total_applications=len(applications),
             total_quota=total_quota,
@@ -768,7 +784,12 @@ class CollegeReviewService:
             if ranking.is_finalized:
                 raise RankingModificationError("Ranking is already finalized")
 
-            # Ensure only one ranking per scholarship/sub-type/term is finalized at a time
+            # Ensure only one ranking per scholarship/sub-type/term/COLLEGE is finalized at
+            # a time. The college_code predicate is essential: rankings are per-college
+            # (issue #1034), so finalizing one college's ranking must NOT un-finalize
+            # another college's — without it college B's finalize would reset college A's
+            # is_finalized=False and admin distribution (which reads only finalized rankings)
+            # would again surface just one college.
             semester_conditions = []
             if self._is_yearly_semester(ranking.semester):
                 semester_conditions.append(CollegeRanking.semester.is_(None))
@@ -780,6 +801,11 @@ class CollegeReviewService:
                 else:
                     semester_conditions.append(CollegeRanking.semester.is_(None))
 
+            if ranking.college_code is None:
+                college_condition = CollegeRanking.college_code.is_(None)
+            else:
+                college_condition = CollegeRanking.college_code == ranking.college_code
+
             other_rankings_stmt = (
                 select(CollegeRanking)
                 .where(
@@ -788,6 +814,7 @@ class CollegeReviewService:
                     CollegeRanking.sub_type_code == ranking.sub_type_code,
                     CollegeRanking.academic_year == ranking.academic_year,
                     or_(*semester_conditions),
+                    college_condition,
                     CollegeRanking.is_finalized.is_(True),
                 )
                 .with_for_update()
