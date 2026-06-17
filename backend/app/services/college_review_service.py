@@ -456,12 +456,18 @@ class CollegeReviewService:
         is_yearly_semester = self._is_yearly_semester(semester)
 
         if not force_new:
-            # Check if an unfinished ranking already exists (reuse to prevent duplicates)
+            # Check if an unfinished ranking already exists (reuse to prevent duplicates).
+            # Scope by created_by: each college reviewer owns their own ranking. Without
+            # this, the first college's unfinalized ranking would be handed to every other
+            # college creating a ranking for the same (type, sub_type, year) — those colleges
+            # could not see it (get_rankings filters by created_by) and their applications
+            # were never ranked, so only one college survived into admin distribution.
             existing_conditions = [
                 CollegeRanking.scholarship_type_id == scholarship_type_id,
                 CollegeRanking.sub_type_code == sub_type_code,
                 CollegeRanking.academic_year == academic_year,
                 CollegeRanking.is_finalized.is_(False),
+                CollegeRanking.created_by == creator_id,
             ]
 
             if normalized_semester is None:
