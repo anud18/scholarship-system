@@ -1335,6 +1335,12 @@ async def supplementary_import(
     if not ranking:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
 
+    # Authorize BEFORE reading the config flag, so a cross-college caller gets a clear
+    # "no permission" 403 (not a misleading "feature not open") and we don't leak another
+    # college's allow_supplementary_import state. College users may only import to their
+    # own college's ranking; authorize on the authoritative ranking.college_code.
+    assert_can_manage_ranking(ranking, current_user)
+
     # Look up the matching scholarship configuration to read the flag.
     # Normalize semester via the canonical helper so "yearly" / Semester.yearly /
     # NULL all resolve consistently (see CollegeReviewService.assert_ranking_within_deadline).
@@ -1353,11 +1359,6 @@ async def supplementary_import(
     cfg = (await db.execute(cfg_stmt)).scalar_one_or_none()
     if not cfg or not cfg.allow_supplementary_import:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="補充匯入功能尚未開放")
-
-    # College users may only import to rankings from their own college. Authorize on
-    # the authoritative ranking.college_code (not the live creator.college_code) so it
-    # stays correct if the creator is later reassigned to another college.
-    assert_can_manage_ranking(ranking, current_user)
 
     # Build label→code map from scholarship sub_type_configs
     label_to_code = {

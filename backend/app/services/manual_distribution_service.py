@@ -541,8 +541,23 @@ class ManualDistributionService:
             # order is deterministic (rank_position, id).
             existing_idx = index_by_app.get(app.id)
             if existing_idx is not None:
-                if student["is_allocated"] and not students[existing_idx]["is_allocated"]:
+                kept = students[existing_idx]
+                if student["is_allocated"] and not kept["is_allocated"]:
                     students[existing_idx] = student
+                elif student["is_allocated"] and kept["is_allocated"]:
+                    # Both duplicate items carry a live allocation — a data anomaly the
+                    # grid can only surface one of. Log it so the hidden allocation (still
+                    # consuming quota) is discoverable; revoke/restore operate per
+                    # application_id and will still reach both copies.
+                    logger.warning(
+                        "Application %s has two allocated ranking items (%s, %s) across "
+                        "finalized rankings; distribution grid shows only %s",
+                        app.id,
+                        kept["ranking_item_id"],
+                        student["ranking_item_id"],
+                        kept["ranking_item_id"],
+                        exc_info=False,
+                    )
                 continue
             index_by_app[app.id] = len(students)
             students.append(student)
