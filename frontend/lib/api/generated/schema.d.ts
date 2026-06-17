@@ -20627,6 +20627,8 @@ export interface operations {
                 skip?: number;
                 limit?: number;
                 scholarship_configuration_id?: number | null;
+                /** @description 依獎學金類型過濾（透過所屬配置） */
+                scholarship_type_id?: number | null;
                 status_filter?: components["schemas"]["RosterStatus"] | null;
                 period_label?: string | null;
                 academic_year?: number | null;

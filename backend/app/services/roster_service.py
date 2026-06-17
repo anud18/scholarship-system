@@ -4,6 +4,7 @@ Roster service core logic for scholarship payment roster generation
 """
 
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -39,6 +40,24 @@ from app.services.student_verification_service import StudentVerificationService
 from app.utils.pii_masking import mask_id_number
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class RosterGenerationResult:
+    """Outcome of a batch roster generation (issue #1033).
+
+    `created` are the rosters newly produced (or rebuilt under
+    force_regenerate); `skipped` are pre-existing rosters left untouched
+    because they already existed and force_regenerate was not set; `locked`
+    are pre-existing rosters that force_regenerate could NOT rebuild because
+    they are locked. Carrying these lets the API tell the admin honestly what
+    happened instead of returning a misleading "produced 0" success — or, for
+    locked rosters under force, aborting the whole batch with a 500.
+    """
+
+    created: List["PaymentRoster"] = field(default_factory=list)
+    skipped: List["PaymentRoster"] = field(default_factory=list)
+    locked: List["PaymentRoster"] = field(default_factory=list)
 
 
 class RosterService:
@@ -1455,7 +1474,7 @@ class RosterService:
         created_by_user_id: int,
         student_verification_enabled: bool = True,
         force_regenerate: bool = False,
-    ) -> List[PaymentRoster]:
+    ) -> "RosterGenerationResult":
         """
         從矩陣分發結果批次產生造冊
 
@@ -1473,7 +1492,8 @@ class RosterService:
             force_regenerate: 是否強制重新產生已存在的造冊
 
         Returns:
-            List[PaymentRoster]: 已產生的造冊列表
+            RosterGenerationResult: `.created` 為新產生的造冊，`.skipped` 為
+            已存在且未重新產生的造冊（force_regenerate=False 時）。
 
         Raises:
             ValueError: 找不到排名、尚未完成分發、或其他驗證錯誤
@@ -1563,6 +1583,8 @@ class RosterService:
 
         # 4. 為每個分組建立造冊（以該分組的消耗配置為準）
         created_rosters: List[PaymentRoster] = []
+        skipped_rosters: List[PaymentRoster] = []
+        locked_rosters: List[PaymentRoster] = []
 
         for (alloc_config_id, sub_type), group_items in groups.items():
             application_ids_in_group = {item.application_id for item in group_items}
@@ -1580,16 +1602,32 @@ class RosterService:
                     force_regenerate=force_regenerate,
                 )
                 created_rosters.append(roster)
-            except RosterAlreadyExistsError:
+            except RosterAlreadyExistsError as e:
                 logger.info(f"Roster for (cfg={alloc_config_id}, {sub_type}) already exists, skipping.")
+                if e.existing_roster is not None:
+                    skipped_rosters.append(e.existing_roster)
+                continue
+            except RosterLockedError as e:
+                # force_regenerate can't rebuild a locked roster. Report it
+                # rather than aborting the whole batch (issue #1033) — the
+                # honest message tells admins to use force, so don't let that
+                # advice 500 when one roster in the batch is locked.
+                logger.info(f"Roster for (cfg={alloc_config_id}, {sub_type}) is locked, cannot rebuild.")
+                if e.roster is not None:
+                    locked_rosters.append(e.roster)
                 continue
             except Exception:
                 logger.exception(f"Failed to generate roster for (cfg={alloc_config_id}, {sub_type})")
                 raise
 
         self.db.commit()
-        logger.info(f"Generated {len(created_rosters)} rosters from distribution rankings {ranking_ids}")
-        return created_rosters
+        logger.info(
+            f"Generated {len(created_rosters)} rosters "
+            f"({len(skipped_rosters)} skipped as already-existing, "
+            f"{len(locked_rosters)} locked) "
+            f"from distribution rankings {ranking_ids}"
+        )
+        return RosterGenerationResult(created=created_rosters, skipped=skipped_rosters, locked=locked_rosters)
 
     def _generate_one_sub_type_roster(
         self,
@@ -1640,11 +1678,15 @@ class RosterService:
 
         if existing_roster and not force_regenerate:
             raise RosterAlreadyExistsError(
-                f"造冊已存在：{sub_type} {allocation_year} 年度。使用 force_regenerate=True 可覆蓋。"
+                f"造冊已存在：{sub_type} {allocation_year} 年度。使用 force_regenerate=True 可覆蓋。",
+                existing_roster=existing_roster,
             )
 
         if existing_roster and existing_roster.is_locked:
-            raise RosterLockedError(f"無法重新產生已鎖定的造冊：{existing_roster.roster_code}")
+            raise RosterLockedError(
+                f"無法重新產生已鎖定的造冊：{existing_roster.roster_code}",
+                roster=existing_roster,
+            )
 
         user = self.db.query(User).filter(User.id == created_by_user_id).first()
         user_name = user.name if user else "Unknown"

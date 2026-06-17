@@ -69,6 +69,23 @@ def _require_admin(user: User) -> None:
 _HEAVY_ITEM_FIELDS = {"rule_validation_result", "verification_snapshot"}
 
 
+def _roster_config_fields(roster: PaymentRoster) -> dict:
+    """Structured links to the owning scholarship config (issue #1033).
+
+    The roster only stores scholarship_configuration_id; scholarship_type_id
+    and semester live on the related ScholarshipConfiguration. Surface them
+    (plus config_id, the frontend's name for the config FK) so reports/audits
+    can filter without parsing roster_code. Requires scholarship_configuration
+    to be eager-loaded to avoid MissingGreenlet under async.
+    """
+    config = roster.scholarship_configuration
+    return {
+        "config_id": roster.scholarship_configuration_id,
+        "scholarship_type_id": config.scholarship_type_id if config else None,
+        "semester": config.semester.value if config and config.semester else None,
+    }
+
+
 def _roster_item_dict_with_display_year(item: PaymentRosterItem, roster: PaymentRoster, *, slim: bool = False) -> dict:
     """Serialize a roster item for the UI, resolving the display year.
 
@@ -406,6 +423,7 @@ async def list_payment_rosters(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     scholarship_configuration_id: Optional[int] = Query(None),
+    scholarship_type_id: Optional[int] = Query(None, description="依獎學金類型過濾（透過所屬配置）"),
     status_filter: Optional[RosterStatus] = Query(None),
     period_label: Optional[str] = Query(None),
     academic_year: Optional[int] = Query(None),
@@ -416,6 +434,8 @@ async def list_payment_rosters(
     取得造冊清單
     Get payment roster list
     """
+    from app.models.scholarship import ScholarshipConfiguration
+
     try:
         # Build query with eager loading to avoid MissingGreenlet errors
         stmt = select(PaymentRoster).options(
@@ -429,6 +449,13 @@ async def list_payment_rosters(
         # 套用篩選條件
         if scholarship_configuration_id:
             stmt = stmt.where(PaymentRoster.scholarship_configuration_id == scholarship_configuration_id)
+        if scholarship_type_id is not None:
+            # Filter by scholarship type via the owning config (issue #1033):
+            # rosters don't store scholarship_type_id directly.
+            stmt = stmt.join(
+                ScholarshipConfiguration,
+                PaymentRoster.scholarship_configuration_id == ScholarshipConfiguration.id,
+            ).where(ScholarshipConfiguration.scholarship_type_id == scholarship_type_id)
         if status_filter:
             stmt = stmt.where(PaymentRoster.status == status_filter)
         if period_label:
@@ -460,6 +487,7 @@ async def list_payment_rosters(
             roster_dict["student_count"] = roster.qualified_count + roster.disqualified_count
             roster_dict["roster_name"] = roster.roster_code
             roster_dict["roster_period"] = roster.roster_cycle.value
+            roster_dict.update(_roster_config_fields(roster))
 
             # 添加關聯資料（已 eager loaded，避免 MissingGreenlet）
             if roster.items:
@@ -1268,10 +1296,12 @@ async def get_payment_roster(
 
         # 使用 Pydantic model_validate 自動處理 Field alias 映射
         response_data = RosterResponse.model_validate(roster)
+        data = response_data.model_dump() if hasattr(response_data, "model_dump") else response_data.dict()
+        data.update(_roster_config_fields(roster))  # structured config FKs (issue #1033)
         return ApiResponse(
             success=True,
             message="查詢成功",
-            data=response_data.model_dump() if hasattr(response_data, "model_dump") else response_data.dict(),
+            data=data,
         )
 
     except HTTPException:

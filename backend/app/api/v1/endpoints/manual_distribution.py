@@ -527,6 +527,23 @@ class GenerateRostersRequest(BaseModel):
     force_regenerate: bool = False
 
 
+def _build_roster_generation_message(created: int, skipped: int, locked: int) -> str:
+    """Honest summary of a batch roster generation (issue #1033).
+
+    Existing rosters are never silently reported as a blank success: skipped
+    ones name how to rebuild (force_regenerate), and locked ones say why they
+    could not be rebuilt. Pure function so the wording stays under test.
+    """
+    message = f"成功產生 {created} 個造冊"
+    if skipped:
+        message += (
+            f"；另有 {skipped} 個造冊已存在、未重新產生。" "如需以最新分發/學生資料重建，請帶 force_regenerate=true。"
+        )
+    if locked:
+        message += f"；有 {locked} 個造冊已鎖定，無法重新產生。"
+    return message
+
+
 @router.post("/generate-rosters-from-distribution")
 async def generate_rosters_from_distribution(
     request: GenerateRostersRequest,
@@ -543,7 +560,7 @@ async def generate_rosters_from_distribution(
 
     service = RosterService(sync_db)
     try:
-        rosters = service.generate_rosters_from_distribution(
+        result = service.generate_rosters_from_distribution(
             scholarship_type_id=request.scholarship_type_id,
             academic_year=request.academic_year,
             semester=request.semester,
@@ -552,8 +569,8 @@ async def generate_rosters_from_distribution(
             force_regenerate=request.force_regenerate,
         )
 
-        roster_summaries = [
-            {
+        def _summarize(r):
+            return {
                 "id": r.id,
                 "roster_code": r.roster_code,
                 "sub_type": r.sub_type,
@@ -565,15 +582,23 @@ async def generate_rosters_from_distribution(
                 "disqualified_count": r.disqualified_count,
                 "total_amount": str(r.total_amount),
             }
-            for r in rosters
-        ]
+
+        roster_summaries = [_summarize(r) for r in result.created]
+        skipped_summaries = [_summarize(r) for r in result.skipped]
+        locked_summaries = [_summarize(r) for r in result.locked]
+
+        message = _build_roster_generation_message(len(result.created), len(result.skipped), len(result.locked))
 
         return {
             "success": True,
-            "message": f"成功產生 {len(rosters)} 個造冊",
+            "message": message,
             "data": {
-                "rosters_created": len(rosters),
+                "rosters_created": len(result.created),
+                "rosters_skipped": len(result.skipped),
+                "rosters_locked": len(result.locked),
                 "rosters": roster_summaries,
+                "skipped_rosters": skipped_summaries,
+                "locked_rosters": locked_summaries,
             },
         }
     except ValueError as e:

@@ -216,15 +216,21 @@ class RosterNotFoundError(NotFoundError):
 class RosterAlreadyExistsError(ConflictError):
     """Raised when trying to create roster that already exists"""
 
-    def __init__(self, message: str):
+    def __init__(self, message: str, existing_roster=None):
         super().__init__(message)
+        # Lets a batch caller report which roster was skipped (issue #1033)
+        # without re-querying. Optional — single-roster callers omit it.
+        self.existing_roster = existing_roster
 
 
 class RosterLockedError(BusinessLogicError):
     """Raised when trying to modify locked roster"""
 
-    def __init__(self, message: str):
+    def __init__(self, message: str, roster=None):
         super().__init__(message)
+        # Lets a batch caller report which locked roster blocked a rebuild
+        # (issue #1033) instead of aborting the whole batch. Optional.
+        self.roster = roster
 
 
 class StudentVerificationError(ScholarshipException):
