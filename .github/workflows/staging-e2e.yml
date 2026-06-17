@@ -286,11 +286,14 @@ jobs:
             --color "d73a4a" \
             --description "Auto-filed by the staging-e2e replica lane" \
             2>/dev/null || true
+          # Reuse a single rolling issue: comment on ANY open staging-e2e-failure
+          # issue instead of opening one per day. (Previously keyed on the date in
+          # the title, which spawned a new issue every night staging stayed down —
+          # e.g. #1023/#1025/#1027/#1030 for one underlying outage.)
           existing=$(gh issue list \
             --repo ${{ github.repository }} \
             --label staging-e2e-failure \
             --state open \
-            --search "in:title $today" \
             --json number \
             --jq '.[0].number' || echo '')
           body=$(cat <<EOF

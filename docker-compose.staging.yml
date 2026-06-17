@@ -141,6 +141,12 @@ services:
     depends_on:
       - backend
       - frontend
+    # Hard memory cap (issue: AP-VM OOM during deploy). The AP VM co-hosts the
+    # full app stack AND five monitoring containers; an uncapped alloy can grow
+    # large enough that `alembic upgrade head` gets OOM-killed (exit 137) during
+    # `deploy-pipeline.yml`, which then fails rollback and leaves staging down.
+    # Capping the monitoring stack keeps host headroom for the migration spike.
+    mem_limit: 256m
     logging:
       driver: "json-file"
       options:
@@ -163,6 +169,7 @@ services:
     networks:
       - scholarship_staging_network
     restart: unless-stopped
+    mem_limit: 64m  # see alloy: AP-VM OOM headroom during deploy
     logging:
       driver: "json-file"
       options:
@@ -222,6 +229,7 @@ services:
     networks:
       - scholarship_staging_network
     restart: unless-stopped
+    mem_limit: 32m  # see alloy: AP-VM OOM headroom during deploy
     logging:
       driver: "json-file"
       options:
@@ -242,6 +250,7 @@ services:
     networks:
       - scholarship_staging_network
     restart: unless-stopped
+    mem_limit: 48m  # see alloy: AP-VM OOM headroom during deploy
     logging:
       driver: "json-file"
       options:
