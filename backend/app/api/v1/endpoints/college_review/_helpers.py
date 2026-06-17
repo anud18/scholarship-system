@@ -33,8 +33,12 @@ def assert_can_manage_ranking(ranking: Any, user: User) -> None:
     """
     if user.is_admin() or user.is_super_admin():
         return
-    user_college = getattr(user, "college_code", None)
-    if ranking.college_code is not None and user_college is not None and ranking.college_code == user_college:
+    # Both codes must be present and non-empty to match — an empty/whitespace code is
+    # not a valid college and must never satisfy the comparison (mirrors the defensive
+    # `(... or "").strip()` checks in export-excel / supplementary-import).
+    ranking_college = (getattr(ranking, "college_code", None) or "").strip()
+    user_college = (getattr(user, "college_code", None) or "").strip()
+    if ranking_college and user_college and ranking_college == user_college:
         return
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,

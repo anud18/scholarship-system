@@ -434,12 +434,14 @@ class ManualDistributionService:
 
         ranking_ids = [r.id for r in rankings]
 
-        # Get all ranking items with applications
+        # Get all ranking items with applications. Order by (rank_position, id) so
+        # iteration — and therefore the per-application dedup below — is deterministic
+        # when an application appears in more than one finalized ranking.
         items_query = (
             select(CollegeRankingItem)
             .options(selectinload(CollegeRankingItem.application))
             .where(CollegeRankingItem.ranking_id.in_(ranking_ids))
-            .order_by(CollegeRankingItem.rank_position)
+            .order_by(CollegeRankingItem.rank_position, CollegeRankingItem.id)
         )
         result = await self.db.execute(items_query)
         items = result.scalars().all()
@@ -454,7 +456,7 @@ class ManualDistributionService:
         system_months = await self._bulk_system_received_months(items, scholarship_type_id, academic_year, semester)
 
         students = []
-        seen_app_ids: set[int] = set()
+        index_by_app: dict[int, int] = {}
         for item in items:
             app = item.application
             if not app:
@@ -463,15 +465,6 @@ class ManualDistributionService:
             # Skip soft-deleted applications
             if app.deleted_at is not None:
                 continue
-
-            # Deduplicate by application_id (keep first seen) — mirrors
-            # get_auto_allocation_suggestions. Normally each application belongs to
-            # exactly one college's single finalized ranking, but a NULL-college
-            # (admin/global) or "default" sub-type ranking finalized alongside a
-            # per-college one could otherwise list the same student twice.
-            if app.id in seen_app_ids:
-                continue
-            seen_app_ids.add(app.id)
 
             student_data = app.student_data or {}
 
@@ -498,48 +491,61 @@ class ManualDistributionService:
                 rm_value = system_months.get(student_id_value) if student_id_value else None
                 rm_source = "system" if rm_value is not None else None
 
-            students.append(
-                {
-                    "ranking_item_id": item.id,
-                    "application_id": app.id,
-                    "rank_position": item.rank_position,
-                    "applied_sub_types": app.scholarship_subtype_list or [],
-                    "rejected_sub_types": list(rejected_map.get(app.id, set())),
-                    "allocated_sub_type": item.allocated_sub_type,
-                    # Config whose quota this slot consumes — the frontend grid
-                    # seeds the checked column from (allocated_sub_type,
-                    # allocation_config_id). Superseded the legacy allocation_year.
-                    "allocation_config_id": item.allocation_config_id,
-                    # Live funding flag — cancel (revoke/suspend) flips this to
-                    # False to free the quota slot, restore flips it back. The
-                    # frontend seeds the 核配 checkbox from this, not from
-                    # allocated_sub_type (which is preserved across cancel).
-                    "is_allocated": item.is_allocated,
-                    "status": item.status,
-                    # Application-level allocation status — drives the
-                    # distribution-row status control (正常/撤銷/停發) and
-                    # disables the 核配 checkboxes once revoked/suspended.
-                    "quota_allocation_status": app.quota_allocation_status,
-                    "revoke_reason": app.revoke_reason,
-                    "suspend_reason": app.suspend_reason,
-                    "college_rejected": item.college_rejected,
-                    "is_supplementary": item.is_supplementary,
-                    "college_code": student_college,
-                    "college_name": student_data.get("trm_academyname", ""),
-                    "department_name": student_data.get("trm_depname", ""),
-                    "term_count": term_count,
-                    "student_name": student_data.get("std_cname", ""),
-                    "nationality": student_data.get("std_nation", ""),
-                    "enrollment_date": enrollment_date,
-                    "student_id": student_data.get("std_stdcode", ""),
-                    "application_identity": identity,
-                    "is_renewal": app.is_renewal,
-                    "renewal_year": app.renewal_year,
-                    "renewal_sub_type": self._get_renewal_sub_type(app),
-                    "received_months": rm_value,
-                    "received_months_source": rm_source,
-                }
-            )
+            student = {
+                "ranking_item_id": item.id,
+                "application_id": app.id,
+                "rank_position": item.rank_position,
+                "applied_sub_types": app.scholarship_subtype_list or [],
+                "rejected_sub_types": list(rejected_map.get(app.id, set())),
+                "allocated_sub_type": item.allocated_sub_type,
+                # Config whose quota this slot consumes — the frontend grid
+                # seeds the checked column from (allocated_sub_type,
+                # allocation_config_id). Superseded the legacy allocation_year.
+                "allocation_config_id": item.allocation_config_id,
+                # Live funding flag — cancel (revoke/suspend) flips this to
+                # False to free the quota slot, restore flips it back. The
+                # frontend seeds the 核配 checkbox from this, not from
+                # allocated_sub_type (which is preserved across cancel).
+                "is_allocated": item.is_allocated,
+                "status": item.status,
+                # Application-level allocation status — drives the
+                # distribution-row status control (正常/撤銷/停發) and
+                # disables the 核配 checkboxes once revoked/suspended.
+                "quota_allocation_status": app.quota_allocation_status,
+                "revoke_reason": app.revoke_reason,
+                "suspend_reason": app.suspend_reason,
+                "college_rejected": item.college_rejected,
+                "is_supplementary": item.is_supplementary,
+                "college_code": student_college,
+                "college_name": student_data.get("trm_academyname", ""),
+                "department_name": student_data.get("trm_depname", ""),
+                "term_count": term_count,
+                "student_name": student_data.get("std_cname", ""),
+                "nationality": student_data.get("std_nation", ""),
+                "enrollment_date": enrollment_date,
+                "student_id": student_data.get("std_stdcode", ""),
+                "application_identity": identity,
+                "is_renewal": app.is_renewal,
+                "renewal_year": app.renewal_year,
+                "renewal_sub_type": self._get_renewal_sub_type(app),
+                "received_months": rm_value,
+                "received_months_source": rm_source,
+            }
+
+            # Deduplicate by application_id: an application can legitimately appear in
+            # two finalized rankings of the same college (e.g. a "default" ranking
+            # finalized alongside a specific sub-type one). Allocation state lives
+            # per-ranking-item, so keep ONE row per application but PREFER the item that
+            # carries the real allocation — otherwise the (rank-ordered) first item, if
+            # unallocated, would hide a persisted allocation on the duplicate. Iteration
+            # order is deterministic (rank_position, id).
+            existing_idx = index_by_app.get(app.id)
+            if existing_idx is not None:
+                if student["is_allocated"] and not students[existing_idx]["is_allocated"]:
+                    students[existing_idx] = student
+                continue
+            index_by_app[app.id] = len(students)
+            students.append(student)
 
         # Sort by college_code, then rank_position
         students.sort(key=lambda s: (s["college_code"], s["rank_position"]))

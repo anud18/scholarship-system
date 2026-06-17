@@ -302,6 +302,15 @@ class TestAssertCanManageRanking:
             self._assert()(self._ranking(None), self._user(college_code=None))
         assert exc.value.status_code == 403
 
+    def test_empty_string_college_codes_are_not_a_match(self):
+        # "" is not a valid college; two empty-coded actors must not share access
+        # (aligns with the defensive strip-and-reject in export/supplementary-import).
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as exc:
+            self._assert()(self._ranking(""), self._user(college_code=""))
+        assert exc.value.status_code == 403
+
 
 # Integration tests that would require database setup
 class TestCollegeReviewServiceIntegration:

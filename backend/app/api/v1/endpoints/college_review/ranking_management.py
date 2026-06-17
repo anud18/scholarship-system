@@ -1182,7 +1182,7 @@ async def export_ranking_excel(
     """Generate the 學生資料彙整表 Excel for a ranking.
 
     Auth: admin/super_admin OR a college user whose `college_code` matches the
-    ranking creator's `college_code` (rankings are scoped per college via creator).
+    ranking's own `college_code` (authoritative per-college ownership).
     """
 
     # 1. Load ranking + items with applications
@@ -1199,13 +1199,10 @@ async def export_ranking_excel(
     if ranking is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到該學院排序資料")
 
-    # 2. Authorization — admin OK; college users must share creator's college_code.
-    # Both codes must be non-empty strings; empty strings are not a valid match.
-    if current_user.role not in (UserRole.admin, UserRole.super_admin):
-        creator_college = (getattr(ranking.creator, "college_code", None) or "").strip()
-        user_college = (current_user.college_code or "").strip()
-        if not creator_college or not user_college or creator_college != user_college:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限匯出此學院之資料")
+    # 2. Authorization — admin OK; college users must own this ranking's college.
+    # Use the authoritative ranking.college_code (immutable snapshot), not the live
+    # creator.college_code, so authz stays correct if the creator is later reassigned.
+    assert_can_manage_ranking(ranking, current_user)
 
     # 2b. Scholarship + academic-year permission checks (mirrors export_package.py pattern)
     if not await _check_scholarship_permission(current_user, ranking.scholarship_type_id, db):
@@ -1357,12 +1354,10 @@ async def supplementary_import(
     if not cfg or not cfg.allow_supplementary_import:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="補充匯入功能尚未開放")
 
-    # College users may only import to rankings from their own college.
-    # (require_college rejects admin/super_admin upstream, so no role-branching needed here.)
-    creator_college = (getattr(ranking.creator, "college_code", None) or "").strip()
-    user_college = (current_user.college_code or "").strip()
-    if not creator_college or not user_college or creator_college != user_college:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限操作此學院之排名")
+    # College users may only import to rankings from their own college. Authorize on
+    # the authoritative ranking.college_code (not the live creator.college_code) so it
+    # stays correct if the creator is later reassigned to another college.
+    assert_can_manage_ranking(ranking, current_user)
 
     # Build label→code map from scholarship sub_type_configs
     label_to_code = {
@@ -1435,7 +1430,9 @@ async def supplementary_import(
     # Use the canonical extractor so we honor std_academyno → academy_code →
     # college_code → std_college precedence (some SIS records carry the field
     # under a different key).
-    expected_college = (getattr(ranking.creator, "college_code", None) or "").strip()
+    # Use the ranking's authoritative college_code (immutable snapshot), consistent
+    # with the authorization check above and stable if the creator is reassigned.
+    expected_college = (ranking.college_code or "").strip()
     if expected_college:
         mismatched = []
         for sid, data in student_data_map.items():
