@@ -111,6 +111,44 @@ class TestCollegeReviewService:
         with pytest.raises(InvalidRankingDataError):
             await service.update_ranking_order(ranking_id=1, new_order=new_order)
 
+    async def test_create_ranking_reuse_is_scoped_by_creator(self, service):
+        """Regression: the reuse-existing-unfinalized-ranking lookup must be scoped
+        by created_by, otherwise one college's unfinalized ranking is handed to every
+        other college creating a ranking for the same (type, sub_type, year) — those
+        colleges cannot see it (get_rankings filters by created_by) and their
+        applications are never ranked. Reproduced live; see the multi-college flow.
+        """
+        captured = []
+
+        def _record(stmt, *args, **kwargs):
+            captured.append(stmt)
+            result = MagicMock()
+            result.scalar_one_or_none.return_value = None
+            scalars = MagicMock()
+            scalars.all.return_value = []
+            result.scalars.return_value = scalars
+            return result
+
+        service.db.execute = AsyncMock(side_effect=_record)
+
+        await service.create_ranking(
+            scholarship_type_id=2,
+            sub_type_code="default",
+            academic_year=114,
+            semester="yearly",
+            creator_id=52,
+        )
+
+        # First statement is the reuse-existence check; its WHERE clause (not the
+        # SELECT column list) must filter on created_by. Inspecting whereclause only
+        # avoids a false positive from select(CollegeRanking) listing every column.
+        assert captured, "expected create_ranking to issue at least one query"
+        where_sql = str(captured[0].whereclause)
+        assert "created_by" in where_sql, (
+            "reuse-existence check WHERE must be scoped by created_by to keep each "
+            f"college's ranking distinct; got WHERE: {where_sql}"
+        )
+
     def test_exception_hierarchy(self):
         """Test that custom exceptions inherit properly"""
         assert issubclass(RankingNotFoundError, CollegeReviewError)
