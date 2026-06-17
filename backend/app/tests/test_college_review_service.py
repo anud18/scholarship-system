@@ -111,19 +111,27 @@ class TestCollegeReviewService:
         with pytest.raises(InvalidRankingDataError):
             await service.update_ranking_order(ranking_id=1, new_order=new_order)
 
-    async def test_create_ranking_reuse_is_scoped_by_creator(self, service):
-        """Regression: the reuse-existing-unfinalized-ranking lookup must be scoped
-        by created_by, otherwise one college's unfinalized ranking is handed to every
-        other college creating a ranking for the same (type, sub_type, year) — those
-        colleges cannot see it (get_rankings filters by created_by) and their
-        applications are never ranked. Reproduced live; see the multi-college flow.
+    async def test_create_ranking_reuse_is_scoped_by_college(self, service):
+        """Regression: the reuse-existing-unfinalized-ranking lookup must be scoped by
+        college_code, otherwise one college's unfinalized ranking is handed to other
+        colleges creating a ranking for the same (type, sub_type, year). Those colleges
+        could not see it (get_rankings is also college-scoped) and their applications
+        were never ranked, so only one college survived into admin distribution.
+        Reproduced live; see issue #1034.
         """
         captured = []
 
         def _record(stmt, *args, **kwargs):
             captured.append(stmt)
             result = MagicMock()
-            result.scalar_one_or_none.return_value = None
+            # First query is the creator lookup → return a college reviewer; the
+            # subsequent existence / apps queries return nothing.
+            if len(captured) == 1:
+                creator = MagicMock()
+                creator.college_code = "E"
+                result.scalar_one_or_none.return_value = creator
+            else:
+                result.scalar_one_or_none.return_value = None
             scalars = MagicMock()
             scalars.all.return_value = []
             result.scalars.return_value = scalars
@@ -139,14 +147,17 @@ class TestCollegeReviewService:
             creator_id=52,
         )
 
-        # First statement is the reuse-existence check; its WHERE clause (not the
-        # SELECT column list) must filter on created_by. Inspecting whereclause only
-        # avoids a false positive from select(CollegeRanking) listing every column.
-        assert captured, "expected create_ranking to issue at least one query"
-        where_sql = str(captured[0].whereclause)
-        assert "created_by" in where_sql, (
-            "reuse-existence check WHERE must be scoped by created_by to keep each "
-            f"college's ranking distinct; got WHERE: {where_sql}"
+        # The reuse-existence check is the statement whose WHERE filters on is_finalized.
+        # Inspecting whereclause only (not the SELECT column list) avoids a false positive
+        # from select(CollegeRanking) listing every column.
+        existence_wheres = [
+            str(s.whereclause) for s in captured if s.whereclause is not None and "is_finalized" in str(s.whereclause)
+        ]
+        assert existence_wheres, "expected a reuse-existence query filtering on is_finalized"
+        where_sql = existence_wheres[0]
+        assert "college_code" in where_sql, (
+            "reuse-existence check WHERE must be scoped by college_code so each college "
+            f"shares one ranking and colleges stay isolated; got WHERE: {where_sql}"
         )
 
     def test_exception_hierarchy(self):

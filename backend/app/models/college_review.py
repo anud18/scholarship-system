@@ -67,6 +67,10 @@ class CollegeRanking(Base):
     sub_type_code = Column(String(50), nullable=False)
     academic_year = Column(Integer, nullable=False)
     semester = Column(String(20))  # Can be null for yearly scholarships
+    # College that owns this ranking. A ranking is scoped per (type, sub_type, year,
+    # semester, college): each college's reviewers share one ranking of their own
+    # college's applications. NULL only for admin/super_admin global rankings.
+    college_code = Column(String(10), nullable=True, index=True)
 
     # Ranking metadata
     ranking_name = Column(String(200))  # Descriptive name for this ranking

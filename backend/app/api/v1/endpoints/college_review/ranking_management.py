@@ -71,8 +71,11 @@ async def get_rankings(
 
         # Apply filters
         if current_user.role not in [UserRole.admin, UserRole.super_admin]:
-            # Regular college users can only see their own rankings
-            stmt = stmt.where(CollegeRanking.created_by == current_user.id)
+            # College reviewers see their college's ranking. Scope by college_code (not
+            # created_by) so every reviewer of the same college shares one ranking and
+            # different colleges stay isolated — matches create_ranking's reuse scoping
+            # (issue #1034).
+            stmt = stmt.where(CollegeRanking.college_code == current_user.college_code)
 
         if academic_year:
             stmt = stmt.where(CollegeRanking.academic_year == academic_year)
