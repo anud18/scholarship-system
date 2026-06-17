@@ -707,3 +707,85 @@ async def test_restore_endpoint_missing_item_returns_404(client_admin: AsyncClie
     roster_id, _item_id = locked_roster_with_removed_item
     resp = await client_admin.post(f"/api/v1/payment-rosters/{roster_id}/items/99999999/restore", json={})
     assert resp.status_code == 404
+
+
+# ===========================================================================
+# Structured config fields + scholarship_type filter (issue #1033)
+# ===========================================================================
+
+
+@pytest_asyncio.fixture
+async def roster_with_real_config(db) -> PaymentRoster:
+    """A roster linked to a real ScholarshipConfiguration so the derived
+    scholarship_type_id / semester / config_id fields are non-null."""
+    from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
+
+    u = await _seed_admin_user(db, "cfg")
+    sch = ScholarshipType(code="pr_cfg_sch", name="PR Cfg", description="x")
+    db.add(sch)
+    await db.commit()
+    await db.refresh(sch)
+
+    cfg = ScholarshipConfiguration(
+        scholarship_type_id=sch.id,
+        config_code="PR-CFG-114",
+        config_name="PR Cfg 114",
+        academic_year=114,
+        semester="first",
+        amount=50000,
+        has_quota_limit=False,
+    )
+    db.add(cfg)
+    await db.commit()
+    await db.refresh(cfg)
+
+    r = PaymentRoster(
+        roster_code="ROSTER-PR-CFG",
+        scholarship_configuration_id=cfg.id,
+        period_label="114",
+        academic_year=114,
+        roster_cycle=RosterCycle.YEARLY,
+        status=RosterStatus.COMPLETED,
+        trigger_type=RosterTriggerType.MANUAL,
+        created_by=u.id,
+        started_at=datetime.now(timezone.utc),
+        completed_at=datetime.now(timezone.utc),
+    )
+    db.add(r)
+    await db.commit()
+    await db.refresh(r)
+    r._test_type_id = sch.id
+    r._test_config_id = cfg.id
+    return r
+
+
+@pytest.mark.asyncio
+async def test_get_roster_exposes_structured_config_fields(client_admin: AsyncClient, roster_with_real_config):
+    """GET /{id}: scholarship_type_id / semester / config_id are populated from
+    the related config, not null (issue #1033 problem 2)."""
+    resp = await client_admin.get(f"/api/v1/payment-rosters/{roster_with_real_config.id}")
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["config_id"] == roster_with_real_config._test_config_id
+    assert data["scholarship_type_id"] == roster_with_real_config._test_type_id
+    assert data["semester"] == "first"
+
+
+@pytest.mark.asyncio
+async def test_list_filters_by_scholarship_type_id(client_admin: AsyncClient, roster_with_real_config):
+    """GET ?scholarship_type_id= filters via the owning config and the returned
+    items carry the structured fields (issue #1033 problem 2)."""
+    type_id = roster_with_real_config._test_type_id
+
+    resp = await client_admin.get(f"/api/v1/payment-rosters?scholarship_type_id={type_id}")
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["data"]["items"]
+    codes = {it["roster_code"] for it in items}
+    assert "ROSTER-PR-CFG" in codes
+    assert all(it["scholarship_type_id"] == type_id for it in items)
+
+    # A different type id must not return this roster.
+    resp2 = await client_admin.get(f"/api/v1/payment-rosters?scholarship_type_id={type_id + 99999}")
+    assert resp2.status_code == 200, resp2.text
+    codes2 = {it["roster_code"] for it in resp2.json()["data"]["items"]}
+    assert "ROSTER-PR-CFG" not in codes2

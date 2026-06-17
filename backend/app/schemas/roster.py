@@ -100,6 +100,13 @@ class RosterResponse(BaseModel):
     id: int
     roster_code: str
     scholarship_configuration_id: int
+    # Structured links to the owning scholarship config, derived from the
+    # related ScholarshipConfiguration so reports/audits can filter without
+    # parsing roster_code (issue #1033). config_id duplicates
+    # scholarship_configuration_id under the name the frontend expects.
+    config_id: Optional[int] = None
+    scholarship_type_id: Optional[int] = None
+    semester: Optional[str] = None
     ranking_id: Optional[int] = None  # 關聯的排名ID（可選）
     period_label: str
     roster_cycle: RosterCycle
