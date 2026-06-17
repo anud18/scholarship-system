@@ -236,6 +236,54 @@ jobs:
         if: always()
         run: docker compose -f docker-compose.dev.yml down -v || true
 
+  # Publish the nightly Playwright HTML report to GitHub Pages so the e2e
+  # results — including the screenshot / video / trace / backend-logs / db-state
+  # attachments captured on failure — are browsable at
+  # https://anud18.github.io/scholarship-system/ . Runs after e2e-full
+  # regardless of pass/fail (`if: always()`): a failed run is exactly the
+  # bug report we want to see.
+  publish-e2e-report:
+    name: Publish E2E report to GitHub Pages
+    runs-on: ubuntu-latest
+    needs: e2e-full
+    if: always()
+    permissions:
+      pages: write       # deploy to the github-pages environment
+      id-token: write    # OIDC token deploy-pages requires
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    # Pages allows one deployment at a time — serialize, never cancel an
+    # in-flight publish.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - name: Download nightly Playwright report
+        uses: actions/download-artifact@v6
+        with:
+          name: playwright-report-nightly
+          path: report
+
+      - name: Ensure the report has an index (placeholder if the run produced none)
+        run: |
+          if [ ! -f report/playwright-report/index.html ]; then
+            echo "::warning::No Playwright HTML report in the artifact — publishing a placeholder so Pages stays valid."
+            mkdir -p report/playwright-report
+            printf '%s' '<!doctype html><meta charset="utf-8"><title>E2E report</title><h1>No e2e report from the last nightly run</h1><p>The full Playwright suite did not produce an HTML report (the run may have failed before tests started). Check the nightly workflow logs.</p>' > report/playwright-report/index.html
+          fi
+
+      - name: Upload the Playwright HTML report as the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # The HTML report is self-contained (attachments bundled under
+          # playwright-report/data/), so publish that dir as the site root.
+          path: report/playwright-report
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
+
   file-issue-on-failure:
     name: File issue on failure
     runs-on: ubuntu-latest
