@@ -4472,8 +4472,8 @@ async def health_check():
 async def get_student_basic_info(
     request: StudentBasicRequest,
     request_obj: Request,
-    authorization: str = Header(..., description="HMAC-SHA256 authorization header"),
-    content_type: str = Header(..., alias="content-type"),
+    authorization: Optional[str] = Header(None, description="HMAC-SHA256 authorization header (optional)"),
+    content_type: Optional[str] = Header(None, alias="content-type"),
     encode_type: Optional[str] = Header(None, alias="ENCODE_TYPE"),
 ):
     """
@@ -4511,8 +4511,8 @@ async def get_student_basic_info(
 async def get_student_term_info(
     request: StudentTermRequest,
     request_obj: Request,
-    authorization: str = Header(..., description="HMAC-SHA256 authorization header"),
-    content_type: str = Header(..., alias="content-type"),
+    authorization: Optional[str] = Header(None, description="HMAC-SHA256 authorization header (optional)"),
+    content_type: Optional[str] = Header(None, alias="content-type"),
     encode_type: Optional[str] = Header(None, alias="ENCODE_TYPE"),
 ):
     """
@@ -4559,8 +4559,8 @@ async def get_student_term_info(
 async def get_student_basic_info_alias(
     request: StudentBasicRequest,
     request_obj: Request,
-    authorization: str = Header(..., description="HMAC-SHA256 authorization header"),
-    content_type: str = Header(..., alias="content-type"),
+    authorization: Optional[str] = Header(None, description="HMAC-SHA256 authorization header (optional)"),
+    content_type: Optional[str] = Header(None, alias="content-type"),
     encode_type: Optional[str] = Header(None, alias="ENCODE_TYPE"),
 ):
     """
@@ -4600,8 +4600,8 @@ async def get_student_basic_info_alias(
 async def get_student_term_info_alias(
     request: StudentTermRequest,
     request_obj: Request,
-    authorization: str = Header(..., description="HMAC-SHA256 authorization header"),
-    content_type: str = Header(..., alias="content-type"),
+    authorization: Optional[str] = Header(None, description="HMAC-SHA256 authorization header (optional)"),
+    content_type: Optional[str] = Header(None, alias="content-type"),
     encode_type: Optional[str] = Header(None, alias="ENCODE_TYPE"),
 ):
     """
