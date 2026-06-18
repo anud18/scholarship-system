@@ -3,8 +3,6 @@ Student service that handles student data from external API.
 Supports both mock API (development) and production student information system.
 """
 
-import hashlib
-import hmac
 import json
 import logging
 from datetime import datetime, timezone
@@ -25,32 +23,14 @@ class StudentService:
         # Get API configuration from settings
         self.api_base_url = getattr(settings, "student_api_base_url", None)
         self.api_account = getattr(settings, "student_api_account", None)
-        self.hmac_key_hex = getattr(settings, "student_api_hmac_key", None)
         self.api_timeout = getattr(settings, "student_api_timeout", 10.0)
         self.api_enabled = getattr(settings, "student_api_enabled", False)
 
-        # Validate configuration
-        if self.api_enabled and not all([self.api_base_url, self.api_account, self.hmac_key_hex]):
-            logger.warning(
-                "Student API is enabled but not properly configured. "
-                "Please set STUDENT_API_BASE_URL, STUDENT_API_ACCOUNT, and STUDENT_API_HMAC_KEY"
-            )
+        # Validate configuration. The external API no longer requires HMAC/account
+        # auth, so only the base URL is needed to reach it.
+        if self.api_enabled and not self.api_base_url:
+            logger.warning("Student API is enabled but STUDENT_API_BASE_URL is not set.")
             self.api_enabled = False
-
-        if self.api_enabled and self.hmac_key_hex:
-            try:
-                self.hmac_key = bytes.fromhex(self.hmac_key_hex)
-            except ValueError:
-                logger.error("Invalid STUDENT_API_HMAC_KEY format. Must be a valid hex string.")
-                self.api_enabled = False
-
-    def _generate_hmac_auth_header(self, request_body: str) -> str:
-        """Generate HMAC-SHA256 authorization header"""
-        time_str = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-        message = time_str + request_body
-        signature = hmac.new(self.hmac_key, message.encode("utf-8"), hashlib.sha256).hexdigest().lower()
-
-        return f"HMAC-SHA256:{time_str}:{self.api_account}:{signature}"
 
     async def get_student_basic_info(self, student_code: str) -> Optional[Dict[str, Any]]:
         """
@@ -74,10 +54,8 @@ class StudentService:
             }
 
             request_body = json.dumps(request_data, separators=(",", ":"))
-            auth_header = self._generate_hmac_auth_header(request_body)
 
             headers = {
-                "Authorization": auth_header,
                 "Content-Type": "application/json;charset=UTF-8",
             }
 
@@ -148,10 +126,8 @@ class StudentService:
             }
 
             request_body = json.dumps(request_data, separators=(",", ":"))
-            auth_header = self._generate_hmac_auth_header(request_body)
 
             headers = {
-                "Authorization": auth_header,
                 "Content-Type": "application/json;charset=UTF-8",
             }
 

@@ -25,8 +25,8 @@ from app.services.student_service import StudentService
 def service(monkeypatch):
     """StudentService with the SIS API force-disabled.
 
-    `settings.student_api_enabled` defaults to True and the base_url/account/
-    hmac_key settings all have non-None defaults, so a bare StudentService() is
+    `settings.student_api_enabled` defaults to True and the base_url/account
+    settings have non-None defaults, so a bare StudentService() is
     "configured" in every environment (CI included). Force the disabled state so
     the disabled-path assertions are deterministic instead of env-dependent.
     """
@@ -43,7 +43,6 @@ def api_service():
     svc.api_enabled = True
     svc.api_base_url = "http://fake-sis-api"
     svc.api_account = "test_account"
-    svc.hmac_key = bytes.fromhex("deadbeef" * 8)
     svc.api_timeout = 5.0
     return svc
 

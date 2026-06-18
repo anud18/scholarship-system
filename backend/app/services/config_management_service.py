@@ -422,12 +422,6 @@ class ConfigurationService:
                 "is_sensitive": True,
                 "description": "Student API account for data retrieval",
             },
-            "student_api_hmac_key": {
-                "category": ConfigCategory.integrations,
-                "data_type": ConfigDataType.string,
-                "is_sensitive": True,
-                "description": "Student API HMAC key for authentication",
-            },
             # Feature Flags
             "enable_mock_sso": {
                 "category": ConfigCategory.features,
