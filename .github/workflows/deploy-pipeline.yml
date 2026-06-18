@@ -233,7 +233,6 @@ jobs:
           NODE_ENV: ${{ secrets.NODE_ENV }}
           STUDENT_API_BASE_URL: ${{ secrets.STUDENT_API_BASE_URL }}
           STUDENT_API_ACCOUNT: ${{ secrets.STUDENT_API_ACCOUNT }}
-          STUDENT_API_HMAC_KEY: ${{ secrets.STUDENT_API_HMAC_KEY }}
           SUPER_ADMIN_NYCU_ID: ${{ secrets.SUPER_ADMIN_NYCU_ID }}
           PII_ENCRYPTION_KEYS: ${{ secrets.PII_ENCRYPTION_KEYS }}
           PII_ENCRYPTION_ACTIVE_VERSION: ${{ secrets.PII_ENCRYPTION_ACTIVE_VERSION }}
@@ -392,7 +391,6 @@ jobs:
           NODE_ENV: ${{ secrets.NODE_ENV }}
           STUDENT_API_BASE_URL: ${{ secrets.STUDENT_API_BASE_URL }}
           STUDENT_API_ACCOUNT: ${{ secrets.STUDENT_API_ACCOUNT }}
-          STUDENT_API_HMAC_KEY: ${{ secrets.STUDENT_API_HMAC_KEY }}
           SUPER_ADMIN_NYCU_ID: ${{ secrets.SUPER_ADMIN_NYCU_ID }}
           PII_ENCRYPTION_KEYS: ${{ secrets.PII_ENCRYPTION_KEYS }}
           PII_ENCRYPTION_ACTIVE_VERSION: ${{ secrets.PII_ENCRYPTION_ACTIVE_VERSION }}
