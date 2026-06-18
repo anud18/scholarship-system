@@ -2,7 +2,9 @@
 
 ⚠️ **DEVELOPMENT/TESTING ONLY** ⚠️
 
-A Docker-based mock API that simulates the university's student information system with HMAC-SHA256 authentication for development and testing purposes. **This should NEVER be used in production environments.**
+A Docker-based mock API that simulates the university's student information system for development and testing purposes. **This should NEVER be used in production environments.**
+
+> **HMAC is now optional.** The real university API no longer requires HMAC authentication, and neither does this mock by default — requests with no `Authorization` header are accepted. Set `MOCK_HMAC_AUTH_REQUIRED=true` to restore strict signature checking (the HMAC verification code below still applies in that mode).
 
 ## Features
 
@@ -33,10 +35,13 @@ ENCODE_TYPE: UTF-8
 ### Environment Configuration
 
 ```bash
-# HMAC key (hex format)
+# Auth toggle (HMAC is optional by default; the real API dropped HMAC)
+MOCK_HMAC_AUTH_REQUIRED=false    # true = enforce HMAC signature on every request
+
+# HMAC key (hex format) — only used when MOCK_HMAC_AUTH_REQUIRED=true
 MOCK_HMAC_KEY_HEX=4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a
 
-# Verification modes
+# Verification modes (only apply when HMAC is required)
 STRICT_TIME_CHECK=true          # Enable ±5 minute time validation
 STRICT_ENCODE_CHECK=false       # Require ENCODE_TYPE header
 TIME_TOLERANCE_MINUTES=5        # Time tolerance in minutes

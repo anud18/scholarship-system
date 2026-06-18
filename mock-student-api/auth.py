@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 MOCK_HMAC_KEY_HEX = os.getenv(
     "MOCK_HMAC_KEY_HEX", "4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a"
 )
+# The real university API no longer requires HMAC auth, so the mock accepts
+# unauthenticated requests by default. Set MOCK_HMAC_AUTH_REQUIRED=true to
+# restore strict signature checking.
+HMAC_AUTH_REQUIRED = os.getenv("MOCK_HMAC_AUTH_REQUIRED", "false").lower() == "true"
 STRICT_TIME_CHECK = os.getenv("STRICT_TIME_CHECK", "true").lower() == "true"
 STRICT_ENCODE_CHECK = os.getenv("STRICT_ENCODE_CHECK", "false").lower() == "true"
 TIME_TOLERANCE_MINUTES = int(os.getenv("TIME_TOLERANCE_MINUTES", "5"))
@@ -34,8 +38,12 @@ def verify_hmac_signature(
 
     Note: TIME should be in UTC format (YYYYMMDDHHMMSS)
     """
+    # HMAC is optional unless explicitly required (matches the real API, which
+    # dropped HMAC auth). Accept requests that send no Authorization header.
+    if not HMAC_AUTH_REQUIRED and not authorization:
+        return True
     try:
-        if not authorization.startswith("HMAC-SHA256:"):
+        if not authorization or not authorization.startswith("HMAC-SHA256:"):
             logger.warning(f"Invalid authorization format: {authorization}")
             return False
 

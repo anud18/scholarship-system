@@ -59,7 +59,6 @@ jobs:
           PII_ENCRYPTION_KEYS: ${{ secrets.PII_ENCRYPTION_KEYS }}
           PORTAL_JWT_SERVER_URL: ${{ secrets.PORTAL_JWT_SERVER_URL }}
           STUDENT_API_BASE_URL: ${{ secrets.STUDENT_API_BASE_URL }}
-          STUDENT_API_HMAC_KEY: ${{ secrets.STUDENT_API_HMAC_KEY }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           EMAIL_FROM_NAME: ${{ secrets.EMAIL_FROM_NAME }}
@@ -95,19 +94,11 @@ jobs:
             *) err "PORTAL_JWT_SERVER_URL must be https://" ;;
           esac
 
-          # P8: student API must be the real campus API, with a real HMAC key.
+          # P8: student API must be the real campus API (no longer uses HMAC auth).
           case "$STUDENT_API_BASE_URL" in
             "") err "STUDENT_API_BASE_URL is not set (would default to the localhost mock; verification fails SILENTLY)" ;;
             *localhost*|*127.0.0.1*|*mock*) err "STUDENT_API_BASE_URL looks like a mock/localhost endpoint: $STUDENT_API_BASE_URL" ;;
           esac
-          # The mock key is the hex of "MockKeyFromHexABCDEFGHJKLMNOPQRSTUVWXYZ".
-          # Derive it at runtime so this workflow carries no high-entropy hex
-          # literal — the prod repo's secret scanning would flag a 78-char hex
-          # blob even though it is only a test fixture.
-          MOCK_HMAC_HEX=$(python3 -c "print('MockKeyFromHexABCDEFGHJKLMNOPQRSTUVWXYZ'.encode().hex())")
-          if [ "$STUDENT_API_HMAC_KEY" = "$MOCK_HMAC_HEX" ]; then
-            err "STUDENT_API_HMAC_KEY is the well-known MOCK key"
-          fi
 
           # P7: real applicants must not receive '(測試)' mail from ss-test.
           [ -n "$SMTP_HOST" ] || err "SMTP_HOST is not set (would default to the staging relay)"
@@ -225,7 +216,6 @@ jobs:
       STUDENT_API_ENABLED: "true"
       STUDENT_API_BASE_URL: ${{ secrets.STUDENT_API_BASE_URL }}
       STUDENT_API_ACCOUNT: ${{ secrets.STUDENT_API_ACCOUNT }}
-      STUDENT_API_HMAC_KEY: ${{ secrets.STUDENT_API_HMAC_KEY }}
       SUPER_ADMIN_NYCU_ID: ${{ secrets.SUPER_ADMIN_NYCU_ID }}
       NEXT_PUBLIC_NYCU_PORTAL_URL: ${{ secrets.NEXT_PUBLIC_NYCU_PORTAL_URL }}
 
