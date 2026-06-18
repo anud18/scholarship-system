@@ -18,7 +18,9 @@ export default defineConfig({
     baseURL: FRONTEND_URL,
     trace: "retain-on-failure",
     video: "retain-on-failure",
-    screenshot: "only-on-failure",
+    // "on": capture a screenshot at the end of EVERY test (pass or fail) so the
+    // GitHub Pages e2e report always shows screenshots, not only on failures.
+    screenshot: "on",
     viewport: { width: 1440, height: 900 },
   },
   projects: [
