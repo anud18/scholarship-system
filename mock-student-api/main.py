@@ -48,13 +48,14 @@ app.add_middleware(
 
 # Request/Response Models
 class StudentBasicRequest(BaseModel):
-    account: str = Field(..., description="Account identifier")
+    # account is optional: the real API (and the backend) no longer send it.
+    account: Optional[str] = Field(None, description="Account identifier (optional)")
     action: str = Field(..., description="Action identifier")
     stdcode: str = Field(..., description="Student code")
 
 
 class StudentTermRequest(BaseModel):
-    account: str = Field(..., description="Account identifier")
+    account: Optional[str] = Field(None, description="Account identifier (optional)")
     action: str = Field(..., description="Action identifier")
     stdcode: str = Field(..., description="Student code")
     trmyear: str = Field(..., description="Academic year")
@@ -4404,23 +4405,25 @@ def _mk_summary_demo_student(code, e):
 
 def _mk_summary_demo_terms(code, e):
     cname, ename, sex, aca, acaname, dep, depname, etype, tcount = e
-    return [{
-        "std_stdcode": code,
-        "trm_year": 114,
-        "trm_term": 1,
-        "trm_termcount": tcount,
-        "trm_studystatus": 1,
-        "trm_degree": 1,
-        "trm_academyno": aca,
-        "trm_academyname": acaname,
-        "trm_depno": dep,
-        "trm_depname": depname,
-        "trm_placings": 0,
-        "trm_placingsrate": 0.0,
-        "trm_depplacing": 0,
-        "trm_depplacingrate": 0.0,
-        "trm_ascore_gpa": 3.8,
-    }]
+    return [
+        {
+            "std_stdcode": code,
+            "trm_year": 114,
+            "trm_term": 1,
+            "trm_termcount": tcount,
+            "trm_studystatus": 1,
+            "trm_degree": 1,
+            "trm_academyno": aca,
+            "trm_academyname": acaname,
+            "trm_depno": dep,
+            "trm_depname": depname,
+            "trm_placings": 0,
+            "trm_placingsrate": 0.0,
+            "trm_depplacing": 0,
+            "trm_depplacingrate": 0.0,
+            "trm_ascore_gpa": 3.8,
+        }
+    ]
 
 
 SAMPLE_STUDENTS.update({c: _mk_summary_demo_student(c, e) for c, e in _SUMMARY_EXPORT_DEMO.items()})
@@ -4469,8 +4472,8 @@ async def health_check():
 async def get_student_basic_info(
     request: StudentBasicRequest,
     request_obj: Request,
-    authorization: str = Header(..., description="HMAC-SHA256 authorization header"),
-    content_type: str = Header(..., alias="content-type"),
+    authorization: Optional[str] = Header(None, description="HMAC-SHA256 authorization header (optional)"),
+    content_type: Optional[str] = Header(None, alias="content-type"),
     encode_type: Optional[str] = Header(None, alias="ENCODE_TYPE"),
 ):
     """
@@ -4508,8 +4511,8 @@ async def get_student_basic_info(
 async def get_student_term_info(
     request: StudentTermRequest,
     request_obj: Request,
-    authorization: str = Header(..., description="HMAC-SHA256 authorization header"),
-    content_type: str = Header(..., alias="content-type"),
+    authorization: Optional[str] = Header(None, description="HMAC-SHA256 authorization header (optional)"),
+    content_type: Optional[str] = Header(None, alias="content-type"),
     encode_type: Optional[str] = Header(None, alias="ENCODE_TYPE"),
 ):
     """
@@ -4556,8 +4559,8 @@ async def get_student_term_info(
 async def get_student_basic_info_alias(
     request: StudentBasicRequest,
     request_obj: Request,
-    authorization: str = Header(..., description="HMAC-SHA256 authorization header"),
-    content_type: str = Header(..., alias="content-type"),
+    authorization: Optional[str] = Header(None, description="HMAC-SHA256 authorization header (optional)"),
+    content_type: Optional[str] = Header(None, alias="content-type"),
     encode_type: Optional[str] = Header(None, alias="ENCODE_TYPE"),
 ):
     """
@@ -4577,7 +4580,7 @@ async def get_student_basic_info_alias(
         if request.action not in ["qrySoaaScholarshipStudent", "QrySchlStudent"]:
             return JSONResponse(status_code=400, content={"code": 400, "msg": "Invalid action", "data": []})
 
-        if request.account != "scholarship":
+        if request.account and request.account != "scholarship":
             return JSONResponse(status_code=400, content={"code": 400, "msg": "Invalid account", "data": []})
 
         # Get student data from in-memory store
@@ -4597,8 +4600,8 @@ async def get_student_basic_info_alias(
 async def get_student_term_info_alias(
     request: StudentTermRequest,
     request_obj: Request,
-    authorization: str = Header(..., description="HMAC-SHA256 authorization header"),
-    content_type: str = Header(..., alias="content-type"),
+    authorization: Optional[str] = Header(None, description="HMAC-SHA256 authorization header (optional)"),
+    content_type: Optional[str] = Header(None, alias="content-type"),
     encode_type: Optional[str] = Header(None, alias="ENCODE_TYPE"),
 ):
     """
@@ -4618,7 +4621,7 @@ async def get_student_term_info_alias(
         if request.action not in ["qrySoaaScholarshipStudent", "QrySchlStudentTerm"]:
             return JSONResponse(status_code=400, content={"code": 400, "msg": "Invalid action", "data": []})
 
-        if request.account != "scholarship":
+        if request.account and request.account != "scholarship":
             return JSONResponse(status_code=400, content={"code": 400, "msg": "Invalid account", "data": []})
 
         # Get student term data from in-memory store

@@ -141,7 +141,6 @@ services:
       # SIS API → bundled mock (the e2e fixture students only exist there).
       STUDENT_API_ENABLED: "true"
       STUDENT_API_BASE_URL: http://mock-student-api:8080
-      STUDENT_API_ACCOUNT: scholarship
       STUDENT_API_TIMEOUT: "10.0"
       STUDENT_API_ENCODE_TYPE: "UTF-8"
     depends_on:

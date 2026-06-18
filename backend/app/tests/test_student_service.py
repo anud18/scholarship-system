@@ -42,7 +42,6 @@ def api_service():
     svc = StudentService()
     svc.api_enabled = True
     svc.api_base_url = "http://fake-sis-api"
-    svc.api_account = "test_account"
     svc.api_timeout = 5.0
     return svc
 

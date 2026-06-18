@@ -265,6 +265,15 @@ python test_api.py
 ```
 
 ### Manual Testing with curl
+
+> By default (HMAC optional) you can skip the signature entirely:
+> ```bash
+> curl -X POST http://localhost:8080/getsoaascholarshipstudent \
+>   -H "Content-Type: application/json;charset=UTF-8" \
+>   -d '{"action":"qrySoaaScholarshipStudent","stdcode":"313612215"}'
+> ```
+> The signed example below only applies when `MOCK_HMAC_AUTH_REQUIRED=true`.
+
 ```bash
 # Generate HMAC signature (using sample key)
 TIME=$(date +%Y%m%d%H%M%S)

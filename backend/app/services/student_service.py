@@ -22,7 +22,6 @@ class StudentService:
     def __init__(self):
         # Get API configuration from settings
         self.api_base_url = getattr(settings, "student_api_base_url", None)
-        self.api_account = getattr(settings, "student_api_account", None)
         self.api_timeout = getattr(settings, "student_api_timeout", 10.0)
         self.api_enabled = getattr(settings, "student_api_enabled", False)
 
@@ -48,7 +47,6 @@ class StudentService:
 
         try:
             request_data = {
-                "account": self.api_account,
                 "action": "qrySoaaScholarshipStudent",
                 "stdcode": student_code,
             }
@@ -118,7 +116,6 @@ class StudentService:
 
         try:
             request_data = {
-                "account": self.api_account,
                 "action": "qrySoaaScholarshipStudent",
                 "stdcode": student_code,
                 "trmyear": academic_year,

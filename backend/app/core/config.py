@@ -129,7 +129,6 @@ class Settings(BaseSettings):
     # Student API Configuration
     student_api_enabled: bool = True
     student_api_base_url: str = "http://localhost:8080"  # Mock API in development
-    student_api_account: str = "scholarship"
     student_api_timeout: float = 10.0
     student_api_encode_type: Optional[str] = "UTF-8"
 

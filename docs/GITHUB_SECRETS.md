@@ -59,9 +59,8 @@ Configure these secrets in: **Settings → Secrets and variables → Actions**
 | Secret Name | Description | Example |
 |-------------|-------------|---------|
 | `STUDENT_API_BASE_URL` | Student API endpoint | `https://api.university.edu.tw/student` |
-| `STUDENT_API_ACCOUNT` | API account ID | `scholarship_system` |
 
-> The student API no longer requires HMAC authentication; `STUDENT_API_HMAC_KEY` is no longer used.
+> The student API no longer requires authentication; `STUDENT_API_ACCOUNT` and `STUDENT_API_HMAC_KEY` are no longer used.
 
 ---
 
