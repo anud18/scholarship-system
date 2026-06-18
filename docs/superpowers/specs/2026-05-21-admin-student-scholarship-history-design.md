@@ -33,7 +33,7 @@ admin browser → AdminManagementShell, tab "student-history" (StudentHistoryPan
                               ▼
                   GET /api/v1/admin/student-history/{student_number}
                               │
-                              ├─ StudentService.get_student_basic_info(stdcode)   → SIS API (HMAC)
+                              ├─ StudentService.get_student_basic_info(stdcode)   → SIS API
                               │   (failure tolerated; surfaced as warning)
                               │
                               └─ StudentScholarshipHistoryService._fetch_paid_payments(stdcode)

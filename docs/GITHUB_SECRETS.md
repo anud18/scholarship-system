@@ -60,7 +60,8 @@ Configure these secrets in: **Settings → Secrets and variables → Actions**
 |-------------|-------------|---------|
 | `STUDENT_API_BASE_URL` | Student API endpoint | `https://api.university.edu.tw/student` |
 | `STUDENT_API_ACCOUNT` | API account ID | `scholarship_system` |
-| `STUDENT_API_HMAC_KEY` | HMAC authentication key (hex) | `64-character-hex-string` |
+
+> The student API no longer requires HMAC authentication; `STUDENT_API_HMAC_KEY` is no longer used.
 
 ---
 

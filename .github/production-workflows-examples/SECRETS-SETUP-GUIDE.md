@@ -426,7 +426,8 @@ These secrets configure integration with NYCU Student Information System (SIS) A
 |-------------|-------------|---------------|----------|
 | `STUDENT_API_BASE_URL` | Student API base URL | `https://api.sis.nycu.edu.tw` | ✅ Yes |
 | `STUDENT_API_ACCOUNT` | Student API account/username | `scholarship_system` | ✅ Yes |
-| `STUDENT_API_HMAC_KEY` | Student API HMAC authentication key | `hmac_secret_key_from_sis` | ✅ Yes |
+
+> The student API no longer requires HMAC authentication; `STUDENT_API_HMAC_KEY` is no longer used.
 
 **How to obtain:**
 - Contact NYCU Academic Affairs Office or IT Services
@@ -434,7 +435,6 @@ These secrets configure integration with NYCU Student Information System (SIS) A
 - They will provide:
   - API endpoint URL
   - Account credentials
-  - HMAC key for request signing
 
 **API Purpose:**
 - Fetches student basic information (API 1: `ScholarshipStudent`)
@@ -442,7 +442,6 @@ These secrets configure integration with NYCU Student Information System (SIS) A
 - Data is cached in `student_data` field of applications
 
 **Important Notes:**
-- ⚠️ HMAC key is used for request authentication - **keep confidential**
 - ⚠️ In production, `STUDENT_API_ENABLED` will be set to `true`
 
 ---
@@ -494,7 +493,7 @@ These secrets configure general application settings.
 gh secret set DB_PASSWORD -b "your_secure_password"
 
 # Set secret from file
-gh secret set STUDENT_API_HMAC_KEY < hmac_key.txt
+gh secret set NYCU_EMP_KEY_HEX < emp_key.txt
 
 # Set secret with prompt (hides input)
 gh secret set SECRET_KEY
@@ -546,7 +545,6 @@ gh secret set PORTAL_JWT_SERVER_URL -b "https://portal.nycu.edu.tw/api/auth"
 # Student API secrets
 gh secret set STUDENT_API_BASE_URL -b "https://api.sis.nycu.edu.tw"
 gh secret set STUDENT_API_ACCOUNT -b "scholarship_system"
-gh secret set STUDENT_API_HMAC_KEY  # Will prompt
 
 # General configuration
 gh secret set DOMAIN -b "ss.aa.nycu.edu.tw"
@@ -897,7 +895,6 @@ REQUIRED_SECRETS=(
   "PORTAL_JWT_SERVER_URL"
   "STUDENT_API_BASE_URL"
   "STUDENT_API_ACCOUNT"
-  "STUDENT_API_HMAC_KEY"
   "DOMAIN"
   "CORS_ORIGINS"
 )
