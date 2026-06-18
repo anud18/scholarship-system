@@ -102,7 +102,8 @@ def validate_request_params(account: str, action: str, expected_action: str) -> 
 
     Returns error response dict if validation fails, None if successful
     """
-    if account != "scholarship":
+    # account is optional now; only reject a non-empty, wrong account.
+    if account and account != "scholarship":
         return {"code": 400, "msg": "Invalid account", "data": []}
 
     if action != expected_action:

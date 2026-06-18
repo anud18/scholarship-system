@@ -425,9 +425,8 @@ These secrets configure integration with NYCU Student Information System (SIS) A
 | Secret Name | Description | Example Value | Required |
 |-------------|-------------|---------------|----------|
 | `STUDENT_API_BASE_URL` | Student API base URL | `https://api.sis.nycu.edu.tw` | ✅ Yes |
-| `STUDENT_API_ACCOUNT` | Student API account/username | `scholarship_system` | ✅ Yes |
 
-> The student API no longer requires HMAC authentication; `STUDENT_API_HMAC_KEY` is no longer used.
+> The student API no longer requires authentication; `STUDENT_API_ACCOUNT` and `STUDENT_API_HMAC_KEY` are no longer used.
 
 **How to obtain:**
 - Contact NYCU Academic Affairs Office or IT Services
@@ -544,7 +543,6 @@ gh secret set PORTAL_JWT_SERVER_URL -b "https://portal.nycu.edu.tw/api/auth"
 
 # Student API secrets
 gh secret set STUDENT_API_BASE_URL -b "https://api.sis.nycu.edu.tw"
-gh secret set STUDENT_API_ACCOUNT -b "scholarship_system"
 
 # General configuration
 gh secret set DOMAIN -b "ss.aa.nycu.edu.tw"
@@ -894,7 +892,6 @@ REQUIRED_SECRETS=(
   "EMAIL_FROM"
   "PORTAL_JWT_SERVER_URL"
   "STUDENT_API_BASE_URL"
-  "STUDENT_API_ACCOUNT"
   "DOMAIN"
   "CORS_ORIGINS"
 )

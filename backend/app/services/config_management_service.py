@@ -416,12 +416,6 @@ class ConfigurationService:
                 "is_sensitive": True,
                 "description": "NYCU Employee API HMAC key in hex format",
             },
-            "student_api_account": {
-                "category": ConfigCategory.integrations,
-                "data_type": ConfigDataType.string,
-                "is_sensitive": True,
-                "description": "Student API account for data retrieval",
-            },
             # Feature Flags
             "enable_mock_sso": {
                 "category": ConfigCategory.features,

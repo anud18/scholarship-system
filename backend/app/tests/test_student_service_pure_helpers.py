@@ -19,7 +19,6 @@ def service():
     """StudentService.__init__ reads settings; in test envs api_enabled is
     False by default."""
     s = StudentService()
-    s.api_account = "test-account"
     return s
 
 
