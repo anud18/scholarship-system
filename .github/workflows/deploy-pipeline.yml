@@ -266,6 +266,19 @@ jobs:
 
       - name: Run database migrations
         run: |
+          # Wait for the backend to finish booting before migrating. The AP VM is
+          # memory-tight: if `alembic upgrade head` (a second full app import) runs
+          # while uvicorn is still mid-boot, the two memory spikes overlap and the
+          # kernel OOM-kills alembic (exit 137), failing the deploy. /health only
+          # checks DB connectivity, not schema, so it is safe to wait on pre-migration.
+          echo "Waiting for backend to finish booting (settle boot memory spike)..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/health >/dev/null; then
+              echo "Backend up after ${i} attempt(s)"
+              break
+            fi
+            sleep 2
+          done
           echo "Running Alembic migrations..."
           docker exec scholarship_backend_staging alembic upgrade head
 
