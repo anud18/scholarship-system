@@ -243,6 +243,27 @@ def _generate_payment_roster_inner(
             finally:
                 independent_db.close()
 
+        # generate_roster wraps every internal failure in RosterGenerationError,
+        # preserving the original exception as __cause__ (contract pinned by
+        # test_roster_generate_concurrency). Re-dispatch on that cause so the
+        # client sees the REAL reason + correct HTTP status instead of an opaque
+        # 「造冊產生失敗」. Only curated domain messages are surfaced; raw/unexpected
+        # causes stay generic so internal detail (filesystem paths, SQL, SDK
+        # errors) never leaks — see test_no_exception_leak_in_endpoints.
+        cause = e.__cause__
+        if isinstance(cause, RosterAlreadyExistsError):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(cause)) from e
+        if isinstance(cause, RosterLockedError):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(cause)) from e
+        if isinstance(cause, RosterNotFoundError):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(cause)) from e
+        if isinstance(cause, ValueError):
+            # Curated validation messages (missing config/ranking, distribution
+            # not executed, no allocated ranking) — safe and actionable.
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(cause)) from e
+        if isinstance(cause, RosterGenerationError):
+            # Curated data-consistency summary from validate_roster_consistency.
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(cause)) from e
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="造冊產生失敗") from e
 
     except ValueError as e:
