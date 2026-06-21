@@ -868,7 +868,11 @@ class RosterService:
                     logger.info(f"Application {application.id} has backup allocations: {len(backup_info)} positions")
                 allocated_sub_type = ranking_item.allocated_sub_type
 
-        # 若無 ranking_id（月份造冊），從同學年度已分發排名中查詢子類型
+        # 若無 ranking_id（月份造冊），從同學年度已分發排名中查詢子類型。
+        # 此處僅 gate 在 is_allocated + academic_year（未含 is_finalized /
+        # distribution_executed）。其正確性依賴 _get_eligible_applications 已先以
+        # 「finalized + executed」篩選過申請：一個申請在同學年度只會有一筆有效正取
+        # （finalize 時會反鎖同 slot 的其他排名），故 .first() 取到的即為授權子類型。
         if not allocated_sub_type:
             alloc_item = (
                 self.db.query(CollegeRankingItem)
