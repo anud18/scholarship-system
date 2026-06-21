@@ -700,21 +700,19 @@ class RosterService:
                     f"all-college roster (type {config.scholarship_type_id}, year {academic_year})"
                 )
 
-                # 聚合所有排名的正取申請。一個申請最多屬於一份排名，故 .in_() 不會重複。
-                query = query.join(CollegeRankingItem, CollegeRankingItem.application_id == Application.id).filter(
-                    and_(
-                        CollegeRankingItem.ranking_id.in_(ranking_ids),
-                        CollegeRankingItem.is_allocated.is_(True),
-                    )
-                )
+                # 聚合所有排名：一個申請最多屬於一份排名，故 .in_() 不會重複。
+                ranking_filter = CollegeRankingItem.ranking_id.in_(ranking_ids)
             else:
-                # 明確指定排名：僅該排名的正取申請（管理員刻意選擇單一排名）。
-                query = query.join(CollegeRankingItem, CollegeRankingItem.application_id == Application.id).filter(
-                    and_(
-                        CollegeRankingItem.ranking_id == ranking_id,
-                        CollegeRankingItem.is_allocated.is_(True),
-                    )
+                # 明確指定排名：僅該排名（管理員刻意選擇單一排名）。
+                ranking_filter = CollegeRankingItem.ranking_id == ranking_id
+
+            # 只選取 ranking 中已分配(正取)的申請。
+            query = query.join(CollegeRankingItem, CollegeRankingItem.application_id == Application.id).filter(
+                and_(
+                    ranking_filter,
+                    CollegeRankingItem.is_allocated.is_(True),
                 )
+            )
         else:
             # 非 Matrix 模式 (none/simple/college_based)：直接從 approved 狀態選取
             logger.info(
