@@ -81,10 +81,17 @@ describe("middleware framing for same-origin preview proxies", () => {
     Object.defineProperty(process.env, "NODE_ENV", { value, configurable: true });
   }
 
+  // ALL framable file-preview proxies now live under the single /api/v1/preview
+  // prefix. system-docs / supp-docs / application-document are the routes that
+  // previously sat outside the prefix and recurred the "refused to connect" bug —
+  // they are the core regression guard for the unification.
   const PREVIEW_ROUTES = [
     "https://ss.test.nycu.edu.tw/api/v1/preview?fileId=1&applicationId=1&type=pdf",
-    "https://ss.test.nycu.edu.tw/api/v1/preview-terms?scholarshipType=phd",
-    "https://ss.test.nycu.edu.tw/api/v1/preview-document-example?documentId=1",
+    "https://ss.test.nycu.edu.tw/api/v1/preview/terms?scholarshipType=phd",
+    "https://ss.test.nycu.edu.tw/api/v1/preview/examples?documentId=1",
+    "https://ss.test.nycu.edu.tw/api/v1/preview/system-docs?key=regulations_url",
+    "https://ss.test.nycu.edu.tw/api/v1/preview/supp-docs?id=1",
+    "https://ss.test.nycu.edu.tw/api/v1/preview/application-document?id=APP-1",
   ];
 
   it.each(PREVIEW_ROUTES)("prod: %s is framable same-origin (SAMEORIGIN + frame-ancestors 'self')", (url) => {
@@ -112,6 +119,10 @@ describe("middleware framing for same-origin preview proxies", () => {
       "https://ss.test.nycu.edu.tw/",
       "https://ss.test.nycu.edu.tw/student/apply",
       "https://ss.test.nycu.edu.tw/api/v1/applications/87",
+      // /api/v1/download is the closest non-framable sibling of the relaxed
+      // /api/v1/preview prefix (attachment download). Guard that the framing
+      // relaxation does NOT leak to it.
+      "https://ss.test.nycu.edu.tw/api/v1/download?fileId=1&applicationId=1&type=pdf",
     ]) {
       const res = middleware(mockRequest(url));
       const csp = res.headers.get("Content-Security-Policy") ?? "";

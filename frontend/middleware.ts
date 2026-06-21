@@ -26,17 +26,26 @@ export function middleware(request: NextRequest) {
   // Determine environment-specific CSP policy
   const isDevelopment = process.env.NODE_ENV === "development";
 
-  // Same-origin file-preview proxies (`/api/v1/preview`, `/api/v1/preview-terms`,
-  // `/api/v1/preview-document-example`) are rendered INSIDE an <iframe> by the app
-  // (file-preview-dialog, application-detail-dialog, review dialogs, the student
-  // wizard, …). The global clickjacking posture (`frame-ancestors 'none'` +
-  // `X-Frame-Options: DENY`) would make the browser refuse to frame these
-  // responses ("<host> refused to connect") — so for these routes ONLY we relax
-  // framing to same-origin. `frame-src 'self'` on the parent page is not enough:
-  // the CHILD response must also permit being framed. (This is the third distinct
-  // root cause of "preview fails" — alongside the clone-placeholder and the
-  // read-path file-data wiring — and the asymmetry that nginx's file-proxy block
-  // already carries SAMEORIGIN while /api/v1/preview did not is how it recurred.)
+  // ALL same-origin file-preview proxies live under the single `/api/v1/preview`
+  // namespace (the multiplexer at `/api/v1/preview` plus `/api/v1/preview/terms`,
+  // `/api/v1/preview/examples`, `/api/v1/preview/system-docs`,
+  // `/api/v1/preview/supp-docs`, `/api/v1/preview/application-document`). They are
+  // rendered INSIDE an <iframe> by the app (file-preview-dialog,
+  // application-detail-dialog, review dialogs, the student wizard, …). The global
+  // clickjacking posture (`frame-ancestors 'none'` + `X-Frame-Options: DENY`)
+  // would make the browser refuse to frame these responses
+  // ("<host> refused to connect") — so for this prefix ONLY we relax framing to
+  // same-origin. `frame-src 'self'` on the parent page is not enough: the CHILD
+  // response must also permit being framed, AND browsers honor CSP
+  // `frame-ancestors` OVER `X-Frame-Options`, so nginx re-declaring SAMEORIGIN is
+  // not sufficient without this matching CSP relaxation.
+  //
+  // INVARIANT: this is why every framable file proxy MUST live under
+  // `/api/v1/preview/` — both this predicate and the nginx `location /api/v1/preview`
+  // block then cover it correct-by-construction, with no per-endpoint edits. A
+  // framable proxy placed outside this prefix recurs the "refused to connect" bug
+  // in BOTH layers. Do NOT create non-framable `/api/v1/preview*` siblings either
+  // (the nginx prefix would wrongly relax them) — keep downloads/uploads elsewhere.
   const isFramablePreview = request.nextUrl.pathname.startsWith("/api/v1/preview");
   const frameAncestors = isFramablePreview ? "frame-ancestors 'self'" : "frame-ancestors 'none'";
 

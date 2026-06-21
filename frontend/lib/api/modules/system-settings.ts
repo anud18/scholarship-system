@@ -14,7 +14,7 @@ import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
 import type { ApiResponse } from '../types';
 
-/** Keys for system-managed documents served via /system-settings/file-proxy. */
+/** Keys for system-managed documents served via /api/v1/preview/system-docs. */
 export type DocKey = 'regulations_url' | 'sample_document_url';
 
 /**
@@ -36,7 +36,7 @@ export function buildFileProxyUrl(
       ? localStorage.getItem('auth_token') || ''
       : '';
   const cacheBuster = encodeURIComponent(objectName.split('/').pop() || '');
-  return `/api/v1/system-settings/file-proxy?key=${key}&token=${encodeURIComponent(
+  return `/api/v1/preview/system-docs?key=${key}&token=${encodeURIComponent(
     token
   )}&v=${cacheBuster}`;
 }
@@ -56,7 +56,7 @@ export type SupplementaryDoc = {
 
 /**
  * Build the file-proxy URL for a supplementary doc. Mirrors buildFileProxyUrl
- * but routes via /api/v1/system-settings/supp-file-proxy?id=...
+ * but routes via /api/v1/preview/supp-docs?id=...
  */
 export function buildSuppDocFileProxyUrl(
   id: number,
@@ -69,7 +69,7 @@ export function buildSuppDocFileProxyUrl(
   const cacheBuster = encodeURIComponent(
     (objectName || '').split('/').pop() || String(id)
   );
-  return `/api/v1/system-settings/supp-file-proxy?id=${id}&token=${encodeURIComponent(
+  return `/api/v1/preview/supp-docs?id=${id}&token=${encodeURIComponent(
     token
   )}&v=${cacheBuster}`;
 }

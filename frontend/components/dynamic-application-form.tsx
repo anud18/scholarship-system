@@ -717,7 +717,7 @@ export function DynamicApplicationForm({
                 try {
                   // SECURITY: Use validated URL builder to prevent open redirect
                   const safeUrl = buildSecurePreviewUrl(
-                    "/api/v1/preview-document-example",
+                    "/api/v1/preview/examples",
                     {
                       documentId: document.id,
                       token: getAuthToken(),

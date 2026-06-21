@@ -603,7 +603,7 @@ export function AdminScholarshipManagementInterface({
 
     const encodedDocumentId = encodeURIComponent(String(documentId));
     const encodedToken = encodeURIComponent(token || "");
-    const previewUrl = `/api/v1/preview-document-example?documentId=${encodedDocumentId}&token=${encodedToken}`;
+    const previewUrl = `/api/v1/preview/examples?documentId=${encodedDocumentId}&token=${encodedToken}`;
 
     setExamplePreviewFile({
       url: previewUrl,
@@ -845,7 +845,7 @@ export function AdminScholarshipManagementInterface({
                   onClick={() => {
                     const token = localStorage.getItem("auth_token");
                     // Append token as query parameter for iframe authentication
-                    const previewUrl = `/api/v1/preview-terms?scholarshipType=${type}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
+                    const previewUrl = `/api/v1/preview/terms?scholarshipType=${type}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
 
                     // 設定預覽文件資訊並打開 Modal
                     setTermsPreviewFile({

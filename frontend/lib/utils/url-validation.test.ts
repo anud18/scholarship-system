@@ -67,12 +67,12 @@ describe('URL Validation Utilities', () => {
     });
 
     it('should build URLs for document example endpoint', () => {
-      const url = buildSecurePreviewUrl('/api/v1/preview-document-example', {
+      const url = buildSecurePreviewUrl('/api/v1/preview/examples', {
         documentId: 456,
         token: 'abc123',
       });
 
-      expect(url).toContain('/api/v1/preview-document-example');
+      expect(url).toContain('/api/v1/preview/examples');
       expect(url).toContain('documentId=456');
       expect(url).toContain('token=abc123');
     });
