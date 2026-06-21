@@ -588,22 +588,10 @@ async def preview_roster_students(
         # Check if has matrix distribution
         has_matrix_distribution = config.quota_management_mode == QuotaManagementMode.matrix_based
 
-        # Auto-detect ranking_id if needed
-        if has_matrix_distribution and not ranking_id:
-            ranking = (
-                db.query(CollegeRanking)
-                .filter(
-                    and_(
-                        CollegeRanking.scholarship_type_id == config.scholarship_type_id,
-                        CollegeRanking.distribution_executed.is_(True),
-                    )
-                )
-                .order_by(CollegeRanking.created_at.desc())
-                .first()
-            )
-            if ranking:
-                ranking_id = ranking.id
-                logger.info(f"Auto-detected ranking_id: {ranking_id}")
+        # NOTE: 不在此處自挑單一排名。ranking_id 為 None 時交由
+        # roster_service._get_eligible_applications 聚合「所有」已執行分發的排名
+        # （= 全院），與 generate_roster 走同一條路 → 預覽與產生保證一致。
+        # 明確指定 ranking_id 時則只預覽該排名。
 
         # Get eligible applications using RosterService
         logger.info(
