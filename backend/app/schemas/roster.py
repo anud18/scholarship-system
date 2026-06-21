@@ -63,6 +63,8 @@ class RosterItemResponse(BaseModel):
     rule_validation_result: Optional[Dict[str, Any]] = None
     # PaymentRosterItem.is_eligible model property; None = 無快照（較舊造冊）
     is_eligible: Optional[bool] = None
+    # 已領月份數（累計含本期；由 received_months_service 計算，非 ORM 欄位）
+    received_months: Optional[int] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
     # 學生學院/系所資訊（從 application.student_data 取得，非 ORM 欄位）

@@ -517,6 +517,7 @@ export function RosterDetailDialog({
             <TableHead>分發獎學金</TableHead>
             <TableHead>符合資格</TableHead>
             <TableHead>資格詳情</TableHead>
+            <TableHead className="text-right">已領月份數</TableHead>
             <TableHead className="text-right">金額</TableHead>
             <TableHead className="text-right w-20">操作</TableHead>
           </TableRow>
@@ -590,6 +591,9 @@ export function RosterDetailDialog({
                   >
                     詳情
                   </Button>
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {item.received_months != null ? item.received_months : "-"}
                 </TableCell>
                 <TableCell className="text-right font-medium">
                   {formatCurrency(item.scholarship_amount)}

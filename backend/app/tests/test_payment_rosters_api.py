@@ -789,3 +789,184 @@ async def test_list_filters_by_scholarship_type_id(client_admin: AsyncClient, ro
     assert resp2.status_code == 200, resp2.text
     codes2 = {it["roster_code"] for it in resp2.json()["data"]["items"]}
     assert "ROSTER-PR-CFG" not in codes2
+
+
+# ===========================================================================
+# GET /{id}/items — 已領月份數 (cumulative received_months) on every item
+# ===========================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_roster_items_includes_cumulative_received_months(client_admin: AsyncClient, db):
+    """Each returned item carries `received_months` = the student's cumulative
+    months under the SAME scholarship config, weighted by roster cycle
+    (MONTHLY=1, YEARLY=12) and counting only is_included items — INCLUDING the
+    roster being viewed (the shared received_months_service source of truth).
+
+    Setup: two COMPLETED rosters (monthly + yearly) under one config, both with
+    an included item for the same student → 1 + 12 = 13. A third yearly roster
+    with an EXCLUDED item for that student must NOT add 12.
+    """
+    u = await _seed_admin_user(db, "rm_items")
+    config_id = 9911
+    student_no = "RM99001"
+
+    def _roster(code: str, cycle: RosterCycle, period: str) -> PaymentRoster:
+        return PaymentRoster(
+            roster_code=code,
+            scholarship_configuration_id=config_id,
+            period_label=period,
+            academic_year=114,
+            roster_cycle=cycle,
+            status=RosterStatus.COMPLETED,
+            trigger_type=RosterTriggerType.MANUAL,
+            created_by=u.id,
+            started_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(timezone.utc),
+        )
+
+    viewed = _roster("ROSTER-RM-A", RosterCycle.MONTHLY, "2026-01")
+    yearly = _roster("ROSTER-RM-B", RosterCycle.YEARLY, "2026")
+    excluded = _roster("ROSTER-RM-C", RosterCycle.YEARLY, "2025")
+    db.add_all([viewed, yearly, excluded])
+    await db.commit()
+    for r in (viewed, yearly, excluded):
+        await db.refresh(r)
+
+    def _item(roster_id: int, included: bool) -> PaymentRosterItem:
+        return PaymentRosterItem(
+            roster_id=roster_id,
+            application_id=1,  # no Application row needed for this contract check
+            student_id_number="A123456789",
+            student_number=student_no,
+            student_name="RM Student",
+            scholarship_name="RM Scholarship",
+            scholarship_amount=Decimal("10000"),
+            is_included=included,
+        )
+
+    db.add_all([_item(viewed.id, True), _item(yearly.id, True), _item(excluded.id, False)])
+    await db.commit()
+
+    resp = await client_admin.get(f"/api/v1/payment-rosters/{viewed.id}/items")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    _assert_api_response_envelope(body)
+
+    items = body["data"]
+    assert len(items) == 1, items
+    assert "received_months" in items[0], items[0]
+    # 1 (monthly, viewed) + 12 (yearly, included) + 0 (yearly but excluded) = 13
+    assert items[0]["received_months"] == 13, items[0]
+
+
+@pytest.mark.asyncio
+async def test_get_roster_items_received_months_zero_for_lone_item(client_admin: AsyncClient, db):
+    """A student whose only included item is in another config does not bleed
+    into this roster's count; an item with no cross-roster history returns its
+    own cycle's months (yearly=12 here)."""
+    u = await _seed_admin_user(db, "rm_zero")
+    other = PaymentRoster(
+        roster_code="ROSTER-RM-OTHER",
+        scholarship_configuration_id=5000,  # different config — must not count
+        period_label="2026",
+        academic_year=114,
+        roster_cycle=RosterCycle.YEARLY,
+        status=RosterStatus.COMPLETED,
+        trigger_type=RosterTriggerType.MANUAL,
+        created_by=u.id,
+        started_at=datetime.now(timezone.utc),
+        completed_at=datetime.now(timezone.utc),
+    )
+    target = PaymentRoster(
+        roster_code="ROSTER-RM-TARGET",
+        scholarship_configuration_id=5001,
+        period_label="2026",
+        academic_year=114,
+        roster_cycle=RosterCycle.YEARLY,
+        status=RosterStatus.COMPLETED,
+        trigger_type=RosterTriggerType.MANUAL,
+        created_by=u.id,
+        started_at=datetime.now(timezone.utc),
+        completed_at=datetime.now(timezone.utc),
+    )
+    db.add_all([other, target])
+    await db.commit()
+    await db.refresh(other)
+    await db.refresh(target)
+
+    db.add_all(
+        [
+            PaymentRosterItem(
+                roster_id=other.id,
+                application_id=1,
+                student_id_number="B123456789",
+                student_number="RM-ZERO-1",
+                student_name="Zero Student",
+                scholarship_name="RM Scholarship",
+                scholarship_amount=Decimal("10000"),
+                is_included=True,
+            ),
+            PaymentRosterItem(
+                roster_id=target.id,
+                application_id=1,
+                student_id_number="B123456789",
+                student_number="RM-ZERO-1",
+                student_name="Zero Student",
+                scholarship_name="RM Scholarship",
+                scholarship_amount=Decimal("10000"),
+                is_included=True,
+            ),
+        ]
+    )
+    await db.commit()
+
+    resp = await client_admin.get(f"/api/v1/payment-rosters/{target.id}/items")
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["data"]
+    assert len(items) == 1, items
+    # only the target config's yearly roster counts → 12, not 24
+    assert items[0]["received_months"] == 12, items[0]
+
+
+@pytest.mark.asyncio
+async def test_get_roster_items_received_months_zero_when_student_number_missing(client_admin: AsyncClient, db):
+    """An item with no student_number (學號) can't be matched for cumulative
+    counting, so it must report received_months=0 rather than raising or
+    matching the bulk dict's None key."""
+    u = await _seed_admin_user(db, "rm_null")
+    roster = PaymentRoster(
+        roster_code="ROSTER-RM-NULL",
+        scholarship_configuration_id=6001,
+        period_label="2026",
+        academic_year=114,
+        roster_cycle=RosterCycle.YEARLY,
+        status=RosterStatus.COMPLETED,
+        trigger_type=RosterTriggerType.MANUAL,
+        created_by=u.id,
+        started_at=datetime.now(timezone.utc),
+        completed_at=datetime.now(timezone.utc),
+    )
+    db.add(roster)
+    await db.commit()
+    await db.refresh(roster)
+
+    db.add(
+        PaymentRosterItem(
+            roster_id=roster.id,
+            application_id=1,
+            student_id_number="C123456789",
+            student_number=None,  # no 學號 — unmatchable
+            student_name="No Number Student",
+            scholarship_name="RM Scholarship",
+            scholarship_amount=Decimal("10000"),
+            is_included=True,
+        )
+    )
+    await db.commit()
+
+    resp = await client_admin.get(f"/api/v1/payment-rosters/{roster.id}/items")
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["data"]
+    assert len(items) == 1, items
+    assert items[0]["received_months"] == 0, items[0]

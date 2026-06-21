@@ -48,6 +48,7 @@ from app.schemas.roster import (
     RosterStatisticsResponse,
 )
 from app.services.excel_export_service import ExcelExportService
+from app.services.received_months_service import calculate_received_months_bulk_async
 from app.services.roster_service import RosterService
 from app.services.student_verification_service import StudentVerificationService
 from app.utils.academic_period import get_roster_period_dates
@@ -1360,6 +1361,13 @@ async def get_roster_items(
         result = await db.execute(stmt)
         items = result.scalars().all()
 
+        # 累計已領月份數（含本期）：用共用的 received_months_service 一次批次計算，
+        # 與 PhD 36 個月上限資格檢查同一來源。以學號 (student_number) 對應。
+        student_numbers = [item.student_number for item in items if item.student_number]
+        received_by_student = await calculate_received_months_bulk_async(
+            db, student_numbers, roster.scholarship_configuration_id
+        )
+
         items_data = []
         for item in items:
             item_dict = _roster_item_dict_with_display_year(item, roster)
@@ -1371,6 +1379,7 @@ async def get_roster_items(
                 item_dict["college_code"] = sd.get("std_academyno") or sd.get("trm_academyno")
                 item_dict["college_name"] = sd.get("trm_academyname")
                 item_dict["department_name"] = sd.get("trm_depname")
+            item_dict["received_months"] = received_by_student.get(item.student_number, 0) if item.student_number else 0
             items_data.append(item_dict)
 
         return ApiResponse(

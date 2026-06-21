@@ -46,6 +46,8 @@ export interface EligibilityDetailItem {
   is_eligible?: boolean | null;
   verification_message?: string | null;
   rule_validation_result?: RuleValidationResult | null;
+  /** 累計已領月份數（含本期）；null/undefined = 無資料 */
+  received_months?: number | null;
 }
 
 interface EligibilityDetailDialogProps {
@@ -161,9 +163,17 @@ export function EligibilityDetailDialog({ item, onClose }: EligibilityDetailDial
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">驗證結果:</span>
-            <EligibilityBadge item={item} />
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">驗證結果:</span>
+              <EligibilityBadge item={item} />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">已領月份數:</span>
+              <span className="text-sm font-medium">
+                {item.received_months != null ? `${item.received_months} 個月` : "-"}
+              </span>
+            </div>
           </div>
 
           <RuleList rules={snapshot?.failed_rules} label="未通過規則" tone="fail" />
