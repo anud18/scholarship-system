@@ -111,12 +111,12 @@ def _approved_app(db_sync, user, scholarship, config, *, std_code, sub_type) -> 
     return a
 
 
-def _ranking(db_sync, scholarship, college_code, *, finalized=True, executed=True) -> CollegeRanking:
+def _ranking(db_sync, scholarship, college_code, *, finalized=True, executed=True, year=YEAR) -> CollegeRanking:
     r = CollegeRanking(
         scholarship_type_id=scholarship.id,
         college_code=college_code,
         sub_type_code="default",
-        academic_year=YEAR,
+        academic_year=year,
         semester=None,
         ranking_name=f"R-{college_code}",
         is_finalized=finalized,
@@ -257,3 +257,114 @@ def test_no_executed_ranking_raises(db_sync, patch_dependencies):
     # No rankings created at all.
     with pytest.raises(RosterGenerationError, match="找不到已執行分發的排名"):
         _generate(db_sync, cfg, admin)
+
+
+def test_null_ranking_derives_allocated_sub_type_from_ranking(db_sync, patch_dependencies):
+    """The aggregated (roster.ranking_id IS NULL) path must derive each item's
+    allocated_sub_type from that student's ranking item, NOT from the
+    application. We make them DIVERGE: the application says 'nstc' but the
+    matrix allocated 'moe_2w'. The roster item must carry the *allocated* value.
+    (test_aggregation_preserves_per_student_subtype only checks
+    scholarship_subtype, which is sourced unconditionally from the application,
+    so it never exercises the per-application ranking derivation at
+    roster_service.py:874-888 — the heart of the all-college aggregation.)"""
+    admin = _admin(db_sync)
+    sch = _scholarship(db_sync)
+    cfg = _matrix_config(db_sync, sch)
+    rA = _ranking(db_sync, sch, "A")
+    a1 = _approved_app(db_sync, admin, sch, cfg, std_code="A001", sub_type="nstc")
+    _alloc_item(db_sync, rA, a1, sub_type="moe_2w")  # allocated subtype ≠ application subtype
+
+    roster = _generate(db_sync, cfg, admin)
+
+    item = _item_numbers(db_sync, roster)[0]
+    assert item.allocated_sub_type == "moe_2w"  # derived from the ranking item
+    assert item.scholarship_subtype == "nstc"  # echoes the application's own field
+
+
+def test_non_finalized_ranking_excluded(db_sync, patch_dependencies):
+    """is_finalized.is_(True) is one of the two gating conditions the fix added.
+    A draft/in-progress college ranking's allocations must NOT leak into a real
+    payment roster."""
+    admin = _admin(db_sync)
+    sch = _scholarship(db_sync)
+    cfg = _matrix_config(db_sync, sch)
+    rA = _ranking(db_sync, sch, "A", finalized=True)
+    rB = _ranking(db_sync, sch, "B", finalized=False)  # not finalized → excluded
+    a1 = _approved_app(db_sync, admin, sch, cfg, std_code="A001", sub_type="nstc")
+    b1 = _approved_app(db_sync, admin, sch, cfg, std_code="B001", sub_type="nstc")
+    _alloc_item(db_sync, rA, a1, sub_type="nstc")
+    _alloc_item(db_sync, rB, b1, sub_type="nstc")
+
+    roster = _generate(db_sync, cfg, admin)
+
+    assert roster.total_applications == 1
+    nums = {i.student_number for i in _item_numbers(db_sync, roster)}
+    assert nums == {"A001"}
+
+
+def test_non_executed_ranking_excluded(db_sync, patch_dependencies):
+    """distribution_executed.is_(True) is the second gating condition the fix
+    added. A ranking that is finalized but whose matrix distribution has not run
+    has no valid allocations and must be excluded."""
+    admin = _admin(db_sync)
+    sch = _scholarship(db_sync)
+    cfg = _matrix_config(db_sync, sch)
+    rA = _ranking(db_sync, sch, "A", executed=True)
+    rB = _ranking(db_sync, sch, "B", finalized=True, executed=False)  # not executed → excluded
+    a1 = _approved_app(db_sync, admin, sch, cfg, std_code="A001", sub_type="nstc")
+    b1 = _approved_app(db_sync, admin, sch, cfg, std_code="B001", sub_type="nstc")
+    _alloc_item(db_sync, rA, a1, sub_type="nstc")
+    _alloc_item(db_sync, rB, b1, sub_type="nstc")
+
+    roster = _generate(db_sync, cfg, admin)
+
+    assert roster.total_applications == 1
+    nums = {i.student_number for i in _item_numbers(db_sync, roster)}
+    assert nums == {"A001"}
+
+
+def test_other_academic_year_ranking_excluded(db_sync, patch_dependencies):
+    """The aggregation filters CollegeRanking.academic_year == academic_year.
+    A prior-year ranking (sharing the same scholarship_type_id) must not pull a
+    student into the current-year roster, even though the student's application
+    is itself in the current year."""
+    admin = _admin(db_sync)
+    sch = _scholarship(db_sync)
+    cfg = _matrix_config(db_sync, sch)
+    rA = _ranking(db_sync, sch, "A", year=YEAR)
+    rPrev = _ranking(db_sync, sch, "P", year=YEAR - 1)  # prior-year ranking → excluded
+    a1 = _approved_app(db_sync, admin, sch, cfg, std_code="A001", sub_type="nstc")
+    b1 = _approved_app(db_sync, admin, sch, cfg, std_code="B001", sub_type="nstc")
+    _alloc_item(db_sync, rA, a1, sub_type="nstc")
+    _alloc_item(db_sync, rPrev, b1, sub_type="nstc")
+
+    roster = _generate(db_sync, cfg, admin)
+
+    assert roster.total_applications == 1
+    nums = {i.student_number for i in _item_numbers(db_sync, roster)}
+    assert nums == {"A001"}
+
+
+def test_application_allocated_in_two_rankings_counted_once(db_sync, patch_dependencies):
+    """Guards the comment 'a single application belongs to at most one ranking,
+    so .in_() does not duplicate'. The invariant is enforced two services away
+    (finalize-time un-finalize), not by a DB constraint here. We force the
+    boundary case — the SAME application allocated in two finalized+executed
+    rankings — and assert it is counted ONCE, locking in the de-duplication
+    behaviour the aggregation relies on for total_applications / item rows."""
+    admin = _admin(db_sync)
+    sch = _scholarship(db_sync)
+    cfg = _matrix_config(db_sync, sch)
+    rA = _ranking(db_sync, sch, "A")
+    rB = _ranking(db_sync, sch, "B")
+    a1 = _approved_app(db_sync, admin, sch, cfg, std_code="A001", sub_type="nstc")
+    _alloc_item(db_sync, rA, a1, sub_type="nstc")
+    _alloc_item(db_sync, rB, a1, sub_type="nstc")  # same application in a second ranking
+
+    roster = _generate(db_sync, cfg, admin)
+
+    assert roster.total_applications == 1
+    items = _item_numbers(db_sync, roster)
+    assert len(items) == 1
+    assert items[0].student_number == "A001"

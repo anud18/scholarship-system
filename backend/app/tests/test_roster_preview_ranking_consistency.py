@@ -12,13 +12,29 @@ from pathlib import Path
 ENDPOINT = Path(__file__).resolve().parents[2] / "app" / "api" / "v1" / "endpoints" / "payment_rosters.py"
 
 
-def test_preview_does_not_self_select_single_ranking():
+def _preview_function_source() -> str:
+    """Slice out just the preview_roster_students function body so the guards
+    below cannot pass vacuously on substrings that live in other endpoints
+    (e.g. _get_eligible_applications is also called by other handlers)."""
     source = ENDPOINT.read_text(encoding="utf-8")
+    start = source.index("async def preview_roster_students")
+    nxt = source.find("\n@router.", start)
+    return source[start : nxt if nxt != -1 else len(source)]
+
+
+def test_preview_does_not_self_select_single_ranking():
+    fn = _preview_function_source()
     # The divergent single-ranking auto-detect (ordered by created_at) must be gone.
-    assert "CollegeRanking.created_at.desc()" not in source
+    assert "CollegeRanking.created_at.desc()" not in fn
+    # And it must never reassign ranking_id from a self-picked ranking — that
+    # reassignment (e.g. `ranking_id = ranking.id`) WAS the bug. The signature
+    # declares `ranking_id:` (colon), so this does not match the parameter.
+    assert "ranking_id = " not in fn
 
 
 def test_preview_delegates_ranking_resolution_to_service():
-    source = ENDPOINT.read_text(encoding="utf-8")
-    # preview still hands ranking_id (None when unspecified) to the shared selector.
-    assert "_get_eligible_applications(" in source
+    fn = _preview_function_source()
+    # Preview delegates selection to the shared service selector...
+    assert "_get_eligible_applications(" in fn
+    # ...passing the caller's ranking_id through UNCHANGED (None ⇒ all colleges).
+    assert "ranking_id=ranking_id" in fn
