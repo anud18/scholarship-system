@@ -671,43 +671,46 @@ class RosterService:
             # Matrix 模式：必須使用 ranking + is_allocated 過濾
             logger.info(f"Using matrix-based filtering for scholarship config {scholarship_configuration_id}")
 
-            # 如果沒有提供 ranking_id，自動偵測最新的已執行分發的 ranking
+            # 未指定 ranking_id：聚合「所有」已執行分發的排名 → 多學院全院納入。
+            # matrix 分發下每個學院各有一份 CollegeRanking；過去只取最新一份
+            # (.order_by(finalized_at.desc()).first()) 會讓造冊只含最後鎖定的那一院。
             if ranking_id is None:
-                # 從 period_label 推導學期
-                semester = self._extract_semester_from_period(period_label)
-
-                # 查詢最新的已完成分發的 ranking
-                ranking = (
+                rankings = (
                     self.db.query(CollegeRanking)
                     .filter(
                         and_(
                             CollegeRanking.scholarship_type_id == config.scholarship_type_id,
                             CollegeRanking.academic_year == academic_year,
-                            CollegeRanking.is_finalized.is_(True),  # 必須已完成
-                            CollegeRanking.distribution_executed.is_(True),  # 必須已執行分發
+                            CollegeRanking.is_finalized.is_(True),
+                            CollegeRanking.distribution_executed.is_(True),
                         )
                     )
-                    .order_by(CollegeRanking.finalized_at.desc())
-                    .first()
+                    .all()
                 )
 
-                if not ranking:
+                if not rankings:
                     raise ValueError(
                         f"找不到已執行分發的排名。Matrix 模式獎學金必須先執行矩陣分發才能產生造冊。"
                         f"獎學金類型ID: {config.scholarship_type_id}, 學年度: {academic_year}"
                     )
 
-                ranking_id = ranking.id
+                ranking_ids = [r.id for r in rankings]
                 logger.info(
-                    f"Auto-detected ranking ID {ranking_id} "
-                    f"(finalized at {ranking.finalized_at}, {ranking.allocated_count} students allocated)"
+                    f"Aggregating {len(ranking_ids)} executed ranking(s) {ranking_ids} for "
+                    f"all-college roster (type {config.scholarship_type_id}, year {academic_year})"
                 )
 
-            # 只選取該 ranking 中已分配(正取)的申請
+                # 聚合所有排名：一個申請最多屬於一份排名，故 .in_() 不會重複。
+                ranking_filter = CollegeRankingItem.ranking_id.in_(ranking_ids)
+            else:
+                # 明確指定排名：僅該排名（管理員刻意選擇單一排名）。
+                ranking_filter = CollegeRankingItem.ranking_id == ranking_id
+
+            # 只選取 ranking 中已分配(正取)的申請。
             query = query.join(CollegeRankingItem, CollegeRankingItem.application_id == Application.id).filter(
                 and_(
-                    CollegeRankingItem.ranking_id == ranking_id,
-                    CollegeRankingItem.is_allocated.is_(True),  # 只選正取學生
+                    ranking_filter,
+                    CollegeRankingItem.is_allocated.is_(True),
                 )
             )
         else:
@@ -865,7 +868,11 @@ class RosterService:
                     logger.info(f"Application {application.id} has backup allocations: {len(backup_info)} positions")
                 allocated_sub_type = ranking_item.allocated_sub_type
 
-        # 若無 ranking_id（月份造冊），從同學年度已分發排名中查詢子類型
+        # 若無 ranking_id（月份造冊），從同學年度已分發排名中查詢子類型。
+        # 此處僅 gate 在 is_allocated + academic_year（未含 is_finalized /
+        # distribution_executed）。其正確性依賴 _get_eligible_applications 已先以
+        # 「finalized + executed」篩選過申請：一個申請在同學年度只會有一筆有效正取
+        # （finalize 時會反鎖同 slot 的其他排名），故 .first() 取到的即為授權子類型。
         if not allocated_sub_type:
             alloc_item = (
                 self.db.query(CollegeRankingItem)

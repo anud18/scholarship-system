@@ -243,6 +243,27 @@ def _generate_payment_roster_inner(
             finally:
                 independent_db.close()
 
+        # generate_roster wraps every internal failure in RosterGenerationError,
+        # preserving the original exception as __cause__ (contract pinned by
+        # test_roster_generate_concurrency). Re-dispatch on that cause so the
+        # client sees the REAL reason + correct HTTP status instead of an opaque
+        # 「造冊產生失敗」. Only curated domain messages are surfaced; raw/unexpected
+        # causes stay generic so internal detail (filesystem paths, SQL, SDK
+        # errors) never leaks — see test_no_exception_leak_in_endpoints.
+        cause = e.__cause__
+        if isinstance(cause, RosterAlreadyExistsError):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(cause)) from e
+        if isinstance(cause, RosterLockedError):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(cause)) from e
+        if isinstance(cause, RosterNotFoundError):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(cause)) from e
+        if isinstance(cause, ValueError):
+            # Curated validation messages (missing config/ranking, distribution
+            # not executed, no allocated ranking) — safe and actionable.
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(cause)) from e
+        if isinstance(cause, RosterGenerationError):
+            # Curated data-consistency summary from validate_roster_consistency.
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(cause)) from e
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="造冊產生失敗") from e
 
     except ValueError as e:
@@ -588,22 +609,10 @@ async def preview_roster_students(
         # Check if has matrix distribution
         has_matrix_distribution = config.quota_management_mode == QuotaManagementMode.matrix_based
 
-        # Auto-detect ranking_id if needed
-        if has_matrix_distribution and not ranking_id:
-            ranking = (
-                db.query(CollegeRanking)
-                .filter(
-                    and_(
-                        CollegeRanking.scholarship_type_id == config.scholarship_type_id,
-                        CollegeRanking.distribution_executed.is_(True),
-                    )
-                )
-                .order_by(CollegeRanking.created_at.desc())
-                .first()
-            )
-            if ranking:
-                ranking_id = ranking.id
-                logger.info(f"Auto-detected ranking_id: {ranking_id}")
+        # NOTE: 不在此處自挑單一排名。ranking_id 為 None 時交由
+        # roster_service._get_eligible_applications 聚合「所有」已執行分發的排名
+        # （= 全院），與 generate_roster 走同一條路 → 預覽與產生保證一致。
+        # 明確指定 ranking_id 時則只預覽該排名。
 
         # Get eligible applications using RosterService
         logger.info(
