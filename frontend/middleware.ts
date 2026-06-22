@@ -41,12 +41,18 @@ export function middleware(request: NextRequest) {
   // not sufficient without this matching CSP relaxation.
   //
   // INVARIANT: this is why every framable file proxy MUST live under
-  // `/api/v1/preview/` — both this predicate and the nginx `location /api/v1/preview`
-  // block then cover it correct-by-construction, with no per-endpoint edits. A
-  // framable proxy placed outside this prefix recurs the "refused to connect" bug
-  // in BOTH layers. Do NOT create non-framable `/api/v1/preview*` siblings either
-  // (the nginx prefix would wrongly relax them) — keep downloads/uploads elsewhere.
-  const isFramablePreview = request.nextUrl.pathname.startsWith("/api/v1/preview");
+  // `/api/v1/preview/` — both this predicate and the nginx preview block then cover
+  // it correct-by-construction, with no per-endpoint edits. A framable proxy placed
+  // outside this prefix recurs the "refused to connect" bug in BOTH layers.
+  //
+  // Match the multiplexer EXACTLY (`/api/v1/preview`) plus its child paths
+  // (`/api/v1/preview/...`) — NOT a bare `startsWith`, which would also relax a
+  // `/api/v1/preview-export`-style sibling and silently make it framable. The nginx
+  // configs mirror this with `location ~ ^/api/v1/preview(/|$)`; the two layers MUST
+  // stay in lock-step (a tight-here / loose-there split itself breaks framing).
+  const { pathname } = request.nextUrl;
+  const isFramablePreview =
+    pathname === "/api/v1/preview" || pathname.startsWith("/api/v1/preview/");
   const frameAncestors = isFramablePreview ? "frame-ancestors 'self'" : "frame-ancestors 'none'";
 
   if (isDevelopment) {
