@@ -131,7 +131,7 @@ describe("NoticeAgreementStep", () => {
     fireEvent.click(openBtn);
     const viewer = await screen.findByTestId("inline-pdf-viewer");
     expect(viewer.getAttribute("data-url")).toMatch(
-      /\/api\/v1\/system-settings\/file-proxy\?key=regulations_url/,
+      /\/api\/v1\/preview\/system-docs\?key=regulations_url/,
     );
 
     // Simulate scroll-to-bottom inside the dialog viewer.

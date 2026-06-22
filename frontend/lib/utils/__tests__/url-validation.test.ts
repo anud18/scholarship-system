@@ -152,8 +152,8 @@ describe("buildSecurePreviewUrl", () => {
       "/api/v1/preview"
     );
     expect(
-      buildSecurePreviewUrl("/api/v1/preview-document-example", {})
-    ).toBe("/api/v1/preview-document-example");
+      buildSecurePreviewUrl("/api/v1/preview/examples", {})
+    ).toBe("/api/v1/preview/examples");
     expect(buildSecurePreviewUrl("/api/v1/download", {})).toBe(
       "/api/v1/download"
     );

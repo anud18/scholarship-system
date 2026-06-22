@@ -552,7 +552,7 @@ export function ScholarshipApplicationStep({
       "application_document";
     const token = localStorage.getItem("auth_token") || "";
     const cacheBuster = encodeURIComponent(filename);
-    const previewUrl = `/api/v1/application-document-proxy?id=${appId}&token=${encodeURIComponent(token)}&v=${cacheBuster}`;
+    const previewUrl = `/api/v1/preview/application-document?id=${appId}&token=${encodeURIComponent(token)}&v=${cacheBuster}`;
     let fileTypeDisplay = "other";
     if (filename.toLowerCase().endsWith(".pdf"))
       fileTypeDisplay = "application/pdf";
@@ -865,7 +865,7 @@ export function ScholarshipApplicationStep({
       typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
 
     // Append token as query parameter for iframe authentication
-    const previewUrl = `/api/v1/preview-terms?scholarshipType=${selectedScholarship.code}${token ? `&token=${encodeURIComponent(token)}` : ""}`;
+    const previewUrl = `/api/v1/preview/terms?scholarshipType=${selectedScholarship.code}${token ? `&token=${encodeURIComponent(token)}` : ""}`;
 
     setTermsPreviewFile({
       url: previewUrl,
