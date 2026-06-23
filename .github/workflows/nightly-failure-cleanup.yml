@@ -1,0 +1,65 @@
+name: Nightly failure report cleanup
+
+# Issue-bound retention for nightly e2e failure evidence.
+#
+# nightly.yml uploads a 90-day `nightly-failure-report-<run_id>` artifact on
+# e2e-full failure and links its name in the auto-filed `nightly-failure` issue.
+# "Keep until fixed" = keep until that issue is closed: when a nightly-failure
+# issue is closed, delete every failure-report artifact it references, instead
+# of waiting out the full 90-day cap. (90 days is GitHub's hard maximum for
+# artifact retention, so an issue left open longer than that will still lose its
+# artifact — that is a platform limit, not a policy choice.)
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  contents: read
+  actions: write   # required to delete workflow artifacts
+  issues: read
+
+jobs:
+  cleanup:
+    name: Delete failure-report artifacts for the closed issue
+    runs-on: ubuntu-latest
+    # Only act on the auto-filed nightly-failure issues.
+    if: ${{ contains(github.event.issue.labels.*.name, 'nightly-failure') }}
+    steps:
+      - name: Delete artifacts referenced by the issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # The dedup issue can reference several runs (one per failing day,
+          # appended as comments), so scan the body AND every comment.
+          gh issue view "$ISSUE" --repo "$REPO" --json body,comments \
+            --jq '.body, (.comments[].body)' > issue_text.txt
+
+          names=$(grep -oE 'nightly-failure-report-[0-9]+' issue_text.txt | sort -u || true)
+          if [ -z "$names" ]; then
+            echo "Issue #$ISSUE references no failure-report artifacts; nothing to delete."
+            exit 0
+          fi
+          echo "Referenced artifacts:"
+          echo "$names"
+
+          for name in $names; do
+            # An artifact name may have several uploads over time; delete all.
+            ids=$(gh api --paginate \
+              "repos/$REPO/actions/artifacts?per_page=100" \
+              --jq ".artifacts[] | select(.name==\"$name\") | .id" || true)
+            if [ -z "$ids" ]; then
+              echo "  $name: not found (already expired or deleted)"
+              continue
+            fi
+            for id in $ids; do
+              if gh api -X DELETE "repos/$REPO/actions/artifacts/$id"; then
+                echo "  deleted $name (id=$id)"
+              else
+                echo "  failed to delete $name (id=$id)" >&2
+              fi
+            done
+          done
