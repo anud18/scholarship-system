@@ -232,6 +232,23 @@ jobs:
             frontend/test-results/
           retention-days: 14
 
+      # On failure, keep a SECOND, run-scoped copy with the maximum retention
+      # GitHub allows (90 days). The 14-day copy above (and the Pages site) get
+      # overwritten by the next nightly — this one survives so the failure's
+      # video/trace/screenshots stay available until the bug is fixed. The
+      # file-issue-on-failure job links this artifact name in the issue, and
+      # nightly-failure-cleanup.yml deletes it when that issue is closed (= the
+      # failure is fixed), rather than waiting out the full 90 days.
+      - name: Upload failure report (retained until the nightly-failure issue is closed)
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: nightly-failure-report-${{ github.run_id }}
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 90
+
       - name: Tear down compose
         if: always()
         run: docker compose -f docker-compose.dev.yml down -v || true
@@ -316,6 +333,15 @@ jobs:
             --search "in:title $today" \
             --json number \
             --jq '.[0].number' || echo '')
+          # When e2e-full failed, point at the 90-day failure-report artifact so
+          # the video/trace/screenshots stay reachable until this issue is
+          # closed. nightly-failure-cleanup.yml greps the issue for this exact
+          # `nightly-failure-report-<run_id>` name to delete it on close, so keep
+          # the literal name in the body.
+          evidence_line=""
+          if [ "${{ needs.e2e-full.result }}" = "failure" ]; then
+            evidence_line="- E2E failure evidence (video/trace/screenshots), retained until this issue is closed: download artifact \`nightly-failure-report-${{ github.run_id }}\` from the run page above, or browse the latest report at https://anud18.github.io/scholarship-system/"
+          fi
           body=$(cat <<EOF
           One or more jobs in the nightly long-running lane failed today.
 
@@ -324,6 +350,7 @@ jobs:
             - backend-slow: ${{ needs.backend-slow.result }}
             - audit-log-contract: ${{ needs.audit-log-contract.result }}
             - e2e-full: ${{ needs.e2e-full.result }}
+          $evidence_line
 
           (Auto-filed by .github/workflows/nightly.yml — Phase 5 of
           test-surface-hardening plan. Feel free to close once the
