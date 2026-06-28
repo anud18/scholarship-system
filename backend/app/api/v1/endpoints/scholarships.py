@@ -250,6 +250,7 @@ async def get_scholarship_eligibility(
             warnings=[],  # Hide warnings from student view - they don't need to see these
             errors=scholarship.get("errors", []),  # Error messages from eligibility check
             created_at=scholarship.get("created_at"),
+            already_submitted=scholarship.get("already_submitted", False),
         )
         response_data.append(response_item)
 

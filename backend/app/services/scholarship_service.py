@@ -149,10 +149,11 @@ class ScholarshipService:
                 eligibility_details,
             ) = await eligibility_service.get_detailed_eligibility_check(current_student_data, config, user_id)
 
-            # Always get application status if user_id is provided, regardless of eligibility
-            application_status = {}
+            # Whether the student already has a submitted-and-beyond application
+            # for this configuration → hides it from the apply flow (see spec).
+            already_submitted = False
             if user_id:
-                application_status = await eligibility_service.get_application_status(user_id, config)
+                already_submitted = await eligibility_service.has_blocking_application(user_id, config)
 
             if is_eligible:
                 # Build scholarship response with configuration data
@@ -229,12 +230,8 @@ class ScholarshipService:
                         "passed": eligibility_details.get("passed", []),
                         "warnings": eligibility_details.get("warnings", []),
                         "errors": eligibility_details.get("errors", []),
-                        # Add application status information
-                        "application_status": application_status.get("application_status"),
-                        "can_apply": application_status.get("can_apply", True),
-                        "status_display": application_status.get("status_display", "可申請"),
-                        "has_application": application_status.get("has_application", False),
-                        "application_id": application_status.get("application_id"),
+                        # Hide already-submitted scholarships from the apply flow
+                        "already_submitted": already_submitted,
                     }
                 )
 
