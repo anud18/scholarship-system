@@ -91,7 +91,9 @@ describe("middleware framing for same-origin preview proxies", () => {
     "https://ss.test.nycu.edu.tw/api/v1/preview/examples?documentId=1",
     "https://ss.test.nycu.edu.tw/api/v1/preview/system-docs?key=regulations_url",
     "https://ss.test.nycu.edu.tw/api/v1/preview/supp-docs?id=1",
-    "https://ss.test.nycu.edu.tw/api/v1/preview/application-document?id=APP-1",
+    // numeric id — the application-document route validates /^\d+$/ and the caller
+    // passes the numeric application PK, so keep the test URL realistic.
+    "https://ss.test.nycu.edu.tw/api/v1/preview/application-document?id=87",
   ];
 
   it.each(PREVIEW_ROUTES)("prod: %s is framable same-origin (SAMEORIGIN + frame-ancestors 'self')", (url) => {
@@ -123,6 +125,10 @@ describe("middleware framing for same-origin preview proxies", () => {
       // /api/v1/preview prefix (attachment download). Guard that the framing
       // relaxation does NOT leak to it.
       "https://ss.test.nycu.edu.tw/api/v1/download?fileId=1&applicationId=1&type=pdf",
+      // String-prefix footgun guard: a `/api/v1/preview-*` SIBLING must NOT be
+      // framable. The predicate matches exactly /api/v1/preview and /preview/<child>,
+      // so this hypothetical sibling must keep the strict DENY posture.
+      "https://ss.test.nycu.edu.tw/api/v1/preview-export?id=1",
     ]) {
       const res = middleware(mockRequest(url));
       const csp = res.headers.get("Content-Security-Policy") ?? "";
