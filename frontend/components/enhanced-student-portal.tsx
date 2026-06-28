@@ -33,7 +33,10 @@ import { DocumentRequestAlert } from "@/components/document-request-alert";
 import { RenewalApplicationCard } from "@/components/student/RenewalApplicationCard";
 import { ChallengeApplicationCard } from "@/components/student/ChallengeApplicationCard";
 import type { StudentDocumentRequest } from "@/lib/api/modules/document-requests";
-import { isSelectableScholarship } from "@/lib/scholarship-eligibility";
+import {
+  isApplyableScholarship,
+  isSelectableScholarship,
+} from "@/lib/scholarship-eligibility";
 import {
   Edit,
   Eye,
@@ -1335,7 +1338,7 @@ export function EnhancedStudentPortal({
 
       {activeTab === "new-application" &&
         (editingApplication ||
-        eligibleScholarships.some(isSelectableScholarship) ? (
+        eligibleScholarships.some(isApplyableScholarship) ? (
           <StudentApplicationWizard
             user={user}
             locale={locale}
@@ -1348,7 +1351,9 @@ export function EnhancedStudentPortal({
             <CardContent className="p-6 text-center">
               <AlertTriangle className="h-8 w-8 text-orange-500 mx-auto mb-4" />
               <h3 className="text-lg font-semibold">
-                {t("messages.no_eligible_scholarships")}
+                {eligibleScholarships.some(isSelectableScholarship)
+                  ? t("messages.all_eligible_already_submitted")
+                  : t("messages.no_eligible_scholarships")}
               </h3>
             </CardContent>
           </Card>

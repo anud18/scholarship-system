@@ -338,6 +338,7 @@ export const translations = {
       no_eligible_scholarships: "目前沒有符合資格的獎學金",
       no_eligible_scholarships_desc:
         "很抱歉，您目前沒有符合申請資格的獎學金。請稍後再試或聯繫獎學金辦公室。",
+      all_eligible_already_submitted: "您可申請的獎學金皆已送出，請至「我的申請」查看進度",
       eligible: "可申請",
       not_eligible: "不符合申請資格",
       loading_data: "正在載入資料...",
@@ -853,6 +854,8 @@ export const translations = {
       no_eligible_scholarships: "No Eligible Scholarships",
       no_eligible_scholarships_desc:
         "Sorry, you are not currently eligible for any scholarships. Please try again later or contact the scholarship office.",
+      all_eligible_already_submitted:
+        "You have already submitted every scholarship you can apply for. See progress under \"My Applications\".",
       eligible: "Eligible",
       not_eligible: "Not Eligible",
       loading_data: "Loading data...",
