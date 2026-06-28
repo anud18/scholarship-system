@@ -133,7 +133,7 @@ GET /api/v1/scholarships/eligible
 
 - **沒有任何申請（常見情況）**：`EXISTS` 為偽 → `already_submitted = False` → 顯示。（專屬查詢天然處理，無 `None` 反轉風險。）
 - **多年度設定共用同一 type code（114 + 115）**：查詢以 `academic_year` + `semester` 為鍵，逐設定計算，申請 114 不會隱藏 115。與精靈以 `configuration_id` 為選取鍵一致。
-- **同一設定多列（被拒/撤回 + 新草稿）**：`EXISTS(隱藏集合)` 與排序無關 → 終態（被拒/撤回）不屬隱藏集合、草稿也不屬 → `already_submitted = False` → 顯示，可重新申請/續填。同時天然避開 `scalar_one_or_none` 多列例外。
+- **同一設定多列**：實作時確認 `Application` 的部分唯一索引 `uq_user_pure_new_app`（`postgresql_where: is_renewal=false AND challenges_application_id IS NULL AND deleted_at IS NULL`）使**兩筆 pure-new 申請無法在同一設定共存**（含「被拒 pure-new + 新草稿」——兩者都 pure-new，會相撞）。唯一可共存的多列情境是「軟刪除（deleted_at）的舊件 + 一筆 live 件」（僅 PostgreSQL；SQLite 測試環境忽略 partial WHERE，視為完整唯一索引，故任何同設定兩列皆不可建）。此情境下 `EXISTS(隱藏集合)` 仍正確（軟刪除/終態不屬隱藏集合）。`has_blocking_application` 以 `.limit(1)` 結構性保證單列、不會丟 `scalar_one_or_none` 多列例外（防禦性；該多列路徑在 SQLite harness 不可重現，故以註解記錄而非整合測試）。
 - **續填草稿 / 修改退回件**：`draft`、`returned` 不在隱藏集合，仍顯示，可由「我的申請」進編輯流程（`editingApplication`）續填。
 - **`returned` 在全新精靈直接新建**：因 `returned` 保留可見（決策 #1），若學生不走編輯而在全新精靈選它並按新建，仍會撞既有守衛（守衛只對 `draft` 回傳既有件續填，`returned` 會回 `DUPLICATE_APPLICATION`）。此為既有守衛行為、屬非目標；正常路徑是由「我的申請」編輯退回件。記錄為已知限制。
 - **`manual_excluded` / `cancelled_by_challenge`**：屬隱藏集合 → 不顯示（與守衛一致，避免顯示後送出撞 `DUPLICATE_APPLICATION`）。
