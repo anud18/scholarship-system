@@ -260,7 +260,7 @@ export const translations = {
     },
     rule_types: {
       nstc: "國科會博士生獎學金",
-      moe_1w: "教育部博士生獎學金 (指導教授配合款一萬)",
+      moe_1w: "教育部博士生獎學金 (指導教授配合款每月五千)",
       moe_2w: "教育部博士生獎學金 (指導教授配合款兩萬)",
     },
     scholarship_sections: {
@@ -773,7 +773,7 @@ export const translations = {
     },
     rule_types: {
       nstc: "NSTC PhD Scholarship",
-      moe_1w: "MOE PhD Scholarship (Advisor Matching Fund - 10K)",
+      moe_1w: "MOE PhD Scholarship (Advisor Matching Fund - NT$5,000/month)",
       moe_2w: "MOE PhD Scholarship (Advisor Matching Fund - 20K)",
     },
     scholarship_sections: {
