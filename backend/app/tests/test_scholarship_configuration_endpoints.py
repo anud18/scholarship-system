@@ -17,6 +17,7 @@ from app.core.security import require_admin
 from app.main import app
 from app.models.enums import Semester
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipStatus, ScholarshipType
+from app.models.student import Academy
 from app.models.user import AdminScholarship, User, UserRole, UserType
 
 BASE = "/api/v1/scholarship-configurations/configurations"
@@ -788,3 +789,51 @@ class TestScholarshipConfigurationEndpointsIntegration:
         assert row["project_numbers"] == {"nstc": "114R000001"}
         assert row["shared_quota_sources"] == [{"source_config_code": "X-113-1", "sub_types": ["nstc"]}]
         assert "prior_quota_years" not in row
+
+
+# --- PhD matrix quota import: persistence + validation ----------------------- #
+
+
+@pytest_asyncio.fixture
+async def matrix_reference_data(db: AsyncSession, test_scholarship_type):
+    """Give the test scholarship type a matrix sub_type_list and seed the
+    Academy rows the validator resolves college codes from."""
+    test_scholarship_type.sub_type_list = ["nstc", "moe_1w"]
+    db.add(test_scholarship_type)
+    db.add_all([Academy(code="C", name="資訊"), Academy(code="E", name="電機")])
+    await db.commit()
+    return test_scholarship_type
+
+
+class TestScholarshipConfigurationQuotaImport:
+    @pytest.mark.asyncio
+    async def test_create_persists_matrix_quotas(
+        self, authenticated_admin_client, valid_config_payload, matrix_reference_data
+    ):
+        payload = {
+            **valid_config_payload,
+            "config_code": "MATRIX-PERSIST-113-1",
+            "quota_management_mode": "matrix_based",
+            "quotas": {"nstc": {"C": 5, "E": 4}, "moe_1w": {"C": 3}},
+        }
+        resp = await authenticated_admin_client.post(BASE, json=payload)
+        assert resp.status_code == 200
+        config_id = resp.json()["data"]["id"]
+
+        # Read back through the API (the proven pattern in test_create_configuration_success).
+        got = (await authenticated_admin_client.get(f"{BASE}/{config_id}")).json()["data"]
+        assert got["quotas"] == {"nstc": {"C": 5, "E": 4}, "moe_1w": {"C": 3}}
+        assert got["total_quota"] == 12  # 5 + 4 + 3, recomputed as the cell-sum
+
+    @pytest.mark.asyncio
+    async def test_create_rejects_unknown_college(
+        self, authenticated_admin_client, valid_config_payload, matrix_reference_data
+    ):
+        payload = {
+            **valid_config_payload,
+            "config_code": "MATRIX-BADCOL-113-1",
+            "quota_management_mode": "matrix_based",
+            "quotas": {"nstc": {"ZZ": 5}},
+        }
+        resp = await authenticated_admin_client.post(BASE, json=payload)
+        assert resp.status_code == 422
