@@ -129,7 +129,11 @@ async def create_application(
         logger.debug(f"Fetching scholarship configuration: {application_data.configuration_id}")
         from sqlalchemy import and_, select
 
-        from app.models.application import Application, ApplicationStatus
+        from app.models.application import (
+            Application,
+            ApplicationStatus,
+            build_config_match_filters,
+        )
         from app.models.scholarship import ScholarshipConfiguration
 
         config_stmt = select(ScholarshipConfiguration).where(
@@ -155,13 +159,11 @@ async def create_application(
         # 排除已撤回/拒絕/取消/刪除的申請 (shared set — see app.models.enums)
         excluded_statuses = REAPPLY_ALLOWED_APPLICATION_STATUSES
 
-        # 查詢是否已有申請 - using values from scholarship configuration
+        # 查詢是否已有申請 - shared (user, type, year, semester) key, see
+        # build_config_match_filters
         duplicate_check_stmt = select(Application).where(
             and_(
-                Application.user_id == current_user.id,
-                Application.scholarship_type_id == scholarship_config.scholarship_type_id,
-                Application.academic_year == scholarship_config.academic_year,
-                Application.semester == scholarship_config.semester,
+                *build_config_match_filters(current_user.id, scholarship_config),
                 Application.status.notin_(excluded_statuses),
             )
         )

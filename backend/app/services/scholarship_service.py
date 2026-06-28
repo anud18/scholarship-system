@@ -149,15 +149,16 @@ class ScholarshipService:
                 eligibility_details,
             ) = await eligibility_service.get_detailed_eligibility_check(current_student_data, config, user_id)
 
-            # Whether the student already has a submitted-and-beyond application
-            # for this configuration → hides it from the apply flow (see spec).
-            already_submitted = False
-            if user_id:
-                already_submitted = await eligibility_service.has_blocking_application(user_id, config)
-
             if is_eligible:
                 # Build scholarship response with configuration data
                 scholarship_type = config.scholarship_type
+
+                # Whether the student already has a submitted-and-beyond
+                # application for this configuration → hides it from the apply
+                # flow (see spec). Computed only for eligible configs.
+                already_submitted = False
+                if user_id:
+                    already_submitted = await eligibility_service.has_blocking_application(user_id, config)
 
                 # Filter sub_type_list based on student eligibility
                 (

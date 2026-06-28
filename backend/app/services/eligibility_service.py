@@ -7,11 +7,11 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import DEV_SCHOLARSHIP_SETTINGS, settings
-from app.models.application import Application, ApplicationStatus
+from app.models.application import Application, ApplicationStatus, build_config_match_filters
 from app.models.enums import HIDDEN_APPLICATION_STATUSES
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
 
@@ -481,114 +481,21 @@ class EligibilityService:
         for this scholarship configuration — i.e. one that should HIDE the
         scholarship from the apply flow.
 
-        Uses the same (user, type, year, semester) key and semester comparison
-        as the DUPLICATE_APPLICATION guard so 'shown ⟺ submittable' holds. An
-        EXISTS query: deterministic, no None edge, safe with multiple rows.
+        Uses the shared (user, type, year, semester) match key
+        (build_config_match_filters) so it stays consistent with the
+        DUPLICATE_APPLICATION guard ("shown ⟺ submittable"). An EXISTS query:
+        deterministic, no None edge, safe with multiple rows.
         """
-        if config.semester:
-            semester_filter = Application.semester == config.semester
-        else:
-            semester_filter = Application.semester.is_(None)
-
-        stmt = (
-            select(Application.id)
-            .where(
+        stmt = select(
+            exists().where(
                 and_(
-                    Application.user_id == user_id,
-                    Application.scholarship_type_id == config.scholarship_type_id,
-                    Application.academic_year == config.academic_year,
-                    semester_filter,
+                    *build_config_match_filters(user_id, config),
                     Application.status.in_(HIDDEN_APPLICATION_STATUSES),
                 )
             )
-            .limit(1)
         )
         result = await self.db.execute(stmt)
-        return result.scalar_one_or_none() is not None
-
-    async def get_application_status(self, user_id: int, config: ScholarshipConfiguration) -> Dict[str, Any]:
-        """Get application status for a specific scholarship configuration
-
-        Returns:
-            Dictionary with application status info:
-            - has_application: bool - whether user has any application for this config
-            - application_status: str - current application status (draft, submitted, etc.)
-            - can_apply: bool - whether user can submit new/edit existing application
-            - status_display: str - display text for frontend
-        """
-
-        # Check for any existing application
-        active_statuses = [
-            ApplicationStatus.draft.value,
-            ApplicationStatus.submitted.value,
-            ApplicationStatus.under_review.value,
-            ApplicationStatus.approved.value,
-            ApplicationStatus.rejected.value,
-            ApplicationStatus.returned.value,
-            ApplicationStatus.cancelled.value,
-            ApplicationStatus.withdrawn.value,
-        ]
-
-        # Handle semester comparison - use enum name for PostgreSQL compatibility
-        # PostgreSQL stores enum as the name (FIRST, SECOND) not the value (first, second)
-        if config.semester:
-            # Use enum name for comparison
-            semester_filter = Application.semester == config.semester.name
-        else:
-            # If no semester in config, check for NULL
-            semester_filter = Application.semester.is_(None)
-
-        stmt = select(Application).filter(
-            and_(
-                Application.user_id == user_id,
-                Application.scholarship_type_id == config.scholarship_type_id,
-                Application.academic_year == config.academic_year,
-                semester_filter,
-                Application.status.in_(active_statuses),
-            )
-        )
-
-        result = await self.db.execute(stmt)
-        existing_application = result.scalar_one_or_none()
-
-        if not existing_application:
-            return {
-                "has_application": False,
-                "application_status": None,
-                "can_apply": True,
-                "status_display": "可申請",
-                "application_id": None,
-            }
-
-        status = existing_application.status
-
-        # Determine if user can apply/edit
-        can_apply = status in [
-            ApplicationStatus.draft.value,
-            ApplicationStatus.returned.value,
-        ]
-
-        # Determine display status
-        status_display_mapping = {
-            ApplicationStatus.draft.value: "草稿",
-            ApplicationStatus.submitted.value: "已申請",
-            ApplicationStatus.under_review.value: "審核中",
-            ApplicationStatus.approved.value: "已核准",
-            ApplicationStatus.rejected.value: "已拒絕",
-            ApplicationStatus.returned.value: "已退回",
-            ApplicationStatus.cancelled.value: "已取消",
-            ApplicationStatus.withdrawn.value: "已撤回",
-        }
-
-        status_display = status_display_mapping.get(status, "未知狀態")
-
-        return {
-            "has_application": True,
-            "application_status": status,
-            "can_apply": can_apply,
-            "status_display": status_display,
-            "application_id": existing_application.id,
-        }
+        return bool(result.scalar())
 
     def _evaluate_rule(self, student_data: Dict[str, Any], rule: ScholarshipRule) -> Optional[bool]:
         """Evaluate a single rule against student data

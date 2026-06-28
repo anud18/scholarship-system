@@ -79,10 +79,10 @@
 
 3. **新增 `has_blocking_application(user_id, config) -> bool`**（置於 `eligibility_service` 或 `scholarship_service`）：對 `(user_id, scholarship_type_id, academic_year, semester)` 且 `status IN HIDDEN_APPLICATION_STATUSES` 做 `EXISTS`/`select(...).limit(1)` 查詢。
    - 確定性、無 `None` 邊界、無多列例外（不需排序、不需 `scalar_one_or_none`）。
-   - **semester 比較須與守衛一致**：守衛用 `Application.semester == config.semester`（enum 物件，`None` 時比 `IS NULL`）。本查詢**完全沿用守衛的比較方式**（非 `get_application_status` 的 `config.semester.name` 寫法），確保 `already_submitted` 與守衛選到同一批列 → 維持「顯示 ⟹ 可送出」不變式。建議抽一個共用 semester 述詞 helper 供兩處共用。
+   - **semester 比較須與守衛一致**：守衛用 `Application.semester == config.semester`（enum 物件，`None` 時比 `IS NULL`）。本查詢與守衛**共用** `app.models.application.build_config_match_filters(user_id, config)`（/simplify 後抽出的 (user, type, year, semester) + semester-NULL 共用述詞），結構性保證兩者不漂移 → 維持「顯示 ⟹ 可送出」不變式。`has_blocking_application` 以原生 `exists()` 實作（非 `select(...).limit(1)`）。
 
 4. **產生 `already_submitted`** — 在 `ScholarshipService.get_eligible_scholarships`（目前 `:155` 呼叫 `get_application_status`、`:224-238` attach 狀態欄位處）：以 `already_submitted = await ...has_blocking_application(user_id, config)` 取代原本被回應層丟棄的狀態欄位。移除 `scholarship_dict` 內那些被丟棄的欄位（`can_apply`/`status_display`/`application_status`/`has_application`/`application_id`），只保留 `already_submitted`。
-   - 連帶結果：`/eligible` 路徑**不再呼叫** `get_application_status`，原本多列 `scalar_one_or_none()` 的 500 風險在此路徑消失（符合先前同意的「修掉當機」目標）。`get_application_status` 屆時只剩自身單元測試引用；本次**保留不動**（其 `active_statuses`/`scalar_one_or_none` 屬已知潛在問題，已不在關鍵路徑，徹底移除/修正列為後續）。
+   - 連帶結果：`/eligible` 路徑**不再呼叫** `get_application_status`，原本多列 `scalar_one_or_none()` 的 500 風險在此路徑消失（符合先前同意的「修掉當機」目標）。`get_application_status` 移除最後一個生產呼叫端後已成死碼；**已於 /simplify 清理階段連同其單元測試一併移除**（含其 `active_statuses`/`scalar_one_or_none`/`config.semester.name` 等已知潛在問題）。
 
 5. **暴露欄位** — 在 `EligibleScholarshipResponse`（`backend/app/schemas/scholarship.py:259-286`）新增 `already_submitted: bool = False`（給預設值，對舊/缺值 payload 具韌性，並與前端 optional 欄位對稱）；於端點建構處（`backend/app/api/v1/endpoints/scholarships.py:225-253`）帶出。
 

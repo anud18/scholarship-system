@@ -314,34 +314,6 @@ async def test_determine_required_student_api_type():
 
 
 @pytest.mark.asyncio
-async def test_get_application_status(monkeypatch):
-    config = build_config()
-
-    empty_session = StubSession([StubResult(scalar=None)])
-    service = EligibilityService(db=empty_session)
-    status = await service.get_application_status(user_id=1, config=config)
-
-    assert status["has_application"] is False
-    assert status["can_apply"] is True
-
-    submitted_app = SimpleNamespace(
-        id=99,
-        status=ApplicationStatus.submitted.value,
-        scholarship_type_id=config.scholarship_type_id,
-        academic_year=config.academic_year,
-    )
-    filled_session = StubSession([StubResult(scalar=submitted_app)])
-    service.db = filled_session
-
-    status_existing = await service.get_application_status(user_id=1, config=config)
-
-    assert status_existing["has_application"] is True
-    assert status_existing["application_id"] == 99
-    assert status_existing["status_display"] == "已申請"
-    assert status_existing["can_apply"] is False
-
-
-@pytest.mark.asyncio
 async def test_check_existing_applications(monkeypatch):
     config = build_config()
     session = StubSession(
