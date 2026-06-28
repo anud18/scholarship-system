@@ -15,7 +15,11 @@
  *
  * 7 cases.
  */
-import { isSelectableScholarship } from "../scholarship-eligibility";
+import type { ScholarshipType } from "@/lib/api/types";
+import {
+  isApplyableScholarship,
+  isSelectableScholarship,
+} from "../scholarship-eligibility";
 
 // Minimal ScholarshipType shape — only the fields the predicate reads.
 type _Sch = {
@@ -90,5 +94,44 @@ describe("isSelectableScholarship", () => {
     expect(
       isSelectableScholarship(scholarship({ eligible_sub_types: [] })),
     ).toBe(false);
+  });
+});
+
+const applyableSelectable = {
+  eligible_sub_types: [
+    { value: "nstc", label: "NSTC", label_en: "NSTC", is_default: true },
+  ],
+  errors: [],
+} as unknown as ScholarshipType;
+
+describe("isApplyableScholarship", () => {
+  it("is true for a selectable scholarship with no submission", () => {
+    expect(isSelectableScholarship(applyableSelectable)).toBe(true);
+    expect(isApplyableScholarship(applyableSelectable)).toBe(true);
+  });
+
+  it("is false when already submitted", () => {
+    const submitted = {
+      ...applyableSelectable,
+      already_submitted: true,
+    } as ScholarshipType;
+    expect(isApplyableScholarship(submitted)).toBe(false);
+  });
+
+  it("is true when already_submitted is explicitly false", () => {
+    const notSubmitted = {
+      ...applyableSelectable,
+      already_submitted: false,
+    } as ScholarshipType;
+    expect(isApplyableScholarship(notSubmitted)).toBe(true);
+  });
+
+  it("is false when not selectable, even if not submitted", () => {
+    const notSelectable = {
+      eligible_sub_types: [],
+      errors: [],
+      already_submitted: false,
+    } as unknown as ScholarshipType;
+    expect(isApplyableScholarship(notSelectable)).toBe(false);
   });
 });
