@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import DEV_SCHOLARSHIP_SETTINGS, settings
 from app.models.application import Application, ApplicationStatus
+from app.models.enums import HIDDEN_APPLICATION_STATUSES
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
 
 logger = logging.getLogger(__name__)
@@ -474,6 +475,36 @@ class EligibilityService:
 
         # Default to basic student API
         return "student"
+
+    async def has_blocking_application(self, user_id: int, config) -> bool:
+        """Whether the student already has a submitted-and-beyond application
+        for this scholarship configuration — i.e. one that should HIDE the
+        scholarship from the apply flow.
+
+        Uses the same (user, type, year, semester) key and semester comparison
+        as the DUPLICATE_APPLICATION guard so 'shown ⟺ submittable' holds. An
+        EXISTS query: deterministic, no None edge, safe with multiple rows.
+        """
+        if config.semester:
+            semester_filter = Application.semester == config.semester
+        else:
+            semester_filter = Application.semester.is_(None)
+
+        stmt = (
+            select(Application.id)
+            .where(
+                and_(
+                    Application.user_id == user_id,
+                    Application.scholarship_type_id == config.scholarship_type_id,
+                    Application.academic_year == config.academic_year,
+                    semester_filter,
+                    Application.status.in_(HIDDEN_APPLICATION_STATUSES),
+                )
+            )
+            .limit(1)
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none() is not None
 
     async def get_application_status(self, user_id: int, config: ScholarshipConfiguration) -> Dict[str, Any]:
         """Get application status for a specific scholarship configuration
