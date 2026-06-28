@@ -84,6 +84,7 @@ async def test_no_application_is_not_blocking(db, test_user, test_scholarship):
 # harness ignores the partial `postgresql_where` clause, treating it as a FULL
 # unique index — so ANY two same-config rows collide there. The re-applyable
 # semantics are already covered by the ("rejected", False) truth-table case
-# above. `has_blocking_application` is structurally single-row via `.limit(1)`,
-# which still matters: a soft-deleted row CAN coexist with a live one on
-# PostgreSQL (excluded from the partial index by `deleted_at IS NULL`).
+# above. `has_blocking_application` is multi-row safe by construction: it uses a
+# native `exists()` query, which always yields a single boolean no matter how
+# many rows match (a soft-deleted row CAN coexist with a live one on PostgreSQL —
+# excluded from the partial index by `deleted_at IS NULL`).
