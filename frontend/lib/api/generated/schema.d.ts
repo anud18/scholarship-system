@@ -8985,6 +8985,11 @@ export interface components {
             subtype_eligibility: {
                 [key: string]: components["schemas"]["SubtypeEligibilityInfo"];
             };
+            /**
+             * Already Submitted
+             * @default false
+             */
+            already_submitted: boolean;
         };
         /** EmailAutomationRuleCreate */
         EmailAutomationRuleCreate: {
