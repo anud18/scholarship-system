@@ -66,6 +66,7 @@ import apiClient, {
   ScholarshipConfigurationFormData,
 } from "@/lib/api";
 import { WhitelistManagementDialog } from "./whitelist-management-dialog";
+import { QuotaExcelButtons } from "@/components/admin/quota-import/QuotaExcelButtons";
 import { QuotaManagementMode, getQuotaManagementModeLabel } from "@/lib/enums";
 import { toast } from "sonner";
 const api = apiClient;
@@ -273,6 +274,16 @@ export function AdminConfigurationManagement({
   >([]);
   const [selectedScholarshipType, setSelectedScholarshipType] =
     useState<ScholarshipType | null>(null);
+  // `getMyScholarships` (admin/scholarships.py) returns `sub_type_list` (NOT `all_sub_type_list`),
+  // and it mirrors the column the backend quota validator checks — keep these in sync. The cast is
+  // needed because the ScholarshipType TS type declares only `all_sub_type_list`.
+  // Mirror the backend's `sub_type_list or DEFAULT_PHD_SUB_TYPES`: an empty list
+  // (the admin endpoint returns `sub_type_list or []`) must fall back to the default,
+  // not stay empty — otherwise FE rows would diverge from the BE allow-list.
+  const subTypeList = (selectedScholarshipType as { sub_type_list?: string[] })?.sub_type_list;
+  const quotaSubTypes = (subTypeList?.length ? subTypeList : ["nstc", "moe_1w", "moe_2w"]).map(
+    code => ({ code })
+  );
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
@@ -1872,6 +1883,15 @@ export function AdminConfigurationManagement({
                 )}
 
                 {formData.quota_management_mode === "matrix_based" && (
+                  <QuotaExcelButtons
+                    quotas={(typeof formData.quotas === "object" && formData.quotas) || {}}
+                    subTypes={quotaSubTypes}
+                    configCode={formData.config_code}
+                    onApply={next => setFormData(prev => ({ ...prev, quotas: next }))}
+                  />
+                )}
+
+                {formData.quota_management_mode === "matrix_based" && (
                   <SharedQuotaSourcesPicker
                     value={
                       Array.isArray(formData.shared_quota_sources)
@@ -2355,6 +2375,15 @@ export function AdminConfigurationManagement({
                       className="min-h-[100px] font-mono text-sm"
                     />
                   </div>
+                )}
+
+                {formData.quota_management_mode === "matrix_based" && (
+                  <QuotaExcelButtons
+                    quotas={(typeof formData.quotas === "object" && formData.quotas) || {}}
+                    subTypes={quotaSubTypes}
+                    configCode={formData.config_code}
+                    onApply={next => setFormData(prev => ({ ...prev, quotas: next }))}
+                  />
                 )}
 
                 {formData.quota_management_mode === "matrix_based" && (

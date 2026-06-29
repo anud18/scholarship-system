@@ -22,10 +22,12 @@ from app.db.deps import get_db
 
 # Student model removed - student data now fetched from external API
 from app.models.application import Application, ApplicationStatus
-from app.models.enums import Semester
+from app.models.enums import QuotaManagementMode, Semester
 from app.models.audit_log import AuditAction, AuditLog
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
+from app.models.student import Academy
 from app.models.user import AdminScholarship, User
+from app.utils.quota_validation import validate_quota_matrix
 from app.schemas.response import ApiResponse
 from app.schemas.scholarship_configuration import (
     WhitelistBatchAddRequest,
@@ -99,6 +101,62 @@ def taiwan_to_western_year(taiwan_year: int) -> int:
 def western_to_taiwan_year(western_year: int) -> int:
     """Convert Western calendar year to Taiwan calendar year (民國年)"""
     return western_year - 1911
+
+
+DEFAULT_PHD_SUB_TYPES = ["nstc", "moe_1w", "moe_2w"]
+
+
+async def _resolve_quota_allowlists(db: AsyncSession, scholarship_type_id: int):
+    """Return (allowed_sub_types, allowed_college_codes) for matrix validation."""
+    sub_result = await db.execute(
+        select(ScholarshipType.sub_type_list).where(ScholarshipType.id == scholarship_type_id)
+    )
+    sub_types = sub_result.scalar_one_or_none() or DEFAULT_PHD_SUB_TYPES
+    col_result = await db.execute(select(Academy.code))
+    college_codes = list(col_result.scalars().all())
+    return sub_types, college_codes
+
+
+async def _apply_quota_fields(db: AsyncSession, config, config_data, *, scholarship_type_id: int):
+    """Assign quota fields from config_data onto config, validating the matrix.
+
+    Shared by create and update so the rules cannot drift. In matrix_based mode the
+    matrix is structurally re-validated (422 on violation) and total_quota is
+    recomputed as the sum of all cells (the body's total_quota is ignored).
+    """
+    if "quota_management_mode" in config_data:
+        raw_mode = config_data["quota_management_mode"]
+        if not raw_mode:
+            config.quota_management_mode = QuotaManagementMode.none
+        else:
+            resolved_mode = next((m for m in QuotaManagementMode if m.value == raw_mode), None)
+            if resolved_mode is None:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"未知的配額管理模式：{raw_mode}",
+                )
+            config.quota_management_mode = resolved_mode
+    if "has_quota_limit" in config_data:
+        config.has_quota_limit = config_data["has_quota_limit"]
+    if "has_college_quota" in config_data:
+        config.has_college_quota = config_data["has_college_quota"]
+
+    is_matrix = config.quota_management_mode == QuotaManagementMode.matrix_based
+    if "quotas" in config_data and config_data["quotas"] is not None:
+        quotas = config_data["quotas"]
+        if is_matrix:
+            sub_types, college_codes = await _resolve_quota_allowlists(db, scholarship_type_id)
+            errors = validate_quota_matrix(quotas, sub_types, college_codes)
+            if errors:
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="；".join(errors))
+            # matrix mode derives total_quota from the cell-sum; ignore any body total_quota
+            config.total_quota = sum(sum(row.values()) for row in quotas.values() if isinstance(row, dict))
+        elif "total_quota" in config_data:
+            config.total_quota = config_data["total_quota"]
+        config.quotas = quotas
+        flag_modified(config, "quotas")
+    elif "total_quota" in config_data and not is_matrix:
+        config.total_quota = config_data["total_quota"]
 
 
 async def get_user_accessible_scholarship_ids(user: User, db: AsyncSession) -> List[int]:
@@ -846,6 +904,9 @@ async def create_scholarship_configuration(
             created_by=current_user.id,
         )
 
+        # Persist + validate quota fields (create previously dropped them).
+        await _apply_quota_fields(db, new_config, config_data, scholarship_type_id=scholarship_type_id)
+
         db.add(new_config)
         await db.commit()
         await db.refresh(new_config)
@@ -977,7 +1038,7 @@ async def update_scholarship_configuration(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Update a scholarship configuration (excluding quota fields)"""
+    """Update a scholarship configuration (quota fields included; matrix validated)."""
 
     try:
         # Get accessible scholarship IDs
@@ -1064,32 +1125,8 @@ async def update_scholarship_configuration(
         if "version" in config_data:
             config.version = config_data["version"]
 
-        # Update quota management settings
-        if "quota_management_mode" in config_data:
-            from app.models.enums import QuotaManagementMode
-
-            mode_value = config_data["quota_management_mode"]
-            if mode_value:
-                # Find the enum by its value
-                mode_enum = None
-                for mode in QuotaManagementMode:
-                    if mode.value == mode_value:
-                        mode_enum = mode
-                        break
-                if mode_enum:
-                    config.quota_management_mode = mode_enum
-            else:
-                config.quota_management_mode = QuotaManagementMode.none
-
-        if "has_quota_limit" in config_data:
-            config.has_quota_limit = config_data["has_quota_limit"]
-        if "has_college_quota" in config_data:
-            config.has_college_quota = config_data["has_college_quota"]
-        if "total_quota" in config_data:
-            config.total_quota = config_data["total_quota"]
-        if "quotas" in config_data:
-            config.quotas = config_data["quotas"]
-            flag_modified(config, "quotas")
+        # Update quota management settings (validated; matrix mode recomputes total).
+        await _apply_quota_fields(db, config, config_data, scholarship_type_id=config.scholarship_type_id)
         if "project_numbers" in config_data:
             config.project_numbers = config_data["project_numbers"]
             flag_modified(config, "project_numbers")
