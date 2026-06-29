@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -43,6 +44,7 @@ export function QuotaImportDialog({
       <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>匯入配額預覽</DialogTitle>
+          <DialogDescription className="sr-only">預覽 Excel 匯入的配額矩陣，確認後套用至配額設定。</DialogDescription>
         </DialogHeader>
 
         <div className="overflow-x-auto">
