@@ -471,9 +471,21 @@ class ExcelExportService:
         """Compatibility helper for legacy calls that expect filtered roster items"""
         return self._get_roster_items(roster, include_excluded)
 
-    def _prepare_excel_data(self, roster: PaymentRoster, roster_items: List[PaymentRosterItem]) -> List[Dict]:
-        """準備Excel資料 - STD_UP_MIXLISTA 30欄位格式"""
-        excel_data = []
+    def _prepare_excel_data(
+        self,
+        roster: PaymentRoster,
+        roster_items: List[PaymentRosterItem],
+        rule_columns: Optional[List[Tuple[int, str]]] = None,
+    ) -> Tuple[List[Dict], List[Dict[str, str]]]:
+        """準備 Excel 資料 — base 30 欄 + 資格驗證欄。
+
+        回傳 (excel_data, cell_fills)：cell_fills 與 excel_data 等長平行，
+        每筆為 {欄名: "red"|"amber"}，供 _create_excel_file 套色。
+        item.excel_row_data 仍寫回乾淨 row dict（不含 fills）。
+        """
+        rule_columns = rule_columns or []
+        excel_data: List[Dict] = []
+        cell_fills: List[Dict[str, str]] = []
 
         for idx, item in enumerate(roster_items, start=1):
             # 取得學生相關資訊
@@ -564,14 +576,57 @@ class ExcelExportService:
                 "分發獎學金": self._format_allocation_display(item),
             }
 
-            # 儲存Excel行資料到資料庫
+            fills: Dict[str, str] = {}
+
+            # 銀行帳號缺漏 → 帳號欄紅
+            if not item.bank_account:
+                fills[self.COL_BANK_ACCOUNT] = "red"
+
+            # 學籍驗證
+            status = item.verification_status
+            row_data[self.COL_VERIFICATION] = self._get_verification_status_label(status)
+            status_value = status.value if hasattr(status, "value") else str(status)
+            if status_value != "verified":
+                fills[self.COL_VERIFICATION] = "red"
+
+            # 整體規則資格（重用 is_eligible property；stub 以屬性提供）
+            elig = getattr(item, "is_eligible", None)
+            row_data[self.COL_RULE_SUMMARY] = "符合" if elig is True else ("不符合" if elig is False else "—")
+            if elig is False:
+                fills[self.COL_RULE_SUMMARY] = "red"
+
+            # 逐條規則欄（讀凍結快照，不重跑）
+            rvr = item.rule_validation_result
+            details = rvr.get("details") if isinstance(rvr, dict) else None
+            for rid, header in rule_columns:
+                res = details.get(f"rule_{rid}") if isinstance(details, dict) else None
+                if isinstance(res, dict) and "passed" in res:
+                    passed = res.get("passed")
+                    row_data[header] = "通過" if passed else "未通過"
+                    if not passed:
+                        if res.get("is_hard_rule"):
+                            fills[header] = "red"
+                        elif res.get("is_warning"):
+                            fills[header] = "amber"
+                else:
+                    row_data[header] = "—"
+
+            # 納入造冊 / 排除原因
+            row_data[self.COL_INCLUDED] = "是" if item.is_included else "否"
+            row_data[self.COL_EXCLUSION] = item.exclusion_reason or ""
+            if not item.is_included:
+                fills[self.COL_INCLUDED] = "red"
+                fills[self.COL_EXCLUSION] = "red"
+
+            # 儲存Excel行資料到資料庫（乾淨 row dict，不含 fills metadata）
             item.excel_row_data = row_data
             item.excel_remarks = remarks
 
             excel_data.append(row_data)
+            cell_fills.append(fills)
 
-        logger.info(f"Prepared {len(excel_data)} rows for 30-column format export")
-        return excel_data
+        logger.info(f"Prepared {len(excel_data)} rows for export ({len(rule_columns)} rule columns)")
+        return excel_data, cell_fills
 
     def _validate_export_data(self, excel_data: List[Dict]) -> Dict[str, Any]:
         """驗證STD_UP_MIXLISTA格式匯出資料品質"""

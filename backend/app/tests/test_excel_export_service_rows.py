@@ -80,6 +80,10 @@ def _make_item(
     allocated_sub_type: Optional[str] = None,
     allocation_year: Optional[int] = None,
     is_included: bool = True,
+    verification_status: str = "verified",
+    is_eligible: Optional[bool] = True,
+    rule_validation_result: Optional[dict] = None,
+    exclusion_reason: Optional[str] = None,
 ) -> SimpleNamespace:
     """PaymentRosterItem stub with just the attrs _prepare_excel_data reads.
 
@@ -97,6 +101,10 @@ def _make_item(
         allocated_sub_type=allocated_sub_type,
         allocation_year=allocation_year,
         is_included=is_included,
+        verification_status=verification_status,
+        is_eligible=is_eligible,
+        rule_validation_result=rule_validation_result,
+        exclusion_reason=exclusion_reason,
         # Write-back targets — pre-init so SimpleNamespace accepts assignment
         excel_row_data=None,
         excel_remarks=None,
@@ -118,7 +126,7 @@ def test_row_data_national_id_comes_from_student_id_number(service: ExcelExportS
     roster = _make_roster()
     item = _make_item(student_id_number="A987654321", student_name="陳大文")
 
-    data = service._prepare_excel_data(roster, [item])
+    data, _ = service._prepare_excel_data(roster, [item])
 
     assert len(data) == 1
     assert data[0]["身分證字號"] == "A987654321"
@@ -137,7 +145,7 @@ def test_row_data_skips_items_missing_required_fields(service: ExcelExportServic
         _make_item(student_id_number="A2", student_name="正常"),  # ok
     ]
 
-    data = service._prepare_excel_data(roster, items)
+    data, _ = service._prepare_excel_data(roster, items)
 
     assert len(data) == 1
     assert data[0]["身分證字號"] == "A2"
@@ -158,7 +166,7 @@ def test_row_data_amount_matches_scholarship_amount(service: ExcelExportService)
     roster = _make_roster()
     item = _make_item(scholarship_amount=50000)
 
-    data = service._prepare_excel_data(roster, [item])
+    data, _ = service._prepare_excel_data(roster, [item])
 
     assert data[0]["單價"] == 50000.0
     assert data[0]["免稅給付"] == 50000.0
@@ -174,7 +182,7 @@ def test_row_data_amount_zero_when_scholarship_amount_falsy(service: ExcelExport
     roster = _make_roster()
     item = _make_item(scholarship_amount=None)
 
-    data = service._prepare_excel_data(roster, [item])
+    data, _ = service._prepare_excel_data(roster, [item])
 
     assert data[0]["單價"] == 0
     assert data[0]["免稅給付"] == 0
@@ -193,7 +201,7 @@ def test_row_data_bank_code_always_700(service: ExcelExportService) -> None:
     roster = _make_roster()
     item = _make_item()
 
-    data = service._prepare_excel_data(roster, [item])
+    data, _ = service._prepare_excel_data(roster, [item])
 
     assert data[0]["銀行代碼"] == "700"
 
@@ -206,7 +214,7 @@ def test_row_data_fixed_columns_contract(service: ExcelExportService) -> None:
     roster = _make_roster()
     item = _make_item()
 
-    data = service._prepare_excel_data(roster, [item])
+    data, _ = service._prepare_excel_data(roster, [item])
 
     row = data[0]
     assert row["職別(稱)"] == "學生"
@@ -225,7 +233,7 @@ def test_row_data_bank_account_passed_through_from_item(service: ExcelExportServ
     with_account = _make_item(bank_account="00012345678")
     no_account = _make_item(student_id_number="A2", bank_account=None)
 
-    data = service._prepare_excel_data(roster, [with_account, no_account])
+    data, _ = service._prepare_excel_data(roster, [with_account, no_account])
 
     assert data[0]["帳號"] == "00012345678"
     assert data[1]["帳號"] == ""
@@ -248,7 +256,7 @@ def test_row_data_remarks_includes_period_and_scholarship(service: ExcelExportSe
         allocation_year=114,
     )
 
-    data = service._prepare_excel_data(roster, [item])
+    data, _ = service._prepare_excel_data(roster, [item])
 
     remarks = data[0]["說明"]
     assert "期間:2025-H1" in remarks
@@ -265,7 +273,7 @@ def test_row_data_remarks_flags_excluded_status(service: ExcelExportService) -> 
     roster = _make_roster()
     item = _make_item(is_included=False, bank_account=None)
 
-    data = service._prepare_excel_data(roster, [item])
+    data, _ = service._prepare_excel_data(roster, [item])
 
     remarks = data[0]["說明"]
     assert "狀態:不合格" in remarks
@@ -286,7 +294,7 @@ def test_row_data_written_back_to_item(service: ExcelExportService) -> None:
     roster = _make_roster()
     item = _make_item()
 
-    data = service._prepare_excel_data(roster, [item])
+    data, _ = service._prepare_excel_data(roster, [item])
 
     assert item.excel_row_data == data[0]
     assert item.excel_remarks == data[0]["說明"]
@@ -320,7 +328,7 @@ def test_empty_roster_prepare_excel_data_returns_empty_list(service: ExcelExport
     a TypeError on `len(excel_data)`."""
     roster = _make_roster()
 
-    data = service._prepare_excel_data(roster, [])
+    data, _ = service._prepare_excel_data(roster, [])
 
     assert data == []
 
@@ -432,3 +440,89 @@ def test_build_export_columns_layout(service):
 
     base = list(service.template_columns)
     assert cols == base + ["學籍驗證", "規則資格", "國籍", "GPA門檻", "納入造冊", "排除原因"]
+
+
+# ---------------------------------------------------------------------------
+# Verification columns + per-rule columns + cell fill metadata
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_returns_rows_and_parallel_fills(service):
+    roster = _make_roster()
+    item = _make_item()
+    rows, fills = service._prepare_excel_data(roster, [item], [])
+    assert len(rows) == len(fills) == 1
+
+
+def test_verification_and_rule_columns_values(service):
+    roster = _make_roster()
+    item = _make_item(student_name="甲")
+    item.verification_status = "verified"
+    item.is_eligible = True
+    item.rule_validation_result = {
+        "is_eligible": True,
+        "details": {
+            "rule_2": {"passed": True, "rule_name": "國籍", "is_hard_rule": True},
+            "rule_5": {"passed": False, "rule_name": "GPA門檻", "is_hard_rule": True},
+            "rule_8": {"passed": False, "rule_name": "在學", "is_warning": True},
+        },
+    }
+    rule_columns = service._collect_rule_columns([item])  # [(2,國籍),(5,GPA門檻),(8,在學)]
+
+    rows, fills = service._prepare_excel_data(roster, [item], rule_columns)
+
+    r, f = rows[0], fills[0]
+    assert r["學籍驗證"] == "已驗證"
+    assert r["規則資格"] == "符合"
+    assert r["國籍"] == "通過"
+    assert r["GPA門檻"] == "未通過"
+    assert r["在學"] == "未通過"
+    assert r["納入造冊"] == "是"
+    # fills: hard fail → red, warning fail → amber, passed → no entry
+    assert "國籍" not in f
+    assert f["GPA門檻"] == "red"
+    assert f["在學"] == "amber"
+
+
+def test_unverified_and_excluded_and_missing_bank_fills_red(service):
+    roster = _make_roster()
+    item = _make_item(student_name="乙", bank_account=None, is_included=False)
+    item.verification_status = "graduated"
+    item.is_eligible = False
+    item.exclusion_reason = "學籍驗證未通過: graduated"
+
+    rows, fills = service._prepare_excel_data(roster, [item], [])
+
+    r, f = rows[0], fills[0]
+    assert r["學籍驗證"] == "已畢業"
+    assert r["規則資格"] == "不符合"
+    assert r["納入造冊"] == "否"
+    assert r["排除原因"] == "學籍驗證未通過: graduated"
+    assert f["學籍驗證"] == "red"
+    assert f["規則資格"] == "red"
+    assert f["帳號"] == "red"
+    assert f["納入造冊"] == "red"
+    assert f["排除原因"] == "red"
+
+
+def test_no_snapshot_item_renders_dashes_without_fill(service):
+    roster = _make_roster()
+    item = _make_item(student_name="丙")
+    item.is_eligible = None
+    item.rule_validation_result = None
+
+    rows, fills = service._prepare_excel_data(roster, [item], [(2, "國籍")])
+
+    assert rows[0]["規則資格"] == "—"
+    assert rows[0]["國籍"] == "—"
+    assert "規則資格" not in fills[0]
+    assert "國籍" not in fills[0]
+
+
+def test_excel_row_data_written_back_is_clean(service):
+    """write-back 不含上色 metadata（fills 走平行回傳，不污染 DB JSON）。"""
+    roster = _make_roster()
+    item = _make_item(student_name="丁")
+    rows, _ = service._prepare_excel_data(roster, [item], [])
+    assert item.excel_row_data == rows[0]
+    assert "__cell_fills__" not in item.excel_row_data
