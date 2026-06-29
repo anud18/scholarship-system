@@ -22,6 +22,27 @@ type CreateRankingInput = Omit<CreateRankingRequest, "force_new"> & {
   force_new?: boolean;
 };
 
+export interface DistributionStudent {
+  student_number: string;
+  student_name: string;
+  rank_position?: number;
+  backup_position?: number;
+}
+
+export interface DistributionSubTypeGroup {
+  code: string;
+  label: string;
+  label_en: string;
+  admitted: DistributionStudent[];
+  backup: DistributionStudent[];
+  rejected: DistributionStudent[];
+}
+
+export interface DistributionResults {
+  distribution_executed: boolean;
+  sub_types: DistributionSubTypeGroup[];
+}
+
 export function createCollegeApi() {
   return {
     /**
@@ -230,6 +251,31 @@ export function createCollegeApi() {
         }
       );
       return toApiResponse<unknown>(response);
+    },
+
+    /**
+     * College: own college's distribution outcomes (正取/備取/未錄取) by sub-type.
+     * GET /api/v1/college-review/distribution-results
+     * Admin-gated by ScholarshipConfiguration.allow_college_view_distribution (403 when closed).
+     */
+    getDistributionResults: async (params: {
+      scholarshipTypeId: number;
+      academicYear: number;
+      semester?: string;
+    }): Promise<ApiResponse<DistributionResults>> => {
+      const response = await typedClient.raw.GET(
+        "/api/v1/college-review/distribution-results",
+        {
+          params: {
+            query: {
+              scholarship_type_id: params.scholarshipTypeId,
+              academic_year: params.academicYear,
+              semester: params.semester,
+            },
+          },
+        }
+      );
+      return toApiResponse<DistributionResults>(response);
     },
 
     /**
@@ -539,6 +585,33 @@ export function createCollegeApi() {
         const err = await resp.json().catch(() => null);
         // Backend wraps HTTPException into ApiResponse { success, message, trace_id }
         // — prefer `message`, fall back to FastAPI's bare `detail` shape.
+        throw new Error(err?.message || err?.detail || "操作失敗");
+      }
+      return resp.json();
+    },
+
+    /**
+     * Admin: toggle college visibility of distribution results for a configuration.
+     * PATCH /api/v1/scholarship-configurations/configurations/{id}/college-view-distribution
+     */
+    toggleConfigCollegeViewDistribution: async (
+      configurationId: number,
+      allow: boolean
+    ): Promise<ApiResponse<{ id: number; allow_college_view_distribution: boolean }>> => {
+      const token = typedClient.getToken();
+      const resp = await fetch(
+        `/api/v1/scholarship-configurations/configurations/${configurationId}/college-view-distribution`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ allow }),
+        }
+      );
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => null);
         throw new Error(err?.message || err?.detail || "操作失敗");
       }
       return resp.json();
