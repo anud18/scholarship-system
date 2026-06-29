@@ -109,7 +109,7 @@ export function parseQuotaSheet(
       const code = colCode[j];
       if (!code) continue; // unknown/blank/duplicate column already reported
       const raw = row[j];
-      if (raw === undefined || raw === null || String(raw).trim() === "") {
+      if (norm(raw) === "") {
         quotas[sub][code] = 0;
         continue;
       }

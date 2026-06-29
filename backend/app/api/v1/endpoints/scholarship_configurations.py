@@ -125,14 +125,10 @@ async def _apply_quota_fields(db: AsyncSession, config, config_data, *, scholars
     recomputed as the sum of all cells (the body's total_quota is ignored).
     """
     if "quota_management_mode" in config_data:
-        mode_value = config_data["quota_management_mode"]
-        mode_enum = QuotaManagementMode.none
-        if mode_value:
-            for mode in QuotaManagementMode:
-                if mode.value == mode_value:
-                    mode_enum = mode
-                    break
-        config.quota_management_mode = mode_enum
+        config.quota_management_mode = next(
+            (m for m in QuotaManagementMode if m.value == config_data["quota_management_mode"]),
+            QuotaManagementMode.none,
+        )
     if "has_quota_limit" in config_data:
         config.has_quota_limit = config_data["has_quota_limit"]
     if "has_college_quota" in config_data:
