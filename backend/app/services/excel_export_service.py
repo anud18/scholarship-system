@@ -6,10 +6,9 @@ Excel export service for payment roster generation
 import hashlib
 import logging
 import os
-from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from openpyxl import Workbook, load_workbook
@@ -22,34 +21,6 @@ from app.models.payment_roster import PaymentRoster, PaymentRosterItem
 from app.services.minio_service import MinIOService
 
 logger = logging.getLogger(__name__)
-
-# --- Eligibility-verification enrichment (review-document columns) ----------
-# Appended after the STD_UP_MIXLISTA base columns. The per-rule columns sit
-# BETWEEN 學籍驗證 and 納入造冊 and are computed per roster (see
-# _collect_rule_columns), so they are not listed here.
-COL_VERIFICATION = "學籍驗證"  # verification_status label
-COL_INCLUDED = "納入造冊"  # is_included → 是/否
-COL_EXCLUSION = "排除原因"  # exclusion_reason
-COL_BANK_ACCOUNT = "帳號"  # existing base column 3 — reddened when blank
-
-# Per-rule cell labels (the value itself drives the fill, see _resolve_cell_fill)
-RULE_PASS_LABEL = "通過"
-RULE_FAIL_LABEL = "未通過"  # hard fail → red
-RULE_WARN_LABEL = "警告"  # warning fail → amber
-NOT_APPLICABLE = "—"  # rule has no detail for this student
-
-# verification_status labels (must match _get_verification_status_label) that
-# mean "not currently enrolled" → red. 已驗證 / unknown ("—") never red.
-BAD_VERIFICATION_LABELS = {"已畢業", "休學中", "已退學", "驗證錯誤", "查無此人"}
-
-# Manual-removal exclusion_reason prefixes — these items were intentionally
-# taken off a locked roster and must NOT reappear in the review export.
-MANUAL_REMOVAL_PREFIXES = ("鎖定後移除", "比對分發移除")
-
-# Excel standard "bad" red and "neutral" amber conditional-format fills.
-RED_FILL = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
-AMBER_FILL = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
-FILL_BY_KIND = {"red": RED_FILL, "amber": AMBER_FILL}
 
 
 class ExcelExportService:
@@ -70,14 +41,6 @@ class ExcelExportService:
         self.default_template_name = default_template
         self.ensure_export_directory()
         self._load_template_structure()
-        # Immutable base column list (STD_UP_MIXLISTA). The verification +
-        # per-rule columns are rebuilt onto this in _prepare_excel_data, so the
-        # column list never accumulates across calls.
-        self._base_columns: List[str] = list(self.template_columns)
-        # Per-rule column headers for the current export (set in
-        # _prepare_excel_data) — used by _resolve_cell_fill to scope the
-        # 未通過/警告 value-based fills to rule cells only.
-        self._rule_column_headers: set = set()
 
     def _get_template_paths(self) -> Dict[str, str]:
         """Get hardcoded template path mapping (CodeQL requirement)"""
@@ -382,101 +345,13 @@ class ExcelExportService:
             raise FileStorageError(f"Failed to export Excel file: {e}", file_name=file_name) from e
 
     def _get_roster_items(self, roster: PaymentRoster, include_excluded: bool) -> List[PaymentRosterItem]:
-        """取得造冊明細 (review scope).
-
-        Default (include_excluded=False): show included students PLUS students
-        auto-excluded for ineligibility (failed 學籍/規則/缺銀行) — so they can
-        be shown in red — but HIDE students manually removed after locking
-        (鎖定後移除 / 比對分發移除), which were intentionally taken off the list.
-
-        include_excluded=True returns everything, including manual removals.
-        """
-        items = list(roster.items)
+        """取得造冊明細"""
+        items = roster.items
 
         if not include_excluded:
-            items = [item for item in items if item.is_included or not self._is_manual_removal(item)]
+            items = [item for item in items if item.is_included]
 
-        return sorted(items, key=lambda x: x.student_name or "")
-
-    @staticmethod
-    def _is_manual_removal(item: PaymentRosterItem) -> bool:
-        """True if the item was manually removed (vs auto-excluded for ineligibility)."""
-        reason = getattr(item, "exclusion_reason", None) or ""
-        return reason.startswith(MANUAL_REMOVAL_PREFIXES)
-
-    def _collect_rule_columns(self, items: List[PaymentRosterItem]) -> List[Tuple[str, str]]:
-        """Build the dynamic per-rule column set from the frozen eligibility
-        snapshot (``item.rule_validation_result["details"]``).
-
-        Returns an ordered list of ``(rule_key, header)`` where rule_key is
-        ``"rule_<id>"`` and header is the rule's ``rule_name``. Ordered by
-        numeric rule id; on duplicate rule_name, the id is appended to keep
-        headers unique. Non-rule detail keys (no_rules_found / error) are
-        ignored. The Excel layer never re-evaluates rules — it only reads.
-        """
-        seen: Dict[str, str] = {}  # rule_key -> rule_name (first seen)
-        for item in items:
-            rvr = getattr(item, "rule_validation_result", None)
-            if not isinstance(rvr, dict):
-                continue
-            details = rvr.get("details")
-            if not isinstance(details, dict):
-                continue
-            for key, detail in details.items():
-                if not isinstance(key, str) or not key.startswith("rule_") or not isinstance(detail, dict):
-                    continue
-                seen.setdefault(key, detail.get("rule_name") or key)
-
-        def _rule_sort_key(key: str) -> Tuple[int, Any]:
-            try:
-                return (0, int(key.split("_", 1)[1]))
-            except (IndexError, ValueError):
-                return (1, key)
-
-        ordered_keys = sorted(seen, key=_rule_sort_key)
-        name_freq = Counter(seen[k] for k in ordered_keys)
-
-        columns: List[Tuple[str, str]] = []
-        for key in ordered_keys:
-            name = seen[key]
-            if name_freq[name] > 1:
-                rule_id = key.split("_", 1)[1] if "_" in key else key
-                header = f"{name} ({rule_id})"
-            else:
-                header = name
-            columns.append((key, header))
-        return columns
-
-    @staticmethod
-    def _rule_cell_value(detail: Optional[Dict[str, Any]]) -> str:
-        """Render one rule cell from its frozen detail dict."""
-        if not isinstance(detail, dict):
-            return NOT_APPLICABLE
-        if detail.get("passed"):
-            return RULE_PASS_LABEL
-        # A failure that is explicitly a warning (and not a hard rule) → amber;
-        # anything else (hard rule, error result with no severity) → red.
-        if detail.get("is_warning") and not detail.get("is_hard_rule"):
-            return RULE_WARN_LABEL
-        return RULE_FAIL_LABEL
-
-    def _resolve_cell_fill(self, column_name: str, value: Any, row: Dict[str, Any], rule_headers: set) -> Optional[str]:
-        """Pure red/amber/none decision for one cell, driven by the rendered
-        value + column identity (no separate fill map needed)."""
-        if column_name == COL_BANK_ACCOUNT:
-            return "red" if not value else None
-        if column_name == COL_VERIFICATION:
-            return "red" if value in BAD_VERIFICATION_LABELS else None
-        if column_name == COL_INCLUDED:
-            return "red" if value == "否" else None
-        if column_name == COL_EXCLUSION:
-            return "red" if row.get(COL_INCLUDED) == "否" else None
-        if column_name in rule_headers:
-            if value == RULE_FAIL_LABEL:
-                return "red"
-            if value == RULE_WARN_LABEL:
-                return "amber"
-        return None
+        return sorted(items, key=lambda x: x.student_name)
 
     def _resolve_template_path(self, template_name: Optional[str]) -> str:
         """
@@ -524,23 +399,8 @@ class ExcelExportService:
         return self._get_roster_items(roster, include_excluded)
 
     def _prepare_excel_data(self, roster: PaymentRoster, roster_items: List[PaymentRosterItem]) -> List[Dict]:
-        """準備Excel資料 - STD_UP_MIXLISTA 30欄位 + 資格驗證欄位
-
-        Appends, after the base columns: 學籍驗證, one column per scholarship
-        rule (read from the frozen eligibility snapshot), then 納入造冊 + 排除原因.
-        Rebuilt from the immutable base each call, so the column list is stable
-        regardless of how many times this runs.
-        """
+        """準備Excel資料 - STD_UP_MIXLISTA 30欄位格式"""
         excel_data = []
-
-        rule_columns = self._collect_rule_columns(roster_items)
-        self._rule_column_headers = {header for _, header in rule_columns}
-        self.template_columns = (
-            list(self._base_columns)
-            + [COL_VERIFICATION]
-            + [header for _, header in rule_columns]
-            + [COL_INCLUDED, COL_EXCLUSION]
-        )
 
         for idx, item in enumerate(roster_items, start=1):
             # 取得學生相關資訊
@@ -631,31 +491,13 @@ class ExcelExportService:
                 "分發獎學金": self._format_allocation_display(item),
             }
 
-            # --- 資格驗證欄位 (review document) ---
-            verification_status = getattr(item, "verification_status", None)
-            row_data[COL_VERIFICATION] = (
-                self._get_verification_status_label(verification_status)
-                if verification_status is not None
-                else NOT_APPLICABLE
-            )
-
-            # 每條規則一欄，值取自凍結的資格快照（不重新評估）
-            rvr = getattr(item, "rule_validation_result", None)
-            details = rvr.get("details") if isinstance(rvr, dict) else None
-            details = details if isinstance(details, dict) else {}
-            for rule_key, header in rule_columns:
-                row_data[header] = self._rule_cell_value(details.get(rule_key))
-
-            row_data[COL_INCLUDED] = "是" if getattr(item, "is_included", True) else "否"
-            row_data[COL_EXCLUSION] = getattr(item, "exclusion_reason", None) or ""
-
             # 儲存Excel行資料到資料庫
             item.excel_row_data = row_data
             item.excel_remarks = remarks
 
             excel_data.append(row_data)
 
-        logger.info(f"Prepared {len(excel_data)} rows for export ({len(self.template_columns)} columns)")
+        logger.info(f"Prepared {len(excel_data)} rows for 30-column format export")
         return excel_data
 
     def _validate_export_data(self, excel_data: List[Dict]) -> Dict[str, Any]:
@@ -771,15 +613,6 @@ class ExcelExportService:
                 wb = load_workbook(template_path)
                 ws = wb.active
                 logger.info("Using template file for Excel generation: %s", template_path)
-                # The template only defines the base columns; write headers for
-                # any appended verification/rule columns whose header cell is blank.
-                for col_idx, column_name in enumerate(self.template_columns, start=1):
-                    header_cell = ws.cell(row=1, column=col_idx)
-                    if header_cell.value in (None, ""):
-                        header_cell.value = column_name
-                        header_cell.font = Font(bold=True)
-                        header_cell.alignment = Alignment(horizontal="center", vertical="center")
-                        header_cell.fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
             else:
                 wb = Workbook()
                 ws = wb.active
@@ -815,11 +648,6 @@ class ExcelExportService:
                         cell.alignment = Alignment(horizontal="center")
                     elif column_name in ["申請日期", "核准日期", "造冊日期"] and isinstance(value, str) and value:
                         cell.alignment = Alignment(horizontal="center")
-
-                    # 不符合資格的儲存格使用紅底（警告使用琥珀色）
-                    fill_kind = self._resolve_cell_fill(column_name, value, row_data, self._rule_column_headers)
-                    if fill_kind:
-                        cell.fill = FILL_BY_KIND[fill_kind]
 
             total_rows = max(len(excel_data) + (1 if include_header else 0), 1)
             self._apply_excel_styling(ws, total_rows, include_header)
@@ -884,9 +712,6 @@ class ExcelExportService:
             "驗證狀態": 10,
             "申請身分": 14,
             "分發獎學金": 18,
-            COL_VERIFICATION: 10,
-            COL_INCLUDED: 8,
-            COL_EXCLUSION: 28,
         }
 
         for col_idx, column_name in enumerate(self.template_columns, start=1):
