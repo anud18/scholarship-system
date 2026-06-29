@@ -514,12 +514,9 @@ Expected: FAIL with 404 (route not found).
 
 - [ ] **Step 3: Add the college endpoint**
 
-In `backend/app/api/v1/endpoints/college_review/distribution.py`, append a new route (after `get_distribution_details`). The imports it needs — `select`, `and_`, `selectinload`, `Optional`, `Dict`, `ApiResponse`, `require_college`, `get_db`, `HTTPException`, `status`, `normalize_semester_value`, `CollegeRanking`, `CollegeRankingItem`, `ScholarshipConfiguration`, `ScholarshipType` — are already imported by `get_distribution_details`; additionally add at the top of the file if absent:
+In `backend/app/api/v1/endpoints/college_review/distribution.py`, append a new route (after `get_distribution_details`). The imports it needs — `select`, `and_`, `selectinload`, `Optional`, `Dict`, `ApiResponse`, `require_college`, `get_db`, `HTTPException`, `status`, `normalize_semester_value`, `CollegeRanking`, `CollegeRankingItem`, `ScholarshipConfiguration`, `ScholarshipType` — are already imported by `get_distribution_details`. No new imports are needed.
 
-```python
-from sqlalchemy import func as sa_func
-from app.models.application import Application
-```
+**College scoping is done in Python, NOT in SQL.** Do NOT use `json_extract_path_text` (it is Postgres-only — the test DB is SQLite — and `student_data` is an encrypted `StudentDataJSON` TypeDecorator; filter the decrypted dict in the loop instead).
 
 Then add:
 
@@ -606,11 +603,7 @@ async def get_college_distribution_results(
     items_stmt = (
         select(CollegeRankingItem)
         .options(selectinload(CollegeRankingItem.application))
-        .join(Application, CollegeRankingItem.application_id == Application.id)
-        .where(
-            CollegeRankingItem.ranking_id.in_(ranking_ids),
-            sa_func.json_extract_path_text(Application.student_data, "std_academyno") == college_code,
-        )
+        .where(CollegeRankingItem.ranking_id.in_(ranking_ids))
     )
     items = (await db.execute(items_stmt)).scalars().all()
 
@@ -628,6 +621,9 @@ async def get_college_distribution_results(
         if appn.status == "deleted" or appn.deleted_at is not None:
             continue
         sd = appn.student_data
+        # College scoping (Python-side; student_data is encrypted JSON, std_academyno is plaintext)
+        if sd.get("std_academyno") != college_code:
+            continue
         student = {
             "student_number": sd.get("std_stdcode") or sd.get("nycu_id") or "N/A",
             "student_name": sd.get("std_cname") or sd.get("name") or "N/A",
