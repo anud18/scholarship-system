@@ -374,3 +374,61 @@ def test_get_roster_items_include_excluded_shows_everything(service):
     names = [i.student_name for i in service._get_roster_items(roster, include_excluded=True)]
 
     assert names == ["手動移除", "納入"]  # sorted by student_name
+
+
+# ---------------------------------------------------------------------------
+# Rule column collection from frozen rule_validation_result snapshots
+# ---------------------------------------------------------------------------
+
+
+def _item_with_rules(name, details):
+    """details: dict like {"rule_5": {"passed": True, "rule_name": "GPA", ...}}"""
+    it = _make_item(student_name=name)
+    it.rule_validation_result = {"is_eligible": True, "details": details}
+    return it
+
+
+def test_collect_rule_columns_orders_by_rule_id_and_dedupes(service):
+    items = [
+        _item_with_rules(
+            "a",
+            {
+                "rule_5": {"passed": True, "rule_name": "GPA門檻"},
+                "rule_2": {"passed": False, "rule_name": "國籍"},
+            },
+        ),
+        _item_with_rules("b", {"rule_2": {"passed": True, "rule_name": "國籍"}, "no_rules_found": True}),
+    ]
+
+    cols = service._collect_rule_columns(items)
+
+    assert cols == [(2, "國籍"), (5, "GPA門檻")]
+
+
+def test_collect_rule_columns_disambiguates_duplicate_names(service):
+    items = [
+        _item_with_rules(
+            "a",
+            {
+                "rule_2": {"passed": True, "rule_name": "門檻"},
+                "rule_7": {"passed": True, "rule_name": "門檻"},
+            },
+        )
+    ]
+
+    cols = service._collect_rule_columns(items)
+
+    assert cols == [(2, "門檻"), (7, "門檻（#7）")]
+
+
+def test_collect_rule_columns_ignores_items_without_snapshot(service):
+    plain = _make_item(student_name="x")
+    plain.rule_validation_result = None
+    assert service._collect_rule_columns([plain]) == []
+
+
+def test_build_export_columns_layout(service):
+    cols = service._build_export_columns([(2, "國籍"), (5, "GPA門檻")])
+
+    base = list(service.template_columns)
+    assert cols == base + ["學籍驗證", "規則資格", "國籍", "GPA門檻", "納入造冊", "排除原因"]

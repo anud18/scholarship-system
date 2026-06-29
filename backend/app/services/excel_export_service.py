@@ -8,7 +8,7 @@ import logging
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from openpyxl import Workbook, load_workbook
@@ -32,6 +32,18 @@ class ExcelExportService:
         "payment_roster_template.xlsx",
         "scholarship_roster.xlsx",
     }
+
+    # 資格驗證欄名（附加於 base 30 欄之後）。逐條規則欄為動態，介於
+    # COL_RULE_SUMMARY 與 COL_INCLUDED 之間（見 _collect_rule_columns）。
+    COL_VERIFICATION = "學籍驗證"  # verification_status 標籤
+    COL_RULE_SUMMARY = "規則資格"  # is_eligible → 符合/不符合/—
+    COL_INCLUDED = "納入造冊"  # is_included → 是/否
+    COL_EXCLUSION = "排除原因"  # exclusion_reason
+    COL_BANK_ACCOUNT = "帳號"  # base 第 3 欄（缺帳號時標紅）
+
+    # 不符合 → 紅底（FFC7CE）；警告 → 琥珀底（FFEB9C），Excel 標準條件格式色。
+    RED_FILL = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+    AMBER_FILL = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
 
     def __init__(self):
         self.export_base_path = getattr(settings, "roster_export_dir", "./exports")
@@ -363,6 +375,56 @@ class ExcelExportService:
             items = [item for item in items if item.is_included or not self._is_manual_removal(item)]
 
         return sorted(items, key=lambda x: x.student_name)
+
+    def _collect_rule_columns(self, roster_items: List[PaymentRosterItem]) -> List[Tuple[int, str]]:
+        """從所有 item 的凍結快照 rule_validation_result["details"] 收集規則欄。
+
+        回傳依 rule_id 升冪排序的 (rule_id, header)；header 以 rule_name 為主，
+        若與 base/驗證欄名或其他規則 header 衝突，加上「（#id）」後綴確保唯一。
+        非規則鍵（no_rules_found / error）忽略。Excel 層只讀不重跑規則。
+        """
+        seen: Dict[int, str] = {}
+        for item in roster_items:
+            rvr = getattr(item, "rule_validation_result", None)
+            details = rvr.get("details") if isinstance(rvr, dict) else None
+            if not isinstance(details, dict):
+                continue
+            for key, res in details.items():
+                if not isinstance(key, str) or not key.startswith("rule_"):
+                    continue
+                suffix = key[len("rule_") :]
+                if not suffix.isdigit():
+                    continue
+                rid = int(suffix)
+                if rid in seen:
+                    continue
+                name = (res.get("rule_name") if isinstance(res, dict) else None) or f"規則{rid}"
+                seen[rid] = name
+
+        reserved = set(self.template_columns) | {
+            self.COL_VERIFICATION,
+            self.COL_RULE_SUMMARY,
+            self.COL_INCLUDED,
+            self.COL_EXCLUSION,
+        }
+        columns: List[Tuple[int, str]] = []
+        used = set(reserved)
+        for rid in sorted(seen):
+            header = seen[rid]
+            if header in used:
+                header = f"{header}（#{rid}）"
+            used.add(header)
+            columns.append((rid, header))
+        return columns
+
+    def _build_export_columns(self, rule_columns: List[Tuple[int, str]]) -> List[str]:
+        """組出本次匯出的完整欄位順序：base 30 欄 + 驗證欄 + 逐條規則欄 + 納入/排除。"""
+        return (
+            list(self.template_columns)
+            + [self.COL_VERIFICATION, self.COL_RULE_SUMMARY]
+            + [header for _, header in rule_columns]
+            + [self.COL_INCLUDED, self.COL_EXCLUSION]
+        )
 
     def _resolve_template_path(self, template_name: Optional[str]) -> str:
         """
