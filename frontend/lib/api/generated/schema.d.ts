@@ -3405,7 +3405,7 @@ export interface paths {
         get: operations["get_scholarship_configuration_api_v1_scholarship_configurations_configurations__id__get"];
         /**
          * Update Scholarship Configuration
-         * @description Update a scholarship configuration (excluding quota fields)
+         * @description Update a scholarship configuration (quota fields included; matrix validated).
          */
         put: operations["update_scholarship_configuration_api_v1_scholarship_configurations_configurations__id__put"];
         post?: never;
