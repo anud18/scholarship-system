@@ -61,6 +61,10 @@ const mockToggleConfigSupplementaryImport = jest
   .fn()
   .mockResolvedValue({ success: true, data: {} });
 
+const mockToggleCollegeView = jest
+  .fn()
+  .mockResolvedValue({ success: true, data: {} });
+
 const mockToggleScholarshipWhitelist = jest
   .fn()
   .mockResolvedValue({ success: true, data: {} });
@@ -91,6 +95,8 @@ jest.mock("@/lib/api", () => ({
     college: {
       toggleConfigSupplementaryImport: (...args: any[]) =>
         mockToggleConfigSupplementaryImport(...args),
+      toggleConfigCollegeViewDistribution: (...args: any[]) =>
+        mockToggleCollegeView(...args),
     },
     whitelist: {
       toggleScholarshipWhitelist: (...args: any[]) =>
@@ -145,6 +151,7 @@ mockApi.admin.duplicateScholarshipConfiguration =
   mockDuplicateScholarshipConfiguration;
 mockApi.college.toggleConfigSupplementaryImport =
   mockToggleConfigSupplementaryImport;
+mockApi.college.toggleConfigCollegeViewDistribution = mockToggleCollegeView;
 mockApi.whitelist.toggleScholarshipWhitelist = mockToggleScholarshipWhitelist;
 // Note: referenceData is already mocked in jest.mock() above
 
@@ -777,5 +784,48 @@ describe("AdminConfigurationManagement Component", () => {
     });
 
     // The form should have validation - specific validation testing would require more detailed form interaction
+  });
+
+  it("should toggle supplementary import via the shared ConfigToggleSwitch", async () => {
+    render(
+      <AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />
+    );
+
+    // Wait for the config rows (and their per-row toggles) to render.
+    await waitFor(() => {
+      expect(
+        screen.getByText("PhD獎學金114學年度第一學期")
+      ).toBeInTheDocument();
+    });
+
+    // First row is the 114 config (id 1; rows sort by academic_year desc).
+    const supplementaryToggle =
+      screen.getAllByLabelText("開放/關閉學院補充匯入")[0];
+    fireEvent.click(supplementaryToggle);
+
+    await waitFor(() => {
+      expect(mockToggleConfigSupplementaryImport).toHaveBeenCalledWith(1, true);
+    });
+  });
+
+  it("should toggle college-view distribution via the shared ConfigToggleSwitch", async () => {
+    render(
+      <AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("PhD獎學金114學年度第一學期")
+      ).toBeInTheDocument();
+    });
+
+    // First row is the 114 config (id 1; rows sort by academic_year desc).
+    const collegeViewToggle =
+      screen.getAllByLabelText("開放/關閉學院查看分發結果")[0];
+    fireEvent.click(collegeViewToggle);
+
+    await waitFor(() => {
+      expect(mockToggleCollegeView).toHaveBeenCalledWith(1, true);
+    });
   });
 });
