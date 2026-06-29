@@ -23,12 +23,18 @@ interface QuotaExcelButtonsProps {
 }
 
 export function QuotaExcelButtons({ quotas, subTypes, configCode, onApply }: QuotaExcelButtonsProps) {
-  const { academies } = useReferenceData();
+  const { academies, subTypeTranslations } = useReferenceData();
   const fileRef = useRef<HTMLInputElement>(null);
   const [result, setResult] = useState<QuotaParseResult | null>(null);
   const [open, setOpen] = useState(false);
 
   const colleges: KnownCollege[] = academies.map(a => ({ code: a.code, name: a.name }));
+  // Enrich sub-types with zh labels so the preview shows names and the parser can
+  // match Excel rows by label (parseQuotaSheet supports KnownSubType.label).
+  const labeledSubTypes: KnownSubType[] = subTypes.map(s => ({
+    code: s.code,
+    label: s.label ?? subTypeTranslations?.zh?.[s.code],
+  }));
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -44,7 +50,7 @@ export function QuotaExcelButtons({ quotas, subTypes, configCode, onApply }: Quo
         return;
       }
       const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 });
-      setResult(parseQuotaSheet(rows, colleges, subTypes, quotas));
+      setResult(parseQuotaSheet(rows, colleges, labeledSubTypes, quotas));
       setOpen(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "無法讀取 Excel 檔案");
@@ -53,7 +59,7 @@ export function QuotaExcelButtons({ quotas, subTypes, configCode, onApply }: Quo
 
   const handleTemplate = async () => {
     try {
-      await downloadQuotaTemplate(quotas, colleges, subTypes, configCode);
+      await downloadQuotaTemplate(quotas, colleges, labeledSubTypes, configCode);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "無法下載範本");
     }
@@ -76,7 +82,7 @@ export function QuotaExcelButtons({ quotas, subTypes, configCode, onApply }: Quo
         result={result}
         currentQuotas={quotas}
         knownColleges={colleges}
-        knownSubTypes={subTypes}
+        knownSubTypes={labeledSubTypes}
         onConfirm={onApply}
       />
     </div>

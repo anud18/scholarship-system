@@ -75,4 +75,10 @@ describe("parseQuotaSheet", () => {
     );
     expect(warnings.some(w => w.kind === "zeroed")).toBe(true);
   });
+
+  it("errors on an empty / header-less sheet instead of silently zeroing", () => {
+    const { errors } = parseQuotaSheet([], COLLEGES, SUBTYPES, { nstc: { C: 5 } });
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors.some(e => e.kind === "college")).toBe(true);
+  });
 });

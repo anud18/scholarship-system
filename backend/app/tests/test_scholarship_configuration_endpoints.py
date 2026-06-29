@@ -837,3 +837,16 @@ class TestScholarshipConfigurationQuotaImport:
         }
         resp = await authenticated_admin_client.post(BASE, json=payload)
         assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_rejects_unknown_quota_management_mode(
+        self, authenticated_admin_client, valid_config_payload, matrix_reference_data
+    ):
+        """An unrecognized quota_management_mode must 422, not silently downgrade to none."""
+        payload = {
+            **valid_config_payload,
+            "config_code": "MATRIX-BADMODE-113-1",
+            "quota_management_mode": "totally_bogus",
+        }
+        resp = await authenticated_admin_client.post(BASE, json=payload)
+        assert resp.status_code == 422

@@ -122,6 +122,14 @@ export function parseQuotaSheet(
     }
   }
 
+  // An empty / header-less sheet must not silently zero everything in a full replace.
+  if (seenCols.size === 0) {
+    errors.push({ kind: "college", severity: "error", message: "找不到有效的學院欄位（請確認標題列含學院代碼或名稱）" });
+  }
+  if (seenRows.size === 0) {
+    errors.push({ kind: "subType", severity: "error", message: "找不到有效的子類型列" });
+  }
+
   // Zeroed-cell warnings: a cell currently > 0 that the import sets to 0.
   for (const s of knownSubTypes) {
     for (const c of knownColleges) {

@@ -60,7 +60,7 @@ export function QuotaImportDialog({
             <tbody>
               {knownSubTypes.map(s => (
                 <tr key={s.code}>
-                  <td className="border p-1 font-medium">{s.label || s.code}</td>
+                  <th scope="row" className="border p-1 font-medium text-left">{s.label || s.code}</th>
                   {knownColleges.map(c => {
                     const before = currentQuotas?.[s.code]?.[c.code] ?? 0;
                     const after = result.quotas?.[s.code]?.[c.code] ?? 0;
@@ -82,12 +82,12 @@ export function QuotaImportDialog({
 
         {result.errors.length > 0 && (
           <ul className="mt-2 space-y-1 text-sm text-red-600">
-            {result.errors.map((e, i) => <li key={i}>⛔ {e.message}</li>)}
+            {result.errors.map((e, i) => <li key={i}><span aria-hidden="true">⛔</span> {e.message}</li>)}
           </ul>
         )}
         {result.warnings.length > 0 && (
           <ul className="mt-2 space-y-1 text-sm text-amber-600">
-            {result.warnings.map((w, i) => <li key={i}>⚠ {w.message}</li>)}
+            {result.warnings.map((w, i) => <li key={i}><span aria-hidden="true">⚠</span> {w.message}</li>)}
           </ul>
         )}
 

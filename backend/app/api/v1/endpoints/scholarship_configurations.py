@@ -125,28 +125,37 @@ async def _apply_quota_fields(db: AsyncSession, config, config_data, *, scholars
     recomputed as the sum of all cells (the body's total_quota is ignored).
     """
     if "quota_management_mode" in config_data:
-        config.quota_management_mode = next(
-            (m for m in QuotaManagementMode if m.value == config_data["quota_management_mode"]),
-            QuotaManagementMode.none,
-        )
+        raw_mode = config_data["quota_management_mode"]
+        if not raw_mode:
+            config.quota_management_mode = QuotaManagementMode.none
+        else:
+            resolved_mode = next((m for m in QuotaManagementMode if m.value == raw_mode), None)
+            if resolved_mode is None:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"未知的配額管理模式：{raw_mode}",
+                )
+            config.quota_management_mode = resolved_mode
     if "has_quota_limit" in config_data:
         config.has_quota_limit = config_data["has_quota_limit"]
     if "has_college_quota" in config_data:
         config.has_college_quota = config_data["has_college_quota"]
 
+    is_matrix = config.quota_management_mode == QuotaManagementMode.matrix_based
     if "quotas" in config_data and config_data["quotas"] is not None:
         quotas = config_data["quotas"]
-        if config.quota_management_mode == QuotaManagementMode.matrix_based:
+        if is_matrix:
             sub_types, college_codes = await _resolve_quota_allowlists(db, scholarship_type_id)
             errors = validate_quota_matrix(quotas, sub_types, college_codes)
             if errors:
                 raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="；".join(errors))
+            # matrix mode derives total_quota from the cell-sum; ignore any body total_quota
             config.total_quota = sum(sum(row.values()) for row in quotas.values() if isinstance(row, dict))
         elif "total_quota" in config_data:
             config.total_quota = config_data["total_quota"]
         config.quotas = quotas
         flag_modified(config, "quotas")
-    elif "total_quota" in config_data:
+    elif "total_quota" in config_data and not is_matrix:
         config.total_quota = config_data["total_quota"]
 
 
