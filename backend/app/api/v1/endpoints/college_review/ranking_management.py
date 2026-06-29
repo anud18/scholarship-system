@@ -182,6 +182,7 @@ async def get_rankings(
                     # Read flag from matching scholarship configuration (one flag per config,
                     # applies to all colleges' rankings under it)
                     "allow_supplementary_import": bool(config and config.allow_supplementary_import),
+                    "allow_college_view_distribution": bool(config and config.allow_college_view_distribution),
                     "ranking_status": ranking.ranking_status,
                     "distribution_executed": ranking.distribution_executed,
                     "created_at": ranking.created_at.isoformat(),
@@ -563,6 +564,7 @@ async def get_ranking(
                 # Read flag from matching scholarship configuration (one flag per config,
                 # applies to all colleges' rankings under it)
                 "allow_supplementary_import": bool(config and config.allow_supplementary_import),
+                "allow_college_view_distribution": bool(config and config.allow_college_view_distribution),
                 "ranking_status": ranking.ranking_status,
                 "distribution_executed": ranking.distribution_executed,
                 "sub_type_metadata": list(sub_type_metadata_map.values()),

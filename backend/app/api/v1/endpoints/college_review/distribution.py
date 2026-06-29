@@ -393,3 +393,157 @@ async def get_distribution_details(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve distribution details",
         ) from e
+
+
+@router.get("/distribution-results")
+async def get_college_distribution_results(
+    scholarship_type_id: int,
+    academic_year: int,
+    semester: Optional[str] = None,
+    current_user: User = Depends(require_college),
+    db: AsyncSession = Depends(get_db),
+):
+    """College-facing: this college's own students' distribution outcomes by sub-type.
+
+    Gated by ScholarshipConfiguration.allow_college_view_distribution (admin toggle).
+    Scoped to the caller's college_code. Allocation outcome only — no payment PII,
+    no allocation-year labels (outcomes for one sub-type are merged across years).
+    """
+    # Permission first, then read the flag (don't leak flag state to a college
+    # with no binding) — same ordering discipline as ranking_management.py.
+    college_code = current_user.college_code
+    if not college_code:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="使用者未綁定學院")
+
+    normalized_semester = normalize_semester_value(semester)
+
+    config_stmt = select(ScholarshipConfiguration).where(
+        and_(
+            ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+            ScholarshipConfiguration.academic_year == academic_year,
+            ScholarshipConfiguration.is_active.is_(True),
+        )
+    )
+    if normalized_semester:
+        config_stmt = config_stmt.where(ScholarshipConfiguration.semester == normalized_semester)
+    else:
+        config_stmt = config_stmt.where(ScholarshipConfiguration.semester.is_(None))
+    config = (await db.execute(config_stmt)).scalar_one_or_none()
+    if not config:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到對應的獎學金配置")
+
+    if not config.allow_college_view_distribution:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="分發結果尚未開放查看")
+
+    # Sub-type label metadata
+    st_stmt = (
+        select(ScholarshipType)
+        .options(selectinload(ScholarshipType.sub_type_configs))
+        .where(ScholarshipType.id == scholarship_type_id)
+    )
+    scholarship_type = (await db.execute(st_stmt)).scalar_one_or_none()
+    label_map: Dict[str, Dict[str, str]] = {}
+    if scholarship_type and getattr(scholarship_type, "sub_type_configs", None):
+        for sc in scholarship_type.sub_type_configs:
+            if sc.sub_type_code:
+                label_map[sc.sub_type_code] = {
+                    "label": sc.name or sc.sub_type_code,
+                    "label_en": sc.name_en or sc.name or sc.sub_type_code,
+                }
+
+    # Rankings for this (type, year, semester)
+    ranking_stmt = select(CollegeRanking).where(
+        and_(
+            CollegeRanking.scholarship_type_id == scholarship_type_id,
+            CollegeRanking.academic_year == academic_year,
+        )
+    )
+    if normalized_semester:
+        ranking_stmt = ranking_stmt.where(CollegeRanking.semester == normalized_semester)
+    else:
+        ranking_stmt = ranking_stmt.where(CollegeRanking.semester.is_(None))
+    rankings = (await db.execute(ranking_stmt)).scalars().all()
+    ranking_ids = [r.id for r in rankings]
+    ranking_sub_type = {r.id: r.sub_type_code for r in rankings}
+    distribution_executed = any(r.distribution_executed for r in rankings)
+
+    if not ranking_ids or not distribution_executed:
+        return ApiResponse(
+            success=True,
+            message="尚未分發",
+            data={"distribution_executed": distribution_executed, "sub_types": []},
+        )
+
+    items_stmt = (
+        select(CollegeRankingItem)
+        .options(selectinload(CollegeRankingItem.application))
+        .where(CollegeRankingItem.ranking_id.in_(ranking_ids))
+    )
+    items = (await db.execute(items_stmt)).scalars().all()
+
+    groups: Dict[str, Dict[str, list]] = {}
+
+    def bucket(code: str) -> Dict[str, list]:
+        if code not in groups:
+            groups[code] = {"admitted": [], "backup": [], "rejected": []}
+        return groups[code]
+
+    for item in items:
+        appn = item.application
+        if not appn or not appn.student_data:
+            continue
+        if appn.status == "deleted" or appn.deleted_at is not None:
+            continue
+        sd = appn.student_data
+        # College scoping (Python-side; student_data is encrypted JSON, std_academyno is plaintext)
+        if sd.get("std_academyno") != college_code:
+            continue
+        student = {
+            "student_number": sd.get("std_stdcode") or sd.get("nycu_id") or "N/A",
+            "student_name": sd.get("std_cname") or sd.get("name") or "N/A",
+        }
+        fallback_code = ranking_sub_type.get(item.ranking_id) or "unallocated"
+
+        if item.status == "rejected" or getattr(item, "college_rejected", False):
+            bucket(fallback_code)["rejected"].append(student)
+            continue
+
+        handled = False
+        if item.is_allocated and item.allocated_sub_type:
+            bucket(item.allocated_sub_type)["admitted"].append({**student, "rank_position": item.rank_position})
+            handled = True
+        if item.backup_allocations and isinstance(item.backup_allocations, list):
+            for ba in item.backup_allocations:
+                if not isinstance(ba, dict):
+                    continue
+                st_code = ba.get("sub_type")
+                if not st_code:
+                    continue
+                bucket(st_code)["backup"].append({**student, "backup_position": ba.get("backup_position")})
+                handled = True
+        if not handled:
+            bucket(fallback_code)["rejected"].append(student)
+
+    def meta(code: str) -> Dict[str, str]:
+        return label_map.get(code, {"label": code, "label_en": code})
+
+    sub_types = []
+    for code in sorted(groups.keys()):
+        m = meta(code)
+        g = groups[code]
+        sub_types.append(
+            {
+                "code": code,
+                "label": m["label"],
+                "label_en": m["label_en"],
+                "admitted": sorted(g["admitted"], key=lambda s: s.get("rank_position") or 0),
+                "backup": sorted(g["backup"], key=lambda s: s.get("backup_position") or 0),
+                "rejected": g["rejected"],
+            }
+        )
+
+    return ApiResponse(
+        success=True,
+        message="分發結果",
+        data={"distribution_executed": True, "sub_types": sub_types},
+    )
