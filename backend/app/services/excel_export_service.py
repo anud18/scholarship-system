@@ -243,8 +243,12 @@ class ExcelExportService:
             file_name = roster.generate_excel_filename()
             file_path = os.path.join(self.export_base_path, file_name)
 
-            # 準備Excel資料
-            excel_data = self._prepare_excel_data(roster, roster_items)
+            # 計算動態欄位（base 30 欄 + 驗證欄 + 逐條規則欄）
+            rule_columns = self._collect_rule_columns(roster_items)
+            export_columns = self._build_export_columns(rule_columns)
+
+            # 準備Excel資料 + 上色 metadata
+            excel_data, cell_fills = self._prepare_excel_data(roster, roster_items, rule_columns)
 
             # 驗證資料品質
             validation_result = self._validate_export_data(excel_data)
@@ -260,9 +264,11 @@ class ExcelExportService:
             # 建立Excel檔案
             self._create_excel_file(
                 excel_data,
+                cell_fills,
                 file_path,
                 roster,
                 template_path=resolved_template_path,
+                columns=export_columns,
                 include_header=include_header,
                 include_statistics=include_statistics,
             )
@@ -346,7 +352,7 @@ class ExcelExportService:
                 "qualified_count": qualified_count,
                 "disqualified_count": disqualified_count,
                 "validation_result": validation_result,
-                "template_columns": self.template_columns,
+                "template_columns": export_columns,
                 "template_name": resolved_template_name,
                 "include_header": include_header,
                 "include_statistics": include_statistics,
@@ -726,14 +732,16 @@ class ExcelExportService:
     def _create_excel_file(
         self,
         excel_data: List[Dict],
+        cell_fills: List[Dict[str, str]],
         file_path: str,
         roster: PaymentRoster,
         *,
         template_path: str,
+        columns: List[str],
         include_header: bool,
         include_statistics: bool,
     ):
-        """建立Excel檔案 - 優先使用模板檔案"""
+        """建立 Excel 檔案 — 依 columns 寫表頭/資料並套用紅/琥珀底。"""
         try:
             use_template = include_header and os.path.exists(template_path)
 
@@ -745,40 +753,40 @@ class ExcelExportService:
                 wb = Workbook()
                 ws = wb.active
                 ws.title = "印領清冊"
+                logger.info("Created new Excel file using default structure (include_header=%s)", include_header)
 
-                if include_header:
-                    for col_idx, column_name in enumerate(self.template_columns, start=1):
-                        cell = ws.cell(row=1, column=col_idx, value=column_name)
-                        cell.font = Font(bold=True)
-                        cell.alignment = Alignment(horizontal="center", vertical="center")
-                        cell.fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
-
-                logger.info(
-                    "Created new Excel file using default structure (include_header=%s)",
-                    include_header,
-                )
-
-            start_row = 2 if include_header else 1
-
-            if include_header and ws.max_row >= start_row:
-                ws.delete_rows(start_row, ws.max_row - start_row + 1)
-            elif not include_header and ws.max_row >= 1:
+            # 清掉既有列，統一依 columns 重寫表頭與資料
+            if ws.max_row >= 1:
                 ws.delete_rows(1, ws.max_row)
 
-            for row_idx, row_data in enumerate(excel_data, start=start_row):
-                for col_idx, column_name in enumerate(self.template_columns, start=1):
+            if include_header:
+                for col_idx, column_name in enumerate(columns, start=1):
+                    cell = ws.cell(row=1, column=col_idx, value=column_name)
+                    cell.font = Font(bold=True)
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+                    cell.fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
+                start_row = 2
+            else:
+                start_row = 1
+
+            for row_idx, (row_data, fills) in enumerate(zip(excel_data, cell_fills), start=start_row):
+                for col_idx, column_name in enumerate(columns, start=1):
                     value = row_data.get(column_name, "")
                     cell = ws.cell(row=row_idx, column=col_idx, value=value)
 
-                    if column_name in ["金額", "扣繳稅額"] and isinstance(value, (int, float)):
+                    if column_name in ["金額", "扣繳稅額", "單價", "免稅給付"] and isinstance(value, (int, float)):
                         cell.number_format = "#,##0"
                     elif column_name in ["序號", "流水號"]:
                         cell.alignment = Alignment(horizontal="center")
-                    elif column_name in ["申請日期", "核准日期", "造冊日期"] and isinstance(value, str) and value:
-                        cell.alignment = Alignment(horizontal="center")
+
+                    kind = fills.get(column_name)
+                    if kind == "red":
+                        cell.fill = self.RED_FILL
+                    elif kind == "amber":
+                        cell.fill = self.AMBER_FILL
 
             total_rows = max(len(excel_data) + (1 if include_header else 0), 1)
-            self._apply_excel_styling(ws, total_rows, include_header)
+            self._apply_excel_styling(ws, total_rows, include_header, columns)
 
             if include_statistics:
                 self._add_worksheet_info(wb, roster)
@@ -793,13 +801,13 @@ class ExcelExportService:
                 file_name=os.path.basename(file_path),
             ) from e
 
-    def _apply_excel_styling(self, ws, max_row: int, include_header: bool):
+    def _apply_excel_styling(self, ws, max_row: int, include_header: bool, columns: List[str]):
         """應用Excel樣式"""
-        self._set_column_widths(ws)
-        self._set_borders(ws, max_row)
+        self._set_column_widths(ws, columns)
+        self._set_borders(ws, max_row, columns)
         ws.freeze_panes = "A2" if include_header else None
 
-    def _set_column_widths(self, ws):
+    def _set_column_widths(self, ws, columns: List[str]):
         """設定欄寬 - 智慧調整基於欄位內容"""
         # 預設欄寬設定
         default_widths = {
@@ -840,14 +848,18 @@ class ExcelExportService:
             "驗證狀態": 10,
             "申請身分": 14,
             "分發獎學金": 18,
+            "學籍驗證": 12,
+            "規則資格": 10,
+            "納入造冊": 10,
+            "排除原因": 30,
         }
 
-        for col_idx, column_name in enumerate(self.template_columns, start=1):
+        for col_idx, column_name in enumerate(columns, start=1):
             width = default_widths.get(column_name, 12)
             column_letter = get_column_letter(col_idx)
             ws.column_dimensions[column_letter].width = width
 
-    def _set_borders(self, ws, max_row: int):
+    def _set_borders(self, ws, max_row: int, columns: List[str]):
         """設定邊框"""
         thin_border = Border(
             left=Side(style="thin"),
@@ -857,7 +869,7 @@ class ExcelExportService:
         )
 
         for row in range(1, max_row + 1):
-            for col in range(1, len(self.template_columns) + 1):
+            for col in range(1, len(columns) + 1):
                 ws.cell(row=row, column=col).border = thin_border
 
     def _add_worksheet_info(self, wb: Workbook, roster: PaymentRoster):
@@ -1039,8 +1051,10 @@ class ExcelExportService:
             # 取得造冊項目
             roster_items = self._get_filtered_roster_items(roster, include_excluded=include_excluded)
 
-            # 準備Excel資料
-            excel_data = self._prepare_excel_data(roster, roster_items)
+            # 計算動態欄位 + 準備Excel資料（預覽不需 fills）
+            rule_columns = self._collect_rule_columns(roster_items)
+            export_columns = self._build_export_columns(rule_columns)
+            excel_data, _ = self._prepare_excel_data(roster, roster_items, rule_columns)
 
             # 驗證資料
             validation_result = self._validate_export_data(excel_data)
@@ -1062,7 +1076,7 @@ class ExcelExportService:
             return {
                 "preview_data": preview_data,
                 "total_rows": len(excel_data),
-                "column_headers": self.template_columns,
+                "column_headers": export_columns,
                 "validation_result": validation_result,
                 "metadata": metadata,
             }

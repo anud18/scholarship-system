@@ -526,3 +526,85 @@ def test_excel_row_data_written_back_is_clean(service):
     rows, _ = service._prepare_excel_data(roster, [item], [])
     assert item.excel_row_data == rows[0]
     assert "__cell_fills__" not in item.excel_row_data
+
+
+# ---------------------------------------------------------------------------
+# End-to-end Excel write — headers, per-rule columns, red/amber cell fills
+# ---------------------------------------------------------------------------
+
+
+def test_create_excel_file_writes_headers_and_fills(service, tmp_path):
+    import openpyxl
+
+    roster = _make_roster()
+    item = _make_item(student_name="甲", bank_account=None, is_included=False)
+    item.verification_status = "withdrawn"
+    item.is_eligible = False
+    item.exclusion_reason = "學籍驗證未通過: withdrawn"
+    item.rule_validation_result = {
+        "is_eligible": False,
+        "details": {"rule_3": {"passed": False, "rule_name": "GPA", "is_hard_rule": True}},
+    }
+
+    rule_columns = service._collect_rule_columns([item])
+    columns = service._build_export_columns(rule_columns)
+    rows, fills = service._prepare_excel_data(roster, [item], rule_columns)
+
+    out = tmp_path / "roster.xlsx"
+    service._create_excel_file(
+        rows,
+        fills,
+        str(out),
+        roster,
+        template_path="/nonexistent.xlsx",
+        columns=columns,
+        include_header=True,
+        include_statistics=False,
+    )
+
+    wb = openpyxl.load_workbook(out)
+    ws = wb.active
+    header = [ws.cell(row=1, column=c).value for c in range(1, len(columns) + 1)]
+    assert header[-5:] == ["學籍驗證", "規則資格", "GPA", "納入造冊", "排除原因"]
+
+    def fill_of(col_name):
+        c = columns.index(col_name) + 1
+        return ws.cell(row=2, column=c).fill.start_color.rgb
+
+    assert "FFC7CE" in str(fill_of("學籍驗證"))  # red
+    assert "FFC7CE" in str(fill_of("GPA"))  # red (hard fail)
+    assert "FFC7CE" in str(fill_of("帳號"))  # red (missing bank)
+    assert "FFC7CE" in str(fill_of("納入造冊"))  # red
+    # 姓名欄不應上色
+    assert "FFC7CE" not in str(fill_of("姓名"))
+
+
+def test_create_excel_file_amber_for_warning_rule(service, tmp_path):
+    import openpyxl
+
+    roster = _make_roster()
+    item = _make_item(student_name="乙")
+    item.rule_validation_result = {
+        "is_eligible": True,
+        "details": {"rule_9": {"passed": False, "rule_name": "在學狀態", "is_warning": True}},
+    }
+    rule_columns = service._collect_rule_columns([item])
+    columns = service._build_export_columns(rule_columns)
+    rows, fills = service._prepare_excel_data(roster, [item], rule_columns)
+
+    out = tmp_path / "roster_amber.xlsx"
+    service._create_excel_file(
+        rows,
+        fills,
+        str(out),
+        roster,
+        template_path="/nonexistent.xlsx",
+        columns=columns,
+        include_header=True,
+        include_statistics=False,
+    )
+
+    wb = openpyxl.load_workbook(out)
+    ws = wb.active
+    c = columns.index("在學狀態") + 1
+    assert "FFEB9C" in str(ws.cell(row=2, column=c).fill.start_color.rgb)  # amber
