@@ -20,11 +20,12 @@ export function DistributionResultPanel({ scholarshipType }: DistributionResultP
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      setLoading(true);
-      setError(null);
-      if (typeof selectedAcademicYear !== "number") {
+      if (typeof selectedAcademicYear !== "number" || !Number.isFinite(selectedAcademicYear)) {
+        setLoading(false);
         return;
       }
+      setLoading(true);
+      setError(null);
       try {
         const { apiClient } = await import("@/lib/api");
         const resp = await apiClient.college.getDistributionResults({

@@ -33,6 +33,7 @@ interface CollegeRanking {
   scholarship_type_id?: number;
   academic_year?: number;
   semester?: string | null;
+  allow_college_view_distribution?: boolean;
   [key: string]: unknown;
 }
 

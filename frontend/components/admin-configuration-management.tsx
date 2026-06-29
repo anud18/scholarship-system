@@ -865,6 +865,10 @@ export function AdminConfigurationManagement({
                                         next
                                       )
                                     }
+                                    onChange={() =>
+                                      selectedScholarshipType &&
+                                      void loadConfigurations(selectedScholarshipType)
+                                    }
                                   />
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -883,6 +887,10 @@ export function AdminConfigurationManagement({
                                         config.id,
                                         next
                                       )
+                                    }
+                                    onChange={() =>
+                                      selectedScholarshipType &&
+                                      void loadConfigurations(selectedScholarshipType)
                                     }
                                   />
                                 </div>

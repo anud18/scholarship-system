@@ -344,7 +344,7 @@ function CollegeManagementContent({ user }: { user: User }) {
               /* college: 申請審核 + 學生排序 (+ 分發結果 when admin opens it) */
               (() => {
                 const showDistribution = filteredRankings.some(
-                  r => (r as { allow_college_view_distribution?: boolean }).allow_college_view_distribution === true
+                  r => r.allow_college_view_distribution === true
                 );
                 return (
                   <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">

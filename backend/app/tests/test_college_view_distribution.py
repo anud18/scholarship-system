@@ -219,6 +219,81 @@ async def test_distribution_results_403_when_flag_off(college_client_factory, co
         DIST_URL, params={"scholarship_type_id": sch_type.id, "academic_year": 114, "semester": "first"}
     )
     assert resp.status_code == 403
+    # Backend may wrap HTTPException into {success,message,...} OR return FastAPI's {detail}.
+    body = resp.json()
+    assert "分發結果尚未開放查看" in (body.get("detail") or body.get("message") or "")
+
+
+@pytest.mark.asyncio
+async def test_distribution_results_allocation_wins_over_college_rejected(college_client_factory, config, sch_type, db):
+    """FIX A precedence: a student who was actually allocated (is_allocated=True) must show
+    as 正取 (admitted) even when college_rejected=True — i.e. the admin overrode the college's
+    N. The allocation outcome wins over the college-rejection flag."""
+    config.allow_college_view_distribution = True
+    await db.commit()
+
+    ranking = CollegeRanking(
+        scholarship_type_id=sch_type.id,
+        sub_type_code="nstc",
+        academic_year=114,
+        semester="first",
+        ranking_name="nstc 114-1 override",
+        total_applications=1,
+        is_finalized=True,
+        distribution_executed=True,
+        allocated_count=1,
+    )
+    db.add(ranking)
+    await db.commit()
+    await db.refresh(ranking)
+
+    student = User(
+        nycu_id="cvd_student_OVR1",
+        email="cvd_student_OVR1@university.edu",
+        name="覆核錄取生",
+        user_type=UserType.student,
+        role=UserRole.student,
+    )
+    db.add(student)
+    appn = Application(
+        app_id="APP-CVD-OVR1",
+        student=student,  # distinct user_id satisfies uq(user_id, type, year, semester)
+        scholarship_type_id=sch_type.id,
+        academic_year=114,
+        semester="first",
+        status="approved",
+        sub_type_selection_mode=SubTypeSelectionMode.single,
+        student_data=_student_data("OVR1", "覆核錄取生", "A"),
+    )
+    db.add(appn)
+    await db.commit()
+    await db.refresh(appn)
+
+    db.add(
+        CollegeRankingItem(
+            ranking_id=ranking.id,
+            application_id=appn.id,
+            rank_position=1,
+            is_allocated=True,
+            allocated_sub_type="nstc",
+            college_rejected=True,  # admin overrode the college's N
+            status="allocated",
+        )
+    )
+    await db.commit()
+
+    cclient = await college_client_factory("A")
+    resp = await cclient.get(
+        DIST_URL, params={"scholarship_type_id": sch_type.id, "academic_year": 114, "semester": "first"}
+    )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    nstc = next(g for g in data["sub_types"] if g["code"] == "nstc")
+    admitted_numbers = {s["student_number"] for s in nstc["admitted"]}
+    rejected_numbers = {s["student_number"] for s in nstc["rejected"]}
+
+    assert "OVR1" in admitted_numbers  # allocation outcome wins -> 正取
+    assert "OVR1" not in rejected_numbers
 
 
 @pytest.mark.asyncio

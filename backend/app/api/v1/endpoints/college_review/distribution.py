@@ -492,21 +492,20 @@ async def get_college_distribution_results(
         appn = item.application
         if not appn or not appn.student_data:
             continue
-        if appn.status == "deleted" or appn.deleted_at is not None:
+        if appn.deleted_at is not None:
             continue
         sd = appn.student_data
         # College scoping (Python-side; student_data is encrypted JSON, std_academyno is plaintext)
-        if sd.get("std_academyno") != college_code:
+        student_college = (
+            sd.get("std_academyno") or sd.get("academy_code") or sd.get("college_code") or sd.get("std_college")
+        )
+        if student_college != college_code:
             continue
         student = {
             "student_number": sd.get("std_stdcode") or sd.get("nycu_id") or "N/A",
             "student_name": sd.get("std_cname") or sd.get("name") or "N/A",
         }
         fallback_code = ranking_sub_type.get(item.ranking_id) or "unallocated"
-
-        if item.status == "rejected" or getattr(item, "college_rejected", False):
-            bucket(fallback_code)["rejected"].append(student)
-            continue
 
         handled = False
         if item.is_allocated and item.allocated_sub_type:
