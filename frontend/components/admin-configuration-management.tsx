@@ -274,8 +274,11 @@ export function AdminConfigurationManagement({
   >([]);
   const [selectedScholarshipType, setSelectedScholarshipType] =
     useState<ScholarshipType | null>(null);
+  // `getMyScholarships` (admin/scholarships.py) returns `sub_type_list` (NOT `all_sub_type_list`),
+  // and it mirrors the column the backend quota validator checks — keep these in sync. The cast is
+  // needed because the ScholarshipType TS type declares only `all_sub_type_list`.
   const quotaSubTypes = (
-    selectedScholarshipType?.all_sub_type_list ??
+    (selectedScholarshipType as { sub_type_list?: string[] })?.sub_type_list ??
     ["nstc", "moe_1w", "moe_2w"]
   ).map(code => ({ code }));
   const [loading, setLoading] = useState(false);
