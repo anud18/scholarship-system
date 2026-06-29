@@ -323,3 +323,54 @@ def test_empty_roster_prepare_excel_data_returns_empty_list(service: ExcelExport
     data = service._prepare_excel_data(roster, [])
 
     assert data == []
+
+
+# ---------------------------------------------------------------------------
+# Roster item scope filter — auto-excluded shown, manual removals hidden
+# ---------------------------------------------------------------------------
+
+
+def _mk_scope_item(name, *, is_included, exclusion_reason=None):
+    it = _make_item(student_name=name, is_included=is_included)
+    it.exclusion_reason = exclusion_reason
+    return it
+
+
+def test_is_manual_removal_detects_lock_and_reconcile_prefixes(service):
+    assert (
+        service._is_manual_removal(_mk_scope_item("a", is_included=False, exclusion_reason="鎖定後移除[停發]：x"))
+        is True
+    )
+    assert (
+        service._is_manual_removal(
+            _mk_scope_item("b", is_included=False, exclusion_reason="比對分發移除：不在分發名單")
+        )
+        is True
+    )
+    assert (
+        service._is_manual_removal(_mk_scope_item("c", is_included=False, exclusion_reason="缺少銀行帳戶資訊")) is False
+    )
+    assert service._is_manual_removal(_mk_scope_item("d", is_included=True, exclusion_reason=None)) is False
+
+
+def test_get_roster_items_default_keeps_auto_excluded_hides_manual(service):
+    included = _mk_scope_item("納入", is_included=True)
+    auto_excluded = _mk_scope_item("自動排除", is_included=False, exclusion_reason="缺少銀行帳戶資訊")
+    manual = _mk_scope_item("手動移除", is_included=False, exclusion_reason="鎖定後移除[停發]：x")
+    roster = SimpleNamespace(items=[included, auto_excluded, manual])
+
+    names = [i.student_name for i in service._get_roster_items(roster, include_excluded=False)]
+
+    assert "納入" in names
+    assert "自動排除" in names
+    assert "手動移除" not in names
+
+
+def test_get_roster_items_include_excluded_shows_everything(service):
+    included = _mk_scope_item("納入", is_included=True)
+    manual = _mk_scope_item("手動移除", is_included=False, exclusion_reason="鎖定後移除[停發]：x")
+    roster = SimpleNamespace(items=[included, manual])
+
+    names = [i.student_name for i in service._get_roster_items(roster, include_excluded=True)]
+
+    assert names == ["手動移除", "納入"]  # sorted by student_name

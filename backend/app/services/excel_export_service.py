@@ -344,12 +344,23 @@ class ExcelExportService:
             logger.exception("Excel export failed")
             raise FileStorageError(f"Failed to export Excel file: {e}", file_name=file_name) from e
 
+    @staticmethod
+    def _is_manual_removal(item) -> bool:
+        """True 表示此 item 是「鎖定後手動移除」或「比對分發移除」，
+        應排除於資格驗證視圖之外（自動因資格不符排除者則保留並標紅）。"""
+        reason = getattr(item, "exclusion_reason", None)
+        return bool(reason and reason.startswith(("鎖定後移除", "比對分發移除")))
+
     def _get_roster_items(self, roster: PaymentRoster, include_excluded: bool) -> List[PaymentRosterItem]:
-        """取得造冊明細"""
-        items = roster.items
+        """取得造冊明細。
+
+        預設（include_excluded=False）：保留「納入」與「因資格不符自動排除」者，
+        隱藏「手動移除」者。include_excluded=True 時回傳全部（含手動移除）。
+        """
+        items = list(roster.items)
 
         if not include_excluded:
-            items = [item for item in items if item.is_included]
+            items = [item for item in items if item.is_included or not self._is_manual_removal(item)]
 
         return sorted(items, key=lambda x: x.student_name)
 
