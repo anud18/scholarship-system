@@ -952,6 +952,7 @@ async def get_scholarship_configuration(
             "review_deadline": config.review_deadline.isoformat() if config.review_deadline else None,
             "is_active": config.is_active,
             "allow_supplementary_import": config.allow_supplementary_import,
+            "allow_college_view_distribution": config.allow_college_view_distribution,
             "effective_start_date": config.effective_start_date.isoformat() if config.effective_start_date else None,
             "effective_end_date": config.effective_end_date.isoformat() if config.effective_end_date else None,
             "version": config.version,
@@ -1053,6 +1054,9 @@ async def update_scholarship_configuration(
         # under this configuration).
         if "allow_supplementary_import" in config_data:
             config.allow_supplementary_import = bool(config_data["allow_supplementary_import"])
+
+        if "allow_college_view_distribution" in config_data:
+            config.allow_college_view_distribution = bool(config_data["allow_college_view_distribution"])
 
         # Update status and effective dates
         if "is_active" in config_data:
@@ -1162,6 +1166,46 @@ async def toggle_configuration_supplementary_import(
         success=True,
         message=f"Supplementary import {'enabled' if body.allow else 'disabled'}",
         data={"id": config.id, "allow_supplementary_import": body.allow},
+    )
+
+
+class CollegeViewDistributionToggle(BaseModel):
+    allow: bool
+
+
+@router.patch("/configurations/{id}/college-view-distribution")
+async def toggle_configuration_college_view_distribution(
+    id: int,
+    body: CollegeViewDistributionToggle,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin toggle: open or close college visibility of distribution results.
+
+    Applies to all colleges' rankings under this (scholarship_type, academic_year, semester).
+    """
+    accessible_scholarship_ids = await get_user_accessible_scholarship_ids(current_user, db)
+
+    stmt = select(ScholarshipConfiguration).where(
+        and_(
+            ScholarshipConfiguration.id == id,
+            ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids),
+        )
+    )
+    result = await db.execute(stmt)
+    config = result.scalar_one_or_none()
+
+    if not config:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="配置不存在或您沒有存取權限")
+
+    config.allow_college_view_distribution = body.allow
+    config.updated_by = current_user.id
+    await db.commit()
+
+    return ApiResponse(
+        success=True,
+        message=f"College view of distribution {'enabled' if body.allow else 'disabled'}",
+        data={"id": config.id, "allow_college_view_distribution": body.allow},
     )
 
 
@@ -1388,6 +1432,7 @@ async def list_scholarship_configurations(
                 "shared_quota_sources": config.shared_quota_sources,
                 "is_active": config.is_active,
                 "allow_supplementary_import": config.allow_supplementary_import,
+                "allow_college_view_distribution": config.allow_college_view_distribution,
                 "renewal_application_start_date": (
                     config.renewal_application_start_date.isoformat() if config.renewal_application_start_date else None
                 ),
