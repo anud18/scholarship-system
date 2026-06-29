@@ -275,7 +275,7 @@ export function AdminConfigurationManagement({
   const [selectedScholarshipType, setSelectedScholarshipType] =
     useState<ScholarshipType | null>(null);
   const quotaSubTypes = (
-    (selectedScholarshipType as { sub_type_list?: string[] })?.sub_type_list ??
+    selectedScholarshipType?.all_sub_type_list ??
     ["nstc", "moe_1w", "moe_2w"]
   ).map(code => ({ code }));
   const [loading, setLoading] = useState(false);
