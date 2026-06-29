@@ -54,7 +54,7 @@ import api, {
   ApplicationCreate,
   Application,
 } from "@/lib/api";
-import { isSelectableScholarship } from "@/lib/scholarship-eligibility";
+import { isApplyableScholarship } from "@/lib/scholarship-eligibility";
 import { clsx } from "@/lib/utils";
 import {
   buildApplicationFormFields,
@@ -741,7 +741,7 @@ export function ScholarshipApplicationStep({
     try {
       const response = await api.scholarships.getEligible();
       if (response.success && response.data) {
-        setEligibleScholarships(response.data.filter(isSelectableScholarship));
+        setEligibleScholarships(response.data.filter(isApplyableScholarship));
       } else {
         setError(response.message || text.loadError);
       }

@@ -16,6 +16,7 @@ from app.core.exceptions import AuthorizationError, NotFoundError, ScholarshipEx
 from app.core.security import get_current_user, require_staff, require_student
 from app.db.deps import get_db
 from app.models.audit_log import AuditAction
+from app.models.enums import REAPPLY_ALLOWED_APPLICATION_STATUSES
 from app.models.user import User
 from app.schemas.application import (
     ApplicationCreate,
@@ -128,7 +129,11 @@ async def create_application(
         logger.debug(f"Fetching scholarship configuration: {application_data.configuration_id}")
         from sqlalchemy import and_, select
 
-        from app.models.application import Application, ApplicationStatus
+        from app.models.application import (
+            Application,
+            ApplicationStatus,
+            build_config_match_filters,
+        )
         from app.models.scholarship import ScholarshipConfiguration
 
         config_stmt = select(ScholarshipConfiguration).where(
@@ -151,21 +156,14 @@ async def create_application(
         # Check for duplicate applications (同一獎學金類型、學年度、學期只能有一個申請)
         logger.debug("Checking for duplicate applications")
 
-        # 排除已撤回/拒絕/取消/刪除的申請
-        excluded_statuses = [
-            ApplicationStatus.withdrawn,
-            ApplicationStatus.rejected,
-            ApplicationStatus.cancelled,
-            ApplicationStatus.deleted,
-        ]
+        # 排除已撤回/拒絕/取消/刪除的申請 (shared set — see app.models.enums)
+        excluded_statuses = REAPPLY_ALLOWED_APPLICATION_STATUSES
 
-        # 查詢是否已有申請 - using values from scholarship configuration
+        # 查詢是否已有申請 - shared (user, type, year, semester) key, see
+        # build_config_match_filters
         duplicate_check_stmt = select(Application).where(
             and_(
-                Application.user_id == current_user.id,
-                Application.scholarship_type_id == scholarship_config.scholarship_type_id,
-                Application.academic_year == scholarship_config.academic_year,
-                Application.semester == scholarship_config.semester,
+                *build_config_match_filters(current_user.id, scholarship_config),
                 Application.status.notin_(excluded_statuses),
             )
         )

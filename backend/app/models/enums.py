@@ -55,6 +55,45 @@ REVIEWABLE_APPLICATION_STATUSES = [
 ]
 
 
+# ── Apply-flow visibility sets ───────────────────────────────────────
+# Partition every ApplicationStatus value into three buckets that decide
+# whether a scholarship is shown in the STUDENT APPLY FLOW.
+# Invariant: shown ⟺ a fresh/continued application is still submittable
+# (kept consistent with the DUPLICATE_APPLICATION guard in applications.py).
+
+# Terminal/withdrawn states the duplicate guard does NOT block — the student may
+# re-apply, so the scholarship stays visible. Mirrors the guard's exclude set;
+# `deleted` is a soft-delete tombstone, intentionally treated as re-applyable.
+REAPPLY_ALLOWED_APPLICATION_STATUSES = [
+    ApplicationStatus.withdrawn.value,
+    ApplicationStatus.rejected.value,
+    ApplicationStatus.cancelled.value,
+    ApplicationStatus.deleted.value,
+]
+
+# In-progress states the student finishes IN PLACE via the edit flow — the
+# scholarship stays visible so the draft/returned item can be completed.
+EDITABLE_APPLICATION_STATUSES = [
+    ApplicationStatus.draft.value,
+    ApplicationStatus.returned.value,
+]
+
+# "已送出/處理中" — a blocking application exists that is NOT continuable in
+# place, so the scholarship is HIDDEN from the apply flow. Exactly the complement
+# of REAPPLY_ALLOWED ∪ EDITABLE over the full enum. `manual_excluded` and
+# `cancelled_by_challenge` are here because the duplicate guard blocks them too
+# (showing them would only lead to a DUPLICATE_APPLICATION error on submit).
+HIDDEN_APPLICATION_STATUSES = [
+    ApplicationStatus.submitted.value,
+    ApplicationStatus.under_review.value,
+    ApplicationStatus.pending_documents.value,
+    ApplicationStatus.approved.value,
+    ApplicationStatus.partial_approved.value,
+    ApplicationStatus.manual_excluded.value,
+    ApplicationStatus.cancelled_by_challenge.value,
+]
+
+
 class ReviewStage(enum.Enum):
     """
     Review stage - Internal workflow position

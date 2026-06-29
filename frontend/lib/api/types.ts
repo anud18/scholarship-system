@@ -222,6 +222,7 @@ export interface ScholarshipType {
   application_end_date?: string;
   sub_type_selection_mode?: "single" | "multiple" | "hierarchical";
   terms_document_url?: string;
+  already_submitted?: boolean;
   whitelist_enabled?: boolean;
   eligible_sub_types?: Array<{
     value: string | null;

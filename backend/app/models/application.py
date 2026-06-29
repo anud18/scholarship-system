@@ -394,3 +394,25 @@ class ApplicationFile(Base):
     def download_url(self, value: Optional[str]):
         """Set file download URL"""
         self._download_url = value
+
+
+def build_config_match_filters(user_id: int, config):
+    """SQLAlchemy filter clauses matching a student's applications to a
+    scholarship configuration by (user, type, year, semester).
+
+    Shared by the eligible-scholarships "already submitted" check
+    (EligibilityService.has_blocking_application) and the DUPLICATE_APPLICATION
+    guard in the applications endpoint, so the two cannot drift on the
+    semester-NULL handling. Each caller appends its own status clause. ``config``
+    only needs ``scholarship_type_id``, ``academic_year`` and ``semester``.
+    """
+    if config.semester:
+        semester_filter = Application.semester == config.semester
+    else:
+        semester_filter = Application.semester.is_(None)
+    return [
+        Application.user_id == user_id,
+        Application.scholarship_type_id == config.scholarship_type_id,
+        Application.academic_year == config.academic_year,
+        semester_filter,
+    ]

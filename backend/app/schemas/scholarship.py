@@ -282,6 +282,7 @@ class EligibleScholarshipResponse(BaseModel):
     created_at: datetime
     all_sub_type_list: List[str] = []
     subtype_eligibility: Dict[str, SubtypeEligibilityInfo] = {}
+    already_submitted: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
