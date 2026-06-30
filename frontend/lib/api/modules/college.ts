@@ -502,14 +502,16 @@ export function createCollegeApi() {
     },
 
     /**
-     * Download the 學生資料彙整表 Excel for a ranking (backend-generated).
+     * Download the 學生資料彙整表 for a ranking (backend-generated), as Excel
+     * (default) or PDF.
      * Endpoint: GET /api/v1/college-review/rankings/{ranking_id}/export-excel
      * Returns the binary blob and the filename parsed from Content-Disposition.
      */
     exportRankingExcel: async (
-      rankingId: number
+      rankingId: number,
+      format: "xlsx" | "pdf" = "xlsx"
     ): Promise<{ blob: Blob; filename: string }> => {
-      return exportRankingExcel(rankingId);
+      return exportRankingExcel(rankingId, format);
     },
 
     /**

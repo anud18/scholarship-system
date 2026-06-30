@@ -85,6 +85,42 @@ def test_build_pdf_handles_xml_special_chars(service, sample_row, dynamic_fields
     assert out[:5] == b"%PDF-"
 
 
+def test_build_pdf_very_long_cell_does_not_overflow(service, dynamic_fields):
+    """A single cell taller than the page must NOT raise LayoutError / 500.
+
+    A reportlab Table cannot split one row across pages; KeepInFrame(mode='shrink')
+    must keep an extremely long free-text value within the page so the export still
+    succeeds.
+    """
+    huge = SimpleNamespace(
+        student_data={"std_cname": "長文測試", "std_stdcode": "310460900"},
+        submitted_form_data={"fields": {"essay": {"value": "長" * 4000}}},  # ~4000 CJK chars
+        sub_type_preferences=["nstc"],
+        sub_scholarship_type=None,
+    )
+    out = service.build_pdf(
+        rows=[ExportRow(rank_position=1, application=huge)],
+        dynamic_fields=dynamic_fields,
+        sub_type_labels={"nstc": "國科會"},
+        title="長文測試",
+    )
+    assert out[:5] == b"%PDF-"
+
+
+def test_build_pdf_none_student_data(service, dynamic_fields):
+    """A draft-like row (student_data is None) renders all-empty cells, not a crash."""
+    blank = SimpleNamespace(
+        student_data=None, submitted_form_data=None, sub_type_preferences=None, sub_scholarship_type=None
+    )
+    out = service.build_pdf(
+        rows=[ExportRow(rank_position=None, application=blank)],
+        dynamic_fields=dynamic_fields,
+        sub_type_labels={},
+        title="空資料",
+    )
+    assert out[:5] == b"%PDF-"
+
+
 # ─── shared column model (xlsx/pdf parity) ───────────────────────────
 
 

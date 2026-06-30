@@ -676,7 +676,7 @@ export function CollegeRankingTable({
     }
   };
 
-  const handleExportRanking = async (format: "xlsx" | "pdf" = "xlsx") => {
+  const handleExportRanking = async (format: "xlsx" | "pdf") => {
     if (!rankingId) {
       toast.error("缺少排名 ID，無法匯出");
       return;

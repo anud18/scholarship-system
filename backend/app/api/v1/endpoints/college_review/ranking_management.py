@@ -44,6 +44,7 @@ from app.services.review_service import ReviewService
 from app.utils.application_helpers import get_college_code_from_data
 from app.services.supplementary_import_service import SupplementaryImportService
 
+from .application_summary_export import XLSX_MEDIA_TYPE
 from ._helpers import (
     _check_academic_year_permission,
     _check_scholarship_permission,
@@ -1252,7 +1253,7 @@ async def export_ranking_excel(
         else (getattr(ranking.creator, "college_code", None) or "全校")
     )
     template_suffix = "_範本" if template else ""
-    extension = "pdf" if format == "pdf" else "xlsx"
+    extension = format  # Literal["xlsx", "pdf"] — extension IS the format
     base_filename = (
         f"{ranking.academic_year}學年度{scholarship_name}學生資料彙整表"
         f"_{college_label}{template_suffix}.{extension}"
@@ -1277,7 +1278,7 @@ async def export_ranking_excel(
             title=title,
             sheet_name=sheet_name,
         )
-        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        media_type = XLSX_MEDIA_TYPE
 
     # 8. Audit the PII access (issue #73): business confirmed Excel must show
     # the full std_pid, so every export that includes plaintext IDs is logged.

@@ -173,6 +173,23 @@ class TestExportPdfFormat:
 
         assert resp.status_code == 400, resp.text
 
+    async def test_invalid_format_is_422(
+        self,
+        client: AsyncClient,
+        admin_user: User,
+        ranking_with_item: CollegeRanking,
+    ):
+        app.dependency_overrides[require_scholarship_manager] = lambda: admin_user
+        try:
+            resp = await client.get(
+                f"/api/v1/college-review/rankings/{ranking_with_item.id}/export-excel",
+                params={"format": "docx"},
+            )
+        finally:
+            app.dependency_overrides.pop(require_scholarship_manager, None)
+
+        assert resp.status_code == 422, resp.text
+
     async def test_default_format_is_xlsx(
         self,
         client: AsyncClient,

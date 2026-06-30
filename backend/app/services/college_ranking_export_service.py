@@ -14,7 +14,7 @@ from __future__ import annotations
 import io
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 # `escape` is a pure string-escaping helper (`<` → `&lt;` …) used to sanitise
 # cell values before they go into reportlab Paragraph markup. It does not parse
@@ -28,30 +28,39 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import KeepInFrame, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.services.pdf_fonts import CJK_FONT_NAME, ensure_cjk_font
 
-STATIC_HEADERS: List[str] = [
-    "NO.",
-    "學院初審會議之學院排序",
-    "申請獎學金類別",
-    "學院",
-    "系所",
-    "年級",
-    "是否為逕博學生",
-    "學生中文姓名",
-    "學生英文姓名",
-    "國籍",
-    "性別",
-    "註冊入學日期",
-    "學號",
-    "學生身分證字號",
-    "學生匯款帳號",
-    "學生E-mail",
-    "學生通訊地址",
-    "指導教授姓名",
+# Static columns shared by the xlsx and PDF exports: (header label, PDF column
+# weight). STATIC_HEADERS and the PDF weight vector are both derived from this one
+# list so they can never drift — renaming a label can't silently mis-size a column.
+# Weights are relative (narrow id/flag columns get less, free-text columns more);
+# the normalize-to-page-width math lives in _pdf_col_widths. Dynamic columns use
+# _PDF_COL_WEIGHT_DEFAULT.
+_STATIC_COLUMNS: List[Tuple[str, float]] = [
+    ("NO.", 0.5),
+    ("學院初審會議之學院排序", 0.8),
+    ("申請獎學金類別", 1.4),
+    ("學院", 1.0),
+    ("系所", 1.2),
+    ("年級", 0.5),
+    ("是否為逕博學生", 0.7),
+    ("學生中文姓名", 1.0),
+    ("學生英文姓名", 1.4),
+    ("國籍", 0.7),
+    ("性別", 0.5),
+    ("註冊入學日期", 0.9),
+    ("學號", 1.0),
+    ("學生身分證字號", 1.1),
+    ("學生匯款帳號", 1.2),
+    ("學生E-mail", 1.7),
+    ("學生通訊地址", 2.0),
+    ("指導教授姓名", 1.3),
 ]
+
+STATIC_HEADERS: List[str] = [label for label, _ in _STATIC_COLUMNS]
+_STATIC_COL_WEIGHTS: List[float] = [weight for _, weight in _STATIC_COLUMNS]
 
 
 # std_enrolltype codes that indicate 逕讀博士 (direct-track PhD)
@@ -146,9 +155,14 @@ class CollegeRankingExportService:
         sorted_dynamic = self._sort_dynamic(dynamic_fields)
         headers = self._headers(sorted_dynamic)
 
-        page_width, _ = landscape(A4)
+        page_width, page_height = landscape(A4)
         usable_width = page_width - (self._PDF_MARGIN_PT * 2)
         col_widths = self._pdf_col_widths(headers, usable_width)
+        # A reportlab Table cannot split ONE row across pages, so a single very
+        # long free-text cell (e.g. a verbose dynamic field) would raise
+        # LayoutError and fail the whole export. Cap each cell to the usable
+        # content height and let KeepInFrame shrink anything taller to fit.
+        cell_max_height = page_height - (self._PDF_MARGIN_PT * 2) - self._PDF_HEADER_RESERVE_PT
 
         title_style = ParagraphStyle(
             "RankingPdfTitle",
@@ -173,10 +187,20 @@ class CollegeRankingExportService:
             wordWrap="CJK",  # break long CJK and unspaced ASCII (emails, IDs)
         )
 
-        data: List[List[Paragraph]] = [[Paragraph(xml_escape(h), header_style) for h in headers]]
+        data: List[list] = [[Paragraph(xml_escape(h), header_style) for h in headers]]
         for idx, row in enumerate(rows, start=1):
             values = self._row_cells(row, idx, sub_type_labels, sorted_dynamic)
-            data.append([Paragraph(xml_escape(self._safe_str(v)), cell_style) for v in values])
+            data.append(
+                [
+                    KeepInFrame(
+                        col_widths[col],
+                        cell_max_height,
+                        [Paragraph(xml_escape(self._safe_str(v)), cell_style)],
+                        mode="shrink",
+                    )
+                    for col, v in enumerate(values)
+                ]
+            )
 
         table = Table(data, colWidths=col_widths, repeatRows=1)
         table.setStyle(
@@ -209,34 +233,20 @@ class CollegeRankingExportService:
     # -------- PDF layout helpers --------
 
     _PDF_MARGIN_PT = 10 * mm
-
-    # Relative column weights for the wide PDF table. Narrow id/flag columns get
-    # less width; free-text columns (name, email, address, advisor, dynamic
-    # fields) get more. Headers not listed (dynamic fields) use the default.
-    _PDF_COL_WEIGHTS: Dict[str, float] = {
-        "NO.": 0.5,
-        "學院初審會議之學院排序": 0.8,
-        "申請獎學金類別": 1.4,
-        "學院": 1.0,
-        "系所": 1.2,
-        "年級": 0.5,
-        "是否為逕博學生": 0.7,
-        "學生中文姓名": 1.0,
-        "學生英文姓名": 1.4,
-        "國籍": 0.7,
-        "性別": 0.5,
-        "註冊入學日期": 0.9,
-        "學號": 1.0,
-        "學生身分證字號": 1.1,
-        "學生匯款帳號": 1.2,
-        "學生E-mail": 1.7,
-        "學生通訊地址": 2.0,
-        "指導教授姓名": 1.3,
-    }
+    # Vertical space reserved (per page) for the title + spacer + repeated header
+    # row, subtracted from page height to bound how tall a single data cell may be.
+    _PDF_HEADER_RESERVE_PT = 60
+    # Width weight for dynamic (form-field) columns; static columns carry their own
+    # weights in _STATIC_COL_WEIGHTS (derived from _STATIC_COLUMNS).
     _PDF_COL_WEIGHT_DEFAULT = 1.2
 
     def _pdf_col_widths(self, headers: List[str], usable_width: float) -> List[float]:
-        weights = [self._PDF_COL_WEIGHTS.get(h, self._PDF_COL_WEIGHT_DEFAULT) for h in headers]
+        # headers is always STATIC_HEADERS + dynamic, so the first N columns map
+        # index-for-index onto _STATIC_COL_WEIGHTS; the rest are dynamic.
+        n_static = len(_STATIC_COL_WEIGHTS)
+        weights = [
+            _STATIC_COL_WEIGHTS[i] if i < n_static else self._PDF_COL_WEIGHT_DEFAULT for i in range(len(headers))
+        ]
         total = sum(weights) or 1.0
         return [usable_width * w / total for w in weights]
 
