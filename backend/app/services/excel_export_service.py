@@ -17,7 +17,12 @@ from openpyxl.utils import get_column_letter
 
 from app.core.config import settings
 from app.core.exceptions import FileStorageError
-from app.models.payment_roster import PaymentRoster, PaymentRosterItem
+from app.models.payment_roster import (
+    MANUAL_REMOVAL_PREFIXES,
+    PaymentRoster,
+    PaymentRosterItem,
+    StudentVerificationStatus,
+)
 from app.services.minio_service import MinIOService
 
 logger = logging.getLogger(__name__)
@@ -44,6 +49,9 @@ class ExcelExportService:
     # 不符合 → 紅底（FFC7CE）；警告 → 琥珀底（FFEB9C），Excel 標準條件格式色。
     RED_FILL = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
     AMBER_FILL = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
+
+    # 需千分位數字格式的欄位（皆為金額欄）
+    NUMERIC_FORMAT_COLUMNS = frozenset({"單價", "免稅給付"})
 
     def __init__(self):
         self.export_base_path = getattr(settings, "roster_export_dir", "./exports")
@@ -365,9 +373,17 @@ class ExcelExportService:
     @staticmethod
     def _is_manual_removal(item) -> bool:
         """True 表示此 item 是「鎖定後手動移除」或「比對分發移除」，
-        應排除於資格驗證視圖之外（自動因資格不符排除者則保留並標紅）。"""
+        應排除於資格驗證視圖之外（自動因資格不符排除者則保留並標紅）。
+        前綴常數與 roster_service 產生端共用（MANUAL_REMOVAL_PREFIXES）。"""
         reason = getattr(item, "exclusion_reason", None)
-        return bool(reason and reason.startswith(("鎖定後移除", "比對分發移除")))
+        return bool(reason and reason.startswith(MANUAL_REMOVAL_PREFIXES))
+
+    @staticmethod
+    def _rule_details(item) -> Dict[str, Any]:
+        """取出凍結快照的逐條規則 details；缺漏／格式不符時回傳空 dict。"""
+        rvr = getattr(item, "rule_validation_result", None)
+        details = rvr.get("details") if isinstance(rvr, dict) else None
+        return details if isinstance(details, dict) else {}
 
     def _get_roster_items(self, roster: PaymentRoster, include_excluded: bool) -> List[PaymentRosterItem]:
         """取得造冊明細。
@@ -391,11 +407,7 @@ class ExcelExportService:
         """
         seen: Dict[int, str] = {}
         for item in roster_items:
-            rvr = getattr(item, "rule_validation_result", None)
-            details = rvr.get("details") if isinstance(rvr, dict) else None
-            if not isinstance(details, dict):
-                continue
-            for key, res in details.items():
+            for key, res in self._rule_details(item).items():
                 if not isinstance(key, str) or not key.startswith("rule_"):
                     continue
                 suffix = key[len("rule_") :]
@@ -407,14 +419,13 @@ class ExcelExportService:
                 name = (res.get("rule_name") if isinstance(res, dict) else None) or f"規則{rid}"
                 seen[rid] = name
 
-        reserved = set(self.template_columns) | {
+        columns: List[Tuple[int, str]] = []
+        used = set(self.template_columns) | {
             self.COL_VERIFICATION,
             self.COL_RULE_SUMMARY,
             self.COL_INCLUDED,
             self.COL_EXCLUSION,
         }
-        columns: List[Tuple[int, str]] = []
-        used = set(reserved)
         for rid in sorted(seen):
             header = seen[rid]
             if header in used:
@@ -490,6 +501,8 @@ class ExcelExportService:
         item.excel_row_data 仍寫回乾淨 row dict（不含 fills）。
         """
         rule_columns = rule_columns or []
+        # 預先算好每欄的快照鍵，避免逐列重建 f"rule_{rid}"
+        rule_lookup = [(header, f"rule_{rid}") for rid, header in rule_columns]
         excel_data: List[Dict] = []
         cell_fills: List[Dict[str, str]] = []
 
@@ -513,15 +526,7 @@ class ExcelExportService:
             if item.application_identity:
                 remarks_parts.append(f"身分:{item.application_identity}")
             if item.allocated_sub_type:
-                sub_type_display = {
-                    "nstc": "國科會",
-                    "moe_1w": "教育部(1萬)",
-                    "moe_2w": "教育部(2萬)",
-                }.get(item.allocated_sub_type, item.allocated_sub_type)
-                alloc_label = sub_type_display
-                if item.allocation_year:
-                    alloc_label = f"{item.allocation_year}年 {sub_type_display}"
-                remarks_parts.append(f"分發:{alloc_label}")
+                remarks_parts.append(f"分發:{self._format_allocation_display(item)}")
             if not item.is_included:
                 remarks_parts.append("狀態:不合格")
             if not item.bank_account:
@@ -592,7 +597,7 @@ class ExcelExportService:
             status = item.verification_status
             row_data[self.COL_VERIFICATION] = self._get_verification_status_label(status)
             status_value = status.value if hasattr(status, "value") else str(status)
-            if status_value != "verified":
+            if status_value != StudentVerificationStatus.VERIFIED.value:
                 fills[self.COL_VERIFICATION] = "red"
 
             # 整體規則資格（重用 is_eligible property；stub 以屬性提供）
@@ -602,18 +607,16 @@ class ExcelExportService:
                 fills[self.COL_RULE_SUMMARY] = "red"
 
             # 逐條規則欄（讀凍結快照，不重跑）
-            rvr = item.rule_validation_result
-            details = rvr.get("details") if isinstance(rvr, dict) else None
-            for rid, header in rule_columns:
-                res = details.get(f"rule_{rid}") if isinstance(details, dict) else None
+            details = self._rule_details(item)
+            for header, rule_key in rule_lookup:
+                res = details.get(rule_key)
                 if isinstance(res, dict) and "passed" in res:
-                    passed = res.get("passed")
-                    row_data[header] = "通過" if passed else "未通過"
-                    if not passed:
-                        if res.get("is_hard_rule"):
-                            fills[header] = "red"
-                        elif res.get("is_warning"):
-                            fills[header] = "amber"
+                    if res.get("passed"):
+                        row_data[header] = "通過"
+                    else:
+                        row_data[header] = "未通過"
+                        # warning 規則 → 琥珀；硬性或無嚴重度標記（含評估錯誤）→ 紅
+                        fills[header] = "amber" if (res.get("is_warning") and not res.get("is_hard_rule")) else "red"
                 else:
                     row_data[header] = "—"
 
@@ -774,10 +777,8 @@ class ExcelExportService:
                     value = row_data.get(column_name, "")
                     cell = ws.cell(row=row_idx, column=col_idx, value=value)
 
-                    if column_name in ["金額", "扣繳稅額", "單價", "免稅給付"] and isinstance(value, (int, float)):
+                    if column_name in self.NUMERIC_FORMAT_COLUMNS and isinstance(value, (int, float)):
                         cell.number_format = "#,##0"
-                    elif column_name in ["序號", "流水號"]:
-                        cell.alignment = Alignment(horizontal="center")
 
                     kind = fills.get(column_name)
                     if kind == "red":

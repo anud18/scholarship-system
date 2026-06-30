@@ -505,6 +505,25 @@ def test_unverified_and_excluded_and_missing_bank_fills_red(service):
     assert f["排除原因"] == "red"
 
 
+def test_untagged_failed_rule_defaults_to_red(service):
+    """An errored/untagged rule result (passed=False but no is_hard_rule/
+    is_warning, e.g. the exception path in _evaluate_scholarship_rule) must
+    still color the cell — defaults to red, never left uncolored."""
+    roster = _make_roster()
+    item = _make_item(student_name="戊")
+    item.is_eligible = False
+    item.rule_validation_result = {
+        "is_eligible": False,
+        "details": {"rule_4": {"passed": False, "rule_name": "錯誤規則"}},
+    }
+    rule_columns = service._collect_rule_columns([item])
+
+    rows, fills = service._prepare_excel_data(roster, [item], rule_columns)
+
+    assert rows[0]["錯誤規則"] == "未通過"
+    assert fills[0]["錯誤規則"] == "red"
+
+
 def test_no_snapshot_item_renders_dashes_without_fill(service):
     roster = _make_roster()
     item = _make_item(student_name="丙")

@@ -62,6 +62,14 @@ class StudentVerificationStatus(enum.Enum):
     NOT_FOUND = "not_found"  # 查無此人
 
 
+# exclusion_reason 前綴：標記「鎖定後手動移除」與「比對分發移除」兩種
+# 人為移除（相對於產生造冊時因資格不符的自動排除）。由 roster_service 寫入、
+# 由 excel_export_service 的審閱視圖過濾——共用同一份常數避免兩端漂移。
+MANUAL_REMOVAL_PREFIX_LOCKED = "鎖定後移除"
+MANUAL_REMOVAL_PREFIX_RECONCILE = "比對分發移除"
+MANUAL_REMOVAL_PREFIXES = (MANUAL_REMOVAL_PREFIX_LOCKED, MANUAL_REMOVAL_PREFIX_RECONCILE)
+
+
 class PaymentRoster(Base):
     """造冊主檔"""
 
