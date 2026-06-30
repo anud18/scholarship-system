@@ -772,7 +772,9 @@ class ExcelExportService:
             else:
                 start_row = 1
 
-            for row_idx, (row_data, fills) in enumerate(zip(excel_data, cell_fills), start=start_row):
+            # strict=True：excel_data 與 cell_fills 由 _prepare_excel_data 同步建構，
+            # 若長度不一致代表上游 bug — 寧可大聲 raise，也不要靜默截斷成局部匯出。
+            for row_idx, (row_data, fills) in enumerate(zip(excel_data, cell_fills, strict=True), start=start_row):
                 for col_idx, column_name in enumerate(columns, start=1):
                     value = row_data.get(column_name, "")
                     cell = ws.cell(row=row_idx, column=col_idx, value=value)
