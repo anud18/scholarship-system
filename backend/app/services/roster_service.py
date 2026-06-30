@@ -24,6 +24,8 @@ from app.core.pii_crypto import redact_dict_pii
 from app.models.application import Application
 from app.models.enums import QuotaManagementMode
 from app.models.payment_roster import (
+    MANUAL_REMOVAL_PREFIX_LOCKED,
+    MANUAL_REMOVAL_PREFIX_RECONCILE,
     PaymentRoster,
     PaymentRosterItem,
     RosterCycle,
@@ -2263,7 +2265,7 @@ class RosterService:
         for item_id in remove_ids:
             item = items_by_id[item_id]
             item.is_included = False
-            item.exclusion_reason = "比對分發移除：不在分發名單"
+            item.exclusion_reason = f"{MANUAL_REMOVAL_PREFIX_RECONCILE}：不在分發名單"
             removed.append({"item_id": item_id, "application_id": item.application_id})
             self._write_roster_item_audit(
                 roster_id=roster_id,
@@ -2314,7 +2316,11 @@ class RosterService:
         # G26 (#988): keep the structured category in front of the free text
         # so removals are classifiable (e.g. "鎖定後移除[withdrawal]：休學").
         category_tag = f"[{reason_category}]" if reason_category else ""
-        item.exclusion_reason = f"鎖定後移除{category_tag}：{reason}" if reason else f"鎖定後移除{category_tag}"
+        item.exclusion_reason = (
+            f"{MANUAL_REMOVAL_PREFIX_LOCKED}{category_tag}：{reason}"
+            if reason
+            else f"{MANUAL_REMOVAL_PREFIX_LOCKED}{category_tag}"
+        )
         self.db.flush()
 
         # Recompute totals via the shared sync helper (persists
