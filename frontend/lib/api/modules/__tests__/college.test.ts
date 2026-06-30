@@ -450,6 +450,31 @@ describe("module-level export helpers", () => {
     expect(result.filename).toBe("學生資料彙整表_42.xlsx");
   });
 
+  it("exportRankingExcel(format='pdf') adds ?format=pdf and .pdf fallback", async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      headers: { get: jest.fn().mockReturnValue("") },
+      blob: jest.fn().mockResolvedValue(new Blob()),
+    });
+    global.fetch = fetchMock as any;
+
+    const result = await exportRankingExcel(42, "pdf");
+    expect(fetchMock.mock.calls[0][0]).toContain("format=pdf");
+    expect(result.filename).toBe("學生資料彙整表_42.pdf");
+  });
+
+  it("exportRankingExcel(format='xlsx') omits the format param (URL unchanged)", async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      headers: { get: jest.fn().mockReturnValue("") },
+      blob: jest.fn().mockResolvedValue(new Blob()),
+    });
+    global.fetch = fetchMock as any;
+
+    await exportRankingExcel(42, "xlsx");
+    expect(fetchMock.mock.calls[0][0]).not.toContain("format=");
+  });
+
   it("exportDepartmentSummary URL includes 4 params + dept_code", async () => {
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
