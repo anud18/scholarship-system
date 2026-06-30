@@ -1,6 +1,6 @@
 """Integration test: generate_export_zip embeds the 申請總表 workbooks and the
 table rows match the student folders. Avoids DB / MinIO / reportlab font by
-monkeypatching _ensure_font, _query_applications, _get_scholarship_type,
+monkeypatching ensure_cjk_font, _query_applications, _get_scholarship_type,
 _generate_summary_pdf, and load_export_aux_data.
 """
 
@@ -42,7 +42,7 @@ def _coro_returning(value):
 
 @pytest.mark.asyncio
 async def test_export_zip_contains_summary_tables_matching_folders(monkeypatch):
-    monkeypatch.setattr("app.services.export_package_service._ensure_font", lambda: None)
+    monkeypatch.setattr("app.services.export_package_service.ensure_cjk_font", lambda: None)
 
     async def _fake_aux(db, *, scholarship_type, applications):
         return ([], {}, {}, {})
@@ -92,7 +92,7 @@ async def test_export_zip_contains_summary_tables_matching_folders(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_export_zip_degrades_when_summary_build_fails_wholesale(monkeypatch):
-    monkeypatch.setattr("app.services.export_package_service._ensure_font", lambda: None)
+    monkeypatch.setattr("app.services.export_package_service.ensure_cjk_font", lambda: None)
 
     async def _boom(*a, **k):
         raise RuntimeError("aux DB down")
