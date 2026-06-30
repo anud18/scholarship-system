@@ -50,14 +50,7 @@ import {
   FileText,
   Clock,
   Info,
-  Loader2,
 } from "lucide-react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { format } from "date-fns";
 import { zhTW } from "date-fns/locale";
 import apiClient, {
@@ -66,101 +59,11 @@ import apiClient, {
   ScholarshipConfigurationFormData,
 } from "@/lib/api";
 import { WhitelistManagementDialog } from "./whitelist-management-dialog";
+import { ConfigToggleSwitch } from "@/components/admin/config/ConfigToggleSwitch";
 import { QuotaExcelButtons } from "@/components/admin/quota-import/QuotaExcelButtons";
 import { QuotaManagementMode, getQuotaManagementModeLabel } from "@/lib/enums";
 import { toast } from "sonner";
 const api = apiClient;
-
-/**
- * Toggle for opening/closing post-distribution supplementary import per configuration.
- * Owns its own loading + optimistic state so the row stays interactive while PATCH is in-flight.
- */
-function SupplementaryImportToggle({
-  configId,
-  initialOpen,
-  onChange,
-}: {
-  configId: number;
-  initialOpen: boolean;
-  onChange?: (open: boolean) => void;
-}) {
-  const [open, setOpen] = useState(initialOpen);
-  const [saving, setSaving] = useState(false);
-
-  // Keep local state in sync if parent reloads configs and prop changes.
-  useEffect(() => {
-    setOpen(initialOpen);
-  }, [initialOpen]);
-
-  const handleToggle = async (next: boolean) => {
-    const prev = open;
-    setOpen(next); // optimistic
-    setSaving(true);
-    try {
-      await api.college.toggleConfigSupplementaryImport(configId, next);
-      toast.success(next ? "已開放補充匯入" : "已關閉補充匯入");
-      onChange?.(next);
-    } catch (err) {
-      setOpen(prev); // rollback
-      toast.error(err instanceof Error ? err.message : "操作失敗");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <TooltipProvider delayDuration={250}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="inline-flex items-center gap-2.5">
-            <Switch
-              checked={open}
-              disabled={saving}
-              onCheckedChange={handleToggle}
-              aria-label="開放/關閉學院補充匯入"
-              className={
-                open
-                  ? "data-[state=checked]:bg-emerald-600"
-                  : undefined
-              }
-            />
-            <span
-              className={[
-                "inline-flex items-center gap-1.5 text-xs font-medium tracking-wide tabular-nums transition-colors",
-                open ? "text-emerald-700" : "text-muted-foreground",
-              ].join(" ")}
-            >
-              {saving ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <span className="relative inline-flex h-2 w-2">
-                  <span
-                    className={[
-                      "absolute inline-flex h-full w-full rounded-full opacity-60",
-                      open ? "animate-ping bg-emerald-400" : "bg-transparent",
-                    ].join(" ")}
-                  />
-                  <span
-                    className={[
-                      "relative inline-flex h-2 w-2 rounded-full",
-                      open ? "bg-emerald-500" : "bg-muted-foreground/40",
-                    ].join(" ")}
-                  />
-                </span>
-              )}
-              {open ? "開放中" : "已關閉"}
-            </span>
-          </div>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="text-xs">
-          {open
-            ? "學院可於分發後上傳新申請學生 Excel；排名接續於現有名單之後"
-            : "點擊以開放學院上傳補充申請名單（Excel）"}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-}
 
 interface AdminConfigurationManagementProps {
   scholarshipTypes: ScholarshipType[];
@@ -855,7 +758,7 @@ export function AdminConfigurationManagement({
                           申請期間
                         </th>
                         <th className="text-left p-4 font-semibold">狀態</th>
-                        <th className="text-left p-4 font-semibold">補充匯入</th>
+                        <th className="text-left p-4 font-semibold">學院功能</th>
                         <th className="text-right p-4 font-semibold">操作</th>
                       </tr>
                     </thead>
@@ -955,17 +858,54 @@ export function AdminConfigurationManagement({
                               </Badge>
                             </td>
                             <td className="p-4">
-                              <SupplementaryImportToggle
-                                configId={config.id}
-                                initialOpen={!!config.allow_supplementary_import}
-                                onChange={() => {
-                                  if (selectedScholarshipType) {
-                                    void loadConfigurations(
-                                      selectedScholarshipType
-                                    );
-                                  }
-                                }}
-                              />
+                              <div className="flex flex-col gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-16 shrink-0 text-xs text-muted-foreground">
+                                    補充匯入
+                                  </span>
+                                  <ConfigToggleSwitch
+                                    initialOpen={!!config.allow_supplementary_import}
+                                    ariaLabel="開放/關閉學院補充匯入"
+                                    successOn="已開放補充匯入"
+                                    successOff="已關閉補充匯入"
+                                    tooltipOn="學院可於分發後上傳新申請學生 Excel；排名接續於現有名單之後"
+                                    tooltipOff="點擊以開放學院上傳補充申請名單（Excel）"
+                                    onToggle={next =>
+                                      api.college.toggleConfigSupplementaryImport(
+                                        config.id,
+                                        next
+                                      )
+                                    }
+                                    onChange={() =>
+                                      selectedScholarshipType &&
+                                      void loadConfigurations(selectedScholarshipType)
+                                    }
+                                  />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="w-16 shrink-0 text-xs text-muted-foreground">
+                                    查看分發
+                                  </span>
+                                  <ConfigToggleSwitch
+                                    initialOpen={!!config.allow_college_view_distribution}
+                                    ariaLabel="開放/關閉學院查看分發結果"
+                                    successOn="已開放學院查看分發結果"
+                                    successOff="已關閉學院查看分發結果"
+                                    tooltipOn="學院可查看自己學生的分發結果（正取／備取／未錄取）"
+                                    tooltipOff="點擊以開放學院查看分發結果"
+                                    onToggle={next =>
+                                      api.college.toggleConfigCollegeViewDistribution(
+                                        config.id,
+                                        next
+                                      )
+                                    }
+                                    onChange={() =>
+                                      selectedScholarshipType &&
+                                      void loadConfigurations(selectedScholarshipType)
+                                    }
+                                  />
+                                </div>
+                              </div>
                             </td>
                             <td className="p-4">
                               <div className="flex justify-end gap-1">

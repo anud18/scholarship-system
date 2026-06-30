@@ -3441,6 +3441,28 @@ export interface paths {
         patch: operations["toggle_configuration_supplementary_import_api_v1_scholarship_configurations_configurations__id__supplementary_import_patch"];
         trace?: never;
     };
+    "/api/v1/scholarship-configurations/configurations/{id}/college-view-distribution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Toggle Configuration College View Distribution
+         * @description Admin toggle: open or close college visibility of distribution results.
+         *
+         *     Applies to all colleges' rankings under this (scholarship_type, academic_year, semester).
+         */
+        patch: operations["toggle_configuration_college_view_distribution_api_v1_scholarship_configurations_configurations__id__college_view_distribution_patch"];
+        trace?: never;
+    };
     "/api/v1/scholarship-configurations/configurations/{id}/duplicate": {
         parameters: {
             query?: never;
@@ -4746,6 +4768,30 @@ export interface paths {
          *     - Rejected students
          */
         get: operations["get_distribution_details_api_v1_college_review_rankings__ranking_id__distribution_details_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/distribution-results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get College Distribution Results
+         * @description College-facing: this college's own students' distribution outcomes by sub-type.
+         *
+         *     Gated by ScholarshipConfiguration.allow_college_view_distribution (admin toggle).
+         *     Scoped to the caller's college_code. Allocation outcome only — no payment PII,
+         *     no allocation-year labels (outcomes for one sub-type are merged across years).
+         */
+        get: operations["get_college_distribution_results_api_v1_college_review_distribution_results_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8606,6 +8652,11 @@ export interface components {
              * @default set
              */
             operation: string;
+        };
+        /** CollegeViewDistributionToggle */
+        CollegeViewDistributionToggle: {
+            /** Allow */
+            allow: boolean;
         };
         /**
          * ConfigCategory
@@ -16668,6 +16719,41 @@ export interface operations {
             };
         };
     };
+    toggle_configuration_college_view_distribution_api_v1_scholarship_configurations_configurations__id__college_view_distribution_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollegeViewDistributionToggle"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     duplicate_scholarship_configuration_api_v1_scholarship_configurations_configurations__id__duplicate_post: {
         parameters: {
             query?: never;
@@ -18892,6 +18978,39 @@ export interface operations {
             path: {
                 ranking_id: number;
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_college_distribution_results_api_v1_college_review_distribution_results_get: {
+        parameters: {
+            query: {
+                scholarship_type_id: number;
+                academic_year: number;
+                semester?: string | null;
+            };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;

@@ -350,6 +350,7 @@ export interface ScholarshipConfiguration {
   review_deadline?: string;
   is_active: boolean;
   allow_supplementary_import?: boolean;
+  allow_college_view_distribution?: boolean;
   effective_start_date?: string;
   effective_end_date?: string;
   version: string;
