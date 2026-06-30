@@ -671,11 +671,13 @@ async function _fetchBinaryExport(
 /**
  * Download the 學生資料彙整表 for a college ranking, as Excel (default) or PDF.
  *
- * Endpoint: GET /api/v1/college-review/rankings/{ranking_id}/export-excel?format={xlsx|pdf}
+ * Endpoint: GET /api/v1/college-review/rankings/{ranking_id}/export-excel
+ *   `format` is an OPTIONAL query param: "pdf" appends `?format=pdf`; the
+ *   default "xlsx" is omitted entirely, so the xlsx request URL is unchanged.
  *
  * Returns the binary file as a Blob along with the filename extracted from
  * the `Content-Disposition: attachment; filename*=UTF-8''<encoded>` header.
- * Falls back to `學生資料彙整表_${rankingId}.${ext}` if the header is missing.
+ * Falls back to `學生資料彙整表_${rankingId}.${format}` if the header is missing.
  */
 export async function exportRankingExcel(
   rankingId: number,
