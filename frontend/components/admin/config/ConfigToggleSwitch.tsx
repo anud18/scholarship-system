@@ -15,8 +15,6 @@ export interface ConfigToggleSwitchProps {
   initialOpen: boolean;
   onToggle: (next: boolean) => Promise<unknown>;
   ariaLabel: string;
-  onLabel?: string; // default 開放中
-  offLabel?: string; // default 已關閉
   successOn: string;
   successOff: string;
   tooltipOn: string;
@@ -28,8 +26,6 @@ export function ConfigToggleSwitch({
   initialOpen,
   onToggle,
   ariaLabel,
-  onLabel = "開放中",
-  offLabel = "已關閉",
   successOn,
   successOff,
   tooltipOn,
@@ -97,7 +93,7 @@ export function ConfigToggleSwitch({
                   />
                 </span>
               )}
-              {open ? onLabel : offLabel}
+              {open ? "開放中" : "已關閉"}
             </span>
           </div>
         </TooltipTrigger>

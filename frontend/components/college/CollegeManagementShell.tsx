@@ -328,62 +328,62 @@ function CollegeManagementContent({ user }: { user: User }) {
         </TabsList>
 
         {/* 每個獎學金類型的內容 */}
-        {availableOptions.scholarship_types.map(scholarshipType => (
-          <TabsContent
-            key={scholarshipType.code}
-            value={scholarshipType.code}
-            className="space-y-6"
-          >
-            {/* admin/super_admin: 直接顯示分發面板，無需子 Tab */}
-            {(user.role === "admin" || user.role === "super_admin") ? (
-              <ManualDistributionPanel
-                user={user}
-                scholarshipType={scholarshipType}
-              />
-            ) : (
-              /* college: 申請審核 + 學生排序 (+ 分發結果 when admin opens it) */
-              (() => {
-                const showDistribution = filteredRankings.some(
-                  r => r.allow_college_view_distribution === true
-                );
-                return (
-                  <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                    <TabsList className={`grid w-full ${showDistribution ? "grid-cols-3" : "grid-cols-2"}`}>
-                      <TabsTrigger value="review" className="flex items-center gap-2">
-                        <GraduationCap className="h-4 w-4" />
-                        {locale === "zh" ? "申請審核" : "Application Review"}
-                      </TabsTrigger>
-                      <TabsTrigger value="ranking" className="flex items-center gap-2">
-                        <Trophy className="h-4 w-4" />
-                        {locale === "zh" ? "學生排序" : "Student Ranking"}
-                      </TabsTrigger>
-                      {showDistribution && (
-                        <TabsTrigger value="distribution" className="flex items-center gap-2">
-                          <Award className="h-4 w-4" />
-                          {locale === "zh" ? "分發結果" : "Distribution Result"}
-                        </TabsTrigger>
-                      )}
-                    </TabsList>
-
-                    <TabsContent value="review" className="space-y-6">
-                      <ApplicationReviewPanel user={user} scholarshipType={scholarshipType} />
-                    </TabsContent>
-
-                    <TabsContent value="ranking" className="space-y-6">
-                      <RankingManagementPanel user={user} scholarshipType={scholarshipType} />
-                    </TabsContent>
-
+        {availableOptions.scholarship_types.map(scholarshipType => {
+          // college: 分發結果 tab appears only when an admin opened visibility for the
+          // active (type, year, semester), derived from the per-ranking flag.
+          const showDistribution = filteredRankings.some(
+            r => r.allow_college_view_distribution === true
+          );
+          return (
+            <TabsContent
+              key={scholarshipType.code}
+              value={scholarshipType.code}
+              className="space-y-6"
+            >
+              {/* admin/super_admin: 直接顯示分發面板，無需子 Tab */}
+              {(user.role === "admin" || user.role === "super_admin") ? (
+                <ManualDistributionPanel
+                  user={user}
+                  scholarshipType={scholarshipType}
+                />
+              ) : (
+                /* college: 申請審核 + 學生排序 (+ 分發結果 when admin opens it) */
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                  <TabsList className={`grid w-full ${showDistribution ? "grid-cols-3" : "grid-cols-2"}`}>
+                    <TabsTrigger value="review" className="flex items-center gap-2">
+                      <GraduationCap className="h-4 w-4" />
+                      {locale === "zh" ? "申請審核" : "Application Review"}
+                    </TabsTrigger>
+                    <TabsTrigger value="ranking" className="flex items-center gap-2">
+                      <Trophy className="h-4 w-4" />
+                      {locale === "zh" ? "學生排序" : "Student Ranking"}
+                    </TabsTrigger>
                     {showDistribution && (
-                      <TabsContent value="distribution" className="space-y-6">
-                        <DistributionResultPanel user={user} scholarshipType={scholarshipType} />
-                      </TabsContent>
+                      <TabsTrigger value="distribution" className="flex items-center gap-2">
+                        <Award className="h-4 w-4" />
+                        {locale === "zh" ? "分發結果" : "Distribution Result"}
+                      </TabsTrigger>
                     )}
-                  </Tabs>
-                );
-              })()
-            )}
-          </TabsContent>
-        ))}
+                  </TabsList>
+
+                  <TabsContent value="review" className="space-y-6">
+                    <ApplicationReviewPanel user={user} scholarshipType={scholarshipType} />
+                  </TabsContent>
+
+                  <TabsContent value="ranking" className="space-y-6">
+                    <RankingManagementPanel user={user} scholarshipType={scholarshipType} />
+                  </TabsContent>
+
+                  {showDistribution && (
+                    <TabsContent value="distribution" className="space-y-6">
+                      <DistributionResultPanel user={user} scholarshipType={scholarshipType} />
+                    </TabsContent>
+                  )}
+                </Tabs>
+              )}
+            </TabsContent>
+          );
+        })}
       </Tabs>
     </div>
   );

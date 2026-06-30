@@ -8,19 +8,26 @@ Handles:
 """
 
 import logging
+from collections import defaultdict
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import load_only, selectinload
 
 from app.core.security import require_college
 from app.db.deps import get_db
+from app.models.application import Application
 from app.models.college_review import CollegeRanking, CollegeRankingItem
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User
 from app.schemas.response import ApiResponse
+from app.utils.application_helpers import (
+    get_college_code_from_data,
+    get_nycu_id_from_data,
+    get_student_name_from_data,
+)
 from app.services.college_review_service import (
     CollegeReviewError,
     CollegeReviewService,
@@ -435,22 +442,6 @@ async def get_college_distribution_results(
     if not config.allow_college_view_distribution:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="分發結果尚未開放查看")
 
-    # Sub-type label metadata
-    st_stmt = (
-        select(ScholarshipType)
-        .options(selectinload(ScholarshipType.sub_type_configs))
-        .where(ScholarshipType.id == scholarship_type_id)
-    )
-    scholarship_type = (await db.execute(st_stmt)).scalar_one_or_none()
-    label_map: Dict[str, Dict[str, str]] = {}
-    if scholarship_type and getattr(scholarship_type, "sub_type_configs", None):
-        for sc in scholarship_type.sub_type_configs:
-            if sc.sub_type_code:
-                label_map[sc.sub_type_code] = {
-                    "label": sc.name or sc.sub_type_code,
-                    "label_en": sc.name_en or sc.name or sc.sub_type_code,
-                }
-
     # Rankings for this (type, year, semester)
     ranking_stmt = select(CollegeRanking).where(
         and_(
@@ -474,19 +465,33 @@ async def get_college_distribution_results(
             data={"distribution_executed": distribution_executed, "sub_types": []},
         )
 
+    # Sub-type label metadata (deferred until we know there are distributed results to label)
+    st_stmt = (
+        select(ScholarshipType)
+        .options(selectinload(ScholarshipType.sub_type_configs))
+        .where(ScholarshipType.id == scholarship_type_id)
+    )
+    scholarship_type = (await db.execute(st_stmt)).scalar_one_or_none()
+    label_map: Dict[str, Dict[str, str]] = {}
+    if scholarship_type and getattr(scholarship_type, "sub_type_configs", None):
+        for sc in scholarship_type.sub_type_configs:
+            if sc.sub_type_code:
+                label_map[sc.sub_type_code] = {
+                    "label": sc.name or sc.sub_type_code,
+                    "label_en": sc.name_en or sc.name or sc.sub_type_code,
+                }
+
+    # Only student_data + deleted_at are read below; avoid hydrating the full Application row.
     items_stmt = (
         select(CollegeRankingItem)
-        .options(selectinload(CollegeRankingItem.application))
+        .options(
+            selectinload(CollegeRankingItem.application).load_only(Application.student_data, Application.deleted_at)
+        )
         .where(CollegeRankingItem.ranking_id.in_(ranking_ids))
     )
     items = (await db.execute(items_stmt)).scalars().all()
 
-    groups: Dict[str, Dict[str, list]] = {}
-
-    def bucket(code: str) -> Dict[str, list]:
-        if code not in groups:
-            groups[code] = {"admitted": [], "backup": [], "rejected": []}
-        return groups[code]
+    groups: Dict[str, Dict[str, list]] = defaultdict(lambda: {"admitted": [], "backup": [], "rejected": []})
 
     for item in items:
         appn = item.application
@@ -495,21 +500,19 @@ async def get_college_distribution_results(
         if appn.deleted_at is not None:
             continue
         sd = appn.student_data
-        # College scoping (Python-side; student_data is encrypted JSON, std_academyno is plaintext)
-        student_college = (
-            sd.get("std_academyno") or sd.get("academy_code") or sd.get("college_code") or sd.get("std_college")
-        )
-        if student_college != college_code:
+        # College scoping (Python-side; student_data is encrypted JSON, the academy code is plaintext).
+        # Reuse the canonical student_data accessors so key-alias changes stay in one place.
+        if get_college_code_from_data(sd) != college_code:
             continue
         student = {
-            "student_number": sd.get("std_stdcode") or sd.get("nycu_id") or "N/A",
-            "student_name": sd.get("std_cname") or sd.get("name") or "N/A",
+            "student_number": get_nycu_id_from_data(sd) or "N/A",
+            "student_name": get_student_name_from_data(sd),
         }
         fallback_code = ranking_sub_type.get(item.ranking_id) or "unallocated"
 
         handled = False
         if item.is_allocated and item.allocated_sub_type:
-            bucket(item.allocated_sub_type)["admitted"].append({**student, "rank_position": item.rank_position})
+            groups[item.allocated_sub_type]["admitted"].append({**student, "rank_position": item.rank_position})
             handled = True
         if item.backup_allocations and isinstance(item.backup_allocations, list):
             for ba in item.backup_allocations:
@@ -518,17 +521,14 @@ async def get_college_distribution_results(
                 st_code = ba.get("sub_type")
                 if not st_code:
                     continue
-                bucket(st_code)["backup"].append({**student, "backup_position": ba.get("backup_position")})
+                groups[st_code]["backup"].append({**student, "backup_position": ba.get("backup_position")})
                 handled = True
         if not handled:
-            bucket(fallback_code)["rejected"].append(student)
-
-    def meta(code: str) -> Dict[str, str]:
-        return label_map.get(code, {"label": code, "label_en": code})
+            groups[fallback_code]["rejected"].append(student)
 
     sub_types = []
     for code in sorted(groups.keys()):
-        m = meta(code)
+        m = label_map.get(code, {"label": code, "label_en": code})
         g = groups[code]
         sub_types.append(
             {

@@ -16,6 +16,34 @@ import { toApiResponse } from "../compat";
 import type { ApiResponse } from "../types";
 import type { components as SchemaComponents } from "../generated/schema";
 
+// Shared PATCH for the per-config admin toggles (supplementary-import, college-view-distribution):
+// both flip one boolean on a ScholarshipConfiguration via the same auth + error-unwrap path.
+async function patchScholarshipConfigToggle<T>(
+  configurationId: number,
+  segment: string,
+  allow: boolean
+): Promise<ApiResponse<T>> {
+  const token = typedClient.getToken();
+  const resp = await fetch(
+    `/api/v1/scholarship-configurations/configurations/${configurationId}/${segment}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ allow }),
+    }
+  );
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => null);
+    // Backend wraps HTTPException into ApiResponse { success, message, trace_id }
+    // — prefer `message`, fall back to FastAPI's bare `detail` shape.
+    throw new Error(err?.message || err?.detail || "操作失敗");
+  }
+  return resp.json();
+}
+
 type CreateRankingRequest =
   SchemaComponents["schemas"]["Body_create_ranking_api_v1_college_review_rankings_post"];
 type CreateRankingInput = Omit<CreateRankingRequest, "force_new"> & {
@@ -565,57 +593,29 @@ export function createCollegeApi() {
      * The flag applies to ALL colleges' rankings under that
      * (scholarship_type, academic_year, semester) configuration.
      */
-    toggleConfigSupplementaryImport: async (
+    toggleConfigSupplementaryImport: (
       configurationId: number,
       allow: boolean
-    ): Promise<ApiResponse<{ id: number; allow_supplementary_import: boolean }>> => {
-      const token = typedClient.getToken();
-      const resp = await fetch(
-        `/api/v1/scholarship-configurations/configurations/${configurationId}/supplementary-import`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ allow }),
-        }
-      );
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => null);
-        // Backend wraps HTTPException into ApiResponse { success, message, trace_id }
-        // — prefer `message`, fall back to FastAPI's bare `detail` shape.
-        throw new Error(err?.message || err?.detail || "操作失敗");
-      }
-      return resp.json();
-    },
+    ): Promise<ApiResponse<{ id: number; allow_supplementary_import: boolean }>> =>
+      patchScholarshipConfigToggle<{ id: number; allow_supplementary_import: boolean }>(
+        configurationId,
+        "supplementary-import",
+        allow
+      ),
 
     /**
      * Admin: toggle college visibility of distribution results for a configuration.
      * PATCH /api/v1/scholarship-configurations/configurations/{id}/college-view-distribution
      */
-    toggleConfigCollegeViewDistribution: async (
+    toggleConfigCollegeViewDistribution: (
       configurationId: number,
       allow: boolean
-    ): Promise<ApiResponse<{ id: number; allow_college_view_distribution: boolean }>> => {
-      const token = typedClient.getToken();
-      const resp = await fetch(
-        `/api/v1/scholarship-configurations/configurations/${configurationId}/college-view-distribution`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ allow }),
-        }
-      );
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => null);
-        throw new Error(err?.message || err?.detail || "操作失敗");
-      }
-      return resp.json();
-    },
+    ): Promise<ApiResponse<{ id: number; allow_college_view_distribution: boolean }>> =>
+      patchScholarshipConfigToggle<{ id: number; allow_college_view_distribution: boolean }>(
+        configurationId,
+        "college-view-distribution",
+        allow
+      ),
 
     /**
      * College: upload supplementary Excel for a ranking.
