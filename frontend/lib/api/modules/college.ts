@@ -502,14 +502,16 @@ export function createCollegeApi() {
     },
 
     /**
-     * Download the 學生資料彙整表 Excel for a ranking (backend-generated).
+     * Download the 學生資料彙整表 for a ranking (backend-generated), as Excel
+     * (default) or PDF.
      * Endpoint: GET /api/v1/college-review/rankings/{ranking_id}/export-excel
      * Returns the binary blob and the filename parsed from Content-Disposition.
      */
     exportRankingExcel: async (
-      rankingId: number
+      rankingId: number,
+      format: "xlsx" | "pdf" = "xlsx"
     ): Promise<{ blob: Blob; filename: string }> => {
-      return exportRankingExcel(rankingId);
+      return exportRankingExcel(rankingId, format);
     },
 
     /**
@@ -667,21 +669,26 @@ async function _fetchBinaryExport(
 }
 
 /**
- * Download the 學生資料彙整表 Excel for a college ranking.
+ * Download the 學生資料彙整表 for a college ranking, as Excel (default) or PDF.
  *
  * Endpoint: GET /api/v1/college-review/rankings/{ranking_id}/export-excel
+ *   `format` is an OPTIONAL query param: "pdf" appends `?format=pdf`; the
+ *   default "xlsx" is omitted entirely, so the xlsx request URL is unchanged.
  *
- * Returns the binary xlsx as a Blob along with the filename extracted from
+ * Returns the binary file as a Blob along with the filename extracted from
  * the `Content-Disposition: attachment; filename*=UTF-8''<encoded>` header.
- * Falls back to `學生資料彙整表_${rankingId}.xlsx` if the header is missing.
+ * Falls back to `學生資料彙整表_${rankingId}.${format}` if the header is missing.
  */
 export async function exportRankingExcel(
-  rankingId: number
+  rankingId: number,
+  format: "xlsx" | "pdf" = "xlsx"
 ): Promise<{ blob: Blob; filename: string }> {
+  const params = new URLSearchParams();
+  if (format !== "xlsx") params.set("format", format);
   return _fetchBinaryExport(
     `/api/v1/college-review/rankings/${rankingId}/export-excel`,
-    new URLSearchParams(),
-    `學生資料彙整表_${rankingId}.xlsx`,
+    params,
+    `學生資料彙整表_${rankingId}.${format}`,
     "無法匯出排名資料"
   );
 }

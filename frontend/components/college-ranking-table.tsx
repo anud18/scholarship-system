@@ -27,6 +27,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -69,6 +75,7 @@ import {
   Download,
   Upload,
   FileSpreadsheet,
+  ChevronDown,
 } from "lucide-react";
 import { getTranslation } from "@/lib/i18n";
 import { toast } from "sonner";
@@ -669,13 +676,13 @@ export function CollegeRankingTable({
     }
   };
 
-  const handleExportRanking = async () => {
+  const handleExportRanking = async (format: "xlsx" | "pdf") => {
     if (!rankingId) {
       toast.error("缺少排名 ID，無法匯出");
       return;
     }
     try {
-      const result = await exportRankingExcel(rankingId);
+      const result = await exportRankingExcel(rankingId, format);
       triggerBlobDownload(result);
       toast.success(`已下載 ${result.filename}`);
     } catch (error) {
@@ -898,10 +905,25 @@ export function CollegeRankingTable({
                 </>
               )}
 
-              <Button variant="outline" size="sm" onClick={handleExportRanking}>
-                <Download className="h-4 w-4 mr-2" />
-                {locale === "zh" ? "匯出" : "Export"}
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Download className="h-4 w-4 mr-2" />
+                    {locale === "zh" ? "匯出" : "Export"}
+                    <ChevronDown className="h-4 w-4 ml-2" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => handleExportRanking("xlsx")}>
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    {locale === "zh" ? "匯出 Excel" : "Export Excel"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExportRanking("pdf")}>
+                    <FileText className="h-4 w-4 mr-2" />
+                    {locale === "zh" ? "匯出 PDF" : "Export PDF"}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </CardHeader>

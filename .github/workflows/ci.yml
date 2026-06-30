@@ -273,6 +273,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      # The college-ranking PDF export (reportlab) registers
+      # /usr/share/fonts/truetype/wqy/wqy-zenhei.ttc, installed in the backend
+      # Docker image (see backend/Dockerfile). CI runs on a bare runner, so the
+      # font must be installed here for the build_pdf / export-pdf tests to render.
+      - name: Install CJK font (reportlab PDF export tests)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fonts-wqy-zenhei
+
       - name: Setup Python
         uses: actions/setup-python@v6
         with:

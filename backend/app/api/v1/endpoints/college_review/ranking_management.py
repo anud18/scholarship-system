@@ -10,7 +10,7 @@ Handles:
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 from urllib.parse import quote as _url_quote
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, UploadFile, status
@@ -44,6 +44,7 @@ from app.services.review_service import ReviewService
 from app.utils.application_helpers import get_college_code_from_data
 from app.services.supplementary_import_service import SupplementaryImportService
 
+from .application_summary_export import XLSX_MEDIA_TYPE
 from ._helpers import (
     _check_academic_year_permission,
     _check_scholarship_permission,
@@ -1176,14 +1177,20 @@ async def export_ranking_excel(
     ranking_id: int,
     request: Request,
     template: bool = Query(False, description="Render the rank column blank, as a fill-in import template"),
+    format: Literal["xlsx", "pdf"] = Query("xlsx", description="Output format: xlsx (default) or pdf"),
     current_user: User = Depends(require_scholarship_manager),
     db: AsyncSession = Depends(get_db),
 ):
-    """Generate the 學生資料彙整表 Excel for a ranking.
+    """Generate the 學生資料彙整表 for a ranking, as Excel (default) or PDF.
 
     Auth: admin/super_admin OR a college user whose `college_code` matches the
     ranking's own `college_code` (authoritative per-college ownership).
     """
+
+    # A PDF template makes no sense — a template is meant to be filled in and
+    # re-imported, which only the xlsx path supports.
+    if template and format == "pdf":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="範本僅支援 Excel 格式")
 
     # 1. Load ranking + items with applications
     stmt = (
@@ -1246,20 +1253,32 @@ async def export_ranking_excel(
         else (getattr(ranking.creator, "college_code", None) or "全校")
     )
     template_suffix = "_範本" if template else ""
+    extension = format  # Literal["xlsx", "pdf"] — extension IS the format
     base_filename = (
-        f"{ranking.academic_year}學年度{scholarship_name}學生資料彙整表_{college_label}{template_suffix}.xlsx"
+        f"{ranking.academic_year}學年度{scholarship_name}學生資料彙整表"
+        f"_{college_label}{template_suffix}.{extension}"
     )
     encoded = _url_quote(base_filename, safe="")
 
-    # 7. Render workbook
+    # 7. Render the workbook (xlsx) or PDF — both share the same columns/rows.
     service = CollegeRankingExportService()
-    payload = service.build_workbook(
-        rows=export_rows,
-        dynamic_fields=dynamic_fields,
-        sub_type_labels=sub_type_labels,
-        title=title,
-        sheet_name=sheet_name,
-    )
+    if format == "pdf":
+        payload = service.build_pdf(
+            rows=export_rows,
+            dynamic_fields=dynamic_fields,
+            sub_type_labels=sub_type_labels,
+            title=title,
+        )
+        media_type = "application/pdf"
+    else:
+        payload = service.build_workbook(
+            rows=export_rows,
+            dynamic_fields=dynamic_fields,
+            sub_type_labels=sub_type_labels,
+            title=title,
+            sheet_name=sheet_name,
+        )
+        media_type = XLSX_MEDIA_TYPE
 
     # 8. Audit the PII access (issue #73): business confirmed Excel must show
     # the full std_pid, so every export that includes plaintext IDs is logged.
@@ -1287,7 +1306,7 @@ async def export_ranking_excel(
                 "record_count": len(exported_app_ids),
                 "application_ids": exported_app_ids,
                 "pii_fields": ["std_pid"],
-                "export_format": "xlsx",
+                "export_format": extension,
                 "is_template": template,
             },
         )
@@ -1299,7 +1318,7 @@ async def export_ranking_excel(
 
     return StreamingResponse(
         iter([payload]),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        media_type=media_type,
         headers={
             "Content-Disposition": f"attachment; filename*=UTF-8''{encoded}",
             "Content-Length": str(len(payload)),

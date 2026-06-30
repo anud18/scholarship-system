@@ -24,8 +24,6 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,6 +33,7 @@ from app.models.application import Application
 from app.models.scholarship import ScholarshipType
 from app.services.export_summary_tables import build_embedded_summary_tables
 from app.services.minio_service import MinIOService
+from app.services.pdf_fonts import CJK_FONT_NAME, ensure_cjk_font
 
 logger = logging.getLogger(__name__)
 
@@ -128,23 +127,11 @@ async def _fetch_and_write(
         zf.writestr(error_path, f"檔案下載失敗：{error_label}\n錯誤：{str(e)}")
 
 
-CJK_FONT_PATH = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
-_font_registered = False
-
-
-def _ensure_font():
-    """Register CJK font once for reportlab."""
-    global _font_registered
-    if not _font_registered:
-        pdfmetrics.registerFont(TTFont("WQY", CJK_FONT_PATH, subfontIndex=0))
-        _font_registered = True
-
-
 class ExportPackageService:
     def __init__(self, db: AsyncSession, minio_service: MinIOService):
         self.db = db
         self.minio = minio_service
-        _ensure_font()
+        ensure_cjk_font()
 
     async def generate_export_zip(
         self,
@@ -362,18 +349,18 @@ class ExportPackageService:
         export_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
 
         # Styles
-        s_normal = ParagraphStyle("CJK", fontName="WQY", fontSize=10, leading=14)
-        s_title = ParagraphStyle("CJKTitle", fontName="WQY", fontSize=16, leading=20, alignment=1)
+        s_normal = ParagraphStyle("CJK", fontName=CJK_FONT_NAME, fontSize=10, leading=14)
+        s_title = ParagraphStyle("CJKTitle", fontName=CJK_FONT_NAME, fontSize=16, leading=20, alignment=1)
         s_section = ParagraphStyle(
             "CJKSection",
-            fontName="WQY",
+            fontName=CJK_FONT_NAME,
             fontSize=12,
             leading=16,
             backColor=colors.Color(0.94, 0.94, 0.94),
         )
         s_header = ParagraphStyle(
             "CJKHeader",
-            fontName="WQY",
+            fontName=CJK_FONT_NAME,
             fontSize=9,
             leading=12,
             alignment=1,
@@ -381,7 +368,7 @@ class ExportPackageService:
         )
         s_footer = ParagraphStyle(
             "CJKFooter",
-            fontName="WQY",
+            fontName=CJK_FONT_NAME,
             fontSize=8,
             leading=10,
             alignment=1,

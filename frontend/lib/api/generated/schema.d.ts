@@ -4648,7 +4648,7 @@ export interface paths {
         };
         /**
          * Export Ranking Excel
-         * @description Generate the 學生資料彙整表 Excel for a ranking.
+         * @description Generate the 學生資料彙整表 for a ranking, as Excel (default) or PDF.
          *
          *     Auth: admin/super_admin OR a college user whose `college_code` matches the
          *     ranking's own `college_code` (authoritative per-college ownership).
@@ -18752,6 +18752,8 @@ export interface operations {
             query?: {
                 /** @description Render the rank column blank, as a fill-in import template */
                 template?: boolean;
+                /** @description Output format: xlsx (default) or pdf */
+                format?: "xlsx" | "pdf";
             };
             header?: never;
             path: {
