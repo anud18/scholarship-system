@@ -31,6 +31,7 @@ from reportlab.lib.units import mm
 from reportlab.platypus import KeepInFrame, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.services.pdf_fonts import CJK_FONT_NAME, ensure_cjk_font
+from app.utils.excel_safety import excel_safe_cell_value
 
 # Static columns shared by the xlsx and PDF exports: (header label, PDF column
 # weight). STATIC_HEADERS and the PDF weight vector are both derived from this one
@@ -120,11 +121,14 @@ class CollegeRankingExportService:
             cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
             cell.fill = PatternFill("solid", fgColor="DDDDDD")
 
-        # Data rows — written from the same _row_cells used by the PDF export
+        # Data rows — written from the same _row_cells used by the PDF export.
+        # excel_safe_cell_value neutralizes formula injection (see its docstring)
+        # -- applied only here, not inside _row_cells, so the PDF export (which
+        # can't execute formulas) keeps rendering the raw text unprefixed.
         for idx, row in enumerate(rows, start=1):
             excel_row = idx + 2  # +2 because rows 1-2 are title/header
             for col_idx, value in enumerate(self._row_cells(row, idx, sub_type_labels, sorted_dynamic), start=1):
-                ws.cell(row=excel_row, column=col_idx, value=value)
+                ws.cell(row=excel_row, column=col_idx, value=excel_safe_cell_value(value))
 
         max_row = len(rows) + 2
         self._apply_borders(ws, max_row=max_row, max_col=total_cols)

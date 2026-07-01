@@ -24,6 +24,7 @@ from app.models.payment_roster import (
     StudentVerificationStatus,
 )
 from app.services.minio_service import MinIOService
+from app.utils.excel_safety import excel_safe_cell_value
 
 logger = logging.getLogger(__name__)
 
@@ -777,7 +778,7 @@ class ExcelExportService:
             for row_idx, (row_data, fills) in enumerate(zip(excel_data, cell_fills, strict=True), start=start_row):
                 for col_idx, column_name in enumerate(columns, start=1):
                     value = row_data.get(column_name, "")
-                    cell = ws.cell(row=row_idx, column=col_idx, value=value)
+                    cell = ws.cell(row=row_idx, column=col_idx, value=excel_safe_cell_value(value))
 
                     if column_name in self.NUMERIC_FORMAT_COLUMNS and isinstance(value, (int, float)):
                         cell.number_format = "#,##0"
