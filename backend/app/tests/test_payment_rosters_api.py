@@ -644,6 +644,38 @@ def locked_roster_with_removed_item(sync_db_for_rosters):
     sync_db_for_rosters.commit()
     sync_db_for_rosters.refresh(u)
 
+    # Security fix (issue #1081, finding K): restore_item now requires a real,
+    # approved Application (mirrors reconcile_roster's add path) -- the item
+    # used to reference a dangling application_id=1 with no backing row, which
+    # only worked because SQLite doesn't enforce the FK by default.
+    from app.models.application import Application, ApplicationStatus
+    from app.models.scholarship import SubTypeSelectionMode
+
+    student = User(
+        nycu_id="student_rmrest",
+        email="student_rmrest@nycu.edu.tw",
+        name="Student RMREST",
+        role=UserRole.student,
+        user_type=UserType.student,
+    )
+    sync_db_for_rosters.add(student)
+    sync_db_for_rosters.commit()
+    sync_db_for_rosters.refresh(student)
+
+    application = Application(
+        user_id=student.id,
+        app_id="APP-PR-RMREST",
+        scholarship_type_id=1,
+        academic_year=114,
+        semester="first",
+        status=ApplicationStatus.approved,
+        sub_type_selection_mode=SubTypeSelectionMode.single,
+        sub_scholarship_type="nstc",
+    )
+    sync_db_for_rosters.add(application)
+    sync_db_for_rosters.commit()
+    sync_db_for_rosters.refresh(application)
+
     r = PaymentRoster(
         roster_code="ROSTER-PR-RMREST",
         scholarship_configuration_id=1,
@@ -666,7 +698,7 @@ def locked_roster_with_removed_item(sync_db_for_rosters):
 
     item = PaymentRosterItem(
         roster_id=r.id,
-        application_id=1,
+        application_id=application.id,
         student_id_number="PR-RMREST-001",
         student_name="Restore Test Student",
         scholarship_name="Test Scholarship",
