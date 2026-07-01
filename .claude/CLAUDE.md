@@ -143,7 +143,7 @@ CREATE TYPE semester AS ENUM ('first', 'second', 'yearly');
 - ✅ Normalize to lowercase in application layer: `sub_type.lower().strip()`
 
 #### Enum Synchronization Checklist
-1. Update Python enum in `backend/app/models/enums.py`
+1. Update the Python enum where it lives — most are in `backend/app/models/enums.py`, but `UserRole`/`UserType`/`EmployeeStatus` are defined in `backend/app/models/user.py`
 2. Update TypeScript enum in `frontend/lib/enums.ts`
 3. Create Alembic migration for database enum changes
 4. Update all code references using find/replace
