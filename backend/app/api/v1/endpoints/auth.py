@@ -54,7 +54,17 @@ async def populate_college_info(user_data: UserResponse, db: AsyncSession, user:
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 @rate_limit(requests=10, window_seconds=600)  # 10 registrations / 10 min per IP
 async def register(request: Request, user_data: UserCreate, db: AsyncSession = Depends(get_db)):
-    """Register a new user"""
+    """Register a new user.
+
+    SECURITY: dev/test only. Real identities come from Portal SSO
+    (which creates users directly, not via this endpoint) or from
+    admin-authenticated POST /users. This endpoint accepts a
+    client-supplied `role` with no credential check, so it must never
+    be reachable when mock SSO is disabled (staging/production).
+    """
+    if not settings.enable_mock_sso:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
     client_ip = _client_ip(request)
     try:
         auth_service = AuthService(db)
@@ -103,7 +113,17 @@ async def register(request: Request, user_data: UserCreate, db: AsyncSession = D
 @router.post("/login")
 @rate_limit(requests=20, window_seconds=300)  # 20 attempts / 5 min per IP — slows brute force
 async def login(request: Request, login_data: UserLogin, db: AsyncSession = Depends(get_db)):
-    """Login user and return access token"""
+    """Login user and return access token.
+
+    SECURITY: dev/test only. `UserLogin` carries no password/credential —
+    `AuthService.authenticate_user` mints a token for any existing
+    `nycu_id`/email with no verification. Real logins go through Portal
+    SSO (`/auth/portal-sso/*`), so this must never be reachable when
+    mock SSO is disabled (staging/production).
+    """
+    if not settings.enable_mock_sso:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
     client_ip = _client_ip(request)
     try:
         auth_service = AuthService(db)
