@@ -239,6 +239,19 @@ async def update_professor_review(
         if existing_review.application_id != application_id:
             raise AuthorizationError("Review does not belong to the specified application")
 
+        # SECURITY: a terminal reject (status=rejected) must stay terminal for the
+        # professor. assert_professor_review_unlocked alone doesn't catch this --
+        # review_stage after a reject is "professor_reviewed", which is deliberately
+        # NOT in the college-review lock set, so without this check a professor could
+        # PUT their own rejected review back to approve after the fact.
+        from app.core.config import settings
+
+        service = ApplicationService(db)
+        if not settings.bypass_time_restrictions and not await service.can_professor_submit_review(
+            application_id, current_user.id
+        ):
+            raise AuthorizationError("Professor not authorized to update review at this time or for this application")
+
         # Block professor edits once the college has started reviewing (#64).
         await review_service.assert_professor_review_unlocked(application_id, current_user)
 

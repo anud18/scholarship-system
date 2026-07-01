@@ -942,6 +942,16 @@ class ApplicationService:
 
         return application
 
+    async def get_viewable_application(self, application_id: int, current_user: User) -> Application | None:
+        """Get the raw Application model if current_user may view it, else None.
+
+        Same access rule as get_application_by_id (student must own it, professor
+        must be assigned, college/admin/super_admin pass through) but without the
+        cost of building a full ApplicationResponse -- for callers (e.g. review
+        endpoints) that only need the authorization gate.
+        """
+        return await self._get_application_model(application_id, current_user)
+
     async def get_application_by_id(self, application_id: int, current_user: User):
         """Get application by ID with proper access control and formatted response"""
         # Use internal method to get the application model

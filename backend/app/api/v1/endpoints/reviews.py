@@ -15,6 +15,7 @@ from sqlalchemy.exc import DatabaseError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from app.core.exceptions import AuthorizationError, NotFoundError
 from app.core.security import get_current_user
 from app.db.deps import get_db
 from app.models.application import Application
@@ -24,6 +25,7 @@ from app.models.user import User
 from app.schemas.response import ApiResponse
 from app.schemas.review import ReviewCreate, ReviewItemResponse, ReviewResponse, ReviewSubmitRequest
 from app.services.application_audit_service import ApplicationAuditService
+from app.services.application_service import ApplicationService
 from app.services.review_service import ReviewService
 
 logger = logging.getLogger(__name__)
@@ -214,8 +216,11 @@ async def get_application_reviews(
     """
     取得申請的所有審查記錄
     """
-    # 檢查申請是否存在
-    application = await db.get(Application, application_id)
+    # SECURITY: scope to the same access rule the rest of the app uses to view an
+    # application (student must own it, professor must be assigned, college/admin
+    # pass through) -- without this, any authenticated student could read other
+    # students' reviewer identities, recommendations, and rejection comments.
+    application = await ApplicationService(db).get_viewable_application(application_id, current_user)
     if not application:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="申請不存在")
 
@@ -276,8 +281,10 @@ async def get_application_review_status(
     """
     review_service = ReviewService(db)
 
-    # 檢查申請是否存在
-    application = await db.get(Application, application_id)
+    # SECURITY: same access-scoping as get_application_reviews above -- see that
+    # endpoint's comment. decision_reason and subtype_statuses (rejector identity +
+    # rejection comments) are equally sensitive.
+    application = await ApplicationService(db).get_viewable_application(application_id, current_user)
     if not application:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="申請不存在")
 
@@ -434,9 +441,29 @@ async def submit_application_review(
     if application_id <= 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid application ID")
 
+    # SECURITY: professors must pass the same assignment / terminal-status / review-window
+    # checks that the dedicated professor.py review endpoint enforces. Without this, any
+    # professor could review or reject an application they aren't assigned to, or reverse
+    # their own terminal reject after the fact via this parallel multi-role endpoint.
+    if current_user.is_professor():
+        from app.core.config import settings
+
+        application_service = ApplicationService(db)
+        if not settings.bypass_time_restrictions and not await application_service.can_professor_submit_review(
+            application_id, current_user.id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Professor not authorized to submit review at this time or for this application",
+            )
+
     try:
         # Use unified ReviewService for creating/updating reviews
         review_service = ReviewService(db)
+
+        if current_user.is_professor():
+            # Block professor edits once college review has started (#64), same as professor.py.
+            await review_service.assert_professor_review_unlocked(application_id, current_user)
 
         # Get reviewable sub-types for this user to validate permissions
         reviewable_subtypes = await review_service.get_reviewable_subtypes(application_id, current_user.role)
@@ -539,6 +566,10 @@ async def submit_application_review(
     except HTTPException:
         # Re-raise FastAPI HTTPException as-is (preserves status code and detail)
         raise
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except AuthorizationError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except ValueError as e:
         logger.warning(f"Invalid review data for application {application_id}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid review data") from e
