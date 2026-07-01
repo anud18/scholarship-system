@@ -224,6 +224,7 @@ async def update_professor_review(
     logger.info(f"Professor {current_user.id} updating review {review_id} for application {application_id}")
 
     try:
+        service = ApplicationService(db)
         review_service = ReviewService(db)
 
         # Verify ownership of the review
@@ -238,6 +239,17 @@ async def update_professor_review(
         # Verify the review belongs to the specified application
         if existing_review.application_id != application_id:
             raise AuthorizationError("Review does not belong to the specified application")
+
+        # SECURITY (#1081-A): enforce the same terminal-reject lock + review-window
+        # guard used on submit. A professor full-reject sets application.status =
+        # rejected, which fails can_professor_submit_review; without this check a
+        # professor could edit their own terminal reject back to an approval.
+        from app.core.config import settings
+
+        if not settings.bypass_time_restrictions and not await service.can_professor_submit_review(
+            application_id, current_user.id
+        ):
+            raise AuthorizationError("Professor not authorized to update review at this time or for this application")
 
         # Block professor edits once the college has started reviewing (#64).
         await review_service.assert_professor_review_unlocked(application_id, current_user)

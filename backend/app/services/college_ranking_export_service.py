@@ -31,6 +31,7 @@ from reportlab.lib.units import mm
 from reportlab.platypus import KeepInFrame, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.services.pdf_fonts import CJK_FONT_NAME, ensure_cjk_font
+from app.utils.excel_security import excel_safe_cell_value
 
 # Static columns shared by the xlsx and PDF exports: (header label, PDF column
 # weight). STATIC_HEADERS and the PDF weight vector are both derived from this one
@@ -124,7 +125,9 @@ class CollegeRankingExportService:
         for idx, row in enumerate(rows, start=1):
             excel_row = idx + 2  # +2 because rows 1-2 are title/header
             for col_idx, value in enumerate(self._row_cells(row, idx, sub_type_labels, sorted_dynamic), start=1):
-                ws.cell(row=excel_row, column=col_idx, value=value)
+                # SECURITY (#1081-G): free-text form fields flow into these cells;
+                # neutralize spreadsheet formula injection before writing.
+                ws.cell(row=excel_row, column=col_idx, value=excel_safe_cell_value(value))
 
         max_row = len(rows) + 2
         self._apply_borders(ws, max_row=max_row, max_col=total_cols)

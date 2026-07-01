@@ -10,6 +10,8 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
+from app.utils.excel_security import excel_safe_cell_value
+
 logger = logging.getLogger(__name__)
 
 
@@ -66,10 +68,12 @@ class WhitelistExcelService:
         row = 2
         for sub_type, students in whitelist_data.items():
             for student in students:
-                ws.cell(row=row, column=1).value = student.get("nycu_id", "")
-                ws.cell(row=row, column=2).value = student.get("name", "")
-                ws.cell(row=row, column=3).value = sub_type
-                ws.cell(row=row, column=4).value = student.get("note", "")
+                # SECURITY (#1081-G): nycu_id/name/note are user-influenced free
+                # text; neutralize spreadsheet formula injection before writing.
+                ws.cell(row=row, column=1).value = excel_safe_cell_value(student.get("nycu_id", ""))
+                ws.cell(row=row, column=2).value = excel_safe_cell_value(student.get("name", ""))
+                ws.cell(row=row, column=3).value = excel_safe_cell_value(sub_type)
+                ws.cell(row=row, column=4).value = excel_safe_cell_value(student.get("note", ""))
 
                 # 應用樣式
                 for col_idx in range(1, len(self.column_headers) + 1):
@@ -231,7 +235,8 @@ class WhitelistExcelService:
         for row_idx, data in enumerate(example_data, start=2):
             for col_idx, value in enumerate(data, start=1):
                 cell = ws.cell(row=row_idx, column=col_idx)
-                cell.value = value
+                # SECURITY (#1081-G): sub_type comes from admin config; guard it.
+                cell.value = excel_safe_cell_value(value)
                 cell.font = self.cell_font
                 cell.alignment = self.cell_alignment
                 cell.border = self.border

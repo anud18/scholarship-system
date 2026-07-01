@@ -942,6 +942,20 @@ class ApplicationService:
 
         return application
 
+    async def get_viewable_application(self, application_id: int, current_user: User) -> Application | None:
+        """Return the raw Application only if ``current_user`` may view its review data.
+
+        Access rules (identical to ``_get_application_model``):
+        - student: only their own application (``user_id`` match)
+        - professor: only applications assigned to them (``professor_id`` match)
+        - college / admin / super_admin: any application
+
+        Returns ``None`` when the application does not exist OR the caller has no
+        legitimate relationship to it. Callers should treat ``None`` as 404 so the
+        two cases are indistinguishable to an enumerating attacker (#1081-B).
+        """
+        return await self._get_application_model(application_id, current_user)
+
     async def get_application_by_id(self, application_id: int, current_user: User):
         """Get application by ID with proper access control and formatted response"""
         # Use internal method to get the application model

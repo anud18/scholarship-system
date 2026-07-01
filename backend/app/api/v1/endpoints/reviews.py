@@ -15,6 +15,8 @@ from sqlalchemy.exc import DatabaseError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from app.core.config import settings
+from app.core.exceptions import AuthorizationError, NotFoundError
 from app.core.security import get_current_user
 from app.db.deps import get_db
 from app.models.application import Application
@@ -24,6 +26,7 @@ from app.models.user import User
 from app.schemas.response import ApiResponse
 from app.schemas.review import ReviewCreate, ReviewItemResponse, ReviewResponse, ReviewSubmitRequest
 from app.services.application_audit_service import ApplicationAuditService
+from app.services.application_service import ApplicationService
 from app.services.review_service import ReviewService
 
 logger = logging.getLogger(__name__)
@@ -178,6 +181,13 @@ async def get_review(
     if not review:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="審查記錄不存在")
 
+    # SECURITY (#1081-B): a single review carries the same evaluative content as the
+    # list endpoint. Scope by the parent application so review-id enumeration can't
+    # leak another applicant's reviewer identity / recommendation / comments.
+    viewable = await ApplicationService(db).get_viewable_application(review.application_id, current_user)
+    if not viewable:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="審查記錄不存在")
+
     return {
         "success": True,
         "message": "審查記錄取得成功",
@@ -214,8 +224,11 @@ async def get_application_reviews(
     """
     取得申請的所有審查記錄
     """
-    # 檢查申請是否存在
-    application = await db.get(Application, application_id)
+    # SECURITY (#1081-B): review records carry reviewer identity, recommendations
+    # and free-text comments (required on reject). Scope reads to the application
+    # owner or staff with a legitimate relationship — otherwise any authenticated
+    # student could read another applicant's full evaluative trail by id.
+    application = await ApplicationService(db).get_viewable_application(application_id, current_user)
     if not application:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="申請不存在")
 
@@ -276,8 +289,10 @@ async def get_application_review_status(
     """
     review_service = ReviewService(db)
 
-    # 檢查申請是否存在
-    application = await db.get(Application, application_id)
+    # SECURITY (#1081-B): this response exposes decision_reason, reviewer identity
+    # and review comments. Scope to the application owner or staff with a
+    # legitimate relationship, same as get_application_reviews.
+    application = await ApplicationService(db).get_viewable_application(application_id, current_user)
     if not application:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="申請不存在")
 
@@ -438,6 +453,30 @@ async def submit_application_review(
         # Use unified ReviewService for creating/updating reviews
         review_service = ReviewService(db)
 
+        # SECURITY (#1081-A): professor callers on this multi-role endpoint must
+        # pass the same assignment + terminal-reject-lock + review-window checks
+        # that professor.py::submit_professor_review already enforces. Without
+        # them, any professor could reject/approve an application they aren't
+        # assigned to, or reverse their own terminal reject after the fact —
+        # defeating the "professor full-reject is terminal" policy. College /
+        # admin / super_admin keep the sub-type-based scoping applied below.
+        if current_user.is_professor():
+            app_service = ApplicationService(db)
+            professor_application = await app_service.get_application_by_id(application_id, current_user)
+            if not professor_application:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+
+            if not settings.bypass_time_restrictions and not await app_service.can_professor_submit_review(
+                application_id, current_user.id
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Professor not authorized to submit review at this time or for this application",
+                )
+
+            # Block professor edits once the college has started reviewing (#64).
+            await review_service.assert_professor_review_unlocked(application_id, current_user)
+
         # Get reviewable sub-types for this user to validate permissions
         reviewable_subtypes = await review_service.get_reviewable_subtypes(application_id, current_user.role)
 
@@ -539,6 +578,11 @@ async def submit_application_review(
     except HTTPException:
         # Re-raise FastAPI HTTPException as-is (preserves status code and detail)
         raise
+    except AuthorizationError as e:
+        # Raised by assert_professor_review_unlocked when the professor lock is set.
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found") from exc
     except ValueError as e:
         logger.warning(f"Invalid review data for application {application_id}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid review data") from e

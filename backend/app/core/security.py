@@ -68,6 +68,12 @@ async def get_current_user(
 
     try:
         payload = verify_token(credentials.credentials)
+        # SECURITY: reject refresh tokens (7-day expiry) where an access token is
+        # expected. Access tokens carry no `type` claim; refresh tokens set
+        # type="refresh". Without this check a refresh token would be accepted
+        # anywhere an access token is.
+        if payload.get("type") == "refresh":
+            raise AuthenticationError("Invalid token")
         user_id_str: str = payload.get("sub")
         if user_id_str is None:
             raise AuthenticationError("Invalid token")

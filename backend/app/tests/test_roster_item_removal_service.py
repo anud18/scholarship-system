@@ -276,6 +276,13 @@ def test_restore_item_reincludes_and_audits(db_sync, locked_roster_two_items, ad
 
     roster = locked_roster_two_items
     target = roster.items[0]
+    # restore_item (#1081-K) only re-includes items whose application is still
+    # approved. The shared fixture's application is cancelled/revoked, so put it in
+    # the legitimate state this happy-path represents (the item was genuinely
+    # re-approved and should be restored).
+    app = db_sync.get(Application, target.application_id)
+    app.status = ApplicationStatus.approved
+    db_sync.flush()
     svc = RosterService(db_sync)
     svc.remove_item_from_locked_roster(roster.id, target.id, admin_db_user_sync.id, "繳回")
 
@@ -329,3 +336,19 @@ def test_restore_item_not_found_raises(db_sync, locked_roster_two_items, admin_d
     svc = RosterService(db_sync)
     with pytest.raises(NotFoundError):  # missing item → 404
         svc.restore_item(roster.id, 99999999, admin_db_user_sync.id, "x")
+
+
+def test_restore_item_rejects_non_approved_application(db_sync, locked_roster_two_items, admin_db_user_sync):
+    """SECURITY (#1081-K): an item whose application is no longer approved
+    (withdrawn / rejected / revoked) must not be restorable — restoring it would
+    silently re-inflate the student's received_months (PhD 36-month cap)."""
+    import pytest
+
+    roster = locked_roster_two_items
+    target = roster.items[0]
+    # The shared fixture leaves the application in `cancelled` (revoked) state.
+    assert db_sync.get(Application, target.application_id).status == ApplicationStatus.cancelled
+    svc = RosterService(db_sync)
+    svc.remove_item_from_locked_roster(roster.id, target.id, admin_db_user_sync.id, "繳回")
+    with pytest.raises(ValueError):
+        svc.restore_item(roster.id, target.id, admin_db_user_sync.id, "誤刪回復")

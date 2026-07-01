@@ -1503,6 +1503,21 @@ class ManualDistributionService:
             if ri.allocated_sub_type:
                 ri.is_allocated = True
 
+        # §10 quota gate (#1081-I): restoring re-consumes a quota slot, so it must
+        # run the same oversubscription check allocate() / finalize() do. Without
+        # it, revoke → reallocate the freed slot to someone else → restore can
+        # double-book a single slot with no DB-level guard. Resolve the round's
+        # config from the re-affirmed slot (fall back to the application's own
+        # config) and recount; a ValueError rolls the whole restore back.
+        requesting_config_id = next(
+            (ri.allocation_config_id for ri in ranking_items if ri.is_allocated and ri.allocation_config_id),
+            app.scholarship_configuration_id,
+        )
+        if requesting_config_id is not None:
+            requesting_config = await self.db.get(ScholarshipConfiguration, requesting_config_id)
+            if requesting_config is not None:
+                await self._assert_round_not_oversubscribed(requesting_config)
+
         # Audit logging moved to the endpoint (ApplicationAuditService.
         # log_application_restore) so the row carries the acting User +
         # request IP/UA and the action lives in the AuditAction enum (G18).

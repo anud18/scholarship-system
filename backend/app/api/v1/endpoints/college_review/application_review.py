@@ -11,11 +11,13 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import select
 from sqlalchemy.exc import DatabaseError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import require_college, require_roles
 from app.db.deps import get_db
+from app.models.application import Application
 
 # Note: CollegeReview model removed - replaced by unified ApplicationReview system
 # from app.models.college_review import CollegeReview
@@ -24,6 +26,7 @@ from app.schemas.college_review import StudentTermData
 from app.schemas.response import ApiResponse
 from app.services.college_review_service import CollegeReviewService, ReviewPermissionError
 from app.services.student_service import StudentService
+from app.utils.application_helpers import get_college_code_from_data
 from app.utils.pii_masking import mask_id_number
 
 from ._helpers import _check_academic_year_permission, _check_scholarship_permission
@@ -153,6 +156,33 @@ async def get_student_preview(
 
     try:
         logger.info(f"User {current_user.id} requesting preview for student {student_id}")
+
+        # SECURITY (#1081-E): the SIS lookup below returns a full per-term academic
+        # record for ANY student number. College users may only preview students who
+        # have an application belonging to their own college. Enforce that BEFORE the
+        # SIS call so this endpoint is neither a cross-college PII leak nor a
+        # student-existence oracle (return 404, not 403, on failure so an attacker
+        # cannot distinguish "no such student" from "not your college").
+        if current_user.role == UserRole.college:
+            college_code = (current_user.college_code or "").strip()
+            if not college_code:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="使用者未綁定學院")
+
+            # Join via User.nycu_id (== the student number) so this stays portable
+            # across DB dialects; scope by the student's academy code in Python
+            # (the canonical accessor keeps key-alias handling in one place).
+            app_rows = (
+                await db.execute(
+                    select(Application.student_data)
+                    .join(User, User.id == Application.user_id)
+                    .where(User.nycu_id == student_id)
+                )
+            ).all()
+            has_college_application = any(
+                sd and (get_college_code_from_data(sd) or "").strip() == college_code for (sd,) in app_rows
+            )
+            if not has_college_application:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Student {student_id} not found")
 
         # Initialize student service
         student_service = StudentService()

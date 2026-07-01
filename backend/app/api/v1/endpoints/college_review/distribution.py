@@ -33,7 +33,7 @@ from app.services.college_review_service import (
     CollegeReviewService,
 )
 
-from ._helpers import normalize_semester_value
+from ._helpers import assert_can_manage_ranking, normalize_semester_value
 
 logger = logging.getLogger(__name__)
 
@@ -88,11 +88,26 @@ async def get_ranking_roster_status(
     查詢排名的造冊狀態和進展
     """
     try:
+        # SECURITY (#1081-D): same missing-scope root cause as distribution-details.
+        # Load the ranking's owning college_code and authorize before returning its
+        # roster metadata, so a college can't read another college's ranking by id.
+        ranking_stmt = (
+            select(CollegeRanking)
+            .options(load_only(CollegeRanking.id, CollegeRanking.college_code))
+            .where(CollegeRanking.id == ranking_id)
+        )
+        ranking = (await db.execute(ranking_stmt)).scalar_one_or_none()
+        if not ranking:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
+        assert_can_manage_ranking(ranking, current_user)
+
         service = CollegeReviewService(db)
         roster_status = await service.check_ranking_roster_status(ranking_id)
 
         return ApiResponse(success=True, message="Roster status retrieved successfully", data=roster_status)
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception(f"Error retrieving roster status for ranking {ranking_id}")
         raise HTTPException(
@@ -130,6 +145,12 @@ async def get_distribution_details(
 
         if not ranking:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
+
+        # SECURITY (#1081-C): rankings are single-college and this response carries
+        # applicant PII, ranks and rejection reasons. Without scoping, a College-A
+        # account could read College-B's data by enumerating ranking_id. Mirror the
+        # sibling ranking_management.py::get_ranking check.
+        assert_can_manage_ranking(ranking, current_user)
 
         sub_type_metadata_map: Dict[str, Dict[str, str]] = {}
         if ranking.scholarship_type and getattr(ranking.scholarship_type, "sub_type_configs", None):
