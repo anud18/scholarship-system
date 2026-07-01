@@ -1032,6 +1032,12 @@ async def import_ranking_from_excel(
         # Check permissions - the owning college's reviewers or an admin can import
         assert_can_manage_ranking(ranking, current_user)
 
+        # SECURITY: every other ranking-mutation endpoint (create/update-order/
+        # finalize/unfinalize) enforces the #63 college-review deadline; this was
+        # the one write path that omitted it, letting a college user reorder
+        # ranks / flip college_rejected via import after the deadline.
+        await CollegeReviewService(db).assert_ranking_within_deadline_by_ranking(ranking_id, current_user)
+
         if ranking.is_finalized:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot modify finalized ranking")
 
@@ -1166,6 +1172,8 @@ async def import_ranking_from_excel(
 
     except HTTPException:
         raise
+    except AuthorizationError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except Exception as e:
         logger.exception("Error importing ranking data")
         raise HTTPException(

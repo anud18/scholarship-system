@@ -1503,6 +1503,19 @@ class ManualDistributionService:
             if ri.allocated_sub_type:
                 ri.is_allocated = True
 
+        # SECURITY: allocate/finalize both gate on _assert_round_not_oversubscribed
+        # before committing an allocation -- restore skipped it, so a
+        # revoke-then-reallocate-then-restore sequence could double-book a
+        # single quota slot (both the reallocated winner and the restored
+        # application counted as is_allocated=True) with no DB-level guard.
+        if app.scholarship_configuration_id is not None:
+            config_result = await self.db.execute(
+                select(ScholarshipConfiguration).where(ScholarshipConfiguration.id == app.scholarship_configuration_id)
+            )
+            requesting_config = config_result.scalar_one_or_none()
+            if requesting_config is not None:
+                await self._assert_round_not_oversubscribed(requesting_config)
+
         # Audit logging moved to the endpoint (ApplicationAuditService.
         # log_application_restore) so the row carries the acting User +
         # request IP/UA and the action lives in the AuditAction enum (G18).

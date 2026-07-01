@@ -2377,6 +2377,21 @@ class RosterService:
         if item.is_included:
             raise ConflictError("明細未被移除，無需回復")
 
+        # SECURITY: reconcile_roster's add path requires application.status ==
+        # approved before re-including an item; restore_item skipped that
+        # re-check, so an item removed while its application was still approved
+        # but since withdrawn/rejected/revoked/suspended (all -> a non-approved
+        # status) could be silently restored into a LOCKED roster, inflating the
+        # student's received_months count (feeds the PhD 36-month cap).
+        from app.models.application import ApplicationStatus
+
+        if item.application is None or item.application.status != ApplicationStatus.approved:
+            current_status = item.application.status.value if item.application else "unknown"
+            raise ValueError(
+                f"Item {item_id}'s application is no longer approved (status={current_status}); "
+                "cannot restore to the roster"
+            )
+
         item.is_included = True
         item.exclusion_reason = None
         self.db.flush()

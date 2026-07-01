@@ -271,6 +271,7 @@ def test_remove_item_from_locked_roster_soft_deletes_and_audits(db_sync, locked_
 
 
 def test_restore_item_reincludes_and_audits(db_sync, locked_roster_two_items, admin_db_user_sync):
+    from app.models.application import ApplicationStatus
     from app.models.roster_audit import RosterAuditAction, RosterAuditLog
     from app.models.payment_roster import PaymentRosterItem
 
@@ -278,6 +279,17 @@ def test_restore_item_reincludes_and_audits(db_sync, locked_roster_two_items, ad
     target = roster.items[0]
     svc = RosterService(db_sync)
     svc.remove_item_from_locked_roster(roster.id, target.id, admin_db_user_sync.id, "繳回")
+
+    # Security fix (issue #1081, finding K): restore_item now requires the
+    # application to be approved again -- mirrors reconcile_roster's add path,
+    # and matches the real recovery flow (undo the revoke via
+    # restore_allocation) rather than blindly re-including an item whose
+    # application is still revoked/cancelled. The fixture's target application
+    # starts revoked (status=cancelled) to cover the remove-for-revoke case
+    # elsewhere in this file; simulate the admin having already restored the
+    # allocation before restoring the roster item.
+    target.application.status = ApplicationStatus.approved
+    db_sync.flush()
 
     result = svc.restore_item(roster.id, target.id, admin_db_user_sync.id, "誤刪回復")
 
