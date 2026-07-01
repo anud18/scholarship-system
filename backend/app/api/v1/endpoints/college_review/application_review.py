@@ -11,11 +11,13 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import select
 from sqlalchemy.exc import DatabaseError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import require_college, require_roles
 from app.db.deps import get_db
+from app.models.application import Application
 
 # Note: CollegeReview model removed - replaced by unified ApplicationReview system
 # from app.models.college_review import CollegeReview
@@ -24,6 +26,7 @@ from app.schemas.college_review import StudentTermData
 from app.schemas.response import ApiResponse
 from app.services.college_review_service import CollegeReviewService, ReviewPermissionError
 from app.services.student_service import StudentService
+from app.utils.application_helpers import get_college_code_from_data
 from app.utils.pii_masking import mask_id_number
 
 from ._helpers import _check_academic_year_permission, _check_scholarship_permission
@@ -153,6 +156,34 @@ async def get_student_preview(
 
     try:
         logger.info(f"User {current_user.id} requesting preview for student {student_id}")
+
+        # SECURITY: college users may only preview students they actually manage --
+        # i.e. a student with at least one application in the caller's own college.
+        # Without this, any college account could enumerate the whole student body's
+        # SIS PII by student number, using 404-vs-200 as an existence oracle.
+        #
+        # Join through User.nycu_id (the authoritative identity column -- for
+        # students this *is* their 學號/std_stdcode) rather than filtering the
+        # student_data JSON snapshot in SQL, so this narrows to a handful of
+        # candidate rows via an indexed column and stays portable across DB
+        # dialects; the college_code check on the snapshot then happens in Python.
+        if current_user.role == UserRole.college:
+            candidates_stmt = (
+                select(Application.student_data)
+                .join(User, User.id == Application.user_id)
+                .where(User.nycu_id == student_id)
+            )
+            candidate_rows = (await db.execute(candidates_stmt)).scalars().all()
+            is_managed = any(
+                get_college_code_from_data(student_data) == current_user.college_code
+                for student_data in candidate_rows
+                if student_data
+            )
+            if not is_managed:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You do not manage an application for this student",
+                )
 
         # Initialize student service
         student_service = StudentService()

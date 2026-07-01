@@ -33,7 +33,7 @@ from app.services.college_review_service import (
     CollegeReviewService,
 )
 
-from ._helpers import normalize_semester_value
+from ._helpers import assert_can_manage_ranking, normalize_semester_value
 
 logger = logging.getLogger(__name__)
 
@@ -88,11 +88,20 @@ async def get_ranking_roster_status(
     查詢排名的造冊狀態和進展
     """
     try:
+        ranking = await db.get(CollegeRanking, ranking_id)
+        if not ranking:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
+        # SECURITY: college-scope this like every other by-ranking-id endpoint --
+        # otherwise any college user can enumerate another college's roster status.
+        assert_can_manage_ranking(ranking, current_user)
+
         service = CollegeReviewService(db)
         roster_status = await service.check_ranking_roster_status(ranking_id)
 
         return ApiResponse(success=True, message="Roster status retrieved successfully", data=roster_status)
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception(f"Error retrieving roster status for ranking {ranking_id}")
         raise HTTPException(
@@ -130,6 +139,10 @@ async def get_distribution_details(
 
         if not ranking:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
+        # SECURITY: rankings are single-college; without this a College-A account could
+        # pass a College-B ranking_id and read that college's applicant PII, ranks, and
+        # rejection reasons (mirrors get_ranking in ranking_management.py).
+        assert_can_manage_ranking(ranking, current_user)
 
         sub_type_metadata_map: Dict[str, Dict[str, str]] = {}
         if ranking.scholarship_type and getattr(ranking.scholarship_type, "sub_type_configs", None):

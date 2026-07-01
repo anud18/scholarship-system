@@ -1057,6 +1057,14 @@ async def get_application_document_file(
     if not is_owner and not is_staff:
         raise HTTPException(status_code=403, detail="無權限")
 
+    # SECURITY: a blanket "professor" role match is not enough -- mirrors files.py,
+    # which requires an actual advising relationship. Without this, any professor
+    # account could download any student's application document regardless of
+    # whether they advise that student.
+    if not is_owner and current_user.role == UserRole.professor:
+        if not current_user.can_access_student_data(application.user_id, "view_applications"):
+            raise HTTPException(status_code=403, detail="無權限 - 與該學生無指導關係")
+
     if not application.application_document_url:
         raise HTTPException(status_code=404, detail="申請文件不存在")
 
