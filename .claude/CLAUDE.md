@@ -19,6 +19,8 @@ docker compose -f docker-compose.dev.yml restart backend
 
 This spins up the full stack (backend, frontend, database, RustFS object storage (S3 API, service name `minio`), mock student API) with hot-reload enabled.
 
+> For a full from-scratch setup (permissions, migrations, seeding), use the `/init-dev-env` skill rather than re-deriving the steps here.
+
 ## Core Development Principles
 
 ### 1. Error Handling Standards
@@ -155,7 +157,7 @@ If you see `LookupError: 'value' is not among the defined enum values`:
 
 ### 5. API Response Standardization
 
-**CRITICAL**: All API endpoints MUST return a consistent ApiResponse format for frontend compatibility.
+**IMPORTANT**: All API endpoints MUST return a consistent ApiResponse format for frontend compatibility.
 
 #### Standard Format
 ```python
@@ -334,7 +336,7 @@ Migration `6b5cb44d2fe3` creates the `application_sequences` table and initializ
 
 ### 7. Application Data Structure Principles
 
-**CRITICAL**: Clear separation between API data snapshot and student-submitted data.
+**IMPORTANT**: Clear separation between API data snapshot and student-submitted data.
 
 #### student_data (JSON Field)
 **Purpose**: Pure SIS API data snapshot at time of application submission.
@@ -447,7 +449,7 @@ CI validates type sync automatically. Backend must be running on `localhost:8000
 ```
 
 ### Alembic Migration Development Rules
-**CRITICAL**: Always include existence checks in migrations:
+**IMPORTANT**: Always include existence checks in migrations:
 
 ```python
 # ✅ CORRECT - Check before creating
@@ -589,7 +591,7 @@ match = safe_regex_match(user_pattern, value, timeout_seconds=1)
 
 ### Test Coverage
 
-See `backend/tests/test_regex_validator.py` for comprehensive test suite:
+See `backend/app/tests/test_regex_validator.py` for comprehensive test suite:
 - 22 test cases covering all security scenarios
 - Dangerous pattern rejection tests
 - ReDoS attack prevention tests
@@ -667,7 +669,7 @@ return new NextResponse(fileBuffer, {
 });
 ```
 
-**CRITICAL**: Missing `Content-Length` or incomplete `Content-Disposition` can cause PDF viewer errors (including false "password protected" errors).
+**Note**: Missing `Content-Length` or incomplete `Content-Disposition` can cause PDF viewer errors (including false "password protected" errors).
 
 ### Environment Variables
 ```bash
