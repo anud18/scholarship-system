@@ -5139,20 +5139,25 @@ def _mk_stg_mock_terms(letter, kk):
     ]
 
 
-SAMPLE_STUDENTS.update(
-    {
-        _stg_mock_stdcode(_STG_MOCK_COHORT[letter][4], kk): _mk_stg_mock_student(letter, kk)
-        for letter in _STG_MOCK_COHORT
-        for kk in range(1, 21)
-    }
-)
-SAMPLE_TERMS.update(
-    {
-        _stg_mock_stdcode(_STG_MOCK_COHORT[letter][4], kk): _mk_stg_mock_terms(letter, kk)
-        for letter in _STG_MOCK_COHORT
-        for kk in range(1, 21)
-    }
-)
+def _build_stg_mock_samples():
+    # Register each student under BOTH its 學號 (std_stdcode) and its nycu_id
+    # (stgmock_<letter><kk>). In production these are the same value; the seed
+    # uses a distinct stgmock_* nycu_id for cleanup targeting, and the
+    # college-review 學生資訊 preview looks up by nycu_id — so key on both.
+    students, terms = {}, {}
+    for letter in _STG_MOCK_COHORT:
+        for kk in range(1, 21):
+            student = _mk_stg_mock_student(letter, kk)
+            term = _mk_stg_mock_terms(letter, kk)
+            for key in (student["std_stdcode"], f"stgmock_{letter.lower()}{kk:02d}"):
+                students[key] = student
+                terms[key] = term
+    return students, terms
+
+
+_stg_mock_students, _stg_mock_terms = _build_stg_mock_samples()
+SAMPLE_STUDENTS.update(_stg_mock_students)
+SAMPLE_TERMS.update(_stg_mock_terms)
 # --- end STG-MOCK-114 PhD cohort --------------------------------------------
 
 
