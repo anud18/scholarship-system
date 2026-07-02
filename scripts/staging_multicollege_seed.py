@@ -29,13 +29,15 @@ HARD LIMIT (cannot be fixed by seeding on real staging):
 College 待審核 visibility (verified): status='submitted' AND
 student_data->>'std_academyno' == reviewer users.college_code. No time gate.
 
-Run — pipe the script into the running backend container (also works on dev,
-which HAS a mock SIS, but the fake 學號 still aren't in its SAMPLE_STUDENTS so the
-學生資訊 preview tab is blank there too):
-  # staging
-  docker exec -i scholarship_backend_staging python - < scripts/staging_multicollege_seed.py
-  # dev
-  docker compose -f docker-compose.dev.yml exec -T backend python - < scripts/staging_multicollege_seed.py
+Run — use the wrapper (recommended), or pipe the script into the backend
+container directly. On DEV the fake 學號 are also registered in mock-student-api
+(SAMPLE_STUDENTS, this PR), so the 學生資訊 preview tab resolves there too; on real
+staging there is no mock SIS, so that live-lookup tab stays blank (see HARD LIMIT).
+  # wrapper (default target dev; pass `staging` for the live staging DB)
+  scripts/staging_multicollege_seed.sh [dev|staging]
+  # or directly:
+  docker exec -i scholarship_backend_staging python - < scripts/staging_multicollege_seed.py            # staging
+  docker compose -f docker-compose.dev.yml exec -T backend python - < scripts/staging_multicollege_seed.py  # dev
 
 Idempotent: wipes its own STG-MOCK-% apps + stgmock_* users first. Env overrides:
   PER_COLLEGE=20  COLLEGES=A,B,C,E  YEAR=114  OPEN_REVIEW_WINDOW=0
