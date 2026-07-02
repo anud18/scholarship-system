@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 # Student model removed - student data now fetched from external API
-from app.core.config import DEV_SCHOLARSHIP_SETTINGS, settings
 
 # Import comprehensive scholarship system models
 from app.models.application import Application, ApplicationStatus, ReviewStatus
@@ -43,18 +42,6 @@ class ScholarshipService:
             logger.exception(f"Error converting GPA '{gpa}' to Decimal")
             return Decimal("0.0")
 
-    def _is_dev_mode(self) -> bool:
-        """Check if running in development mode"""
-        return settings.debug or settings.environment == "development"
-
-    def _should_bypass_application_period(self) -> bool:
-        """Check if should bypass application period in dev mode"""
-        return self._is_dev_mode() and DEV_SCHOLARSHIP_SETTINGS.get("ALWAYS_OPEN_APPLICATION", False)
-
-    def _should_bypass_whitelist(self) -> bool:
-        """Check if should bypass whitelist in dev mode"""
-        return self._is_dev_mode() and DEV_SCHOLARSHIP_SETTINGS.get("BYPASS_WHITELIST", False)
-
     async def get_eligible_scholarships(
         self, student_data: Dict[str, Any], user_id: Optional[int] = None
     ) -> List[Dict[str, Any]]:
@@ -79,9 +66,12 @@ class ScholarshipService:
         }
 
         for config in active_configs:
-            # First filter by application period - only show scholarships within their application period
-            if not self._should_bypass_application_period() and not config.is_application_period:
-                continue
+            # NOTE: We intentionally do NOT filter by application period here.
+            # active_configs already contains only *effective* (生效) configs, and
+            # effective scholarships must remain visible to students after the
+            # application deadline (as view-only). The current period status is
+            # surfaced via the `is_application_period` flag below; the apply/submit
+            # flow enforces the deadline separately (check_student_eligibility).
 
             # Determine which student API type is required for this configuration
             required_api_type = await eligibility_service.determine_required_student_api_type(config)
@@ -233,6 +223,10 @@ class ScholarshipService:
                         "errors": eligibility_details.get("errors", []),
                         # Hide already-submitted scholarships from the apply flow
                         "already_submitted": already_submitted,
+                        # Whether the scholarship is currently accepting applications.
+                        # False for effective-but-closed (生效但已截止) scholarships, which
+                        # are shown read-only and cannot be applied to.
+                        "is_application_period": eligibility_details.get("is_application_period", True),
                     }
                 )
 

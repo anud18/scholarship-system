@@ -9041,6 +9041,11 @@ export interface components {
              * @default false
              */
             already_submitted: boolean;
+            /**
+             * Is Application Period
+             * @default true
+             */
+            is_application_period: boolean;
         };
         /** EmailAutomationRuleCreate */
         EmailAutomationRuleCreate: {

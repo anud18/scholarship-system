@@ -223,6 +223,33 @@ describe("EnhancedStudentPortal", () => {
     expect(screen.getByText("Submitted")).toBeInTheDocument();
   });
 
+  it("keeps 我的申請 visible when no eligible scholarships (application period ended)", async () => {
+    // Regression: after the application deadline the eligible-scholarship list
+    // is empty, but the 我的申請 tab must still render the student's own
+    // applications. Previously a top-level early return replaced the entire
+    // portal with the "No Eligible Scholarships" card on every tab.
+    (api.scholarships.getEligible as jest.Mock).mockResolvedValue({
+      success: true,
+      message: "no eligible",
+      data: [],
+    });
+    mockUseApplications.mockReturnValue(
+      createApplicationsHook({ applications: [mockApplication] })
+    );
+
+    await act(async () => {
+      render(<EnhancedStudentPortal user={mockUser} locale="en" initialTab="applications" />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Application ID:/)).toBeInTheDocument();
+    });
+    // The generic empty-eligible card must NOT hijack the applications tab.
+    expect(
+      screen.queryByText("No Eligible Scholarships")
+    ).not.toBeInTheDocument();
+  });
+
   it("should show loading state", async () => {
     mockUseApplications.mockReturnValue(
       createApplicationsHook({ isLoading: true })

@@ -223,6 +223,10 @@ export interface ScholarshipType {
   sub_type_selection_mode?: "single" | "multiple" | "hierarchical";
   terms_document_url?: string;
   already_submitted?: boolean;
+  // Whether the scholarship is currently accepting applications. When false the
+  // scholarship is still effective (生效) but its application window has closed,
+  // so it is shown read-only and cannot be applied to.
+  is_application_period?: boolean;
   whitelist_enabled?: boolean;
   eligible_sub_types?: Array<{
     value: string | null;
