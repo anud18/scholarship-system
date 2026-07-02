@@ -57,13 +57,12 @@ interface ChallengeApplicationCardProps {
 /**
  * 將 sub_type 代碼轉為簡短中文顯示名稱。
  *   nstc          → "國科會"
- *   moe_1w/moe_2w → "教育部+1" / "教育部+2"
+ *   moe_1w/moe_2w → "教育部"
  *   其他          → 原值
  */
 function getSubTypeShortName(subType: string): string {
   if (subType === "nstc") return "國科會";
-  const moeMatch = subType.match(/^moe_(\d+)w$/);
-  if (moeMatch) return `教育部+${moeMatch[1]}`;
+  if (/^moe_\d+w$/.test(subType)) return "教育部";
   return subType;
 }
 
