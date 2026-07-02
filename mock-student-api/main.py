@@ -5067,6 +5067,95 @@ SAMPLE_TERMS.update({c: _mk_summary_demo_terms(c, e) for c, e in _SUMMARY_EXPORT
 # --- end demo students ------------------------------------------------------
 
 
+# --- STG-MOCK-114 PhD cohort: 4 colleges x 20 students, keyed by std_stdcode ---
+# Companion to scripts/staging_multicollege_seed.py — so dev flows that query the
+# SIS (student portal / re-fetch / eligibility / 學生資訊 preview) resolve the 80
+# STG-MOCK-114 fake 學號. Values mirror that seed's inline student_data exactly.
+# Tuple: (academyno, depno, academyname, depname, stdcode_prefix, phone_offset);
+# stdcode = f"{stdcode_prefix}{kk:02d}" for kk in 1..20.
+_STG_MOCK_COHORT = {
+    "A": ("A", "4460", "人文社會學院", "教育研究所博士班", "1114460", 0),
+    "B": ("B", "184", "生物科技學院", "生醫科學與工程博士學位學程", "111184", 20),
+    "C": ("C", "3551", "資訊學院", "資訊科學與工程研究所博士班", "1113551", 40),
+    "E": ("E", "1511", "電機學院", "電子研究所博士班", "1111511", 60),
+}
+
+
+def _stg_mock_stdcode(prefix, kk):
+    return f"{prefix}{kk:02d}"
+
+
+def _mk_stg_mock_student(letter, kk):
+    academyno, depno, academyname, _depname, prefix, phone_offset = _STG_MOCK_COHORT[letter]
+    gidx = phone_offset + kk
+    return {
+        "std_stdcode": _stg_mock_stdcode(prefix, kk),
+        "std_enrollyear": 111,
+        "std_enrollterm": 1,
+        "std_highestschname": "國立陽明交通大學",
+        "std_cname": f"{academyname}測試生{kk:02d}",
+        "std_ename": f"MOCK STUDENT {letter}{kk:02d}",
+        "std_pid": f"S{100000000 + gidx:09d}",  # plaintext placeholder (mock only)
+        "std_bdate": "880515",
+        "std_academyno": academyno,
+        "std_depno": depno,
+        "std_sex": 1 if kk % 2 == 1 else 2,
+        "std_nation": "中華民國",
+        "std_degree": 1,  # PhD -> hard rule PASS
+        "std_enrolltype": 1,  # not in {2,5,6,7} -> no warning
+        "std_identity": 1,  # not in {3,4,17} -> no warning
+        "std_schoolid": 1,
+        "std_overseaplace": "",
+        "std_termcount": 3,
+        "std_studingstatus": 1,
+        "mgd_title": "在學",
+        "ToDoctor": 0,
+        "com_commadd": "新竹市東區大學路1001號",
+        "com_email": f"stgmock_{letter.lower()}{kk:02d}@stg.mock.nycu.edu.tw",
+        "com_cellphone": f"09{gidx:08d}",
+    }
+
+
+def _mk_stg_mock_terms(letter, kk):
+    academyno, depno, academyname, depname, prefix, _phone_offset = _STG_MOCK_COHORT[letter]
+    return [
+        {
+            "std_stdcode": _stg_mock_stdcode(prefix, kk),
+            "trm_year": 114,
+            "trm_term": 1,
+            "trm_termcount": 3,
+            "trm_studystatus": 1,
+            "trm_degree": 1,
+            "trm_academyno": academyno,
+            "trm_academyname": academyname,
+            "trm_depno": depno,
+            "trm_depname": depname,
+            "trm_placings": 0,
+            "trm_placingsrate": 0.0,
+            "trm_depplacing": 0,
+            "trm_depplacingrate": 0.0,
+            "trm_ascore_gpa": round(4.0 - 0.03 * (kk - 1), 2),
+        }
+    ]
+
+
+SAMPLE_STUDENTS.update(
+    {
+        _stg_mock_stdcode(_STG_MOCK_COHORT[letter][4], kk): _mk_stg_mock_student(letter, kk)
+        for letter in _STG_MOCK_COHORT
+        for kk in range(1, 21)
+    }
+)
+SAMPLE_TERMS.update(
+    {
+        _stg_mock_stdcode(_STG_MOCK_COHORT[letter][4], kk): _mk_stg_mock_terms(letter, kk)
+        for letter in _STG_MOCK_COHORT
+        for kk in range(1, 21)
+    }
+)
+# --- end STG-MOCK-114 PhD cohort --------------------------------------------
+
+
 @app.get("/")
 async def root():
     """API root endpoint"""
