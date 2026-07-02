@@ -283,6 +283,9 @@ class EligibleScholarshipResponse(BaseModel):
     all_sub_type_list: List[str] = []
     subtype_eligibility: Dict[str, SubtypeEligibilityInfo] = {}
     already_submitted: bool = False
+    # Whether the scholarship is currently accepting applications. False for
+    # effective-but-closed (生效但已截止) scholarships, which are shown read-only.
+    is_application_period: bool = True
 
     model_config = ConfigDict(from_attributes=True)
 

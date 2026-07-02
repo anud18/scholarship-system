@@ -134,4 +134,26 @@ describe("isApplyableScholarship", () => {
     } as unknown as ScholarshipType;
     expect(isApplyableScholarship(notSelectable)).toBe(false);
   });
+
+  it("is false when the application period has closed (生效但已截止)", () => {
+    /** Effective-but-closed scholarships stay selectable/visible (read-only)
+     * but must NOT be offered in the apply flow. Pin so a regression can't let
+     * students start applications after the deadline. */
+    const closed = {
+      ...applyableSelectable,
+      already_submitted: false,
+      is_application_period: false,
+    } as ScholarshipType;
+    expect(isSelectableScholarship(closed)).toBe(true);
+    expect(isApplyableScholarship(closed)).toBe(false);
+  });
+
+  it("is true when is_application_period is explicitly true", () => {
+    const open = {
+      ...applyableSelectable,
+      already_submitted: false,
+      is_application_period: true,
+    } as ScholarshipType;
+    expect(isApplyableScholarship(open)).toBe(true);
+  });
 });

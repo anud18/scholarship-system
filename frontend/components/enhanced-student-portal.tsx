@@ -997,8 +997,10 @@ export function EnhancedStudentPortal({
     onStartEditing?.(application.id);
   };
 
-  // Loading state
-  if (isLoadingScholarships) {
+  // Loading state — only gates the scholarship-list / new-application tabs,
+  // which depend on the eligible-scholarship fetch. The 我的申請 (applications)
+  // tab has its own independent data + loading state and must not be blocked.
+  if (activeTab !== "applications" && isLoadingScholarships) {
     return (
       <Card>
         <CardContent className="p-6 text-center">
@@ -1014,8 +1016,9 @@ export function EnhancedStudentPortal({
     );
   }
 
-  // Error state
-  if (scholarshipsError) {
+  // Error state — scoped like the loading state so a scholarship-fetch error
+  // never hides the 我的申請 tab.
+  if (activeTab !== "applications" && scholarshipsError) {
     return (
       <Card>
         <CardContent className="p-6 text-center">
@@ -1026,8 +1029,10 @@ export function EnhancedStudentPortal({
     );
   }
 
-  // No eligible scholarships
-  if (eligibleScholarships.length === 0) {
+  // No eligible scholarships — only the scholarship-list tab shows this empty
+  // state. The new-application tab has its own nuanced messaging (below) and the
+  // 我的申請 tab renders the student's own applications regardless.
+  if (activeTab === "scholarship-list" && eligibleScholarships.length === 0) {
     return (
       <Card>
         <CardContent className="p-6 text-center">
@@ -1351,9 +1356,16 @@ export function EnhancedStudentPortal({
             <CardContent className="p-6 text-center">
               <AlertTriangle className="h-8 w-8 text-orange-500 mx-auto mb-4" />
               <h3 className="text-lg font-semibold">
-                {eligibleScholarships.some(isSelectableScholarship)
-                  ? t("messages.all_eligible_already_submitted")
-                  : t("messages.no_eligible_scholarships")}
+                {eligibleScholarships.some(
+                  s =>
+                    isSelectableScholarship(s) &&
+                    !s.already_submitted &&
+                    s.is_application_period === false
+                )
+                  ? t("messages.application_period_ended")
+                  : eligibleScholarships.some(isSelectableScholarship)
+                    ? t("messages.all_eligible_already_submitted")
+                    : t("messages.no_eligible_scholarships")}
               </h3>
             </CardContent>
           </Card>
@@ -1387,23 +1399,37 @@ export function EnhancedStudentPortal({
                           : scholarship.name_en || scholarship.name}
                       </CardTitle>
                     </div>
-                    {isEligible ? (
-                      <Badge
-                        variant="outline"
-                        className="bg-emerald-50 text-emerald-600 border-emerald-100 text-base px-4 py-1"
-                      >
-                        <Check className="h-4 w-4 mr-1.5" />
-                        {t("messages.eligible")}
-                      </Badge>
-                    ) : (
-                      <Badge
-                        variant="outline"
-                        className="bg-amber-50 text-amber-600 border-amber-100 text-base px-4 py-1"
-                      >
-                        <AlertTriangle className="h-4 w-4 mr-1.5" />
-                        {t("messages.not_eligible")}
-                      </Badge>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {/* Once the application window has closed, the scholarship
+                          is view-only — show only the "已截止" badge. Surfacing
+                          "可申請" here would contradict it, since the student can
+                          no longer apply regardless of eligibility. */}
+                      {scholarship.is_application_period === false ? (
+                        <Badge
+                          variant="outline"
+                          className="bg-gray-100 text-gray-500 border-gray-200 text-base px-4 py-1"
+                        >
+                          <Calendar className="h-4 w-4 mr-1.5" />
+                          {t("messages.application_period_ended")}
+                        </Badge>
+                      ) : isEligible ? (
+                        <Badge
+                          variant="outline"
+                          className="bg-emerald-50 text-emerald-600 border-emerald-100 text-base px-4 py-1"
+                        >
+                          <Check className="h-4 w-4 mr-1.5" />
+                          {t("messages.eligible")}
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className="bg-amber-50 text-amber-600 border-amber-100 text-base px-4 py-1"
+                        >
+                          <AlertTriangle className="h-4 w-4 mr-1.5" />
+                          {t("messages.not_eligible")}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
 
                   {/* Eligible Programs Section - only show if student is eligible */}

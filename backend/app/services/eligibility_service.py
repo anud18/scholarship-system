@@ -149,36 +149,12 @@ class EligibilityService:
         # Existing application check is moved to separate method
         # We want to show scholarships regardless of application status
 
-        # Check application period (unless bypassed in dev mode)
-        if not self._should_bypass_application_period():
-            now = datetime.now(timezone.utc)
-
-            # Check regular application period
-            if config.application_start_date and config.application_end_date:
-                # Handle timezone-aware and naive datetime comparison
-                app_start = config.application_start_date
-                if app_start.tzinfo is None:
-                    app_start = app_start.replace(tzinfo=timezone.utc)
-
-                app_end = config.application_end_date
-                if app_end.tzinfo is None:
-                    app_end = app_end.replace(tzinfo=timezone.utc)
-
-                if not (app_start <= now <= app_end):
-                    # Check renewal application period if applicable
-                    if config.renewal_application_start_date and config.renewal_application_end_date:
-                        renewal_start = config.renewal_application_start_date
-                        if renewal_start.tzinfo is None:
-                            renewal_start = renewal_start.replace(tzinfo=timezone.utc)
-
-                        renewal_end = config.renewal_application_end_date
-                        if renewal_end.tzinfo is None:
-                            renewal_end = renewal_end.replace(tzinfo=timezone.utc)
-
-                        if not (renewal_start <= now <= renewal_end):
-                            reasons.append("不在申請期間內")
-                    else:
-                        reasons.append("不在申請期間內")
+        # Application period is a *timing gate*, NOT an eligibility criterion.
+        # An effective (生效) scholarship stays visible after its application
+        # deadline as view-only, so we expose the current period status in the
+        # details instead of failing eligibility. The apply/submit flow is gated
+        # separately (see check_student_eligibility). Dev-mode bypass keeps it open.
+        details["is_application_period"] = self._should_bypass_application_period() or config.is_application_period
 
         # Check whitelist if enabled (unless bypassed in dev mode)
         if config.scholarship_type.whitelist_enabled and not self._should_bypass_whitelist():

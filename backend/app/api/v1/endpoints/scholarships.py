@@ -251,6 +251,7 @@ async def get_scholarship_eligibility(
             errors=scholarship.get("errors", []),  # Error messages from eligibility check
             created_at=scholarship.get("created_at"),
             already_submitted=scholarship.get("already_submitted", False),
+            is_application_period=scholarship.get("is_application_period", True),
         )
         response_data.append(response_item)
 
