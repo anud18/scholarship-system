@@ -462,7 +462,10 @@ async def submit_application_review(
         # admin / super_admin keep the sub-type-based scoping applied below.
         if current_user.is_professor():
             app_service = ApplicationService(db)
-            professor_application = await app_service.get_application_by_id(application_id, current_user)
+            # Raw-model existence/assignment check (returns None for a professor not
+            # assigned to this application) — lighter than get_application_by_id,
+            # which builds a full response payload and integrates file data.
+            professor_application = await app_service.get_viewable_application(application_id, current_user)
             if not professor_application:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
 

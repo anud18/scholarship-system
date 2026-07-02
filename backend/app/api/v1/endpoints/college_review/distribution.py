@@ -40,6 +40,23 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _assert_ranking_visible_or_404(ranking, current_user: User) -> None:
+    """Authorize ranking access for read endpoints, translating a cross-college
+    403 into a 404.
+
+    ``assert_can_manage_ranking`` raises 403 for a college that doesn't own the
+    ranking. On these read-by-id endpoints that turns the endpoint into an
+    enumeration oracle (403 = "exists but not your college" vs 404 = "no such
+    ranking"). Collapsing both to 404 removes that signal (#1081-C/D).
+    """
+    try:
+        assert_can_manage_ranking(ranking, current_user)
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_403_FORBIDDEN:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found") from exc
+        raise
+
+
 @router.get("/quota-status")
 async def get_quota_status(
     scholarship_type_id: int = Query(..., description="Scholarship type ID"),
@@ -99,7 +116,7 @@ async def get_ranking_roster_status(
         ranking = (await db.execute(ranking_stmt)).scalar_one_or_none()
         if not ranking:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
-        assert_can_manage_ranking(ranking, current_user)
+        _assert_ranking_visible_or_404(ranking, current_user)
 
         service = CollegeReviewService(db)
         roster_status = await service.check_ranking_roster_status(ranking_id)
@@ -148,9 +165,9 @@ async def get_distribution_details(
 
         # SECURITY (#1081-C): rankings are single-college and this response carries
         # applicant PII, ranks and rejection reasons. Without scoping, a College-A
-        # account could read College-B's data by enumerating ranking_id. Mirror the
-        # sibling ranking_management.py::get_ranking check.
-        assert_can_manage_ranking(ranking, current_user)
+        # account could read College-B's data by enumerating ranking_id. Cross-college
+        # access collapses to 404 (not 403) so it isn't an existence oracle.
+        _assert_ranking_visible_or_404(ranking, current_user)
 
         sub_type_metadata_map: Dict[str, Dict[str, str]] = {}
         if ranking.scholarship_type and getattr(ranking.scholarship_type, "sub_type_configs", None):
