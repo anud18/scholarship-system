@@ -18515,6 +18515,8 @@ export interface operations {
                 academic_year: number;
                 semester?: string | null;
                 scope: "college" | "all";
+                /** @description Academy (學院) code to export when scope='college'; admins may pick any college */
+                academy_code?: string | null;
             };
             header?: never;
             path?: never;

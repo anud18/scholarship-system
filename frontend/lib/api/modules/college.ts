@@ -820,13 +820,19 @@ export async function exportDepartmentSummary(
  * Endpoint: GET /api/v1/college-review/applications/department-summary-export-bulk
  */
 export async function exportDepartmentSummaryBulk(
-  args: DepartmentSummaryExportArgs & { scope: "college" | "all" }
+  args: DepartmentSummaryExportArgs & {
+    scope: "college" | "all";
+    // When scope is "college", an explicit academy code to export. Admins use
+    // this to pick any college; omitted for a college user's own academy.
+    academy_code?: string;
+  }
 ): Promise<{ blob: Blob; filename: string }> {
   const params = new URLSearchParams();
   params.set("scholarship_type_id", String(args.scholarship_type_id));
   params.set("academic_year", String(args.academic_year));
   if (args.semester) params.set("semester", args.semester);
   params.set("scope", args.scope);
+  if (args.academy_code) params.set("academy_code", args.academy_code);
 
   return _fetchBinaryExport(
     "/api/v1/college-review/applications/department-summary-export-bulk",
