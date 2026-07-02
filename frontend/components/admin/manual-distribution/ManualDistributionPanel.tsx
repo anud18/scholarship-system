@@ -5,10 +5,7 @@ import { logger } from "@/lib/utils/logger";
 import { useCollegeManagement } from "@/contexts/college-management-context";
 import { useReferenceData } from "@/hooks/use-reference-data";
 import { apiClient } from "@/lib/api";
-import {
-  exportDepartmentSummary,
-  exportDepartmentSummaryBulk,
-} from "@/lib/api/modules/college";
+import { exportDepartmentSummaryBulk } from "@/lib/api/modules/college";
 import type {
   DistributionStudent,
   LocalAlloc,
@@ -78,8 +75,7 @@ interface ManualDistributionPanelProps {
   scholarshipType: { id: number; code: string; name: string };
 }
 
-const ALL_DEPTS_OWN = "__college_all__";
-const ALL_DEPTS_SYSTEM = "__all__";
+const ALL_ACADEMIES_SYSTEM = "__all__";
 
 /** Seed local allocation state from the server snapshot (null = unallocated). */
 function seedAllocations(
@@ -128,17 +124,18 @@ export function ManualDistributionPanel({
   // Use the ID directly from the prop (provided by the admin available-combinations endpoint)
   const scholarshipTypeId = scholarshipType.id;
 
-  const { departments, academies } = useReferenceData();
+  const { academies } = useReferenceData();
   const [summaryDept, setSummaryDept] = useState<string>("");
 
-  const visibleDepartments = useMemo(() => {
-    if (!departments) return [];
-    if (user.role === "admin" || user.role === "super_admin") return departments;
-    return departments.filter(
-      (d: { code: string; name: string; academy_code?: string | null }) =>
-        d.academy_code === user.college_code
+  // The 匯出總表 dropdown lists 學院 (academies), not individual 系所.
+  // Admins see every academy; a college user sees only their own.
+  const visibleAcademies = useMemo(() => {
+    if (!academies) return [];
+    if (user.role === "admin" || user.role === "super_admin") return academies;
+    return academies.filter(
+      (a: { code: string; name: string }) => a.code === user.college_code
     );
-  }, [departments, user]);
+  }, [academies, user]);
 
   const handleDownloadSummary = useCallback(async () => {
     if (!summaryDept || !scholarshipType.id || !selectedAcademicYear) {
@@ -152,12 +149,15 @@ export function ManualDistributionPanel({
         semester: selectedSemester ?? null,
       };
       let result: { blob: Blob; filename: string };
-      if (summaryDept === ALL_DEPTS_OWN) {
-        result = await exportDepartmentSummaryBulk({ ...common, scope: "college" });
-      } else if (summaryDept === ALL_DEPTS_SYSTEM) {
+      if (summaryDept === ALL_ACADEMIES_SYSTEM) {
         result = await exportDepartmentSummaryBulk({ ...common, scope: "all" });
       } else {
-        result = await exportDepartmentSummary({ ...common, department_code: summaryDept });
+        // summaryDept holds an academy code — export that college's departments.
+        result = await exportDepartmentSummaryBulk({
+          ...common,
+          scope: "college",
+          academy_code: summaryDept,
+        });
       }
       const url = URL.createObjectURL(result.blob);
       const a = document.createElement("a");
@@ -782,22 +782,17 @@ export function ManualDistributionPanel({
             <div className="flex gap-2 flex-wrap">
               <Select value={summaryDept} onValueChange={setSummaryDept}>
                 <SelectTrigger className="w-[200px] h-9">
-                  <SelectValue placeholder="選擇系所匯出總表" />
+                  <SelectValue placeholder="選擇學院匯出總表" />
                 </SelectTrigger>
                 <SelectContent>
-                  {visibleDepartments.map((d: { code: string; name: string }) => (
-                    <SelectItem key={d.code} value={d.code}>
-                      {d.name}
+                  {visibleAcademies.map((a: { code: string; name: string }) => (
+                    <SelectItem key={a.code} value={a.code}>
+                      {a.name}
                     </SelectItem>
                   ))}
-                  {user.college_code && (
-                    <SelectItem value={ALL_DEPTS_OWN}>
-                      本學院全部 (ZIP)
-                    </SelectItem>
-                  )}
                   {(user.role === "admin" || user.role === "super_admin") && (
-                    <SelectItem value={ALL_DEPTS_SYSTEM}>
-                      全部系所 (ZIP)
+                    <SelectItem value={ALL_ACADEMIES_SYSTEM}>
+                      全部學院 (ZIP)
                     </SelectItem>
                   )}
                 </SelectContent>

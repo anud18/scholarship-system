@@ -225,6 +225,10 @@ async def export_department_summary_bulk(
     academic_year: int = Query(...),
     semester: Optional[str] = Query(None),
     scope: Literal["college", "all"] = Query(...),
+    academy_code: Optional[str] = Query(
+        None,
+        description="Academy (學院) code to export when scope='college'; admins may pick any college",
+    ),
     current_user: User = Depends(require_scholarship_manager),
     db: AsyncSession = Depends(get_db),
 ):
@@ -261,18 +265,35 @@ async def export_department_summary_bulk(
         )
 
     if scope == "college":
-        college_code = (current_user.college_code or "").strip()
+        # Admins may target any academy via academy_code; a college user is
+        # always pinned to their own college_code and cannot cross-export.
+        requested_academy = (academy_code or "").strip()
+        if is_admin:
+            college_code = requested_academy or (current_user.college_code or "").strip()
+        else:
+            college_code = (current_user.college_code or "").strip()
+            if requested_academy and requested_academy != college_code:
+                logger.warning(
+                    "department-summary-export-bulk denied: cross-college academy_code",
+                    extra={**log_extra, "requested_academy": requested_academy, "user_college": college_code},
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="無權限匯出此學院之資料",
+                )
         if not college_code:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="未設定學院，無法使用本學院範圍",
+                detail="未指定學院，無法使用本學院範圍",
             )
         dept_rows = (
             (await db.execute(select(Department).where(Department.academy_code == college_code))).scalars().all()
         )
         target_dept_codes = [d.code for d in dept_rows if d.code]
+        resolved_college_code = college_code
     else:  # scope == "all"
         target_dept_codes = None  # no dept filter
+        resolved_college_code = None
 
     # Load scholarship type
     stype = (
@@ -373,7 +394,7 @@ async def export_department_summary_bulk(
 
     payload = buf.getvalue()
 
-    scope_label = current_user.college_code if scope == "college" else "全部"
+    scope_label = resolved_college_code if scope == "college" else "全部"
     base_filename = (
         f"{academic_year}學年度{scholarship_name}學生資料彙整表"
         f"_{_sanitise_filename_part(scope_label or '全部')}.zip"
