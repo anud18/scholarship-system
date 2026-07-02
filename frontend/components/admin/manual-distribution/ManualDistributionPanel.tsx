@@ -95,13 +95,12 @@ function seedAllocations(
 /**
  * Derive abbreviated display name from sub_type code and full display_name.
  * nstc           → "國科會"
- * moe_1w/moe_2w  → "教育部+1" / "教育部+2"
+ * moe_1w/moe_2w  → "教育部"
  * other          → truncated display_name
  */
 function getSubTypeShortName(sub_type: string, display_name: string): string {
   if (sub_type === "nstc") return "國科會";
-  const moeMatch = sub_type.match(/^moe_(\d+)w$/);
-  if (moeMatch) return `教育部+${moeMatch[1]}`;
+  if (/^moe_\d+w$/.test(sub_type)) return "教育部";
   return display_name.length > 7
     ? display_name.slice(0, 6) + "…"
     : display_name;
@@ -239,7 +238,7 @@ export function ManualDistributionPanel({
       for (const cData of configs) {
         if (cData.total <= 0) continue;
         // Multi-config sub-types (e.g. nstc borrowing): label with config code → "國科會 · phd_114"
-        // Single-config sub-types (e.g. moe_1w): just the short name → "教育部+1"
+        // Single-config sub-types (e.g. moe_1w): just the short name → "教育部"
         const display_name = isMulti ? `${shortName} · ${cData.config_code}` : shortName;
         cols.push({
           sub_type,
