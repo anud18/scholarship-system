@@ -47,6 +47,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
 
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        # SECURITY: reject refresh tokens where an access token is expected.
+        # Access tokens carry no `type` claim; refresh tokens set type="refresh".
+        if payload.get("type") == "refresh":
+            raise credentials_exception
         user_id: str = payload.get("sub")
         if user_id is None:
             raise credentials_exception

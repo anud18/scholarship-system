@@ -17,6 +17,7 @@ from openpyxl.utils import get_column_letter
 
 from app.core.config import settings
 from app.core.exceptions import FileStorageError
+from app.utils.excel_security import excel_safe_cell_value
 from app.models.payment_roster import (
     MANUAL_REMOVAL_PREFIXES,
     PaymentRoster,
@@ -777,7 +778,11 @@ class ExcelExportService:
             for row_idx, (row_data, fills) in enumerate(zip(excel_data, cell_fills, strict=True), start=start_row):
                 for col_idx, column_name in enumerate(columns, start=1):
                     value = row_data.get(column_name, "")
-                    cell = ws.cell(row=row_idx, column=col_idx, value=value)
+                    # SECURITY (#1081-G): roster rows carry student-influenced text
+                    # (name, address, remarks). Neutralize spreadsheet formula
+                    # injection; numeric values pass through unchanged so the
+                    # number_format below still applies.
+                    cell = ws.cell(row=row_idx, column=col_idx, value=excel_safe_cell_value(value))
 
                     if column_name in self.NUMERIC_FORMAT_COLUMNS and isinstance(value, (int, float)):
                         cell.number_format = "#,##0"
@@ -903,7 +908,8 @@ class ExcelExportService:
 
         for row_idx, (label, value) in enumerate(info_data, start=1):
             info_ws.cell(row=row_idx, column=1, value=label).font = Font(bold=True)
-            info_ws.cell(row=row_idx, column=2, value=value)
+            # SECURITY (#1081-G): defense-in-depth for any config-influenced label.
+            info_ws.cell(row=row_idx, column=2, value=excel_safe_cell_value(value))
 
         info_ws.column_dimensions["A"].width = 15
         info_ws.column_dimensions["B"].width = 20

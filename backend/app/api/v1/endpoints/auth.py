@@ -55,6 +55,14 @@ async def populate_college_info(user_data: UserResponse, db: AsyncSession, user:
 @rate_limit(requests=10, window_seconds=600)  # 10 registrations / 10 min per IP
 async def register(request: Request, user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     """Register a new user"""
+    # SECURITY: This endpoint accepts an unauthenticated, client-settable `role`
+    # (including super_admin) and is a pre-SSO-migration leftover. Gate it behind
+    # mock SSO so it is unreachable (404) on staging/production where
+    # ENABLE_MOCK_SSO=false. Legitimate user creation goes through the
+    # admin-gated POST /users, and Portal SSO creates users directly via the ORM.
+    if not settings.enable_mock_sso:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
     client_ip = _client_ip(request)
     try:
         auth_service = AuthService(db)
@@ -104,6 +112,13 @@ async def register(request: Request, user_data: UserCreate, db: AsyncSession = D
 @rate_limit(requests=20, window_seconds=300)  # 20 attempts / 5 min per IP — slows brute force
 async def login(request: Request, login_data: UserLogin, db: AsyncSession = Depends(get_db)):
     """Login user and return access token"""
+    # SECURITY: `authenticate_user` performs NO credential verification (UserLogin
+    # has no password field), so this endpoint mints a valid JWT for any known
+    # username. It is a pre-SSO-migration leftover; gate it behind mock SSO so it
+    # returns 404 on staging/production where ENABLE_MOCK_SSO=false.
+    if not settings.enable_mock_sso:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
     client_ip = _client_ip(request)
     try:
         auth_service = AuthService(db)

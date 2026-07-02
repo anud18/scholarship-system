@@ -633,6 +633,10 @@ def locked_roster_with_removed_item(sync_db_for_rosters):
     """
     from datetime import datetime, timezone
 
+    from app.models.application import Application, ApplicationStatus
+    from app.models.enums import ReviewStage
+    from app.models.scholarship import SubTypeSelectionMode
+
     u = User(
         nycu_id="admin_rmrest",
         email="admin_rmrest@nycu.edu.tw",
@@ -643,6 +647,23 @@ def locked_roster_with_removed_item(sync_db_for_rosters):
     sync_db_for_rosters.add(u)
     sync_db_for_rosters.commit()
     sync_db_for_rosters.refresh(u)
+
+    # restore_item (#1081-K) now re-reads the item's application status, so the
+    # item must point at a real, still-approved application for the happy-path
+    # restore to succeed.
+    appn = Application(
+        user_id=u.id,
+        app_id="APP-PR-RMREST-001",
+        scholarship_type_id=1,
+        academic_year=114,
+        semester="first",
+        status=ApplicationStatus.approved,
+        review_stage=ReviewStage.student_draft,
+        sub_type_selection_mode=SubTypeSelectionMode.single,
+    )
+    sync_db_for_rosters.add(appn)
+    sync_db_for_rosters.commit()
+    sync_db_for_rosters.refresh(appn)
 
     r = PaymentRoster(
         roster_code="ROSTER-PR-RMREST",
@@ -666,7 +687,7 @@ def locked_roster_with_removed_item(sync_db_for_rosters):
 
     item = PaymentRosterItem(
         roster_id=r.id,
-        application_id=1,
+        application_id=appn.id,
         student_id_number="PR-RMREST-001",
         student_name="Restore Test Student",
         scholarship_name="Test Scholarship",

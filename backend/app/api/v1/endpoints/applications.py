@@ -1044,18 +1044,36 @@ async def get_application_document_file(
     if not application:
         raise HTTPException(status_code=404, detail="申請單不存在")
 
-    # Authorization: owner OR staff/admin/professor/college
+    # Authorization: owner, admin/super_admin/college, or a professor with an
+    # actual advising relationship to the student.
     from app.models.user import UserRole
 
     is_owner = application.user_id == current_user.id
-    is_staff = current_user.role in (
-        UserRole.admin,
-        UserRole.super_admin,
-        UserRole.professor,
-        UserRole.college,
-    )
-    if not is_owner and not is_staff:
-        raise HTTPException(status_code=403, detail="無權限")
+    if not is_owner:
+        if current_user.role in (UserRole.admin, UserRole.super_admin, UserRole.college):
+            pass  # staff can access any application document
+        elif current_user.role == UserRole.professor:
+            # SECURITY (#1081-F): a blanket professor-role allow let any professor
+            # download any student's application-document PDF. Require the same
+            # advising relationship the sibling files.py proxy enforces via
+            # can_access_student_data(..., "view_applications"). Queried explicitly
+            # (not via the lazy relationship) to stay async-safe.
+            from app.models.professor_student import ProfessorStudentRelationship
+
+            rel_stmt = (
+                select(ProfessorStudentRelationship.id)
+                .where(
+                    ProfessorStudentRelationship.professor_id == current_user.id,
+                    ProfessorStudentRelationship.student_id == application.user_id,
+                    ProfessorStudentRelationship.is_active.is_(True),
+                    ProfessorStudentRelationship.can_view_applications.is_(True),
+                )
+                .limit(1)
+            )
+            if (await db.execute(rel_stmt)).first() is None:
+                raise HTTPException(status_code=403, detail="無權限 - 與學生無指導關係")
+        else:
+            raise HTTPException(status_code=403, detail="無權限")
 
     if not application.application_document_url:
         raise HTTPException(status_code=404, detail="申請文件不存在")
