@@ -284,7 +284,7 @@ async def export_department_summary_bulk(
         if not college_code:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="未指定學院，無法使用本學院範圍",
+                detail="未設定學院，無法使用本學院範圍",
             )
         dept_rows = (
             (await db.execute(select(Department).where(Department.academy_code == college_code))).scalars().all()
