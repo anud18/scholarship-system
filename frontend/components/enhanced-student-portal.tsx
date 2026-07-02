@@ -1400,9 +1400,11 @@ export function EnhancedStudentPortal({
                       </CardTitle>
                     </div>
                     <div className="flex items-center gap-2">
-                      {/* Effective-but-closed scholarships stay visible as
-                          read-only; flag that the application window has ended. */}
-                      {scholarship.is_application_period === false && (
+                      {/* Once the application window has closed, the scholarship
+                          is view-only — show only the "已截止" badge. Surfacing
+                          "可申請" here would contradict it, since the student can
+                          no longer apply regardless of eligibility. */}
+                      {scholarship.is_application_period === false ? (
                         <Badge
                           variant="outline"
                           className="bg-gray-100 text-gray-500 border-gray-200 text-base px-4 py-1"
@@ -1410,8 +1412,7 @@ export function EnhancedStudentPortal({
                           <Calendar className="h-4 w-4 mr-1.5" />
                           {t("messages.application_period_ended")}
                         </Badge>
-                      )}
-                      {isEligible ? (
+                      ) : isEligible ? (
                         <Badge
                           variant="outline"
                           className="bg-emerald-50 text-emerald-600 border-emerald-100 text-base px-4 py-1"
