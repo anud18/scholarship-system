@@ -28,7 +28,7 @@ export function createAdminApi() {
      * Get dashboard statistics.
      *
      * Returns the unified DashboardStats shape (snake_case canonical fields
-     * + legacy camelCase aliases for the admin-management-interface UI).
+     * + legacy camelCase aliases the backend still emits alongside them).
      * See issue #642 for the reconciliation.
      */
     getDashboardStats: async (): Promise<ApiResponse<DashboardStats>> => {
