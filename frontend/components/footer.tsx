@@ -64,22 +64,9 @@ export function Footer({ locale = "zh" }: FooterProps) {
             </div>
           </div>
 
-          {/* Contact Information — collapsible on mobile via native <details>
+          {/* Related Links — collapsible on mobile via native <details>
               (closed by default below md). Above md it renders flat without
               a disclosure widget so desktop layout is unchanged. */}
-          <details className="group [&_summary::-webkit-details-marker]:hidden" open>
-            <summary className="flex items-center justify-between cursor-pointer md:cursor-default list-none">
-              <h4 className="font-bold text-nycu-navy-800 text-lg">
-                {locale === "zh" ? "聯絡資訊" : "Contact Information"}
-              </h4>
-              <ChevronDown
-                className="h-5 w-5 text-nycu-navy-600 transition-transform group-open:rotate-180 md:hidden"
-                aria-hidden="true"
-              />
-            </summary>
-          </details>
-
-          {/* Related Links — same collapsible pattern as Contact Information. */}
           <details className="group [&_summary::-webkit-details-marker]:hidden" open>
             <summary className="flex items-center justify-between cursor-pointer md:cursor-default list-none">
               <h4 className="font-bold text-nycu-navy-800 text-lg">
