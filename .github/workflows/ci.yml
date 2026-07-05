@@ -189,15 +189,21 @@ jobs:
 
       - name: Dependency Vulnerability Check
         if: matrix.check == 'dependency-check'
+        # npm audit is HARD-gated at high severity: a high/critical advisory in
+        # the dependency tree fails this job. (It used to end in `|| true`,
+        # which made the whole check structurally incapable of failing.)
+        # safety stays warn-only: it needs network/API access that is flaky on
+        # runners, and its findings overlap Dependabot alerts we already gate.
         run: |
           if [[ "${{ needs.changes.outputs.dependencies }}" == "true" ]]; then
             echo "Checking dependency vulnerabilities..."
             if [[ -f "backend/requirements.txt" ]]; then
               pip install safety || true
-              safety check -r backend/requirements.txt --json || true
+              safety check -r backend/requirements.txt --json \
+                || echo "::warning title=safety::safety check reported issues (warn-only)"
             fi
             if [[ -f "frontend/package.json" ]]; then
-              cd frontend && npm audit --audit-level=moderate || true
+              cd frontend && npm audit --audit-level=high
             fi
           fi
 
@@ -500,15 +506,15 @@ jobs:
 
   # End-to-end smoke (Phase 4 of test-surface-hardening plan)
   # Brings up docker-compose.dev.yml and runs Playwright specs tagged
-  # with @smoke. Soft-gated initially (continue-on-error: true) until
-  # the smoke set is validated to be flake-free in CI.
+  # with @smoke. HARD-gated since 2026-07 (issue #948): the smoke set ran
+  # flake-free long enough to meet the promotion condition set when the
+  # job was introduced soft-gated. A red here blocks the PR.
   e2e-smoke:
     name: E2E Smoke
     runs-on: ubuntu-latest
     needs: [changes, backend-tests, frontend-tests]
     if: ${{ always() && !failure() && github.event_name == 'pull_request' && (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true') }}
     timeout-minutes: 15
-    continue-on-error: true
 
     steps:
       - name: Checkout
@@ -525,9 +531,9 @@ jobs:
         # Best-effort bringup. The compose file references private GHCR
         # images alongside `build:` directives — pulls may fail without
         # ghcr.io auth, then `up --build` rebuilds locally. We tolerate
-        # both pull and build failures here because the whole job is
-        # continue-on-error: true; the readiness check below decides
-        # whether the suite can actually run.
+        # both pull and build failures at THIS step so the readiness
+        # check controls the outcome; the not-ready guard below then
+        # fails the job hard (no more silent green no-op).
         continue-on-error: true
         run: |
           docker compose -f docker-compose.dev.yml pull --quiet 2>&1 | tail -5 || true
@@ -544,17 +550,20 @@ jobs:
             sleep 2
           done
           if [ "$ready" -ne 1 ]; then
-            echo "::warning title=e2e-smoke skipped::Services did not become ready; subsequent steps will no-op."
+            echo "::warning title=e2e-smoke::Services did not become ready; the guard step will fail the job."
             docker compose -f docker-compose.dev.yml ps || true
             docker compose -f docker-compose.dev.yml logs --tail=100 || true
           fi
           echo "READY=$ready" >> "$GITHUB_ENV"
 
-      - name: Skip-on-not-ready guard
+      - name: Fail-on-not-ready guard
+        # This used to `exit 0`, which combined with the job-level
+        # continue-on-error meant the E2E Smoke job could NEVER fail —
+        # a broken compose stack sailed through green (issue #948).
         if: env.READY != '1'
         run: |
-          echo "::notice::Compose stack failed to come up; skipping Playwright run."
-          exit 0
+          echo "::error title=e2e-smoke::Compose stack failed to become ready; failing instead of silently skipping."
+          exit 1
 
       - name: Migrate + seed inside backend container
         # /health returns 200 as soon as FastAPI has started — it doesn't

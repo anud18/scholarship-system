@@ -392,27 +392,6 @@ class TestAdminEndpoints:
         # Assert
         assert response.status_code == 422  # Validation error
 
-    @pytest.mark.skip(reason="endpoint removed: GET /admin/applications/export no longer exists")
-    @pytest.mark.asyncio
-    async def test_export_applications_csv(self, admin_client):
-        """Test applications export in CSV format"""
-        # Arrange
-        with patch("app.api.v1.endpoints.admin.get_db") as mock_get_db:
-            mock_db = AsyncMock()
-            mock_get_db.return_value.__aenter__.return_value = mock_db
-
-            # Mock export service
-            with patch("app.services.export_service.ExportService") as mock_export_class:
-                mock_export = mock_export_class.return_value
-                mock_export.export_applications_csv = AsyncMock(return_value="csv_content")
-
-                # Act
-                response = await admin_client.get("/api/v1/admin/applications/export?format=csv")
-
-                # Assert
-                assert response.status_code == 200
-                assert response.headers["content-type"] == "text/csv; charset=utf-8"
-
     @pytest.mark.asyncio
     async def test_system_health_check(self, admin_client):
         """Test system health check endpoint"""
@@ -429,26 +408,6 @@ class TestAdminEndpoints:
             assert data["success"] is True
             assert "database" in data["data"]
 
-    @pytest.mark.skip(reason="endpoint removed: GET /admin/system/logs no longer exists")
-    @pytest.mark.asyncio
-    async def test_get_system_logs(self, admin_client):
-        """Test system logs endpoint"""
-        # Arrange
-        with patch("builtins.open", create=True) as mock_open:
-            mock_open.return_value.__enter__.return_value.readlines.return_value = [
-                "2024-01-01 00:00:01 INFO Application started\n",
-                "2024-01-01 00:00:02 INFO Database connected\n",
-            ]
-
-            # Act
-            response = await admin_client.get("/api/v1/admin/system/logs?lines=100")
-
-            # Assert
-            assert response.status_code == 200
-            data = response.json()
-            assert data["success"] is True
-            assert "logs" in data["data"]
-
     @pytest.mark.asyncio
     async def test_update_system_settings(self, admin_client):
         """Test system setting update (route renamed to /system-setting, real DB)."""
@@ -464,46 +423,6 @@ class TestAdminEndpoints:
         assert data["success"] is True
         assert data["data"]["key"] == "email_notifications_enabled"
         assert data["data"]["value"] == "true"
-
-    @pytest.mark.skip(reason="endpoint removed: GET /admin/audit-logs no longer exists")
-    @pytest.mark.asyncio
-    async def test_get_audit_logs(self, admin_client):
-        """Test audit logs retrieval"""
-        # Arrange
-        with patch("app.api.v1.endpoints.admin.get_db") as mock_get_db:
-            mock_db = AsyncMock()
-            mock_get_db.return_value.__aenter__.return_value = mock_db
-
-            mock_logs = [
-                Mock(
-                    id=1,
-                    action="CREATE_APPLICATION",
-                    user_id=1,
-                    timestamp=datetime.now(timezone.utc),
-                ),
-                Mock(
-                    id=2,
-                    action="APPROVE_APPLICATION",
-                    user_id=2,
-                    timestamp=datetime.now(timezone.utc),
-                ),
-            ]
-
-            mock_result = Mock()
-            mock_result.scalars.return_value.all.return_value = mock_logs
-
-            mock_count_result = Mock()
-            mock_count_result.scalar.return_value = 2
-
-            mock_db.execute.side_effect = [mock_result, mock_count_result]
-
-            # Act
-            response = await admin_client.get("/api/v1/admin/audit-logs")
-
-            # Assert
-            assert response.status_code == 200
-            data = response.json()
-            assert data["success"] is True
 
     @pytest.mark.asyncio
     async def test_invalid_endpoint_returns_404(self, admin_client):
