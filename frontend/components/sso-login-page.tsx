@@ -66,7 +66,7 @@ export function SSOLoginPage() {
             <GraduationCap className="h-8 w-8 text-white" />
           </div>
           <CardTitle className="text-2xl text-nycu-navy-800">登入系統</CardTitle>
-          <CardDescription>獎學金申請與簽核系統</CardDescription>
+          <CardDescription>獎學金申請與審核系統</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">

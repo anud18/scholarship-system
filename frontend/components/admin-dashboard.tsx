@@ -96,7 +96,7 @@ export function AdminDashboard({
           <div>
             <h2 className="text-2xl font-bold mb-2">獎學金管理系統儀表板</h2>
             <p className="text-white/90">
-              歡迎使用陽明交通大學獎學金申請與簽核系統，提升獎學金作業效率與透明度
+              歡迎使用陽明交通大學獎學金申請與審核系統，提升獎學金作業效率與透明度
             </p>
           </div>
         </div>

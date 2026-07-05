@@ -20,7 +20,7 @@ describe("getTranslation", () => {
   it("resolves a top-level key", () => {
     /** Single-level path returns the value directly. */
     const result = getTranslation("zh", "system.title");
-    expect(result).toBe("獎學金申請與簽核系統");
+    expect(result).toBe("獎學金申請與審核系統");
   });
 
   it("resolves a nested dot-path", () => {
