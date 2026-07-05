@@ -107,7 +107,7 @@ jobs:
             *ss-test*) err "EMAIL_FROM still uses the staging address: $EMAIL_FROM" ;;
           esac
           case "$EMAIL_FROM_NAME" in
-            "") err "EMAIL_FROM_NAME is not set (would default to '(測試)獎學金申請與簽核系統')" ;;
+            "") err "EMAIL_FROM_NAME is not set (would default to '(測試)獎學金申請與審核系統')" ;;
             *測試*) err "EMAIL_FROM_NAME still contains 測試: $EMAIL_FROM_NAME" ;;
           esac
 
