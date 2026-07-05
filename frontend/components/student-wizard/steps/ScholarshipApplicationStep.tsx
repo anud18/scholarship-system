@@ -228,6 +228,11 @@ export function ScholarshipApplicationStep({
       advisorEmailPlaceholder: "professor@nycu.edu.tw",
       advisorId: "指導教授本校人事編號",
       advisorIdPlaceholder: "請輸入指導教授本校人事編號",
+      advisorInfoNotes: [
+        "如有超過一位指導教授或共同指導，請填寫一位主要指導教授。",
+        "申請教育部博士生獎學金之學生，請填寫可提供每月$5000元配合款的指導教授。（每年配合款經費金額將配合教育部相關規定，採滾動式調整。）",
+        "如無指導教授或指導教授為兼任老師無單一入口網權限須請系主任或所長代為簽核。",
+      ],
       bankInfo: "郵局帳號資訊",
       accountNumber: "郵局局號加帳號共 14 碼(限本人)",
       accountNumberPlaceholder: "請輸入 14 碼郵局帳號",
@@ -332,6 +337,11 @@ export function ScholarshipApplicationStep({
       advisorEmailPlaceholder: "professor@nycu.edu.tw",
       advisorId: "Advisor NYCU ID",
       advisorIdPlaceholder: "Enter advisor's NYCU personnel ID",
+      advisorInfoNotes: [
+        "If you have more than one advisor or co-advisors, please fill in one primary advisor.",
+        "Students applying for the MOE Doctoral Fellowship should list an advisor who can provide the NT$5,000/month matching fund. (The matching fund amount is adjusted annually in line with MOE regulations.)",
+        "If you have no advisor, or your advisor is a part-time faculty member without single-sign-on portal access, please ask your department chair or institute director to sign on your behalf.",
+      ],
       bankInfo: "Post Office Account",
       accountNumber: "Post Office Account (14 digits)",
       accountNumberPlaceholder: "Enter 14-digit post office account number",
@@ -1258,6 +1268,13 @@ export function ScholarshipApplicationStep({
               <User className="h-4 w-4 text-violet-600" />
               {text.advisorInfo}
             </h3>
+            <div className="mb-3 p-3 rounded-md bg-blue-50 border border-blue-200 text-sm text-blue-900 space-y-1">
+              {text.advisorInfoNotes.map((note, i) => (
+                <div key={i}>
+                  {i + 1}. {note}
+                </div>
+              ))}
+            </div>
             {advisorErrors.length > 0 && (
               <Alert variant="destructive" className="mb-3">
                 <AlertCircle className="h-4 w-4" />
