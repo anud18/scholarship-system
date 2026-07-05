@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Separator } from "@/components/ui/separator";
-import { Mail, Phone, MapPin, ExternalLink, GraduationCap, ChevronDown } from "lucide-react";
+import { ExternalLink, GraduationCap, ChevronDown } from "lucide-react";
 
 interface FooterProps {
   locale?: "zh" | "en";
@@ -45,7 +45,7 @@ export function Footer({ locale = "zh" }: FooterProps) {
                   </p>
                   <p className="text-nycu-navy-600 text-sm">
                     {locale === "zh"
-                      ? "獎學金申請與簽核系統"
+                      ? "獎學金申請與審核系統"
                       : "NYCU Admissions Scholarship System"}
                   </p>
                   <p className="text-nycu-navy-500 text-xs font-medium">
@@ -77,88 +77,6 @@ export function Footer({ locale = "zh" }: FooterProps) {
                 aria-hidden="true"
               />
             </summary>
-            <div className="space-y-6 mt-4">
-              {/* 交大校區 */}
-              <div className="space-y-3">
-                <h5 className="font-semibold text-nycu-navy-700 flex items-center gap-2">
-                  <span className="inline-block w-2 h-2 bg-nycu-blue-600 rounded-full"></span>
-                  {locale === "zh" ? "交大校區" : "Chiao Tung Campus"}
-                </h5>
-                <div className="flex items-start gap-3 text-sm text-nycu-navy-700">
-                  <MapPin className="h-5 w-5 text-nycu-blue-600 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium">
-                      {locale === "zh"
-                        ? "30010 新竹市大學路1001號"
-                        : "1001 University Road, Hsinchu City 30010"}
-                    </p>
-                    <p className="text-nycu-navy-600 text-xs mt-1">
-                      {locale === "zh"
-                        ? "科學1館1樓(教務處各單位) / 浩然圖書資訊中心8樓(教務長室)"
-                        : "Science Building 1, 1F (Academic Affairs Units) / Library & Information Center, 8F (Dean's Office)"}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 text-sm text-nycu-navy-700">
-                  <Phone className="h-5 w-5 text-nycu-blue-600 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium">(03) 571-2121</p>
-                    <p className="text-nycu-navy-600 text-xs">
-                      {locale === "zh"
-                        ? "分機: 31666(註冊), 31668(課務), 31391(招生), 31751, 31752(處本部)"
-                        : "Ext: 31666(Registration), 31668(Curriculum), 31391(Admission), 31751, 31752(Main Office)"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* 陽明校區 */}
-              <div className="space-y-3">
-                <h5 className="font-semibold text-nycu-navy-700 flex items-center gap-2">
-                  <span className="inline-block w-2 h-2 bg-nycu-orange-600 rounded-full"></span>
-                  {locale === "zh" ? "陽明校區" : "Yang Ming Campus"}
-                </h5>
-                <div className="flex items-start gap-3 text-sm text-nycu-navy-700">
-                  <MapPin className="h-5 w-5 text-nycu-orange-600 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium">
-                      {locale === "zh"
-                        ? "11221 台北市北投區立農街二段155號"
-                        : "No. 155, Sec. 2, Linong St., Beitou District, Taipei City 11221"}
-                    </p>
-                    <p className="text-nycu-navy-600 text-xs mt-1">
-                      {locale === "zh"
-                        ? "行政大樓3樓"
-                        : "Administration Building, 3F"}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 text-sm text-nycu-navy-700">
-                  <Phone className="h-5 w-5 text-nycu-orange-600 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium">(02) 2826-7000</p>
-                    <p className="text-nycu-navy-600 text-xs">
-                      {locale === "zh"
-                        ? "分機: 62203(註冊), 62038(課務), 62299(招生), 62310(實習), 62022(處本部)"
-                        : "Ext: 62203(Registration), 62038(Curriculum), 62299(Admission), 62310(Internship), 62022(Main Office)"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Email */}
-              <div className="flex items-center gap-3 text-sm text-nycu-navy-700 pt-2">
-                <Mail className="h-5 w-5 text-nycu-blue-600 flex-shrink-0" />
-                <div>
-                  <p className="font-medium">oaa@nycu.edu.tw</p>
-                  <p className="text-nycu-navy-600 text-xs">
-                    {locale === "zh" ? "教務處信箱" : "Academic Affairs Email"}
-                  </p>
-                </div>
-              </div>
-            </div>
           </details>
 
           {/* Related Links — same collapsible pattern as Contact Information. */}

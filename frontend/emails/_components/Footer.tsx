@@ -28,7 +28,7 @@ export const Footer = () => {
             lineHeight: '1.5',
           }}
         >
-          國立陽明交通大學 獎學金申請與簽核系統
+          國立陽明交通大學 獎學金申請與審核系統
         </Text>
         <Text
           className="text-gray-600 text-xs m-0 mb-2"

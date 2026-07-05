@@ -8,7 +8,7 @@ export const translations = {
   zh: {
     // 系統標題
     system: {
-      title: "獎學金申請與簽核系統",
+      title: "獎學金申請與審核系統",
       subtitle: "NYCU Admissions Scholarship System",
       name: "NYCU Admissions Scholarship System",
     },
@@ -510,7 +510,7 @@ export const translations = {
     // System Title
     system: {
       title: "NYCU Admissions Scholarship System",
-      subtitle: "獎學金申請與簽核系統",
+      subtitle: "獎學金申請與審核系統",
       name: "NYCU Admissions Scholarship System",
     },
 
