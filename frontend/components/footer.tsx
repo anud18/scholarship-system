@@ -64,10 +64,11 @@ export function Footer({ locale = "zh" }: FooterProps) {
             </div>
           </div>
 
-          {/* Related Links — collapsible on mobile via native <details>
-              (closed by default below md). Above md it renders flat without
-              a disclosure widget so desktop layout is unchanged. */}
-          <details className="group [&_summary::-webkit-details-marker]:hidden" open>
+          {/* Related Links — expanded by default (native <details open>) on
+              every breakpoint. Below md the summary stays interactive so
+              users can collapse it; the disclosure chevron is hidden at
+              md+ where the toggle affordance isn't needed. */}
+          <details className="group [&_summary::-webkit-details-marker]:hidden md:col-span-2" open>
             <summary className="flex items-center justify-between cursor-pointer md:cursor-default list-none">
               <h4 className="font-bold text-nycu-navy-800 text-lg">
                 {locale === "zh" ? "相關連結" : "Related Links"}
