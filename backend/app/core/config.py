@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     smtp_password: Optional[str] = None
     smtp_use_tls: bool = False  # STARTTLS/TLS encryption (default: False for plain SMTP)
     email_from: str = "ss-test.aa@nycu.edu.tw"
-    email_from_name: str = "(測試)獎學金申請與簽核系統"
+    email_from_name: str = "(測試)獎學金申請與審核系統"
 
     # File Upload
     upload_dir: str = "./uploads"
