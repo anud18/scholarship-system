@@ -63,6 +63,11 @@ const NOTICES = {
           "各獎學金有不同的申請期限，逾期申請恕不受理。請注意各獎學金的開放申請日期與截止日期。",
       },
       {
+        title: "申請限制",
+        content:
+          "每位獲獎學生至多可領獎3年共計6學期，國科會與教育部獎學金兩獎項合併計算，申請次數不限。\n每次申請為一學年期程，並可申請續領至滿三學年為止。如遇休學、退學、畢業，或有違反本校獎學金要點相關規定之情事，將喪失領獎資格，將由備取學生遞補。",
+      },
+      {
         title: "文件準備",
         content:
           "請備妥所需文件，包括但不限於成績單、郵局存摺封面、勞保投保紀錄、指導教授推薦函等。所有文件必須為清晰可辨識的電子檔案（PDF、JPG、JPEG 或 PNG 格式）。",
@@ -95,7 +100,7 @@ const NOTICES = {
     ],
     importantNotice: "重要提醒",
     importantContent:
-      "請務必詳細閱讀各獎學金的申請條款與相關規定。每位學生每學期限申請一項獎學金，請謹慎選擇。",
+      "請務必詳細閱讀各項獎學金要點與相關規定。\n每位學生每次申請國科會或教育部博士生獎學金為一學年期程，僅可擇一獲獎，請謹慎選擇。",
     agreementText: "我已詳細閱讀並了解獎學金要點，同意遵守相關規定",
     readNoticeText: "尚未閱讀獎學金要點",
     readNoticeHint: "請點擊上方按鈕開啟獎學金要點並滑至底端",
@@ -131,6 +136,11 @@ const NOTICES = {
           "Each scholarship has different application deadlines. Late applications will not be accepted. Please note the opening and closing dates for each scholarship.",
       },
       {
+        title: "Application Restrictions",
+        content:
+          "Each awarded student may receive the scholarship for up to 3 years (6 semesters total); the NSTC and MOE scholarships are counted together, with no limit on the number of applications.\nEach application covers one academic year, and may be renewed up to a total of three academic years. Recipients who take a leave of absence, withdraw, graduate, or violate the university's scholarship regulations will forfeit their eligibility, and a waitlisted student will be selected instead.",
+      },
+      {
         title: "Document Preparation",
         content:
           "Please prepare all required documents, including but not limited to transcripts, enrollment certificates, and advisor recommendation letters. All documents must be clear electronic files (PDF, JPG, JPEG, or PNG format).",
@@ -163,7 +173,7 @@ const NOTICES = {
     ],
     importantNotice: "Important Notice",
     importantContent:
-      "Please read the terms and conditions of each scholarship carefully. Each student may only apply for one scholarship per semester. Choose wisely.",
+      "Please read the regulations and related rules for each scholarship carefully.\nEach student may apply for either the NSTC or MOE PhD Scholarship for one academic year per application, and may only receive one of the two. Please choose carefully.",
     agreementText:
       "I have read and understand the scholarship regulations and agree to comply",
     readNoticeText: "Regulations not yet read",
@@ -295,7 +305,9 @@ export function NoticeAgreementStep({
               <div className="font-semibold text-amber-900 mb-1">
                 {t.importantNotice}
               </div>
-              <div className="text-sm text-amber-800">{t.importantContent}</div>
+              <div className="text-sm text-amber-800 whitespace-pre-line">
+                {t.importantContent}
+              </div>
             </AlertDescription>
           </Alert>
 
@@ -315,7 +327,7 @@ export function NoticeAgreementStep({
                         <h4 className="font-semibold text-nycu-navy-800 mb-2">
                           {item.title}
                         </h4>
-                        <p className="text-sm text-gray-700 leading-relaxed">
+                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
                           {item.content}
                         </p>
                       </div>
