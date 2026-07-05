@@ -9,7 +9,7 @@ data backfill is exercised by the reset_database.sh smoke (Task 1.7).
 import importlib.util
 from pathlib import Path
 
-_MIG = Path(__file__).resolve().parents[1] / "alembic" / "versions" / "20260608_shared_quota_pools_add.py"
+_MIG = Path(__file__).resolve().parents[2] / "alembic" / "versions" / "20260608_shared_quota_pools_add.py"
 
 
 def _load():
@@ -48,7 +48,7 @@ def test_migration_source_contract():
     assert "audit" in src.lower()
 
 
-_MIG2 = Path(__file__).resolve().parents[1] / "alembic" / "versions" / "20260608_shared_quota_pools_drop.py"
+_MIG2 = Path(__file__).resolve().parents[2] / "alembic" / "versions" / "20260608_shared_quota_pools_drop.py"
 
 
 def _load2():

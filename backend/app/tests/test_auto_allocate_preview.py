@@ -22,7 +22,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 _SERVICE_PATH = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "app", "services", "manual_distribution_service.py")
+    os.path.join(os.path.dirname(__file__), "..", "services", "manual_distribution_service.py")
 )
 
 _MOCK_MODULES = [

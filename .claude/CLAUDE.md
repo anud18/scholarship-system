@@ -589,7 +589,7 @@ match = safe_regex_match(user_pattern, value, timeout_seconds=1)
 
 ### Test Coverage
 
-See `backend/tests/test_regex_validator.py` for comprehensive test suite:
+See `backend/app/tests/test_regex_validator.py` for comprehensive test suite:
 - 22 test cases covering all security scenarios
 - Dangerous pattern rejection tests
 - ReDoS attack prevention tests
