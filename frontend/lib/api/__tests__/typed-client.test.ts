@@ -11,7 +11,16 @@
  * - Token stored under wrong localStorage key → other code that reads
  *   the auth_token key (login UI, error overlay) is out of sync
  *
- * 8 cases. Pure DOM via jsdom (jest default).
+ * Also covers the 401 onResponse middleware: an expired/invalid session
+ * must clear the token AND dispatch the global "session-expired" event
+ * (same contract as the legacy ApiClient), while a failed credential
+ * submission (e.g. wrong password on /auth/login) must do neither.
+ * Regression for the staging "Authorization header missing" loop: the
+ * typed client used to clear the token silently, so the UI stayed
+ * "logged in" but every later request went out with no Authorization
+ * header and no way to recover.
+ *
+ * 13 cases. Pure DOM via jsdom (jest default).
  */
 
 import { TypedApiClient } from "../typed-client";
@@ -138,5 +147,99 @@ describe("hasToken / getToken", () => {
     const client = new TypedApiClient();
     client.setToken("");
     expect(client.hasToken()).toBe(false);
+  });
+});
+
+// ─── 401 onResponse middleware ───────────────────────────────────────
+
+describe("401 handling (onResponse middleware)", () => {
+  const originalFetch = global.fetch;
+  let sessionExpiredEvents: CustomEvent[];
+  const captureEvent = (e: Event) =>
+    sessionExpiredEvents.push(e as CustomEvent);
+
+  const mockFetchStatus = (status: number) => {
+    global.fetch = jest.fn(
+      async () =>
+        new Response(JSON.stringify({ detail: "x" }), {
+          status,
+          headers: { "Content-Type": "application/json" },
+        })
+    ) as jest.Mock;
+  };
+
+  beforeEach(() => {
+    sessionExpiredEvents = [];
+    window.addEventListener("session-expired", captureEvent);
+  });
+
+  afterEach(() => {
+    window.removeEventListener("session-expired", captureEvent);
+    global.fetch = originalFetch;
+  });
+
+  it("401 on a normal endpoint clears token AND dispatches session-expired", async () => {
+    /* Regression pin (staging bug): expired token → 401 → the typed
+     * client cleared the token SILENTLY. The UI stayed "logged in" and
+     * every later typed-client request went out with no Authorization
+     * header, so panels showed the raw backend error "Authorization
+     * header missing" forever (重試 could never fix it). The client must
+     * announce expiry so SessionExpiredModal prompts a re-login. */
+    mockFetchStatus(401);
+    const client = new TypedApiClient();
+    client.setToken("expired-token");
+
+    await client.raw.GET("/api/v1/admin/dashboard/stats" as never);
+
+    expect(client.hasToken()).toBe(false);
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(sessionExpiredEvents).toHaveLength(1);
+    expect(sessionExpiredEvents[0].detail).toEqual({
+      type: "token_expired",
+      status: 401,
+      endpoint: "/api/v1/admin/dashboard/stats",
+    });
+  });
+
+  it("401 on /auth/login does NOT clear token and does NOT dispatch", async () => {
+    /* Pin: a wrong-password 401 is about the SUBMITTED credentials, not
+     * the stored session. It must neither nuke a valid existing session
+     * nor pop the "session expired" modal over the login form. */
+    mockFetchStatus(401);
+    const client = new TypedApiClient();
+    client.setToken("still-valid-session");
+
+    await client.raw.POST("/api/v1/auth/login" as never, {
+      body: { username: "u", password: "wrong" },
+    } as never);
+
+    expect(client.getToken()).toBe("still-valid-session");
+    expect(localStorage.getItem(STORAGE_KEY)).toBe("still-valid-session");
+    expect(sessionExpiredEvents).toHaveLength(0);
+  });
+
+  it("non-401 responses leave token untouched and dispatch nothing", async () => {
+    mockFetchStatus(200);
+    const client = new TypedApiClient();
+    client.setToken("healthy-token");
+
+    await client.raw.GET("/api/v1/admin/dashboard/stats" as never);
+
+    expect(client.getToken()).toBe("healthy-token");
+    expect(sessionExpiredEvents).toHaveLength(0);
+  });
+
+  it("403 does not clear token (permission denied ≠ session expired)", async () => {
+    /* Pin: 403 means "authenticated but not allowed" — common for
+     * scoped admins browsing tabs they lack permissions for. Clearing
+     * the token here would log users out on every permission check. */
+    mockFetchStatus(403);
+    const client = new TypedApiClient();
+    client.setToken("healthy-token");
+
+    await client.raw.GET("/api/v1/admin/dashboard/stats" as never);
+
+    expect(client.getToken()).toBe("healthy-token");
+    expect(sessionExpiredEvents).toHaveLength(0);
   });
 });

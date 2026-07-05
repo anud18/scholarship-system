@@ -16,6 +16,17 @@ import type { paths } from './generated/schema';
 import { logger } from '../utils/logger';
 
 /**
+ * Credential-submission endpoints: a 401 from these means the SUBMITTED
+ * credentials were wrong, not that the stored session expired. Don't clear
+ * the stored token or announce session expiry for them.
+ */
+const CREDENTIAL_ENDPOINTS = [
+  '/api/v1/auth/login',
+  '/api/v1/auth/mock-sso/login',
+  '/api/v1/auth/portal-sso/verify',
+];
+
+/**
  * Type-safe API client with authentication and environment-aware routing
  */
 class TypedApiClient {
@@ -57,11 +68,35 @@ class TypedApiClient {
           headers,
         });
       },
-      onResponse: ({ response }) => {
+      onResponse: ({ request, response }) => {
         // Clear token on 401 Unauthorized
         if (response.status === 401) {
+          let endpoint = request.url;
+          try {
+            endpoint = new URL(request.url, 'http://localhost').pathname;
+          } catch {}
+
+          // Failed credential submission — leave any stored session alone.
+          if (CREDENTIAL_ENDPOINTS.includes(endpoint)) {
+            return undefined;
+          }
+
           logger.error('Authentication failed - clearing token');
           this.clearToken();
+
+          // Announce session expiry so SessionExpiredModal prompts a
+          // re-login (same contract as the legacy ApiClient in client.ts).
+          // Without this, the app looks logged-in but every request from
+          // this client goes out WITHOUT an Authorization header, and
+          // panels surface the raw backend error ("Authorization header
+          // missing") with no way to recover.
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('session-expired', {
+                detail: { type: 'token_expired', status: 401, endpoint },
+              })
+            );
+          }
         }
         return undefined; // No modification needed
       },
