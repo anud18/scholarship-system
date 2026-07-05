@@ -48,43 +48,70 @@ _MOCK_MODULES = [
 @pytest.fixture(scope="module")
 def _compute_suggestions():
     """
-    Import _compute_suggestions with mocked dependencies, then clean up
-    sys.modules on teardown to avoid poisoning other test files.
+    Provide _compute_suggestions.
+
+    Preferred path: a plain import — in the dev container and CI all real
+    dependencies (sqlalchemy, app.models.*) are installed, and importing the
+    real module cannot poison anything.
+
+    Fallback path (bare host without backend deps): install MagicMock stand-ins
+    into sys.modules for the import chain, load the service straight from its
+    file, then remove ONLY the modules we created. Attributes are set ONLY on
+    MagicMock stand-ins we created ourselves — an earlier version of this
+    fixture unconditionally overwrote attributes (e.g. ``RosterStatus``) on the
+    REAL, already-imported modules, and its teardown restored sys.modules
+    entries but not the clobbered attributes, permanently poisoning
+    ``app.models.payment_roster`` for every later test file in the same run
+    (surfaced by test_payment_roster_model.py once this file joined the main
+    CI unit lane).
     """
-    originals = {}
+    try:
+        from app.services.manual_distribution_service import _compute_suggestions as real_fn
+    except ImportError:
+        pass
+    else:
+        yield real_fn
+        return
+
+    created: dict[str, MagicMock] = {}
     for mod_name in _MOCK_MODULES:
-        originals[mod_name] = sys.modules.get(mod_name)
         if mod_name not in sys.modules:
-            sys.modules[mod_name] = MagicMock()
+            created[mod_name] = MagicMock()
+            sys.modules[mod_name] = created[mod_name]
+
+    def _stub(mod_name: str, attr: str, value) -> None:
+        # Only touch modules this fixture created; never mutate a real module.
+        if mod_name in created:
+            setattr(created[mod_name], attr, value)
 
     # Ensure sub-packages resolve correctly via their parents
-    sys.modules["sqlalchemy"].ext = sys.modules["sqlalchemy.ext"]
-    sys.modules["sqlalchemy.ext"].asyncio = sys.modules["sqlalchemy.ext.asyncio"]
-    sys.modules["sqlalchemy.ext.asyncio"].AsyncSession = object
+    _stub("sqlalchemy", "ext", sys.modules["sqlalchemy.ext"])
+    _stub("sqlalchemy.ext", "asyncio", sys.modules["sqlalchemy.ext.asyncio"])
+    _stub("sqlalchemy.ext.asyncio", "AsyncSession", object)
 
-    sys.modules["sqlalchemy.orm"].selectinload = MagicMock()
-    sys.modules["sqlalchemy.orm"].joinedload = MagicMock()
+    _stub("sqlalchemy.orm", "selectinload", MagicMock())
+    _stub("sqlalchemy.orm", "joinedload", MagicMock())
 
-    sys.modules["app.models.enums"].ApplicationStatus = MagicMock()
-    sys.modules["app.models.enums"].ReviewStage = MagicMock()
+    _stub("app.models.enums", "ApplicationStatus", MagicMock())
+    _stub("app.models.enums", "ReviewStage", MagicMock())
 
-    sys.modules["app.models.college_review"].CollegeRanking = MagicMock()
-    sys.modules["app.models.college_review"].CollegeRankingItem = MagicMock()
-    sys.modules["app.models.college_review"].ManualDistributionHistory = MagicMock()
+    _stub("app.models.college_review", "CollegeRanking", MagicMock())
+    _stub("app.models.college_review", "CollegeRankingItem", MagicMock())
+    _stub("app.models.college_review", "ManualDistributionHistory", MagicMock())
 
-    sys.modules["app.models.scholarship"].ScholarshipConfiguration = MagicMock()
-    sys.modules["app.models.scholarship"].ScholarshipSubTypeConfig = MagicMock()
+    _stub("app.models.scholarship", "ScholarshipConfiguration", MagicMock())
+    _stub("app.models.scholarship", "ScholarshipSubTypeConfig", MagicMock())
 
-    sys.modules["app.models.application"].Application = MagicMock()
-    sys.modules["app.models.audit_log"].AuditLog = MagicMock()
-    sys.modules["app.models.review"].ApplicationReview = MagicMock()
-    sys.modules["app.models.review"].ApplicationReviewItem = MagicMock()
-    sys.modules["app.models.payment_roster"].PaymentRoster = MagicMock()
-    sys.modules["app.models.payment_roster"].PaymentRosterItem = MagicMock()
-    sys.modules["app.models.payment_roster"].RosterStatus = MagicMock()
-    sys.modules["app.models.user"].User = MagicMock()
-    sys.modules["app.models.user"].UserRole = MagicMock()
-    sys.modules["app.services.received_months_service"].calculate_received_months_bulk_async = MagicMock()
+    _stub("app.models.application", "Application", MagicMock())
+    _stub("app.models.audit_log", "AuditLog", MagicMock())
+    _stub("app.models.review", "ApplicationReview", MagicMock())
+    _stub("app.models.review", "ApplicationReviewItem", MagicMock())
+    _stub("app.models.payment_roster", "PaymentRoster", MagicMock())
+    _stub("app.models.payment_roster", "PaymentRosterItem", MagicMock())
+    _stub("app.models.payment_roster", "RosterStatus", MagicMock())
+    _stub("app.models.user", "User", MagicMock())
+    _stub("app.models.user", "UserRole", MagicMock())
+    _stub("app.services.received_months_service", "calculate_received_months_bulk_async", MagicMock())
 
     spec = importlib.util.spec_from_file_location("manual_distribution_service_direct", _SERVICE_PATH)
     module = importlib.util.module_from_spec(spec)
@@ -92,12 +119,9 @@ def _compute_suggestions():
 
     yield module._compute_suggestions
 
-    # Restore original sys.modules state
-    for mod_name in _MOCK_MODULES:
-        if originals[mod_name] is None:
-            sys.modules.pop(mod_name, None)
-        else:
-            sys.modules[mod_name] = originals[mod_name]
+    # Remove only the stand-ins we created; real modules were never touched.
+    for mod_name in created:
+        sys.modules.pop(mod_name, None)
 
 
 # ---------------------------------------------------------------------------
