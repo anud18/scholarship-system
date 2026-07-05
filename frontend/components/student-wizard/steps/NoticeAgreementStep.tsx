@@ -58,14 +58,14 @@ const NOTICES = {
           "申請人必須為本校在學【全職學生】，【不得於公私立機構從事專職全時之有給職工作】，且符合各獎學金規定的申請條件。請確認您的學籍狀態與申請資格。",
       },
       {
-        title: "申請期限",
-        content:
-          "各獎學金有不同的申請期限，逾期申請恕不受理。請注意各獎學金的開放申請日期與截止日期。",
-      },
-      {
         title: "申請限制",
         content:
           "每位獲獎學生至多可領獎3年共計6學期，國科會與教育部獎學金兩獎項合併計算，申請次數不限。\n每次申請為一學年期程，並可申請續領至滿三學年為止。如遇休學、退學、畢業，或有違反本校獎學金要點相關規定之情事，將喪失領獎資格，將由備取學生遞補。",
+      },
+      {
+        title: "申請期限",
+        content:
+          "各獎學金有不同的申請期限，逾期申請恕不受理。請注意各獎學金的開放申請日期與截止日期。",
       },
       {
         title: "文件準備",
@@ -131,14 +131,14 @@ const NOTICES = {
           "Applicants must be currently enrolled students and meet the specific requirements of each scholarship. Please verify your enrollment status and eligibility.",
       },
       {
-        title: "Application Deadline",
-        content:
-          "Each scholarship has different application deadlines. Late applications will not be accepted. Please note the opening and closing dates for each scholarship.",
-      },
-      {
         title: "Application Restrictions",
         content:
           "Each awarded student may receive the scholarship for up to 3 years (6 semesters total); the NSTC and MOE scholarships are counted together, with no limit on the number of applications.\nEach application covers one academic year, and may be renewed up to a total of three academic years. Recipients who take a leave of absence, withdraw, graduate, or violate the university's scholarship regulations will forfeit their eligibility, and a waitlisted student will be selected instead.",
+      },
+      {
+        title: "Application Deadline",
+        content:
+          "Each scholarship has different application deadlines. Late applications will not be accepted. Please note the opening and closing dates for each scholarship.",
       },
       {
         title: "Document Preparation",
