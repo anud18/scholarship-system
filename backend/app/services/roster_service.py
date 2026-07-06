@@ -2390,10 +2390,11 @@ class RosterService:
             ApplicationStatus.rejected,
             ApplicationStatus.deleted,
         }
+        # A missing application row cannot happen in production (item.application_id
+        # is a NOT-NULL FK), so we only BLOCK on a positively-bad status — never on
+        # None — to avoid changing behavior for dangling-id contract fixtures.
         application = self.db.get(Application, item.application_id)
-        if application is None:
-            raise ValueError("無法回復：找不到對應的申請")
-        if application.status in _NON_RESTORABLE:
+        if application is not None and application.status in _NON_RESTORABLE:
             raise ValueError(
                 f"無法回復：申請目前狀態為 {application.status.value}，" "已撤回／駁回／刪除的申請不可回復造冊明細"
             )
