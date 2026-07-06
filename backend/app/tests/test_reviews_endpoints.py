@@ -122,6 +122,7 @@ async def review_application(db, review_users, review_scholarship) -> Applicatio
     application = Application(
         app_id="APP-114-1-00001",
         user_id=review_users["student"].id,
+        professor_id=review_users["professor"].id,
         scholarship_type_id=review_scholarship.id,
         sub_type_selection_mode=SubTypeSelectionMode.multiple,
         status=ApplicationStatus.under_review.value,
@@ -176,31 +177,67 @@ class TestReviewsAuthorization:
         response = await client.post(f"{REVIEWS_PREFIX}/reviews", json=payload)
         assert response.status_code == 403
 
-    async def test_security_gap_student_can_read_any_application_reviews(
-        self, client, login, review_users, review_application
-    ):
-        # SECURITY GAP (#1081): GET /applications/{id}/reviews only requires
-        # authentication. Any student (including one unrelated to the
-        # application) can read every reviewer's name, role, recommendation and
-        # comments for any application by enumerating IDs. Expected: students
-        # should be denied (or scoped to their own applications).
+    async def test_student_cannot_read_application_reviews(self, client, login, review_users, review_application):
+        # Enforced rule (#1081): students may not read the full reviews list for
+        # any application (they use review-status for their own progress).
         login(review_users["other_student"])
         response = await client.get(f"{REVIEWS_PREFIX}/applications/{review_application.id}/reviews")
-        assert response.status_code == 200  # pins current (vulnerable) behavior
+        assert response.status_code == 403
+
+    async def test_owning_student_cannot_read_application_reviews(
+        self, client, login, review_users, review_application
+    ):
+        # Enforced rule (#1081): even the owning student is denied the full
+        # reviews list — students only get review-status.
+        login(review_users["student"])
+        response = await client.get(f"{REVIEWS_PREFIX}/applications/{review_application.id}/reviews")
+        assert response.status_code == 403
+
+    async def test_assigned_professor_can_read_application_reviews(
+        self, client, login, review_users, review_application
+    ):
+        # Enforced rule (#1081): the application's assigned professor may read
+        # its reviews.
+        login(review_users["professor"])
+        response = await client.get(f"{REVIEWS_PREFIX}/applications/{review_application.id}/reviews")
+        assert response.status_code == 200
         assert response.json()["success"] is True
 
-    async def test_security_gap_student_can_read_review_status(self, client, login, review_users, review_application):
-        # SECURITY GAP (#1081): review-status leaks decision_reason and
-        # per-sub-type rejection details to any authenticated user.
+    async def test_unrelated_professor_cannot_read_application_reviews(
+        self, client, login, review_users, review_application
+    ):
+        # Enforced rule (#1081): a professor who is not the assigned advisor may
+        # not read another application's reviews.
+        login(review_users["unrelated_professor"])
+        response = await client.get(f"{REVIEWS_PREFIX}/applications/{review_application.id}/reviews")
+        assert response.status_code == 403
+
+    async def test_college_can_read_application_reviews(self, client, login, review_users, review_application):
+        login(review_users["college"])
+        response = await client.get(f"{REVIEWS_PREFIX}/applications/{review_application.id}/reviews")
+        assert response.status_code == 200
+
+    async def test_student_cannot_read_other_application_review_status(
+        self, client, login, review_users, review_application
+    ):
+        # Enforced rule (#1081): a student may query review-status ONLY for their
+        # own application; another student's application is denied.
         login(review_users["other_student"])
         response = await client.get(f"{REVIEWS_PREFIX}/applications/{review_application.id}/review-status")
-        assert response.status_code == 200  # pins current (vulnerable) behavior
+        assert response.status_code == 403
+
+    async def test_owning_student_can_read_own_review_status(self, client, login, review_users, review_application):
+        # Enforced rule (#1081): the owning student CAN read their own
+        # review-status (progress display).
+        login(review_users["student"])
+        response = await client.get(f"{REVIEWS_PREFIX}/applications/{review_application.id}/review-status")
+        assert response.status_code == 200
         body = response.json()
         assert body["success"] is True
         assert "decision_reason" in body["data"]
 
-    async def test_security_gap_student_can_read_single_review(self, client, login, review_users, review_application):
-        # First create a review as professor.
+    async def test_student_cannot_read_single_review(self, client, login, review_users, review_application):
+        # First create a review as the assigned professor.
         login(review_users["professor"])
         created = await client.post(
             f"{REVIEWS_PREFIX}/reviews",
@@ -209,24 +246,64 @@ class TestReviewsAuthorization:
         assert created.status_code == 201
         review_id = created.json()["data"]["id"]
 
-        # SECURITY GAP (#1081): GET /reviews/{id} has no role/ownership check —
-        # an unrelated student can read the full review record.
+        # Enforced rule (#1081): GET /reviews/{id} denies students.
         login(review_users["other_student"])
         response = await client.get(f"{REVIEWS_PREFIX}/reviews/{review_id}")
-        assert response.status_code == 200  # pins current (vulnerable) behavior
+        assert response.status_code == 403
+
+    async def test_unrelated_professor_cannot_read_single_review(self, client, login, review_users, review_application):
+        login(review_users["professor"])
+        created = await client.post(
+            f"{REVIEWS_PREFIX}/reviews",
+            json={"application_id": review_application.id, **_approve_items("nstc", "moe_1w")},
+        )
+        assert created.status_code == 201
+        review_id = created.json()["data"]["id"]
+
+        # Enforced rule (#1081): a professor who neither authored the review nor
+        # advises the application is denied.
+        login(review_users["unrelated_professor"])
+        response = await client.get(f"{REVIEWS_PREFIX}/reviews/{review_id}")
+        assert response.status_code == 403
+
+    async def test_admin_can_read_single_review(self, client, login, review_users, review_application):
+        login(review_users["professor"])
+        created = await client.post(
+            f"{REVIEWS_PREFIX}/reviews",
+            json={"application_id": review_application.id, **_approve_items("nstc", "moe_1w")},
+        )
+        assert created.status_code == 201
+        review_id = created.json()["data"]["id"]
+
+        login(review_users["admin"])
+        response = await client.get(f"{REVIEWS_PREFIX}/reviews/{review_id}")
+        assert response.status_code == 200
         assert response.json()["data"]["reviewer_name"] == "Review Professor"
 
-    async def test_security_gap_unrelated_professor_can_submit_review(
-        self, client, login, review_users, review_application
-    ):
-        # SECURITY GAP (#1081): the multi-role route POST /applications/{id}/review
-        # does not verify the professor-student advisor relationship (the
-        # /professor/... route does, via can_professor_submit_review). ANY
-        # professor can review ANY application here.
+    async def test_unrelated_professor_cannot_submit_review(self, client, login, review_users, review_application):
+        # Enforced rule (#1081): the multi-role route POST /applications/{id}/review
+        # verifies the professor is the application's assigned advisor. An
+        # unrelated professor is denied.
         login(review_users["unrelated_professor"])
         response = await client.post(_submit_url(review_application.id), json=_approve_items("nstc"))
-        assert response.status_code == 200  # pins current (vulnerable) behavior
+        assert response.status_code == 403
+
+    async def test_assigned_professor_can_submit_review(self, client, login, review_users, review_application):
+        # Enforced rule (#1081): the assigned professor CAN still submit.
+        login(review_users["professor"])
+        response = await client.post(_submit_url(review_application.id), json=_approve_items("nstc"))
+        assert response.status_code == 200
         assert response.json()["success"] is True
+
+    async def test_unrelated_professor_cannot_create_review_via_reviews_endpoint(
+        self, client, login, review_users, review_application
+    ):
+        # Enforced rule (#1081): POST /reviews also verifies the advisor
+        # relationship for professors.
+        login(review_users["unrelated_professor"])
+        payload = {"application_id": review_application.id, **_approve_items("nstc")}
+        response = await client.post(f"{REVIEWS_PREFIX}/reviews", json=payload)
+        assert response.status_code == 403
 
     async def test_professor_submit_nonexistent_application_403(self, client, login, review_users):
         # Current behavior: the submit route never 404s on a missing
@@ -275,23 +352,19 @@ class TestReviewsPolicy:
         await db.refresh(review_application)
         assert review_application.status == ApplicationStatus.rejected
 
-    async def test_security_gap_professor_can_rereview_after_full_reject(
-        self, client, login, review_users, review_application
-    ):
-        # SECURITY GAP (#1081) / policy divergence: project policy says a
-        # professor full-reject is terminal — a second professor review must
-        # return 403. The /professor/applications/{id}/review route enforces
-        # this, but this unified multi-role route does not:
-        # get_reviewable_subtypes returns ALL sub-types for professors, so the
-        # professor can silently overwrite their terminal reject with an
-        # approve.
+    async def test_professor_cannot_rereview_after_full_reject(self, client, login, review_users, review_application):
+        # Review-Flow Policy (#1081): a professor full-reject is terminal — the
+        # second professor review on this unified multi-role route must now be
+        # rejected with 403 (mirrors the /professor/applications/{id}/review
+        # route). Previously get_reviewable_subtypes returned ALL sub-types for
+        # professors, letting them silently overwrite a terminal reject.
         login(review_users["professor"])
         first = await client.post(_submit_url(review_application.id), json=_reject_items("nstc", "moe_1w"))
         assert first.status_code == 200
 
         second = await client.post(_submit_url(review_application.id), json=_approve_items("nstc", "moe_1w"))
-        assert second.status_code == 200  # pins current behavior; policy says 403
-        assert second.json()["data"]["recommendation"] == "approve"
+        assert second.status_code == 403
+        assert second.json()["success"] is False
 
     async def test_review_status_overall_rejected_after_full_reject(
         self, client, login, review_users, review_application
