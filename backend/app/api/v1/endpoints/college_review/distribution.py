@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import load_only, selectinload
+from sqlalchemy.orm import selectinload
 
 from app.core.security import require_college
 from app.db.deps import get_db
@@ -33,7 +33,7 @@ from app.services.college_review_service import (
     CollegeReviewService,
 )
 
-from ._helpers import normalize_semester_value
+from ._helpers import assert_can_manage_ranking, normalize_semester_value
 
 logger = logging.getLogger(__name__)
 
@@ -88,11 +88,23 @@ async def get_ranking_roster_status(
     查詢排名的造冊狀態和進展
     """
     try:
+        ranking_row = (
+            await db.execute(select(CollegeRanking).where(CollegeRanking.id == ranking_id))
+        ).scalar_one_or_none()
+        if not ranking_row:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
+
+        # College-scope the read (issue #1081 finding D): a reviewer may only see
+        # their own college's ranking — same guard as ranking_management.get_ranking.
+        assert_can_manage_ranking(ranking_row, current_user)
+
         service = CollegeReviewService(db)
         roster_status = await service.check_ranking_roster_status(ranking_id)
 
         return ApiResponse(success=True, message="Roster status retrieved successfully", data=roster_status)
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception(f"Error retrieving roster status for ranking {ranking_id}")
         raise HTTPException(
@@ -130,6 +142,12 @@ async def get_distribution_details(
 
         if not ranking:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
+
+        # College-scope the read (issue #1081 finding C): a reviewer may only see
+        # their own college's ranking (admins may see any) — same guard as
+        # ranking_management.get_ranking. Prevents cross-college access to
+        # applicant PII / ranks / rejection reasons via ranking-id enumeration.
+        assert_can_manage_ranking(ranking, current_user)
 
         sub_type_metadata_map: Dict[str, Dict[str, str]] = {}
         if ranking.scholarship_type and getattr(ranking.scholarship_type, "sub_type_configs", None):

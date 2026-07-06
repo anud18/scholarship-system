@@ -1044,17 +1044,46 @@ async def get_application_document_file(
     if not application:
         raise HTTPException(status_code=404, detail="申請單不存在")
 
-    # Authorization: owner OR staff/admin/professor/college
+    # Authorization (issue #1081 finding F): owner, college/admin/super_admin, or a
+    # professor tied to this applicant — either the reviewer this application is
+    # assigned to (Application.professor_id, the professor-review routing field) or
+    # an active view_applications relationship (same gate as the files.py proxy's
+    # can_access_student_data, expressed as a direct query because the relationship
+    # collection is lazy-loaded and the request user was fetched on an AsyncSession).
+    from app.models.professor_student import ProfessorStudentRelationship
     from app.models.user import UserRole
 
     is_owner = application.user_id == current_user.id
     is_staff = current_user.role in (
         UserRole.admin,
         UserRole.super_admin,
-        UserRole.professor,
         UserRole.college,
     )
-    if not is_owner and not is_staff:
+    is_related_professor = False
+    if not is_owner and not is_staff and current_user.role == UserRole.professor:
+        is_related_professor = application.professor_id == current_user.id
+        if not is_related_professor:
+            rel_stmt = (
+                select(ProfessorStudentRelationship.id)
+                .where(
+                    ProfessorStudentRelationship.professor_id == current_user.id,
+                    ProfessorStudentRelationship.student_id == application.user_id,
+                    ProfessorStudentRelationship.is_active.is_(True),
+                    ProfessorStudentRelationship.can_view_applications.is_(True),
+                )
+                .limit(1)
+            )
+            is_related_professor = (await db.execute(rel_stmt)).scalar_one_or_none() is not None
+        if not is_related_professor:
+            logger.warning(
+                "SECURITY: professor lacked relationship to access application document",
+                extra={
+                    "user_id": current_user.id,
+                    "student_user_id": application.user_id,
+                    "application_id": application.id,
+                },
+            )
+    if not (is_owner or is_staff or is_related_professor):
         raise HTTPException(status_code=403, detail="無權限")
 
     if not application.application_document_url:
