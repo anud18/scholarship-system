@@ -129,7 +129,10 @@ async def create_review(
         .options(joinedload(ApplicationReview.reviewer), joinedload(ApplicationReview.items))
     )
     result = await db.execute(stmt)
-    review_with_relations = result.scalar_one()
+    # .unique() is REQUIRED: joinedload(ApplicationReview.items) is a collection
+    # eager load — without it any review with 2+ items raises InvalidRequestError
+    # (500 AFTER the commit, so the review was created but the client saw an error).
+    review_with_relations = result.unique().scalar_one()
 
     return {
         "success": True,
@@ -173,7 +176,7 @@ async def get_review(
         .options(joinedload(ApplicationReview.reviewer), joinedload(ApplicationReview.items))
     )
     result = await db.execute(stmt)
-    review = result.scalar_one_or_none()
+    review = result.unique().scalar_one_or_none()
 
     if not review:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="審查記錄不存在")
@@ -227,7 +230,7 @@ async def get_application_reviews(
         .order_by(ApplicationReview.reviewed_at.desc())
     )
     result = await db.execute(stmt)
-    reviews = result.scalars().all()
+    reviews = result.unique().scalars().all()
 
     return {
         "success": True,
@@ -306,7 +309,7 @@ async def get_application_review_status(
         .order_by(ApplicationReview.reviewed_at.desc())
     )
     result = await db.execute(stmt)
-    reviews = result.scalars().all()
+    reviews = result.unique().scalars().all()
 
     return {
         "success": True,
