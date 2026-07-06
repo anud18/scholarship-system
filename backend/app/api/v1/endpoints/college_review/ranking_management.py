@@ -667,11 +667,15 @@ async def update_ranking_order(
         # G8 (#970): capture the prior order — rank overwrites previously left
         # no trace, so 「核配當時的名次」 could not be reconstructed.
         prior_rows = await db.execute(
-            select(CollegeRankingItem.application_id, CollegeRankingItem.rank_position).where(
-                CollegeRankingItem.ranking_id == ranking_id
-            )
+            select(
+                CollegeRankingItem.id,
+                CollegeRankingItem.application_id,
+                CollegeRankingItem.rank_position,
+            ).where(CollegeRankingItem.ranking_id == ranking_id)
         )
-        old_order = {str(app_id): pos for app_id, pos in prior_rows.all()}
+        prior = prior_rows.all()
+        old_order = {str(app_id): pos for _item_id, app_id, pos in prior}
+        item_to_app = {item_id: app_id for item_id, app_id, _pos in prior}
 
         ranking = await service.update_ranking_order(
             ranking_id=ranking_id, new_order=[item.model_dump() for item in new_order]
@@ -685,9 +689,13 @@ async def update_ranking_order(
                 resource_id=str(ranking_id),
                 description=f"ranking order updated ({len(new_order)} item(s))",
                 old_values={"rank_positions": old_order},
+                # RankingOrderUpdate carries item_id/position (NOT application_id/
+                # rank_position) — reading the wrong keys here 500'd EVERY valid
+                # reorder request since the G8 audit block landed. Key new_values by
+                # application_id (via the prior-rows mapping) so old/new stay comparable.
                 new_values={
                     "rank_positions": {
-                        str(i["application_id"]): i.get("rank_position")
+                        str(item_to_app.get(i["item_id"], f"item:{i['item_id']}")): i.get("position")
                         for i in (item.model_dump() for item in new_order)
                     }
                 },
