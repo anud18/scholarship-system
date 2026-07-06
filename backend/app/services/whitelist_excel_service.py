@@ -4,6 +4,8 @@ Whitelist Excel Import/Export Service
 
 import io
 import logging
+
+from app.utils.excel_safety import sanitize_excel_cell
 from typing import Dict, List, Tuple
 
 from openpyxl import Workbook, load_workbook
@@ -66,10 +68,12 @@ class WhitelistExcelService:
         row = 2
         for sub_type, students in whitelist_data.items():
             for student in students:
-                ws.cell(row=row, column=1).value = student.get("nycu_id", "")
-                ws.cell(row=row, column=2).value = student.get("name", "")
-                ws.cell(row=row, column=3).value = sub_type
-                ws.cell(row=row, column=4).value = student.get("note", "")
+                # SECURITY (#1081 G): neutralize spreadsheet formula injection from
+                # free-text name/note before writing.
+                ws.cell(row=row, column=1).value = sanitize_excel_cell(student.get("nycu_id", ""))
+                ws.cell(row=row, column=2).value = sanitize_excel_cell(student.get("name", ""))
+                ws.cell(row=row, column=3).value = sanitize_excel_cell(sub_type)
+                ws.cell(row=row, column=4).value = sanitize_excel_cell(student.get("note", ""))
 
                 # 應用樣式
                 for col_idx in range(1, len(self.column_headers) + 1):

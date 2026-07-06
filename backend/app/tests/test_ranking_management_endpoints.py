@@ -627,3 +627,34 @@ class TestDistributionEndpointScoping:
         login(rank_users["college_eng"])
         response = await client.get(f"{RANKINGS_URL}/999999/roster-status")
         assert response.status_code == 404
+
+
+@pytest.mark.api
+class TestImportExcelDeadlineGuard:
+    """#1081 finding H: import-excel was the one ranking-mutation path missing
+    the college-review deadline guard the sibling mutations apply."""
+
+    async def test_import_excel_blocked_after_deadline_for_college(
+        self, client, login, db, rank_users, rank_scholarship, ranking_eng, ranking_eng_items
+    ):
+        from datetime import datetime, timedelta, timezone
+
+        config = ScholarshipConfiguration(
+            scholarship_type_id=rank_scholarship.id,
+            academic_year=114,
+            semester=Semester.first,
+            config_name="import deadline cfg",
+            config_code="import_deadline_cfg_114_1",
+            amount=10000,
+            college_review_end=datetime.now(timezone.utc) - timedelta(days=1),
+        )
+        db.add(config)
+        await db.commit()
+
+        login(rank_users["college_eng"])
+        payload = [
+            {"student_id": "S001", "student_name": "A", "rank_position": 1},
+            {"student_id": "S002", "student_name": "B", "rank_position": 2},
+        ]
+        response = await client.post(f"{RANKINGS_URL}/{ranking_eng.id}/import-excel", json=payload)
+        assert response.status_code == 403

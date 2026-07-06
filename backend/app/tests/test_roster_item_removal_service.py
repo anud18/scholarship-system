@@ -329,3 +329,30 @@ def test_restore_item_not_found_raises(db_sync, locked_roster_two_items, admin_d
     svc = RosterService(db_sync)
     with pytest.raises(NotFoundError):  # missing item → 404
         svc.restore_item(roster.id, 99999999, admin_db_user_sync.id, "x")
+
+
+def test_restore_item_blocks_withdrawn_application(db_sync, locked_roster_two_items, admin_db_user_sync):
+    """#1081 finding K: an item whose application was WITHDRAWN since removal
+    must not be restorable — restoring it would re-include the student and
+    inflate received_months. (The revoke/suspend `cancelled` flow stays
+    restorable — covered by test_restore_item_reincludes_and_audits.)"""
+    import pytest
+
+    from app.models.payment_roster import PaymentRosterItem
+
+    roster = locked_roster_two_items
+    target = roster.items[0]
+    svc = RosterService(db_sync)
+    svc.remove_item_from_locked_roster(roster.id, target.id, admin_db_user_sync.id, "繳回")
+
+    # Student withdraws the application after the item was removed.
+    item = db_sync.get(PaymentRosterItem, target.id)
+    application = db_sync.get(Application, item.application_id)
+    application.status = ApplicationStatus.withdrawn
+    db_sync.flush()
+
+    with pytest.raises(ValueError, match="撤回|駁回|刪除"):
+        svc.restore_item(roster.id, target.id, admin_db_user_sync.id, "誤刪回復")
+
+    db_sync.refresh(item)
+    assert item.is_included is False  # still excluded — restore was blocked

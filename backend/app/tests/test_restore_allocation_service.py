@@ -265,3 +265,106 @@ async def test_finalize_skips_revoked_application(
 
     assert allocated_application.status == ApplicationStatus.cancelled
     assert allocated_application.quota_allocation_status == "revoked"
+
+
+# ---------------------------------------------------------------------------
+# restore_allocation: quota oversubscription guard (#1081 finding I)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_restore_blocked_when_slot_already_reallocated(db, admin_db_user):
+    """#1081 finding I: revoke frees a quota slot; if that slot is then handed to
+    another student, restoring the original must NOT double-book it. allocate()/
+    finalize() gate on _assert_round_not_oversubscribed; restore_allocation now
+    does too."""
+    from app.models.scholarship import ScholarshipConfiguration, SubTypeSelectionMode
+    from app.models.enums import ReviewStage
+    from app.models.user import User, UserRole, UserType
+
+    # Single-slot nstc pool.
+    cfg = ScholarshipConfiguration(
+        scholarship_type_id=1,
+        config_code="OVERSUB-114",
+        config_name="Oversub 114",
+        academic_year=114,
+        semester="first",
+        amount=50000,
+        quotas={"nstc": 1},
+    )
+    db.add(cfg)
+
+    ranking = CollegeRanking(
+        scholarship_type_id=1,
+        sub_type_code="nstc",
+        academic_year=114,
+        semester="first",
+        ranking_name="Oversub Ranking",
+        is_finalized=True,
+        ranking_status="finalized",
+        created_by=admin_db_user.id,
+    )
+    db.add(ranking)
+
+    other_student = User(
+        nycu_id="oversub_stu_b",
+        email="oversub_b@nycu.edu.tw",
+        name="Oversub B",
+        role=UserRole.student,
+        user_type=UserType.student,
+    )
+    db.add(other_student)
+    await db.commit()
+    await db.refresh(cfg)
+    await db.refresh(ranking)
+    await db.refresh(other_student)
+
+    def _app(app_id, user_id, alloc_status):
+        return Application(
+            user_id=user_id,
+            app_id=app_id,
+            scholarship_type_id=1,
+            academic_year=114,
+            semester="first",
+            status=ApplicationStatus.cancelled if alloc_status != "allocated" else ApplicationStatus.approved,
+            review_stage=ReviewStage.student_draft,
+            sub_type_selection_mode=SubTypeSelectionMode.single,
+            sub_scholarship_type="nstc",
+            is_renewal=False,
+            quota_allocation_status=alloc_status,
+            revoke_reason="freed" if alloc_status == "revoked" else None,
+        )
+
+    # A: revoked (its slot was freed). B: currently holds the only slot.
+    app_a = _app("APP-OVERSUB-A", admin_db_user.id, "revoked")
+    app_b = _app("APP-OVERSUB-B", other_student.id, "allocated")
+    db.add_all([app_a, app_b])
+    await db.commit()
+    await db.refresh(app_a)
+    await db.refresh(app_b)
+
+    item_a = CollegeRankingItem(
+        ranking_id=ranking.id,
+        application_id=app_a.id,
+        rank_position=1,
+        is_allocated=False,  # freed at revoke time
+        allocated_sub_type="nstc",
+        allocation_config_id=cfg.id,
+        status="allocated",
+    )
+    item_b = CollegeRankingItem(
+        ranking_id=ranking.id,
+        application_id=app_b.id,
+        rank_position=2,
+        is_allocated=True,  # took the freed slot
+        allocated_sub_type="nstc",
+        allocation_config_id=cfg.id,
+        status="allocated",
+    )
+    db.add_all([item_a, item_b])
+    await db.commit()
+
+    svc = ManualDistributionService(db)
+    # pool=1, B already consumes it → restoring A would make it 2/1.
+    with pytest.raises(ValueError, match="配額超額|超過總配額"):
+        await svc.restore_allocation(app_a.id, admin_db_user.id)

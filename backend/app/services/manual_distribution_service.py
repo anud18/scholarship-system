@@ -7,7 +7,6 @@ Supports multi-year supplementary distribution (補發) where prior-year
 remaining quotas can be allocated to current-year students.
 """
 
-import json as _json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
@@ -1499,9 +1498,30 @@ class ManualDistributionService:
         # re-consumes the quota slot and a finalize run re-approves them. The
         # allocated_sub_type / allocation_year were preserved at cancel time, so
         # we only flip is_allocated back for items that actually held a slot.
+        reaffirmed_config_ids: set = set()
         for ri in ranking_items:
             if ri.allocated_sub_type:
                 ri.is_allocated = True
+                if ri.allocation_config_id is not None:
+                    reaffirmed_config_ids.add(ri.allocation_config_id)
+
+        # #1081 finding I: re-affirming a slot re-consumes quota, so it can push a
+        # round over its total (revoke → reallocate the freed slot → restore the
+        # original double-books it). allocate()/finalize() both gate on
+        # _assert_round_not_oversubscribed; restore did not. Recount and reject
+        # here too (raises ValueError, rolling back the flip within the txn).
+        if reaffirmed_config_ids:
+            configs = (
+                (
+                    await self.db.execute(
+                        select(ScholarshipConfiguration).where(ScholarshipConfiguration.id.in_(reaffirmed_config_ids))
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for cfg in configs:
+                await self._assert_round_not_oversubscribed(cfg)
 
         # Audit logging moved to the endpoint (ApplicationAuditService.
         # log_application_restore) so the row carries the acting User +
