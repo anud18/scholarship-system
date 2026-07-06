@@ -574,3 +574,56 @@ class TestRankingFlowAndEnvelope:
         response = await client.get(f"{RANKINGS_URL}/{ranking_sci.id}/export-excel")
         assert response.status_code == 200
         assert response.headers["content-type"].startswith(XLSX_MIME)
+
+
+@pytest.mark.api
+class TestDistributionEndpointScoping:
+    """Issue #1081 findings C/D: distribution-details and roster-status must be
+    college-scoped exactly like GET /rankings/{id} (assert_can_manage_ranking)."""
+
+    # ── Finding C: GET /rankings/{id}/distribution-details ──────────────────
+
+    async def test_cross_college_distribution_details_403(self, client, login, rank_users, ranking_sci):
+        login(rank_users["college_eng"])
+        response = await client.get(f"{RANKINGS_URL}/{ranking_sci.id}/distribution-details")
+        assert response.status_code == 403
+
+    async def test_owning_college_distribution_details_200(self, client, login, rank_users, ranking_eng):
+        login(rank_users["college_eng"])
+        response = await client.get(f"{RANKINGS_URL}/{ranking_eng.id}/distribution-details")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is True
+        assert body["data"]["ranking_id"] == ranking_eng.id
+
+    async def test_same_college_second_reviewer_distribution_details_200(self, client, login, rank_users, ranking_eng):
+        login(rank_users["college_eng2"])
+        response = await client.get(f"{RANKINGS_URL}/{ranking_eng.id}/distribution-details")
+        assert response.status_code == 200
+
+    async def test_distribution_details_missing_ranking_404(self, client, login, rank_users):
+        login(rank_users["college_eng"])
+        response = await client.get(f"{RANKINGS_URL}/999999/distribution-details")
+        assert response.status_code == 404
+
+    # ── Finding D: GET /rankings/{id}/roster-status ──────────────────────────
+
+    async def test_cross_college_roster_status_403(self, client, login, rank_users, ranking_sci):
+        login(rank_users["college_eng"])
+        response = await client.get(f"{RANKINGS_URL}/{ranking_sci.id}/roster-status")
+        assert response.status_code == 403
+
+    async def test_owning_college_roster_status_200(self, client, login, rank_users, ranking_eng):
+        login(rank_users["college_eng"])
+        response = await client.get(f"{RANKINGS_URL}/{ranking_eng.id}/roster-status")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is True
+        assert body["data"]["has_roster"] is False
+
+    async def test_roster_status_missing_ranking_404(self, client, login, rank_users):
+        # Previously a nonexistent ranking silently returned "no roster";
+        # after the #1081 fix the ranking itself is loaded first.
+        login(rank_users["college_eng"])
+        response = await client.get(f"{RANKINGS_URL}/999999/roster-status")
+        assert response.status_code == 404
