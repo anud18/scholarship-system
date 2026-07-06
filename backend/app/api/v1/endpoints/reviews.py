@@ -17,7 +17,7 @@ from sqlalchemy.orm import joinedload
 
 from app.core.security import get_current_user
 from app.db.deps import get_db
-from app.models.application import Application
+from app.models.application import Application, ApplicationStatus
 from app.models.audit_log import AuditAction
 from app.models.review import ApplicationReview, ApplicationReviewItem
 from app.models.user import User
@@ -28,6 +28,37 @@ from app.services.review_service import ReviewService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _assert_review_submission_allowed(current_user: User, application: Application) -> None:
+    """Role-scoped review-submission guard (#1081).
+
+    - Students are never reviewers.
+    - A professor may only review an application where they are the assigned
+      professor (``application.professor_id``).
+    - A professor full-reject is terminal for the professor (Review-Flow
+      Policy): once the application is rejected, only college/admin may
+      revert it (回發) — the professor cannot re-review here.
+    - College/admin/super_admin behavior is unchanged (sub-type filtering
+      still applies downstream via get_reviewable_subtypes).
+    """
+    if current_user.is_student():
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="學生無權提交審查")
+
+    if current_user.is_professor():
+        if application.professor_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="您不是此申請的指導教授，無權審查此申請",
+            )
+        # Compare against enum AND its .value: a SQLite-loaded status can come
+        # back as the raw string, so the bare `== enum` check silently missed
+        # the terminal-reject state (matches can_professor_submit_review).
+        if application.status in (ApplicationStatus.rejected, ApplicationStatus.rejected.value):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="申請已被拒絕，教授無法再次審查（僅學院或管理員可回發）",
+            )
 
 
 @router.post("/reviews", status_code=status.HTTP_201_CREATED)
@@ -51,6 +82,9 @@ async def create_review(
     application = await db.get(Application, review_data.application_id)
     if not application:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="申請不存在")
+
+    # 授權範圍 (#1081)：學生不得審查；教授僅限其指導的申請，且教授全部拒絕後不得再審。
+    _assert_review_submission_allowed(current_user, application)
 
     # 取得可審查的子項目
     reviewable_subtypes = await review_service.get_reviewable_subtypes(review_data.application_id, current_user.role)
@@ -181,6 +215,15 @@ async def get_review(
     if not review:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="審查記錄不存在")
 
+    # 授權範圍 (#1081)：admin/super_admin/college 可讀；教授僅限自己提交的審查或其
+    # 指導的申請；學生不得讀取。
+    if current_user.is_student():
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="學生無權讀取審查記錄")
+    if current_user.is_professor() and review.reviewer_id != current_user.id:
+        application = await db.get(Application, review.application_id)
+        if not application or application.professor_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="您無權讀取此審查記錄")
+
     return {
         "success": True,
         "message": "審查記錄取得成功",
@@ -221,6 +264,13 @@ async def get_application_reviews(
     application = await db.get(Application, application_id)
     if not application:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="申請不存在")
+
+    # 授權範圍 (#1081)：admin/super_admin/college 可讀；教授僅限其指導的申請；
+    # 學生不得讀取完整審查記錄（學生使用 review-status 查詢自身進度）。
+    if current_user.is_student():
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="學生無權讀取審查記錄")
+    if current_user.is_professor() and application.professor_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="您不是此申請的指導教授，無權讀取審查記錄")
 
     # 查詢所有審查記錄
     stmt = (
@@ -283,6 +333,10 @@ async def get_application_review_status(
     application = await db.get(Application, application_id)
     if not application:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="申請不存在")
+
+    # 授權範圍 (#1081)：學生僅能查詢自己的申請；教授/學院/管理員維持原行為。
+    if current_user.is_student() and application.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="您無權查詢此申請的審查狀態")
 
     # 取得子項目累積狀態
     subtype_statuses = await review_service.get_subtype_cumulative_status(application_id)
@@ -436,6 +490,27 @@ async def submit_application_review(
     # Validate application_id
     if application_id <= 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid application ID")
+
+    # Authorization scoping (#1081): a professor may only review an application
+    # where they are the assigned professor, and a professor full-reject is
+    # terminal (they cannot re-review a rejected application here). College/
+    # admin/super_admin behavior is unchanged. A missing application yields 403
+    # for professors (consistent with the sub-type filter that returns []).
+    if current_user.is_professor():
+        application = await db.get(Application, application_id)
+        if not application or application.professor_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="您不是此申請的指導教授，無權審查此申請",
+            )
+        # Compare against enum AND its .value: a SQLite-loaded status can come
+        # back as the raw string, so the bare `== enum` check silently missed
+        # the terminal-reject state (matches can_professor_submit_review).
+        if application.status in (ApplicationStatus.rejected, ApplicationStatus.rejected.value):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="申請已被拒絕，教授無法再次審查（僅學院或管理員可回發）",
+            )
 
     try:
         # Use unified ReviewService for creating/updating reviews
