@@ -161,6 +161,11 @@ export function DevLoginPage() {
   const handleUserLogin = async (user: MockUser) => {
     logger.debug("Calling mock SSO login API", { nycu_id: user.nycu_id });
 
+    // Issue #1096 bonus: these setters were never called, so the
+    // "Logging in..." label and button-disable below could never trigger.
+    setSelectedUser(user.id);
+    setIsLoggingIn(true);
+
     try {
       const response = await api.auth.mockSSOLogin(user.nycu_id);
       logger.debug("Mock SSO login response received", {

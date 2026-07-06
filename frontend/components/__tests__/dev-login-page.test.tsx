@@ -252,6 +252,48 @@ describe("DevLoginPage Component", () => {
     });
   });
 
+  it("should show 'Logging in...' and disable buttons while login is in flight, clearing on failure (issue #1096)", async () => {
+    // Hold the login promise open so the in-flight state is observable.
+    let rejectLogin!: (err: Error) => void;
+    mockSSOLoginSpy.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectLogin = reject;
+        })
+    );
+    render(<DevLoginPage />);
+
+    const studentButton = await screen.findByRole("button", {
+      name: "Login as Student",
+    });
+    fireEvent.click(studentButton);
+
+    // The clicked card's button flips to the in-flight label and every
+    // login button disables while isLoggingIn is set.
+    const inFlightButton = await screen.findByRole("button", {
+      name: "Logging in...",
+    });
+    expect(inFlightButton).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Login as Professor" })
+    ).toBeDisabled();
+
+    // Fail the login: isLoggingIn/selectedUser clear and buttons re-enable.
+    rejectLogin(new Error("Failed to fetch"));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Backend server is not running or not accessible/)
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.getByRole("button", { name: "Login as Student" })
+    ).not.toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: "Logging in..." })
+    ).not.toBeInTheDocument();
+  });
+
   it("should reload the user list via Refresh Users button", async () => {
     render(<DevLoginPage />);
 

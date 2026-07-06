@@ -49,14 +49,13 @@ function getRowButtons() {
   return { previewButton: buttons[0], removeButton: buttons[1] };
 }
 
-// NOTE: every real caller passes `initialFiles` (controlled usage, echoing
-// onFilesChange back into the prop). When the prop is OMITTED, the default
-// `initialFiles = []` parameter creates a fresh array per render, so the
-// sync-useEffect re-runs after an internal setFiles and WIPES the freshly
-// selected files from the list (component bug for uncontrolled usage —
-// see final report). Tests that assert the rendered list after selection
-// therefore pass a stable empty array, mirroring real usage.
-const STABLE_EMPTY_FILES: File[] = [];
+// NOTE (issue #1096 bug 1, FIXED): the default `initialFiles = []` parameter
+// used to create a fresh array identity per render, so the sync-useEffect
+// re-ran after any internal setFiles and WIPED freshly selected files in
+// uncontrolled usage (prop omitted). The component now defaults to a stable
+// module-scope EMPTY_FILES constant, so tests no longer need to pass a
+// stable empty array as a workaround — uncontrolled usage is covered by a
+// dedicated regression test below.
 
 describe("FileUpload Component", () => {
   let mockOnFilesChange: jest.Mock;
@@ -87,10 +86,7 @@ describe("FileUpload Component", () => {
 
   it("should handle file selection via input", () => {
     const { container } = render(
-      <FileUpload
-        onFilesChange={mockOnFilesChange}
-        initialFiles={STABLE_EMPTY_FILES}
-      />
+      <FileUpload onFilesChange={mockOnFilesChange} />
     );
 
     const file = new File(["content"], "test.pdf", {
@@ -100,6 +96,23 @@ describe("FileUpload Component", () => {
 
     expect(mockOnFilesChange).toHaveBeenCalledWith([file]);
     expect(screen.getByText("test.pdf")).toBeInTheDocument();
+  });
+
+  it("should keep a selected file listed in uncontrolled usage (issue #1096 bug 1 regression)", () => {
+    // No initialFiles prop at all: before the fix, the fresh-[] default
+    // re-triggered the sync effect after selection and wiped the list.
+    const { container } = render(
+      <FileUpload onFilesChange={mockOnFilesChange} />
+    );
+
+    const file = new File(["content"], "keep-me.pdf", {
+      type: "application/pdf",
+    });
+    selectFiles(getFileInput(container), [file]);
+
+    expect(mockOnFilesChange).toHaveBeenCalledWith([file]);
+    expect(screen.getByText("keep-me.pdf")).toBeInTheDocument();
+    expect(screen.getByText(/\(1\/5\)/)).toBeInTheDocument();
   });
 
   it("should handle drag and drop", () => {
@@ -153,11 +166,7 @@ describe("FileUpload Component", () => {
 
   it("should enforce the max files limit", () => {
     const { container } = render(
-      <FileUpload
-        onFilesChange={mockOnFilesChange}
-        maxFiles={2}
-        initialFiles={STABLE_EMPTY_FILES}
-      />
+      <FileUpload onFilesChange={mockOnFilesChange} maxFiles={2} />
     );
 
     const files = [
@@ -243,10 +252,7 @@ describe("FileUpload Component", () => {
 
     try {
       const { container } = render(
-        <FileUpload
-          onFilesChange={mockOnFilesChange}
-          initialFiles={STABLE_EMPTY_FILES}
-        />
+        <FileUpload onFilesChange={mockOnFilesChange} />
       );
 
       const file = new File(["content"], "test.pdf", {
@@ -311,6 +317,34 @@ describe("FileUpload Component", () => {
     expect(screen.getByText("Preview: test.pdf")).toBeInTheDocument();
     expect(screen.getByText("Type: application/pdf")).toBeInTheDocument();
     expect(screen.getByText("URL: blob:mock-object-url")).toBeInTheDocument();
+  });
+
+  it("should revoke preview object URLs on unmount (issue #1096 bug 2 regression)", () => {
+    // The old code used a useState lazy initializer as if it were useEffect;
+    // React never runs a returned "cleanup" from an initializer, so blob
+    // URLs created for previews leaked. Now a real useEffect revokes them.
+    const initialFiles = [
+      new File(["content"], "test.pdf", { type: "application/pdf" }),
+    ];
+
+    const { unmount } = render(
+      <FileUpload
+        onFilesChange={mockOnFilesChange}
+        initialFiles={initialFiles}
+      />
+    );
+
+    const { previewButton } = getRowButtons();
+    fireEvent.click(previewButton);
+
+    expect(global.URL.createObjectURL).toHaveBeenCalledTimes(1);
+    expect(global.URL.revokeObjectURL).not.toHaveBeenCalled();
+
+    unmount();
+
+    expect(global.URL.revokeObjectURL).toHaveBeenCalledWith(
+      "blob:mock-object-url"
+    );
   });
 
   it("should prefer the server url for previously-uploaded files in preview", () => {

@@ -34,12 +34,20 @@ interface FileUploadProps {
   locale?: Locale; // 添加語言支持
 }
 
+// UNCONTROLLED-USAGE FIX (issue #1096):
+// The default must be a stable module-scope constant. A literal `[]` default
+// parameter creates a fresh array identity every render, so the sync-effect
+// below (keyed on `initialFiles`) re-fires after every internal `setFiles`
+// and wipes a just-selected file back to []. With a stable identity the
+// effect only runs on mount for uncontrolled usage.
+const EMPTY_FILES: File[] = [];
+
 export function FileUpload({
   onFilesChange,
   acceptedTypes = [".pdf", ".jpg", ".jpeg", ".png"],
   maxSize = 10 * 1024 * 1024, // 10MB
   maxFiles = 5,
-  initialFiles = [],
+  initialFiles = EMPTY_FILES,
   fileType = "",
   locale = "zh",
 }: FileUploadProps) {
@@ -77,12 +85,13 @@ export function FileUpload({
   // 初始化和同步外部文件
   //
   // INFINITE-LOOP FIX (PR #509):
-  // The default `initialFiles = []` parameter creates a fresh array
-  // reference on every render. With a naive `setFiles([...initialFiles])`,
-  // this useEffect would fire every render, schedule a state update,
-  // trigger another render, and loop indefinitely. Compare contents
-  // before setting state — if they match, return the previous reference
-  // so React's bailout breaks the cycle.
+  // If a controlled parent recreates the `initialFiles` array every render,
+  // a naive `setFiles([...initialFiles])` here would fire every render,
+  // schedule a state update, trigger another render, and loop indefinitely.
+  // Compare contents before setting state — if they match, return the
+  // previous reference so React's bailout breaks the cycle. (Uncontrolled
+  // usage is covered by the stable EMPTY_FILES default above, which keeps
+  // this effect from re-firing at all.)
   useEffect(() => {
     setFiles((prev) => {
       if (
@@ -224,6 +233,9 @@ export function FileUpload({
     return "other";
   };
 
+  // Blob object URLs created for previews — revoked on unmount (issue #1096).
+  const createdObjectUrlsRef = useRef<string[]>([]);
+
   // 處理文件預覽
   const handleFilePreview = (file: File) => {
     const previewUrl = getFilePreviewUrl(file);
@@ -231,6 +243,11 @@ export function FileUpload({
       // No previewable URL (e.g. a restored file lacking a same-origin path);
       // nothing to show, and opening the dialog with an empty src renders blank.
       return;
+    }
+    if (previewUrl.startsWith("blob:")) {
+      // Object URL freshly created by resolveFilePreviewUrl — remember it so
+      // the unmount effect below can revoke it.
+      createdObjectUrlsRef.current.push(previewUrl);
     }
     const fileType = getFileType(file);
 
@@ -249,16 +266,15 @@ export function FileUpload({
     }
   }, []);
 
-  // 組件卸載時清理臨時URL
-  useState(() => {
+  // 組件卸載時清理臨時URL (issue #1096: this was previously a `useState`
+  // lazy initializer whose returned "cleanup" React never invoked — the
+  // object URLs created for previews leaked for the lifetime of the page).
+  useEffect(() => {
     return () => {
-      files.forEach(file => {
-        if (!isUploadedFile(file)) {
-          cleanupTempUrl(URL.createObjectURL(file));
-        }
-      });
+      createdObjectUrlsRef.current.forEach(cleanupTempUrl);
+      createdObjectUrlsRef.current = [];
     };
-  });
+  }, [cleanupTempUrl]);
 
   return (
     <div className="space-y-4">
