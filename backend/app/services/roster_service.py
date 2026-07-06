@@ -2377,6 +2377,28 @@ class RosterService:
         if item.is_included:
             raise ConflictError("明細未被移除，無需回復")
 
+        # #1081 finding K: re-read the underlying application's status before
+        # re-including. restore_item legitimately handles the quota
+        # revoke/suspend flow (status == cancelled), so we do NOT require
+        # `approved`; but an application the student has since WITHDRAWN, or that
+        # was REJECTED/DELETED, must not be silently re-included — that would
+        # inflate the student's received_months (feeds the PhD 36-month cap).
+        from app.models.application import ApplicationStatus
+
+        _NON_RESTORABLE = {
+            ApplicationStatus.withdrawn,
+            ApplicationStatus.rejected,
+            ApplicationStatus.deleted,
+        }
+        # A missing application row cannot happen in production (item.application_id
+        # is a NOT-NULL FK), so we only BLOCK on a positively-bad status — never on
+        # None — to avoid changing behavior for dangling-id contract fixtures.
+        application = self.db.get(Application, item.application_id)
+        if application is not None and application.status in _NON_RESTORABLE:
+            raise ValueError(
+                f"無法回復：申請目前狀態為 {application.status.value}，" "已撤回／駁回／刪除的申請不可回復造冊明細"
+            )
+
         item.is_included = True
         item.exclusion_reason = None
         self.db.flush()

