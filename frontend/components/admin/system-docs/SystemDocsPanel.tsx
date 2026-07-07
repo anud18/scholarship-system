@@ -28,6 +28,7 @@ import { previewMimeType } from "@/lib/utils";
 import { toast } from "sonner";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { SupplementaryDocsList } from "./SupplementaryDocsList";
+import { ApplicationNoticesPanel } from "./ApplicationNoticesPanel";
 
 interface DocSlot {
   key: DocKey;
@@ -450,6 +451,8 @@ export function SystemDocsPanel() {
       </Card>
 
       <SupplementaryDocsList />
+
+      <ApplicationNoticesPanel />
 
       <FilePreviewDialog
         isOpen={preview !== null}

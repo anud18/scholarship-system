@@ -9,6 +9,11 @@ from app.core.security import get_current_user, require_admin
 from app.db.deps import get_db
 from app.models.system_setting import ConfigCategory, ConfigDataType
 from app.models.user import User
+from app.schemas.application_notices import (
+    APPLICATION_NOTICES_KEY,
+    DEFAULT_APPLICATION_NOTICES,
+    ApplicationNotices,
+)
 from app.schemas.supplementary_doc import (
     ReorderRequest,
     SupplementaryDocResponse,
@@ -124,6 +129,80 @@ async def get_public_docs(
     rows = result.scalars().all()
     data = {row.key: row.value for row in rows}
     return {"success": True, "message": "OK", "data": data}
+
+
+@router.get("/application-notices")
+async def get_application_notices(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    取得學生申請精靈的「獎學金申請注意事項」內容（zh/en）。
+    所有登入使用者皆可讀取；尚未設定時回傳系統預設內容。
+    """
+    from pydantic import ValidationError
+
+    config_service = ConfigurationService(db)
+    setting = await config_service.get_configuration(APPLICATION_NOTICES_KEY)
+
+    if setting is None:
+        notices = DEFAULT_APPLICATION_NOTICES
+    else:
+        try:
+            raw_value = await config_service.get_decrypted_value(setting)
+            notices = ApplicationNotices.model_validate(raw_value)
+        except (ValidationError, ValueError) as e:
+            logger.exception("Stored application_notices setting is not valid JSON content")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="注意事項設定資料格式錯誤，請聯絡系統管理員",
+            ) from e
+
+    return {"success": True, "message": "OK", "data": notices.model_dump()}
+
+
+@router.put("/application-notices")
+async def update_application_notices(
+    payload: ApplicationNotices,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    更新「獎學金申請注意事項」內容。僅限管理員。
+    整份 zh/en 內容一次覆寫，變更會寫入設定稽核日誌。
+    """
+    config_service = ConfigurationService(db)
+
+    try:
+        await config_service.set_configuration(
+            key=APPLICATION_NOTICES_KEY,
+            value=payload.model_dump(),
+            user_id=current_user.id,
+            category=ConfigCategory.features,
+            data_type=ConfigDataType.json,
+            description="學生申請精靈「獎學金申請注意事項」內容（zh/en）",
+            change_reason="Update application notices",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+    logger.info(
+        "application-notices updated by user_id=%s",
+        current_user.id,
+        extra={
+            "actor_user_id": current_user.id,
+            "actor_role": (current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)),
+            "config_key": APPLICATION_NOTICES_KEY,
+            "zh_item_count": len(payload.zh.items),
+            "en_item_count": len(payload.en.items),
+        },
+    )
+
+    return {
+        "success": True,
+        "message": "Application notices updated successfully",
+        "data": payload.model_dump(),
+    }
 
 
 @router.post("/upload/{doc_key}")

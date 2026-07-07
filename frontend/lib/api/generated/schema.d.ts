@@ -6727,6 +6727,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/system-settings/application-notices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Application Notices
+         * @description 取得學生申請精靈的「獎學金申請注意事項」內容（zh/en）。
+         *     所有登入使用者皆可讀取；尚未設定時回傳系統預設內容。
+         */
+        get: operations["get_application_notices_api_v1_system_settings_application_notices_get"];
+        /**
+         * Update Application Notices
+         * @description 更新「獎學金申請注意事項」內容。僅限管理員。
+         *     整份 zh/en 內容一次覆寫，變更會寫入設定稽核日誌。
+         */
+        put: operations["update_application_notices_api_v1_system_settings_application_notices_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/system-settings/upload/{doc_key}": {
         parameters: {
             query?: never;
@@ -8013,6 +8039,24 @@ export interface components {
             documents: components["schemas"]["DocumentData"][];
         };
         /**
+         * ApplicationNoticeItem
+         * @description One numbered notice item (e.g. 申請資格, 申請期限).
+         */
+        ApplicationNoticeItem: {
+            /** Title */
+            title: string;
+            /** Content */
+            content: string;
+        };
+        /**
+         * ApplicationNotices
+         * @description Full bilingual notice content shown in the application wizard.
+         */
+        ApplicationNotices: {
+            zh: components["schemas"]["LocalizedApplicationNotices"];
+            en: components["schemas"]["LocalizedApplicationNotices"];
+        };
+        /**
          * ApplicationReviewResponse
          * @description Application review response schema (unified review system)
          */
@@ -9206,6 +9250,16 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * LocalizedApplicationNotices
+         * @description Notice content for a single locale.
+         */
+        LocalizedApplicationNotices: {
+            /** Items */
+            items: components["schemas"]["ApplicationNoticeItem"][];
+            /** Important Notice */
+            important_notice: string;
         };
         /**
          * ManualBankReviewRequestSchema
@@ -21809,6 +21863,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_application_notices_api_v1_system_settings_application_notices_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    update_application_notices_api_v1_system_settings_application_notices_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplicationNotices"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

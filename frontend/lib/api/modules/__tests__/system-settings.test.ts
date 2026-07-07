@@ -255,6 +255,61 @@ describe("createSystemSettingsApi", () => {
     );
   });
 
+  // ─── applicationNotices (raw fetch) ────────────────────────────────
+
+  it("applicationNotices.get GETs /application-notices with Bearer token", async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: jest
+        .fn()
+        .mockResolvedValue({ success: true, message: "OK", data: {} }),
+    });
+    global.fetch = fetchMock as any;
+    Object.defineProperty(global, "localStorage", {
+      value: { getItem: () => "test-token" },
+      writable: true,
+    });
+
+    const api = createSystemSettingsApi();
+    await api.applicationNotices.get();
+    const [url, opts] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/v1/system-settings/application-notices");
+    expect(opts.headers.Authorization).toBe("Bearer test-token");
+  });
+
+  it("applicationNotices.update PUTs the full zh/en payload as JSON", async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: jest
+        .fn()
+        .mockResolvedValue({ success: true, message: "OK", data: {} }),
+    });
+    global.fetch = fetchMock as any;
+    Object.defineProperty(global, "localStorage", {
+      value: { getItem: () => "test-token" },
+      writable: true,
+    });
+
+    const notices = {
+      zh: {
+        items: [{ title: "申請資格", content: "內容" }],
+        important_notice: "提醒",
+      },
+      en: {
+        items: [{ title: "Eligibility", content: "Content" }],
+        important_notice: "Notice",
+      },
+    };
+
+    const api = createSystemSettingsApi();
+    await api.applicationNotices.update(notices);
+    const [url, opts] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/v1/system-settings/application-notices");
+    expect(opts.method).toBe("PUT");
+    expect(opts.headers["Content-Type"]).toBe("application/json");
+    expect(JSON.parse(opts.body)).toEqual(notices);
+  });
+
   it("uploadRegulations sends empty Bearer when no token", async () => {
     // Pin: fallback to empty string (not undefined). Backend
     // sees "Bearer " and rejects — pin so refactor doesn't
