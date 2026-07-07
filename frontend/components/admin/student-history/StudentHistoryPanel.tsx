@@ -89,7 +89,7 @@ export function StudentHistoryPanel() {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>學生領取歷史查詢</CardTitle>
+          <CardTitle>學生領獎紀錄查詢</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-end gap-3">

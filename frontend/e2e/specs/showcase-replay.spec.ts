@@ -15,7 +15,7 @@
  * records trace but never video. We inject auth onto the fixture context via
  * `authContext` instead.
  *
- * Flow: admin → 系統管理 → 學生領取歷史 → query seeded stuphd001 → result renders.
+ * Flow: admin → 系統管理 → 學生領獎紀錄查詢 → query seeded stuphd001 → result renders.
  * Kept assertion-light on purpose: the value is the recording, and it must stay
  * green every night.
  */
@@ -34,7 +34,7 @@ test("showcase: admin looks up a student's scholarship history", async ({
 
   // AdminManagementShell renders inside the top-level "系統管理" tab.
   await page.getByRole("tab", { name: "系統管理" }).click();
-  await page.getByRole("tab", { name: "學生領取歷史" }).click();
+  await page.getByRole("tab", { name: "學生領獎紀錄查詢" }).click();
 
   await page.getByLabel("學號").fill("stuphd001");
   await page.getByRole("button", { name: "查詢" }).click();

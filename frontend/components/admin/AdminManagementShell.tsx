@@ -109,7 +109,7 @@ function AdminManagementContent({ user }: AdminManagementShellProps) {
           <TabsTrigger value="dashboard">系統概覽</TabsTrigger>
           <TabsTrigger value="users">使用者權限</TabsTrigger>
           <TabsTrigger value="students">學生列表</TabsTrigger>
-          <TabsTrigger value="student-history">學生領取歷史</TabsTrigger>
+          <TabsTrigger value="student-history">學生領獎紀錄查詢</TabsTrigger>
           {hasQuotaPermission && (
             <TabsTrigger value="quota">名額管理</TabsTrigger>
           )}
