@@ -285,19 +285,23 @@ class TestAdminScholarshipsEndpoints:
         assert "nstc" in codes
 
     @pytest.mark.asyncio
-    async def test_get_sub_type_configs_general_crashes_500(self, login, admin, scholarship):
-        """BUG: GET sub-type-configs 500s when sub_type_list contains 'general'
-        but no explicit general config exists.
+    async def test_get_sub_type_configs_general_default_succeeds(self, login, admin, scholarship):
+        """#1117 (fixed): GET sub-type-configs no longer 500s when sub_type_list
+        contains 'general' with no explicit general config.
 
-        The synthetic-general default (admin/scholarships.py ~L449-453) reads
-        ``scholarship.currency`` and ``scholarship.amount``, but ScholarshipType
-        has NEITHER column (per CLAUDE.md these live on ScholarshipConfiguration).
-        The unhandled AttributeError becomes an HTTP 500 in production; the test
-        ASGI transport re-raises it. Pinning current (broken) behavior.
+        The synthetic-general default used to read ``scholarship.currency`` /
+        ``scholarship.amount`` — columns ScholarshipType does not have (they live
+        on ScholarshipConfiguration) → AttributeError → 500. It now emits a
+        default-currency, null-amount synthetic config.
         """
         c = login(admin)
-        with pytest.raises(AttributeError, match="currency"):
-            await c.get(f"/api/v1/admin/scholarships/{scholarship.id}/sub-type-configs")
+        resp = await c.get(f"/api/v1/admin/scholarships/{scholarship.id}/sub-type-configs")
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        general = next((x for x in data if x["sub_type_code"] == "general"), None)
+        assert general is not None
+        assert general["currency"] == "TWD"
+        assert general["effective_amount"] is None
 
     # ------------------------------------------------------------------
     # POST /scholarships/{scholarship_id}/sub-type-configs

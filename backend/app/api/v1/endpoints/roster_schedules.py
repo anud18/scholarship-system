@@ -470,6 +470,11 @@ async def execute_schedule_now(
             data={"schedule_id": schedule_id, "force_regenerate": force_regenerate},
         )
 
+    except HTTPException:
+        # #1113: without this, the 404 "Roster schedule not found" raised above
+        # was swallowed by the bare `except Exception` and re-raised as 500.
+        # Every sibling handler already re-raises HTTPException first.
+        raise
     except Exception as e:
         logger.exception("Error executing schedule %s", schedule_id)
         raise HTTPException(

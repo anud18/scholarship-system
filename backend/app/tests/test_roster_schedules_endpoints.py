@@ -261,17 +261,14 @@ class TestRosterSchedulesValidationAndNotFound:
         response = await client.delete(f"{PREFIX}/999999")
         assert response.status_code == 404
 
-    async def test_execute_schedule_not_found_returns_500_bug(self, client, login, roster_users):
-        # BUG: execute_schedule_now() is the only handler in this module missing
-        # the `except HTTPException: raise` guard. Its own 404 ("Roster schedule
-        # not found") is caught by the bare `except Exception` and re-raised as
-        # 500, masking a legitimate not-found as a server error. Every sibling
-        # handler (get/update/patch/delete) correctly re-raises the 404.
-        # Pinning current behavior; fix = add `except HTTPException: raise`
-        # before the generic handler (see roster_schedules.py ~line 473).
+    async def test_execute_schedule_not_found_returns_404(self, client, login, roster_users):
+        # #1113 (fixed): execute_schedule_now() now re-raises HTTPException before
+        # the generic handler, so a missing schedule surfaces as 404 (was masked
+        # as 500 because it was the only handler lacking `except HTTPException:
+        # raise`).
         login(roster_users["admin"])
         response = await client.post(f"{PREFIX}/999999/execute")
-        assert response.status_code == 500
+        assert response.status_code == 404
 
 
 @pytest.mark.api

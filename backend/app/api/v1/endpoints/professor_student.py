@@ -128,7 +128,10 @@ async def create_professor_student_relationship(
         # Verify users exist
         prof_query = await db.execute(select(User).where(User.id == professor_id))
         professor = prof_query.scalar_one_or_none()
-        if not professor or professor.role not in ["professor", "admin"]:
+        # #1112: User.role is a UserRole enum member, never equal to a bare
+        # string — comparing against ["professor", "admin"] rejected EVERY valid
+        # pair (the endpoint could never create a relationship). Compare enums.
+        if not professor or professor.role not in (UserRole.professor, UserRole.admin):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid professor ID or user is not a professor",
@@ -136,7 +139,7 @@ async def create_professor_student_relationship(
 
         student_query = await db.execute(select(User).where(User.id == student_id))
         student = student_query.scalar_one_or_none()
-        if not student or student.role != "student":
+        if not student or student.role != UserRole.student:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid student ID or user is not a student",

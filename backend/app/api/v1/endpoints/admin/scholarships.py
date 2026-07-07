@@ -447,10 +447,15 @@ async def get_scholarship_sub_type_configs(
                 "description": "一般獎學金",
                 "description_en": "General Scholarship",
                 "amount": None,
-                "currency": scholarship.currency,
+                # #1117: ScholarshipType has NO currency/amount columns (they live
+                # on ScholarshipConfiguration — the documented split). Reading them
+                # here raised AttributeError → 500 for the DEFAULT sub_type_list
+                # ["general"]. A general sub-type with no explicit config has no
+                # configured amount, so default currency + a null effective amount.
+                "currency": "TWD",
                 "display_order": 0,
                 "is_active": True,
-                "effective_amount": scholarship.amount,
+                "effective_amount": None,
                 "created_at": now,
                 "updated_at": now,
             }

@@ -70,7 +70,10 @@ class ScholarshipTypeBase(BaseModel):
     @field_validator("amount")
     @classmethod
     def validate_amount(cls, v):
-        if v <= 0:
+        # None is allowed so ScholarshipTypeResponse can represent a type with no
+        # active configuration yet (#1115); inputs (ScholarshipTypeCreate) keep
+        # `amount: Decimal` required, so a positive amount is still enforced there.
+        if v is not None and v <= 0:
             raise ValueError("Amount must be greater than 0")
         return v
 
@@ -124,6 +127,10 @@ class ScholarshipTypeUpdate(BaseModel):
 
 class ScholarshipTypeResponse(ScholarshipTypeBase):
     id: int
+    # A scholarship type whose active ScholarshipConfiguration does not exist yet
+    # has no configured amount — represent it as null rather than 500ing on the
+    # base's `amount > 0` rule (#1115).
+    amount: Optional[Decimal] = None
     created_at: datetime
     updated_at: datetime
     created_by: Optional[int] = None
