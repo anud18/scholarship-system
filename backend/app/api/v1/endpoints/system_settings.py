@@ -152,7 +152,7 @@ async def get_application_notices(
             raw_value = await config_service.get_decrypted_value(setting)
             notices = ApplicationNotices.model_validate(raw_value)
         except (ValidationError, ValueError) as e:
-            logger.exception("Stored application_notices setting is not valid JSON content")
+            logger.exception("Stored application_notices setting is invalid (malformed JSON or schema mismatch)")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="注意事項設定資料格式錯誤，請聯絡系統管理員",

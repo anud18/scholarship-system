@@ -36,8 +36,36 @@ const LOCALES: Array<{ key: "zh" | "en"; label: string }> = [
 
 const MAX_ITEMS = 30;
 
+// Items get a stable client-side key so React tracks identity across
+// reordering — index keys would make inputs reuse the wrong DOM state.
+type EditableItem = { key: string; title: string; content: string };
+type EditableLocalized = {
+  items: EditableItem[];
+  important_notice: string;
+};
+type EditableNotices = { zh: EditableLocalized; en: EditableLocalized };
+
+let itemKeyCounter = 0;
+const nextItemKey = () => `notice-item-${++itemKeyCounter}`;
+
+function toEditable(notices: ApplicationNotices): EditableNotices {
+  const localize = (l: LocalizedApplicationNotices): EditableLocalized => ({
+    important_notice: l.important_notice,
+    items: l.items.map((item) => ({ ...item, key: nextItemKey() })),
+  });
+  return { zh: localize(notices.zh), en: localize(notices.en) };
+}
+
+function toPayload(notices: EditableNotices): ApplicationNotices {
+  const strip = (l: EditableLocalized): LocalizedApplicationNotices => ({
+    important_notice: l.important_notice,
+    items: l.items.map(({ title, content }) => ({ title, content })),
+  });
+  return { zh: strip(notices.zh), en: strip(notices.en) };
+}
+
 export function ApplicationNoticesPanel() {
-  const [notices, setNotices] = useState<ApplicationNotices | null>(null);
+  const [notices, setNotices] = useState<EditableNotices | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -49,7 +77,7 @@ export function ApplicationNoticesPanel() {
     try {
       const res = await apiClient.systemSettings.applicationNotices.get();
       if (res.success && res.data) {
-        setNotices(res.data);
+        setNotices(toEditable(res.data));
         setDirty(false);
       } else {
         setLoadFailed(true);
@@ -70,7 +98,7 @@ export function ApplicationNoticesPanel() {
 
   const mutateLocale = (
     locale: "zh" | "en",
-    mutate: (draft: LocalizedApplicationNotices) => LocalizedApplicationNotices
+    mutate: (draft: EditableLocalized) => EditableLocalized
   ) => {
     setNotices((prev) => {
       if (!prev) return prev;
@@ -94,7 +122,7 @@ export function ApplicationNoticesPanel() {
   const addItem = (locale: "zh" | "en") =>
     mutateLocale(locale, (draft) => ({
       ...draft,
-      items: [...draft.items, { title: "", content: "" }],
+      items: [...draft.items, { key: nextItemKey(), title: "", content: "" }],
     }));
 
   const removeItem = (locale: "zh" | "en", index: number) =>
@@ -112,7 +140,7 @@ export function ApplicationNoticesPanel() {
       return { ...draft, items };
     });
 
-  const validate = (data: ApplicationNotices): string | null => {
+  const validate = (data: EditableNotices): string | null => {
     for (const { key, label } of LOCALES) {
       const localized = data[key];
       if (localized.items.length === 0) {
@@ -142,12 +170,12 @@ export function ApplicationNoticesPanel() {
     }
     setSaving(true);
     try {
-      const res =
-        await apiClient.systemSettings.applicationNotices.update(notices);
+      const res = await apiClient.systemSettings.applicationNotices.update(
+        toPayload(notices)
+      );
       if (res.success) {
         toast.success("注意事項已更新，學生端將立即看到新內容");
         setDirty(false);
-        if (res.data) setNotices(res.data);
       } else {
         toast.error(res.message || "儲存失敗");
       }
@@ -232,7 +260,7 @@ export function ApplicationNoticesPanel() {
                       </Label>
                       {localized.items.map((item, index) => (
                         <div
-                          key={index}
+                          key={item.key}
                           className="rounded-lg border border-gray-200 p-4 space-y-3 bg-white"
                         >
                           <div className="flex items-center gap-2">
