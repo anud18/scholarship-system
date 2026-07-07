@@ -687,7 +687,7 @@ Hard-won from the 2026-05-30 backend-test-backlog cleanup (cleared ~150 failures
 ### CI suite layout (`.github/workflows/ci.yml`)
 - **unit**: `app/tests/test_*.py -m "not integration and not asyncio"` — sync tests only.
 - **integration**: `app/tests/test_*_service*.py -m "integration or asyncio"` — async tests. `asyncio_mode = auto`, so any `async def test_` is auto-collected here (it is EXCLUDED from unit).
-- **smoke / critical-workflows**: explicit file lists.
+- **smoke**: explicit file list (includes `test_critical_workflows.py`). The former dedicated `critical-workflows` lane was removed as redundant — that file already runs in smoke + integration.
 - A test that is `@pytest.mark.asyncio` / `async def` runs in **integration**, not unit. Converting a sync test to async moves it between suites.
 
 ### Lint is HARD-gated — black passing is NOT enough

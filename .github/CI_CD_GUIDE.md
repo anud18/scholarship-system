@@ -12,45 +12,44 @@ This document describes the CI/CD pipeline for the Scholarship Management System
 
 **Purpose**: Orchestrate the complete CI/CD process
 
-**Jobs**:
-- **test-coverage**: Runs the comprehensive test coverage workflow
-- **smoke-tests**: Quick tests for fast feedback
-- **security-scan**: Runs Trivy vulnerability scanner
-- **build-deploy**: Builds Docker images and deploys to staging (main branch only)
-- **performance-test**: Runs k6 performance tests (main branch only)
-- **notify**: Sends notifications about pipeline status
+**Jobs** (actual, see `ci.yml`):
+- **quick-checks**: black/flake8 (hard on B904/B014), frontend lint, dependency check (`npm audit` hard-gated at high)
+- **backend-tests**: matrix of `smoke` / `unit` / `integration` lanes (all hard-gated) against real PostgreSQL
+- **frontend-tests**: `jest --coverage` (hard on test failures; coverage not gated)
+- **e2e-smoke**: brings up docker-compose.dev and runs `@smoke` Playwright specs (hard-gated since #948)
+- **performance-test**: k6 (main-branch push only; advisory)
+- **notify**: pipeline status summary
 
 **Key Features**:
-- Delegates to dedicated test coverage workflow for thorough testing
 - Quick smoke tests for immediate feedback
 - Automatic deployment to staging on main branch
 - Performance testing with k6
 - Comprehensive status reporting
 
-### 2. Test Coverage Workflow (`test-coverage.yml`)
+### 2. Test coverage (measured & reported, NOT gated)
 
-**Trigger**: Called by main CI/CD pipeline or manually
+> ⚠️ There is **no** `test-coverage.yml` workflow and **no** 90% threshold
+> enforcement. An earlier version of this guide described an aspirational
+> workflow that was never built; this section documents what actually runs.
 
-**Purpose**: Comprehensive testing with strict coverage requirements (90%)
+Coverage is produced by the backend-test lanes in `ci.yml` (each runs
+`pytest --cov=app --cov-fail-under=0`) and the frontend `frontend-tests` job
+(`jest --coverage`), then **uploaded to Codecov for reporting only**:
 
-**Jobs**:
-- **backend-unit-tests**: Isolated unit tests with in-memory database
-- **backend-integration-tests**: Tests with real PostgreSQL, Redis, and MinIO
-- **backend-api-tests**: API endpoint testing with full Docker stack
-- **frontend-unit-tests**: Component and utility function tests
-- **frontend-component-tests**: React component integration tests
-- **e2e-tests**: Multi-browser E2E tests with Playwright
-- **security-tests**: Bandit, Safety, and npm audit checks
-- **performance-tests**: Load testing with k6
-- **coverage-report**: Aggregates all coverage reports
+- **`--cov-fail-under=0`** on every backend lane — coverage never fails the
+  build. (The local `pytest.ini` sets `--cov-fail-under=20` scoped to
+  `app/services`, but CI overrides it to 0.)
+- **Codecov upload uses `fail_ci_if_error: false`** with no status gate, so a
+  coverage drop is visible in the Codecov PR comment but cannot block a merge.
+- The only coverage-shaped *gate* is the per-PR **diff-cover** step
+  (changed-lines ≥ 80%), and it is **`continue-on-error: true`** (advisory)
+  until the smoke suite is deemed stable.
+- `.coveragerc` currently `omit`s several large services from measurement, so
+  the reported percentage is not a whole-codebase figure.
 
-**Features**:
-- Parallel test execution for faster feedback
-- 90% coverage threshold enforcement
-- Multi-browser E2E testing (Chrome, Firefox, Safari)
-- Security vulnerability scanning
-- Performance baseline testing
-- PR comments with coverage summary
+Establishing a real ratchet (un-omit the services, set `--cov-fail-under` to a
+floor at/below current, drop the `=0` override, promote diff-cover to a hard
+gate) is tracked as follow-up work — see the 2026-07 test audit.
 
 ### 3. CodeQL Analysis (`codeql.yml`)
 
@@ -124,7 +123,7 @@ This document describes the CI/CD pipeline for the Scholarship Management System
 
 ### Test Types and Coverage
 
-1. **Unit Tests** (Target: 90% coverage)
+1. **Unit Tests** (aspirational target 90%; NOT enforced — see §2)
    - Backend: pytest with async support
    - Frontend: Jest with React Testing Library
 
@@ -187,12 +186,12 @@ pre-commit run --all-files
 
 - **Backend**:
   - `pytest.ini`: pytest configuration with coverage settings
-  - `.coveragerc`: Coverage.py configuration (90% threshold)
+  - `.coveragerc`: Coverage.py config (source=app/services, `fail_under=20`; CI overrides to 0 — not gated)
   - `conftest.py`: Shared fixtures and test utilities
 
 - **Frontend**:
   - `jest.config.js`: Jest configuration
-  - `jest.config.standalone.js`: CI-specific Jest config
+  - `jest.config.standalone.js`: unused alternate config (not referenced by any npm script or CI)
 
 ## Environment Variables and Secrets
 
@@ -221,7 +220,7 @@ BACKUP_S3_BUCKET      # S3 bucket for backups
 
 ### Common Issues
 
-1. **Test Coverage Below Threshold**
+1. **Test Coverage Reporting** (no hard threshold today — see §2)
    - Check coverage reports in artifacts
    - Add tests for uncovered code paths
    - Use `# pragma: no cover` sparingly for unreachable code
@@ -260,7 +259,7 @@ BACKUP_S3_BUCKET      # S3 bucket for backups
 
 1. **Maintain High Test Coverage**
    - Write tests for new features before implementation (TDD)
-   - Keep coverage above 90% threshold
+   - Aim to raise coverage (no hard threshold today — see §2)
    - Focus on critical business logic
 
 2. **Use Test Markers**
@@ -293,7 +292,7 @@ BACKUP_S3_BUCKET      # S3 bucket for backups
 ## Metrics and Monitoring
 
 ### Key Metrics
-- Test coverage: Target 90%+
+- Test coverage: aspirational 90%+ (measured/reported, not gated — see §2)
 - CI/CD pipeline duration: Target < 15 minutes
 - Test flakiness: Target < 1%
 - Security vulnerabilities: Target 0 critical/high
