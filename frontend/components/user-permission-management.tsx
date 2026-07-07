@@ -126,21 +126,26 @@ export function UserPermissionManagement() {
     setUsersError(null);
 
     try {
-      let rolesParam = "college,admin,super_admin,professor";
-      if (user?.role === "admin") {
-        rolesParam = "college,admin,professor";
-      }
-      rolesParam = rolesParam
+      const baseRoles = user?.role === "admin"
+        ? "college,admin,professor"
+        : "college,admin,super_admin,professor";
+      const allowedRoles = baseRoles
         .split(",")
-        .map((role) => role.trim())
-        .join(",");
+        .map((role) => role.trim());
+
+      // The backend prefers `roles` over `role` (`if roles: ... elif role:`),
+      // and we always send `roles`, so the role filter must narrow the `roles`
+      // scope itself — sending a separate `role` param would be ignored.
+      const rolesParam =
+        userRoleFilter && allowedRoles.includes(userRoleFilter)
+          ? userRoleFilter
+          : allowedRoles.join(",");
 
       const params: {
         page: number;
         size: number;
         roles: string;
         search?: string;
-        role?: string;
       } = {
         page: userPagination.page,
         size: userPagination.size,
@@ -148,7 +153,6 @@ export function UserPermissionManagement() {
       };
 
       if (userSearch) params.search = userSearch;
-      if (userRoleFilter) params.role = userRoleFilter;
 
       const response = await apiClient.users.getAll(params);
 
@@ -242,7 +246,13 @@ export function UserPermissionManagement() {
   }, [user, userPagination.page]);
 
   useEffect(() => {
-    if (user?.role === "super_admin") {
+    if (user?.role !== "super_admin") return;
+    // Reset to the first page when search/filter changes so we never land on an
+    // out-of-range page. If already on page 1, fetch directly; otherwise the
+    // page-change effect above handles the fetch.
+    if (userPagination.page !== 1) {
+      setUserPagination((prev) => ({ ...prev, page: 1 }));
+    } else {
       fetchUsers();
     }
   }, [userSearch, userRoleFilter]);
