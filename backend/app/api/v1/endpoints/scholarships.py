@@ -298,7 +298,7 @@ async def get_scholarship_detail(id: int, db: AsyncSession = Depends(get_db)):
         "description_en": scholarship.description_en,
         "application_cycle": scholarship.application_cycle.value if scholarship.application_cycle else "semester",
         "sub_type_list": scholarship.sub_type_list or [],
-        "amount": active_config.amount if active_config else 0,  # Get amount from active configuration
+        "amount": active_config.amount if active_config else None,  # None when no active config (#1115)
         "currency": active_config.currency if active_config else "TWD",  # Get currency from active configuration
         "whitelist_enabled": scholarship.whitelist_enabled if hasattr(scholarship, "whitelist_enabled") else False,
         "whitelist_student_ids": [
@@ -735,7 +735,7 @@ async def toggle_scholarship_whitelist(
         "description_en": scholarship.description_en,
         "application_cycle": scholarship.application_cycle.value if scholarship.application_cycle else "semester",
         "sub_type_list": scholarship.sub_type_list or [],
-        "amount": active_config.amount if active_config else 0,
+        "amount": active_config.amount if active_config else None,  # None when no active config (#1115)
         "currency": active_config.currency if active_config else "TWD",
         "whitelist_enabled": scholarship.whitelist_enabled,
         "whitelist_student_ids": [

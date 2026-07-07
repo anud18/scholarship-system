@@ -97,11 +97,11 @@ async def scholarship(db) -> ScholarshipType:
 
 @pytest_asyncio.fixture
 async def active_config(db, scholarship) -> ScholarshipConfiguration:
-    """An active configuration (amount > 0) so ScholarshipTypeResponse validates.
+    """An active configuration so the detail response carries a real amount.
 
-    Without an active config the detail / whitelist responses build
-    ScholarshipTypeResponse(amount=0), which fails the ``amount > 0`` schema
-    validator and 500s (see TestScholarshipResponseBuildBug).
+    Without an active config the detail / whitelist responses now build
+    ScholarshipTypeResponse with a null amount (see
+    TestScholarshipResponseBuildNoConfig) — that path used to 500 before #1115.
     """
     config = ScholarshipConfiguration(
         scholarship_type_id=scholarship.id,
@@ -331,32 +331,23 @@ class TestDevEndpointsDebugGate:
 
 
 @pytest.mark.api
-class TestScholarshipResponseBuildBug:
-    """BUG (pinned current behavior): GET /{id} and PATCH /{id}/whitelist crash
-    for any scholarship type that has NO active ScholarshipConfiguration.
+class TestScholarshipResponseBuildNoConfig:
+    """#1115 (fixed): GET /{id} and PATCH /{id}/whitelist for a scholarship type
+    with NO active ScholarshipConfiguration now succeed with a null amount.
 
-    scholarships.py builds ScholarshipTypeResponse(amount=0) when active_config is
-    None (lines ~299 and ~736), but ScholarshipTypeResponse's field validator
-    rejects ``amount <= 0`` ("Amount must be greater than 0"), so the response
-    construction raises a pydantic ValidationError. In production the error
-    middleware turns this into an HTTP 500; under the ASGI test transport the
-    exception propagates to the caller (pinned with pytest.raises below). A
-    brand-new scholarship type (created before its configuration) is therefore
-    un-viewable via these routes.
+    Previously scholarships.py passed amount=0 when active_config was None, which
+    tripped ScholarshipTypeResponse's `amount > 0` validator → pydantic
+    ValidationError → HTTP 500. The endpoints now pass None and the response
+    schema allows a null amount (input schemas still require a positive amount).
     """
 
-    async def test_get_detail_without_config_raises(self, client, scholarship):
-        # BUG: should be 200 with amount=0; instead the amount>0 validator raises.
-        from pydantic import ValidationError
+    async def test_get_detail_without_config_returns_null_amount(self, client, scholarship):
+        response = await client.get(f"{SCHOLARSHIPS_PREFIX}/{scholarship.id}")
+        assert response.status_code == 200
+        assert response.json()["data"]["amount"] is None
 
-        with pytest.raises(ValidationError):
-            await client.get(f"{SCHOLARSHIPS_PREFIX}/{scholarship.id}")
-
-    async def test_whitelist_toggle_without_config_raises(self, client, login, sch_users, scholarship):
-        # BUG: the whitelist flag IS persisted (commit precedes response building),
-        # but the response construction raises because there is no active config.
-        from pydantic import ValidationError
-
+    async def test_whitelist_toggle_without_config_succeeds(self, client, login, sch_users, scholarship):
         login(sch_users["admin"])
-        with pytest.raises(ValidationError):
-            await client.patch(f"{SCHOLARSHIPS_PREFIX}/{scholarship.id}/whitelist", json={"enabled": True})
+        response = await client.patch(f"{SCHOLARSHIPS_PREFIX}/{scholarship.id}/whitelist", json={"enabled": True})
+        assert response.status_code == 200
+        assert response.json()["success"] is True

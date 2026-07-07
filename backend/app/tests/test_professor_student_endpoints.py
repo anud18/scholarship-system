@@ -252,15 +252,11 @@ class TestProfessorStudentEnvelopeAndFlow:
         assert body["success"] is True
         assert body["data"] is None
 
-    async def test_admin_create_valid_professor_rejected_400_bug(self, client, login, ps_users):
-        # BUG: create_professor_student_relationship validates the fetched user's
-        # role with `professor.role not in ["professor", "admin"]` and
-        # `student.role != "student"`. `User.role` is a plain enum.Enum member
-        # (UserRole.professor), never equal to the bare string "professor", so a
-        # perfectly valid professor+student pair is ALWAYS rejected with 400 —
-        # the create endpoint cannot create any relationship. Fix = compare
-        # against enum members (UserRole.professor / UserRole.student) or
-        # `.value`. Pinning current (broken) behavior.
+    async def test_admin_create_valid_professor_succeeds(self, client, login, ps_users):
+        # #1112 (fixed): the role check now compares UserRole enum members, so a
+        # valid professor+student pair is accepted. Previously `professor.role
+        # not in ["professor","admin"]` (enum vs bare string) rejected EVERY pair
+        # with 400 — the create endpoint could never create a relationship.
         login(ps_users["admin"])
         response = await client.post(
             PREFIX,
@@ -270,4 +266,6 @@ class TestProfessorStudentEnvelopeAndFlow:
                 "relationship_type": "advisor",
             },
         )
-        assert response.status_code == 400
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is True
