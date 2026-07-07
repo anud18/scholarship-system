@@ -94,7 +94,7 @@ export function UserPermissionManagement() {
     nycu_id: "",
     email: "",
     name: "",
-    role: "college",
+    role: "professor",
     student_no: "",
   });
   const [userPagination, setUserPagination] = useState({
@@ -434,7 +434,7 @@ export function UserPermissionManagement() {
       nycu_id: "",
       email: "",
       name: "",
-      role: "college",
+      role: "professor",
       user_type: "student",
       status: "在學",
       dept_code: "",
