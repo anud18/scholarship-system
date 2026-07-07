@@ -945,7 +945,7 @@ test.describe("locked roster dialog — revoked student panel + item removal", (
     },
   );
   test(
-    "@nightly suspend is queryable via /admin/audit-logs and visible in 學生領取歷史 (G29 #991)",
+    "@nightly suspend is queryable via /admin/audit-logs and visible in 學生領獎紀錄查詢 (G29 #991)",
     async ({ browser }) => {
       // The fixture suspended csphd0002 AFTER the roster locked (its item is
       // untouched by earlier tests — the revoked student's item gets removed
@@ -953,7 +953,7 @@ test.describe("locked roster dialog — revoked student panel + item removal", (
       // Two compliance read paths must surface it:
       //   1. the system-wide audit-log endpoint (#1007) carries the typed
       //      suspend event with the reason;
-      //   2. 學生領取歷史 (#1005) shows the paid row WITH the suspension
+      //   2. 學生領獎紀錄查詢 (#1005) shows the paid row WITH the suspension
       //      context instead of an unqualified 已領取.
       const adminLogin = await loginAs(browser, "admin");
       pushTrace(runState, adminLogin.traceId);
@@ -987,7 +987,7 @@ test.describe("locked roster dialog — revoked student panel + item removal", (
       expect(suspendEvents[0].new_values?.reason).toContain("E2E locked-roster fixture");
       expect(suspendEvents[0].actor_nycu_id).toBe("admin");
 
-      // 2. 學生領取歷史 suspension context.
+      // 2. 學生領獎紀錄查詢 suspension context.
       const historyRes = await apiAs<{
         success: boolean;
         data: {
@@ -1008,7 +1008,7 @@ test.describe("locked roster dialog — revoked student panel + item removal", (
       );
       expect(
         suspendedRecords.length,
-        "suspended-after-lock payment must carry suspension context in 學生領取歷史 (G25)",
+        "suspended-after-lock payment must carry suspension context in 學生領獎紀錄查詢 (G25)",
       ).toBeGreaterThan(0);
       expect(suspendedRecords[0].suspend_reason).toContain("E2E locked-roster fixture");
       expect(suspendedRecords[0].suspended_at).toBeTruthy();

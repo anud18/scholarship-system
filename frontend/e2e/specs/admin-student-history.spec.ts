@@ -1,7 +1,7 @@
 /**
  * E2E: Admin student scholarship history lookup.
  *
- * Tab: AdminManagementShell → "學生領取歷史"
+ * Tab: AdminManagementShell → "學生領獎紀錄查詢"
  * Endpoint: GET /api/v1/admin/student-history/{student_number}
  *
  * Mirrors the auth pattern from admin-manual-distribution.spec.ts: log in as
@@ -19,7 +19,7 @@ test.describe("Admin student scholarship history", () => {
     await page.goto("/");
     // AdminManagementShell renders inside the top-level "系統管理" (value="admin") tab.
     await page.getByRole("tab", { name: "系統管理" }).click();
-    await page.getByRole("tab", { name: "學生領取歷史" }).click();
+    await page.getByRole("tab", { name: "學生領獎紀錄查詢" }).click();
     await page.getByLabel("學號").fill("@@");
     await page.getByRole("button", { name: "查詢" }).click();
     await expect(page.getByText(/請輸入有效的學號/)).toBeVisible();
@@ -31,7 +31,7 @@ test.describe("Admin student scholarship history", () => {
     const page = await context.newPage();
     await page.goto("/");
     await page.getByRole("tab", { name: "系統管理" }).click();
-    await page.getByRole("tab", { name: "學生領取歷史" }).click();
+    await page.getByRole("tab", { name: "學生領獎紀錄查詢" }).click();
     await page.getByLabel("學號").fill("GHOST00000");
     await page.getByRole("button", { name: "查詢" }).click();
     await expect(page.getByText("查無此學生資料")).toBeVisible({
@@ -52,7 +52,7 @@ test.describe("Admin student scholarship history", () => {
     const page = await context.newPage();
     await page.goto("/");
     await page.getByRole("tab", { name: "系統管理" }).click();
-    await page.getByRole("tab", { name: "學生領取歷史" }).click();
+    await page.getByRole("tab", { name: "學生領獎紀錄查詢" }).click();
     await page.getByLabel("學號").fill("stuphd001");
     await page.getByRole("button", { name: "查詢" }).click();
     await expect(

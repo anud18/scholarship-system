@@ -759,7 +759,9 @@ export function AdminConfigurationManagement({
                         </th>
                         <th className="text-left p-4 font-semibold">狀態</th>
                         <th className="text-left p-4 font-semibold">學院功能</th>
-                        <th className="text-right p-4 font-semibold">操作</th>
+                        <th className="text-right p-4 font-semibold">
+                          設定申請/審查期間
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
