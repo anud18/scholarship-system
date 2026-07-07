@@ -5,13 +5,22 @@ import { NoticeAgreementStep } from "../student-wizard/steps/NoticeAgreementStep
 jest.mock("../../lib/api", () => {
   const getPublicDocs = jest.fn();
   const list = jest.fn();
+  const noticesGet = jest.fn();
   return {
     __esModule: true,
     default: {
-      systemSettings: { getPublicDocs, supplementaryDocs: { list } },
+      systemSettings: {
+        getPublicDocs,
+        supplementaryDocs: { list },
+        applicationNotices: { get: noticesGet },
+      },
     },
     api: {
-      systemSettings: { getPublicDocs, supplementaryDocs: { list } },
+      systemSettings: {
+        getPublicDocs,
+        supplementaryDocs: { list },
+        applicationNotices: { get: noticesGet },
+      },
     },
   };
 });
@@ -21,12 +30,33 @@ const apiMock = jest.requireMock("../../lib/api") as {
     systemSettings: {
       getPublicDocs: jest.Mock;
       supplementaryDocs: { list: jest.Mock };
+      applicationNotices: { get: jest.Mock };
     };
   };
 };
 
 const mockGetPublicDocs = apiMock.api.systemSettings.getPublicDocs;
 const mockSuppList = apiMock.api.systemSettings.supplementaryDocs.list;
+const mockNoticesGet = apiMock.api.systemSettings.applicationNotices.get;
+
+const SAMPLE_NOTICES = {
+  zh: {
+    items: [
+      { title: "申請資格", content: "申請資格說明內容" },
+      { title: "申請期限", content: "申請期限說明內容" },
+      { title: "獎金撥款", content: "獎金撥款說明內容" },
+    ],
+    important_notice: "請務必詳細閱讀各項獎學金要點與相關規定。",
+  },
+  en: {
+    items: [
+      { title: "Eligibility", content: "Eligibility details" },
+      { title: "Deadline", content: "Deadline details" },
+      { title: "Distribution", content: "Distribution details" },
+    ],
+    important_notice: "Please read the regulations carefully.",
+  },
+};
 
 jest.mock("../inline-pdf-viewer", () => ({
   InlinePdfViewer: (props: {
@@ -55,6 +85,11 @@ describe("NoticeAgreementStep", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockSuppList.mockResolvedValue({ success: true, message: "OK", data: [] });
+    mockNoticesGet.mockResolvedValue({
+      success: true,
+      message: "OK",
+      data: SAMPLE_NOTICES,
+    });
     Object.defineProperty(window, "localStorage", {
       value: {
         getItem: jest.fn(() => "test-token"),
@@ -187,7 +222,7 @@ describe("NoticeAgreementStep", () => {
     expect(agreeCheckbox).not.toBeDisabled();
   });
 
-  it("keeps the 8 hardcoded notice items visible as a static summary", async () => {
+  it("renders the admin-managed notice items fetched from the API", async () => {
     mockGetPublicDocs.mockResolvedValue({
       success: true,
       data: { regulations_url: "system-docs/x.pdf" },
@@ -204,9 +239,35 @@ describe("NoticeAgreementStep", () => {
     await waitFor(() =>
       expect(screen.getByText("申請資格")).toBeInTheDocument(),
     );
-    expect(mockGetPublicDocs).toHaveBeenCalled();
+    expect(mockNoticesGet).toHaveBeenCalled();
     expect(screen.getByText("申請期限")).toBeInTheDocument();
     expect(screen.getByText("獎金撥款")).toBeInTheDocument();
+    expect(screen.getByText("申請資格說明內容")).toBeInTheDocument();
+    expect(
+      screen.getByText(/請務必詳細閱讀各項獎學金要點/),
+    ).toBeInTheDocument();
+  });
+
+  it("shows an error message (not stale content) when notices fail to load", async () => {
+    mockGetPublicDocs.mockResolvedValue({
+      success: true,
+      data: { regulations_url: "system-docs/x.pdf" },
+    });
+    mockNoticesGet.mockRejectedValue(new Error("network down"));
+
+    render(
+      <NoticeAgreementStep
+        agreedToTerms={false}
+        onAgree={noop}
+        onNext={noop}
+        locale="zh"
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText(/無法載入注意事項/)).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("申請資格")).not.toBeInTheDocument();
   });
 });
 
@@ -214,6 +275,11 @@ describe("NoticeAgreementStep — 參考文件 list", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockSuppList.mockResolvedValue({ success: true, message: "OK", data: [] });
+    mockNoticesGet.mockResolvedValue({
+      success: true,
+      message: "OK",
+      data: SAMPLE_NOTICES,
+    });
     Object.defineProperty(window, "localStorage", {
       value: { getItem: jest.fn(() => "test-token") },
       configurable: true,

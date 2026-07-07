@@ -31,6 +31,7 @@ import { api } from "@/lib/api";
 import {
   buildFileProxyUrl,
   buildSuppDocFileProxyUrl,
+  type ApplicationNotices,
   type SupplementaryDoc,
 } from "@/lib/api/modules/system-settings";
 import { previewMimeType } from "@/lib/utils";
@@ -44,63 +45,18 @@ interface NoticeAgreementStepProps {
   locale: "zh" | "en";
 }
 
-// Static locale copy hoisted to module scope so the ~140-line object isn't
-// reallocated on every render.
+// Static locale copy hoisted to module scope so the object isn't reallocated
+// on every render. The notice items and important-notice content are NOT here:
+// they are admin-editable and fetched from
+// GET /api/v1/system-settings/application-notices.
 const NOTICES = {
   zh: {
     title: "獎學金申請注意事項",
     subtitle:
       "請詳細閱讀以下內容，點擊「閱讀獎學金要點」並滑至底部後方可勾選同意繼續申請",
-    items: [
-      {
-        title: "申請資格",
-        content:
-          "申請人必須為本校在學【全職學生】，【不得於公私立機構從事專職全時之有給職工作】，且符合各獎學金規定的申請條件。請確認您的學籍狀態與申請資格。",
-      },
-      {
-        title: "申請限制",
-        content:
-          "每位獲獎學生至多可領獎3年共計6學期，國科會與教育部獎學金兩獎項合併計算，申請次數不限。\n每次申請為一學年期程，並可申請續領至滿三學年為止。如遇休學、退學、畢業，或有違反本校獎學金要點相關規定之情事，將喪失領獎資格，將由備取學生遞補。",
-      },
-      {
-        title: "申請期限",
-        content:
-          "各獎學金有不同的申請期限，逾期申請恕不受理。請注意各獎學金的開放申請日期與截止日期。",
-      },
-      {
-        title: "文件準備",
-        content:
-          "請備妥所需文件，包括但不限於成績單、郵局存摺封面、勞保投保紀錄、指導教授推薦函等。所有文件必須為清晰可辨識的電子檔案（PDF、JPG、JPEG 或 PNG 格式）。",
-      },
-      {
-        title: "資料正確性",
-        content:
-          "申請人應確保所填寫資料及上傳文件之正確性與真實性。如有虛偽不實，將取消申請資格並依校規處理。",
-      },
-      {
-        title: "個人資料使用",
-        content:
-          "您的個人資料將僅用於獎學金申請審核及後續相關作業，本校將依個人資料保護法規定妥善保管。",
-      },
-      {
-        title: "審核流程",
-        content:
-          "申請送出後，須經指導教授審核，並依序辦理系所初審、學院複審及教務處校級複核會議審查等程序。審核期間，請隨時留意系統通知，以掌握最新審查進度。",
-      },
-      {
-        title: "獎金撥款",
-        content:
-          "獲獎學生請確認郵局帳戶資料正確無誤，獎學金將於核定後撥款至指定帳戶",
-      },
-      {
-        title: "申請撤回",
-        content:
-          "申請送出後如需撤回，請於審核開始前聯繫承辦單位。審核程序啟動後將無法撤回申請。",
-      },
-    ],
     importantNotice: "重要提醒",
-    importantContent:
-      "請務必詳細閱讀各項獎學金要點與相關規定。\n每位學生每次申請國科會或教育部博士生獎學金為一學年期程，僅可擇一獲獎，請謹慎選擇。",
+    noticesLoading: "正在載入注意事項…",
+    noticesLoadError: "無法載入注意事項，請重新整理頁面或聯絡承辦單位。",
     agreementText: "我已詳細閱讀並了解獎學金要點，同意遵守相關規定",
     readNoticeText: "尚未閱讀獎學金要點",
     readNoticeHint: "請點擊上方按鈕開啟獎學金要點並滑至底端",
@@ -124,56 +80,10 @@ const NOTICES = {
     title: "Scholarship Application Notice",
     subtitle:
       "Read the following carefully. Scroll the Scholarship Regulations below to the bottom before agreeing to continue.",
-    items: [
-      {
-        title: "Eligibility",
-        content:
-          "Applicants must be currently enrolled students and meet the specific requirements of each scholarship. Please verify your enrollment status and eligibility.",
-      },
-      {
-        title: "Application Restrictions",
-        content:
-          "Each awarded student may receive the scholarship for up to 3 years (6 semesters total); the NSTC and MOE scholarships are counted together, with no limit on the number of applications.\nEach application covers one academic year, and may be renewed up to a total of three academic years. Recipients who take a leave of absence, withdraw, graduate, or violate the university's scholarship regulations will forfeit their eligibility, and a waitlisted student will be selected instead.",
-      },
-      {
-        title: "Application Deadline",
-        content:
-          "Each scholarship has different application deadlines. Late applications will not be accepted. Please note the opening and closing dates for each scholarship.",
-      },
-      {
-        title: "Document Preparation",
-        content:
-          "Please prepare all required documents, including but not limited to transcripts, enrollment certificates, and advisor recommendation letters. All documents must be clear electronic files (PDF, JPG, JPEG, or PNG format).",
-      },
-      {
-        title: "Data Accuracy",
-        content:
-          "Applicants must ensure the accuracy and authenticity of all information and uploaded documents. False information will result in disqualification and disciplinary action according to university regulations.",
-      },
-      {
-        title: "Personal Data Usage",
-        content:
-          "Your personal data will be used solely for scholarship application review and related procedures. The university will safeguard your data according to Personal Data Protection Act.",
-      },
-      {
-        title: "Review Process",
-        content:
-          "After submission, applications will go through department preliminary review, college review, and administrative approval. Please monitor system notifications during the review period.",
-      },
-      {
-        title: "Award Distribution",
-        content:
-          "Award recipients should ensure their bank account information is correct. Scholarships will be disbursed to the designated account after approval.",
-      },
-      {
-        title: "Application Withdrawal",
-        content:
-          "If you need to withdraw your application after submission, please contact the administrative office before the review begins. Withdrawal is not possible once the review process has started.",
-      },
-    ],
     importantNotice: "Important Notice",
-    importantContent:
-      "Please read the regulations and related rules for each scholarship carefully.\nEach student may apply for either the NSTC or MOE PhD Scholarship for one academic year per application, and may only receive one of the two. Please choose carefully.",
+    noticesLoading: "Loading application notices…",
+    noticesLoadError:
+      "Failed to load the application notices. Please refresh the page or contact the administrative office.",
     agreementText:
       "I have read and understand the scholarship regulations and agree to comply",
     readNoticeText: "Regulations not yet read",
@@ -217,6 +127,8 @@ export function NoticeAgreementStep({
   const [supplementaryDocs, setSupplementaryDocs] = useState<SupplementaryDoc[]>(
     []
   );
+  const [notices, setNotices] = useState<ApplicationNotices | null>(null);
+  const [noticesError, setNoticesError] = useState(false);
   const [previewFile, setPreviewFile] = useState<{
     url: string;
     filename: string;
@@ -224,13 +136,14 @@ export function NoticeAgreementStep({
   } | null>(null);
 
   useEffect(() => {
-    // allSettled (not all): a supplementary-docs fetch failure must not drop
-    // publicDocs, which gates the regulations scroll-and-agree flow.
+    // allSettled (not all): a supplementary-docs or notices fetch failure must
+    // not drop publicDocs, which gates the regulations scroll-and-agree flow.
     Promise.allSettled([
       api.systemSettings.getPublicDocs(),
       api.systemSettings.supplementaryDocs.list(),
+      api.systemSettings.applicationNotices.get(),
     ])
-      .then(([docsResult, suppResult]) => {
+      .then(([docsResult, suppResult, noticesResult]) => {
         if (docsResult.status === "fulfilled") {
           const docsRes = docsResult.value;
           if (docsRes.success && docsRes.data) setPublicDocs(docsRes.data);
@@ -251,6 +164,22 @@ export function NoticeAgreementStep({
           console.error(
             "[NoticeAgreementStep] supplementaryDocs.list failed",
             suppResult.reason
+          );
+        }
+        if (
+          noticesResult.status === "fulfilled" &&
+          noticesResult.value.success &&
+          noticesResult.value.data
+        ) {
+          setNotices(noticesResult.value.data);
+        } else {
+          setNoticesError(true);
+          // eslint-disable-next-line no-console
+          console.error(
+            "[NoticeAgreementStep] applicationNotices.get failed",
+            noticesResult.status === "rejected"
+              ? noticesResult.reason
+              : noticesResult.value
           );
         }
       })
@@ -283,6 +212,7 @@ export function NoticeAgreementStep({
 
   const hasRegulationsUploaded = Boolean(publicDocs.regulations_url);
   const t = NOTICES[locale];
+  const localizedNotices = notices ? notices[locale] : null;
 
   return (
     <div className="space-y-6">
@@ -299,44 +229,59 @@ export function NoticeAgreementStep({
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          <Alert className="border-amber-200 bg-amber-50">
-            <AlertTriangle className="h-5 w-5 text-amber-600" />
-            <AlertDescription>
-              <div className="font-semibold text-amber-900 mb-1">
-                {t.importantNotice}
-              </div>
-              <div className="text-sm text-amber-800 whitespace-pre-line">
-                {t.importantContent}
-              </div>
-            </AlertDescription>
-          </Alert>
-
-          <Card className="border-2">
-            <div className="p-6">
-              <div className="space-y-4">
-                {t.items.map((item, index) => (
-                  <div
-                    key={index}
-                    className="pb-4 border-b last:border-b-0 last:pb-0"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-nycu-blue-100 text-nycu-blue-700 flex items-center justify-center font-semibold text-sm">
-                        {index + 1}
-                      </div>
-                      <div className="flex-1">
-                        <h4 className="font-semibold text-nycu-navy-800 mb-2">
-                          {item.title}
-                        </h4>
-                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
-                          {item.content}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+          {noticesError ? (
+            <Alert className="border-red-300 bg-red-50">
+              <AlertCircle className="h-5 w-5 text-red-600" />
+              <AlertDescription className="text-red-900">
+                {t.noticesLoadError}
+              </AlertDescription>
+            </Alert>
+          ) : !localizedNotices ? (
+            <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-sm text-gray-500">
+              {t.noticesLoading}
             </div>
-          </Card>
+          ) : (
+            <>
+              <Alert className="border-amber-200 bg-amber-50">
+                <AlertTriangle className="h-5 w-5 text-amber-600" />
+                <AlertDescription>
+                  <div className="font-semibold text-amber-900 mb-1">
+                    {t.importantNotice}
+                  </div>
+                  <div className="text-sm text-amber-800 whitespace-pre-line">
+                    {localizedNotices.important_notice}
+                  </div>
+                </AlertDescription>
+              </Alert>
+
+              <Card className="border-2">
+                <div className="p-6">
+                  <div className="space-y-4">
+                    {localizedNotices.items.map((item, index) => (
+                      <div
+                        key={index}
+                        className="pb-4 border-b last:border-b-0 last:pb-0"
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-nycu-blue-100 text-nycu-blue-700 flex items-center justify-center font-semibold text-sm">
+                            {index + 1}
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-nycu-navy-800 mb-2">
+                              {item.title}
+                            </h4>
+                            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+                              {item.content}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </Card>
+            </>
+          )}
 
           {(() => {
             const sampleAvailable = Boolean(publicDocs.sample_document_url);

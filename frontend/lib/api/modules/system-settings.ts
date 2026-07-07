@@ -74,6 +74,24 @@ export function buildSuppDocFileProxyUrl(
   )}&v=${cacheBuster}`;
 }
 
+/** One numbered notice item on the application wizard's notice step. */
+export type ApplicationNoticeItem = {
+  title: string;
+  content: string;
+};
+
+/** Notice content for a single locale. */
+export type LocalizedApplicationNotices = {
+  items: ApplicationNoticeItem[];
+  important_notice: string;
+};
+
+/** Admin-editable 獎學金申請注意事項 content (bilingual). */
+export type ApplicationNotices = {
+  zh: LocalizedApplicationNotices;
+  en: LocalizedApplicationNotices;
+};
+
 // System configuration types
 type SystemConfiguration = {
   key: string;
@@ -316,6 +334,46 @@ export function createSystemSettingsApi() {
       );
       const json = await res.json();
       return json;
+    },
+
+    applicationNotices: {
+      /**
+       * Get the 獎學金申請注意事項 content (any authenticated user).
+       * Returns backend defaults when the admin hasn't customized it yet.
+       */
+      get: async (): Promise<ApiResponse<ApplicationNotices>> => {
+        const token =
+          typeof window !== "undefined"
+            ? localStorage.getItem("auth_token") || ""
+            : "";
+        const res = await fetch(
+          "/api/v1/system-settings/application-notices",
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        return (await res.json()) as ApiResponse<ApplicationNotices>;
+      },
+
+      /** Replace the full zh/en notice content (admin only). */
+      update: async (
+        notices: ApplicationNotices
+      ): Promise<ApiResponse<ApplicationNotices>> => {
+        const token =
+          typeof window !== "undefined"
+            ? localStorage.getItem("auth_token") || ""
+            : "";
+        const res = await fetch(
+          "/api/v1/system-settings/application-notices",
+          {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(notices),
+          }
+        );
+        return (await res.json()) as ApiResponse<ApplicationNotices>;
+      },
     },
 
     supplementaryDocs: {
