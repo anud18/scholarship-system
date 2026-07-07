@@ -126,12 +126,10 @@ export function UserPermissionManagement() {
     setUsersError(null);
 
     try {
-      const baseRoles = user?.role === "admin"
-        ? "college,admin,professor"
-        : "college,admin,super_admin,professor";
-      const allowedRoles = baseRoles
-        .split(",")
-        .map((role) => role.trim());
+      const allowedRoles =
+        user?.role === "admin"
+          ? ["college", "admin", "professor"]
+          : ["college", "admin", "super_admin", "professor"];
 
       // The backend prefers `roles` over `role` (`if roles: ... elif role:`),
       // and we always send `roles`, so the role filter must narrow the `roles`
