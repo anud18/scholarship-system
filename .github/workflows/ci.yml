@@ -236,7 +236,6 @@ jobs:
           - smoke
           - unit
           - integration
-          - critical-workflows
         include:
           - test-suite: smoke
             # Explicit file list (not "app/tests") so pytest doesn't try to
@@ -267,12 +266,14 @@ jobs:
             # files whose async tests matched NO lane (asyncio_mode=auto auto-marks
             # them asyncio, so the unit lane excluded them too). Those stale files
             # are now fixed; test_no_orphaned_async_tests.py guards the invariant.
+            #
+            # NOTE: the former dedicated `critical-workflows` lane
+            # (test_critical_workflows.py -m integration) was removed as fully
+            # redundant — that file already runs here (matched by test_*.py +
+            # its `integration` marks) AND in the smoke lane's explicit list, so
+            # the extra PG-provisioned matrix row added zero coverage.
             test-path: "app/tests/test_*.py"
             test-mark: "integration or asyncio"
-            continue-on-error: false
-          - test-suite: critical-workflows
-            test-path: app/tests/test_critical_workflows.py
-            test-mark: "integration"
             continue-on-error: false
 
     steps:
