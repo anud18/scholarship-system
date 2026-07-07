@@ -97,11 +97,11 @@ async def scholarship(db) -> ScholarshipType:
 
 @pytest_asyncio.fixture
 async def active_config(db, scholarship) -> ScholarshipConfiguration:
-    """An active configuration (amount > 0) so ScholarshipTypeResponse validates.
+    """An active configuration so the detail response carries a real amount.
 
-    Without an active config the detail / whitelist responses build
-    ScholarshipTypeResponse(amount=0), which fails the ``amount > 0`` schema
-    validator and 500s (see TestScholarshipResponseBuildBug).
+    Without an active config the detail / whitelist responses now build
+    ScholarshipTypeResponse with a null amount (see
+    TestScholarshipResponseBuildNoConfig) — that path used to 500 before #1115.
     """
     config = ScholarshipConfiguration(
         scholarship_type_id=scholarship.id,
@@ -348,8 +348,6 @@ class TestScholarshipResponseBuildNoConfig:
 
     async def test_whitelist_toggle_without_config_succeeds(self, client, login, sch_users, scholarship):
         login(sch_users["admin"])
-        response = await client.patch(
-            f"{SCHOLARSHIPS_PREFIX}/{scholarship.id}/whitelist", json={"enabled": True}
-        )
+        response = await client.patch(f"{SCHOLARSHIPS_PREFIX}/{scholarship.id}/whitelist", json={"enabled": True})
         assert response.status_code == 200
         assert response.json()["success"] is True
