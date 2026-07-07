@@ -169,7 +169,7 @@ export function UserPermissionManagement() {
         setUsers(sortedUsers);
         setUserPagination((prev) => ({
           ...prev,
-          total: sortedUsers.length,
+          total: response.data?.total ?? sortedUsers.length,
         }));
       } else {
         const errorMsg = response.message || "獲取使用者失敗";
