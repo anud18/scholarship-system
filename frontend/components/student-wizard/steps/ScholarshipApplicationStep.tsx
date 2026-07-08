@@ -59,6 +59,7 @@ import { clsx } from "@/lib/utils";
 import {
   buildApplicationFormFields,
   isValidTaiwanMobile,
+  isDocumentUploadRequired,
   TAIWAN_MOBILE_MESSAGE,
 } from "@/lib/utils/application-helpers";
 import { useApplications } from "@/hooks/use-applications";
@@ -781,9 +782,7 @@ export function ScholarshipApplicationStep({
       const requiredFields = fields.filter(
         f => f.is_active && f.is_required && !f.is_fixed
       );
-      const requiredDocuments = documents.filter(
-        d => d.is_active && d.is_required && !d.is_fixed
-      );
+      const requiredDocuments = documents.filter(isDocumentUploadRequired);
 
       let totalRequired = requiredFields.length + requiredDocuments.length;
 
@@ -1235,6 +1234,13 @@ export function ScholarshipApplicationStep({
     eligibleSubTypes.length > 0 &&
     eligibleSubTypes[0]?.value !== "general" &&
     eligibleSubTypes[0]?.value !== null;
+
+  const applicationDocumentNote = selectedScholarship
+    ? locale === "zh"
+      ? selectedScholarship.application_document_note
+      : selectedScholarship.application_document_note_en ||
+        selectedScholarship.application_document_note
+    : null;
 
   return (
     <div className="space-y-6">
@@ -1727,6 +1733,12 @@ export function ScholarshipApplicationStep({
                 <FileText className="h-5 w-5 text-nycu-blue-600" />
                 {text.applicationDocument}
               </h4>
+
+              {applicationDocumentNote && (
+                <p className="text-sm text-gray-600 whitespace-pre-line mb-4">
+                  {applicationDocumentNote}
+                </p>
+              )}
 
               {existingApplicationDocument ? (
                 <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
