@@ -10,6 +10,8 @@ import {
   isValidTaiwanMobile,
   TAIWAN_MOBILE_MESSAGE,
   BadgeVariant,
+  isDocumentListedInScholarshipCard,
+  isDocumentUploadRequired,
 } from "../application-helpers";
 import {
   ApplicationStatus,
@@ -578,11 +580,6 @@ describe("isValidTaiwanMobile", () => {
     expect(TAIWAN_MOBILE_MESSAGE).toBe("請輸入本人有效的台灣手機 (09xxxxxx)");
   });
 });
-
-import {
-  isDocumentListedInScholarshipCard,
-  isDocumentUploadRequired,
-} from "../application-helpers";
 
 describe("isDocumentListedInScholarshipCard", () => {
   it("shows active documents by default (flag missing)", () => {
