@@ -16,6 +16,28 @@ import { toApiResponse } from '../compat';
 import { createFileUploadFormData, type MultipartFormData } from '../form-data-helpers';
 import type { ApiResponse } from '../types';
 
+/**
+ * Resolve the auth token for direct `fetch()` downloads.
+ *
+ * The typed client keeps an in-memory copy, but that can be empty on a fresh
+ * page load / session restore where the token only lives in localStorage. The
+ * rest of the app reads the token straight from storage at call time, so fall
+ * back to the same keys here — otherwise these downloads go out without an
+ * Authorization header and the backend rejects them with 401
+ * ("Authorization header missing").
+ */
+function resolveAuthToken(): string | null {
+  const inMemory = typedClient.getToken();
+  if (inMemory) return inMemory;
+  if (typeof window === 'undefined') return null;
+  return (
+    localStorage.getItem('auth_token') ||
+    localStorage.getItem('token') ||
+    sessionStorage.getItem('auth_token') ||
+    null
+  );
+}
+
 type BatchUploadResult = {
   batch_id: number;
   file_name: string;
@@ -269,7 +291,7 @@ export function createBatchImportApi() {
      * Type-safe: Returns blob for file download
      */
     downloadTemplate: async (scholarshipType: string): Promise<void> => {
-      const token = typedClient.getToken();
+      const token = resolveAuthToken();
       const baseURL = typeof window !== "undefined" ? "" : process.env.INTERNAL_API_URL || "http://localhost:8000";
 
       const response = await fetch(
@@ -283,7 +305,16 @@ export function createBatchImportApi() {
       );
 
       if (!response.ok) {
-        throw new Error("Failed to download template");
+        let detail = "";
+        try {
+          const body = await response.clone().json();
+          detail = body?.message || body?.detail || "";
+        } catch {
+          // Non-JSON error body — surface the status alone.
+        }
+        throw new Error(
+          `Failed to download template (${response.status}${detail ? `: ${detail}` : ""})`
+        );
       }
 
       const blob = await response.blob();
@@ -325,7 +356,7 @@ export function createBatchImportApi() {
      * Type-safe: Returns blob for file download
      */
     downloadFile: async (batchId: number): Promise<void> => {
-      const token = typedClient.getToken();
+      const token = resolveAuthToken();
       const baseURL =
         typeof window !== "undefined"
           ? ""
@@ -342,7 +373,16 @@ export function createBatchImportApi() {
       );
 
       if (!response.ok) {
-        throw new Error("Failed to download file");
+        let detail = "";
+        try {
+          const body = await response.clone().json();
+          detail = body?.message || body?.detail || "";
+        } catch {
+          // Non-JSON error body — surface the status alone.
+        }
+        throw new Error(
+          `Failed to download file (${response.status}${detail ? `: ${detail}` : ""})`
+        );
       }
 
       const blob = await response.blob();

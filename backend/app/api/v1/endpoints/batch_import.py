@@ -46,11 +46,11 @@ logger = logging.getLogger(__name__)
 
 
 def require_college_role(current_user: User = Depends(get_current_user)) -> User:
-    """Dependency to require college role or super admin"""
-    if current_user.role not in [UserRole.college, UserRole.super_admin]:
+    """Dependency to require college, admin, or super admin role"""
+    if current_user.role not in [UserRole.college, UserRole.admin, UserRole.super_admin]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="此功能僅限學院角色使用",
+            detail="此功能僅限學院或管理員角色使用",
         )
     return current_user
 
@@ -88,9 +88,10 @@ async def upload_batch_import_data(
             detail=f"獎學金類型 {scholarship_type} 不存在",
         )
 
-    # Get college code from user (skip for super_admin)
+    # Get college code from user (skip for admin / super_admin, who are not
+    # bound to a single college and fall back to the "admin" record value)
     college_code = current_user.college_code
-    if not college_code and current_user.role != UserRole.super_admin:
+    if not college_code and current_user.role not in (UserRole.super_admin, UserRole.admin):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="使用者未設定學院代碼",
