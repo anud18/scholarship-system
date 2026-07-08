@@ -183,6 +183,8 @@ export function AdminScholarshipManagementInterface({
         setApplicationFields([]);
         setDocumentRequirements([]);
         setFormConfig(null);
+        setAppDocNote("");
+        setAppDocNoteEn("");
         setError("尚未設定表單配置，請先於後台建立。");
       }
     } catch (err) {
@@ -190,6 +192,8 @@ export function AdminScholarshipManagementInterface({
       setApplicationFields([]);
       setDocumentRequirements([]);
       setFormConfig(null);
+      setAppDocNote("");
+      setAppDocNoteEn("");
       setError("載入表單配置時發生錯誤，請稍後再試");
     } finally {
       setIsLoading(false);

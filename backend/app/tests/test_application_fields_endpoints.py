@@ -606,3 +606,50 @@ class TestApplicationFieldsEndpoints:
         )
         assert resp.status_code == 200
         assert resp.json()["data"]["application_document_note"] == "既有說明"
+
+    @pytest.mark.asyncio
+    async def test_form_config_save_persists_document_flags(self, login, admin):
+        """The admin UI writes documents exclusively through the form-config POST
+        (-> bulk_update_documents), not the per-document endpoints. Lock in that
+        display_in_list / requires_upload survive that real production write path."""
+        await self._make_scholarship_type(code="flagtest")
+        client = login(admin)
+        resp = await client.post(
+            "/api/v1/application-fields/form-config/flagtest",
+            json={
+                "fields": [],
+                "documents": [
+                    {
+                        "document_name": "紙本切結書",
+                        "accepted_file_types": ["PDF"],
+                        "requires_upload": False,
+                        "display_in_list": False,
+                    }
+                ],
+            },
+        )
+        assert resp.status_code == 200
+
+        resp = await client.get("/api/v1/application-fields/form-config/flagtest")
+        assert resp.status_code == 200
+        docs = resp.json()["data"]["documents"]
+        by_name = {d["document_name"]: d for d in docs}
+        assert by_name["紙本切結書"]["requires_upload"] is False
+        assert by_name["紙本切結書"]["display_in_list"] is False
+
+    @pytest.mark.asyncio
+    async def test_save_form_config_empty_note_clears_existing(self, login, admin):
+        """The frontend always sends the note string; an empty string must CLEAR an
+        existing note (not be treated as 'omitted' and leave the old note intact)."""
+        st = await self._make_scholarship_type(code="cleartest")
+        db = await _shared_db()
+        st.application_document_note = "既有說明"
+        await db.commit()
+
+        client = login(admin)
+        resp = await client.post(
+            "/api/v1/application-fields/form-config/cleartest",
+            json={"fields": [], "documents": [], "application_document_note": ""},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["data"]["application_document_note"] == ""

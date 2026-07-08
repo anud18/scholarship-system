@@ -1089,6 +1089,8 @@ export interface FormConfigSaveRequest {
     description?: string;
     description_en?: string;
     is_required?: boolean;
+    display_in_list?: boolean;
+    requires_upload?: boolean;
     accepted_file_types?: string[];
     max_file_size?: string;
     max_file_count?: number;
