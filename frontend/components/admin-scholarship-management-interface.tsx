@@ -93,6 +93,8 @@ export function AdminScholarshipManagementInterface({
   const [documentRequirements, setDocumentRequirements] = useState<
     ApplicationDocument[]
   >([]);
+  const [appDocNote, setAppDocNote] = useState("");
+  const [appDocNoteEn, setAppDocNoteEn] = useState("");
 
   // Loading and error states
   const [isLoading, setIsLoading] = useState(true);
@@ -175,6 +177,8 @@ export function AdminScholarshipManagementInterface({
         setFormConfig(config);
         setApplicationFields(fields);
         setDocumentRequirements(documents);
+        setAppDocNote(config.application_document_note || "");
+        setAppDocNoteEn(config.application_document_note_en || "");
       } else {
         setApplicationFields([]);
         setDocumentRequirements([]);
@@ -277,6 +281,8 @@ export function AdminScholarshipManagementInterface({
           description: doc.description,
           description_en: doc.description_en,
           is_required: doc.is_required,
+          display_in_list: doc.display_in_list ?? true,
+          requires_upload: doc.requires_upload ?? true,
           accepted_file_types: doc.accepted_file_types,
           max_file_size: doc.max_file_size,
           max_file_count: doc.max_file_count,
@@ -286,6 +292,8 @@ export function AdminScholarshipManagementInterface({
           upload_instructions_en: doc.upload_instructions_en,
           validation_rules: doc.validation_rules,
         })),
+        application_document_note: appDocNote,
+        application_document_note_en: appDocNoteEn,
       };
 
       const response = await api.applicationFields.saveFormConfig(
@@ -1516,6 +1524,40 @@ export function AdminScholarshipManagementInterface({
                     ))}
                   </TableBody>
                 </Table>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <FileText className="h-5 w-5 text-blue-600" />
+                申請文件說明文字
+              </CardTitle>
+              <CardDescription className="text-gray-600">
+                顯示在學生申請步驟3「申請文件」區塊下方的說明文字，留空則不顯示
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="app-doc-note">說明文字（中文）</Label>
+                <Textarea
+                  id="app-doc-note"
+                  value={appDocNote}
+                  onChange={e => setAppDocNote(e.target.value)}
+                  placeholder="例如：請將所有文件合併為單一 PDF 檔案上傳"
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="app-doc-note-en">說明文字（英文）</Label>
+                <Textarea
+                  id="app-doc-note-en"
+                  value={appDocNoteEn}
+                  onChange={e => setAppDocNoteEn(e.target.value)}
+                  placeholder="e.g., Please merge all documents into a single PDF file"
+                  rows={3}
+                />
               </div>
             </CardContent>
           </Card>
