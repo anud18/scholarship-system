@@ -173,6 +173,14 @@ async def upload_batch_import_data(
 
         validation_warnings.extend(permission_warnings)
 
+        eligibility_warnings = await service.bulk_check_eligibility(
+            parsed_data=parsed_data,
+            scholarship_type_id=scholarship.id,
+            academic_year=academic_year,
+            semester=normalized_semester,
+        )
+        validation_warnings.extend(eligibility_warnings)
+
         for row_data in parsed_data:
             student_id = row_data["student_id"]
             row_number = row_data.get("row_number") or 0
@@ -484,6 +492,14 @@ async def revalidate_batch_import(
     )
 
     validation_warnings.extend(permission_warnings)
+
+    eligibility_warnings = await service.bulk_check_eligibility(
+        parsed_data=parsed_data,
+        scholarship_type_id=batch_import.scholarship_type_id,
+        academic_year=batch_import.academic_year,
+        semester=batch_import.semester,
+    )
+    validation_warnings.extend(eligibility_warnings)
 
     for row_data in parsed_data:
         student_id = row_data.get("student_id")

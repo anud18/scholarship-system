@@ -138,6 +138,47 @@ class TestBatchImportEndpoints:
         assert len(data["preview_data"]) == 2
 
     @pytest.mark.asyncio
+    async def test_upload_batch_import_surfaces_eligibility_warnings(
+        self, client: AsyncClient, college_user: User, test_scholarship: ScholarshipType, valid_excel_file
+    ):
+        """Eligibility/professor warnings from bulk_check_eligibility must
+        surface in the upload response's validation_summary.warnings."""
+        _override_user(college_user)
+
+        fake_warning = {
+            "row_number": 2,
+            "student_id": "111111111",
+            "field": "eligibility",
+            "warning_type": "eligibility_failed",
+            "message": "學生 111111111 資格預檢未通過：GPA 未達標準（不影響匯入，請人工審查把關）。",
+        }
+
+        with patch(
+            "app.services.batch_import_service.BatchImportService.bulk_check_eligibility",
+            new_callable=AsyncMock,
+            return_value=[fake_warning],
+        ):
+            response = await client.post(
+                f"{BASE}/upload-data",
+                params={
+                    "scholarship_type": test_scholarship.code,
+                    "academic_year": 113,
+                    "semester": "first",
+                },
+                files={
+                    "file": (
+                        "test.xlsx",
+                        valid_excel_file,
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
+                },
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        warnings = response.json()["data"]["validation_summary"]["warnings"]
+        assert any("GPA 未達標準" in (w.get("message") or "") for w in warnings)
+
+    @pytest.mark.asyncio
     async def test_upload_batch_import_file_too_large(
         self, client: AsyncClient, college_user: User, test_scholarship: ScholarshipType
     ):

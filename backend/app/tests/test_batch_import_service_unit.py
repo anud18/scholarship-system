@@ -822,3 +822,78 @@ async def test_batch_assigns_professor_when_account_exists(db, batch_import_fixt
 
     app = await db.get(Application, created_ids[0])
     assert app.professor_id == professor.id
+
+
+# ─── bulk_check_eligibility: preview-stage warnings ──────────────────
+
+
+@pytest.mark.asyncio
+async def test_bulk_check_eligibility_flags_failures_but_filters_period(db, scholarship_with_config, monkeypatch):
+    service = BatchImportService(db)
+
+    async def fake_snapshot(student_id, academic_year=None, semester=None):
+        return {"std_stdcode": student_id, "trm_ascore_gpa": 2.0}
+
+    monkeypatch.setattr(service.student_service, "get_student_snapshot", fake_snapshot)
+
+    async def fake_check(student_data, config, user_id=None):
+        # Simulates: outside application period AND a real rule failure
+        return False, ["不在申請期間內", "GPA 未達標準"]
+
+    from app.services import batch_import_service as bis_module
+
+    monkeypatch.setattr(
+        bis_module.EligibilityService, "check_student_eligibility", staticmethod(fake_check), raising=False
+    )
+
+    parsed_data = [{"student_id": "313554001", "sub_types": ["nstc"], "advisor_nycu_id": None, "row_number": 2}]
+    warnings = await service.bulk_check_eligibility(parsed_data, scholarship_with_config.id, 114, None)
+
+    eligibility_warnings = [w for w in warnings if w["warning_type"] == "eligibility_failed"]
+    assert len(eligibility_warnings) == 1
+    assert "GPA 未達標準" in eligibility_warnings[0]["message"]
+    # Application-period reason is exempted for batch import (late entry)
+    assert "不在申請期間內" not in eligibility_warnings[0]["message"]
+
+
+@pytest.mark.asyncio
+async def test_bulk_check_eligibility_warns_missing_professor_account(db, scholarship_with_config, monkeypatch):
+    service = BatchImportService(db)
+
+    async def fake_snapshot(student_id, academic_year=None, semester=None):
+        return {"std_stdcode": student_id}
+
+    monkeypatch.setattr(service.student_service, "get_student_snapshot", fake_snapshot)
+
+    parsed_data = [{"student_id": "313554001", "sub_types": ["nstc"], "advisor_nycu_id": "NOSUCH", "row_number": 2}]
+    warnings = await service.bulk_check_eligibility(parsed_data, scholarship_with_config.id, 114, None)
+
+    professor_warnings = [w for w in warnings if w["warning_type"] == "professor_not_found"]
+    assert len(professor_warnings) == 1
+    assert "NOSUCH" in professor_warnings[0]["message"]
+
+
+@pytest.mark.asyncio
+async def test_bulk_check_eligibility_real_check_no_missing_greenlet(db, scholarship_with_config, monkeypatch):
+    """Runs the REAL check_student_eligibility with the ScholarshipType NOT in
+    the session identity map (revalidate path). check_student_eligibility reads
+    config.scholarship_type.whitelist_enabled, so without eager-loading this
+    would raise MissingGreenlet on an async lazy-load."""
+    config_id = scholarship_with_config.id
+    # Drop everything from the identity map so config.scholarship_type must be
+    # resolved from the query, not the identity map.
+    db.expunge_all()
+
+    service = BatchImportService(db)
+
+    async def fake_snapshot(student_id, academic_year=None, semester=None):
+        return {"std_stdcode": student_id}
+
+    monkeypatch.setattr(service.student_service, "get_student_snapshot", fake_snapshot)
+
+    parsed_data = [{"student_id": "313554001", "sub_types": ["nstc"], "advisor_nycu_id": None, "row_number": 2}]
+    # Must not raise (regression guard for MissingGreenlet).
+    warnings = await service.bulk_check_eligibility(parsed_data, config_id, 114, None)
+
+    # No skip warning about missing config (the config was found).
+    assert not any(w["warning_type"] == "eligibility_check_skipped" and w["field"] == "configuration" for w in warnings)

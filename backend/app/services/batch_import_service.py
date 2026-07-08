@@ -13,13 +13,14 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import NotFoundError, ServiceUnavailableError
 from app.models.application import Application
 from app.models.batch_import import BatchImport
 from app.models.enums import BatchImportStatus, Semester
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.user_profile import UserProfile
 from app.schemas.batch_import import ApplicationDataRow, BatchImportValidationError
 from app.services.application_builder import (
@@ -29,6 +30,7 @@ from app.services.application_builder import (
     generate_app_id,
     order_sub_type_preferences,
 )
+from app.services.eligibility_service import EligibilityService
 from app.services.student_service import StudentService
 
 logger = logging.getLogger(__name__)
@@ -100,9 +102,128 @@ def _is_sub_type_marked(cell: Any) -> bool:
 class BatchImportService:
     """Service for handling batch import operations"""
 
+    # Application-period exemption: batch import exists precisely for
+    # post-deadline paper-form entry, so this reason never surfaces.
+    _PERIOD_EXEMPT_REASONS = {"不在申請期間內"}
+
     def __init__(self, db: AsyncSession, student_service: Optional[StudentService] = None):
         self.db = db
         self.student_service = student_service or StudentService()
+
+    async def bulk_check_eligibility(
+        self,
+        parsed_data: List[Dict[str, Any]],
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        """Run the SAME eligibility check the student self-submission path
+        uses, demoted to warnings (manual review is the gate for batch
+        imports). Also warns when an advisor_nycu_id has no professor
+        account (the application would never reach a professor's queue).
+        Never raises, never blocks the import.
+        """
+        warnings: List[Dict[str, Any]] = []
+
+        # Resolve the configuration the same way create_applications_from_batch does
+        semester_enum: Optional[Semester] = None
+        if semester:
+            try:
+                semester_enum = Semester(semester)
+            except ValueError:
+                semester_enum = None
+
+        # Eager-load scholarship_type: check_student_eligibility reads
+        # config.scholarship_type.whitelist_enabled, and an async lazy-load
+        # would raise MissingGreenlet in the revalidate path (where the
+        # ScholarshipType is not already in the session identity map).
+        config_stmt = (
+            select(ScholarshipConfiguration)
+            .options(selectinload(ScholarshipConfiguration.scholarship_type))
+            .where(
+                ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+                ScholarshipConfiguration.academic_year == academic_year,
+            )
+        )
+        if semester_enum is None or semester_enum == Semester.yearly:
+            config_stmt = config_stmt.where(ScholarshipConfiguration.semester.is_(None))
+        else:
+            config_stmt = config_stmt.where(ScholarshipConfiguration.semester == semester_enum)
+        config_result = await self.db.execute(config_stmt)
+        config = config_result.scalar_one_or_none()
+
+        if not config:
+            warnings.append(
+                {
+                    "row_number": None,
+                    "student_id": None,
+                    "field": "configuration",
+                    "warning_type": "eligibility_check_skipped",
+                    "message": "找不到對應的獎學金配置，已跳過資格預檢（確認匯入時將會失敗，請先建立配置）。",
+                }
+            )
+            return warnings
+
+        eligibility_service = EligibilityService(self.db)
+
+        # Professor-account existence: one query for all advisor ids
+        advisor_ids = {row.get("advisor_nycu_id") for row in parsed_data if row.get("advisor_nycu_id")}
+        professor_map: Dict[str, User] = {}
+        if advisor_ids:
+            prof_stmt = select(User).where(User.nycu_id.in_(list(advisor_ids)), User.role == UserRole.professor)
+            prof_result = await self.db.execute(prof_stmt)
+            professor_map = {p.nycu_id: p for p in prof_result.scalars().all()}
+
+        for row in parsed_data:
+            student_id = row.get("student_id")
+            row_number = row.get("row_number")
+
+            advisor_id = row.get("advisor_nycu_id")
+            if advisor_id and advisor_id not in professor_map:
+                warnings.append(
+                    {
+                        "row_number": row_number,
+                        "student_id": student_id,
+                        "field": "advisor_nycu_id",
+                        "warning_type": "professor_not_found",
+                        "message": f"查無人事編號 {advisor_id} 的教授帳號，該申請將無法進入教授待審清單。",
+                    }
+                )
+
+            try:
+                snapshot = await self.student_service.get_student_snapshot(
+                    student_id, academic_year=str(academic_year), semester=semester
+                )
+            except Exception:  # noqa: BLE001 — any SIS failure demotes to a skip warning
+                logger.warning("Eligibility precheck skipped for %s (SIS error)", student_id, exc_info=True)
+                warnings.append(
+                    {
+                        "row_number": row_number,
+                        "student_id": student_id,
+                        "field": "eligibility",
+                        "warning_type": "eligibility_check_skipped",
+                        "message": f"無法取得學生 {student_id} 的學籍資料，已跳過資格預檢。",
+                    }
+                )
+                continue
+
+            is_eligible, reasons = await eligibility_service.check_student_eligibility(
+                student_data=snapshot, config=config
+            )
+            effective_reasons = [r for r in reasons if r not in self._PERIOD_EXEMPT_REASONS]
+            if not is_eligible and effective_reasons:
+                warnings.append(
+                    {
+                        "row_number": row_number,
+                        "student_id": student_id,
+                        "field": "eligibility",
+                        "warning_type": "eligibility_failed",
+                        "message": f"學生 {student_id} 資格預檢未通過："
+                        f"{'；'.join(effective_reasons)}（不影響匯入，請人工審查把關）。",
+                    }
+                )
+
+        return warnings
 
     async def parse_excel_file(
         self, file_content: bytes, scholarship_type_id: int, academic_year: int, semester: Optional[str]
