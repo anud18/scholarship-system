@@ -421,7 +421,7 @@ async def seed_scholarship_rules(session: AsyncSession) -> None:
             "created_by": admin_id,
             "updated_by": admin_id,
         },
-        # 博士生獎學金 教育部獎學金 (每月五千) 5. 中華民國國籍 6. 一至三年級
+        # 博士生獎學金 教育部獎學金 (每月 $5000 元) 5. 中華民國國籍 6. 一至三年級
         {
             "scholarship_type_id": 2,
             "sub_type": "moe_1w",
@@ -809,9 +809,9 @@ async def seed_scholarship_sub_type_configs(session: AsyncSession) -> None:
                     {
                         "scholarship_type_id": scholarship.id,
                         "sub_type_code": "moe_1w",
-                        "name": "教育部博士生獎學金 (指導教授配合款每月五千)",
+                        "name": "教育部博士生獎學金 (指導教授配合款每月 $5000 元)",
                         "name_en": "MOE PHD Scholarship (Professor Match NT$5,000/month)",
-                        "description": "教育部博士生獎學金，指導教授配合款每月五千元",
+                        "description": "教育部博士生獎學金，指導教授配合款每月 $5000 元",
                         "description_en": "MOE PHD Scholarship with professor match of NT$5,000/month",
                         "amount": None,  # 使用主獎學金金額
                         "display_order": 2,
