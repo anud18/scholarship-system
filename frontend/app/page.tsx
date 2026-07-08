@@ -542,7 +542,7 @@ export default function ScholarshipManagementSystem() {
             </TabsContent>
           )}
 
-          {/* 批次匯入 - college 和 super_admin 角色可見 */}
+          {/* 批次匯入 - college、admin 和 super_admin 角色可見 */}
           {(user.role === "college" || user.role === "admin" || user.role === "super_admin") && (
             <TabsContent value="batch-import" className="space-y-4">
               <BatchImportPanel locale={locale} />

@@ -46,11 +46,11 @@ logger = logging.getLogger(__name__)
 
 
 def require_college_role(current_user: User = Depends(get_current_user)) -> User:
-    """Dependency to require college role or super admin"""
-    if current_user.role not in [UserRole.college, UserRole.super_admin]:
+    """Dependency to require college, admin, or super admin role"""
+    if current_user.role not in [UserRole.college, UserRole.admin, UserRole.super_admin]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="此功能僅限學院角色使用",
+            detail="此功能僅限學院或管理員角色使用",
         )
     return current_user
 
@@ -88,9 +88,10 @@ async def upload_batch_import_data(
             detail=f"獎學金類型 {scholarship_type} 不存在",
         )
 
-    # Get college code from user (skip for super_admin)
+    # Get college code from user (skip for admin / super_admin, who are not
+    # bound to a single college and fall back to the "admin" record value)
     college_code = current_user.college_code
-    if not college_code and current_user.role != UserRole.super_admin:
+    if not college_code and current_user.role not in (UserRole.super_admin, UserRole.admin):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="使用者未設定學院代碼",
@@ -1672,7 +1673,7 @@ async def download_batch_import_template(
     # Sub-type label mapping
     sub_type_labels = {
         "nstc": "國科會",
-        "moe_1w": "教育部配合款1萬",
+        "moe_1w": "教育部",
         "moe_2w": "教育部配合款2萬",
     }
 
@@ -1693,8 +1694,21 @@ async def download_batch_import_template(
     custom_fields_result = await db.execute(custom_fields_stmt)
     custom_fields = custom_fields_result.scalars().all()
 
-    # Add custom field columns (Traditional Chinese)
+    # Add custom field columns (Traditional Chinese), skipping any that would
+    # duplicate a base/fixed column already present. postal_account and the
+    # advisor fields are also seeded as ApplicationFields, so without this the
+    # column list gets duplicate labels — which makes pandas return a DataFrame
+    # for df[label] and breaks the column-width pass with
+    # "'DataFrame' object has no attribute 'tolist'".
+    reserved_field_names = {"student_id", "student_name", "postal_account"}
+    if requires_advisor:
+        reserved_field_names.update({"advisor_name", "advisor_email", "advisor_nycu_id"})
+
+    template_custom_fields = []
     for field in custom_fields:
+        if field.field_name in reserved_field_names or field.field_label in columns:
+            continue
+        template_custom_fields.append(field)
         columns.append(field.field_label)  # Use Chinese label
         column_mapping[field.field_label] = f"custom_{field.field_name}"
 
@@ -1729,16 +1743,20 @@ async def download_batch_import_template(
             }
         )
 
-    # Add sub_type sample values if applicable
+    # Add sub_type sample values if applicable.
+    # Sub-type cells hold a 志願序 (priority) number: 1 = first choice, 2 = second
+    # choice, ... blank = not applied — this is what the importer parses (a plain
+    # "Y" is ignored). Per the current flow 教育部 (MOE) is always the first
+    # choice, so order the sample so MOE codes take the lowest numbers.
     if scholarship.sub_type_list:
-        for i, row in enumerate(sample_data):
-            for j, sub_type_code in enumerate(scholarship.sub_type_list):
+        ordered_sub_types = sorted(scholarship.sub_type_list, key=lambda c: (not str(c).startswith("moe")))
+        for row in sample_data:
+            for priority, sub_type_code in enumerate(ordered_sub_types, start=1):
                 label = sub_type_labels.get(sub_type_code, sub_type_code)
-                # First row has first sub_type as Y, second row has second sub_type as Y
-                row[label] = "Y" if i == j else ""
+                row[label] = priority
 
     # Add custom field sample values
-    for field in custom_fields:
+    for field in template_custom_fields:
         for i, row in enumerate(sample_data):
             # Provide sample values based on field type
             if field.field_type == "text":
@@ -1769,8 +1787,10 @@ async def download_batch_import_template(
 
         worksheet = writer.sheets["批次匯入範例"]
         for idx, col in enumerate(df.columns, 1):
-            # Calculate max length for this column
-            column_values = df[col].astype(str).tolist()
+            # Calculate max length for this column. Use positional access so a
+            # duplicate column label can never turn df[col] into a DataFrame
+            # (which has no .tolist()).
+            column_values = df.iloc[:, idx - 1].astype(str).tolist()
 
             # Collect all content in this column (header + all data)
             all_content = [str(col)] + column_values

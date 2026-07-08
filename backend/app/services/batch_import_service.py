@@ -140,7 +140,7 @@ class BatchImportService:
         # Sub-type label mapping
         sub_type_labels = {
             "國科會": "nstc",
-            "教育部配合款1萬": "moe_1w",
+            "教育部": "moe_1w",
             "教育部配合款2萬": "moe_2w",
         }
 
