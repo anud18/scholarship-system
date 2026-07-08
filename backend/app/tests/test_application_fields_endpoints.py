@@ -492,3 +492,63 @@ class TestApplicationFieldsEndpoints:
         c = login(admin)
         resp = await c.delete(f"/api/v1/application-fields/documents/{doc.id}/example")
         assert resp.status_code == 404
+
+    # ------------------------------------------------------------------
+    # display_in_list / requires_upload flags
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_create_document_flags_default_true(self, login, admin):
+        """Documents created without the new flags default both to True."""
+        client = login(admin)
+        resp = await client.post(
+            "/api/v1/application-fields/documents",
+            json={"scholarship_type": "undergraduate", "document_name": "成績單"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["display_in_list"] is True
+        assert data["requires_upload"] is True
+
+    @pytest.mark.asyncio
+    async def test_create_document_with_explicit_flags(self, login, admin):
+        client = login(admin)
+        resp = await client.post(
+            "/api/v1/application-fields/documents",
+            json={
+                "scholarship_type": "undergraduate",
+                "document_name": "紙本切結書",
+                "display_in_list": True,
+                "requires_upload": False,
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["display_in_list"] is True
+        assert data["requires_upload"] is False
+
+    @pytest.mark.asyncio
+    async def test_update_document_flags(self, login, admin):
+        doc = await self._make_document()
+        client = login(admin)
+        resp = await client.put(
+            f"/api/v1/application-fields/documents/{doc.id}",
+            json={"display_in_list": False, "requires_upload": False},
+        )
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["display_in_list"] is False
+        assert data["requires_upload"] is False
+
+    @pytest.mark.asyncio
+    async def test_form_config_documents_include_flags(self, login, admin):
+        await self._make_document(document_name="推薦信", requires_upload=False)
+        client = login(admin)
+        resp = await client.get("/api/v1/application-fields/form-config/undergraduate")
+        assert resp.status_code == 200
+        docs = resp.json()["data"]["documents"]
+        by_name = {d["document_name"]: d for d in docs}
+        assert by_name["推薦信"]["requires_upload"] is False
+        assert by_name["推薦信"]["display_in_list"] is True
+        # Injected fixed documents also carry the flags (schema defaults)
+        assert all("requires_upload" in d and "display_in_list" in d for d in docs)

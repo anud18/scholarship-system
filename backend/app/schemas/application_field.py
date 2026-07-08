@@ -115,6 +115,8 @@ class ApplicationDocumentBase(BaseModel):
     description: Optional[str] = Field(None, description="Document description")
     description_en: Optional[str] = Field(None, description="Document description (English)")
     is_required: bool = Field(default=True, description="Is document required")
+    display_in_list: bool = Field(default=True, description="Show in scholarship-list document boxes")
+    requires_upload: bool = Field(default=True, description="Student must upload this document in step 3")
     accepted_file_types: List[str] = Field(default=["PDF"], description="Accepted file types")
     max_file_size: str = Field(default="5MB", description="Maximum file size")
     max_file_count: int = Field(default=1, description="Maximum file count")
@@ -140,6 +142,8 @@ class ApplicationDocumentUpdate(BaseModel):
     description: Optional[str] = None
     description_en: Optional[str] = None
     is_required: Optional[bool] = None
+    display_in_list: Optional[bool] = None
+    requires_upload: Optional[bool] = None
     accepted_file_types: Optional[List[str]] = None
     max_file_size: Optional[str] = None
     max_file_count: Optional[int] = None
