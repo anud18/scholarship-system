@@ -78,6 +78,10 @@ class ScholarshipType(Base):
     # 申請條款文件
     terms_document_url = Column(String(500), nullable=True)  # 申請條款文件 URL
 
+    # 申請文件區塊說明文字（學生申請步驟3「申請文件」下方，admin 可編輯）
+    application_document_note = Column(Text, nullable=True)
+    application_document_note_en = Column(Text, nullable=True)
+
     # 狀態與設定
     status = Column(String(20), default=ScholarshipStatus.active.value)
 

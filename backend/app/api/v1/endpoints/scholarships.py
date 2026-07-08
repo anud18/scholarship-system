@@ -246,6 +246,8 @@ async def get_scholarship_eligibility(
             college_review_end=scholarship.get("college_review_end"),
             sub_type_selection_mode=scholarship.get("sub_type_selection_mode", "single"),
             terms_document_url=scholarship.get("terms_document_url"),
+            application_document_note=scholarship.get("application_document_note"),
+            application_document_note_en=scholarship.get("application_document_note_en"),
             passed=scholarship.get("passed", []),  # Rules passed from eligibility check
             warnings=[],  # Hide warnings from student view - they don't need to see these
             errors=scholarship.get("errors", []),  # Error messages from eligibility check

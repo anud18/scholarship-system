@@ -552,3 +552,57 @@ class TestApplicationFieldsEndpoints:
         assert by_name["推薦信"]["display_in_list"] is True
         # Injected fixed documents also carry the flags (schema defaults)
         assert all("requires_upload" in d and "display_in_list" in d for d in docs)
+
+    # ------------------------------------------------------------------
+    # 申請文件 note (application_document_note on scholarship_types)
+    # ------------------------------------------------------------------
+
+    async def _make_scholarship_type(self, code="undergraduate"):
+        from app.models.scholarship import ScholarshipType
+
+        db = await _shared_db()
+        st = ScholarshipType(code=code, name="學士班獎學金", name_en="Undergraduate Scholarship")
+        db.add(st)
+        await db.commit()
+        await db.refresh(st)
+        return st
+
+    @pytest.mark.asyncio
+    async def test_save_form_config_persists_application_document_note(self, login, admin):
+        await self._make_scholarship_type()
+        client = login(admin)
+        resp = await client.post(
+            "/api/v1/application-fields/form-config/undergraduate",
+            json={
+                "fields": [],
+                "documents": [],
+                "application_document_note": "請以PDF合併上傳",
+                "application_document_note_en": "Please merge into a single PDF",
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["application_document_note"] == "請以PDF合併上傳"
+        assert data["application_document_note_en"] == "Please merge into a single PDF"
+
+        # Round-trips through the GET
+        resp = await client.get("/api/v1/application-fields/form-config/undergraduate")
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["application_document_note"] == "請以PDF合併上傳"
+        assert data["application_document_note_en"] == "Please merge into a single PDF"
+
+    @pytest.mark.asyncio
+    async def test_save_form_config_without_note_leaves_existing_note(self, login, admin):
+        st = await self._make_scholarship_type(code="phd")
+        db = await _shared_db()
+        st.application_document_note = "既有說明"
+        await db.commit()
+
+        client = login(admin)
+        resp = await client.post(
+            "/api/v1/application-fields/form-config/phd",
+            json={"fields": [], "documents": []},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["data"]["application_document_note"] == "既有說明"

@@ -181,5 +181,7 @@ class ScholarshipFormConfigResponse(BaseModel):
     color: Optional[str] = None
     hasWhitelist: Optional[bool] = None
     terms_document_url: Optional[str] = None
+    application_document_note: Optional[str] = None
+    application_document_note_en: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)

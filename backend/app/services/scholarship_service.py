@@ -201,6 +201,8 @@ class ScholarshipService:
                     "whitelist_student_ids": config.whitelist_student_ids or {},
                     # Terms document
                     "terms_document_url": scholarship_type.terms_document_url,
+                    "application_document_note": scholarship_type.application_document_note,
+                    "application_document_note_en": scholarship_type.application_document_note_en,
                     # System data
                     "created_at": scholarship_type.created_at,
                     "config_version": config.version,
