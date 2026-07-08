@@ -90,12 +90,15 @@ class TestBatchImportEndpoints:
     @pytest.fixture
     def valid_excel_file(self):
         """Create a valid Excel file for testing"""
+        # test_scholarship defines real sub-types (type_a, type_b), so each
+        # row MUST mark a sub-type or parse rejects it with missing_sub_type.
         df = pd.DataFrame(
             {
                 "student_id": ["111111111", "222222222"],
                 "student_name": ["王小明", "陳小華"],
                 "dept_code": ["5201", "5202"],
                 "bank_account": ["1234567890", "9876543210"],
+                "sub_type_type_a": ["V", "V"],
             }
         )
 

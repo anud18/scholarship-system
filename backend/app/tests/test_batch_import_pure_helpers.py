@@ -25,6 +25,7 @@ import pandas as pd
 import pytest
 
 from app.services.batch_import_service import (
+    _is_sub_type_marked,
     _normalize_identifier,
     _normalize_optional,
     _parse_renewal_year,
@@ -133,3 +134,27 @@ def test_parse_renewal_year_non_numeric_returns_not_renewal():
     is_renewal, year = _parse_renewal_year("not-a-year")
     assert is_renewal is False
     assert year is None
+
+
+# ─── _is_sub_type_marked ────────────────────────────────────────────
+
+
+def test_is_sub_type_marked_positive_numbers():
+    assert _is_sub_type_marked(1) is True
+    assert _is_sub_type_marked(2.0) is True
+    assert _is_sub_type_marked("3") is True
+
+
+def test_is_sub_type_marked_checkmarks():
+    assert _is_sub_type_marked("V") is True
+    assert _is_sub_type_marked("v") is True
+    assert _is_sub_type_marked("✓") is True
+
+
+def test_is_sub_type_marked_blank_zero_and_noise():
+    assert _is_sub_type_marked(None) is False
+    assert _is_sub_type_marked("") is False
+    assert _is_sub_type_marked(0) is False
+    assert _is_sub_type_marked("0") is False
+    assert _is_sub_type_marked(float("nan")) is False
+    assert _is_sub_type_marked("no") is False

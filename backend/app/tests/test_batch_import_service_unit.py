@@ -4,9 +4,12 @@ Unit tests for BatchImportService
 Tests file parsing, validation, bulk operations, and transaction rollback.
 """
 
+import io
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
+import pandas as pd
 import pytest
+import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BatchImportError
@@ -36,6 +39,8 @@ class TestBatchImportService:
         scholarship.amount = 10000
         scholarship.main_type = "general"
         scholarship.sub_type_selection_mode = "single"
+        # No real sub-types → parse_excel_file must not require sub-type marks.
+        scholarship.sub_type_list = []
         return scholarship
 
     @pytest.fixture
@@ -495,3 +500,100 @@ class TestBatchImportService:
             assert batch_import.failed_count == 5
             assert batch_import.import_status == "partial"
             assert batch_import.error_summary["total_errors"] == 1
+
+
+# ─── parse_excel_file sub-type parsing (checkmark semantics) ─────────
+
+
+@pytest_asyncio.fixture
+async def scholarship_with_sub_types(db: AsyncSession):
+    """A ScholarshipType that defines real sub-types (nstc, moe_1w).
+
+    Mirrors the ScholarshipType construction style in
+    test_batch_import_endpoints.py: only columns that exist on
+    ScholarshipType are set (period/amount live on ScholarshipConfiguration).
+    """
+    scholarship = ScholarshipType(
+        code="phd_sub_types",
+        name="PhD Scholarship With Sub Types",
+        sub_type_list=["nstc", "moe_1w"],
+        sub_type_selection_mode="multiple",
+    )
+    db.add(scholarship)
+    await db.commit()
+    await db.refresh(scholarship)
+    return scholarship
+
+
+@pytest.mark.asyncio
+async def test_parse_orders_preferences_moe_first_regardless_of_numbers(db, scholarship_with_sub_types):
+    # 國科會=1, 教育部=2 in the Excel — moe_1w must STILL come first
+    df = pd.DataFrame([{"學號": "313554001", "學生姓名": "王小明", "國科會": 1, "教育部": 2}])
+    buf = io.BytesIO()
+    df.to_excel(buf, index=False)
+
+    service = BatchImportService(db)
+    parsed, errors = await service.parse_excel_file(buf.getvalue(), scholarship_with_sub_types.id, 114, None)
+
+    assert errors == []
+    assert parsed[0]["sub_types"] == ["moe_1w", "nstc"]
+
+
+@pytest.mark.asyncio
+async def test_parse_accepts_checkmark_v(db, scholarship_with_sub_types):
+    df = pd.DataFrame([{"學號": "313554001", "學生姓名": "王小明", "國科會": "V", "教育部": ""}])
+    buf = io.BytesIO()
+    df.to_excel(buf, index=False)
+
+    service = BatchImportService(db)
+    parsed, errors = await service.parse_excel_file(buf.getvalue(), scholarship_with_sub_types.id, 114, None)
+
+    assert errors == []
+    assert parsed[0]["sub_types"] == ["nstc"]
+
+
+@pytest.mark.asyncio
+async def test_parse_missing_sub_type_is_hard_error(db, scholarship_with_sub_types):
+    df = pd.DataFrame([{"學號": "313554001", "學生姓名": "王小明", "國科會": "", "教育部": ""}])
+    buf = io.BytesIO()
+    df.to_excel(buf, index=False)
+
+    service = BatchImportService(db)
+    parsed, errors = await service.parse_excel_file(buf.getvalue(), scholarship_with_sub_types.id, 114, None)
+
+    assert parsed == []
+    assert len(errors) == 1
+    assert errors[0].error_type == "missing_sub_type"
+    assert errors[0].student_id == "313554001"
+
+
+@pytest_asyncio.fixture
+async def scholarship_general_only(db: AsyncSession):
+    """A ScholarshipType carrying only the synthetic "general" placeholder
+    (the model default). It defines NO real sub-types, so rows must NOT be
+    required to mark one."""
+    scholarship = ScholarshipType(
+        code="general_only",
+        name="General Scholarship",
+        sub_type_list=["general"],
+        sub_type_selection_mode="single",
+    )
+    db.add(scholarship)
+    await db.commit()
+    await db.refresh(scholarship)
+    return scholarship
+
+
+@pytest.mark.asyncio
+async def test_parse_general_only_scholarship_needs_no_sub_type_mark(db, scholarship_general_only):
+    # No sub-type columns at all; a "general"-only scholarship must parse cleanly.
+    df = pd.DataFrame([{"學號": "313554001", "學生姓名": "王小明"}])
+    buf = io.BytesIO()
+    df.to_excel(buf, index=False)
+
+    service = BatchImportService(db)
+    parsed, errors = await service.parse_excel_file(buf.getvalue(), scholarship_general_only.id, 114, None)
+
+    assert errors == []
+    assert len(parsed) == 1
+    assert parsed[0]["sub_types"] == []

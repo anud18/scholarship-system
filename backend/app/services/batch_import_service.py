@@ -22,6 +22,7 @@ from app.models.enums import BatchImportStatus, Semester
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User
 from app.schemas.batch_import import ApplicationDataRow, BatchImportValidationError
+from app.services.application_builder import order_sub_type_preferences
 from app.services.student_service import StudentService
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,29 @@ def _parse_renewal_year(raw_value: Any) -> Tuple[bool, Optional[int]]:
         except (ValueError, TypeError):
             pass
     return False, None
+
+
+_CHECKMARK_VALUES = {"v", "✓"}
+
+
+def _is_sub_type_marked(cell: Any) -> bool:
+    """A sub-type column cell counts as "applied" when it holds a positive
+    number or a checkmark (V/v/✓). Blank, 0, NaN, or anything else means
+    not applied. Numbers no longer encode preference order — ordering is
+    derived by application_builder.order_sub_type_preferences.
+    """
+    if cell is None:
+        return False
+    if isinstance(cell, (int, float)):
+        if isinstance(cell, float) and pd.isna(cell):
+            return False
+        return cell > 0
+    if isinstance(cell, str):
+        stripped = cell.strip()
+        if stripped.isdigit():
+            return int(stripped) > 0
+        return stripped.lower() in _CHECKMARK_VALUES
+    return False
 
 
 class BatchImportService:
@@ -127,6 +151,12 @@ class BatchImportService:
                 )
             )
             return [], errors
+
+        # Real sub-types are the ones that constrain distribution quota slots.
+        # The synthetic "general" placeholder (the model default) is NOT a real
+        # sub-type, so a "general"-only scholarship must not demand a mark.
+        # Mirrors application_builder.validate_sub_type_for_submission.
+        real_sub_types = [st for st in (scholarship.sub_type_list or []) if st and st.lower() != "general"]
 
         # Get custom fields configuration
         custom_fields_stmt = (
@@ -236,19 +266,14 @@ class BatchImportService:
                         "custom_fields": {},
                     }
 
-                    # Parse sub_types from Chinese column names
-                    # Values: 1/2/3 = applied with priority order (1=first choice), blank = not applied
-                    priority_entries: list[tuple[int, str]] = []
+                    # Parse sub_types from Chinese column names.
+                    # Any positive number or checkmark = applied; ordering is
+                    # forced by shared rule (moe_1w first), NOT by cell numbers.
+                    selected_sub_types = []
                     for chinese_label, sub_type_code in sub_type_labels.items():
-                        if chinese_label in df_columns:
-                            cell = row.get(chinese_label)
-                            if isinstance(cell, (int, float)) and not pd.isna(cell) and int(cell) > 0:
-                                priority_entries.append((int(cell), sub_type_code))
-                            elif isinstance(cell, str) and cell.strip().isdigit() and int(cell.strip()) > 0:
-                                priority_entries.append((int(cell.strip()), sub_type_code))
-
-                    priority_entries.sort(key=lambda x: x[0])
-                    data_row["sub_types"] = [code for _, code in priority_entries]
+                        if chinese_label in df_columns and _is_sub_type_marked(row.get(chinese_label)):
+                            selected_sub_types.append(sub_type_code)
+                    data_row["sub_types"] = order_sub_type_preferences(selected_sub_types)
 
                     # Parse custom fields from Chinese column names
                     for chinese_label, field_name in custom_field_mapping.items():
@@ -279,18 +304,11 @@ class BatchImportService:
                     }
 
                     # Parse sub_types from English column names (sub_type_*)
-                    priority_entries = []
+                    selected_sub_types = []
                     for col in df_columns:
-                        if col.startswith("sub_type_"):
-                            sub_type_code = col.replace("sub_type_", "")
-                            cell = row.get(col)
-                            if isinstance(cell, (int, float)) and not pd.isna(cell) and int(cell) > 0:
-                                priority_entries.append((int(cell), sub_type_code))
-                            elif isinstance(cell, str) and cell.strip().isdigit() and int(cell.strip()) > 0:
-                                priority_entries.append((int(cell.strip()), sub_type_code))
-
-                    priority_entries.sort(key=lambda x: x[0])
-                    data_row["sub_types"] = [code for _, code in priority_entries]
+                        if col.startswith("sub_type_") and _is_sub_type_marked(row.get(col)):
+                            selected_sub_types.append(col.replace("sub_type_", ""))
+                    data_row["sub_types"] = order_sub_type_preferences(selected_sub_types)
 
                     # Parse custom fields from English column names (custom_*)
                     for col in df_columns:
@@ -307,6 +325,23 @@ class BatchImportService:
                 validated_row = ApplicationDataRow(**data_row)
                 normalized_row = validated_row.model_dump()
                 normalized_row["row_number"] = row_number
+
+                # Sub-type is mandatory when the scholarship defines real
+                # sub-types — a row with none marked cannot be imported
+                # (it would fall into the synthetic "general" bucket which
+                # matches no distribution quota slot).
+                if real_sub_types and not normalized_row.get("sub_types"):
+                    errors.append(
+                        BatchImportValidationError(
+                            row_number=row_number,
+                            student_id=student_id,
+                            field="sub_types",
+                            error_type="missing_sub_type",
+                            message="未勾選任何申請類別（國科會/教育部），請於 Excel 中標記後重新上傳",
+                        )
+                    )
+                    continue
+
                 parsed_data.append(normalized_row)
 
             except Exception as e:
