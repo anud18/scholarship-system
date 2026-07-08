@@ -897,3 +897,37 @@ async def test_bulk_check_eligibility_real_check_no_missing_greenlet(db, scholar
 
     # No skip warning about missing config (the config was found).
     assert not any(w["warning_type"] == "eligibility_check_skipped" and w["field"] == "configuration" for w in warnings)
+
+
+@pytest.mark.asyncio
+async def test_bulk_check_eligibility_skips_row_when_check_raises(db, scholarship_with_config, monkeypatch):
+    """A failing eligibility check (e.g. malformed rule config) must be demoted
+    to a per-row skip warning, never propagated to 500 the preview endpoints."""
+    service = BatchImportService(db)
+
+    async def fake_snapshot(student_id, academic_year=None, semester=None):
+        return {"std_stdcode": student_id}
+
+    monkeypatch.setattr(service.student_service, "get_student_snapshot", fake_snapshot)
+
+    async def boom_check(student_data, config, user_id=None):
+        raise RuntimeError("malformed rule config")
+
+    from app.services import batch_import_service as bis_module
+
+    monkeypatch.setattr(
+        bis_module.EligibilityService, "check_student_eligibility", staticmethod(boom_check), raising=False
+    )
+
+    parsed_data = [{"student_id": "313554001", "sub_types": ["nstc"], "advisor_nycu_id": None, "row_number": 2}]
+    # Must not raise.
+    warnings = await service.bulk_check_eligibility(parsed_data, scholarship_with_config.id, 114, None)
+
+    skip_warnings = [
+        w for w in warnings if w["warning_type"] == "eligibility_check_skipped" and w["field"] == "eligibility"
+    ]
+    assert len(skip_warnings) == 1
+    assert skip_warnings[0]["row_number"] == 2
+    assert skip_warnings[0]["student_id"] == "313554001"
+    # A raised check must NOT produce an eligibility_failed warning.
+    assert not any(w["warning_type"] == "eligibility_failed" for w in warnings)

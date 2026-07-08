@@ -207,10 +207,24 @@ class BatchImportService:
                 )
                 continue
 
-            is_eligible, reasons = await eligibility_service.check_student_eligibility(
-                student_data=snapshot, config=config
-            )
-            effective_reasons = [r for r in reasons if r not in self._PERIOD_EXEMPT_REASONS]
+            try:
+                is_eligible, reasons = await eligibility_service.check_student_eligibility(
+                    student_data=snapshot, config=config
+                )
+                effective_reasons = [r for r in reasons if r not in self._PERIOD_EXEMPT_REASONS]
+            except Exception:  # noqa: BLE001 — a bad rule config must not 500 the preview
+                logger.warning("Eligibility precheck failed for %s", student_id, exc_info=True)
+                warnings.append(
+                    {
+                        "row_number": row_number,
+                        "student_id": student_id,
+                        "field": "eligibility",
+                        "warning_type": "eligibility_check_skipped",
+                        "message": f"學生 {student_id} 資格預檢執行失敗，已跳過。",
+                    }
+                )
+                continue
+
             if not is_eligible and effective_reasons:
                 warnings.append(
                     {
