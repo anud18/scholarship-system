@@ -1760,16 +1760,15 @@ async def download_batch_import_template(
         )
 
     # Add sub_type sample values if applicable.
-    # Sub-type cells hold a 志願序 (priority) number: 1 = first choice, 2 = second
-    # choice, ... blank = not applied — this is what the importer parses (a plain
-    # "Y" is ignored). Per the current flow 教育部 (MOE) is always the first
-    # choice, so order the sample so MOE codes take the lowest numbers.
+    # Sub-type cells are checkmarks: 1 (or V) = applying for that category,
+    # blank = not applying. Preference order is NOT read from these cells —
+    # the system forces MOE (moe_1w) as first preference, mirroring the
+    # student wizard. Sample rows show both categories checked.
     if scholarship.sub_type_list:
-        ordered_sub_types = sorted(scholarship.sub_type_list, key=lambda c: (not str(c).startswith("moe")))
         for row in sample_data:
-            for priority, sub_type_code in enumerate(ordered_sub_types, start=1):
+            for sub_type_code in scholarship.sub_type_list:
                 label = sub_type_labels.get(sub_type_code, sub_type_code)
-                row[label] = priority
+                row[label] = 1
 
     # Add custom field sample values
     for field in template_custom_fields:
