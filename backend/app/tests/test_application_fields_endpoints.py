@@ -492,3 +492,164 @@ class TestApplicationFieldsEndpoints:
         c = login(admin)
         resp = await c.delete(f"/api/v1/application-fields/documents/{doc.id}/example")
         assert resp.status_code == 404
+
+    # ------------------------------------------------------------------
+    # display_in_list / requires_upload flags
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_create_document_flags_default_true(self, login, admin):
+        """Documents created without the new flags default both to True."""
+        client = login(admin)
+        resp = await client.post(
+            "/api/v1/application-fields/documents",
+            json={"scholarship_type": "undergraduate", "document_name": "成績單"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["display_in_list"] is True
+        assert data["requires_upload"] is True
+
+    @pytest.mark.asyncio
+    async def test_create_document_with_explicit_flags(self, login, admin):
+        client = login(admin)
+        resp = await client.post(
+            "/api/v1/application-fields/documents",
+            json={
+                "scholarship_type": "undergraduate",
+                "document_name": "紙本切結書",
+                "display_in_list": True,
+                "requires_upload": False,
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["display_in_list"] is True
+        assert data["requires_upload"] is False
+
+    @pytest.mark.asyncio
+    async def test_update_document_flags(self, login, admin):
+        doc = await self._make_document()
+        client = login(admin)
+        resp = await client.put(
+            f"/api/v1/application-fields/documents/{doc.id}",
+            json={"display_in_list": False, "requires_upload": False},
+        )
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["display_in_list"] is False
+        assert data["requires_upload"] is False
+
+    @pytest.mark.asyncio
+    async def test_form_config_documents_include_flags(self, login, admin):
+        await self._make_document(document_name="推薦信", requires_upload=False)
+        client = login(admin)
+        resp = await client.get("/api/v1/application-fields/form-config/undergraduate")
+        assert resp.status_code == 200
+        docs = resp.json()["data"]["documents"]
+        by_name = {d["document_name"]: d for d in docs}
+        assert by_name["推薦信"]["requires_upload"] is False
+        assert by_name["推薦信"]["display_in_list"] is True
+        # Injected fixed documents also carry the flags (schema defaults)
+        assert all("requires_upload" in d and "display_in_list" in d for d in docs)
+
+    # ------------------------------------------------------------------
+    # 申請文件 note (application_document_note on scholarship_types)
+    # ------------------------------------------------------------------
+
+    async def _make_scholarship_type(self, code="undergraduate"):
+        from app.models.scholarship import ScholarshipType
+
+        db = await _shared_db()
+        st = ScholarshipType(code=code, name="學士班獎學金", name_en="Undergraduate Scholarship")
+        db.add(st)
+        await db.commit()
+        await db.refresh(st)
+        return st
+
+    @pytest.mark.asyncio
+    async def test_save_form_config_persists_application_document_note(self, login, admin):
+        await self._make_scholarship_type()
+        client = login(admin)
+        resp = await client.post(
+            "/api/v1/application-fields/form-config/undergraduate",
+            json={
+                "fields": [],
+                "documents": [],
+                "application_document_note": "請以PDF合併上傳",
+                "application_document_note_en": "Please merge into a single PDF",
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["application_document_note"] == "請以PDF合併上傳"
+        assert data["application_document_note_en"] == "Please merge into a single PDF"
+
+        # Round-trips through the GET
+        resp = await client.get("/api/v1/application-fields/form-config/undergraduate")
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["application_document_note"] == "請以PDF合併上傳"
+        assert data["application_document_note_en"] == "Please merge into a single PDF"
+
+    @pytest.mark.asyncio
+    async def test_save_form_config_without_note_leaves_existing_note(self, login, admin):
+        st = await self._make_scholarship_type(code="phd")
+        db = await _shared_db()
+        st.application_document_note = "既有說明"
+        await db.commit()
+
+        client = login(admin)
+        resp = await client.post(
+            "/api/v1/application-fields/form-config/phd",
+            json={"fields": [], "documents": []},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["data"]["application_document_note"] == "既有說明"
+
+    @pytest.mark.asyncio
+    async def test_form_config_save_persists_document_flags(self, login, admin):
+        """The admin UI writes documents exclusively through the form-config POST
+        (-> bulk_update_documents), not the per-document endpoints. Lock in that
+        display_in_list / requires_upload survive that real production write path."""
+        await self._make_scholarship_type(code="flagtest")
+        client = login(admin)
+        resp = await client.post(
+            "/api/v1/application-fields/form-config/flagtest",
+            json={
+                "fields": [],
+                "documents": [
+                    {
+                        "document_name": "紙本切結書",
+                        "accepted_file_types": ["PDF"],
+                        "requires_upload": False,
+                        "display_in_list": False,
+                    }
+                ],
+            },
+        )
+        assert resp.status_code == 200
+
+        resp = await client.get("/api/v1/application-fields/form-config/flagtest")
+        assert resp.status_code == 200
+        docs = resp.json()["data"]["documents"]
+        by_name = {d["document_name"]: d for d in docs}
+        assert by_name["紙本切結書"]["requires_upload"] is False
+        assert by_name["紙本切結書"]["display_in_list"] is False
+
+    @pytest.mark.asyncio
+    async def test_save_form_config_empty_note_clears_existing(self, login, admin):
+        """The frontend always sends the note string; an empty string must CLEAR an
+        existing note (not be treated as 'omitted' and leave the old note intact)."""
+        st = await self._make_scholarship_type(code="cleartest")
+        db = await _shared_db()
+        st.application_document_note = "既有說明"
+        await db.commit()
+
+        client = login(admin)
+        resp = await client.post(
+            "/api/v1/application-fields/form-config/cleartest",
+            json={"fields": [], "documents": [], "application_document_note": ""},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["data"]["application_document_note"] == ""

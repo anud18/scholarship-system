@@ -97,6 +97,9 @@ class ApplicationDocument(Base):
 
     # Requirements
     is_required = Column(Boolean, default=True)
+    # Admin-configurable visibility/upload behavior
+    display_in_list = Column(Boolean, default=True, nullable=False, server_default="true")  # 顯示於獎學金列表框框
+    requires_upload = Column(Boolean, default=True, nullable=False, server_default="true")  # 步驟3需要學生上傳
     accepted_file_types = Column(JSON)  # 接受的檔案類型 ["PDF", "JPG", "JPEG", "PNG"]
     max_file_size = Column(String(20), default="5MB")  # 檔案大小限制
     max_file_count = Column(Integer, default=1)  # 檔案數量限制

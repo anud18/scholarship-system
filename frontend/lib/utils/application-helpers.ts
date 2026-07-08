@@ -533,3 +533,18 @@ export const buildApplicationFormFields = (
 
   return fields;
 };
+
+// Admin-configurable document visibility (see application_documents.display_in_list
+// / requires_upload). `!== false` keeps pre-flag API payloads behaving as before.
+export const isDocumentListedInScholarshipCard = (doc: {
+  is_active: boolean;
+  display_in_list?: boolean;
+}): boolean => doc.is_active && doc.display_in_list !== false;
+
+export const isDocumentUploadRequired = (doc: {
+  is_active: boolean;
+  is_required: boolean;
+  requires_upload?: boolean;
+  is_fixed?: boolean;
+}): boolean =>
+  doc.is_active && doc.is_required && doc.requires_upload !== false && !doc.is_fixed;

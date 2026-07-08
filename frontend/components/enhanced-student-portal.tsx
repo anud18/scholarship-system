@@ -38,6 +38,10 @@ import {
   isSelectableScholarship,
 } from "@/lib/scholarship-eligibility";
 import {
+  isDocumentListedInScholarshipCard,
+  isDocumentUploadRequired,
+} from "@/lib/utils/application-helpers";
+import {
   Edit,
   Eye,
   Trash2,
@@ -507,9 +511,7 @@ export function EnhancedStudentPortal({
 
         // Calculate total required items
         const requiredFields = fields.filter(f => f.is_active && f.is_required);
-        const requiredDocuments = documents.filter(
-          d => d.is_active && d.is_required
-        );
+        const requiredDocuments = documents.filter(isDocumentUploadRequired);
         let totalRequired = requiredFields.length + requiredDocuments.length;
 
         // Add sub-type selection as a required item if applicable
@@ -1889,7 +1891,9 @@ export function EnhancedStudentPortal({
                               <div className="flex flex-wrap gap-1.5">
                                 {applicationInfo.documents
                                   .filter(
-                                    doc => doc.is_required && doc.is_active
+                                    doc =>
+                                      doc.is_required &&
+                                      isDocumentListedInScholarshipCard(doc)
                                   )
                                   .map((doc, index) => (
                                     <Badge
@@ -1913,7 +1917,9 @@ export function EnhancedStudentPortal({
                         !applicationInfo.isLoading &&
                         !applicationInfo.error &&
                         applicationInfo.documents.filter(
-                          doc => !doc.is_required && doc.is_active
+                          doc =>
+                            !doc.is_required &&
+                            isDocumentListedInScholarshipCard(doc)
                         ).length > 0 && (
                           <div className="rounded-lg border border-gray-100 overflow-hidden">
                             <div className="bg-sky-50/50 px-3 py-2 border-b border-gray-100">
@@ -1931,7 +1937,9 @@ export function EnhancedStudentPortal({
                               <div className="flex flex-wrap gap-1.5">
                                 {applicationInfo.documents
                                   .filter(
-                                    doc => !doc.is_required && doc.is_active
+                                    doc =>
+                                      !doc.is_required &&
+                                      isDocumentListedInScholarshipCard(doc)
                                   )
                                   .map((doc, index) => (
                                     <Badge

@@ -7756,6 +7756,18 @@ export interface components {
              */
             is_required: boolean;
             /**
+             * Display In List
+             * @description Show in scholarship-list document boxes
+             * @default true
+             */
+            display_in_list: boolean;
+            /**
+             * Requires Upload
+             * @description Student must upload this document in step 3
+             * @default true
+             */
+            requires_upload: boolean;
+            /**
              * Accepted File Types
              * @description Accepted file types
              * @default [
@@ -7823,6 +7835,10 @@ export interface components {
             description_en?: string | null;
             /** Is Required */
             is_required?: boolean | null;
+            /** Display In List */
+            display_in_list?: boolean | null;
+            /** Requires Upload */
+            requires_upload?: boolean | null;
             /** Accepted File Types */
             accepted_file_types?: string[] | null;
             /** Max File Size */
@@ -9057,6 +9073,10 @@ export interface components {
             sub_type_selection_mode: components["schemas"]["SubTypeSelectionModeEnum"];
             /** Terms Document Url */
             terms_document_url?: string | null;
+            /** Application Document Note */
+            application_document_note?: string | null;
+            /** Application Document Note En */
+            application_document_note_en?: string | null;
             /** Passed */
             passed: components["schemas"]["RuleMessage"][];
             /** Warnings */
@@ -9226,6 +9246,10 @@ export interface components {
             fields: Record<string, never>[];
             /** Documents */
             documents: Record<string, never>[];
+            /** Application Document Note */
+            application_document_note?: string | null;
+            /** Application Document Note En */
+            application_document_note_en?: string | null;
         };
         /** GenerateRostersRequest */
         GenerateRostersRequest: {

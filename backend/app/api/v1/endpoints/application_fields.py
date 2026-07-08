@@ -5,7 +5,7 @@ Application field configuration API endpoints
 import io
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Path, UploadFile, status
 from fastapi.responses import StreamingResponse
@@ -263,6 +263,8 @@ class FormConfigSaveRequest(BaseModel):
 
     fields: List[Dict[str, Any]]
     documents: List[Dict[str, Any]]
+    application_document_note: Optional[str] = None
+    application_document_note_en: Optional[str] = None
 
 
 @router.post("/form-config/{scholarship_type}")
@@ -280,6 +282,8 @@ async def save_scholarship_form_config(
         fields_data=config_data.fields,
         documents_data=config_data.documents,
         user_id=current_user.id,
+        application_document_note=config_data.application_document_note,
+        application_document_note_en=config_data.application_document_note_en,
     )
 
     await invalidate(f"fields:{scholarship_type}")

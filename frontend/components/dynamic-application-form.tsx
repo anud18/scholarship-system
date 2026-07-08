@@ -803,7 +803,7 @@ export function DynamicApplicationForm({
     .sort((a, b) => a.display_order - b.display_order);
 
   const activeDocuments = formConfig.documents
-    .filter(doc => doc.is_active && !doc.is_fixed)
+    .filter(doc => doc.is_active && !doc.is_fixed && doc.requires_upload !== false)
     .sort((a, b) => a.display_order - b.display_order);
 
   return (

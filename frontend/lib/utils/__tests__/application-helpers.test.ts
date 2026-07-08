@@ -10,6 +10,8 @@ import {
   isValidTaiwanMobile,
   TAIWAN_MOBILE_MESSAGE,
   BadgeVariant,
+  isDocumentListedInScholarshipCard,
+  isDocumentUploadRequired,
 } from "../application-helpers";
 import {
   ApplicationStatus,
@@ -576,5 +578,49 @@ describe("isValidTaiwanMobile", () => {
 
   it("exposes the requested help message", () => {
     expect(TAIWAN_MOBILE_MESSAGE).toBe("請輸入本人有效的台灣手機 (09xxxxxx)");
+  });
+});
+
+describe("isDocumentListedInScholarshipCard", () => {
+  it("shows active documents by default (flag missing)", () => {
+    expect(isDocumentListedInScholarshipCard({ is_active: true })).toBe(true);
+  });
+
+  it("hides documents with display_in_list=false", () => {
+    expect(
+      isDocumentListedInScholarshipCard({ is_active: true, display_in_list: false })
+    ).toBe(false);
+  });
+
+  it("hides inactive documents regardless of flag", () => {
+    expect(
+      isDocumentListedInScholarshipCard({ is_active: false, display_in_list: true })
+    ).toBe(false);
+  });
+});
+
+describe("isDocumentUploadRequired", () => {
+  const base = { is_active: true, is_required: true };
+
+  it("requires upload by default (flag missing)", () => {
+    expect(isDocumentUploadRequired(base)).toBe(true);
+  });
+
+  it("does not require upload when requires_upload=false", () => {
+    expect(isDocumentUploadRequired({ ...base, requires_upload: false })).toBe(false);
+  });
+
+  it("excludes fixed documents", () => {
+    expect(isDocumentUploadRequired({ ...base, is_fixed: true })).toBe(false);
+  });
+
+  it("excludes optional documents", () => {
+    expect(
+      isDocumentUploadRequired({ is_active: true, is_required: false })
+    ).toBe(false);
+  });
+
+  it("excludes inactive documents", () => {
+    expect(isDocumentUploadRequired({ ...base, is_active: false })).toBe(false);
   });
 });

@@ -283,6 +283,8 @@ class EligibleScholarshipResponse(BaseModel):
     college_review_end: Optional[datetime] = None
     sub_type_selection_mode: SubTypeSelectionModeEnum
     terms_document_url: Optional[str] = None
+    application_document_note: Optional[str] = None
+    application_document_note_en: Optional[str] = None
     passed: List[RuleMessage]
     warnings: List[RuleMessage]
     errors: List[RuleMessage]

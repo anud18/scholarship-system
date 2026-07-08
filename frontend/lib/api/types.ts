@@ -222,6 +222,8 @@ export interface ScholarshipType {
   application_end_date?: string;
   sub_type_selection_mode?: "single" | "multiple" | "hierarchical";
   terms_document_url?: string;
+  application_document_note?: string;
+  application_document_note_en?: string;
   already_submitted?: boolean;
   // Whether the scholarship is currently accepting applications. When false the
   // scholarship is still effective (生效) but its application window has closed,
@@ -920,6 +922,8 @@ export interface ApplicationDocument {
   description?: string;
   description_en?: string;
   is_required: boolean;
+  display_in_list: boolean;
+  requires_upload: boolean;
   accepted_file_types: string[];
   max_file_size: string;
   max_file_count: number;
@@ -1014,6 +1018,8 @@ export interface ApplicationDocumentCreate {
   description?: string;
   description_en?: string;
   is_required?: boolean;
+  display_in_list?: boolean;
+  requires_upload?: boolean;
   accepted_file_types?: string[];
   max_file_size?: string;
   max_file_count?: number;
@@ -1030,6 +1036,8 @@ export interface ApplicationDocumentUpdate {
   description?: string;
   description_en?: string;
   is_required?: boolean;
+  display_in_list?: boolean;
+  requires_upload?: boolean;
   accepted_file_types?: string[];
   max_file_size?: string;
   max_file_count?: number;
@@ -1050,6 +1058,8 @@ export interface ScholarshipFormConfig {
   hasWhitelist?: boolean;
   whitelist_student_ids?: Record<string, number[]>;
   terms_document_url?: string;
+  application_document_note?: string;
+  application_document_note_en?: string;
 }
 
 export interface FormConfigSaveRequest {
@@ -1079,6 +1089,8 @@ export interface FormConfigSaveRequest {
     description?: string;
     description_en?: string;
     is_required?: boolean;
+    display_in_list?: boolean;
+    requires_upload?: boolean;
     accepted_file_types?: string[];
     max_file_size?: string;
     max_file_count?: number;
@@ -1088,6 +1100,8 @@ export interface FormConfigSaveRequest {
     upload_instructions_en?: string;
     validation_rules?: Record<string, any>;
   }>;
+  application_document_note?: string;
+  application_document_note_en?: string;
 }
 
 export interface ScholarshipStats {

@@ -548,6 +548,8 @@ class ApplicationFieldService:
                 config_data["title"] = scholarship_model.name  # Add Chinese name
                 config_data["title_en"] = scholarship_model.name_en  # Add English name
                 config_data["terms_document_url"] = scholarship_model.terms_document_url
+                config_data["application_document_note"] = scholarship_model.application_document_note
+                config_data["application_document_note_en"] = scholarship_model.application_document_note_en
 
             config = ScholarshipFormConfigResponse.model_validate(config_data)
 
@@ -565,6 +567,8 @@ class ApplicationFieldService:
         fields_data: List[Dict[str, Any]],
         documents_data: List[Dict[str, Any]],
         user_id: int,
+        application_document_note: Optional[str] = None,
+        application_document_note_en: Optional[str] = None,
     ) -> ScholarshipFormConfigResponse:
         """Save complete form configuration for a scholarship type"""
 
@@ -572,4 +576,32 @@ class ApplicationFieldService:
         fields = await self.bulk_update_fields(scholarship_type, fields_data, user_id)
         documents = await self.bulk_update_documents(scholarship_type, documents_data, user_id)
 
-        return ScholarshipFormConfigResponse(scholarship_type=scholarship_type, fields=fields, documents=documents)
+        # Persist the 申請文件 note on the scholarship type when provided.
+        # None means "not part of this save"; empty string clears the note.
+        from app.models.scholarship import ScholarshipType
+
+        stmt = select(ScholarshipType).where(ScholarshipType.code == scholarship_type)
+        result = await self.db.execute(stmt)
+        scholarship_model = result.scalar_one_or_none()
+
+        if scholarship_model:
+            note_changed = False
+            if application_document_note is not None:
+                scholarship_model.application_document_note = application_document_note
+                note_changed = True
+            if application_document_note_en is not None:
+                scholarship_model.application_document_note_en = application_document_note_en
+                note_changed = True
+            if note_changed:
+                await self.db.commit()
+
+        saved_note = scholarship_model.application_document_note if scholarship_model else None
+        saved_note_en = scholarship_model.application_document_note_en if scholarship_model else None
+
+        return ScholarshipFormConfigResponse(
+            scholarship_type=scholarship_type,
+            fields=fields,
+            documents=documents,
+            application_document_note=saved_note,
+            application_document_note_en=saved_note_en,
+        )
