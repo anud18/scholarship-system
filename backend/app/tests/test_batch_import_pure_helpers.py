@@ -14,9 +14,16 @@ Helpers covered:
   empty becomes None.
 - `_parse_renewal_year(value)`: renewal-year detection from
   Excel cell, returning (is_renewal, year_or_None).
+- `_is_sub_type_marked(value)`: checkmark/positive-number cell detection
+  for sub-type columns.
 
-11 cases — covers each helper across None/NaN/integer-float/string-int/
-plain-string inputs plus the renewal-year parser's failure mode.
+Plus pure-schema round-trip checks on `ApplicationDataRow`, pinning that
+the advisor_* fields survive `model_dump()` (they feed the profile upsert
++ professor auto-assign; a missing field silently dropped them).
+
+21 cases — each helper across None/NaN/integer-float/string-int/
+plain-string inputs, the renewal-year parser's failure mode, the
+sub-type-mark truth table, and the ApplicationDataRow advisor fields.
 """
 
 import math

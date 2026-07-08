@@ -824,6 +824,78 @@ async def test_batch_assigns_professor_when_account_exists(db, batch_import_fixt
     assert app.professor_id == professor.id
 
 
+@pytest.mark.asyncio
+async def test_advisor_columns_survive_parse_to_profile_and_professor(
+    db, batch_import_fixture, scholarship_with_config
+):
+    """Regression: advisor columns from the Excel must survive the FULL
+    chain — parse_excel_file → ApplicationDataRow round-trip →
+    create_applications_from_batch → UserProfile + professor auto-assign.
+
+    The earlier tests fed hand-built parsed_data dicts that already carried
+    advisor_* keys, so they never exercised the schema layer. The defect
+    lived exactly there: ApplicationDataRow had no advisor fields, so
+    model_dump() silently dropped advisor info parsed from the sheet — the
+    profile never got the advisor and no professor was auto-assigned.
+    """
+    professor = User(nycu_id="P009999", name="趙教授", role="professor", user_type="employee")
+    db.add(professor)
+    await db.flush()
+
+    # Chinese-column Excel with advisor + postal columns.
+    df = pd.DataFrame(
+        {
+            "學號": ["313557001"],
+            "學生姓名": ["黃小美"],
+            "國科會": [1],
+            "指導教授姓名": ["趙教授"],
+            "指導教授Email": ["zhao@nycu.edu.tw"],
+            "指導教授本校人事編號": ["P009999"],
+            "郵局帳號": ["1234567890"],
+        }
+    )
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False)
+    file_content = buffer.getvalue()
+
+    service = BatchImportService(db, student_service=_no_sis_student_service())
+
+    parsed_data, parse_errors = await service.parse_excel_file(
+        file_content=file_content,
+        scholarship_type_id=scholarship_with_config.id,
+        academic_year=114,
+        semester=None,
+    )
+    assert parse_errors == []
+    assert len(parsed_data) == 1
+    # Advisor fields survived parse → schema round-trip (the defect site).
+    assert parsed_data[0]["advisor_nycu_id"] == "P009999"
+    assert parsed_data[0]["advisor_name"] == "趙教授"
+    assert parsed_data[0]["advisor_email"] == "zhao@nycu.edu.tw"
+
+    created_ids, create_errors = await service.create_applications_from_batch(
+        batch_import=batch_import_fixture,
+        parsed_data=parsed_data,
+        scholarship_type_id=scholarship_with_config.id,
+        academic_year=114,
+        semester=None,
+    )
+    assert create_errors == []
+    await db.commit()
+
+    student = (await db.execute(select(User).where(User.nycu_id == "313557001"))).scalar_one()
+    profile = (await db.execute(select(UserProfile).where(UserProfile.user_id == student.id))).scalar_one()
+    assert profile.advisor_nycu_id == "P009999"
+    assert profile.advisor_name == "趙教授"
+    assert profile.advisor_email == "zhao@nycu.edu.tw"
+    assert profile.account_number == "1234567890"
+
+    # Professor auto-assigned from the advisor_nycu_id that survived the chain.
+    app = await db.get(Application, created_ids[0])
+    assert app.professor_id == professor.id
+
+
 # ─── bulk_check_eligibility: preview-stage warnings ──────────────────
 
 

@@ -15,9 +15,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_current_user
 from app.main import app
+from app.models.application import Application, ApplicationStatus
 from app.models.batch_import import BatchImport
-from app.models.enums import BatchImportStatus
-from app.models.scholarship import ScholarshipType
+from app.models.enums import BatchImportStatus, ReviewStage
+from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole
 
 # Router is mounted under this prefix in app/api/v1/api.py
@@ -304,6 +305,85 @@ class TestBatchImportEndpoints:
         data = response.json()["data"]
         assert data["success_count"] == 2
         assert data["failed_count"] == 0
+
+    @pytest.mark.asyncio
+    async def test_confirm_batch_import_keeps_review_flow_status(
+        self, client: AsyncClient, db: AsyncSession, college_user: User
+    ):
+        """Regression (review-flow parity): the confirm endpoint must NOT
+        mutate the status the service sets. A stale
+        ``UPDATE applications SET status='under_review'`` used to run after
+        creation and stomped the submitted / student_submitted values,
+        defeating batch-import review-flow parity. This drives the REAL
+        service (not a mock) through the endpoint and reads the created
+        applications back from the DB.
+        """
+        scholarship = ScholarshipType(
+            code="phd_confirm_status",
+            name="PhD Confirm Status",
+            sub_type_list=["nstc"],
+            sub_type_selection_mode="single",
+        )
+        db.add(scholarship)
+        await db.flush()
+        db.add(
+            ScholarshipConfiguration(
+                scholarship_type_id=scholarship.id,
+                academic_year=114,
+                semester=None,
+                config_name="PhD Confirm Status 114",
+                config_code="phd_confirm_status_114",
+                amount=40000,
+            )
+        )
+
+        batch = BatchImport(
+            importer_id=college_user.id,
+            college_code="E",
+            scholarship_type_id=scholarship.id,
+            academic_year=114,
+            file_name="confirm.xlsx",
+            total_records=1,
+            import_status=BatchImportStatus.pending.value,
+            parsed_data={
+                "data": [
+                    {
+                        "student_id": "313559001",
+                        "student_name": "王小明",
+                        "sub_types": ["nstc"],
+                        "custom_fields": {},
+                        "row_number": 2,
+                    }
+                ],
+                "errors": [],
+            },
+        )
+        db.add(batch)
+        await db.commit()
+        await db.refresh(batch)
+
+        _override_user(college_user)
+        # Neutralize SIS so no network call — the endpoint builds its own
+        # BatchImportService(db) internally, so patch the StudentService it
+        # constructs rather than injecting a stub.
+        stub_sis = Mock()
+        stub_sis.get_student_snapshot = AsyncMock(return_value=None)
+        stub_sis.get_student_basic_info = AsyncMock(return_value=None)
+        with patch("app.services.batch_import_service.StudentService", return_value=stub_sis):
+            response = await client.post(
+                f"{BASE}/{batch.id}/confirm",
+                json={"batch_id": batch.id, "confirm": True},
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        created_ids = response.json()["data"]["created_application_ids"]
+        assert len(created_ids) == 1
+
+        # Fresh DB re-read so enum columns come back as enum members.
+        db.expunge_all()
+        created = await db.get(Application, created_ids[0])
+        assert created.status == ApplicationStatus.submitted
+        assert created.review_stage == ReviewStage.student_submitted
 
     @pytest.mark.asyncio
     async def test_confirm_batch_import_cancel(self, client: AsyncClient, db: AsyncSession, college_user: User):
