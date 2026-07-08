@@ -10,8 +10,14 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.exceptions import ValidationError
+from app.models.application_sequence import ApplicationSequence
 from app.models.enums import ApplicationStatus, ReviewStage
+from app.models.user import User, UserRole
+from app.models.user_profile import UserProfile
 from app.utils.i18n import ScholarshipI18n
 
 logger = logging.getLogger(__name__)
@@ -70,3 +76,87 @@ def build_submitted_application_values(scholarship, config) -> Dict[str, Any]:
         "amount": config.amount,
         "scholarship_name": config.config_name or scholarship.name,
     }
+
+
+async def generate_app_id(
+    db: AsyncSession,
+    academic_year: int,
+    semester,
+    *,
+    suffix: str = "",
+    commit: bool = True,
+) -> str:
+    """Generate a sequential application ID with database row locking.
+
+    Format: APP-{academic_year}-{semester_code}-{sequence:05d}{suffix}
+
+    commit=True releases the sequence row lock immediately (student path).
+    commit=False keeps the lock until the caller's transaction ends — the
+    batch import path relies on this to stay atomic, at the cost of
+    blocking online submissions for the duration of the import.
+    """
+    if semester is None:
+        semester = "yearly"
+    if hasattr(semester, "value"):
+        semester = semester.value
+
+    stmt = (
+        select(ApplicationSequence)
+        .where(
+            and_(
+                ApplicationSequence.academic_year == academic_year,
+                ApplicationSequence.semester == semester,
+            )
+        )
+        .with_for_update()
+    )
+    result = await db.execute(stmt)
+    seq_record = result.scalar_one_or_none()
+
+    if not seq_record:
+        seq_record = ApplicationSequence(academic_year=academic_year, semester=semester, last_sequence=0)
+        db.add(seq_record)
+        await db.flush()
+
+    seq_record.last_sequence += 1
+    sequence_num = seq_record.last_sequence
+
+    if commit:
+        await db.commit()
+
+    app_id = ApplicationSequence.format_app_id(academic_year, semester, sequence_num)
+    return f"{app_id}{suffix}"
+
+
+async def assign_professor_from_profile(db: AsyncSession, application, user_id: int) -> Optional[User]:
+    """Auto-assign the reviewing professor from the student's UserProfile.
+
+    Looks up UserProfile.advisor_nycu_id and matches a User with
+    role=professor. Returns the professor User or None. Never overwrites
+    an already-assigned professor_id.
+    """
+    if getattr(application, "professor_id", None):
+        return None
+
+    profile_stmt = select(UserProfile).where(UserProfile.user_id == user_id)
+    profile_result = await db.execute(profile_stmt)
+    profile = profile_result.scalar_one_or_none()
+
+    if not profile or not profile.advisor_nycu_id:
+        return None
+
+    professor_stmt = select(User).where(
+        User.nycu_id == profile.advisor_nycu_id,
+        User.role == UserRole.professor,
+    )
+    professor_result = await db.execute(professor_stmt)
+    professor = professor_result.scalar_one_or_none()
+
+    if professor:
+        application.professor_id = professor.id
+        logger.info(
+            "Auto-assigned professor %s to application %s",
+            professor.id,
+            getattr(application, "app_id", "?"),
+        )
+    return professor

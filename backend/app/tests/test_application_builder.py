@@ -105,3 +105,69 @@ def test_build_submitted_values_falls_back_to_scholarship_name():
 
     assert values["scholarship_name"] == "博士生獎學金"
     assert values["amount"] is None
+
+
+# --- async helpers -----------------------------------------------------------
+
+from app.models.application_sequence import ApplicationSequence  # noqa: E402,F401
+from app.models.user import User  # noqa: E402
+from app.models.user_profile import UserProfile  # noqa: E402
+from app.services.application_builder import (  # noqa: E402
+    assign_professor_from_profile,
+    generate_app_id,
+)
+
+
+async def test_generate_app_id_creates_sequence_and_formats(db):
+    app_id = await generate_app_id(db, 114, None)
+    assert app_id == "APP-114-0-00001"
+
+    app_id2 = await generate_app_id(db, 114, "yearly")
+    assert app_id2 == "APP-114-0-00002"
+
+
+async def test_generate_app_id_with_suffix_no_commit(db):
+    app_id = await generate_app_id(db, 114, "first", suffix="U", commit=False)
+    assert app_id == "APP-114-1-00001U"
+
+
+async def test_assign_professor_sets_id_when_profile_matches(db):
+    student = User(nycu_id="313554001", name="學生甲", role="student", user_type="student")
+    professor = User(nycu_id="P001234", name="張教授", role="professor", user_type="employee")
+    db.add_all([student, professor])
+    await db.flush()
+
+    db.add(UserProfile(user_id=student.id, advisor_nycu_id="P001234"))
+    await db.flush()
+
+    application = SimpleNamespace(professor_id=None)
+    result = await assign_professor_from_profile(db, application, student.id)
+
+    assert result is not None
+    assert application.professor_id == professor.id
+
+
+async def test_assign_professor_none_when_no_professor_account(db):
+    student = User(nycu_id="313554002", name="學生乙", role="student", user_type="student")
+    db.add(student)
+    await db.flush()
+    db.add(UserProfile(user_id=student.id, advisor_nycu_id="NOSUCH"))
+    await db.flush()
+
+    application = SimpleNamespace(professor_id=None)
+    result = await assign_professor_from_profile(db, application, student.id)
+
+    assert result is None
+    assert application.professor_id is None
+
+
+async def test_assign_professor_does_not_overwrite_existing(db):
+    student = User(nycu_id="313554003", name="學生丙", role="student", user_type="student")
+    db.add(student)
+    await db.flush()
+
+    application = SimpleNamespace(professor_id=999)
+    result = await assign_professor_from_profile(db, application, student.id)
+
+    assert result is None
+    assert application.professor_id == 999
