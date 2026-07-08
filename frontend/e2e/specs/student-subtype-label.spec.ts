@@ -62,18 +62,20 @@ test.describe("phd moe_1w sub-type label wording", () => {
     browser,
   }) => {
     // (a) DB layer — the source of truth the wizard label is built from.
-    const { rows } = await pool.query<{ name: string; is_active: boolean }>(
-      `SELECT sstc.name, sstc.is_active
+    // (scholarship_type_id, sub_type_code) has no unique constraint, so pin
+    // exactly ONE active row — a duplicate would make the backend's
+    // translation lookup (last-write-wins) nondeterministic.
+    const { rows } = await pool.query<{ name: string }>(
+      `SELECT sstc.name
          FROM scholarship_sub_type_configs sstc
          JOIN scholarship_types st ON st.id = sstc.scholarship_type_id
-        WHERE st.code = $1 AND sstc.sub_type_code = $2`,
+        WHERE st.code = $1 AND sstc.sub_type_code = $2 AND sstc.is_active = TRUE`,
       [SCHOLARSHIP_CODE, SUB_TYPE],
     );
     expect(
       rows.length,
-      `no scholarship_sub_type_configs row for (${SCHOLARSHIP_CODE}, ${SUB_TYPE}) — seed/migration missing`,
-    ).toBeGreaterThan(0);
-    expect(rows[0].is_active, "moe_1w sub-type config must be active").toBe(true);
+      `expected exactly one ACTIVE scholarship_sub_type_configs row for (${SCHOLARSHIP_CODE}, ${SUB_TYPE}), got ${rows.length} — seed/migration missing or duplicated`,
+    ).toBe(1);
     expect(
       rows[0].name,
       "scholarship_sub_type_configs.name must carry the 每月 $5000 元 wording (migration update_moe_1w_label_001)",
