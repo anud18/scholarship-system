@@ -11,18 +11,24 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
-from sqlalchemy import and_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError, ServiceUnavailableError
-from app.models.application import Application, ApplicationStatus
-from app.models.application_sequence import ApplicationSequence
+from app.models.application import Application
 from app.models.batch_import import BatchImport
 from app.models.enums import BatchImportStatus, Semester
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User
+from app.models.user_profile import UserProfile
 from app.schemas.batch_import import ApplicationDataRow, BatchImportValidationError
-from app.services.application_builder import order_sub_type_preferences
+from app.services.application_builder import (
+    assign_professor_from_profile,
+    build_submitted_application_values,
+    derive_sub_scholarship_type,
+    generate_app_id,
+    order_sub_type_preferences,
+)
 from app.services.student_service import StudentService
 
 logger = logging.getLogger(__name__)
@@ -694,6 +700,60 @@ class BatchImportService:
 
         return user_map
 
+    async def _upsert_user_profile(self, user: User, row_data: Dict[str, Any]) -> None:
+        """Write postal account and advisor info to the student's UserProfile,
+        the same place the student self-service flow keeps them.
+
+        Overwrite policy (spec): a non-empty Excel value overwrites the
+        existing profile value (paper form is authoritative); a blank Excel
+        cell preserves whatever is already there.
+        """
+        profile_stmt = select(UserProfile).where(UserProfile.user_id == user.id)
+        profile_result = await self.db.execute(profile_stmt)
+        profile = profile_result.scalar_one_or_none()
+
+        if not profile:
+            profile = UserProfile(user_id=user.id)
+            self.db.add(profile)
+
+        field_map = {
+            "postal_account": "account_number",
+            "advisor_name": "advisor_name",
+            "advisor_email": "advisor_email",
+            "advisor_nycu_id": "advisor_nycu_id",
+        }
+        for row_key, profile_attr in field_map.items():
+            value = row_data.get(row_key)
+            if value:
+                setattr(profile, profile_attr, value)
+
+    async def _build_submitted_form_data(self, scholarship_code: str, custom_fields: Dict[str, Any]) -> Dict[str, Any]:
+        """Shape batch custom-field values into the standard student-submission
+        structure: {"fields": {name: {field_id, field_type, value, required}},
+        "documents": []}. field_type/required come from the ApplicationField
+        definitions; a value with no matching definition falls back to text.
+        """
+        from app.models.application_field import ApplicationField
+
+        defs_stmt = (
+            select(ApplicationField)
+            .where(ApplicationField.scholarship_type == scholarship_code)
+            .where(ApplicationField.is_active)
+        )
+        defs_result = await self.db.execute(defs_stmt)
+        definitions = {f.field_name: f for f in defs_result.scalars().all()}
+
+        fields = {}
+        for field_name, value in (custom_fields or {}).items():
+            definition = definitions.get(field_name)
+            fields[field_name] = {
+                "field_id": field_name,
+                "field_type": definition.field_type if definition else "text",
+                "value": value,
+                "required": bool(definition.is_required) if definition else False,
+            }
+        return {"fields": fields, "documents": []}
+
     async def create_applications_from_batch(
         self,
         batch_import: BatchImport,
@@ -789,44 +849,10 @@ class BatchImportService:
 
                 user = user_map[student_id]
 
-                # Generate app_id using the shared sequence, and append 'U' for upload/batch.
-                # This logic is adapted from ApplicationService._generate_app_id
-                temp_semester = semester
-                if temp_semester is None:
-                    temp_semester = "yearly"
-
-                # Lock the sequence record for the duration of this transaction
-                stmt = (
-                    select(ApplicationSequence)
-                    .where(
-                        and_(
-                            ApplicationSequence.academic_year == academic_year,
-                            ApplicationSequence.semester == temp_semester,
-                        )
-                    )
-                    .with_for_update()
-                )
-
-                result = await self.db.execute(stmt)
-                seq_record = result.scalar_one_or_none()
-
-                # Create sequence record if it doesn't exist
-                if not seq_record:
-                    seq_record = ApplicationSequence(
-                        academic_year=academic_year, semester=temp_semester, last_sequence=0
-                    )
-                    self.db.add(seq_record)
-                    await self.db.flush()  # Flush to get the record in the session
-
-                # Increment sequence
-                seq_record.last_sequence += 1
-                sequence_num = seq_record.last_sequence
-
-                # Format and return app_id
-                # NOTE: We do NOT commit here. The lock is held for the entire batch transaction
-                # to ensure atomicity. This will block online applications during the import.
-                base_app_id = ApplicationSequence.format_app_id(academic_year, temp_semester, sequence_num)
-                app_id = f"{base_app_id}U"
+                # Shared sequence logic; commit=False holds the row lock for
+                # the whole batch transaction (atomicity over concurrency —
+                # online submissions block during the import, intentionally).
+                app_id = await generate_app_id(self.db, academic_year, semester, suffix="U", commit=False)
 
                 # Create application
                 # Fetch student snapshot from SIS API (includes both basic info and term data)
@@ -847,25 +873,20 @@ class BatchImportService:
                         student_id,
                     )
 
-                # Construct submitted_form_data, primarily from batch import, but override dept_code if SIS has it
-                submitted_form_data = {
-                    "postal_account": row_data.get("postal_account"),
-                    "advisor_name": row_data.get("advisor_name"),
-                    "advisor_email": row_data.get("advisor_email"),
-                    "advisor_nycu_id": row_data.get("advisor_nycu_id"),
-                    "custom_fields": row_data.get("custom_fields", {}),
-                }
+                submitted_form_data = await self._build_submitted_form_data(
+                    scholarship.code, row_data.get("custom_fields", {})
+                )
+
+                submitted_values = build_submitted_application_values(scholarship, scholarship_config)
 
                 application = Application(
                     app_id=app_id,
                     user_id=user.id,
                     scholarship_type_id=scholarship_type_id,
-                    scholarship_configuration_id=scholarship_config.id,  # Link to specific configuration
-                    scholarship_name=scholarship.name,
-                    amount=None,  # Amount is now per sub-type in ScholarshipSubTypeConfig
-                    sub_scholarship_type=(
-                        row_data.get("sub_types", [None])[0].lower() if row_data.get("sub_types") else "general"
-                    ),  # Lowercase, configuration-driven
+                    scholarship_configuration_id=scholarship_config.id,
+                    scholarship_name=submitted_values["scholarship_name"],
+                    amount=submitted_values["amount"],
+                    sub_scholarship_type=derive_sub_scholarship_type(row_data.get("sub_types")),
                     scholarship_subtype_list=row_data.get("sub_types", []),
                     sub_type_preferences=row_data.get("sub_types", []) or None,
                     sub_type_selection_mode=scholarship.sub_type_selection_mode,
@@ -873,17 +894,25 @@ class BatchImportService:
                     semester=semester,
                     is_renewal=row_data.get("is_renewal", False),
                     renewal_year=row_data.get("renewal_year"),
-                    status=ApplicationStatus.under_review.value,
+                    status=submitted_values["status"],
+                    status_name=submitted_values["status_name"],
+                    review_stage=submitted_values["review_stage"],
                     imported_by_id=batch_import.importer_id,
                     batch_import_id=batch_import.id,
                     import_source="batch_import",
                     document_status="pending_documents",
-                    submitted_at=datetime.now(timezone.utc),
+                    submitted_at=submitted_values["submitted_at"],
                     student_data=student_data,
                     submitted_form_data=submitted_form_data,
                 )
                 applications.append(application)
                 self.db.add(application)
+
+                # Profile upsert then professor auto-assign — same linkage the
+                # student submit path uses (professor review lists match on
+                # Application.professor_id).
+                await self._upsert_user_profile(user, row_data)
+                await assign_professor_from_profile(self.db, application, user.id)
 
             # Flush all applications at once
             await self.db.flush()
