@@ -97,6 +97,14 @@ test.describe("phd moe_1w sub-type label wording", () => {
         eligibleRes.body,
       )}`,
     ).toBe(true);
+    expect(
+      eligibleRes.body?.success,
+      `ApiResponse.success must be true: body=${JSON.stringify(eligibleRes.body)}`,
+    ).toBe(true);
+    expect(
+      Array.isArray(eligibleRes.body.data),
+      `ApiResponse.data must be a scholarship array: body=${JSON.stringify(eligibleRes.body)}`,
+    ).toBe(true);
 
     const phd = eligibleRes.body.data.find((s) => s.code === SCHOLARSHIP_CODE);
     expect(phd, `phd scholarship missing from /scholarships/eligible for ${STUDENT_ID}`).toBeTruthy();
