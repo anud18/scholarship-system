@@ -585,18 +585,23 @@ class ApplicationFieldService:
         scholarship_model = result.scalar_one_or_none()
 
         if scholarship_model:
+            note_changed = False
             if application_document_note is not None:
                 scholarship_model.application_document_note = application_document_note
+                note_changed = True
             if application_document_note_en is not None:
                 scholarship_model.application_document_note_en = application_document_note_en
-            await self.db.commit()
+                note_changed = True
+            if note_changed:
+                await self.db.commit()
+
+        saved_note = scholarship_model.application_document_note if scholarship_model else None
+        saved_note_en = scholarship_model.application_document_note_en if scholarship_model else None
 
         return ScholarshipFormConfigResponse(
             scholarship_type=scholarship_type,
             fields=fields,
             documents=documents,
-            application_document_note=scholarship_model.application_document_note if scholarship_model else None,
-            application_document_note_en=(
-                scholarship_model.application_document_note_en if scholarship_model else None
-            ),
+            application_document_note=saved_note,
+            application_document_note_en=saved_note_en,
         )

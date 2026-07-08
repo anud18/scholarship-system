@@ -1235,12 +1235,11 @@ export function ScholarshipApplicationStep({
     eligibleSubTypes[0]?.value !== "general" &&
     eligibleSubTypes[0]?.value !== null;
 
-  const applicationDocumentNote = selectedScholarship
-    ? locale === "zh"
-      ? selectedScholarship.application_document_note
-      : selectedScholarship.application_document_note_en ||
-        selectedScholarship.application_document_note
-    : null;
+  const applicationDocumentNote =
+    locale === "zh"
+      ? selectedScholarship?.application_document_note
+      : selectedScholarship?.application_document_note_en ||
+        selectedScholarship?.application_document_note;
 
   return (
     <div className="space-y-6">
