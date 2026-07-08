@@ -1673,7 +1673,7 @@ async def download_batch_import_template(
     # Sub-type label mapping
     sub_type_labels = {
         "nstc": "國科會",
-        "moe_1w": "教育部配合款1萬",
+        "moe_1w": "教育部",
         "moe_2w": "教育部配合款2萬",
     }
 
@@ -1743,13 +1743,17 @@ async def download_batch_import_template(
             }
         )
 
-    # Add sub_type sample values if applicable
+    # Add sub_type sample values if applicable.
+    # Sub-type cells hold a 志願序 (priority) number: 1 = first choice, 2 = second
+    # choice, ... blank = not applied — this is what the importer parses (a plain
+    # "Y" is ignored). Per the current flow 教育部 (MOE) is always the first
+    # choice, so order the sample so MOE codes take the lowest numbers.
     if scholarship.sub_type_list:
-        for i, row in enumerate(sample_data):
-            for j, sub_type_code in enumerate(scholarship.sub_type_list):
+        ordered_sub_types = sorted(scholarship.sub_type_list, key=lambda c: (not str(c).startswith("moe")))
+        for row in sample_data:
+            for priority, sub_type_code in enumerate(ordered_sub_types, start=1):
                 label = sub_type_labels.get(sub_type_code, sub_type_code)
-                # First row has first sub_type as Y, second row has second sub_type as Y
-                row[label] = "Y" if i == j else ""
+                row[label] = priority
 
     # Add custom field sample values
     for field in template_custom_fields:
