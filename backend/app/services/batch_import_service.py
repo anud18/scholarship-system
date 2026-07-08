@@ -862,11 +862,10 @@ class BatchImportService:
             if value:
                 setattr(profile, profile_attr, value)
 
-    async def _build_submitted_form_data(self, scholarship_code: str, custom_fields: Dict[str, Any]) -> Dict[str, Any]:
-        """Shape batch custom-field values into the standard student-submission
-        structure: {"fields": {name: {field_id, field_type, value, required}},
-        "documents": []}. field_type/required come from the ApplicationField
-        definitions; a value with no matching definition falls back to text.
+    async def _fetch_field_definitions(self, scholarship_code: str) -> Dict[str, Any]:
+        """Load active ApplicationField definitions for a scholarship, keyed by
+        field_name. Definitions are identical for a whole batch, so this is
+        fetched ONCE per import and reused for every row (avoids an N+1 query).
         """
         from app.models.application_field import ApplicationField
 
@@ -876,11 +875,20 @@ class BatchImportService:
             .where(ApplicationField.is_active)
         )
         defs_result = await self.db.execute(defs_stmt)
-        definitions = {f.field_name: f for f in defs_result.scalars().all()}
+        return {f.field_name: f for f in defs_result.scalars().all()}
 
+    def _build_submitted_form_data(
+        self, field_definitions: Dict[str, Any], custom_fields: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Shape batch custom-field values into the standard student-submission
+        structure: {"fields": {name: {field_id, field_type, value, required}},
+        "documents": []}. field_type/required come from the ApplicationField
+        definitions (fetched once via _fetch_field_definitions); a value with no
+        matching definition falls back to text.
+        """
         fields = {}
         for field_name, value in (custom_fields or {}).items():
-            definition = definitions.get(field_name)
+            definition = field_definitions.get(field_name)
             fields[field_name] = {
                 "field_id": field_name,
                 "field_type": definition.field_type if definition else "text",
@@ -976,6 +984,10 @@ class BatchImportService:
             # Step 1: Bulk get/create users
             user_map = await self._get_or_create_users_bulk(parsed_data)
 
+            # Custom-field definitions are identical for every row in the batch;
+            # fetch once here instead of once per row (avoids an N+1 query).
+            field_definitions = await self._fetch_field_definitions(scholarship.code)
+
             # Step 2: Bulk create applications
             applications = []
             for idx, row_data in enumerate(parsed_data):
@@ -1008,8 +1020,8 @@ class BatchImportService:
                         student_id,
                     )
 
-                submitted_form_data = await self._build_submitted_form_data(
-                    scholarship.code, row_data.get("custom_fields", {})
+                submitted_form_data = self._build_submitted_form_data(
+                    field_definitions, row_data.get("custom_fields", {})
                 )
 
                 submitted_values = build_submitted_application_values(scholarship, scholarship_config)

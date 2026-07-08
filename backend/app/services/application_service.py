@@ -907,6 +907,14 @@ class ApplicationService:
         if not student_fields.get("student_no") and application.student:
             student_fields["student_no"] = application.student.nycu_id
 
+        # 郵局帳號 lives on the student's UserProfile (student self-service and
+        # batch import both write it there — never into submitted_form_data).
+        from app.models.user_profile import UserProfile
+
+        profile_result = await self.db.execute(select(UserProfile).where(UserProfile.user_id == application.user_id))
+        student_profile = profile_result.scalar_one_or_none()
+        postal_account = student_profile.account_number if student_profile else None
+
         # Build sub_type labels from scholarship.sub_type_configs
         sub_type_labels = {}
         if application.scholarship and hasattr(application.scholarship, "sub_type_configs"):
@@ -992,6 +1000,7 @@ class ApplicationService:
             "scholarship_name": scholarship_name,
             "amount": amount,
             "currency": currency,
+            "postal_account": postal_account,
             **student_fields,  # Spread extracted student fields
             # Workflow configuration flags
             "requires_professor_recommendation": bool(
