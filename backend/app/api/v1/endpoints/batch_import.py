@@ -1694,8 +1694,21 @@ async def download_batch_import_template(
     custom_fields_result = await db.execute(custom_fields_stmt)
     custom_fields = custom_fields_result.scalars().all()
 
-    # Add custom field columns (Traditional Chinese)
+    # Add custom field columns (Traditional Chinese), skipping any that would
+    # duplicate a base/fixed column already present. postal_account and the
+    # advisor fields are also seeded as ApplicationFields, so without this the
+    # column list gets duplicate labels — which makes pandas return a DataFrame
+    # for df[label] and breaks the column-width pass with
+    # "'DataFrame' object has no attribute 'tolist'".
+    reserved_field_names = {"student_id", "student_name", "postal_account"}
+    if requires_advisor:
+        reserved_field_names.update({"advisor_name", "advisor_email", "advisor_nycu_id"})
+
+    template_custom_fields = []
     for field in custom_fields:
+        if field.field_name in reserved_field_names or field.field_label in columns:
+            continue
+        template_custom_fields.append(field)
         columns.append(field.field_label)  # Use Chinese label
         column_mapping[field.field_label] = f"custom_{field.field_name}"
 
@@ -1739,7 +1752,7 @@ async def download_batch_import_template(
                 row[label] = "Y" if i == j else ""
 
     # Add custom field sample values
-    for field in custom_fields:
+    for field in template_custom_fields:
         for i, row in enumerate(sample_data):
             # Provide sample values based on field type
             if field.field_type == "text":
@@ -1770,8 +1783,10 @@ async def download_batch_import_template(
 
         worksheet = writer.sheets["批次匯入範例"]
         for idx, col in enumerate(df.columns, 1):
-            # Calculate max length for this column
-            column_values = df[col].astype(str).tolist()
+            # Calculate max length for this column. Use positional access so a
+            # duplicate column label can never turn df[col] into a DataFrame
+            # (which has no .tolist()).
+            column_values = df.iloc[:, idx - 1].astype(str).tolist()
 
             # Collect all content in this column (header + all data)
             all_content = [str(col)] + column_values
