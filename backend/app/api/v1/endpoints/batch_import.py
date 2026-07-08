@@ -15,13 +15,13 @@ import magic
 import pandas as pd
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import desc, select, update
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.path_security import validate_object_name_minio
 from app.core.security import get_current_user
 from app.db.deps import get_db
-from app.models.application import Application, ApplicationFile, ApplicationStatus
+from app.models.application import Application, ApplicationFile
 from app.models.audit_log import AuditAction, AuditLog
 from app.models.batch_import import BatchImport
 from app.models.enums import BatchImportStatus
@@ -1141,12 +1141,6 @@ async def confirm_batch_import(
             status="completed" if len(creation_errors) == 0 else "partial",
         )
 
-        # Ensure applications created via batch import are visible for college review
-        await db.execute(
-            update(Application)
-            .where(Application.batch_import_id == batch_id)
-            .values(status=ApplicationStatus.under_review.value)
-        )
         # 每筆由批次建立的申請各留一筆稽核 (issue #964 / G2) — 沒有這些紀錄，
         # 數百筆申請的「誰建立、來自哪個檔案」將無從追溯。
         for created_id in created_ids:

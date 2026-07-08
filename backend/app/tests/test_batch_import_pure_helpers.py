@@ -24,6 +24,7 @@ import math
 import pandas as pd
 import pytest
 
+from app.schemas.batch_import import ApplicationDataRow
 from app.services.batch_import_service import (
     _is_sub_type_marked,
     _normalize_identifier,
@@ -158,3 +159,33 @@ def test_is_sub_type_marked_blank_zero_and_noise():
     assert _is_sub_type_marked("0") is False
     assert _is_sub_type_marked(float("nan")) is False
     assert _is_sub_type_marked("no") is False
+
+
+# ─── ApplicationDataRow advisor fields ──────────────────────────────
+# Regression: the parser populates advisor_name/advisor_email/
+# advisor_nycu_id in the raw row dict, but they are re-validated through
+# ApplicationDataRow whose model_dump() feeds the profile upsert +
+# professor auto-assign. If the schema drops these fields, advisor info
+# entered in the Excel is silently lost — UserProfile never gets the
+# advisor, and no professor is auto-assigned. Pin that they survive.
+
+
+def test_application_data_row_preserves_advisor_fields():
+    row = ApplicationDataRow(
+        student_id="csphd0001",
+        student_name="王博士",
+        advisor_name="李資訊教授",
+        advisor_email="cs_professor@nycu.edu.tw",
+        advisor_nycu_id="cs_professor",
+    )
+    dumped = row.model_dump()
+    assert dumped["advisor_name"] == "李資訊教授"
+    assert dumped["advisor_email"] == "cs_professor@nycu.edu.tw"
+    assert dumped["advisor_nycu_id"] == "cs_professor"
+
+
+def test_application_data_row_advisor_fields_default_none():
+    dumped = ApplicationDataRow(student_id="csphd0001", student_name="王博士").model_dump()
+    assert dumped["advisor_name"] is None
+    assert dumped["advisor_email"] is None
+    assert dumped["advisor_nycu_id"] is None
