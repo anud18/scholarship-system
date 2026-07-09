@@ -2,7 +2,7 @@ import io
 
 import pandas as pd
 import pytest
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 from app.models.scholarship import ScholarshipType
 from app.services.renewal_import_service import RenewalImportService
@@ -69,3 +69,27 @@ async def test_parse_keeps_only_passed_rows(service, mock_scholarship):
     assert parsed[0]["sub_type"] == "nstc"
     assert len(skipped) == 1
     assert errors == []
+
+
+@pytest.mark.asyncio
+async def test_validate_flags_sis_not_found_as_error(service):
+    service.student_service = Mock()
+    service.student_service.api_enabled = True
+    service.student_service.get_student_basic_info = AsyncMock(return_value=None)
+    parsed = [
+        {
+            "student_id": "999",
+            "student_name": "x",
+            "sub_type": "nstc",
+            "postal_account": None,
+            "advisor_nycu_id": None,
+            "advisor_name": None,
+            "row_number": 2,
+        }
+    ]
+
+    errors, warnings = await service.validate_and_preview(
+        parsed, college_code="A", scholarship_type_id=1, academic_year=114, semester="first"
+    )
+    assert any(e["error_type"] == "sis_not_found" for e in errors)
+    assert any(w["warning_type"] == "missing_postal_account" for w in warnings)

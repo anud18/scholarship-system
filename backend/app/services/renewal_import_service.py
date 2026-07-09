@@ -29,6 +29,16 @@ APPLIED_YES = "是"
 PASS_MARK = "通過"
 
 
+def _to_semester_enum(semester: Optional[str]) -> Optional[Semester]:
+    """Map a raw semester string to the enum; yearly/annual/None -> None."""
+    if semester in (None, "", "yearly", "annual"):
+        return None
+    try:
+        return Semester(semester)
+    except ValueError:
+        return None
+
+
 class RenewalImportService:
     def __init__(self, db: AsyncSession, student_service: Optional[StudentService] = None):
         self.db = db
@@ -163,3 +173,133 @@ class RenewalImportService:
                 )
 
         return parsed, skipped, errors
+
+    async def validate_and_preview(
+        self,
+        parsed_rows: List[Dict[str, Any]],
+        college_code: str,
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: Optional[str],
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Per-row SIS existence + duplicate-renewal errors, and postal/quota warnings."""
+        errors: List[Dict[str, Any]] = []
+        warnings: List[Dict[str, Any]] = []
+        if not parsed_rows:
+            return errors, warnings
+
+        student_ids = [r["student_id"] for r in parsed_rows]
+
+        # SIS existence check (real recipients must resolve to a snapshot at 造冊 time).
+        if getattr(self.student_service, "api_enabled", False):
+            for r in parsed_rows:
+                sid = r["student_id"]
+                try:
+                    info = await self.student_service.get_student_basic_info(sid)
+                except ServiceUnavailableError:
+                    warnings.append(
+                        {
+                            "row_number": r["row_number"],
+                            "student_id": sid,
+                            "field": "學號",
+                            "warning_type": "student_api_unavailable",
+                            "message": "學籍系統暫時不可用，請稍後重試。",
+                        }
+                    )
+                    break
+                except Exception:  # noqa: BLE001 - a single-row SIS error must not abort the whole preview
+                    logger.warning("SIS error for %s", sid, exc_info=True)
+                    continue
+                if not info:
+                    errors.append(
+                        {
+                            "row_number": r["row_number"],
+                            "student_id": sid,
+                            "field": "學號",
+                            "error_type": "sis_not_found",
+                            "message": f"學籍系統查無學號 {sid}，無法建立可造冊的續領。",
+                        }
+                    )
+
+        # Missing postal account -> excluded from roster Excel (warn only).
+        for r in parsed_rows:
+            if not r.get("postal_account"):
+                warnings.append(
+                    {
+                        "row_number": r["row_number"],
+                        "student_id": r["student_id"],
+                        "field": "郵局帳號",
+                        "warning_type": "missing_postal_account",
+                        "message": f"學號 {r['student_id']} 缺少郵局帳號，造冊時將被排除。",
+                    }
+                )
+
+        # Duplicate approved/renewal check + over-quota warning.
+        semester_enum = _to_semester_enum(semester)
+        users_stmt = select(User).where(User.nycu_id.in_(student_ids))
+        users = (await self.db.execute(users_stmt)).scalars().all()
+        user_by_nycu = {u.nycu_id: u for u in users}
+        if user_by_nycu:
+            dup_stmt = select(Application).where(
+                Application.user_id.in_([u.id for u in users]),
+                Application.scholarship_type_id == scholarship_type_id,
+                Application.academic_year == academic_year,
+                Application.is_renewal.is_(True),
+            )
+            dup_stmt = (
+                dup_stmt.where(Application.semester.is_(None))
+                if semester_enum is None
+                else dup_stmt.where(Application.semester == semester_enum)
+            )
+            existing = {a.user_id for a in (await self.db.execute(dup_stmt)).scalars().all()}
+            for r in parsed_rows:
+                u = user_by_nycu.get(r["student_id"])
+                if u and u.id in existing:
+                    errors.append(
+                        {
+                            "row_number": r["row_number"],
+                            "student_id": r["student_id"],
+                            "field": "duplicate",
+                            "error_type": "duplicate_renewal",
+                            "message": f"學號 {r['student_id']} 已有此獎學金 {academic_year} 學年度的續領申請。",
+                        }
+                    )
+
+        await self._append_quota_warnings(parsed_rows, scholarship_type_id, academic_year, semester_enum, warnings)
+        return errors, warnings
+
+    async def _append_quota_warnings(self, parsed_rows, scholarship_type_id, academic_year, semester_enum, warnings):
+        from app.services.manual_distribution_service import ManualDistributionService
+
+        config_stmt = select(ScholarshipConfiguration).where(
+            ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+            ScholarshipConfiguration.academic_year == academic_year,
+        )
+        config_stmt = (
+            config_stmt.where(ScholarshipConfiguration.semester.is_(None))
+            if semester_enum in (None, Semester.yearly)
+            else config_stmt.where(ScholarshipConfiguration.semester == semester_enum)
+        )
+        config = (await self.db.execute(config_stmt)).scalar_one_or_none()
+        if not config or not config.quotas:
+            return
+        md = ManualDistributionService(self.db)
+        counts: Dict[str, int] = {}
+        for r in parsed_rows:
+            counts[r["sub_type"]] = counts.get(r["sub_type"], 0) + 1
+        for sub_type, incoming in counts.items():
+            quota_map = config.quotas.get(sub_type) or {}
+            total_quota = (
+                sum(int(v) for v in quota_map.values()) if isinstance(quota_map, dict) else int(quota_map or 0)
+            )
+            current = await md.consumers_count(config.id, sub_type)
+            if total_quota and current + incoming > total_quota:
+                warnings.append(
+                    {
+                        "row_number": None,
+                        "student_id": None,
+                        "field": sub_type,
+                        "warning_type": "over_quota",
+                        "message": f"子類型 {sub_type} 匯入後將達 {current + incoming} 人，超過配額 {total_quota} 人。",
+                    }
+                )
