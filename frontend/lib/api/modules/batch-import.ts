@@ -15,6 +15,7 @@ import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
 import { createFileUploadFormData, type MultipartFormData } from '../form-data-helpers';
 import type { ApiResponse } from '../types';
+import { getAuthToken } from '../../utils/url-validation';
 
 /**
  * Resolve the auth token for direct `fetch()` downloads.
@@ -30,12 +31,9 @@ function resolveAuthToken(): string | null {
   const inMemory = typedClient.getToken();
   if (inMemory) return inMemory;
   if (typeof window === 'undefined') return null;
-  return (
-    localStorage.getItem('auth_token') ||
-    localStorage.getItem('token') ||
-    sessionStorage.getItem('auth_token') ||
-    null
-  );
+  // Delegate to the app-wide fallback chain (localStorage/sessionStorage,
+  // auth_token + legacy token keys) instead of re-implementing a subset.
+  return getAuthToken() || null;
 }
 
 /**
@@ -88,6 +86,16 @@ async function downloadAuthedFile(path: string, label: string, fallbackFilename:
   window.URL.revokeObjectURL(url);
 }
 
+/** Upload/details warnings come back as structured objects from the backend
+ *  (`{row, field, message}`); plain strings are tolerated for older records. */
+type BatchValidationWarning =
+  | string
+  | {
+      row?: number | null;
+      field?: string | null;
+      message?: string | null;
+    };
+
 type BatchUploadResult = {
   batch_id: number;
   file_name: string;
@@ -96,7 +104,7 @@ type BatchUploadResult = {
   validation_summary: {
     valid_count: number;
     invalid_count: number;
-    warnings: string[];
+    warnings: BatchValidationWarning[];
     errors: Array<{
       row: number;
       field?: string;
@@ -185,7 +193,7 @@ type BatchDetails = BatchHistoryItem & {
   validation_summary: {
     valid_count: number;
     invalid_count: number;
-    warnings: string[];
+    warnings: BatchValidationWarning[];
     errors: Array<{
       row: number;
       field?: string;

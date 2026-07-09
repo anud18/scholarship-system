@@ -396,11 +396,14 @@ export function BatchApplicationFileUpload({
                   </div>
                 </TableCell>
 
-                {/* Dynamic Form Data Fields */}
+                {/* Dynamic Form Data Fields — ?? not ||: 0 and false are
+                    legitimate custom-field values and must still display */}
                 {displayFields.map((field) => (
                   <TableCell key={field} className="text-sm">
-                    {state.application?.submitted_form_data?.fields?.[field]?.value ||
-                     state.application?.form_data?.[field] || "-"}
+                    {String(
+                      state.application?.submitted_form_data?.fields?.[field]?.value ??
+                      state.application?.form_data?.[field] ?? "-"
+                    )}
                   </TableCell>
                 ))}
 

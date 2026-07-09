@@ -360,7 +360,10 @@ class BatchImportService:
         # The synthetic "general" placeholder (the model default) is NOT a real
         # sub-type, so a "general"-only scholarship must not demand a mark.
         # Mirrors application_builder.validate_sub_type_for_submission.
-        real_sub_types = [st for st in (scholarship.sub_type_list or []) if st and st.lower() != "general"]
+        # Codes are normalized to lowercase (CLAUDE.md convention) — admin-
+        # entered sub_type_list isn't case-enforced, but the forced moe_1w
+        # ordering and quota/distribution lookups assume lowercase.
+        real_sub_types = [st.lower() for st in (scholarship.sub_type_list or []) if st and st.lower() != "general"]
 
         # Custom-field definitions (same set _build_submitted_form_data uses)
         field_definitions = await self._fetch_field_definitions(scholarship.code)
@@ -369,12 +372,16 @@ class BatchImportService:
         # Column header → sub-type code accepted by the parser, scoped to this
         # scholarship's real sub-types. The template writes the known Chinese
         # label when one exists and falls back to the raw code for custom
-        # sub-types — accept BOTH so a downloaded template always round-trips
-        # through import.
+        # sub-types — accept the label, the raw-case code, and the lowercase
+        # code so a downloaded template always round-trips through import.
         code_to_label = {code: label for label, code in SUB_TYPE_CODE_BY_LABEL.items()}
         sub_type_labels: Dict[str, str] = {}
-        for code in real_sub_types:
-            sub_type_labels[code_to_label.get(code, code)] = code
+        for raw_code in scholarship.sub_type_list or []:
+            if not raw_code or raw_code.lower() == "general":
+                continue
+            code = raw_code.lower()
+            sub_type_labels[code_to_label.get(code, raw_code)] = code
+            sub_type_labels.setdefault(raw_code, code)
             sub_type_labels.setdefault(code, code)
 
         # Pre-compute column set for O(1) membership tests
@@ -467,9 +474,15 @@ class BatchImportService:
                     # Parse sub_types from Chinese column names.
                     # Any positive number or checkmark = applied; ordering is
                     # forced by shared rule (moe_1w first), NOT by cell numbers.
+                    # Dedupe: a sheet may carry both the label column (國科會)
+                    # and the raw-code column (nstc) for the same sub-type.
                     selected_sub_types = []
                     for chinese_label, sub_type_code in sub_type_labels.items():
-                        if chinese_label in df_columns and _is_sub_type_marked(row.get(chinese_label)):
+                        if (
+                            chinese_label in df_columns
+                            and _is_sub_type_marked(row.get(chinese_label))
+                            and sub_type_code not in selected_sub_types
+                        ):
                             selected_sub_types.append(sub_type_code)
                     data_row["sub_types"] = order_sub_type_preferences(selected_sub_types)
 
@@ -501,11 +514,17 @@ class BatchImportService:
                         "custom_fields": {},
                     }
 
-                    # Parse sub_types from English column names (sub_type_*)
+                    # Parse sub_types from English column names (sub_type_*).
+                    # Iterate df.columns (ordered), NOT the df_columns set —
+                    # set order would make non-moe preference order random.
+                    # Codes are lowercased (sub_type_MOE_1W must still hit the
+                    # forced moe_1w rule) and deduped.
                     selected_sub_types = []
-                    for col in df_columns:
+                    for col in df.columns:
                         if col.startswith("sub_type_") and _is_sub_type_marked(row.get(col)):
-                            selected_sub_types.append(col.replace("sub_type_", ""))
+                            code = col.replace("sub_type_", "").lower()
+                            if code not in selected_sub_types:
+                                selected_sub_types.append(code)
                     data_row["sub_types"] = order_sub_type_preferences(selected_sub_types)
 
                     # Parse custom fields from English column names (custom_*)

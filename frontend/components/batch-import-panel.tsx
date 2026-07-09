@@ -62,10 +62,10 @@ interface PeriodOption {
 
 type ValidationWarning =
   | {
-      row?: number;
-      field?: string;
-      message?: string;
-      warning_type?: string;
+      row?: number | null;
+      field?: string | null;
+      message?: string | null;
+      warning_type?: string | null;
     }
   | string;
 

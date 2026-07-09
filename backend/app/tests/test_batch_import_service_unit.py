@@ -956,7 +956,7 @@ async def test_bulk_check_eligibility_real_check_no_missing_greenlet(db, scholar
     the session identity map (revalidate path). check_student_eligibility reads
     config.scholarship_type.whitelist_enabled, so without eager-loading this
     would raise MissingGreenlet on an async lazy-load."""
-    config_id = scholarship_with_config.id
+    scholarship_type_id = scholarship_with_config.id
     # Drop everything from the identity map so config.scholarship_type must be
     # resolved from the query, not the identity map.
     db.expunge_all()
@@ -970,7 +970,7 @@ async def test_bulk_check_eligibility_real_check_no_missing_greenlet(db, scholar
 
     parsed_data = [{"student_id": "313554001", "sub_types": ["nstc"], "advisor_nycu_id": None, "row_number": 2}]
     # Must not raise (regression guard for MissingGreenlet).
-    warnings = await service.bulk_check_eligibility(parsed_data, config_id, 114, None)
+    warnings = await service.bulk_check_eligibility(parsed_data, scholarship_type_id, 114, None)
 
     # No skip warning about missing config (the config was found).
     assert not any(w["warning_type"] == "eligibility_check_skipped" and w["field"] == "configuration" for w in warnings)
@@ -1008,3 +1008,34 @@ async def test_bulk_check_eligibility_skips_row_when_check_raises(db, scholarshi
     assert skip_warnings[0]["student_id"] == "313554001"
     # A raised check must NOT produce an eligibility_failed warning.
     assert not any(w["warning_type"] == "eligibility_failed" for w in warnings)
+
+
+@pytest.mark.asyncio
+async def test_parse_dedupes_label_and_raw_code_columns(db, scholarship_with_sub_types):
+    """A sheet carrying BOTH the Chinese label column (國科會) and the
+    raw-code column (nstc), both marked, must yield the code once — not a
+    duplicated preference list (Copilot review, PR #1129)."""
+    df = pd.DataFrame([{"學號": "313554001", "學生姓名": "王小明", "國科會": 1, "nstc": "V"}])
+    buf = io.BytesIO()
+    df.to_excel(buf, index=False)
+
+    service = BatchImportService(db)
+    parsed, errors = await service.parse_excel_file(buf.getvalue(), scholarship_with_sub_types.id, 114, None)
+
+    assert errors == []
+    assert parsed[0]["sub_types"] == ["nstc"]
+
+
+@pytest.mark.asyncio
+async def test_parse_english_sub_type_columns_lowercased(db, scholarship_with_sub_types):
+    """sub_type_MOE_1W must normalize to moe_1w so the forced-first rule and
+    downstream lowercase quota lookups still match (Copilot review, PR #1129)."""
+    df = pd.DataFrame([{"student_id": "313554001", "student_name": "王小明", "sub_type_NSTC": 1, "sub_type_MOE_1W": 1}])
+    buf = io.BytesIO()
+    df.to_excel(buf, index=False)
+
+    service = BatchImportService(db)
+    parsed, errors = await service.parse_excel_file(buf.getvalue(), scholarship_with_sub_types.id, 114, None)
+
+    assert errors == []
+    assert parsed[0]["sub_types"] == ["moe_1w", "nstc"]
