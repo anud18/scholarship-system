@@ -57,7 +57,7 @@ class TestLoginGated:
         monkeypatch.setattr(settings, "enable_mock_sso", False)
         response = client.post(
             "/api/v1/auth/login",
-            json={"nycu_id": "admin"},
+            json={"username": "admin"},
         )
         assert response.status_code == 404
 
