@@ -249,17 +249,21 @@ export function RenewalImportPanel({ locale = "zh" }: RenewalImportPanelProps) {
     setIsUploading(true);
     setError(null);
 
-    // Parse academic year and semester from selected period
+    // Parse academic year and semester from selected period.
+    // Yearly-cycle scholarships (e.g. PhD) have a suffix-less period value
+    // ("114"); the upload endpoint requires semester to match
+    // ^(first|second|yearly)$, so default to "yearly" rather than sending an
+    // empty string (which 422s).
     const periodParts = selectedPeriod.split("-");
     const academicYear = parseInt(periodParts[0]);
-    const semester = periodParts.length > 1 ? periodParts[1] : undefined;
+    const semester = periodParts.length > 1 ? periodParts[1] : "yearly";
 
     try {
       const response = await apiClient.renewalImport.uploadData(
         selectedFile,
         selectedScholarship.code,
         academicYear,
-        semester || ""
+        semester
       );
 
       if (response.success && response.data) {
