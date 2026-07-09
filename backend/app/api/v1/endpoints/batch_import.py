@@ -1235,12 +1235,18 @@ async def get_batch_import_history(
         # Super admin can see all confirmed batch imports
         stmt = (
             select(BatchImport)
-            .where(BatchImport.import_status.in_(confirmed_statuses))
+            .where(
+                BatchImport.import_status.in_(confirmed_statuses),
+                BatchImport.import_type == "application",
+            )
             .order_by(desc(BatchImport.created_at))
             .offset(skip)
             .limit(limit)
         )
-        count_stmt = select(BatchImport).where(BatchImport.import_status.in_(confirmed_statuses))
+        count_stmt = select(BatchImport).where(
+            BatchImport.import_status.in_(confirmed_statuses),
+            BatchImport.import_type == "application",
+        )
     else:
         # College role can only see their own confirmed imports
         stmt = (
@@ -1248,6 +1254,7 @@ async def get_batch_import_history(
             .where(
                 BatchImport.importer_id == current_user.id,
                 BatchImport.import_status.in_(confirmed_statuses),
+                BatchImport.import_type == "application",
             )
             .order_by(desc(BatchImport.created_at))
             .offset(skip)
@@ -1256,6 +1263,7 @@ async def get_batch_import_history(
         count_stmt = select(BatchImport).where(
             BatchImport.importer_id == current_user.id,
             BatchImport.import_status.in_(confirmed_statuses),
+            BatchImport.import_type == "application",
         )
 
     result = await db.execute(stmt)
