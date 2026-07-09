@@ -303,3 +303,159 @@ class RenewalImportService:
                         "message": f"子類型 {sub_type} 匯入後將達 {current + incoming} 人，超過配額 {total_quota} 人。",
                     }
                 )
+
+    async def _get_or_create_users_bulk(self, rows: List[Dict[str, Any]]) -> Dict[str, User]:
+        """Delegate bulk user get/create to BatchImportService (shared logic)."""
+        from app.services.batch_import_service import BatchImportService
+
+        return await BatchImportService(self.db, self.student_service)._get_or_create_users_bulk(rows)
+
+    async def create_renewal_import_record(
+        self,
+        importer_id: int,
+        college_code: str,
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: Optional[str],
+        file_name: str,
+        total_records: int,
+    ) -> BatchImport:
+        """Create the BatchImport record for a renewal import (import_type='renewal')."""
+        batch_import = BatchImport(
+            importer_id=importer_id,
+            college_code=college_code,
+            scholarship_type_id=scholarship_type_id,
+            academic_year=academic_year,
+            semester=semester,
+            file_name=file_name,
+            total_records=total_records,
+            import_status=BatchImportStatus.pending.value,
+            import_type="renewal",
+            data_expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+        )
+        self.db.add(batch_import)
+        await self.db.flush()
+        return batch_import
+
+    async def create_renewals_from_batch(
+        self,
+        batch_import: BatchImport,
+        parsed_rows: List[Dict[str, Any]],
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: Optional[str],
+    ) -> Tuple[List[int], List[Dict[str, Any]]]:
+        """Create approved renewal Applications (all-or-nothing) shaped so 造冊 includes them."""
+        from app.core.exceptions import BatchImportError
+
+        created_ids: List[int] = []
+        errors: List[Dict[str, Any]] = []
+
+        scholarship = await self.db.get(ScholarshipType, scholarship_type_id)
+        if not scholarship:
+            raise BatchImportError(message=f"獎學金類型 ID {scholarship_type_id} 不存在", batch_id=batch_import.id)
+
+        semester_enum = _to_semester_enum(semester)
+        config_stmt = select(ScholarshipConfiguration).where(
+            ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+            ScholarshipConfiguration.academic_year == academic_year,
+        )
+        config_stmt = (
+            config_stmt.where(ScholarshipConfiguration.semester.is_(None))
+            if semester_enum in (None, Semester.yearly)
+            else config_stmt.where(ScholarshipConfiguration.semester == semester_enum)
+        )
+        config = (await self.db.execute(config_stmt)).scalar_one_or_none()
+        if not config:
+            raise BatchImportError(
+                message=f"找不到 {academic_year} 學年度的獎學金配置，請先建立配置。", batch_id=batch_import.id
+            )
+
+        seq_semester = semester if semester is not None else "yearly"
+        current_row = 0
+        applications: List[Application] = []
+        try:
+            user_map = await self._get_or_create_users_bulk(
+                [{"student_id": r["student_id"], "student_name": r["student_name"]} for r in parsed_rows]
+            )
+            for idx, row in enumerate(parsed_rows):
+                current_row = row.get("row_number", idx + 2)
+                user = user_map[row["student_id"]]
+
+                # Inline sequential app_id with 'R' (renewal) suffix — same lock pattern as batch import.
+                seq_stmt = (
+                    select(ApplicationSequence)
+                    .where(
+                        and_(
+                            ApplicationSequence.academic_year == academic_year,
+                            ApplicationSequence.semester == seq_semester,
+                        )
+                    )
+                    .with_for_update()
+                )
+                seq_record = (await self.db.execute(seq_stmt)).scalar_one_or_none()
+                if not seq_record:
+                    seq_record = ApplicationSequence(
+                        academic_year=academic_year, semester=seq_semester, last_sequence=0
+                    )
+                    self.db.add(seq_record)
+                    await self.db.flush()
+                seq_record.last_sequence += 1
+                app_id = f"{ApplicationSequence.format_app_id(academic_year, seq_semester, seq_record.last_sequence)}R"
+
+                student_data = None
+                try:
+                    student_data = await self.student_service.get_student_snapshot(
+                        row["student_id"], academic_year=str(academic_year), semester=semester
+                    )
+                except (NotFoundError, ServiceUnavailableError):
+                    logger.warning("SIS snapshot unavailable for %s", row["student_id"], exc_info=True)
+
+                now = datetime.now(timezone.utc)
+                application = Application(
+                    app_id=app_id,
+                    user_id=user.id,
+                    scholarship_type_id=scholarship_type_id,
+                    scholarship_configuration_id=config.id,
+                    allocation_config_id=config.id,
+                    scholarship_name=scholarship.name,
+                    amount=config.amount,
+                    sub_scholarship_type=row["sub_type"],
+                    scholarship_subtype_list=[row["sub_type"]],
+                    sub_type_selection_mode=scholarship.sub_type_selection_mode,
+                    academic_year=academic_year,
+                    semester=semester,
+                    is_renewal=True,
+                    renewal_year=academic_year,
+                    status=ApplicationStatus.approved.value,
+                    review_stage=ReviewStage.quota_distributed.value,
+                    quota_allocation_status="allocated",
+                    approved_at=now,
+                    submitted_at=now,
+                    imported_by_id=batch_import.importer_id,
+                    batch_import_id=batch_import.id,
+                    import_source="renewal_import",
+                    document_status="complete",
+                    student_data=student_data,
+                    submitted_form_data={
+                        "postal_account": row.get("postal_account"),
+                        "advisor_name": row.get("advisor_name"),
+                        "advisor_nycu_id": row.get("advisor_nycu_id"),
+                        "custom_fields": {},
+                    },
+                )
+                self.db.add(application)
+                applications.append(application)
+
+            await self.db.flush()
+            created_ids = [app.id for app in applications]
+        except Exception as e:  # noqa: BLE001 - convert to BatchImportError after rollback
+            await self.db.rollback()
+            batch_import.import_status = BatchImportStatus.failed.value
+            batch_import.error_summary = {"failed_at_row": current_row, "message": str(e)}
+            await self.db.commit()
+            raise BatchImportError(
+                message=f"續領匯入失敗於第 {current_row} 行: {str(e)}", batch_id=batch_import.id
+            ) from e
+
+        return created_ids, errors

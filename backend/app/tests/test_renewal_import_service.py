@@ -4,7 +4,11 @@ import pandas as pd
 import pytest
 from unittest.mock import AsyncMock, Mock
 
-from app.models.scholarship import ScholarshipType
+from app.models.application import Application, ApplicationStatus
+from app.models.batch_import import BatchImport
+from app.models.enums import ReviewStage
+from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
+from app.models.user import User
 from app.services.renewal_import_service import RenewalImportService
 
 
@@ -93,3 +97,78 @@ async def test_validate_flags_sis_not_found_as_error(service):
     )
     assert any(e["error_type"] == "sis_not_found" for e in errors)
     assert any(w["warning_type"] == "missing_postal_account" for w in warnings)
+
+
+@pytest.mark.asyncio
+async def test_create_renewals_sets_approved_fields(service):
+    scholarship = Mock(spec=ScholarshipType)
+    scholarship.id = 1
+    scholarship.name = "PhD"
+    scholarship.sub_type_selection_mode = "single"
+
+    config = Mock(spec=ScholarshipConfiguration)
+    config.id = 7
+    config.amount = 40000
+
+    batch = Mock(spec=BatchImport)
+    batch.id = 3
+    batch.importer_id = 10
+
+    user = Mock(spec=User)
+    user.id = 99
+    user.nycu_id = "413271002"
+
+    parsed = [
+        {
+            "student_id": "413271002",
+            "student_name": "曾美麗",
+            "sub_type": "nstc",
+            "postal_account": "1234567890123",
+            "advisor_nycu_id": "P001",
+            "advisor_name": "張教授",
+            "row_number": 2,
+        }
+    ]
+
+    from unittest.mock import AsyncMock, patch
+
+    captured = []
+
+    async def _get(model, _id):
+        return scholarship
+
+    service.db.get = _get
+    with (
+        patch.object(service, "_get_or_create_users_bulk", new=AsyncMock(return_value={"413271002": user})),
+        patch.object(
+            service.student_service,
+            "get_student_snapshot",
+            new=AsyncMock(return_value={"std_stdcode": "413271002", "std_cname": "曾美麗", "std_pid": "A123456789"}),
+        ),
+        patch.object(service.db, "add", side_effect=lambda o: captured.append(o)),
+        patch.object(service.db, "flush", new=AsyncMock()),
+        patch.object(service.db, "execute", new=AsyncMock()),
+    ):
+        # config lookup + ApplicationSequence lookup both via execute
+        cfg_res, seq_res = Mock(), Mock()
+        cfg_res.scalar_one_or_none.return_value = config
+        seq_res.scalar_one_or_none.return_value = None
+        service.db.execute.side_effect = [cfg_res, seq_res]
+
+        created_ids, errors = await service.create_renewals_from_batch(
+            batch_import=batch, parsed_rows=parsed, scholarship_type_id=1, academic_year=114, semester="first"
+        )
+
+    apps = [o for o in captured if isinstance(o, Application)]
+    assert len(apps) == 1
+    app = apps[0]
+    assert app.is_renewal is True
+    assert app.status == ApplicationStatus.approved.value
+    assert app.review_stage == ReviewStage.quota_distributed.value
+    assert app.sub_scholarship_type == "nstc"
+    assert app.allocation_config_id == 7
+    assert app.amount == 40000
+    assert app.import_source == "renewal_import"
+    assert app.app_id.endswith("R")
+    assert app.submitted_form_data["postal_account"] == "1234567890123"
+    assert errors == []
