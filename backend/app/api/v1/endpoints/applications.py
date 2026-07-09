@@ -642,13 +642,15 @@ async def upload_file_alias(
 @router.get("/review/list")
 async def get_applications_for_review(
     status: Optional[str] = Query(None, description="Filter by status"),
-    scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type ID"),
+    scholarship_type: Optional[str] = Query(None, description="Filter by scholarship type code"),
     current_user: User = Depends(require_staff),
     db: AsyncSession = Depends(get_db),
 ):
     """Get applications for review (staff only)"""
+    # Keyword args are load-bearing: passing these positionally once sent
+    # status into `skip` and the type filter into `limit` (issue #1131).
     service = ApplicationService(db)
-    result = await service.get_applications_for_review(current_user, status, scholarship_type_id)
+    result = await service.get_applications_for_review(current_user, status=status, scholarship_type=scholarship_type)
     return {
         "success": True,
         "message": "查詢成功",

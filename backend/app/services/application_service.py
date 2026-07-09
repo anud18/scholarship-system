@@ -1248,7 +1248,7 @@ class ApplicationService:
         # 自動分配指導教授：根據 UserProfile 的 advisor_nycu_id 查找教授帳號
         from app.services.application_builder import assign_professor_from_profile
 
-        await assign_professor_from_profile(self.db, application, application.user_id)
+        await assign_professor_from_profile(self.db, application, application.user_id, profile=advisor_profile)
 
         await self.db.commit()
         await self._invalidate_app_caches()
@@ -1357,6 +1357,22 @@ class ApplicationService:
 
         return ApplicationResponse(**response_data)
 
+    async def _get_accessible_student_ids(self, professor: User, permission: str = "view_applications") -> List[int]:
+        """Student IDs this professor may access, queried async-safely.
+
+        The former User.get_accessible_student_ids traversed the lazy
+        professor_relationships collection, which raises MissingGreenlet
+        under an AsyncSession (issue #1130) — query the rows explicitly.
+        """
+        from app.models.professor_student import ProfessorStudentRelationship
+
+        stmt = select(ProfessorStudentRelationship).where(
+            ProfessorStudentRelationship.professor_id == professor.id,
+            ProfessorStudentRelationship.is_active.is_(True),
+        )
+        result = await self.db.execute(stmt)
+        return [rel.student_id for rel in result.scalars().all() if rel.has_permission(permission)]
+
     async def get_applications_for_review(
         self,
         current_user: User,
@@ -1375,7 +1391,7 @@ class ApplicationService:
 
         if current_user.role == UserRole.professor:
             # Filter applications to only those from accessible students
-            accessible_student_ids = current_user.get_accessible_student_ids("view_applications")
+            accessible_student_ids = await self._get_accessible_student_ids(current_user)
             if accessible_student_ids:
                 query = query.where(Application.user_id.in_(accessible_student_ids))
             else:
@@ -1865,7 +1881,7 @@ class ApplicationService:
             query = query.where(Application.user_id == current_user.id)
         elif current_user.role == UserRole.professor:
             # Filter applications to only those from accessible students
-            accessible_student_ids = current_user.get_accessible_student_ids("view_applications")
+            accessible_student_ids = await self._get_accessible_student_ids(current_user)
             if accessible_student_ids:
                 query = query.where(Application.user_id.in_(accessible_student_ids))
             else:
