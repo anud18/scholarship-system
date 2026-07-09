@@ -14,9 +14,16 @@ Helpers covered:
   empty becomes None.
 - `_parse_renewal_year(value)`: renewal-year detection from
   Excel cell, returning (is_renewal, year_or_None).
+- `_is_sub_type_marked(value)`: checkmark/positive-number cell detection
+  for sub-type columns.
 
-11 cases — covers each helper across None/NaN/integer-float/string-int/
-plain-string inputs plus the renewal-year parser's failure mode.
+Plus pure-schema round-trip checks on `ApplicationDataRow`, pinning that
+the advisor_* fields survive `model_dump()` (they feed the profile upsert
++ professor auto-assign; a missing field silently dropped them).
+
+21 cases — each helper across None/NaN/integer-float/string-int/
+plain-string inputs, the renewal-year parser's failure mode, the
+sub-type-mark truth table, and the ApplicationDataRow advisor fields.
 """
 
 import math
@@ -24,7 +31,9 @@ import math
 import pandas as pd
 import pytest
 
+from app.schemas.batch_import import ApplicationDataRow
 from app.services.batch_import_service import (
+    _is_sub_type_marked,
     _normalize_identifier,
     _normalize_optional,
     _parse_renewal_year,
@@ -133,3 +142,57 @@ def test_parse_renewal_year_non_numeric_returns_not_renewal():
     is_renewal, year = _parse_renewal_year("not-a-year")
     assert is_renewal is False
     assert year is None
+
+
+# ─── _is_sub_type_marked ────────────────────────────────────────────
+
+
+def test_is_sub_type_marked_positive_numbers():
+    assert _is_sub_type_marked(1) is True
+    assert _is_sub_type_marked(2.0) is True
+    assert _is_sub_type_marked("3") is True
+
+
+def test_is_sub_type_marked_checkmarks():
+    assert _is_sub_type_marked("V") is True
+    assert _is_sub_type_marked("v") is True
+    assert _is_sub_type_marked("✓") is True
+
+
+def test_is_sub_type_marked_blank_zero_and_noise():
+    assert _is_sub_type_marked(None) is False
+    assert _is_sub_type_marked("") is False
+    assert _is_sub_type_marked(0) is False
+    assert _is_sub_type_marked("0") is False
+    assert _is_sub_type_marked(float("nan")) is False
+    assert _is_sub_type_marked("no") is False
+
+
+# ─── ApplicationDataRow advisor fields ──────────────────────────────
+# Regression: the parser populates advisor_name/advisor_email/
+# advisor_nycu_id in the raw row dict, but they are re-validated through
+# ApplicationDataRow whose model_dump() feeds the profile upsert +
+# professor auto-assign. If the schema drops these fields, advisor info
+# entered in the Excel is silently lost — UserProfile never gets the
+# advisor, and no professor is auto-assigned. Pin that they survive.
+
+
+def test_application_data_row_preserves_advisor_fields():
+    row = ApplicationDataRow(
+        student_id="csphd0001",
+        student_name="王博士",
+        advisor_name="李資訊教授",
+        advisor_email="cs_professor@nycu.edu.tw",
+        advisor_nycu_id="cs_professor",
+    )
+    dumped = row.model_dump()
+    assert dumped["advisor_name"] == "李資訊教授"
+    assert dumped["advisor_email"] == "cs_professor@nycu.edu.tw"
+    assert dumped["advisor_nycu_id"] == "cs_professor"
+
+
+def test_application_data_row_advisor_fields_default_none():
+    dumped = ApplicationDataRow(student_id="csphd0001", student_name="王博士").model_dump()
+    assert dumped["advisor_name"] is None
+    assert dumped["advisor_email"] is None
+    assert dumped["advisor_nycu_id"] is None

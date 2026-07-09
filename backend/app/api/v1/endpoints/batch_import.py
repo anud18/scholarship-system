@@ -15,13 +15,13 @@ import magic
 import pandas as pd
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import desc, select, update
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.path_security import validate_object_name_minio
 from app.core.security import get_current_user
 from app.db.deps import get_db
-from app.models.application import Application, ApplicationFile, ApplicationStatus
+from app.models.application import Application, ApplicationFile
 from app.models.audit_log import AuditAction, AuditLog
 from app.models.batch_import import BatchImport
 from app.models.enums import BatchImportStatus
@@ -60,7 +60,9 @@ async def upload_batch_import_data(
     file: UploadFile = File(..., description="Excel或CSV檔案"),
     scholarship_type: str = Query(..., description="獎學金類型代碼", pattern=r"^[a-z_]{1,50}$"),
     academic_year: int = Query(..., description="學年度", ge=100, le=200),
-    semester: Optional[str] = Query(None, description="學期", pattern=r"^(first|second|yearly)$"),
+    # Empty string is accepted and normalized to None below — the frontend
+    # sends semester="" for yearly scholarships whose period has no semester.
+    semester: Optional[str] = Query(None, description="學期", pattern=r"^(first|second|yearly)?$"),
     current_user: User = Depends(require_college_role),
     db: AsyncSession = Depends(get_db),
 ):
@@ -172,6 +174,14 @@ async def upload_batch_import_data(
         )
 
         validation_warnings.extend(permission_warnings)
+
+        eligibility_warnings = await service.bulk_check_eligibility(
+            parsed_data=parsed_data,
+            scholarship_type_id=scholarship.id,
+            academic_year=academic_year,
+            semester=normalized_semester,
+        )
+        validation_warnings.extend(eligibility_warnings)
 
         for row_data in parsed_data:
             student_id = row_data["student_id"]
@@ -484,6 +494,14 @@ async def revalidate_batch_import(
     )
 
     validation_warnings.extend(permission_warnings)
+
+    eligibility_warnings = await service.bulk_check_eligibility(
+        parsed_data=parsed_data,
+        scholarship_type_id=batch_import.scholarship_type_id,
+        academic_year=batch_import.academic_year,
+        semester=batch_import.semester,
+    )
+    validation_warnings.extend(eligibility_warnings)
 
     for row_data in parsed_data:
         student_id = row_data.get("student_id")
@@ -1125,12 +1143,6 @@ async def confirm_batch_import(
             status="completed" if len(creation_errors) == 0 else "partial",
         )
 
-        # Ensure applications created via batch import are visible for college review
-        await db.execute(
-            update(Application)
-            .where(Application.batch_import_id == batch_id)
-            .values(status=ApplicationStatus.under_review.value)
-        )
         # 每筆由批次建立的申請各留一筆稽核 (issue #964 / G2) — 沒有這些紀錄，
         # 數百筆申請的「誰建立、來自哪個檔案」將無從追溯。
         for created_id in created_ids:
@@ -1670,12 +1682,11 @@ async def download_batch_import_template(
             }
         )
 
-    # Sub-type label mapping
-    sub_type_labels = {
-        "nstc": "國科會",
-        "moe_1w": "教育部",
-        "moe_2w": "教育部配合款2萬",
-    }
+    # Sub-type label mapping — inverted from the parser's shared constant so
+    # a downloaded template is always importable (labels can never drift).
+    from app.services.batch_import_service import SUB_TYPE_CODE_BY_LABEL
+
+    sub_type_labels = {code: label for label, code in SUB_TYPE_CODE_BY_LABEL.items()}
 
     # Add sub_type columns if scholarship has sub types (Traditional Chinese)
     if scholarship.sub_type_list:
@@ -1744,16 +1755,15 @@ async def download_batch_import_template(
         )
 
     # Add sub_type sample values if applicable.
-    # Sub-type cells hold a 志願序 (priority) number: 1 = first choice, 2 = second
-    # choice, ... blank = not applied — this is what the importer parses (a plain
-    # "Y" is ignored). Per the current flow 教育部 (MOE) is always the first
-    # choice, so order the sample so MOE codes take the lowest numbers.
+    # Sub-type cells are checkmarks: 1 (or V) = applying for that category,
+    # blank = not applying. Preference order is NOT read from these cells —
+    # the system forces MOE (moe_1w) as first preference, mirroring the
+    # student wizard. Sample rows show both categories checked.
     if scholarship.sub_type_list:
-        ordered_sub_types = sorted(scholarship.sub_type_list, key=lambda c: (not str(c).startswith("moe")))
         for row in sample_data:
-            for priority, sub_type_code in enumerate(ordered_sub_types, start=1):
+            for sub_type_code in scholarship.sub_type_list:
                 label = sub_type_labels.get(sub_type_code, sub_type_code)
-                row[label] = priority
+                row[label] = 1
 
     # Add custom field sample values
     for field in template_custom_fields:

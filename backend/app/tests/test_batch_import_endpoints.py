@@ -15,9 +15,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_current_user
 from app.main import app
+from app.models.application import Application, ApplicationStatus
 from app.models.batch_import import BatchImport
-from app.models.enums import BatchImportStatus
-from app.models.scholarship import ScholarshipType
+from app.models.enums import BatchImportStatus, ReviewStage
+from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole
 
 # Router is mounted under this prefix in app/api/v1/api.py
@@ -90,12 +91,15 @@ class TestBatchImportEndpoints:
     @pytest.fixture
     def valid_excel_file(self):
         """Create a valid Excel file for testing"""
+        # test_scholarship defines real sub-types (type_a, type_b), so each
+        # row MUST mark a sub-type or parse rejects it with missing_sub_type.
         df = pd.DataFrame(
             {
                 "student_id": ["111111111", "222222222"],
                 "student_name": ["王小明", "陳小華"],
                 "dept_code": ["5201", "5202"],
                 "bank_account": ["1234567890", "9876543210"],
+                "sub_type_type_a": ["V", "V"],
             }
         )
 
@@ -133,6 +137,47 @@ class TestBatchImportEndpoints:
         assert "batch_id" in data
         assert data["total_records"] == 2
         assert len(data["preview_data"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_upload_batch_import_surfaces_eligibility_warnings(
+        self, client: AsyncClient, college_user: User, test_scholarship: ScholarshipType, valid_excel_file
+    ):
+        """Eligibility/professor warnings from bulk_check_eligibility must
+        surface in the upload response's validation_summary.warnings."""
+        _override_user(college_user)
+
+        fake_warning = {
+            "row_number": 2,
+            "student_id": "111111111",
+            "field": "eligibility",
+            "warning_type": "eligibility_failed",
+            "message": "學生 111111111 資格預檢未通過：GPA 未達標準（不影響匯入，請人工審查把關）。",
+        }
+
+        with patch(
+            "app.services.batch_import_service.BatchImportService.bulk_check_eligibility",
+            new_callable=AsyncMock,
+            return_value=[fake_warning],
+        ):
+            response = await client.post(
+                f"{BASE}/upload-data",
+                params={
+                    "scholarship_type": test_scholarship.code,
+                    "academic_year": 113,
+                    "semester": "first",
+                },
+                files={
+                    "file": (
+                        "test.xlsx",
+                        valid_excel_file,
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
+                },
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        warnings = response.json()["data"]["validation_summary"]["warnings"]
+        assert any("GPA 未達標準" in (w.get("message") or "") for w in warnings)
 
     @pytest.mark.asyncio
     async def test_upload_batch_import_file_too_large(
@@ -260,6 +305,85 @@ class TestBatchImportEndpoints:
         data = response.json()["data"]
         assert data["success_count"] == 2
         assert data["failed_count"] == 0
+
+    @pytest.mark.asyncio
+    async def test_confirm_batch_import_keeps_review_flow_status(
+        self, client: AsyncClient, db: AsyncSession, college_user: User
+    ):
+        """Regression (review-flow parity): the confirm endpoint must NOT
+        mutate the status the service sets. A stale
+        ``UPDATE applications SET status='under_review'`` used to run after
+        creation and stomped the submitted / student_submitted values,
+        defeating batch-import review-flow parity. This drives the REAL
+        service (not a mock) through the endpoint and reads the created
+        applications back from the DB.
+        """
+        scholarship = ScholarshipType(
+            code="phd_confirm_status",
+            name="PhD Confirm Status",
+            sub_type_list=["nstc"],
+            sub_type_selection_mode="single",
+        )
+        db.add(scholarship)
+        await db.flush()
+        db.add(
+            ScholarshipConfiguration(
+                scholarship_type_id=scholarship.id,
+                academic_year=114,
+                semester=None,
+                config_name="PhD Confirm Status 114",
+                config_code="phd_confirm_status_114",
+                amount=40000,
+            )
+        )
+
+        batch = BatchImport(
+            importer_id=college_user.id,
+            college_code="E",
+            scholarship_type_id=scholarship.id,
+            academic_year=114,
+            file_name="confirm.xlsx",
+            total_records=1,
+            import_status=BatchImportStatus.pending.value,
+            parsed_data={
+                "data": [
+                    {
+                        "student_id": "313559001",
+                        "student_name": "王小明",
+                        "sub_types": ["nstc"],
+                        "custom_fields": {},
+                        "row_number": 2,
+                    }
+                ],
+                "errors": [],
+            },
+        )
+        db.add(batch)
+        await db.commit()
+        await db.refresh(batch)
+
+        _override_user(college_user)
+        # Neutralize SIS so no network call — the endpoint builds its own
+        # BatchImportService(db) internally, so patch the StudentService it
+        # constructs rather than injecting a stub.
+        stub_sis = Mock()
+        stub_sis.get_student_snapshot = AsyncMock(return_value=None)
+        stub_sis.get_student_basic_info = AsyncMock(return_value=None)
+        with patch("app.services.batch_import_service.StudentService", return_value=stub_sis):
+            response = await client.post(
+                f"{BASE}/{batch.id}/confirm",
+                json={"batch_id": batch.id, "confirm": True},
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        created_ids = response.json()["data"]["created_application_ids"]
+        assert len(created_ids) == 1
+
+        # Fresh DB re-read so enum columns come back as enum members.
+        db.expunge_all()
+        created = await db.get(Application, created_ids[0])
+        assert created.status == ApplicationStatus.submitted
+        assert created.review_stage == ReviewStage.student_submitted
 
     @pytest.mark.asyncio
     async def test_confirm_batch_import_cancel(self, client: AsyncClient, db: AsyncSession, college_user: User):
@@ -428,6 +552,65 @@ class TestBatchImportEndpoints:
         assert ".xlsx" in content_disposition
         # Filename is derived from the scholarship name ("Test Scholarship" -> "Test%20Scholarship").
         assert "Test" in content_disposition
+
+    @pytest.mark.asyncio
+    async def test_upload_accepts_empty_semester_for_yearly(
+        self, client: AsyncClient, college_user: User, test_scholarship: ScholarshipType, valid_excel_file
+    ):
+        """Yearly scholarships have no semester part in their period, so the
+        UI sends semester="" — that must normalize to None (yearly), not die
+        in the query-pattern check with a generic 422 "Validation failed"."""
+        _override_user(college_user)
+        response = await client.post(
+            f"{BASE}/upload-data",
+            params={"scholarship_type": test_scholarship.code, "academic_year": 114, "semester": ""},
+            files={
+                "file": (
+                    "test.xlsx",
+                    valid_excel_file,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_downloaded_template_round_trips_through_upload(
+        self, client: AsyncClient, college_user: User, test_scholarship: ScholarshipType
+    ):
+        """下載的範本必須「原樣可匯入」：GET /template 的檔案直接餵回
+        upload-data 不得產生任何驗證錯誤。
+
+        Covers the custom sub-type gap: test_scholarship uses raw codes
+        (type_a/type_b) with no Chinese label, so the template writes the
+        code itself as the column header — the parser must accept it, or
+        every sample row dies with missing_sub_type.
+        """
+        _override_user(college_user)
+
+        template_resp = await client.get(f"{BASE}/template", params={"scholarship_type": test_scholarship.code})
+        assert template_resp.status_code == status.HTTP_200_OK
+
+        upload_resp = await client.post(
+            f"{BASE}/upload-data",
+            params={"scholarship_type": test_scholarship.code, "academic_year": 113, "semester": "first"},
+            files={
+                "file": (
+                    "template.xlsx",
+                    template_resp.content,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
+
+        assert upload_resp.status_code == status.HTTP_200_OK
+        data = upload_resp.json()["data"]
+        assert data["validation_summary"]["errors"] == []
+        assert data["validation_summary"]["invalid_count"] == 0
+        # Both sample rows survive as importable records with sub-types parsed.
+        assert len(data["preview_data"]) == 2
+        assert all(row["sub_types"] for row in data["preview_data"])
 
     @pytest.mark.asyncio
     async def test_upload_requires_college_role(

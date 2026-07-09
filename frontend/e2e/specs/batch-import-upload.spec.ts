@@ -57,7 +57,10 @@ test.describe("College batch-import upload parses CSV into a preview batch", () 
     pushTrace(runState, collegeLogin.traceId);
 
     // 1. Valid CSV with the required columns (Chinese header variant).
-    const csv = `學號,學生姓名\n${CSV_STUDENT_ID},${CSV_STUDENT_NAME}\n`;
+    //    phd defines real sub-types (nstc/moe_1w), so a row with NO sub-type
+    //    marked is now excluded at parse as missing_sub_type — the valid row
+    //    must carry a sub-type mark (教育部 = moe_1w) to be counted.
+    const csv = `學號,學生姓名,教育部\n${CSV_STUDENT_ID},${CSV_STUDENT_NAME},1\n`;
     const form = new FormData();
     form.append("file", new Blob([csv], { type: "text/csv" }), "e2e-batch.csv");
 

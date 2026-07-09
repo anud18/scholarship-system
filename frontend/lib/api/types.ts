@@ -157,6 +157,8 @@ export interface Application {
   status_zh?: string;
   student_name?: string;
   student_no?: string;
+  /** 郵局帳號 (from the student's UserProfile.account_number, not submitted_form_data) */
+  postal_account?: string | null;
   student_termcount?: number;
   gpa?: number;
   department?: string;
