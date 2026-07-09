@@ -1480,13 +1480,17 @@ class RosterService:
         return CollegeRanking.semester == semester
 
     def _build_application_semester_filter(self, semester: Optional[str]):
-        """Semester predicate on Application.semester, mirroring _build_semester_filter.
+        """Semester predicate on Application.semester.
         None / "annual" / "yearly" / "" all map to the yearly bucket
-        (semester IS NULL OR "annual" OR "yearly"); otherwise exact match."""
+        (semester IS NULL OR "yearly"); otherwise exact match.
+
+        Unlike CollegeRanking.semester (String(20)), Application.semester is a
+        native Postgres enum {first, second, yearly} — emitting "annual" here
+        aborts the whole query with `invalid input value for enum semester`.
+        Mirror _config_semester_condition, not the String-column helpers."""
         if semester in (None, "", "annual", "yearly"):
             return or_(
                 Application.semester.is_(None),
-                Application.semester == "annual",
                 Application.semester == "yearly",
             )
         return Application.semester == semester

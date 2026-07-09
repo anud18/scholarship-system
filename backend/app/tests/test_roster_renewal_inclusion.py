@@ -6,6 +6,7 @@ pull approved renewals directly, group them by
 the group has ONLY renewals (no allocated ranking items)."""
 
 import pytest
+from sqlalchemy.dialects import postgresql
 
 from app.models.application import Application, ApplicationStatus
 from app.models.enums import ReviewStage
@@ -48,6 +49,22 @@ def _mk_common(db_sync):
     db_sync.add(user)
     db_sync.flush()
     return st, cfg, user
+
+
+@pytest.mark.integration
+def test_application_semester_filter_emits_no_invalid_enum_literal(db_sync):
+    """Regression: Application.semester is a native Postgres enum
+    {first, second, yearly}. The yearly-bucket filter must NOT emit the
+    non-existent value 'annual' — SQLite silently tolerates it (so the suite
+    passed), but Postgres aborts the whole query with
+    `invalid input value for enum semester: "annual"`, breaking every
+    yearly-cycle 造冊. Compile to Postgres SQL and assert the literal is gone."""
+    service = RosterService(db_sync)
+    for sem in ("yearly", "annual", None, ""):
+        clause = service._build_application_semester_filter(sem)
+        compiled = str(clause.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+        assert "annual" not in compiled, f"annual leaked for semester={sem!r}: {compiled}"
+        assert "yearly" in compiled
 
 
 @pytest.mark.integration

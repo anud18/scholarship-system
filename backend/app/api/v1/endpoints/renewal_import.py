@@ -308,6 +308,13 @@ async def confirm_renewal_import(
         }
     except BatchImportError as e:
         logger.exception("Renewal import confirm failed", extra={"batch_id": batch_id})
+        # Pre-try lookups (scholarship/config) raise before the service's own
+        # rollback→failed handler runs, leaving the batch stuck in `processing`
+        # (the state guard then blocks both retry and cancel). Reset it here so
+        # the admin can act. In-try errors already set `failed`, so guard on it.
+        if batch.import_status == BatchImportStatus.processing.value:
+            batch.import_status = BatchImportStatus.failed.value
+            await db.commit()
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=e.message,

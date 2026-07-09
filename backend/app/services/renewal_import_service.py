@@ -240,11 +240,15 @@ class RenewalImportService:
         users = (await self.db.execute(users_stmt)).scalars().all()
         user_by_nycu = {u.nycu_id: u for u in users}
         if user_by_nycu:
+            # deleted_at IS NULL mirrors the partial unique index uq_user_renewal_app
+            # (is_renewal = true AND deleted_at IS NULL); a soft-deleted prior renewal
+            # does not block a fresh insert, so it must not raise a false duplicate.
             dup_stmt = select(Application).where(
                 Application.user_id.in_([u.id for u in users]),
                 Application.scholarship_type_id == scholarship_type_id,
                 Application.academic_year == academic_year,
                 Application.is_renewal.is_(True),
+                Application.deleted_at.is_(None),
             )
             dup_stmt = (
                 dup_stmt.where(Application.semester.is_(None))
