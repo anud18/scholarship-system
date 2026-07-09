@@ -43,6 +43,16 @@ class RenewalDataRow(BaseModel):
             raise ValueError("郵局帳號僅能包含數字和連字號")
         return v
 
+    @field_validator("advisor_name")
+    @classmethod
+    def validate_advisor_name(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        v = v.strip()
+        if re.search(r"<[^>]*script|<[^>]*iframe|javascript:", v, re.IGNORECASE):
+            raise ValueError("指導教授姓名欄位包含不允許的字元")
+        return v
+
 
 class RenewalImportUploadResponse(BaseModel):
     batch_id: int

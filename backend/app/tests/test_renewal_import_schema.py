@@ -24,3 +24,13 @@ def test_renewal_row_rejects_bad_student_id():
 def test_renewal_row_rejects_bad_postal_account():
     with pytest.raises(ValidationError):
         RenewalDataRow(student_id="413271002", student_name="x", sub_type="nstc", postal_account="12ab")
+
+
+def test_renewal_row_rejects_xss_advisor_name():
+    with pytest.raises(ValidationError):
+        RenewalDataRow(
+            student_id="413271002",
+            student_name="x",
+            sub_type="nstc",
+            advisor_name="<script>alert(1)</script>",
+        )

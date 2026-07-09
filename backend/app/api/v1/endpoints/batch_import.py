@@ -350,7 +350,7 @@ async def update_batch_record(
     """
     # Get batch import record
     batch_import = await db.get(BatchImport, batch_id)
-    if not batch_import:
+    if not batch_import or batch_import.import_type != "application":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"批次匯入記錄 {batch_id} 不存在",
@@ -430,7 +430,7 @@ async def revalidate_batch_import(
     """
     # Get batch import record
     batch_import = await db.get(BatchImport, batch_id)
-    if not batch_import:
+    if not batch_import or batch_import.import_type != "application":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"批次匯入記錄 {batch_id} 不存在",
@@ -575,7 +575,7 @@ async def delete_batch_record(
     """
     # Get batch import record
     batch_import = await db.get(BatchImport, batch_id)
-    if not batch_import:
+    if not batch_import or batch_import.import_type != "application":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"批次匯入記錄 {batch_id} 不存在",
@@ -696,7 +696,7 @@ async def upload_batch_documents(
 
     # Get batch import record
     batch_import = await db.get(BatchImport, batch_id)
-    if not batch_import:
+    if not batch_import or batch_import.import_type != "application":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"批次匯入記錄 {batch_id} 不存在",
@@ -1014,7 +1014,7 @@ async def confirm_batch_import(
     """
     # Get batch import record
     batch_import = await db.get(BatchImport, batch_id)
-    if not batch_import:
+    if not batch_import or batch_import.import_type != "application":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"批次匯入記錄 {batch_id} 不存在",
@@ -1322,7 +1322,7 @@ async def get_batch_import_details(
     """
     # Get batch import
     batch_import = await db.get(BatchImport, batch_id)
-    if not batch_import:
+    if not batch_import or batch_import.import_type != "application":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"批次匯入記錄 {batch_id} 不存在",
@@ -1390,7 +1390,7 @@ async def download_batch_import_file(
 
     # Get batch import
     batch_import = await db.get(BatchImport, batch_id)
-    if not batch_import:
+    if not batch_import or batch_import.import_type != "application":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"批次匯入記錄 {batch_id} 不存在",
@@ -1479,7 +1479,7 @@ async def delete_batch_import(
     result = await db.execute(stmt)
     batch_import = result.scalar_one_or_none()
 
-    if not batch_import:
+    if not batch_import or batch_import.import_type != "application":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"批次匯入記錄 {batch_id} 不存在",

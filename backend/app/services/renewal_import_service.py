@@ -411,6 +411,18 @@ class RenewalImportService:
                 except (NotFoundError, ServiceUnavailableError):
                     logger.warning("SIS snapshot unavailable for %s", row["student_id"], exc_info=True)
 
+                # A row without a snapshot has no std_stdcode, so 造冊 hard-skips it —
+                # creating an approved renewal that silently vanishes from the roster.
+                # Fail the whole (all-or-nothing) batch instead (spec §6).
+                if not student_data:
+                    raise BatchImportError(
+                        message=(
+                            f"學號 {row['student_id']} 無法取得學籍資料"
+                            "（SIS 不可用或查無此學號），請於學籍系統恢復後重試。"
+                        ),
+                        batch_id=batch_import.id,
+                    )
+
                 now = datetime.now(timezone.utc)
                 application = Application(
                     app_id=app_id,
@@ -424,7 +436,7 @@ class RenewalImportService:
                     scholarship_subtype_list=[row["sub_type"]],
                     sub_type_selection_mode=scholarship.sub_type_selection_mode,
                     academic_year=academic_year,
-                    semester=semester,
+                    semester=semester_enum,
                     is_renewal=True,
                     renewal_year=academic_year,
                     status=ApplicationStatus.approved.value,

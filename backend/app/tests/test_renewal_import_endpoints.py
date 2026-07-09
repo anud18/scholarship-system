@@ -355,9 +355,17 @@ class TestRenewalImportEndpoints:
         await db.commit()
         await db.refresh(batch)
 
-        # SIS is unavailable in the test env; disabling it makes get_student_snapshot
-        # raise ServiceUnavailableError (caught -> student_data stays None) instead of
-        # attempting a real network call. student_data being None is acceptable here.
+        # A renewal row without a SIS snapshot now fails the whole batch (spec §6:
+        # it could not be rostered). Return a valid snapshot so confirm succeeds and
+        # the created Application has student_data populated.
+        async def _fake_snapshot(*args, **kwargs):
+            return {"std_stdcode": "413271002", "std_cname": "曾美麗", "std_pid": "A123456789"}
+
+        monkeypatch.setattr(
+            "app.services.student_service.StudentService.get_student_snapshot",
+            _fake_snapshot,
+        )
+        # Keep the user-bulk path off the network; the student User is pre-created.
         monkeypatch.setattr(settings, "student_api_enabled", False, raising=False)
 
         _override_user(college_user)
@@ -378,3 +386,5 @@ class TestRenewalImportEndpoints:
         # Enum column: a fresh DB read yields the member; the in-session object holds the value.
         assert app_row.status in (ApplicationStatus.approved, ApplicationStatus.approved.value)
         assert app_row.import_source == "renewal_import"
+        assert app_row.student_data is not None
+        assert app_row.student_data.get("std_stdcode") == "413271002"
