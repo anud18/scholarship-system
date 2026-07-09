@@ -12,11 +12,15 @@ import pandas as pd
 import pytest
 from fastapi import status
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.security import get_current_user
 from app.main import app
+from app.models.application import Application, ApplicationStatus
+from app.models.batch_import import BatchImport
+from app.models.enums import BatchImportStatus
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole
 
@@ -238,3 +242,139 @@ class TestRenewalImportEndpoints:
         content_disposition = response.headers.get("content-disposition", "")
         assert "attachment" in content_disposition
         assert ".xlsx" in content_disposition
+
+    @pytest.mark.asyncio
+    async def test_confirm_rejects_non_renewal_batch(self, client: AsyncClient, db: AsyncSession, college_user: User):
+        """The renewal confirm endpoint must reject a non-renewal batch (import_type='application') -> 404."""
+        batch = BatchImport(
+            importer_id=college_user.id,
+            college_code="E",
+            scholarship_type_id=1,
+            academic_year=114,
+            semester="first",
+            file_name="app.xlsx",
+            total_records=1,
+            import_status=BatchImportStatus.pending.value,
+            import_type="application",
+            parsed_data={"data": [{"student_id": "111111111"}], "errors": []},
+        )
+        db.add(batch)
+        await db.commit()
+        await db.refresh(batch)
+
+        _override_user(college_user)
+        response = await client.post(
+            f"{BASE}/{batch.id}/confirm",
+            json={"batch_id": batch.id, "confirm": True},
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_confirm_rejects_non_owner(self, client: AsyncClient, db: AsyncSession, college_user: User):
+        """A different non-super-admin user cannot confirm someone else's renewal batch -> 403."""
+        batch = BatchImport(
+            importer_id=college_user.id,
+            college_code="E",
+            scholarship_type_id=1,
+            academic_year=114,
+            semester="first",
+            file_name="renewal.xlsx",
+            total_records=1,
+            import_status=BatchImportStatus.pending.value,
+            import_type="renewal",
+            parsed_data={"data": [{"student_id": "111111111"}], "errors": []},
+        )
+        db.add(batch)
+        await db.commit()
+        await db.refresh(batch)
+
+        # A DIFFERENT college user (not the importer, not super_admin).
+        other_user = User(
+            id=999,
+            nycu_id="other_college",
+            name="Other College User",
+            email="other.college@test.com",
+            role=UserRole.college,
+            college_code="H",
+            user_type="employee",
+        )
+        _override_user(other_user)
+        response = await client.post(
+            f"{BASE}/{batch.id}/confirm",
+            json={"batch_id": batch.id, "confirm": True},
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    @pytest.mark.asyncio
+    async def test_confirm_happy_path_creates_approved_renewals(
+        self, client: AsyncClient, db: AsyncSession, college_user: User, phd_scholarship: ScholarshipType, monkeypatch
+    ):
+        """Confirming a pending renewal batch creates an approved is_renewal Application."""
+        # Config for the (year, semester) is required by create_renewals_from_batch.
+        db.add(_make_config(phd_scholarship.id, renewal_open=True))
+        # Pre-create the student User so _get_or_create_users_bulk needs no SIS lookup.
+        db.add(
+            User(
+                nycu_id="413271002",
+                name="曾美麗",
+                email="mei@test.com",
+                role=UserRole.student,
+                user_type="student",
+            )
+        )
+        batch = BatchImport(
+            importer_id=college_user.id,
+            college_code="E",
+            scholarship_type_id=phd_scholarship.id,
+            academic_year=114,
+            semester="first",
+            file_name="renewal.xlsx",
+            total_records=1,
+            import_status=BatchImportStatus.pending.value,
+            import_type="renewal",
+            parsed_data={
+                "data": [
+                    {
+                        "student_id": "413271002",
+                        "student_name": "曾美麗",
+                        "sub_type": "nstc",
+                        "postal_account": "1234567890123",
+                        "advisor_nycu_id": "P001",
+                        "advisor_name": "張教授",
+                        "row_number": 2,
+                    }
+                ],
+                "errors": [],
+                "skipped": [],
+                "warnings": [],
+            },
+        )
+        db.add(batch)
+        await db.commit()
+        await db.refresh(batch)
+
+        # SIS is unavailable in the test env; disabling it makes get_student_snapshot
+        # raise ServiceUnavailableError (caught -> student_data stays None) instead of
+        # attempting a real network call. student_data being None is acceptable here.
+        monkeypatch.setattr(settings, "student_api_enabled", False, raising=False)
+
+        _override_user(college_user)
+        response = await client.post(
+            f"{BASE}/{batch.id}/confirm",
+            json={"batch_id": batch.id, "confirm": True},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()["data"]
+        assert data["success_count"] >= 1
+        assert data["failed_count"] == 0
+
+        created = (await db.execute(select(Application).where(Application.batch_import_id == batch.id))).scalars().all()
+        assert len(created) >= 1
+        app_row = created[0]
+        assert app_row.is_renewal is True
+        # Enum column: a fresh DB read yields the member; the in-session object holds the value.
+        assert app_row.status in (ApplicationStatus.approved, ApplicationStatus.approved.value)
+        assert app_row.import_source == "renewal_import"
