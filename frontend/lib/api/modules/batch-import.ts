@@ -210,7 +210,7 @@ export function createBatchImportApi() {
       file: File,
       scholarshipType: string,
       academicYear: number,
-      semester: string
+      semester?: string
     ): Promise<ApiResponse<BatchUploadResult>> => {
       const formData = createFileUploadFormData({ file });
 
@@ -219,7 +219,9 @@ export function createBatchImportApi() {
           query: {
             scholarship_type: scholarshipType,
             academic_year: academicYear,
-            semester: semester,
+            // Yearly scholarships have no semester — omit the param entirely
+            // (an empty string would fail the endpoint's pattern check).
+            ...(semester ? { semester } : {}),
           },
         },
         body: formData as MultipartFormData<{ file: string }>,

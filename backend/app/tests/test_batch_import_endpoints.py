@@ -554,6 +554,28 @@ class TestBatchImportEndpoints:
         assert "Test" in content_disposition
 
     @pytest.mark.asyncio
+    async def test_upload_accepts_empty_semester_for_yearly(
+        self, client: AsyncClient, college_user: User, test_scholarship: ScholarshipType, valid_excel_file
+    ):
+        """Yearly scholarships have no semester part in their period, so the
+        UI sends semester="" — that must normalize to None (yearly), not die
+        in the query-pattern check with a generic 422 "Validation failed"."""
+        _override_user(college_user)
+        response = await client.post(
+            f"{BASE}/upload-data",
+            params={"scholarship_type": test_scholarship.code, "academic_year": 114, "semester": ""},
+            files={
+                "file": (
+                    "test.xlsx",
+                    valid_excel_file,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["success"] is True
+
+    @pytest.mark.asyncio
     async def test_downloaded_template_round_trips_through_upload(
         self, client: AsyncClient, college_user: User, test_scholarship: ScholarshipType
     ):

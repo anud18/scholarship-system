@@ -280,7 +280,7 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
         selectedFile,
         selectedScholarship.code,
         academicYear,
-        semester || ""
+        semester
       );
 
       if (response.success && response.data) {
