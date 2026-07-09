@@ -38,6 +38,56 @@ function resolveAuthToken(): string | null {
   );
 }
 
+/**
+ * Fetch an authenticated file endpoint and trigger a browser download.
+ * Shared by template/file downloads: error-body extraction and RFC 5987
+ * filename handling live in one place.
+ */
+async function downloadAuthedFile(path: string, label: string, fallbackFilename: string): Promise<void> {
+  const token = resolveAuthToken();
+  const baseURL = typeof window !== "undefined" ? "" : process.env.INTERNAL_API_URL || "http://localhost:8000";
+
+  const response = await fetch(`${baseURL}${path}`, {
+    method: "GET",
+    headers: {
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
+  });
+
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const body = await response.clone().json();
+      detail = body?.message || body?.detail || "";
+    } catch {
+      // Non-JSON error body — surface the status alone.
+    }
+    throw new Error(`Failed to download ${label} (${response.status}${detail ? `: ${detail}` : ""})`);
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+
+  // Extract filename from Content-Disposition header
+  const contentDisposition = response.headers.get("content-disposition");
+  let filename = fallbackFilename;
+  if (contentDisposition) {
+    // Match filename*=UTF-8''encoded_name (RFC 5987)
+    const filenameMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
+    if (filenameMatch) {
+      filename = decodeURIComponent(filenameMatch[1].trim());
+    }
+  }
+
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
+}
+
 type BatchUploadResult = {
   batch_id: number;
   file_name: string;
@@ -291,53 +341,11 @@ export function createBatchImportApi() {
      * Type-safe: Returns blob for file download
      */
     downloadTemplate: async (scholarshipType: string): Promise<void> => {
-      const token = resolveAuthToken();
-      const baseURL = typeof window !== "undefined" ? "" : process.env.INTERNAL_API_URL || "http://localhost:8000";
-
-      const response = await fetch(
-        `${baseURL}/api/v1/college-review/batch-import/template?scholarship_type=${encodeURIComponent(scholarshipType)}`,
-        {
-          method: "GET",
-          headers: {
-            ...(token && { Authorization: `Bearer ${token}` }),
-          },
-        }
+      await downloadAuthedFile(
+        `/api/v1/college-review/batch-import/template?scholarship_type=${encodeURIComponent(scholarshipType)}`,
+        "template",
+        `batch_import_template_${scholarshipType}.xlsx`
       );
-
-      if (!response.ok) {
-        let detail = "";
-        try {
-          const body = await response.clone().json();
-          detail = body?.message || body?.detail || "";
-        } catch {
-          // Non-JSON error body — surface the status alone.
-        }
-        throw new Error(
-          `Failed to download template (${response.status}${detail ? `: ${detail}` : ""})`
-        );
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-
-      // Extract filename from Content-Disposition header
-      const contentDisposition = response.headers.get("content-disposition");
-      let filename = `batch_import_template_${scholarshipType}.xlsx`;
-      if (contentDisposition) {
-        // Match filename*=UTF-8''encoded_name (RFC 5987)
-        const filenameMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
-        if (filenameMatch) {
-          filename = decodeURIComponent(filenameMatch[1].trim());
-        }
-      }
-
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
     },
 
     /**
@@ -356,58 +364,11 @@ export function createBatchImportApi() {
      * Type-safe: Returns blob for file download
      */
     downloadFile: async (batchId: number): Promise<void> => {
-      const token = resolveAuthToken();
-      const baseURL =
-        typeof window !== "undefined"
-          ? ""
-          : process.env.INTERNAL_API_URL || "http://localhost:8000";
-
-      const response = await fetch(
-        `${baseURL}/api/v1/college-review/batch-import/${batchId}/download`,
-        {
-          method: "GET",
-          headers: {
-            ...(token && { Authorization: `Bearer ${token}` }),
-          },
-        }
+      await downloadAuthedFile(
+        `/api/v1/college-review/batch-import/${batchId}/download`,
+        "file",
+        `batch_import_${batchId}.xlsx`
       );
-
-      if (!response.ok) {
-        let detail = "";
-        try {
-          const body = await response.clone().json();
-          detail = body?.message || body?.detail || "";
-        } catch {
-          // Non-JSON error body — surface the status alone.
-        }
-        throw new Error(
-          `Failed to download file (${response.status}${detail ? `: ${detail}` : ""})`
-        );
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-
-      // Extract filename from Content-Disposition header
-      const contentDisposition = response.headers.get("content-disposition");
-      let filename = `batch_import_${batchId}.xlsx`;
-      if (contentDisposition) {
-        // Match filename*=UTF-8''encoded_name (RFC 5987)
-        const filenameMatch = contentDisposition.match(
-          /filename\*=UTF-8''([^;]+)/
-        );
-        if (filenameMatch) {
-          filename = decodeURIComponent(filenameMatch[1].trim());
-        }
-      }
-
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
     },
   };
 }

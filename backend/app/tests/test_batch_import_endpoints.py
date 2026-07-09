@@ -554,6 +554,43 @@ class TestBatchImportEndpoints:
         assert "Test" in content_disposition
 
     @pytest.mark.asyncio
+    async def test_downloaded_template_round_trips_through_upload(
+        self, client: AsyncClient, college_user: User, test_scholarship: ScholarshipType
+    ):
+        """下載的範本必須「原樣可匯入」：GET /template 的檔案直接餵回
+        upload-data 不得產生任何驗證錯誤。
+
+        Covers the custom sub-type gap: test_scholarship uses raw codes
+        (type_a/type_b) with no Chinese label, so the template writes the
+        code itself as the column header — the parser must accept it, or
+        every sample row dies with missing_sub_type.
+        """
+        _override_user(college_user)
+
+        template_resp = await client.get(f"{BASE}/template", params={"scholarship_type": test_scholarship.code})
+        assert template_resp.status_code == status.HTTP_200_OK
+
+        upload_resp = await client.post(
+            f"{BASE}/upload-data",
+            params={"scholarship_type": test_scholarship.code, "academic_year": 113, "semester": "first"},
+            files={
+                "file": (
+                    "template.xlsx",
+                    template_resp.content,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
+
+        assert upload_resp.status_code == status.HTTP_200_OK
+        data = upload_resp.json()["data"]
+        assert data["validation_summary"]["errors"] == []
+        assert data["validation_summary"]["invalid_count"] == 0
+        # Both sample rows survive as importable records with sub-types parsed.
+        assert len(data["preview_data"]) == 2
+        assert all(row["sub_types"] for row in data["preview_data"])
+
+    @pytest.mark.asyncio
     async def test_upload_requires_college_role(
         self, client: AsyncClient, test_scholarship: ScholarshipType, valid_excel_file
     ):

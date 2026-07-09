@@ -1680,12 +1680,11 @@ async def download_batch_import_template(
             }
         )
 
-    # Sub-type label mapping
-    sub_type_labels = {
-        "nstc": "國科會",
-        "moe_1w": "教育部",
-        "moe_2w": "教育部配合款2萬",
-    }
+    # Sub-type label mapping — inverted from the parser's shared constant so
+    # a downloaded template is always importable (labels can never drift).
+    from app.services.batch_import_service import SUB_TYPE_CODE_BY_LABEL
+
+    sub_type_labels = {code: label for label, code in SUB_TYPE_CODE_BY_LABEL.items()}
 
     # Add sub_type columns if scholarship has sub types (Traditional Chinese)
     if scholarship.sub_type_list:

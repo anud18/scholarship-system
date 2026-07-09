@@ -128,19 +128,23 @@ async def generate_app_id(
     return f"{app_id}{suffix}"
 
 
-async def assign_professor_from_profile(db: AsyncSession, application, user_id: int) -> Optional[User]:
+async def assign_professor_from_profile(
+    db: AsyncSession, application, user_id: int, profile: Optional[UserProfile] = None
+) -> Optional[User]:
     """Auto-assign the reviewing professor from the student's UserProfile.
 
     Looks up UserProfile.advisor_nycu_id and matches a User with
     role=professor. Returns the professor User or None. Never overwrites
-    an already-assigned professor_id.
+    an already-assigned professor_id. Pass `profile` when the caller has
+    already loaded it to skip the redundant SELECT.
     """
     if getattr(application, "professor_id", None):
         return None
 
-    profile_stmt = select(UserProfile).where(UserProfile.user_id == user_id)
-    profile_result = await db.execute(profile_stmt)
-    profile = profile_result.scalar_one_or_none()
+    if profile is None:
+        profile_stmt = select(UserProfile).where(UserProfile.user_id == user_id)
+        profile_result = await db.execute(profile_stmt)
+        profile = profile_result.scalar_one_or_none()
 
     if not profile or not profile.advisor_nycu_id:
         return None

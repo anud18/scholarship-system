@@ -22,6 +22,8 @@ from app.models.enums import BatchImportStatus, Semester
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole
 from app.models.user_profile import UserProfile
+from pydantic import ValidationError as PydanticValidationError
+
 from app.schemas.batch_import import ApplicationDataRow, BatchImportValidationError
 from app.services.application_builder import (
     assign_professor_from_profile,
@@ -99,6 +101,65 @@ def _is_sub_type_marked(cell: Any) -> bool:
     return False
 
 
+# Row-field → Excel column label, for human-readable validation errors.
+_ROW_FIELD_LABELS = {
+    "student_id": "學號",
+    "student_name": "學生姓名",
+    "postal_account": "郵局帳號",
+    "advisor_name": "指導教授姓名",
+    "advisor_email": "指導教授Email",
+    "advisor_nycu_id": "指導教授本校人事編號",
+    "renewal_year": "續領年份",
+    "is_renewal": "續領",
+    "sub_types": "申請類別",
+    "custom_fields": "自訂欄位",
+}
+
+
+def _format_row_validation_error(exc: PydanticValidationError) -> str:
+    """Per-field, Chinese-labelled reasons for a rejected row — staff fixing
+    their Excel need to know WHICH column failed and WHY, not a pydantic repr.
+    """
+    parts = []
+    for err in exc.errors():
+        loc = err.get("loc") or ("row",)
+        label = _ROW_FIELD_LABELS.get(str(loc[0]), str(loc[0]))
+        msg = err.get("msg", "")
+        # Pydantic v2 prefixes custom ValueError messages with "Value error, "
+        if msg.startswith("Value error, "):
+            msg = msg[len("Value error, ") :]
+        parts.append(f"{label}：{msg}")
+    return "；".join(parts) or str(exc)
+
+
+# Chinese column label → sub-type code. Shared by the parser below and the
+# template generator in api/v1/endpoints/batch_import.py — the two MUST stay
+# identical or a downloaded template stops being importable.
+SUB_TYPE_CODE_BY_LABEL = {
+    "國科會": "nstc",
+    "教育部": "moe_1w",
+    "教育部配合款2萬": "moe_2w",
+}
+
+
+def _make_warning(
+    message: str,
+    *,
+    warning_type: str,
+    row_number: Optional[int] = None,
+    student_id: Optional[str] = None,
+    field: str = "eligibility",
+) -> Dict[str, Any]:
+    """Preview-warning dict in the shape the endpoints persist and return."""
+    return {
+        "row_number": row_number,
+        "student_id": student_id,
+        "field": field,
+        "warning_type": warning_type,
+        "message": message,
+    }
+
+
 class BatchImportService:
     """Service for handling batch import operations"""
 
@@ -109,6 +170,42 @@ class BatchImportService:
     def __init__(self, db: AsyncSession, student_service: Optional[StudentService] = None):
         self.db = db
         self.student_service = student_service or StudentService()
+
+    async def _resolve_configuration(
+        self, scholarship_type_id: int, academic_year: int, semester: Optional[str]
+    ) -> Optional[ScholarshipConfiguration]:
+        """Resolve the ScholarshipConfiguration for an academic period.
+
+        Single source of the yearly-vs-semester matching rule (None or
+        "yearly" → semester IS NULL) so the preview check and the confirm
+        step can never disagree about which config applies.
+
+        Eager-loads scholarship_type: eligibility checks read
+        config.scholarship_type.whitelist_enabled, and an async lazy-load
+        would raise MissingGreenlet when the type isn't already in the
+        session identity map.
+        """
+        semester_enum: Optional[Semester] = None
+        if semester:
+            try:
+                semester_enum = Semester(semester)
+            except ValueError:
+                semester_enum = None
+
+        config_stmt = (
+            select(ScholarshipConfiguration)
+            .options(selectinload(ScholarshipConfiguration.scholarship_type))
+            .where(
+                ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+                ScholarshipConfiguration.academic_year == academic_year,
+            )
+        )
+        if semester_enum is None or semester_enum == Semester.yearly:
+            config_stmt = config_stmt.where(ScholarshipConfiguration.semester.is_(None))
+        else:
+            config_stmt = config_stmt.where(ScholarshipConfiguration.semester == semester_enum)
+        config_result = await self.db.execute(config_stmt)
+        return config_result.scalar_one_or_none()
 
     async def bulk_check_eligibility(
         self,
@@ -125,42 +222,14 @@ class BatchImportService:
         """
         warnings: List[Dict[str, Any]] = []
 
-        # Resolve the configuration the same way create_applications_from_batch does
-        semester_enum: Optional[Semester] = None
-        if semester:
-            try:
-                semester_enum = Semester(semester)
-            except ValueError:
-                semester_enum = None
-
-        # Eager-load scholarship_type: check_student_eligibility reads
-        # config.scholarship_type.whitelist_enabled, and an async lazy-load
-        # would raise MissingGreenlet in the revalidate path (where the
-        # ScholarshipType is not already in the session identity map).
-        config_stmt = (
-            select(ScholarshipConfiguration)
-            .options(selectinload(ScholarshipConfiguration.scholarship_type))
-            .where(
-                ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
-                ScholarshipConfiguration.academic_year == academic_year,
-            )
-        )
-        if semester_enum is None or semester_enum == Semester.yearly:
-            config_stmt = config_stmt.where(ScholarshipConfiguration.semester.is_(None))
-        else:
-            config_stmt = config_stmt.where(ScholarshipConfiguration.semester == semester_enum)
-        config_result = await self.db.execute(config_stmt)
-        config = config_result.scalar_one_or_none()
-
+        config = await self._resolve_configuration(scholarship_type_id, academic_year, semester)
         if not config:
             warnings.append(
-                {
-                    "row_number": None,
-                    "student_id": None,
-                    "field": "configuration",
-                    "warning_type": "eligibility_check_skipped",
-                    "message": "找不到對應的獎學金配置，已跳過資格預檢（確認匯入時將會失敗，請先建立配置）。",
-                }
+                _make_warning(
+                    "找不到對應的獎學金配置，已跳過資格預檢（確認匯入時將會失敗，請先建立配置）。",
+                    warning_type="eligibility_check_skipped",
+                    field="configuration",
+                )
             )
             return warnings
 
@@ -181,13 +250,13 @@ class BatchImportService:
             advisor_id = row.get("advisor_nycu_id")
             if advisor_id and advisor_id not in professor_map:
                 warnings.append(
-                    {
-                        "row_number": row_number,
-                        "student_id": student_id,
-                        "field": "advisor_nycu_id",
-                        "warning_type": "professor_not_found",
-                        "message": f"查無人事編號 {advisor_id} 的教授帳號，該申請將無法進入教授待審清單。",
-                    }
+                    _make_warning(
+                        f"查無人事編號 {advisor_id} 的教授帳號，該申請將無法進入教授待審清單。",
+                        warning_type="professor_not_found",
+                        row_number=row_number,
+                        student_id=student_id,
+                        field="advisor_nycu_id",
+                    )
                 )
 
             try:
@@ -197,13 +266,12 @@ class BatchImportService:
             except Exception:  # noqa: BLE001 — any SIS failure demotes to a skip warning
                 logger.warning("Eligibility precheck skipped for %s (SIS error)", student_id, exc_info=True)
                 warnings.append(
-                    {
-                        "row_number": row_number,
-                        "student_id": student_id,
-                        "field": "eligibility",
-                        "warning_type": "eligibility_check_skipped",
-                        "message": f"無法取得學生 {student_id} 的學籍資料，已跳過資格預檢。",
-                    }
+                    _make_warning(
+                        f"無法取得學生 {student_id} 的學籍資料，已跳過資格預檢。",
+                        warning_type="eligibility_check_skipped",
+                        row_number=row_number,
+                        student_id=student_id,
+                    )
                 )
                 continue
 
@@ -215,26 +283,24 @@ class BatchImportService:
             except Exception:  # noqa: BLE001 — a bad rule config must not 500 the preview
                 logger.warning("Eligibility precheck failed for %s", student_id, exc_info=True)
                 warnings.append(
-                    {
-                        "row_number": row_number,
-                        "student_id": student_id,
-                        "field": "eligibility",
-                        "warning_type": "eligibility_check_skipped",
-                        "message": f"學生 {student_id} 資格預檢執行失敗，已跳過。",
-                    }
+                    _make_warning(
+                        f"學生 {student_id} 資格預檢執行失敗，已跳過。",
+                        warning_type="eligibility_check_skipped",
+                        row_number=row_number,
+                        student_id=student_id,
+                    )
                 )
                 continue
 
             if not is_eligible and effective_reasons:
                 warnings.append(
-                    {
-                        "row_number": row_number,
-                        "student_id": student_id,
-                        "field": "eligibility",
-                        "warning_type": "eligibility_failed",
-                        "message": f"學生 {student_id} 資格預檢未通過："
+                    _make_warning(
+                        f"學生 {student_id} 資格預檢未通過："
                         f"{'；'.join(effective_reasons)}（不影響匯入，請人工審查把關）。",
-                    }
+                        warning_type="eligibility_failed",
+                        row_number=row_number,
+                        student_id=student_id,
+                    )
                 )
 
         return warnings
@@ -254,9 +320,6 @@ class BatchImportService:
         Returns:
             Tuple of (parsed_data, validation_errors)
         """
-        from app.models.application_field import ApplicationField
-        from app.models.scholarship import ScholarshipType
-
         errors = []
         parsed_data = []
 
@@ -299,26 +362,20 @@ class BatchImportService:
         # Mirrors application_builder.validate_sub_type_for_submission.
         real_sub_types = [st for st in (scholarship.sub_type_list or []) if st and st.lower() != "general"]
 
-        # Get custom fields configuration
-        custom_fields_stmt = (
-            select(ApplicationField)
-            .where(ApplicationField.scholarship_type == scholarship.code)
-            .where(ApplicationField.is_active)
-        )
-        custom_fields_result = await self.db.execute(custom_fields_stmt)
-        custom_fields = custom_fields_result.scalars().all()
+        # Custom-field definitions (same set _build_submitted_form_data uses)
+        field_definitions = await self._fetch_field_definitions(scholarship.code)
+        custom_field_mapping = {f.field_label: f.field_name for f in field_definitions.values()}
 
-        # Sub-type label mapping
-        sub_type_labels = {
-            "國科會": "nstc",
-            "教育部": "moe_1w",
-            "教育部配合款2萬": "moe_2w",
-        }
-
-        # Add custom field mappings
-        custom_field_mapping = {}
-        for field in custom_fields:
-            custom_field_mapping[field.field_label] = field.field_name
+        # Column header → sub-type code accepted by the parser, scoped to this
+        # scholarship's real sub-types. The template writes the known Chinese
+        # label when one exists and falls back to the raw code for custom
+        # sub-types — accept BOTH so a downloaded template always round-trips
+        # through import.
+        code_to_label = {code: label for label, code in SUB_TYPE_CODE_BY_LABEL.items()}
+        sub_type_labels: Dict[str, str] = {}
+        for code in real_sub_types:
+            sub_type_labels[code_to_label.get(code, code)] = code
+            sub_type_labels.setdefault(code, code)
 
         # Pre-compute column set for O(1) membership tests
         df_columns = set(df.columns)
@@ -485,6 +542,16 @@ class BatchImportService:
 
                 parsed_data.append(normalized_row)
 
+            except PydanticValidationError as e:
+                errors.append(
+                    BatchImportValidationError(
+                        row_number=row_number,
+                        student_id=student_id,
+                        field="row_data",
+                        error_type="validation_error",
+                        message=f"資料驗證失敗：{_format_row_validation_error(e)}",
+                    )
+                )
             except Exception as e:
                 errors.append(
                     BatchImportValidationError(
@@ -492,7 +559,7 @@ class BatchImportService:
                         student_id=student_id,
                         field="row_data",
                         error_type="validation_error",
-                        message=f"資料驗證失敗: {str(e)}",
+                        message=f"資料驗證失敗：{str(e)}",
                     )
                 )
 
@@ -835,13 +902,16 @@ class BatchImportService:
 
         return user_map
 
-    async def _upsert_user_profile(self, user: User, row_data: Dict[str, Any]) -> None:
+    async def _upsert_user_profile(self, user: User, row_data: Dict[str, Any]) -> UserProfile:
         """Write postal account and advisor info to the student's UserProfile,
         the same place the student self-service flow keeps them.
 
         Overwrite policy (spec): a non-empty Excel value overwrites the
         existing profile value (paper form is authoritative); a blank Excel
         cell preserves whatever is already there.
+
+        Returns the profile so callers can reuse it (professor auto-assign
+        reads advisor_nycu_id from it) without a second SELECT.
         """
         profile_stmt = select(UserProfile).where(UserProfile.user_id == user.id)
         profile_result = await self.db.execute(profile_stmt)
@@ -861,6 +931,8 @@ class BatchImportService:
             value = row_data.get(row_key)
             if value:
                 setattr(profile, profile_attr, value)
+
+        return profile
 
     async def _fetch_field_definitions(self, scholarship_code: str) -> Dict[str, Any]:
         """Load active ApplicationField definitions for a scholarship, keyed by
@@ -943,20 +1015,9 @@ class BatchImportService:
                     batch_id=batch_import.id,
                 ) from exc
 
-        # Find scholarship configuration for this academic period
-        config_stmt = select(ScholarshipConfiguration).where(
-            ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
-            ScholarshipConfiguration.academic_year == academic_year,
-        )
-
-        # Handle semester filtering (None means yearly scholarship)
-        if semester_enum is None or semester_enum == Semester.yearly:
-            config_stmt = config_stmt.where(ScholarshipConfiguration.semester.is_(None))
-        else:
-            config_stmt = config_stmt.where(ScholarshipConfiguration.semester == semester_enum)
-
-        config_result = await self.db.execute(config_stmt)
-        scholarship_config = config_result.scalar_one_or_none()
+        # Find scholarship configuration for this academic period (same
+        # resolver the preview eligibility check uses — they must agree).
+        scholarship_config = await self._resolve_configuration(scholarship_type_id, academic_year, semester)
 
         if not scholarship_config:
             period_label = f"{academic_year}學年度"
@@ -987,6 +1048,10 @@ class BatchImportService:
             # Custom-field definitions are identical for every row in the batch;
             # fetch once here instead of once per row (avoids an N+1 query).
             field_definitions = await self._fetch_field_definitions(scholarship.code)
+
+            # Submitted-state values are loop-invariant (one shared
+            # submitted_at timestamp for the whole batch is intended).
+            submitted_values = build_submitted_application_values(scholarship, scholarship_config)
 
             # Step 2: Bulk create applications
             applications = []
@@ -1024,8 +1089,6 @@ class BatchImportService:
                     field_definitions, row_data.get("custom_fields", {})
                 )
 
-                submitted_values = build_submitted_application_values(scholarship, scholarship_config)
-
                 application = Application(
                     app_id=app_id,
                     user_id=user.id,
@@ -1058,8 +1121,8 @@ class BatchImportService:
                 # Profile upsert then professor auto-assign — same linkage the
                 # student submit path uses (professor review lists match on
                 # Application.professor_id).
-                await self._upsert_user_profile(user, row_data)
-                await assign_professor_from_profile(self.db, application, user.id)
+                profile = await self._upsert_user_profile(user, row_data)
+                await assign_professor_from_profile(self.db, application, user.id, profile=profile)
 
             # Flush all applications at once
             await self.db.flush()
