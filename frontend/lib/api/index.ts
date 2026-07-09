@@ -28,6 +28,7 @@ import { createBankVerificationApi } from './modules/bank-verification';
 import { createProfessorStudentApi } from './modules/professor-student';
 import { createEmailAutomationApi } from './modules/email-automation';
 import { createBatchImportApi } from './modules/batch-import';
+import { createRenewalImportApi } from './modules/renewal-import';
 import { createReferenceDataApi } from './modules/reference-data';
 import { createApplicationFieldsApi } from './modules/application-fields';
 import { createUserProfilesApi } from './modules/user-profiles';
@@ -155,6 +156,7 @@ class ExtendedApiClient extends ApiClient {
   private _professorStudent?: ReturnType<typeof createProfessorStudentApi>;
   private _emailAutomation?: ReturnType<typeof createEmailAutomationApi>;
   private _batchImport?: ReturnType<typeof createBatchImportApi>;
+  private _renewalImport?: ReturnType<typeof createRenewalImportApi>;
   private _referenceData?: ReturnType<typeof createReferenceDataApi>;
   private _applicationFields?: ReturnType<typeof createApplicationFieldsApi>;
   private _userProfiles?: ReturnType<typeof createUserProfilesApi>;
@@ -238,6 +240,11 @@ class ExtendedApiClient extends ApiClient {
   get batchImport(): ReturnType<typeof createBatchImportApi> {
     if (!this._batchImport) this._batchImport = createBatchImportApi();
     return this._batchImport;
+  }
+
+  get renewalImport(): ReturnType<typeof createRenewalImportApi> {
+    if (!this._renewalImport) this._renewalImport = createRenewalImportApi();
+    return this._renewalImport;
   }
 
   get referenceData(): ReturnType<typeof createReferenceDataApi> {
