@@ -12257,8 +12257,8 @@ export interface operations {
             query?: {
                 /** @description Filter by status */
                 status?: string | null;
-                /** @description Filter by scholarship type ID */
-                scholarship_type_id?: number | null;
+                /** @description Filter by scholarship type code */
+                scholarship_type?: string | null;
             };
             header?: never;
             path?: never;

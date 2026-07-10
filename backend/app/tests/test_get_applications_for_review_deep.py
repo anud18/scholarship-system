@@ -158,3 +158,62 @@ async def test_scholarship_type_filter_by_code(db: AsyncSession):
     # Filter to scholarship_type code matching cfg_a's type code.
     result = await service.get_applications_for_review(current_user=admin, scholarship_type="forrev_type_a")
     assert len(result) == 2
+
+
+@pytest.mark.asyncio
+async def test_professor_path_scopes_without_lazy_load(db: AsyncSession):
+    """Issue #1130 regression: the professor branch used to traverse the lazy
+    professor_relationships collection, which raises MissingGreenlet under an
+    AsyncSession. The access list must be queried explicitly AND scope the
+    results to students with view permission."""
+    from app.models.professor_student import ProfessorStudentRelationship
+
+    professor = await _seed_user(db, role=UserRole.professor, nycu_id="forrev_prof_scope")
+    accessible = await _seed_user(db, role=UserRole.student, nycu_id="forrev_stu_acc")
+    hidden = await _seed_user(db, role=UserRole.student, nycu_id="forrev_stu_hid")
+    cfg = await _seed_config(db, suffix="prof_scope")
+    app_acc = await _seed_app(
+        db, student=accessible, config=cfg, status=ApplicationStatus.submitted.value, suffix="acc1"
+    )
+    await _seed_app(db, student=hidden, config=cfg, status=ApplicationStatus.submitted.value, suffix="hid1")
+
+    db.add(
+        ProfessorStudentRelationship(
+            professor_id=professor.id,
+            student_id=accessible.id,
+            relationship_type="advisor",
+            is_active=True,
+            can_view_applications=True,
+        )
+    )
+    await db.commit()
+
+    service = ApplicationService(db)
+    result = await service.get_applications_for_review(current_user=professor)
+    assert [r.id for r in result] == [app_acc.id]
+
+
+@pytest.mark.asyncio
+async def test_review_list_endpoint_wires_filters_as_keywords(client, db: AsyncSession):
+    """Issue #1131 regression: /review/list once passed its query params
+    positionally, sending status into `skip` (offset("submitted") → 500) and
+    the type filter into `limit`. Both filters must reach the service."""
+    from app.core.security import get_current_user
+    from app.main import app as fastapi_app
+
+    admin = await _seed_user(db, role=UserRole.admin, nycu_id="forrev_admin_http")
+    student = await _seed_user(db, role=UserRole.student, nycu_id="forrev_stu_http")
+    cfg_a = await _seed_config(db, suffix="http_a")
+    cfg_b = await _seed_config(db, suffix="http_b")
+    await _seed_app(db, student=student, config=cfg_a, status=ApplicationStatus.submitted.value, suffix="ha1")
+    await _seed_app(db, student=student, config=cfg_a, status=ApplicationStatus.approved.value, suffix="ha2")
+    await _seed_app(db, student=student, config=cfg_b, status=ApplicationStatus.submitted.value, suffix="hb1")
+
+    fastapi_app.dependency_overrides[get_current_user] = lambda: admin
+    resp = await client.get(
+        "/api/v1/applications/review/list",
+        params={"status": "submitted", "scholarship_type": "forrev_http_a"},
+    )
+    assert resp.status_code == 200
+    rows = resp.json()["data"]
+    assert len(rows) == 1

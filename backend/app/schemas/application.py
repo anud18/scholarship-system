@@ -359,6 +359,9 @@ class ApplicationResponse(BaseModel):
     student_pid: Optional[str] = None  # std_pid
     student_email: Optional[str] = None  # com_email
     student_phone: Optional[str] = None  # com_cellphone
+    postal_account: Optional[str] = Field(
+        None, description="郵局帳號（來自學生 UserProfile.account_number，非 submitted_form_data）"
+    )
 
     # === Academic Organization ===
     academy_code: Optional[str] = None  # std_academyno / trm_academyno

@@ -176,10 +176,11 @@ export function BatchApplicationFileUpload({
 
     if (!firstApp) return [];
 
-    // For batch import: use submitted_form_data.custom_fields (show all fields)
-    const customFields = firstApp.submitted_form_data?.custom_fields;
-    if (customFields && typeof customFields === 'object' && Object.keys(customFields).length > 0) {
-      return Object.keys(customFields); // Show all custom fields
+    // For batch import: use submitted_form_data.fields (standard shape) — the
+    // custom-field values live under fields[name].value
+    const fields = firstApp.submitted_form_data?.fields;
+    if (fields && typeof fields === 'object' && Object.keys(fields).length > 0) {
+      return Object.keys(fields); // Show all custom fields
     }
 
     // For regular applications: use form_data (show all fields)
@@ -374,9 +375,9 @@ export function BatchApplicationFileUpload({
                    state.application?.scholarship_type || "-"}
                 </TableCell>
 
-                {/* Postal Account */}
+                {/* Postal Account (郵局帳號 lives on the student's UserProfile) */}
                 <TableCell className="text-sm font-mono">
-                    {state.application?.submitted_form_data?.fields?.postal_account?.value || "-"}
+                    {state.application?.postal_account || "-"}
                 </TableCell>
 
                 {/* Sub Scholarship Types */}
@@ -395,11 +396,14 @@ export function BatchApplicationFileUpload({
                   </div>
                 </TableCell>
 
-                {/* Dynamic Form Data Fields */}
+                {/* Dynamic Form Data Fields — ?? not ||: 0 and false are
+                    legitimate custom-field values and must still display */}
                 {displayFields.map((field) => (
                   <TableCell key={field} className="text-sm">
-                    {state.application?.submitted_form_data?.custom_fields?.[field] ||
-                     state.application?.form_data?.[field] || "-"}
+                    {String(
+                      state.application?.submitted_form_data?.fields?.[field]?.value ??
+                      state.application?.form_data?.[field] ?? "-"
+                    )}
                   </TableCell>
                 ))}
 

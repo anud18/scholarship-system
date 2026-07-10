@@ -280,66 +280,10 @@ class ApplicationService:
         return str(semester)
 
     async def _generate_app_id(self, academic_year: int, semester: Optional[str]) -> str:
-        """
-        Generate sequential application ID with database locking
+        """Generate sequential application ID (delegates to application_builder)."""
+        from app.services.application_builder import generate_app_id
 
-        Args:
-            academic_year: Academic year (e.g., 113 for 民國113年)
-            semester: Semester enum value ('first', 'second', 'yearly' or None)
-
-        Returns:
-            str: Sequential application ID (e.g., 'APP-113-1-00001')
-
-        Format: APP-{academic_year}-{semester_code}-{sequence:05d}
-        - semester_code: '1' for first, '2' for second, '0' for yearly/None
-        """
-        from app.models.application_sequence import ApplicationSequence
-
-        # Handle None semester (for yearly scholarships)
-        if semester is None:
-            semester = "yearly"
-        # Normalise Semester enum to its string value so SQLite (String column) can bind it
-        if hasattr(semester, "value"):
-            semester = semester.value
-
-        # Use database lock to ensure thread-safe sequence generation
-        from sqlalchemy import and_, select
-
-        stmt = (
-            select(ApplicationSequence)
-            .where(
-                and_(
-                    ApplicationSequence.academic_year == academic_year,
-                    ApplicationSequence.semester == semester,
-                )
-            )
-            .with_for_update()
-        )
-
-        result = await self.db.execute(stmt)
-        seq_record = result.scalar_one_or_none()
-
-        # Create sequence record if it doesn't exist
-        if not seq_record:
-            seq_record = ApplicationSequence(academic_year=academic_year, semester=semester, last_sequence=0)
-            self.db.add(seq_record)
-            await self.db.flush()  # Flush to get the record in the session
-
-        # Increment sequence
-        seq_record.last_sequence += 1
-        sequence_num = seq_record.last_sequence
-
-        # Commit the sequence increment immediately to release the lock
-        await self.db.commit()
-
-        # Format and return app_id
-        app_id = ApplicationSequence.format_app_id(academic_year, semester, sequence_num)
-        logger.debug(
-            f"Generated app_id: {app_id} (academic_year={academic_year}, "
-            f"semester={semester}, sequence={sequence_num})"
-        )
-
-        return app_id
+        return await generate_app_id(self.db, academic_year, semester)
 
     async def _validate_student_eligibility(
         self,
@@ -451,45 +395,17 @@ class ApplicationService:
 
     @staticmethod
     def _derive_sub_scholarship_type(scholarship_subtype_list: Optional[List[str]]) -> str:
-        """Derive the denormalized scalar `sub_scholarship_type` from the selected
-        sub-type list: first entry wins, normalized to lowercase; empty → "general".
+        """Delegates to application_builder (shared with batch import)."""
+        from app.services.application_builder import derive_sub_scholarship_type
 
-        Shared by create and update so the scalar never drifts from the list
-        (a drift is what let a "general" scalar survive an edit that picked a
-        real sub-type — see _validate_sub_type_for_submission).
-        """
-        if scholarship_subtype_list:
-            return scholarship_subtype_list[0].lower()
-        return "general"
+        return derive_sub_scholarship_type(scholarship_subtype_list)
 
     @staticmethod
     def _validate_sub_type_for_submission(scholarship: ScholarshipType, sub_scholarship_type: Optional[str]) -> None:
-        """Reject the synthetic "general" category on submission for scholarships
-        that define real sub-types.
+        """Delegates to application_builder (shared with batch import)."""
+        from app.services.application_builder import validate_sub_type_for_submission
 
-        "general" is only a valid category for scholarships with no sub-types.
-        For a scholarship that defines real ones (e.g. PhD: nstc / moe_1w), a
-        "general" application matches no quota slot during distribution, so it
-        must carry a concrete sub-type before it can be submitted.
-
-        Sub-types are stored lowercase (CLAUDE.md convention), but admin-entered
-        `sub_type_list` may not be — compare case-insensitively so a correct
-        submission is never falsely rejected over casing.
-
-        When the scholarship defines no real sub-types, only the synthetic
-        "general" (or empty) is valid — an arbitrary sub-type string would be
-        stored verbatim and break downstream quota/distribution lookups, so it
-        is rejected too.
-        """
-        if scholarship is None:
-            return
-        real_sub_types = [st.lower() for st in (scholarship.sub_type_list or []) if st and st.lower() != "general"]
-        normalized = (sub_scholarship_type or "general").lower()
-        if real_sub_types:
-            if normalized not in real_sub_types:
-                raise ValidationError("此獎學金需選擇申請類別（" + "、".join(real_sub_types) + "），不可使用通用類別")
-        elif normalized != "general":
-            raise ValidationError("此獎學金不提供申請類別選擇，不可指定子類別")
+        validate_sub_type_for_submission(scholarship, sub_scholarship_type)
 
     async def _create_application_instance(
         self,
@@ -523,12 +439,18 @@ class ApplicationService:
         if not is_draft:
             self._validate_sub_type_for_submission(scholarship, sub_scholarship_type)
 
-        # Determine status based on is_draft flag
         from app.models.enums import ApplicationStatus
+        from app.services.application_builder import build_submitted_application_values
         from app.utils.i18n import ScholarshipI18n
 
-        status = ApplicationStatus.draft.value if is_draft else ApplicationStatus.submitted.value
-        status_name = ScholarshipI18n.get_application_status_text(status)
+        submitted_values = build_submitted_application_values(scholarship, config)
+
+        if is_draft:
+            status = ApplicationStatus.draft.value
+            status_name = ScholarshipI18n.get_application_status_text(status)
+        else:
+            status = submitted_values["status"]
+            status_name = submitted_values["status_name"]
 
         # Create application
         application = Application(
@@ -536,8 +458,8 @@ class ApplicationService:
             user_id=user.id,
             scholarship_type_id=scholarship.id,
             scholarship_configuration_id=config.id,
-            scholarship_name=config.config_name or scholarship.name,
-            amount=config.amount,
+            scholarship_name=submitted_values["scholarship_name"],
+            amount=submitted_values["amount"],
             scholarship_subtype_list=scholarship_subtype_list,
             # Ordered sub-type preference list (志願序). The distribution service
             # reads this first; without it, allocation falls back to selection
@@ -556,9 +478,8 @@ class ApplicationService:
         )
 
         if not is_draft:
-            application.submitted_at = datetime.now(timezone.utc)
-            # Keep review_stage consistent with the submitted status (mirrors submit_application).
-            application.review_stage = ReviewStage.student_submitted.value
+            application.submitted_at = submitted_values["submitted_at"]
+            application.review_stage = submitted_values["review_stage"]
 
         return application
 
@@ -986,6 +907,14 @@ class ApplicationService:
         if not student_fields.get("student_no") and application.student:
             student_fields["student_no"] = application.student.nycu_id
 
+        # 郵局帳號 lives on the student's UserProfile (student self-service and
+        # batch import both write it there — never into submitted_form_data).
+        from app.models.user_profile import UserProfile
+
+        profile_result = await self.db.execute(select(UserProfile).where(UserProfile.user_id == application.user_id))
+        student_profile = profile_result.scalar_one_or_none()
+        postal_account = student_profile.account_number if student_profile else None
+
         # Build sub_type labels from scholarship.sub_type_configs
         sub_type_labels = {}
         if application.scholarship and hasattr(application.scholarship, "sub_type_configs"):
@@ -1071,6 +1000,7 @@ class ApplicationService:
             "scholarship_name": scholarship_name,
             "amount": amount,
             "currency": currency,
+            "postal_account": postal_account,
             **student_fields,  # Spread extracted student fields
             # Workflow configuration flags
             "requires_professor_recommendation": bool(
@@ -1316,21 +1246,9 @@ class ApplicationService:
         advisor_profile = user_profile_result.scalar_one_or_none()
 
         # 自動分配指導教授：根據 UserProfile 的 advisor_nycu_id 查找教授帳號
-        if not application.professor_id and advisor_profile:
+        from app.services.application_builder import assign_professor_from_profile
 
-            if advisor_profile and advisor_profile.advisor_nycu_id:
-                professor_stmt = select(User).where(
-                    User.nycu_id == advisor_profile.advisor_nycu_id,
-                    User.role == UserRole.professor,
-                )
-                professor_result = await self.db.execute(professor_stmt)
-                professor = professor_result.scalar_one_or_none()
-                if professor:
-                    application.professor_id = professor.id
-                    logger.info(
-                        f"Auto-assigned professor {professor.id} ({professor.name}) "
-                        f"to application {application.app_id}"
-                    )
+        await assign_professor_from_profile(self.db, application, application.user_id, profile=advisor_profile)
 
         await self.db.commit()
         await self._invalidate_app_caches()
@@ -1439,6 +1357,22 @@ class ApplicationService:
 
         return ApplicationResponse(**response_data)
 
+    async def _get_accessible_student_ids(self, professor: User, permission: str = "view_applications") -> List[int]:
+        """Student IDs this professor may access, queried async-safely.
+
+        The former User.get_accessible_student_ids traversed the lazy
+        professor_relationships collection, which raises MissingGreenlet
+        under an AsyncSession (issue #1130) — query the rows explicitly.
+        """
+        from app.models.professor_student import ProfessorStudentRelationship
+
+        stmt = select(ProfessorStudentRelationship).where(
+            ProfessorStudentRelationship.professor_id == professor.id,
+            ProfessorStudentRelationship.is_active.is_(True),
+        )
+        result = await self.db.execute(stmt)
+        return [rel.student_id for rel in result.scalars().all() if rel.has_permission(permission)]
+
     async def get_applications_for_review(
         self,
         current_user: User,
@@ -1457,7 +1391,7 @@ class ApplicationService:
 
         if current_user.role == UserRole.professor:
             # Filter applications to only those from accessible students
-            accessible_student_ids = current_user.get_accessible_student_ids("view_applications")
+            accessible_student_ids = await self._get_accessible_student_ids(current_user)
             if accessible_student_ids:
                 query = query.where(Application.user_id.in_(accessible_student_ids))
             else:
@@ -1947,7 +1881,7 @@ class ApplicationService:
             query = query.where(Application.user_id == current_user.id)
         elif current_user.role == UserRole.professor:
             # Filter applications to only those from accessible students
-            accessible_student_ids = current_user.get_accessible_student_ids("view_applications")
+            accessible_student_ids = await self._get_accessible_student_ids(current_user)
             if accessible_student_ids:
                 query = query.where(Application.user_id.in_(accessible_student_ids))
             else:

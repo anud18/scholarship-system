@@ -4,16 +4,22 @@ Unit tests for BatchImportService
 Tests file parsing, validation, bulk operations, and transaction rollback.
 """
 
+import io
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
+import pandas as pd
 import pytest
+import pytest_asyncio
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BatchImportError
+from app.models.application import Application, ApplicationStatus
 from app.models.batch_import import BatchImport
-from app.models.enums import BatchImportStatus, Semester
+from app.models.enums import BatchImportStatus, ReviewStage, Semester
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User
+from app.models.user_profile import UserProfile
 from app.schemas.batch_import import BatchImportValidationError
 from app.services.batch_import_service import BatchImportService
 
@@ -36,6 +42,8 @@ class TestBatchImportService:
         scholarship.amount = 10000
         scholarship.main_type = "general"
         scholarship.sub_type_selection_mode = "single"
+        # No real sub-types → parse_excel_file must not require sub-type marks.
+        scholarship.sub_type_list = []
         return scholarship
 
     @pytest.fixture
@@ -221,6 +229,28 @@ class TestBatchImportService:
                 "get_student_snapshot",
                 new_callable=AsyncMock,
                 return_value=mock_student_snapshot,
+            ),
+            # The profile upsert, form-data shaping and professor assignment each
+            # run their own DB queries; patch them here so this stays a focused
+            # unit test of the orchestration (the DB-backed tests below exercise
+            # the real helpers). Their absence keeps db.execute to config + one
+            # sequence lookup per row.
+            patch.object(
+                service,
+                "_fetch_field_definitions",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch.object(
+                service,
+                "_build_submitted_form_data",
+                return_value={"fields": {}, "documents": []},
+            ),
+            patch.object(service, "_upsert_user_profile", new_callable=AsyncMock),
+            patch(
+                "app.services.batch_import_service.assign_professor_from_profile",
+                new_callable=AsyncMock,
+                return_value=None,
             ),
             patch.object(service.db, "execute") as mock_execute,
         ):
@@ -495,3 +525,517 @@ class TestBatchImportService:
             assert batch_import.failed_count == 5
             assert batch_import.import_status == "partial"
             assert batch_import.error_summary["total_errors"] == 1
+
+
+# ─── parse_excel_file sub-type parsing (checkmark semantics) ─────────
+
+
+@pytest_asyncio.fixture
+async def scholarship_with_sub_types(db: AsyncSession):
+    """A ScholarshipType that defines real sub-types (nstc, moe_1w).
+
+    Mirrors the ScholarshipType construction style in
+    test_batch_import_endpoints.py: only columns that exist on
+    ScholarshipType are set (period/amount live on ScholarshipConfiguration).
+    """
+    scholarship = ScholarshipType(
+        code="phd_sub_types",
+        name="PhD Scholarship With Sub Types",
+        sub_type_list=["nstc", "moe_1w"],
+        sub_type_selection_mode="multiple",
+    )
+    db.add(scholarship)
+    await db.commit()
+    await db.refresh(scholarship)
+    return scholarship
+
+
+@pytest.mark.asyncio
+async def test_parse_orders_preferences_moe_first_regardless_of_numbers(db, scholarship_with_sub_types):
+    # 國科會=1, 教育部=2 in the Excel — moe_1w must STILL come first
+    df = pd.DataFrame([{"學號": "313554001", "學生姓名": "王小明", "國科會": 1, "教育部": 2}])
+    buf = io.BytesIO()
+    df.to_excel(buf, index=False)
+
+    service = BatchImportService(db)
+    parsed, errors = await service.parse_excel_file(buf.getvalue(), scholarship_with_sub_types.id, 114, None)
+
+    assert errors == []
+    assert parsed[0]["sub_types"] == ["moe_1w", "nstc"]
+
+
+@pytest.mark.asyncio
+async def test_parse_accepts_checkmark_v(db, scholarship_with_sub_types):
+    df = pd.DataFrame([{"學號": "313554001", "學生姓名": "王小明", "國科會": "V", "教育部": ""}])
+    buf = io.BytesIO()
+    df.to_excel(buf, index=False)
+
+    service = BatchImportService(db)
+    parsed, errors = await service.parse_excel_file(buf.getvalue(), scholarship_with_sub_types.id, 114, None)
+
+    assert errors == []
+    assert parsed[0]["sub_types"] == ["nstc"]
+
+
+@pytest.mark.asyncio
+async def test_parse_missing_sub_type_is_hard_error(db, scholarship_with_sub_types):
+    df = pd.DataFrame([{"學號": "313554001", "學生姓名": "王小明", "國科會": "", "教育部": ""}])
+    buf = io.BytesIO()
+    df.to_excel(buf, index=False)
+
+    service = BatchImportService(db)
+    parsed, errors = await service.parse_excel_file(buf.getvalue(), scholarship_with_sub_types.id, 114, None)
+
+    assert parsed == []
+    assert len(errors) == 1
+    assert errors[0].error_type == "missing_sub_type"
+    assert errors[0].student_id == "313554001"
+
+
+@pytest_asyncio.fixture
+async def scholarship_general_only(db: AsyncSession):
+    """A ScholarshipType carrying only the synthetic "general" placeholder
+    (the model default). It defines NO real sub-types, so rows must NOT be
+    required to mark one."""
+    scholarship = ScholarshipType(
+        code="general_only",
+        name="General Scholarship",
+        sub_type_list=["general"],
+        sub_type_selection_mode="single",
+    )
+    db.add(scholarship)
+    await db.commit()
+    await db.refresh(scholarship)
+    return scholarship
+
+
+@pytest.mark.asyncio
+async def test_parse_general_only_scholarship_needs_no_sub_type_mark(db, scholarship_general_only):
+    # No sub-type columns at all; a "general"-only scholarship must parse cleanly.
+    df = pd.DataFrame([{"學號": "313554001", "學生姓名": "王小明"}])
+    buf = io.BytesIO()
+    df.to_excel(buf, index=False)
+
+    service = BatchImportService(db)
+    parsed, errors = await service.parse_excel_file(buf.getvalue(), scholarship_general_only.id, 114, None)
+
+    assert errors == []
+    assert len(parsed) == 1
+    assert parsed[0]["sub_types"] == []
+
+
+# ─── create_applications_from_batch: student-submission parity ───────
+#
+# These are DB-backed (unlike the mocked TestBatchImportService cases
+# above): they persist real rows and read them back so the spec
+# behaviour — batch-created applications entering the standard review
+# flow — is verified against real DB state, not mocks.
+
+
+def _no_sis_student_service():
+    """A StudentService stub that reports no SIS data, so the batch
+    path falls back to Excel values without any network call (the test
+    env's default settings have the SIS API 'enabled')."""
+    stub = MagicMock()
+    stub.get_student_basic_info = AsyncMock(return_value=None)
+    stub.get_student_snapshot = AsyncMock(return_value=None)
+    return stub
+
+
+@pytest_asyncio.fixture
+async def scholarship_with_config(db: AsyncSession):
+    """A ScholarshipType plus a matching 114-year ScholarshipConfiguration
+    (period/amount/config_name live on the configuration)."""
+    scholarship = ScholarshipType(
+        code="phd_batch",
+        name="PhD Batch Scholarship",
+        sub_type_list=["nstc", "moe_1w"],
+        sub_type_selection_mode="multiple",
+    )
+    db.add(scholarship)
+    await db.flush()
+
+    config = ScholarshipConfiguration(
+        scholarship_type_id=scholarship.id,
+        academic_year=114,
+        semester=None,
+        config_name="PhD Batch Scholarship 114",
+        config_code="phd_batch_114",
+        amount=10000,
+    )
+    db.add(config)
+    await db.commit()
+    await db.refresh(scholarship)
+    return scholarship
+
+
+@pytest_asyncio.fixture
+async def batch_import_fixture(db: AsyncSession):
+    """A persisted BatchImport record and its importer user."""
+    importer = User(nycu_id="importer_admin", name="Importer", role="admin", user_type="employee")
+    db.add(importer)
+    await db.flush()
+
+    batch = BatchImport(
+        importer_id=importer.id,
+        college_code="E",
+        academic_year=114,
+        file_name="test.xlsx",
+        total_records=1,
+    )
+    db.add(batch)
+    await db.commit()
+    await db.refresh(batch)
+    return batch
+
+
+@pytest.mark.asyncio
+async def test_batch_created_application_matches_student_submission_shape(
+    db, batch_import_fixture, scholarship_with_config
+):
+    """Core spec assertion: a batch-created application looks like a
+    student-submitted one (status/review_stage/amount/name/form_data)."""
+    parsed_data = [
+        {
+            "student_id": "313554001",
+            "student_name": "王小明",
+            "postal_account": "1234567890123",
+            "advisor_name": "張教授",
+            "advisor_email": "chang@nycu.edu.tw",
+            "advisor_nycu_id": "P001234",
+            "is_renewal": False,
+            "renewal_year": None,
+            "sub_types": ["moe_1w", "nstc"],
+            "custom_fields": {"contact_phone": "0912345678"},
+            "row_number": 2,
+        }
+    ]
+
+    service = BatchImportService(db, student_service=_no_sis_student_service())
+    created_ids, errors = await service.create_applications_from_batch(
+        batch_import=batch_import_fixture,
+        parsed_data=parsed_data,
+        scholarship_type_id=scholarship_with_config.id,
+        academic_year=114,
+        semester=None,
+    )
+
+    assert errors == []
+    # Commit + expunge so the re-read is a fresh DB load (enum columns come
+    # back as enum members, not the strings set in-session).
+    await db.commit()
+    db.expunge_all()
+    app = await db.get(Application, created_ids[0])
+
+    # Review flow parity
+    assert app.status == ApplicationStatus.submitted
+    assert app.review_stage == ReviewStage.student_submitted
+    assert app.submitted_at is not None
+    # Value parity (config-sourced)
+    assert app.amount is not None
+    assert "114" in app.scholarship_name  # config_name carries the year
+    # app_id keeps the batch marker
+    assert app.app_id.endswith("U")
+    # Standard form-data structure; postal/advisor NOT inside
+    assert set(app.submitted_form_data.keys()) == {"fields", "documents"}
+    assert app.submitted_form_data["documents"] == []
+    assert app.submitted_form_data["fields"]["contact_phone"]["value"] == "0912345678"
+    assert "postal_account" not in app.submitted_form_data["fields"]
+    # Sub-type scalar via shared derivation
+    assert app.sub_scholarship_type == "moe_1w"
+    assert app.sub_type_preferences == ["moe_1w", "nstc"]
+    # Unchanged batch markers
+    assert app.import_source == "batch_import"
+    assert app.batch_import_id == batch_import_fixture.id
+    assert app.document_status == "pending_documents"
+
+
+@pytest.mark.asyncio
+async def test_batch_upserts_user_profile_with_overwrite(db, batch_import_fixture, scholarship_with_config):
+    # Pre-existing profile: advisor set by the student, postal blank
+    user = User(nycu_id="313554002", name="陳小華", role="student", user_type="student")
+    db.add(user)
+    await db.flush()
+    db.add(UserProfile(user_id=user.id, account_number=None, advisor_name="舊教授", advisor_nycu_id="P000001"))
+    await db.flush()
+
+    parsed_data = [
+        {
+            "student_id": "313554002",
+            "student_name": "陳小華",
+            "postal_account": "9876543210987",
+            "advisor_name": "李教授",
+            "advisor_email": None,  # blank in Excel — must preserve existing (None here)
+            "advisor_nycu_id": "P005678",
+            "is_renewal": False,
+            "renewal_year": None,
+            "sub_types": ["nstc"],
+            "custom_fields": {},
+            "row_number": 2,
+        }
+    ]
+
+    service = BatchImportService(db, student_service=_no_sis_student_service())
+    await service.create_applications_from_batch(
+        batch_import=batch_import_fixture,
+        parsed_data=parsed_data,
+        scholarship_type_id=scholarship_with_config.id,
+        academic_year=114,
+        semester=None,
+    )
+    await db.commit()
+
+    profile_result = await db.execute(select(UserProfile).where(UserProfile.user_id == user.id))
+    profile = profile_result.scalar_one()
+    assert profile.account_number == "9876543210987"  # filled from Excel
+    assert profile.advisor_name == "李教授"  # Excel value overwrites
+    assert profile.advisor_email is None  # blank Excel cell preserves existing
+    assert profile.advisor_nycu_id == "P005678"  # Excel value overwrites
+
+
+@pytest.mark.asyncio
+async def test_batch_assigns_professor_when_account_exists(db, batch_import_fixture, scholarship_with_config):
+    professor = User(nycu_id="P001234", name="張教授", role="professor", user_type="employee")
+    db.add(professor)
+    await db.flush()
+
+    parsed_data = [
+        {
+            "student_id": "313554003",
+            "student_name": "林小強",
+            "postal_account": None,
+            "advisor_name": "張教授",
+            "advisor_email": "chang@nycu.edu.tw",
+            "advisor_nycu_id": "P001234",
+            "is_renewal": False,
+            "renewal_year": None,
+            "sub_types": ["nstc"],
+            "custom_fields": {},
+            "row_number": 2,
+        }
+    ]
+
+    service = BatchImportService(db, student_service=_no_sis_student_service())
+    created_ids, _ = await service.create_applications_from_batch(
+        batch_import=batch_import_fixture,
+        parsed_data=parsed_data,
+        scholarship_type_id=scholarship_with_config.id,
+        academic_year=114,
+        semester=None,
+    )
+    await db.commit()
+
+    app = await db.get(Application, created_ids[0])
+    assert app.professor_id == professor.id
+
+
+@pytest.mark.asyncio
+async def test_advisor_columns_survive_parse_to_profile_and_professor(
+    db, batch_import_fixture, scholarship_with_config
+):
+    """Regression: advisor columns from the Excel must survive the FULL
+    chain — parse_excel_file → ApplicationDataRow round-trip →
+    create_applications_from_batch → UserProfile + professor auto-assign.
+
+    The earlier tests fed hand-built parsed_data dicts that already carried
+    advisor_* keys, so they never exercised the schema layer. The defect
+    lived exactly there: ApplicationDataRow had no advisor fields, so
+    model_dump() silently dropped advisor info parsed from the sheet — the
+    profile never got the advisor and no professor was auto-assigned.
+    """
+    professor = User(nycu_id="P009999", name="趙教授", role="professor", user_type="employee")
+    db.add(professor)
+    await db.flush()
+
+    # Chinese-column Excel with advisor + postal columns.
+    df = pd.DataFrame(
+        {
+            "學號": ["313557001"],
+            "學生姓名": ["黃小美"],
+            "國科會": [1],
+            "指導教授姓名": ["趙教授"],
+            "指導教授Email": ["zhao@nycu.edu.tw"],
+            "指導教授本校人事編號": ["P009999"],
+            "郵局帳號": ["1234567890"],
+        }
+    )
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False)
+    file_content = buffer.getvalue()
+
+    service = BatchImportService(db, student_service=_no_sis_student_service())
+
+    parsed_data, parse_errors = await service.parse_excel_file(
+        file_content=file_content,
+        scholarship_type_id=scholarship_with_config.id,
+        academic_year=114,
+        semester=None,
+    )
+    assert parse_errors == []
+    assert len(parsed_data) == 1
+    # Advisor fields survived parse → schema round-trip (the defect site).
+    assert parsed_data[0]["advisor_nycu_id"] == "P009999"
+    assert parsed_data[0]["advisor_name"] == "趙教授"
+    assert parsed_data[0]["advisor_email"] == "zhao@nycu.edu.tw"
+
+    created_ids, create_errors = await service.create_applications_from_batch(
+        batch_import=batch_import_fixture,
+        parsed_data=parsed_data,
+        scholarship_type_id=scholarship_with_config.id,
+        academic_year=114,
+        semester=None,
+    )
+    assert create_errors == []
+    await db.commit()
+
+    student = (await db.execute(select(User).where(User.nycu_id == "313557001"))).scalar_one()
+    profile = (await db.execute(select(UserProfile).where(UserProfile.user_id == student.id))).scalar_one()
+    assert profile.advisor_nycu_id == "P009999"
+    assert profile.advisor_name == "趙教授"
+    assert profile.advisor_email == "zhao@nycu.edu.tw"
+    assert profile.account_number == "1234567890"
+
+    # Professor auto-assigned from the advisor_nycu_id that survived the chain.
+    app = await db.get(Application, created_ids[0])
+    assert app.professor_id == professor.id
+
+
+# ─── bulk_check_eligibility: preview-stage warnings ──────────────────
+
+
+@pytest.mark.asyncio
+async def test_bulk_check_eligibility_flags_failures_but_filters_period(db, scholarship_with_config, monkeypatch):
+    service = BatchImportService(db)
+
+    async def fake_snapshot(student_id, academic_year=None, semester=None):
+        return {"std_stdcode": student_id, "trm_ascore_gpa": 2.0}
+
+    monkeypatch.setattr(service.student_service, "get_student_snapshot", fake_snapshot)
+
+    async def fake_check(student_data, config, user_id=None):
+        # Simulates: outside application period AND a real rule failure
+        return False, ["不在申請期間內", "GPA 未達標準"]
+
+    from app.services import batch_import_service as bis_module
+
+    monkeypatch.setattr(
+        bis_module.EligibilityService, "check_student_eligibility", staticmethod(fake_check), raising=False
+    )
+
+    parsed_data = [{"student_id": "313554001", "sub_types": ["nstc"], "advisor_nycu_id": None, "row_number": 2}]
+    warnings = await service.bulk_check_eligibility(parsed_data, scholarship_with_config.id, 114, None)
+
+    eligibility_warnings = [w for w in warnings if w["warning_type"] == "eligibility_failed"]
+    assert len(eligibility_warnings) == 1
+    assert "GPA 未達標準" in eligibility_warnings[0]["message"]
+    # Application-period reason is exempted for batch import (late entry)
+    assert "不在申請期間內" not in eligibility_warnings[0]["message"]
+
+
+@pytest.mark.asyncio
+async def test_bulk_check_eligibility_warns_missing_professor_account(db, scholarship_with_config, monkeypatch):
+    service = BatchImportService(db)
+
+    async def fake_snapshot(student_id, academic_year=None, semester=None):
+        return {"std_stdcode": student_id}
+
+    monkeypatch.setattr(service.student_service, "get_student_snapshot", fake_snapshot)
+
+    parsed_data = [{"student_id": "313554001", "sub_types": ["nstc"], "advisor_nycu_id": "NOSUCH", "row_number": 2}]
+    warnings = await service.bulk_check_eligibility(parsed_data, scholarship_with_config.id, 114, None)
+
+    professor_warnings = [w for w in warnings if w["warning_type"] == "professor_not_found"]
+    assert len(professor_warnings) == 1
+    assert "NOSUCH" in professor_warnings[0]["message"]
+
+
+@pytest.mark.asyncio
+async def test_bulk_check_eligibility_real_check_no_missing_greenlet(db, scholarship_with_config, monkeypatch):
+    """Runs the REAL check_student_eligibility with the ScholarshipType NOT in
+    the session identity map (revalidate path). check_student_eligibility reads
+    config.scholarship_type.whitelist_enabled, so without eager-loading this
+    would raise MissingGreenlet on an async lazy-load."""
+    scholarship_type_id = scholarship_with_config.id
+    # Drop everything from the identity map so config.scholarship_type must be
+    # resolved from the query, not the identity map.
+    db.expunge_all()
+
+    service = BatchImportService(db)
+
+    async def fake_snapshot(student_id, academic_year=None, semester=None):
+        return {"std_stdcode": student_id}
+
+    monkeypatch.setattr(service.student_service, "get_student_snapshot", fake_snapshot)
+
+    parsed_data = [{"student_id": "313554001", "sub_types": ["nstc"], "advisor_nycu_id": None, "row_number": 2}]
+    # Must not raise (regression guard for MissingGreenlet).
+    warnings = await service.bulk_check_eligibility(parsed_data, scholarship_type_id, 114, None)
+
+    # No skip warning about missing config (the config was found).
+    assert not any(w["warning_type"] == "eligibility_check_skipped" and w["field"] == "configuration" for w in warnings)
+
+
+@pytest.mark.asyncio
+async def test_bulk_check_eligibility_skips_row_when_check_raises(db, scholarship_with_config, monkeypatch):
+    """A failing eligibility check (e.g. malformed rule config) must be demoted
+    to a per-row skip warning, never propagated to 500 the preview endpoints."""
+    service = BatchImportService(db)
+
+    async def fake_snapshot(student_id, academic_year=None, semester=None):
+        return {"std_stdcode": student_id}
+
+    monkeypatch.setattr(service.student_service, "get_student_snapshot", fake_snapshot)
+
+    async def boom_check(student_data, config, user_id=None):
+        raise RuntimeError("malformed rule config")
+
+    from app.services import batch_import_service as bis_module
+
+    monkeypatch.setattr(
+        bis_module.EligibilityService, "check_student_eligibility", staticmethod(boom_check), raising=False
+    )
+
+    parsed_data = [{"student_id": "313554001", "sub_types": ["nstc"], "advisor_nycu_id": None, "row_number": 2}]
+    # Must not raise.
+    warnings = await service.bulk_check_eligibility(parsed_data, scholarship_with_config.id, 114, None)
+
+    skip_warnings = [
+        w for w in warnings if w["warning_type"] == "eligibility_check_skipped" and w["field"] == "eligibility"
+    ]
+    assert len(skip_warnings) == 1
+    assert skip_warnings[0]["row_number"] == 2
+    assert skip_warnings[0]["student_id"] == "313554001"
+    # A raised check must NOT produce an eligibility_failed warning.
+    assert not any(w["warning_type"] == "eligibility_failed" for w in warnings)
+
+
+@pytest.mark.asyncio
+async def test_parse_dedupes_label_and_raw_code_columns(db, scholarship_with_sub_types):
+    """A sheet carrying BOTH the Chinese label column (國科會) and the
+    raw-code column (nstc), both marked, must yield the code once — not a
+    duplicated preference list (Copilot review, PR #1129)."""
+    df = pd.DataFrame([{"學號": "313554001", "學生姓名": "王小明", "國科會": 1, "nstc": "V"}])
+    buf = io.BytesIO()
+    df.to_excel(buf, index=False)
+
+    service = BatchImportService(db)
+    parsed, errors = await service.parse_excel_file(buf.getvalue(), scholarship_with_sub_types.id, 114, None)
+
+    assert errors == []
+    assert parsed[0]["sub_types"] == ["nstc"]
+
+
+@pytest.mark.asyncio
+async def test_parse_english_sub_type_columns_lowercased(db, scholarship_with_sub_types):
+    """sub_type_MOE_1W must normalize to moe_1w so the forced-first rule and
+    downstream lowercase quota lookups still match (Copilot review, PR #1129)."""
+    df = pd.DataFrame([{"student_id": "313554001", "student_name": "王小明", "sub_type_NSTC": 1, "sub_type_MOE_1W": 1}])
+    buf = io.BytesIO()
+    df.to_excel(buf, index=False)
+
+    service = BatchImportService(db)
+    parsed, errors = await service.parse_excel_file(buf.getvalue(), scholarship_with_sub_types.id, 114, None)
+
+    assert errors == []
+    assert parsed[0]["sub_types"] == ["moe_1w", "nstc"]
