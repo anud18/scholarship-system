@@ -194,3 +194,6 @@ frontend/junit.xml
 .claude/worktrees/
 # codegraph
 .codegraph/
+
+# Local-only mock student datasets (contain real-looking student IDs)
+mock-student-api/students_local.py
