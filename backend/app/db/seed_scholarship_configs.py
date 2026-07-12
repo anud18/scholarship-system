@@ -364,7 +364,9 @@ async def seed_scholarship_rules(session: AsyncSession) -> None:
             "expected_value": "1,2,3",
             "message": "博士生獎學金需要在學生身分 1: 在學 2: 應畢 3: 延畢",
             "message_en": "PhD scholarship requires active student status",
-            "is_hard_rule": False,
+            # 硬性規則（#1139）：休學/退學（4/5）必須在匯入預檢與造冊資格
+            # 檢查中被標記，不可静默通過
+            "is_hard_rule": True,
             "is_warning": False,
             "priority": 2,
             "is_active": True,
@@ -558,7 +560,9 @@ async def seed_scholarship_rules(session: AsyncSession) -> None:
             "expected_value": "1,2,3",
             "message": "逕讀博士獎學金需要在學生身分 1: 在學 2: 應畢 3: 延畢",
             "message_en": "Direct PhD scholarship requires active student status",
-            "is_hard_rule": False,
+            # 硬性規則（#1139）：休學/退學（4/5）必須在匯入預檢與造冊資格
+            # 檢查中被標記，不可静默通過
+            "is_hard_rule": True,
             "is_warning": False,
             "priority": 2,
             "is_active": True,
