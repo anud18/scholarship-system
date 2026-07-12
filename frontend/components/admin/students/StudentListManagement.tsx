@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { logger } from "@/lib/utils/logger";
 import { apiClient } from "@/lib/api";
-import type { ScholarshipType, Student, StudentStats } from "@/lib/api";
+import type { Student, StudentStats } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -27,9 +27,12 @@ import { Label } from "@/components/ui/label";
 import { GraduationCap, Users, UserCheck, X, Search, Eye } from "lucide-react";
 import { StudentDetailModal } from "./StudentDetailModal";
 import { useReferenceData, getDepartmentName } from "@/hooks/use-reference-data";
+import { useScholarshipData } from "@/hooks/use-scholarship-data";
 
 export function StudentListManagement() {
   const { departments, isLoading: refDataLoading } = useReferenceData();
+  // Shared SWR-cached scholarship list, reused for the 獎學金篩選 dropdown
+  const { scholarships: scholarshipTypes } = useScholarshipData();
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +56,6 @@ export function StudentListManagement() {
   // "" = all, "any" = has some application, "none" = no application,
   // numeric string = applied for that scholarship type id
   const [scholarshipFilter, setScholarshipFilter] = useState("");
-  const [scholarshipTypes, setScholarshipTypes] = useState<ScholarshipType[]>([]);
 
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -129,19 +131,6 @@ export function StudentListManagement() {
     }
   };
 
-  // Fetch scholarship types for the filter dropdown
-  const fetchScholarshipTypes = async () => {
-    try {
-      const response = await apiClient.scholarships.getAll();
-
-      if (response.success && response.data) {
-        setScholarshipTypes(response.data);
-      }
-    } catch (error) {
-      logger.error("獲取獎學金類型失敗", { error: error });
-    }
-  };
-
   // Refetch on pagination change and on explicit search/clear
   useEffect(() => {
     fetchStudents();
@@ -150,7 +139,6 @@ export function StudentListManagement() {
   // Initial load
   useEffect(() => {
     fetchStats();
-    fetchScholarshipTypes();
   }, []);
 
   // Search and filter handler
