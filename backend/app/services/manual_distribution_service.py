@@ -349,7 +349,13 @@ class ManualDistributionService:
         return pool
 
     async def _batch_load_rejected_map(self, app_ids: list[int]) -> dict[int, set[str]]:
-        """Load professor-rejected sub-types for a batch of applications."""
+        """Load reviewer-rejected (不同意) sub-types for a batch of applications.
+
+        Any reviewer's reject counts (professor, college, admin) — a rejected
+        sub-type disables the checkbox in the manual distribution UI and is
+        hard-blocked from allocation/finalize/restore/auto-distribution.
+        Codes are normalized to lowercase to match allocation inputs.
+        """
         rejected_map: dict[int, set[str]] = {}
         if not app_ids:
             return rejected_map
@@ -363,7 +369,7 @@ class ManualDistributionService:
         )
         result = await self.db.execute(query)
         for sub_type_code, app_id in result:
-            rejected_map.setdefault(app_id, set()).add(sub_type_code)
+            rejected_map.setdefault(app_id, set()).add((sub_type_code or "").lower().strip())
         return rejected_map
 
     async def _bulk_system_received_months(
@@ -875,6 +881,31 @@ class ManualDistributionService:
         result = await self.db.execute(items_query)
         items = result.scalars().all()
 
+        # Rejection gate at finalize time: a reviewer reject (不同意) may have
+        # arrived AFTER the allocation was saved (or been reintroduced via a
+        # history restore) — such allocations must never be finalized into an
+        # approved application. Only items finalize would actually approve are
+        # checked (same skip conditions as the loop below).
+        finalizable = [
+            (item, item.application)
+            for item in items
+            if item.application is not None
+            and item.application.deleted_at is None
+            and item.application.quota_allocation_status not in ("revoked", "suspended")
+            and item.is_allocated
+            and item.allocated_sub_type
+        ]
+        rejected_map = await self._batch_load_rejected_map([app.id for _, app in finalizable])
+        rejected_violations = [
+            f"{app.app_id} → {item.allocated_sub_type}"
+            for item, app in finalizable
+            if (item.allocated_sub_type or "").lower().strip() in rejected_map.get(app.id, set())
+        ]
+        if rejected_violations:
+            raise ValueError(
+                "以下核配之子類型教授（審核）不同意，無法確認分發，請先取消該勾選：" + "、".join(rejected_violations)
+            )
+
         approved_count = 0
         rejected_count = 0
         # Per-ranking approved tallies — each college ranking must record its
@@ -1050,25 +1081,45 @@ class ManualDistributionService:
                 item.status = "ranked"
                 item.allocation_reason = None
 
-        # Now restore from snapshot
-        restored_count = 0
+        # Resolve snapshot rows to items first so reviewer-rejected sub-types
+        # can be batch-checked before any allocation is re-applied.
+        to_restore: list[tuple[CollegeRankingItem, dict[str, Any]]] = []
         for item_id_str, alloc_data in allocations_snapshot.items():
             try:
                 item_id = int(item_id_str)
-                item_query = select(CollegeRankingItem).where(CollegeRankingItem.id == item_id)
-                result = await self.db.execute(item_query)
-                item = result.scalar_one_or_none()
-
-                if item and alloc_data.get("sub_type"):
-                    item.is_allocated = True
-                    item.allocated_sub_type = alloc_data["sub_type"]
-                    item.allocation_config_id = alloc_data.get("allocation_config_id")
-                    item.status = alloc_data.get("status", "allocated")
-                    item.allocation_reason = "還原歷史分發"
-                    restored_count += 1
             except (ValueError, TypeError):
                 logger.warning(f"Skipping invalid item ID in snapshot: {item_id_str}")
                 continue
+            item_query = select(CollegeRankingItem).where(CollegeRankingItem.id == item_id)
+            result = await self.db.execute(item_query)
+            item = result.scalar_one_or_none()
+            if item and alloc_data.get("sub_type"):
+                to_restore.append((item, alloc_data))
+
+        rejected_map = await self._batch_load_rejected_map(
+            [item.application_id for item, _ in to_restore if item.application_id is not None]
+        )
+
+        # Now restore from snapshot — a snapshot may predate a reviewer reject
+        # (不同意), so rejected sub-types are skipped instead of re-allocated.
+        restored_count = 0
+        skipped_rejected = 0
+        for item, alloc_data in to_restore:
+            sub_type = (alloc_data["sub_type"] or "").lower().strip()
+            if item.application_id is not None and sub_type in rejected_map.get(item.application_id, set()):
+                skipped_rejected += 1
+                logger.info(
+                    "restore_from_history: skipping ranking_item %s — sub_type %s was rejected in review",
+                    item.id,
+                    alloc_data["sub_type"],
+                )
+                continue
+            item.is_allocated = True
+            item.allocated_sub_type = alloc_data["sub_type"]
+            item.allocation_config_id = alloc_data.get("allocation_config_id")
+            item.status = alloc_data.get("status", "allocated")
+            item.allocation_reason = "還原歷史分發"
+            restored_count += 1
 
         await self.db.flush()
 
@@ -1089,7 +1140,7 @@ class ManualDistributionService:
         except Exception:
             logger.warning("Failed to record restore history", exc_info=True)
 
-        return {"restored_count": restored_count}
+        return {"restored_count": restored_count, "skipped_rejected": skipped_rejected}
 
     async def _validate_allocations(
         self,
@@ -1107,12 +1158,16 @@ class ManualDistributionService:
                 raise ValueError(f"Duplicate ranking item: {item_id}")
             seen_items.add(item_id)
 
-        # Professor-approval gate (issue: 分發時一定要教授有同意那個獎學金才能被分發到).
-        # A student may only be distributed to a sub-type the professor approved
-        # for that application. Exemptions handled in _assert_professor_approved:
-        #   - renewal applications (續領豁免 — they don't go through professor review)
-        #   - scholarships that don't require a professor recommendation step
-        #     (no professor reviews exist, so there is nothing to gate on)
+        # Professor-review gate (issue: 教授審核不同意的子類型不可被分發).
+        # Two layers, enforced in _assert_professor_approved:
+        #   1. Rejection gate (unconditional): a sub-type any reviewer explicitly
+        #      rejected (不同意) can never be allocated — mirrors the disabled
+        #      checkbox in the manual distribution UI.
+        #   2. Approval gate: the sub-type must carry an explicit professor
+        #      approve. Exemptions for this layer only:
+        #      - renewal applications (續領豁免 — no professor review step)
+        #      - scholarships that don't require a professor recommendation
+        #        (no professor reviews exist, so there is nothing to gate on)
         await self._assert_professor_approved(allocations)
 
         # Server-side quota enforcement is net-new (spec §10): the lock gate in
@@ -1121,12 +1176,15 @@ class ManualDistributionService:
         # oversubscription. The frontend remaining counts are advisory.
 
     async def _assert_professor_approved(self, allocations: list[dict[str, Any]]) -> None:
-        """Block any allocation to a sub-type the professor did not approve.
+        """Block any allocation to a sub-type the review rejected or the professor did not approve.
 
         Only allocations that assign a sub-type are checked (``sub_type_code`` set;
-        ``None`` means unallocate). Renewal applications and scholarships that don't
-        require a professor recommendation are exempt — for those there is no
-        professor approval to enforce against.
+        ``None`` means unallocate). The rejection gate is unconditional: a sub-type
+        with an explicit reviewer reject (不同意) can never be allocated, renewal or
+        not. The positive approval gate additionally requires an explicit professor
+        approve, exempting renewal applications and scholarships that don't require
+        a professor recommendation — for those there is no professor approval to
+        enforce against.
         """
         allocating = [a for a in allocations if a.get("sub_type_code")]
         if not allocating:
@@ -1140,13 +1198,29 @@ class ManualDistributionService:
         )
         items = {it.id: it for it in (await self.db.execute(stmt)).scalars().all()}
 
-        # Keep only allocations that actually need the gate (skip renewal apps and
-        # scholarships without a professor recommendation step).
-        gated: list[tuple[dict[str, Any], Application]] = []
+        resolved: list[tuple[dict[str, Any], Application]] = []
         for alloc in allocating:
             item = items.get(alloc["ranking_item_id"])
             app = item.application if item else None
-            if app is None or app.is_renewal:
+            if app is not None:
+                resolved.append((alloc, app))
+
+        # Layer 1 — rejection gate (unconditional, no exemptions): mirrors the
+        # disabled checkbox in the UI so a crafted request can't bypass it.
+        rejected = await self._batch_load_rejected_map([app.id for _, app in resolved])
+        rejected_violations = [
+            f"{app.app_id} → {alloc['sub_type_code']}"
+            for alloc, app in resolved
+            if (alloc["sub_type_code"] or "").lower().strip() in rejected.get(app.id, set())
+        ]
+        if rejected_violations:
+            raise ValueError("以下分發之子類型教授（審核）不同意，無法分發：" + "、".join(rejected_violations))
+
+        # Layer 2 — positive approval gate (skip renewal apps and scholarships
+        # without a professor recommendation step).
+        gated: list[tuple[dict[str, Any], Application]] = []
+        for alloc, app in resolved:
+            if app.is_renewal:
                 continue
             cfg = app.scholarship_configuration
             if not (cfg and cfg.requires_professor_recommendation):
@@ -1881,13 +1955,19 @@ class ManualDistributionService:
             pool = await self.distributable_pool(config, sub_type)
             working_remaining: dict[int, int] = {c["config_id"]: c["remaining"] for c in pool}
             candidates = await self._get_general_candidates(scholarship_type_id, academic_year, sub_type)
+            rejected_map = await self._batch_load_rejected_map(
+                [c.application_id for c in candidates if c.application_id is not None]
+            )
             for cand in candidates:
-                picked = await self._pick_config(config, sub_type, working_remaining)
-                if picked is None:
-                    break
                 app = cand.application
                 if app is None:
                     continue
+                # Reviewer reject (不同意) on this sub_type — never distribute.
+                if sub_type in rejected_map.get(app.id, set()):
+                    continue
+                picked = await self._pick_config(config, sub_type, working_remaining)
+                if picked is None:
+                    break
                 app.status = ApplicationStatus.approved
                 app.sub_scholarship_type = sub_type
                 app.quota_allocation_status = "allocated"
@@ -1962,9 +2042,15 @@ class ManualDistributionService:
             waitlist = await self._get_waitlist_candidates(
                 scholarship_type_id, academic_year, sub_type, limit=available
             )
+            waitlist_rejected_map = await self._batch_load_rejected_map(
+                [c.application_id for c in waitlist if c.application_id is not None]
+            )
             for cand in waitlist:
                 app = cand.application
                 if app is None:
+                    continue
+                # Reviewer reject (不同意) on this sub_type — never fill in.
+                if sub_type in waitlist_rejected_map.get(app.id, set()):
                     continue
                 app.status = ApplicationStatus.approved
                 app.sub_scholarship_type = sub_type

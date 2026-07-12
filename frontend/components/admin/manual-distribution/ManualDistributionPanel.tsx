@@ -684,9 +684,12 @@ export function ManualDistributionPanel({
         { history_id: historyId }
       );
       if (resp.success && resp.data) {
+        const skipped = resp.data.skipped_rejected ?? 0;
         setSaveMessage({
           type: "success",
-          text: `成功還原 ${resp.data.restored_count} 筆分配紀錄`,
+          text:
+            `成功還原 ${resp.data.restored_count} 筆分配紀錄` +
+            (skipped > 0 ? `（${skipped} 筆因教授審核不同意已略過）` : ""),
         });
         setShowHistoryDialog(false);
         await reloadServerSnapshot();
