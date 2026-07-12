@@ -78,6 +78,25 @@ def _parse_renewal_year(raw_value: Any) -> Tuple[bool, Optional[int]]:
     return False, None
 
 
+_NUMERIC_FIELD_TYPES = {"number", "integer", "float", "decimal"}
+
+
+def _normalize_custom_field_value(value: Any, field_type: Optional[str]) -> Any:
+    """Normalize a custom-field cell by its ApplicationField type.
+
+    Numeric field types keep their numeric value; everything else becomes a
+    trimmed string (int-safe, so a numeric cell 3.0 renders "3" while text
+    cells keep leading zeros — #1140).
+    """
+    if isinstance(value, bool):
+        return value
+    if (field_type or "").lower() in _NUMERIC_FIELD_TYPES:
+        return value
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    return str(value).strip()
+
+
 _CHECKMARK_VALUES = {"v", "✓"}
 
 
@@ -324,12 +343,15 @@ class BatchImportService:
         parsed_data = []
 
         try:
-            # Try reading as Excel first
-            df = pd.read_excel(io.BytesIO(file_content))
+            # Try reading as Excel first. dtype=object keeps each cell's own
+            # type (text cells stay text) instead of coercing whole columns —
+            # column-level int64 inference ate leading zeros in text cells
+            # like 聯絡電話 "09xxxxxxxxx" (#1140).
+            df = pd.read_excel(io.BytesIO(file_content), dtype=object)
         except Exception:
             try:
                 # Fallback to CSV
-                df = pd.read_csv(io.BytesIO(file_content))
+                df = pd.read_csv(io.BytesIO(file_content), dtype=object)
             except Exception as e:
                 errors.append(
                     BatchImportValidationError(
@@ -368,6 +390,7 @@ class BatchImportService:
         # Custom-field definitions (same set _build_submitted_form_data uses)
         field_definitions = await self._fetch_field_definitions(scholarship.code)
         custom_field_mapping = {f.field_label: f.field_name for f in field_definitions.values()}
+        custom_field_types = {f.field_name: f.field_type for f in field_definitions.values()}
 
         # Column header → sub-type code accepted by the parser, scoped to this
         # scholarship's real sub-types. The template writes the known Chinese
@@ -489,12 +512,9 @@ class BatchImportService:
                     # Parse custom fields from Chinese column names
                     for chinese_label, field_name in custom_field_mapping.items():
                         if chinese_label in df_columns and pd.notna(row.get(chinese_label)):
-                            value = row.get(chinese_label)
-                            # Convert to appropriate type
-                            if isinstance(value, (int, float, bool)):
-                                data_row["custom_fields"][field_name] = value
-                            else:
-                                data_row["custom_fields"][field_name] = str(value).strip()
+                            data_row["custom_fields"][field_name] = _normalize_custom_field_value(
+                                row.get(chinese_label), custom_field_types.get(field_name)
+                            )
                 else:
                     # English column format (backward compatibility)
                     is_renewal, renewal_year = _parse_renewal_year(
@@ -532,11 +552,9 @@ class BatchImportService:
                         if col.startswith("custom_"):
                             field_name = col.replace("custom_", "")
                             if pd.notna(row.get(col)):
-                                value = row.get(col)
-                                if isinstance(value, (int, float, bool)):
-                                    data_row["custom_fields"][field_name] = value
-                                else:
-                                    data_row["custom_fields"][field_name] = str(value).strip()
+                                data_row["custom_fields"][field_name] = _normalize_custom_field_value(
+                                    row.get(col), custom_field_types.get(field_name)
+                                )
 
                 # Validate using Pydantic schema and capture normalized values
                 validated_row = ApplicationDataRow(**data_row)
