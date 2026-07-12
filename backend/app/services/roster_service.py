@@ -804,22 +804,19 @@ class RosterService:
         # 從申請中取得學生資料
         student_data = application.student_data or {}
 
-        # 判斷是否納入造冊
-        is_included = True
-        exclusion_reason = None
+        # 判斷是否納入造冊 — 收集「所有」排除原因，不得互相覆蓋 (#1142)
+        exclusion_reasons: list[str] = []
 
         # 1. 檢查學籍驗證狀態
         if verification_status != StudentVerificationStatus.VERIFIED:
-            is_included = False
-            exclusion_reason = f"學籍驗證未通過: {verification_status.value}"
+            exclusion_reasons.append(f"學籍驗證未通過: {verification_status.value}")
         # 2. 檢查獎學金規則符合性
         elif eligibility_result and not eligibility_result.get("is_eligible", True):
-            is_included = False
             failed_rules = eligibility_result.get("failed_rules", [])
             if failed_rules:
-                exclusion_reason = f"不符合獎學金規則: {'; '.join(failed_rules)}"
+                exclusion_reasons.append(f"不符合獎學金規則: {'; '.join(failed_rules)}")
             else:
-                exclusion_reason = "不符合獎學金資格條件"
+                exclusion_reasons.append("不符合獎學金資格條件")
         # 3. 檢查銀行帳戶資訊
         # IMPORTANT: Support both nested (schema-compliant) and flat (legacy) data structures
         form_data = application.submitted_form_data or {}
@@ -840,12 +837,14 @@ class RosterService:
                 break
 
         if not bank_account:
-            is_included = False
-            exclusion_reason = "缺少銀行帳戶資訊"
+            exclusion_reasons.append("缺少銀行帳戶資訊")
             logger.warning(
                 f"Application {application.id} missing bank account. "
                 f"Checked nested and flat structures. submitted_form_data keys: {list(form_data.keys())}"
             )
+
+        is_included = not exclusion_reasons
+        exclusion_reason = "；".join(exclusion_reasons) if exclusion_reasons else None
 
         # 查詢 CollegeRankingItem 以取得備取資訊與分發子類型
         backup_info = None
