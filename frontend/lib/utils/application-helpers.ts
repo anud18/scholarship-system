@@ -121,7 +121,8 @@ export const getApplicationTimeline = (
   const professorName = application.professor?.name || application.professor?.nycu_id;
 
   // 判斷合併步驟狀態的輔助函數:
-  // entryStage 為進入此步驟的階段,exitStage 為完成後進入的階段
+  // entryStage 為進入此步驟的階段,exitStage 為此步驟完成時所到達的階段
+  // (review_stage 達到 exitStage 即視為此步驟已完成)
   const getStepStatus = (
     entryStage: string,
     exitStage: string,
