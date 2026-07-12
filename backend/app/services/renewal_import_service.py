@@ -26,7 +26,10 @@ logger = logging.getLogger(__name__)
 # 獎學金類別 label -> configuration sub-type code. Extend as new labels appear.
 RENEWAL_SUB_TYPE_LABELS = {"國科會": "nstc", "教育部": "moe_1w", "教育部配合款2萬": "moe_2w"}
 APPLIED_YES = "是"
-PASS_MARK = "通過"
+# Domain marker for a passing 續領審核結果 ("通過") — NOT a credential. Bandit's
+# hardcoded-password heuristic (B105) trips on the "PASS" name prefix, hence the
+# inline nosec on the assignment below.
+PASS_MARK = "通過"  # nosec B105
 
 
 def _to_semester_enum(semester: Optional[str]) -> Optional[Semester]:
