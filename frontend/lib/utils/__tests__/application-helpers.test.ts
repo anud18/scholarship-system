@@ -206,6 +206,18 @@ describe("Application Helpers", () => {
       expect(timeline[3].status).toBe("pending");
     });
 
+    it("marks the final step rejected for cancelled_by_challenge", () => {
+      const app = {
+        ...mockApplication,
+        status: "cancelled_by_challenge",
+        review_stage: "college_review",
+        allow_college_view_distribution: true,
+      };
+      const timeline = getApplicationTimeline(app, "zh");
+
+      expect(timeline[3].status).toBe("rejected");
+    });
+
     it("should return correct timeline for rejected status", () => {
       const rejectedApp = { ...mockApplication, status: "rejected", review_stage: "college_reviewed" };
       const timeline = getApplicationTimeline(rejectedApp, "zh");

@@ -154,7 +154,11 @@ export const getApplicationTimeline = (
   const allowCollegeViewDistribution = application.allow_college_view_distribution ?? false;
 
   const isTerminated =
-    status === "rejected" || status === "returned" || status === "withdrawn" || status === "cancelled";
+    status === "rejected" ||
+    status === "returned" ||
+    status === "withdrawn" ||
+    status === "cancelled" ||
+    status === "cancelled_by_challenge";
 
   const steps: TimelineStep[] = [
     // 1. 提交申請
