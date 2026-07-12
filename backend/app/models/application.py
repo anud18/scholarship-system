@@ -257,6 +257,14 @@ class Application(Base):
             "ix_applications_scholarship_configuration_id",
             "scholarship_configuration_id",
         ),
+        # Plain index on the user FK — the partial unique indexes above lead
+        # with user_id but their WHERE predicates make them unusable for
+        # arbitrary per-user lookups (student application list, admin student
+        # list applied-scholarships aggregation).
+        Index(
+            "ix_applications_user_id",
+            "user_id",
+        ),
     )
 
     def __repr__(self):

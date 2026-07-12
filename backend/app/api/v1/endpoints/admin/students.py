@@ -11,6 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import require_admin
 from app.db.deps import get_db
+from app.models.application import Application
+from app.models.enums import ApplicationStatus
+from app.models.scholarship import ScholarshipType
 from app.models.user import EmployeeStatus, User, UserRole
 from app.services.student_service import StudentService
 
@@ -19,7 +22,59 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def convert_student_to_dict(user: User) -> dict:
+def applied_application_filters() -> list:
+    """Filter clauses for applications that count as "the student applied".
+
+    An application counts once the student has submitted it (draft = not yet
+    applied); soft-deleted rows and rows without a scholarship type link are
+    excluded. Shared by the list annotation and the scholarship filters so the
+    badges shown always match what the filters return.
+    """
+    return [
+        Application.deleted_at.is_(None),
+        Application.status.notin_([ApplicationStatus.draft, ApplicationStatus.deleted]),
+        Application.scholarship_type_id.isnot(None),
+    ]
+
+
+async def get_applied_scholarships_map(db: AsyncSession, user_ids: list[int]) -> dict[int, list[dict]]:
+    """Aggregate which scholarship types each user has applied for.
+
+    Returns {user_id: [{scholarship_type_id, code, name, application_count}]},
+    one entry per distinct scholarship type with the number of qualifying
+    applications (see applied_application_filters for what qualifies).
+    """
+    applied_map: dict[int, list[dict]] = {user_id: [] for user_id in user_ids}
+    if not user_ids:
+        return applied_map
+
+    stmt = (
+        select(
+            Application.user_id,
+            ScholarshipType.id,
+            ScholarshipType.code,
+            ScholarshipType.name,
+            func.count(Application.id),
+        )
+        .join(ScholarshipType, Application.scholarship_type_id == ScholarshipType.id)
+        .where(Application.user_id.in_(user_ids), *applied_application_filters())
+        .group_by(Application.user_id, ScholarshipType.id, ScholarshipType.code, ScholarshipType.name)
+        .order_by(ScholarshipType.id)
+    )
+    result = await db.execute(stmt)
+    for user_id, type_id, type_code, type_name, application_count in result.all():
+        applied_map[user_id].append(
+            {
+                "scholarship_type_id": type_id,
+                "code": type_code,
+                "name": type_name,
+                "application_count": application_count,
+            }
+        )
+    return applied_map
+
+
+def convert_student_to_dict(user: User, applied_scholarships: Optional[list[dict]] = None) -> dict:
     """Convert User model (student role) to dictionary"""
     return {
         "id": user.id,
@@ -33,6 +88,7 @@ def convert_student_to_dict(user: User) -> dict:
         "college_code": user.college_code,
         "role": user.role.value if hasattr(user.role, "value") else str(user.role),
         "comment": user.comment,
+        "applied_scholarships": applied_scholarships or [],
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
         "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None,
@@ -46,11 +102,21 @@ async def get_all_students(
     search: Optional[str] = Query(None, description="Search by name, email, or NYCU ID"),
     dept_code: Optional[str] = Query(None, description="Filter by department code"),
     status: Optional[str] = Query(None, description="Filter by status (在學/畢業)"),
+    scholarship_type_id: Optional[int] = Query(
+        None, description="Filter by scholarship type the student has applied for"
+    ),
+    has_application: Optional[bool] = Query(
+        None, description="Filter by whether the student has applied for any scholarship"
+    ),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Get all students with pagination, search, and filters
+
+    Each student item includes applied_scholarships: the scholarship types the
+    student has submitted applications for (drafts and deleted applications
+    excluded), with per-type application counts.
 
     Requires admin or super_admin role.
     """
@@ -79,6 +145,24 @@ async def get_all_students(
         if status in valid_statuses:
             stmt = stmt.where(User.status == status)
 
+    # Apply scholarship application filters (EXISTS correlated on User.id)
+    if scholarship_type_id is not None:
+        stmt = stmt.where(
+            select(Application.id)
+            .where(
+                Application.user_id == User.id,
+                Application.scholarship_type_id == scholarship_type_id,
+                *applied_application_filters(),
+            )
+            .exists()
+        )
+
+    if has_application is not None:
+        any_application = (
+            select(Application.id).where(Application.user_id == User.id, *applied_application_filters()).exists()
+        )
+        stmt = stmt.where(any_application if has_application else ~any_application)
+
     # Get total count
     count_stmt = select(func.count()).select_from(stmt.subquery())
     result = await db.execute(count_stmt)
@@ -91,8 +175,11 @@ async def get_all_students(
     result = await db.execute(stmt)
     students = result.scalars().all()
 
+    # Annotate each student with the scholarships they have applied for
+    applied_map = await get_applied_scholarships_map(db, [student.id for student in students])
+
     # Convert to dict
-    student_list = [convert_student_to_dict(student) for student in students]
+    student_list = [convert_student_to_dict(student, applied_map.get(student.id, [])) for student in students]
 
     # Calculate total pages
     pages = (total + size - 1) // size if total > 0 else 0
@@ -205,10 +292,12 @@ async def get_student_detail(
         },
     )
 
+    applied_map = await get_applied_scholarships_map(db, [student.id])
+
     return {
         "success": True,
         "message": "Student detail retrieved successfully",
-        "data": convert_student_to_dict(student),
+        "data": convert_student_to_dict(student, applied_map.get(student.id, [])),
     }
 
 
