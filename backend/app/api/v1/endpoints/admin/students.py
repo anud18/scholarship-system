@@ -88,7 +88,7 @@ def convert_student_to_dict(user: User, applied_scholarships: Optional[list[dict
         "college_code": user.college_code,
         "role": user.role.value if hasattr(user.role, "value") else str(user.role),
         "comment": user.comment,
-        "applied_scholarships": applied_scholarships or [],
+        "applied_scholarships": applied_scholarships if applied_scholarships is not None else [],
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
         "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None,

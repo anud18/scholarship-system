@@ -32,7 +32,7 @@ async def authed_admin_client(client, admin_user):
 
     app.dependency_overrides[require_admin] = override_require_admin
     yield client
-    del app.dependency_overrides[require_admin]
+    app.dependency_overrides.pop(require_admin, None)
 
 
 @pytest_asyncio.fixture
