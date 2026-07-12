@@ -891,6 +891,10 @@ class RosterService:
             if alloc_item:
                 allocated_sub_type = alloc_item.allocated_sub_type
 
+        # 續領申請沒有 CollegeRankingItem；子類型直接取自申請本身。
+        if not allocated_sub_type and application.is_renewal:
+            allocated_sub_type = application.sub_scholarship_type
+
         # 載入消耗配置 (consumed config) — 借用前年度配額時不同於發放配置。
         # allocation_config_id NULL ⇒ 全期 sentinel，退回造冊自身的發放配置。
         consumed_config = None
@@ -903,7 +907,7 @@ class RosterService:
 
         # 計算申請身分別
         application_identity = None
-        if application.is_renewal and application.previous_application_id:
+        if application.is_renewal:
             application_identity = f"{application.academic_year}續領"
         else:
             application_identity = f"{application.academic_year}新申請"
@@ -1475,6 +1479,22 @@ class RosterService:
             )
         return CollegeRanking.semester == semester
 
+    def _build_application_semester_filter(self, semester: Optional[str]):
+        """Semester predicate on Application.semester.
+        None / "annual" / "yearly" / "" all map to the yearly bucket
+        (semester IS NULL OR "yearly"); otherwise exact match.
+
+        Unlike CollegeRanking.semester (String(20)), Application.semester is a
+        native Postgres enum {first, second, yearly} — emitting "annual" here
+        aborts the whole query with `invalid input value for enum semester`.
+        Mirror _config_semester_condition, not the String-column helpers."""
+        if semester in (None, "", "annual", "yearly"):
+            return or_(
+                Application.semester.is_(None),
+                Application.semester == "yearly",
+            )
+        return Application.semester == semester
+
     def generate_rosters_from_distribution(
         self,
         scholarship_type_id: int,
@@ -1526,13 +1546,6 @@ class RosterService:
             .all()
         )
 
-        if not rankings:
-            raise ValueError(
-                f"找不到已完成分發的排名：scholarship_type_id={scholarship_type_id}, "
-                f"academic_year={academic_year}, semester={semester}。"
-                "請先完成排名並執行矩陣分發後再產生造冊。"
-            )
-
         ranking_ids = [r.id for r in rankings]
 
         # 2. 取得對應的獎學金配置
@@ -1552,7 +1565,26 @@ class RosterService:
                 f"找不到對應的獎學金配置：scholarship_type_id={scholarship_type_id}, " f"academic_year={academic_year}"
             )
 
-        # 3. 取得所有已分配的 ranking items，並按 (allocation_config_id, allocated_sub_type) 分組
+        # 3a. 取得已核准的續領申請。續領申請永遠不會贏得 CollegeRankingItem
+        # （它們被排除在配額分發之外），所以矩陣分發造冊路徑看不到它們。此處直接撈出，
+        # 並以 (allocation_config_id, sub_scholarship_type) 為 key 併入分組 —— 與
+        # ManualDistributionService 消耗配額所用的 key 一致。
+        renewal_apps = (
+            self.db.query(Application)
+            .filter(
+                and_(
+                    Application.scholarship_type_id == scholarship_type_id,
+                    Application.academic_year == academic_year,
+                    Application.is_renewal.is_(True),
+                    Application.status == "approved",
+                    Application.deleted_at.is_(None),
+                    self._build_application_semester_filter(semester),
+                )
+            )
+            .all()
+        )
+
+        # 3b. 取得所有已分配的 ranking items，並按 (allocation_config_id, allocated_sub_type) 分組
         allocated_items = (
             self.db.query(CollegeRankingItem)
             .filter(
@@ -1562,10 +1594,15 @@ class RosterService:
                 )
             )
             .all()
+            if ranking_ids
+            else []
         )
 
-        if not allocated_items:
-            raise ValueError(f"排名 {ranking_ids} 沒有已分配的學生。請確認已完成手動分發並確認分發。")
+        if not allocated_items and not renewal_apps:
+            raise ValueError(
+                "沒有可造冊的資料：找不到已分配的排名學生，也沒有已核准的續領。"
+                "請先完成矩陣分發，或先匯入續領通過名單。"
+            )
 
         # 分組：{(allocation_config_id, sub_type): [ranking_item, ...]}
         # allocation_config_id NULL ⇒ 消耗本配置（requesting config）的配額。
@@ -1575,6 +1612,13 @@ class RosterService:
             sub_type = item.allocated_sub_type or "general"
             key = (alloc_config_id, sub_type)
             groups.setdefault(key, []).append(item)
+
+        # 將已核准的續領併入（可能是全新的）分組；記錄每個 key 的續領 application id。
+        renewal_ids_by_key: Dict[tuple, set] = {}
+        for app in renewal_apps:
+            key = (app.allocation_config_id or scholarship_config.id, app.sub_scholarship_type or "general")
+            renewal_ids_by_key.setdefault(key, set()).add(app.id)
+            groups.setdefault(key, [])
 
         # 預先載入每個分組的「消耗配置」(consumed config) — 借用配額時是前年度的同代碼配置
         consumed_configs: Dict[int, ScholarshipConfiguration] = {scholarship_config.id: scholarship_config}
@@ -1597,6 +1641,7 @@ class RosterService:
 
         for (alloc_config_id, sub_type), group_items in groups.items():
             application_ids_in_group = {item.application_id for item in group_items}
+            application_ids_in_group |= renewal_ids_by_key.get((alloc_config_id, sub_type), set())
             consumed_config = consumed_configs[alloc_config_id]
 
             try:

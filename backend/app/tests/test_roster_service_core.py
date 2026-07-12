@@ -323,10 +323,7 @@ def test_create_roster_item_application_identity_new(service: RosterService) -> 
 
 
 def test_create_roster_item_application_identity_renewal(service: RosterService) -> None:
-    """A renewal (is_renewal=True AND previous_application_id set) gets
-    the "{academic_year}續領" tag. Both flags must be true — a stray
-    is_renewal=True with no previous_application_id falls back to 新申請
-    rather than mislabeling."""
+    """A renewal (is_renewal=True) gets the "{academic_year}續領" tag."""
     roster = _make_roster(academic_year=114)
     application = _make_application(
         academic_year=114,
@@ -345,10 +342,11 @@ def test_create_roster_item_application_identity_renewal(service: RosterService)
     assert item.application_identity == "114續領"
 
 
-def test_create_roster_item_renewal_flag_without_previous_id_is_new(service: RosterService) -> None:
-    """Defensive: is_renewal=True but previous_application_id=None means
-    the renewal data is incomplete. Fall back to 新申請 rather than emitting
-    a misleading 續領 label. Pins the AND-of-both-conditions branch."""
+def test_create_roster_item_renewal_flag_without_previous_id_is_still_renewal(service: RosterService) -> None:
+    """is_renewal drives the 續領 label on its own — imported renewals
+    (匯入續領通過名單) carry is_renewal=True but NO previous_application_id
+    (they are standalone rows, not linked to a prior application), and MUST
+    still be labelled 續領, not 新申請. Pins the is_renewal-only branch."""
     roster = _make_roster(academic_year=114)
     application = _make_application(
         academic_year=114,
@@ -364,7 +362,7 @@ def test_create_roster_item_renewal_flag_without_previous_id_is_new(service: Ros
         eligibility_result=None,
     )
 
-    assert item.application_identity == "114新申請"
+    assert item.application_identity == "114續領"
 
 
 # ---------------------------------------------------------------------------

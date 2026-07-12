@@ -307,6 +307,33 @@ class TestBatchImportEndpoints:
         assert data["failed_count"] == 0
 
     @pytest.mark.asyncio
+    async def test_confirm_rejects_renewal_batch(self, client: AsyncClient, db: AsyncSession, college_user: User):
+        """A renewal-type batch must not be confirmable via the application endpoint -> 404."""
+        batch_import = BatchImport(
+            importer_id=college_user.id,
+            college_code="E",
+            scholarship_type_id=1,
+            academic_year=113,
+            semester="first",
+            file_name="renewal.xlsx",
+            total_records=1,
+            import_status=BatchImportStatus.pending.value,
+            import_type="renewal",
+            parsed_data={"data": [{"student_id": "111111111"}], "errors": []},
+        )
+        db.add(batch_import)
+        await db.commit()
+        await db.refresh(batch_import)
+
+        _override_user(college_user)
+        response = await client.post(
+            f"{BASE}/{batch_import.id}/confirm",
+            json={"batch_id": batch_import.id, "confirm": True},
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio
     async def test_confirm_batch_import_keeps_review_flow_status(
         self, client: AsyncClient, db: AsyncSession, college_user: User
     ):

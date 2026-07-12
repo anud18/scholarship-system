@@ -5422,6 +5422,114 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/college-review/renewal-import/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Renewal Import
+         * @description 上傳續領生名單，解析並回傳預覽（僅保留「是 + 通過」的續領生）。
+         */
+        post: operations["upload_renewal_import_api_v1_college_review_renewal_import_upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/renewal-import/{batch_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Renewal Import
+         * @description 確認匯入續領生，建立已核准的續領申請（供造冊使用）。
+         */
+        post: operations["confirm_renewal_import_api_v1_college_review_renewal_import__batch_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/renewal-import/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Renewal Import History
+         * @description 查詢續領匯入歷史記錄（僅顯示已確認的批次）。
+         */
+        get: operations["get_renewal_import_history_api_v1_college_review_renewal_import_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/renewal-import/{batch_id}/details": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Renewal Import Details
+         * @description 查詢續領匯入詳細資訊。
+         */
+        get: operations["get_renewal_import_details_api_v1_college_review_renewal_import__batch_id__details_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/renewal-import/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Renewal Import Template
+         * @description 下載續領匯入範例 Excel 檔案。
+         *
+         *     **固定欄位**（繁體中文）：編號、學院、系所、學生姓名、學號、學生年級、
+         *     學生是否申請續領、續領審核結果、獎學金類別、郵局帳號、指導教授本校人事編號。
+         *
+         *     **注意**: 「獎學金類別」欄位可填 `國科會` 或 `教育部`；僅「學生是否申請續領=是」
+         *     且「續領審核結果=通過」的列會被匯入。
+         *
+         *     **權限**: 僅限 college 角色。
+         */
+        get: operations["download_renewal_import_template_api_v1_college_review_renewal_import_template_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/email-management/history": {
         parameters: {
             query?: never;
@@ -8640,6 +8748,15 @@ export interface components {
              */
             file: string;
         };
+        /** Body_upload_renewal_import_api_v1_college_review_renewal_import_upload_post */
+        Body_upload_renewal_import_api_v1_college_review_renewal_import_upload_post: {
+            /**
+             * File
+             * Format: binary
+             * @description 續領生 Excel 或 CSV 檔案
+             */
+            file: string;
+        };
         /** Body_upload_system_doc_api_v1_system_settings_upload__doc_key__post */
         Body_upload_system_doc_api_v1_system_settings_upload__doc_key__post: {
             /**
@@ -9572,6 +9689,16 @@ export interface components {
              * @description 結構化移除理由分類 (G26/#988)
              */
             reason_category?: ("withdrawal" | "verification_failed" | "duplicate" | "revoked" | "admin_decision" | "other") | null;
+        };
+        /** RenewalImportConfirmRequest */
+        RenewalImportConfirmRequest: {
+            /** Batch Id */
+            batch_id: number;
+            /**
+             * Confirm
+             * @default true
+             */
+            confirm: boolean;
         };
         /** ReorderItem */
         ReorderItem: {
@@ -19865,6 +19992,178 @@ export interface operations {
         };
     };
     download_batch_import_template_api_v1_college_review_batch_import_template_get: {
+        parameters: {
+            query: {
+                /** @description 獎學金類型代碼 */
+                scholarship_type: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_renewal_import_api_v1_college_review_renewal_import_upload_post: {
+        parameters: {
+            query: {
+                /** @description 獎學金類型代碼 */
+                scholarship_type: string;
+                /** @description 學年度 */
+                academic_year: number;
+                /** @description 學期 */
+                semester?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_renewal_import_api_v1_college_review_renewal_import_upload_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_renewal_import_api_v1_college_review_renewal_import__batch_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RenewalImportConfirmRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_renewal_import_history_api_v1_college_review_renewal_import_history_get: {
+        parameters: {
+            query?: {
+                /** @description 跳過筆數 */
+                skip?: number;
+                /** @description 每頁筆數 */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_renewal_import_details_api_v1_college_review_renewal_import__batch_id__details_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_renewal_import_template_api_v1_college_review_renewal_import_template_get: {
         parameters: {
             query: {
                 /** @description 獎學金類型代碼 */
