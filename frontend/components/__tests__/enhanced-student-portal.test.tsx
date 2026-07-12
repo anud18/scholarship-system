@@ -352,8 +352,9 @@ describe("EnhancedStudentPortal", () => {
       expect(screen.getByText("Review Progress")).toBeInTheDocument();
     });
     expect(screen.getByText("Submit Application")).toBeInTheDocument();
+    expect(screen.getByText("Professor Review")).toBeInTheDocument();
     expect(
-      screen.getByText("Waiting for Professor Review")
+      screen.getByText("Finalized (Contact College Office)")
     ).toBeInTheDocument();
   });
 
