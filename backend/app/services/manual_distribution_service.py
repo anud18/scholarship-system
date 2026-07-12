@@ -877,6 +877,9 @@ class ManualDistributionService:
 
         approved_count = 0
         rejected_count = 0
+        # Per-ranking approved tallies — each college ranking must record its
+        # OWN winner count, not the global one (#1138).
+        approved_by_ranking: dict[int, int] = {}
 
         for item in items:
             app = item.application
@@ -927,6 +930,7 @@ class ManualDistributionService:
                         )
                     )
                 approved_count += 1
+                approved_by_ranking[item.ranking_id] = approved_by_ranking.get(item.ranking_id, 0) + 1
             elif item.is_supplementary and not item.is_allocated:
                 # Supplementary students pending a second distribution pass —
                 # leave status as 'ranked' so they appear in the next allocation.
@@ -971,7 +975,7 @@ class ManualDistributionService:
         for ranking in rankings:
             ranking.distribution_executed = True
             ranking.distribution_date = now
-            ranking.allocated_count = approved_count
+            ranking.allocated_count = approved_by_ranking.get(ranking.id, 0)
 
         await self.db.flush()
 
