@@ -68,6 +68,9 @@ async def get_professor_student_relationships(
             is_active = active_status.lower() == "active"
             query = query.where(ProfessorStudentRelationship.is_active == is_active)
 
+        # Stable ordering so explicit pagination is deterministic across requests
+        query = query.order_by(ProfessorStudentRelationship.id)
+
         # Apply pagination only when explicitly requested (size=None → return all)
         if size is not None:
             query = query.offset((page - 1) * size).limit(size)

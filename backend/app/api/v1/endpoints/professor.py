@@ -48,6 +48,7 @@ async def get_professor_applications(
 
         # Calculate pagination metadata; size=None means the full set in one page
         if size is None:
+            page = 1  # keep metadata consistent — the full set is always page 1
             response_size = total_count
             total_pages = 1 if total_count else 0
         else:
