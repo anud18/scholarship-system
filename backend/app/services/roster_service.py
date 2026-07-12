@@ -1105,7 +1105,9 @@ class RosterService:
                 if not rule_result["passed"]:
                     if rule.is_hard_rule:
                         failed_rules.append(rule_result["message"])
-                    elif rule.is_warning:
+                    else:
+                        # 軟性規則失敗不影響 is_eligible，但必須留下紀錄，
+                        # 讓造冊 Excel 的資格欄位看得到（#1139）
                         warning_rules.append(rule_result["message"])
 
                 details[f"rule_{rule.id}"] = rule_result
