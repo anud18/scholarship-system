@@ -700,6 +700,10 @@ class ApplicationService:
             requires_college_review=bool(
                 application.scholarship_configuration and application.scholarship_configuration.requires_college_review
             ),
+            allow_college_view_distribution=bool(
+                application.scholarship_configuration
+                and application.scholarship_configuration.allow_college_view_distribution
+            ),
         )
 
     async def get_user_applications(self, user: User, status: Optional[str] = None) -> List[ApplicationListResponse]:
@@ -1009,6 +1013,10 @@ class ApplicationService:
             ),
             "requires_college_review": bool(
                 application.scholarship_configuration and application.scholarship_configuration.requires_college_review
+            ),
+            "allow_college_view_distribution": bool(
+                application.scholarship_configuration
+                and application.scholarship_configuration.allow_college_view_distribution
             ),
         }
 

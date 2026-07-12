@@ -123,8 +123,9 @@ describe("Application Helpers", () => {
       submitted_at: "2025-01-02T10:00:00Z",
       reviewed_at: "2025-01-03T10:00:00Z",
       approved_at: "2025-01-04T10:00:00Z",
-      // getApplicationTimeline now conditionalizes professor/college review steps
-      // on these flags. Tests below expect the full 8-step timeline.
+      // getApplicationTimeline conditionalizes professor/college review steps
+      // on these flags. Tests below expect the full 4-step timeline:
+      // 提交申請 → 教授審核 → 學院審核 → 已核定(請洽院辦)
       requires_professor_recommendation: true,
       requires_college_review: true,
     };
@@ -133,37 +134,76 @@ describe("Application Helpers", () => {
       const draftApp = { ...mockApplication, status: "draft", review_stage: "student_draft" };
       const timeline = getApplicationTimeline(draftApp, "zh");
 
-      expect(timeline).toHaveLength(8);
+      expect(timeline).toHaveLength(4);
       expect(timeline[0].title).toBe("提交申請");
       expect(timeline[0].status).toBe("current");
+      expect(timeline[1].title).toBe("教授審核");
       expect(timeline[1].status).toBe("pending");
+      expect(timeline[2].title).toBe("學院審核");
       expect(timeline[2].status).toBe("pending");
+      expect(timeline[3].title).toBe("已核定(請洽院辦)");
       expect(timeline[3].status).toBe("pending");
-      expect(timeline[4].status).toBe("pending");
-      expect(timeline[5].status).toBe("pending");
-      expect(timeline[6].status).toBe("pending");
-      expect(timeline[7].status).toBe("pending");
     });
 
     it("should return correct timeline for submitted status in English", () => {
       const submittedApp = { ...mockApplication, status: "submitted", review_stage: "student_submitted" };
       const timeline = getApplicationTimeline(submittedApp, "en");
 
-      expect(timeline).toHaveLength(8);
+      expect(timeline).toHaveLength(4);
       expect(timeline[0].title).toBe("Submit Application");
       expect(timeline[0].status).toBe("completed");
-      expect(timeline[1].title).toContain("Waiting for Professor Review");
+      expect(timeline[1].title).toContain("Professor Review");
       expect(timeline[1].status).toBe("current");
-      expect(timeline[2].title).toBe("Professor Reviewing");
+      expect(timeline[2].title).toBe("College Review");
       expect(timeline[2].status).toBe("pending");
+      expect(timeline[3].title).toBe("Finalized (Contact College Office)");
+      expect(timeline[3].status).toBe("pending");
     });
 
-    it("should return correct timeline for approved status", () => {
+    it("marks college review current once the professor review is submitted", () => {
+      const app = { ...mockApplication, review_stage: "college_review" };
+      const timeline = getApplicationTimeline(app, "zh");
+
+      expect(timeline[1].status).toBe("completed");
+      expect(timeline[2].status).toBe("current");
+      expect(timeline[3].status).toBe("pending");
+    });
+
+    it("does NOT check 已核定 for approved status while distribution is not opened to colleges", () => {
       const approvedApp = { ...mockApplication, status: "approved", review_stage: "completed" };
       const timeline = getApplicationTimeline(approvedApp, "zh");
 
       expect(timeline[0].status).toBe("completed");
-      expect(timeline[7].status).toBe("completed");
+      expect(timeline[1].status).toBe("completed");
+      expect(timeline[2].status).toBe("completed");
+      // Admin toggle allow_college_view_distribution is off → not completed yet
+      expect(timeline[3].status).toBe("current");
+      expect(timeline[3].date).toBe("");
+    });
+
+    it("checks 已核定 only when admin opened distribution results to colleges", () => {
+      const approvedApp = {
+        ...mockApplication,
+        status: "approved",
+        review_stage: "completed",
+        allow_college_view_distribution: true,
+      };
+      const timeline = getApplicationTimeline(approvedApp, "zh");
+
+      expect(timeline[3].status).toBe("completed");
+      expect(timeline[3].date).not.toBe("");
+    });
+
+    it("does not check 已核定 for non-approved status even when the toggle is on", () => {
+      const app = {
+        ...mockApplication,
+        status: "under_review",
+        review_stage: "college_review",
+        allow_college_view_distribution: true,
+      };
+      const timeline = getApplicationTimeline(app, "zh");
+
+      expect(timeline[3].status).toBe("pending");
     });
 
     it("should return correct timeline for rejected status", () => {
@@ -171,7 +211,20 @@ describe("Application Helpers", () => {
       const timeline = getApplicationTimeline(rejectedApp, "zh");
 
       expect(timeline[0].status).toBe("completed");
-      expect(timeline[7].status).toBe("rejected");
+      expect(timeline[3].status).toBe("rejected");
+    });
+
+    it("skips professor/college steps when the scholarship does not require them", () => {
+      const app = {
+        ...mockApplication,
+        requires_professor_recommendation: false,
+        requires_college_review: false,
+      };
+      const timeline = getApplicationTimeline(app, "zh");
+
+      expect(timeline).toHaveLength(2);
+      expect(timeline[0].title).toBe("提交申請");
+      expect(timeline[1].title).toBe("已核定(請洽院辦)");
     });
   });
 

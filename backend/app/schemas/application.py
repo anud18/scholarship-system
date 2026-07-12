@@ -394,6 +394,9 @@ class ApplicationResponse(BaseModel):
     # Workflow configuration flags
     requires_professor_recommendation: bool = False
     requires_college_review: bool = False
+    # Admin toggle (ScholarshipConfiguration.allow_college_view_distribution):
+    # the student timeline's final step is only checked once this is opened
+    allow_college_view_distribution: bool = False
 
     @property
     def is_editable(self) -> bool:
@@ -644,6 +647,9 @@ class ApplicationListResponse(BaseModel):
     # Workflow configuration flags
     requires_professor_recommendation: bool = False
     requires_college_review: bool = False
+    # Admin toggle (ScholarshipConfiguration.allow_college_view_distribution):
+    # the student timeline's final step is only checked once this is opened
+    allow_college_view_distribution: bool = False
 
     @property
     def is_editable(self) -> bool:

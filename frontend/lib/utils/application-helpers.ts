@@ -91,6 +91,7 @@ type ApplicationTimelineInput = {
   professor?: { name?: string; nycu_id?: string };
   requires_professor_recommendation?: boolean;
   requires_college_review?: boolean;
+  allow_college_view_distribution?: boolean;
   submitted_at?: string;
   created_at?: string;
   approved_at?: string;
@@ -119,29 +120,25 @@ export const getApplicationTimeline = (
   // 教授姓名
   const professorName = application.professor?.name || application.professor?.nycu_id;
 
-  // 判斷步驟狀態的輔助函數
+  // 判斷合併步驟狀態的輔助函數:
+  // entryStage 為進入此步驟的階段,exitStage 為完成後進入的階段
   const getStepStatus = (
-    targetStage: string,
-    nextStage: string,
+    entryStage: string,
+    exitStage: string,
     hasCompletedEvidence?: boolean
   ): "completed" | "current" | "pending" | "rejected" => {
     // 如果被拒絕,且已達到該階段,標記為 rejected
-    if (status === "rejected" && hasReachedStage(reviewStage, targetStage)) {
+    if (status === "rejected" && hasReachedStage(reviewStage, entryStage)) {
       return "rejected";
     }
 
-    // 如果有明確的完成證據 (如審核記錄)
-    if (hasCompletedEvidence) {
+    // 如果有明確的完成證據 (如審核記錄),或已進入後續階段
+    if (hasCompletedEvidence || hasReachedStage(reviewStage, exitStage)) {
       return "completed";
     }
 
-    // 如果已達到下一階段,則此階段已完成
-    if (hasReachedStage(reviewStage, nextStage)) {
-      return "completed";
-    }
-
-    // 如果正好在此階段
-    if (reviewStage === targetStage) {
+    // 已進入此步驟但尚未完成
+    if (hasReachedStage(reviewStage, entryStage)) {
       return "current";
     }
 
@@ -152,9 +149,11 @@ export const getApplicationTimeline = (
   // Workflow configuration flags
   const requiresProfessor = application.requires_professor_recommendation ?? false;
   const requiresCollege = application.requires_college_review ?? false;
+  // 管理員「開放學院查看分發結果」開關:開啟後最終步驟才會打勾
+  const allowCollegeViewDistribution = application.allow_college_view_distribution ?? false;
 
-  // Determine the stage after professor review (skip college if not required)
-  const afterProfessorStage = requiresCollege ? "college_review" : "admin_review";
+  const isTerminated =
+    status === "rejected" || status === "returned" || status === "withdrawn" || status === "cancelled";
 
   const steps: TimelineStep[] = [
     // 1. 提交申請
@@ -168,72 +167,48 @@ export const getApplicationTimeline = (
     },
   ];
 
-  // Professor review steps (only if required)
+  // 2. 教授審核 (only if required)
   if (requiresProfessor) {
-    steps.push(
-      {
-        id: "wait_professor",
-        title: locale === "zh"
-          ? `等待教授審核${professorName ? ` (${professorName})` : ""}`
-          : `Waiting for Professor Review${professorName ? ` (${professorName})` : ""}`,
-        status: getStepStatus("student_submitted", "professor_review"),
-        date: "",
-      },
-      {
-        id: "professor_reviewing",
-        title: locale === "zh" ? "教授審核中" : "Professor Reviewing",
-        status: getStepStatus("professor_review", "professor_reviewed", hasProfessorReview),
-        date: "",
-      },
-      {
-        id: "professor_submitted",
-        title: locale === "zh" ? "教授已送出審核" : "Professor Review Submitted",
-        status: getStepStatus("professor_reviewed", afterProfessorStage, hasProfessorReview),
-        date: hasProfessorReview ? formatDate(professorReview?.reviewed_at, locale) : "",
-      },
-    );
+    steps.push({
+      id: "professor_review",
+      title: locale === "zh"
+        ? `教授審核${professorName ? ` (${professorName})` : ""}`
+        : `Professor Review${professorName ? ` (${professorName})` : ""}`,
+      status: getStepStatus("student_submitted", "professor_reviewed", hasProfessorReview),
+      date: hasProfessorReview ? formatDate(professorReview?.reviewed_at, locale) : "",
+    });
   }
 
-  // College review steps (only if required)
+  // 3. 學院審核 (only if required)
   if (requiresCollege) {
-    steps.push(
-      {
-        id: "wait_college",
-        title: locale === "zh" ? "等待學院審核" : "Waiting for College Review",
-        status: getStepStatus("professor_reviewed", "college_review"),
-        date: "",
-      },
-      {
-        id: "college_reviewing",
-        title: locale === "zh" ? "學院審核中" : "College Reviewing",
-        status: getStepStatus("college_review", "college_reviewed", hasCollegeReview),
-        date: "",
-      },
-      {
-        id: "college_submitted",
-        title: locale === "zh" ? "學院已送出審核" : "College Review Submitted",
-        status: getStepStatus("college_reviewed", "admin_review", hasCollegeReview),
-        date: hasCollegeReview ? formatDate(collegeReview?.reviewed_at, locale) : "",
-      },
-    );
+    steps.push({
+      id: "college_review",
+      title: locale === "zh" ? "學院審核" : "College Review",
+      status: getStepStatus(
+        requiresProfessor ? "professor_reviewed" : "student_submitted",
+        "college_reviewed",
+        hasCollegeReview
+      ),
+      date: hasCollegeReview ? formatDate(collegeReview?.reviewed_at, locale) : "",
+    });
   }
 
-  // Final decision
+  // 4. 已核定(請洽院辦) — 僅在管理員開放學院查看分發結果後才打勾
   steps.push({
     id: "final_decision",
-    title: locale === "zh" ? "最終核定" : "Final Decision",
-    status:
-      status === "approved"
-        ? "completed"
-        : status === "rejected" || status === "returned" || status === "withdrawn" || status === "cancelled"
-          ? "rejected"
-          : "pending",
-    date:
-      status === "approved"
+    title: locale === "zh" ? "已核定(請洽院辦)" : "Finalized (Contact College Office)",
+    status: isTerminated
+      ? "rejected"
+      : status === "approved"
+        ? allowCollegeViewDistribution
+          ? "completed"
+          : "current"
+        : "pending",
+    date: isTerminated
+      ? formatDate(application.reviewed_at, locale)
+      : status === "approved" && allowCollegeViewDistribution
         ? formatDate(application.approved_at, locale)
-        : status === "rejected" || status === "returned" || status === "withdrawn" || status === "cancelled"
-          ? formatDate(application.reviewed_at, locale)
-          : "",
+        : "",
   });
 
   return steps;

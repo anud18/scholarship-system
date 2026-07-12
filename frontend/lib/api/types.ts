@@ -143,6 +143,12 @@ export interface Application {
    *  (top-level flag from the college review listing; distinct from the
    *  nested scholarship_configuration.requires_professor_recommendation). */
   requires_professor_recommendation?: boolean;
+  /** Whether this scholarship requires a college review step (top-level flag
+   *  surfaced on application list/detail responses). */
+  requires_college_review?: boolean;
+  /** Admin toggle「開放學院查看分發結果」— the student timeline's final
+   *  已核定(請洽院辦) step is only checked once this is opened. */
+  allow_college_view_distribution?: boolean;
   professor_review_completed?: boolean;
   college_review_completed?: boolean;
   form_data?: Record<string, any>;
