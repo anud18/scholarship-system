@@ -269,3 +269,50 @@ class TestProfessorStudentEnvelopeAndFlow:
         assert response.status_code == 200
         body = response.json()
         assert body["success"] is True
+
+
+@pytest.mark.api
+class TestProfessorStudentNoPaginationCap:
+    """size omitted → ALL relationships returned (no implicit 20-row cap);
+    explicit page/size still paginates deterministically."""
+
+    async def _seed_many(self, db, ps_users, count=25):
+        # Distinct relationship_type per row to sidestep the
+        # (professor, student, type) uniqueness rule.
+        for i in range(count):
+            db.add(
+                ProfessorStudentRelationship(
+                    professor_id=ps_users["professor"].id,
+                    student_id=ps_users["student"].id,
+                    relationship_type=f"nocap_t{i:02d}",
+                    is_active=True,
+                    created_by=ps_users["admin"].id,
+                )
+            )
+        await db.commit()
+
+    async def test_default_returns_all_rows_beyond_old_cap(self, client, login, db, ps_users):
+        # 25 rows > the old default page size of 20.
+        await self._seed_many(db, ps_users, count=25)
+        login(ps_users["professor"])
+        response = await client.get(PREFIX)
+        assert response.status_code == 200
+        assert len(response.json()["data"]) == 25
+
+    async def test_explicit_size_still_paginates(self, client, login, db, ps_users):
+        await self._seed_many(db, ps_users, count=25)
+        login(ps_users["professor"])
+
+        page1 = await client.get(PREFIX, params={"page": 1, "size": 10})
+        assert page1.status_code == 200
+        page1_ids = [rel["id"] for rel in page1.json()["data"]]
+        assert len(page1_ids) == 10
+
+        page3 = await client.get(PREFIX, params={"page": 3, "size": 10})
+        assert page3.status_code == 200
+        page3_ids = [rel["id"] for rel in page3.json()["data"]]
+        assert len(page3_ids) == 5
+
+        # Ordered by id → pages are disjoint and deterministic.
+        assert not set(page1_ids) & set(page3_ids)
+        assert max(page1_ids) < min(page3_ids)

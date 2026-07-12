@@ -26,12 +26,16 @@ async def get_professor_applications(
     request: Request,
     status_filter: Optional[str] = Query(None, description="Filter by review status: pending, completed, all"),
     page: int = Query(1, ge=1, description="Page number"),
-    size: int = Query(20, ge=1, le=100, description="Items per page"),
+    size: Optional[int] = Query(None, ge=1, description="Items per page; omit to return all applications"),
     current_user: User = Depends(require_professor),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get applications requiring professor review with pagination"""
-    logger.info("Professor {current_user.id} requesting applications for review (page {page}, size {size})")
+    """Get applications requiring professor review.
+
+    Returns ALL assigned applications by default; pass ``page``/``size``
+    for explicit pagination.
+    """
+    logger.info(f"Professor {current_user.id} requesting applications for review (page {page}, size {size})")
 
     try:
         service = ApplicationService(db)
@@ -42,8 +46,14 @@ async def get_professor_applications(
             size=size,
         )
 
-        # Calculate pagination metadata
-        total_pages = (total_count + size - 1) // size  # Ceiling division
+        # Calculate pagination metadata; size=None means the full set in one page
+        if size is None:
+            page = 1  # keep metadata consistent — the full set is always page 1
+            response_size = total_count
+            total_pages = 1 if total_count else 0
+        else:
+            response_size = size
+            total_pages = (total_count + size - 1) // size  # Ceiling division
 
         logger.info(
             f"Found {len(applications)} applications (page {page}/{total_pages}, total: {total_count}) for professor {current_user.id}"
@@ -53,7 +63,7 @@ async def get_professor_applications(
             items=applications,
             total=total_count,
             page=page,
-            size=size,
+            size=response_size,
             pages=total_pages,
         )
         return {

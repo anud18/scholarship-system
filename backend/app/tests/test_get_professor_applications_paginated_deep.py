@@ -14,6 +14,9 @@ Contract pinned (6 cases):
 - status_filter='completed' narrows to {approved, partial_approved, rejected}.
 - Pagination: page=2, size=2 returns rows 3-4 of an ordered set; total
   count reflects the full filtered set, not the page.
+- No implicit cap: the default call (size omitted) returns EVERY assigned
+  application — professors must see all of them (the old default silently
+  truncated the list to 20).
 """
 
 from datetime import datetime, timedelta, timezone
@@ -256,3 +259,27 @@ async def test_pagination_returns_correct_slice_and_total(db: AsyncSession):
     assert total == 5
     # The page has 2 rows.
     assert len(page2) == 2
+
+
+@pytest.mark.asyncio
+async def test_default_call_returns_all_applications_without_cap(db: AsyncSession):
+    """size omitted → every assigned application is returned (no implicit 20-row cap)."""
+    student = await _seed_user(db, role=UserRole.student, nycu_id="profpag_stu_nocap")
+    prof = await _seed_user(db, role=UserRole.professor, nycu_id="profpag_prof_nocap")
+    cfg = await _seed_config(db, requires_prof=True, suffix="nocap")
+
+    # 25 apps > the old default page size of 20.
+    for i in range(25):
+        await _seed_app(
+            db,
+            student=student,
+            config=cfg,
+            status=ApplicationStatus.submitted.value,
+            professor_id=prof.id,
+            suffix=f"nocap_{i}",
+        )
+
+    service = ApplicationService(db)
+    apps, total = await service.get_professor_applications_paginated(professor_id=prof.id)
+    assert total == 25
+    assert len(apps) == 25
