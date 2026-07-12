@@ -32,7 +32,7 @@ def applied_application_filters() -> list:
     """
     return [
         Application.deleted_at.is_(None),
-        Application.status.notin_([ApplicationStatus.draft, ApplicationStatus.deleted]),
+        Application.status.notin_([ApplicationStatus.draft.value, ApplicationStatus.deleted.value]),
         Application.scholarship_type_id.isnot(None),
     ]
 
@@ -44,7 +44,7 @@ async def get_applied_scholarships_map(db: AsyncSession, user_ids: list[int]) ->
     one entry per distinct scholarship type with the number of qualifying
     applications (see applied_application_filters for what qualifies).
     """
-    applied_map: dict[int, list[dict]] = {user_id: [] for user_id in user_ids}
+    applied_map: dict[int, list[dict]] = {}
     if not user_ids:
         return applied_map
 
@@ -63,7 +63,7 @@ async def get_applied_scholarships_map(db: AsyncSession, user_ids: list[int]) ->
     )
     result = await db.execute(stmt)
     for user_id, type_id, type_code, type_name, application_count in result.all():
-        applied_map[user_id].append(
+        applied_map.setdefault(user_id, []).append(
             {
                 "scholarship_type_id": type_id,
                 "code": type_code,
