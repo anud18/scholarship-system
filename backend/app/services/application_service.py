@@ -2371,9 +2371,13 @@ class ApplicationService:
         professor_id: int,
         status_filter: Optional[str] = None,
         page: int = 1,
-        size: int = 20,
+        size: Optional[int] = None,
     ) -> tuple[List[ApplicationListResponse], int]:
-        """Get paginated applications assigned to professor with total count"""
+        """Get applications assigned to professor with total count.
+
+        ``size=None`` (default) returns ALL matching applications;
+        pass ``page``/``size`` for explicit pagination.
+        """
         try:
             # Build base query with ALL required filters (consistent with what will be returned)
             base_query = (
@@ -2429,9 +2433,10 @@ class ApplicationService:
             count_result = await self.db.execute(count_query)
             total_count = count_result.scalar()
 
-            # Apply pagination and get results
-            offset = (page - 1) * size
-            paginated_query = base_query.offset(offset).limit(size).order_by(desc(Application.created_at))
+            # Apply ordering, then pagination only when explicitly requested
+            paginated_query = base_query.order_by(desc(Application.created_at))
+            if size is not None:
+                paginated_query = paginated_query.offset((page - 1) * size).limit(size)
 
             result = await self.db.execute(paginated_query)
             applications = result.unique().scalars().all()

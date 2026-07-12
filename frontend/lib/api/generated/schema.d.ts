@@ -4282,7 +4282,10 @@ export interface paths {
         };
         /**
          * Get Professor Applications
-         * @description Get applications requiring professor review with pagination
+         * @description Get applications requiring professor review.
+         *
+         *     Returns ALL assigned applications by default; pass ``page``/``size``
+         *     for explicit pagination.
          */
         get: operations["get_professor_applications_api_v1_professor_applications_get"];
         put?: never;
@@ -18138,8 +18141,8 @@ export interface operations {
                 status_filter?: string | null;
                 /** @description Page number */
                 page?: number;
-                /** @description Items per page */
-                size?: number;
+                /** @description Items per page; omit to return all applications */
+                size?: number | null;
             };
             header?: never;
             path?: never;
@@ -18338,8 +18341,8 @@ export interface operations {
                 status?: string | null;
                 /** @description Page number */
                 page?: number;
-                /** @description Items per page */
-                size?: number;
+                /** @description Items per page; omit to return all relationships */
+                size?: number | null;
             };
             header?: never;
             path?: never;

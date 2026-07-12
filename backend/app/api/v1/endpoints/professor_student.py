@@ -28,7 +28,7 @@ async def get_professor_student_relationships(
     relationship_type: Optional[str] = Query(None, description="Filter by relationship type"),
     active_status: Optional[str] = Query(None, alias="status", description="Filter by active status (active/inactive)"),
     page: int = Query(1, ge=1, description="Page number"),
-    size: int = Query(20, ge=1, le=100, description="Items per page"),
+    size: Optional[int] = Query(None, ge=1, description="Items per page; omit to return all relationships"),
     current_user: User = Depends(require_roles(UserRole.professor, UserRole.admin, UserRole.super_admin)),
     db: AsyncSession = Depends(get_db),
 ):
@@ -68,8 +68,9 @@ async def get_professor_student_relationships(
             is_active = active_status.lower() == "active"
             query = query.where(ProfessorStudentRelationship.is_active == is_active)
 
-        # Apply pagination
-        query = query.offset((page - 1) * size).limit(size)
+        # Apply pagination only when explicitly requested (size=None → return all)
+        if size is not None:
+            query = query.offset((page - 1) * size).limit(size)
 
         # Execute query
         result = await db.execute(query)
