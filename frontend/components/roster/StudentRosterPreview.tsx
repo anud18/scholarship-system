@@ -418,12 +418,10 @@ export function StudentRosterPreview({
         <CardContent>
           {data.has_matrix_distribution ? (
             <Tabs value={selectedCollege} onValueChange={setSelectedCollege}>
-              <TabsList
-                className="grid w-full"
-                style={{
-                  gridTemplateColumns: `repeat(${Object.keys(data.summary.by_college).length + 1}, 1fr)`,
-                }}
-              >
+              {/* flex-wrap（多列換行）：學院多時單列 grid 會把每欄壓到比
+                  min-content 還窄而水平溢出卡片（#1145）；h-auto 蓋掉基底
+                  TabsList 的固定 h-10 讓列高隨換行長高 */}
+              <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
                 {Object.entries(data.summary.by_college).map(
                   ([college, stats]) => (
                     <TabsTrigger
