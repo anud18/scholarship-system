@@ -194,6 +194,8 @@ class ScholarshipService:
                     "college_review_end": config.college_review_end,
                     "requires_professor_recommendation": config.requires_professor_recommendation,
                     "requires_college_review": config.requires_college_review,
+                    "renewal_requires_professor_review": config.renewal_requires_professor_review,
+                    "renewal_requires_college_review": config.renewal_requires_college_review,
                     "requires_interview": getattr(config, "requires_interview", False),
                     "requires_research_proposal": getattr(config, "requires_research_proposal", False),
                     # Eligibility info

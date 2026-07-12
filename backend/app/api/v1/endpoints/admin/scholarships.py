@@ -190,12 +190,12 @@ async def get_applications_by_scholarship(
             "scholarship_configuration": (
                 {
                     "requires_professor_recommendation": (
-                        app.scholarship_configuration.requires_professor_recommendation
+                        app.scholarship_configuration.requires_professor_review_for(bool(app.is_renewal))
                         if app.scholarship_configuration
                         else False
                     ),
                     "requires_college_review": (
-                        app.scholarship_configuration.requires_college_review
+                        app.scholarship_configuration.requires_college_review_for(bool(app.is_renewal))
                         if app.scholarship_configuration
                         else False
                     ),

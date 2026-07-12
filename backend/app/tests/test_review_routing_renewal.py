@@ -65,6 +65,7 @@ def _make_config_in_renewal_phase(
     )
     if role == "professor":
         kwargs.update(
+            renewal_requires_professor_review=True,
             renewal_professor_review_start=open_start,
             renewal_professor_review_end=open_end,
             professor_review_start=closed_start,
@@ -72,6 +73,7 @@ def _make_config_in_renewal_phase(
         )
     elif role == "college":
         kwargs.update(
+            renewal_requires_college_review=True,
             renewal_college_review_start=open_start,
             renewal_college_review_end=open_end,
             college_review_start=closed_start,
@@ -111,6 +113,7 @@ def _make_config_in_general_phase(
     )
     if role == "professor":
         kwargs.update(
+            renewal_requires_professor_review=True,
             renewal_professor_review_start=closed_start,
             renewal_professor_review_end=closed_end,
             professor_review_start=open_start,
@@ -118,6 +121,7 @@ def _make_config_in_general_phase(
         )
     elif role == "college":
         kwargs.update(
+            renewal_requires_college_review=True,
             renewal_college_review_start=closed_start,
             renewal_college_review_end=closed_end,
             college_review_start=open_start,
@@ -206,6 +210,42 @@ async def test_professor_sees_only_renewal_during_renewal_period(
 
     assert renewal_app.id in visible_ids, "renewal application should be visible during renewal phase"
     assert general_app.id not in visible_ids, "general application should NOT be visible during renewal phase"
+
+
+@pytest.mark.asyncio
+async def test_renewal_hidden_when_admin_disabled_renewal_professor_review(
+    db: AsyncSession,
+    test_user: User,
+    test_scholarship: ScholarshipType,
+):
+    """Renewal window is open NOW, but the admin turned OFF
+    renewal_requires_professor_review — the renewal application must be
+    hidden from the professor's pending list despite the open window.
+    """
+    config = _make_config_in_renewal_phase(test_scholarship.id, role="professor", config_code="PROF-RENEW-OFF")
+    config.renewal_requires_professor_review = False
+    db.add(config)
+    await db.commit()
+    await db.refresh(config)
+
+    renewal_app = await _make_pending_application(
+        db,
+        user=test_user,
+        scholarship_type=test_scholarship,
+        configuration_id=config.id,
+        is_renewal=True,
+        app_id_suffix="00021",
+    )
+
+    stmt = select(Application).where(Application.status == ApplicationStatus.under_review.value)
+    stmt = apply_renewal_phase_filter(stmt, role="professor")
+
+    result = await db.execute(stmt)
+    visible_ids = {row.id for row in result.scalars().all()}
+
+    assert (
+        renewal_app.id not in visible_ids
+    ), "renewal application must be hidden when the admin disabled renewal professor review"
 
 
 @pytest.mark.asyncio

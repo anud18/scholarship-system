@@ -430,7 +430,9 @@ class ApplicationFieldService:
             configs = result.scalars().all()
 
             for config in configs:
-                if config.requires_professor_recommendation:
+                # Advisor fields are needed if professor review is required
+                # for either general applications or renewals.
+                if config.requires_professor_recommendation or config.renewal_requires_professor_review:
                     return True
 
             return False

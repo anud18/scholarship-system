@@ -884,8 +884,10 @@ async def create_scholarship_configuration(
             renewal_application_end_date=parse_date_field(config_data.get("renewal_application_end_date")),
             application_start_date=parse_date_field(config_data.get("application_start_date")),
             application_end_date=parse_date_field(config_data.get("application_end_date")),
+            renewal_requires_professor_review=config_data.get("renewal_requires_professor_review", False),
             renewal_professor_review_start=parse_date_field(config_data.get("renewal_professor_review_start")),
             renewal_professor_review_end=parse_date_field(config_data.get("renewal_professor_review_end")),
+            renewal_requires_college_review=config_data.get("renewal_requires_college_review", False),
             renewal_college_review_start=parse_date_field(config_data.get("renewal_college_review_start")),
             renewal_college_review_end=parse_date_field(config_data.get("renewal_college_review_end")),
             requires_professor_recommendation=config_data.get("requires_professor_recommendation", False),
@@ -990,12 +992,14 @@ async def get_scholarship_configuration(
                 config.application_start_date.isoformat() if config.application_start_date else None
             ),
             "application_end_date": config.application_end_date.isoformat() if config.application_end_date else None,
+            "renewal_requires_professor_review": config.renewal_requires_professor_review,
             "renewal_professor_review_start": (
                 config.renewal_professor_review_start.isoformat() if config.renewal_professor_review_start else None
             ),
             "renewal_professor_review_end": (
                 config.renewal_professor_review_end.isoformat() if config.renewal_professor_review_end else None
             ),
+            "renewal_requires_college_review": config.renewal_requires_college_review,
             "renewal_college_review_start": (
                 config.renewal_college_review_start.isoformat() if config.renewal_college_review_start else None
             ),
@@ -1087,6 +1091,10 @@ async def update_scholarship_configuration(
             config.application_end_date = parse_date_field(config_data["application_end_date"])
 
         # Update review periods
+        if "renewal_requires_professor_review" in config_data:
+            config.renewal_requires_professor_review = bool(config_data["renewal_requires_professor_review"])
+        if "renewal_requires_college_review" in config_data:
+            config.renewal_requires_college_review = bool(config_data["renewal_requires_college_review"])
         if "renewal_professor_review_start" in config_data:
             config.renewal_professor_review_start = parse_date_field(config_data["renewal_professor_review_start"])
         if "renewal_professor_review_end" in config_data:
@@ -1367,6 +1375,8 @@ async def duplicate_scholarship_configuration(
             ),
             requires_professor_recommendation=source_config.requires_professor_recommendation,
             requires_college_review=source_config.requires_college_review,
+            renewal_requires_professor_review=source_config.renewal_requires_professor_review,
+            renewal_requires_college_review=source_config.renewal_requires_college_review,
             is_active=True,
             version="1.0",
             created_by=current_user.id,
@@ -1483,12 +1493,14 @@ async def list_scholarship_configurations(
                     config.application_end_date.isoformat() if config.application_end_date else None
                 ),
                 # Add review-related fields
+                "renewal_requires_professor_review": config.renewal_requires_professor_review,
                 "renewal_professor_review_start": (
                     config.renewal_professor_review_start.isoformat() if config.renewal_professor_review_start else None
                 ),
                 "renewal_professor_review_end": (
                     config.renewal_professor_review_end.isoformat() if config.renewal_professor_review_end else None
                 ),
+                "renewal_requires_college_review": config.renewal_requires_college_review,
                 "renewal_college_review_start": (
                     config.renewal_college_review_start.isoformat() if config.renewal_college_review_start else None
                 ),
