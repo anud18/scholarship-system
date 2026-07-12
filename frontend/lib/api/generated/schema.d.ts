@@ -2314,6 +2314,10 @@ export interface paths {
          * Get All Students
          * @description Get all students with pagination, search, and filters
          *
+         *     Each student item includes applied_scholarships: the scholarship types the
+         *     student has submitted applications for (drafts and deleted applications
+         *     excluded), with per-type application counts.
+         *
          *     Requires admin or super_admin role.
          */
         get: operations["get_all_students_api_v1_admin_students_get"];
@@ -15138,6 +15142,10 @@ export interface operations {
                 dept_code?: string | null;
                 /** @description Filter by status (在學/畢業) */
                 status?: string | null;
+                /** @description Filter by scholarship type the student has applied for */
+                scholarship_type_id?: number | null;
+                /** @description Filter by whether the student has applied for any scholarship */
+                has_application?: boolean | null;
             };
             header?: never;
             path?: never;

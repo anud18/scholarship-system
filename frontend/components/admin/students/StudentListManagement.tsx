@@ -27,9 +27,12 @@ import { Label } from "@/components/ui/label";
 import { GraduationCap, Users, UserCheck, X, Search, Eye } from "lucide-react";
 import { StudentDetailModal } from "./StudentDetailModal";
 import { useReferenceData, getDepartmentName } from "@/hooks/use-reference-data";
+import { useScholarshipData } from "@/hooks/use-scholarship-data";
 
 export function StudentListManagement() {
   const { departments, isLoading: refDataLoading } = useReferenceData();
+  // Shared SWR-cached scholarship list, reused for the 獎學金篩選 dropdown
+  const { scholarships: scholarshipTypes } = useScholarshipData();
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,9 +53,16 @@ export function StudentListManagement() {
   const [search, setSearch] = useState("");
   const [deptFilter, setDeptFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  // "" = all, "any" = has some application, "none" = no application,
+  // numeric string = applied for that scholarship type id
+  const [scholarshipFilter, setScholarshipFilter] = useState("");
 
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+
+  // Bumped by 搜尋/清除 so the fetch effect reruns with the committed
+  // filter state (a direct fetchStudents() call would close over stale state)
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Fetch students
   const fetchStudents = async () => {
@@ -66,6 +76,8 @@ export function StudentListManagement() {
         search?: string;
         dept_code?: string;
         status?: string;
+        scholarship_type_id?: number;
+        has_application?: boolean;
       } = {
         page: pagination.page,
         size: pagination.size,
@@ -74,6 +86,13 @@ export function StudentListManagement() {
       if (search) params.search = search;
       if (deptFilter) params.dept_code = deptFilter;
       if (statusFilter) params.status = statusFilter;
+      if (scholarshipFilter === "any") {
+        params.has_application = true;
+      } else if (scholarshipFilter === "none") {
+        params.has_application = false;
+      } else if (scholarshipFilter) {
+        params.scholarship_type_id = Number(scholarshipFilter);
+      }
 
       // Use apiClient instead of direct fetch
       const response = await apiClient.students.getAll(params);
@@ -112,24 +131,29 @@ export function StudentListManagement() {
     }
   };
 
-  // Initial load
+  // Refetch on pagination change and on explicit search/clear
   useEffect(() => {
     fetchStudents();
+  }, [pagination.page, pagination.size, refreshKey]);
+
+  // Initial load
+  useEffect(() => {
     fetchStats();
-  }, [pagination.page, pagination.size]);
+  }, []);
 
   // Search and filter handler
   const handleSearch = () => {
     setPagination((prev) => ({ ...prev, page: 1 }));
-    fetchStudents();
+    setRefreshKey((key) => key + 1);
   };
 
   const handleClearFilters = () => {
     setSearch("");
     setDeptFilter("");
     setStatusFilter("");
+    setScholarshipFilter("");
     setPagination((prev) => ({ ...prev, page: 1 }));
-    setTimeout(() => fetchStudents(), 0);
+    setRefreshKey((key) => key + 1);
   };
 
   const handleViewDetails = (student: Student) => {
@@ -251,6 +275,30 @@ export function StudentListManagement() {
               </Select>
             </div>
 
+            <div className="w-full md:w-56">
+              <Label htmlFor="scholarship">獎學金篩選</Label>
+              <Select
+                value={scholarshipFilter || "all"}
+                onValueChange={(value) =>
+                  setScholarshipFilter(value === "all" ? "" : value)
+                }
+              >
+                <SelectTrigger id="scholarship">
+                  <SelectValue placeholder="全部學生" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部學生</SelectItem>
+                  <SelectItem value="any">有申請獎學金</SelectItem>
+                  <SelectItem value="none">未申請獎學金</SelectItem>
+                  {scholarshipTypes.map((scholarship) => (
+                    <SelectItem key={scholarship.id} value={String(scholarship.id)}>
+                      {scholarship.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="flex items-end gap-2">
               <Button onClick={handleSearch}>
                 <Search className="mr-2 h-4 w-4" />
@@ -289,6 +337,7 @@ export function StudentListManagement() {
                   <TableHead className="w-[200px]">信箱</TableHead>
                   <TableHead className="w-[150px]">系所</TableHead>
                   <TableHead className="w-[80px]">狀態</TableHead>
+                  <TableHead className="w-[200px]">申請獎學金</TableHead>
                   <TableHead className="w-[120px]">註冊時間</TableHead>
                   <TableHead className="w-[120px]">最後登入</TableHead>
                   <TableHead className="w-[100px]">操作</TableHead>
@@ -297,13 +346,13 @@ export function StudentListManagement() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">
+                    <TableCell colSpan={9} className="text-center py-8">
                       載入中...
                     </TableCell>
                   </TableRow>
                 ) : students.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">
+                    <TableCell colSpan={9} className="text-center py-8">
                       沒有找到學生
                     </TableCell>
                   </TableRow>
@@ -317,6 +366,28 @@ export function StudentListManagement() {
                       <TableCell className="text-sm">{student.email}</TableCell>
                       <TableCell>{getDepartmentName(student.dept_code, departments)}</TableCell>
                       <TableCell>{getStatusBadge(student.status)}</TableCell>
+                      <TableCell>
+                        {student.applied_scholarships &&
+                        student.applied_scholarships.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {student.applied_scholarships.map((scholarship) => (
+                              <Badge
+                                key={scholarship.scholarship_type_id}
+                                variant="outline"
+                                className="text-xs"
+                              >
+                                {scholarship.name}
+                                {scholarship.application_count > 1 &&
+                                  ` ×${scholarship.application_count}`}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">
+                            未申請
+                          </span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-sm">
                         {formatDate(student.created_at)}
                       </TableCell>
