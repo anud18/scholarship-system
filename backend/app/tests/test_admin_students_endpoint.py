@@ -1,8 +1,8 @@
 """Integration tests for GET /api/v1/admin/students applied-scholarships data + filters.
 
 Covers the admin student list additions:
-  - each item carries applied_scholarships (distinct scholarship types with
-    per-type application counts, drafts / deleted excluded)
+  - each item carries applied_scholarships (distinct scholarship CONFIGURATIONS,
+    獎學金配置, with per-configuration application counts, drafts / deleted excluded)
   - scholarship_type_id query filter (students who applied for that type)
   - has_application query filter (true = applied for anything, false = nothing)
 
@@ -17,7 +17,7 @@ import pytest
 import pytest_asyncio
 
 from app.models.application import Application, ApplicationStatus
-from app.models.scholarship import ScholarshipType
+from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole, UserType
 
 
@@ -77,14 +77,36 @@ async def seeded_students(client):
     await db.refresh(phd)
     await db.refresh(nstc)
 
+    # One configuration (獎學金配置) per type — the badge column groups by config.
+    phd_cfg = ScholarshipConfiguration(
+        scholarship_type_id=phd.id,
+        academic_year=113,
+        config_name="博士生獎學金 113學年",
+        config_code="phd_113_test",
+        amount=30000,
+    )
+    nstc_cfg = ScholarshipConfiguration(
+        scholarship_type_id=nstc.id,
+        academic_year=113,
+        semester="first",
+        config_name="國科會獎學金 113學年第一學期",
+        config_code="nstc_113_1_test",
+        amount=20000,
+    )
+    db.add_all([phd_cfg, nstc_cfg])
+    await db.commit()
+    await db.refresh(phd_cfg)
+    await db.refresh(nstc_cfg)
+
     now = datetime.now(timezone.utc)
     applications = [
-        # applicant_multi: two qualifying PHD applications (different semesters
-        # to satisfy the per-(user, type, year, semester) unique indexes)
+        # applicant_multi: two qualifying applications for the SAME phd config
+        # → one badge for that config with application_count 2
         Application(
             app_id="APP-113-1-00001",
             user_id=students["applicant_multi"].id,
             scholarship_type_id=phd.id,
+            scholarship_configuration_id=phd_cfg.id,
             status=ApplicationStatus.submitted.value,
             academic_year=113,
             semester="first",
@@ -94,6 +116,7 @@ async def seeded_students(client):
             app_id="APP-113-2-00001",
             user_id=students["applicant_multi"].id,
             scholarship_type_id=phd.id,
+            scholarship_configuration_id=phd_cfg.id,
             status=ApplicationStatus.approved.value,
             academic_year=113,
             semester="second",
@@ -104,6 +127,7 @@ async def seeded_students(client):
             app_id="APP-113-1-00002",
             user_id=students["applicant_multi"].id,
             scholarship_type_id=nstc.id,
+            scholarship_configuration_id=nstc_cfg.id,
             status=ApplicationStatus.draft.value,
             academic_year=113,
             semester="first",
@@ -114,6 +138,7 @@ async def seeded_students(client):
             app_id="APP-112-1-00001",
             user_id=students["applicant_multi"].id,
             scholarship_type_id=phd.id,
+            scholarship_configuration_id=phd_cfg.id,
             status=ApplicationStatus.rejected.value,
             academic_year=112,
             semester="first",
@@ -125,6 +150,7 @@ async def seeded_students(client):
             app_id="APP-113-1-00003",
             user_id=students["applicant_single"].id,
             scholarship_type_id=nstc.id,
+            scholarship_configuration_id=nstc_cfg.id,
             status=ApplicationStatus.under_review.value,
             academic_year=113,
             semester="first",
@@ -134,7 +160,7 @@ async def seeded_students(client):
     db.add_all(applications)
     await db.commit()
 
-    return {"students": students, "phd": phd, "nstc": nstc}
+    return {"students": students, "phd": phd, "nstc": nstc, "phd_cfg": phd_cfg, "nstc_cfg": nstc_cfg}
 
 
 def _items_by_nycu_id(body: dict) -> dict:
@@ -143,8 +169,8 @@ def _items_by_nycu_id(body: dict) -> dict:
 
 @pytest.mark.asyncio
 async def test_list_includes_applied_scholarships_aggregation(authed_admin_client, seeded_students):
-    """Every item has applied_scholarships; counts aggregate per type and
-    exclude drafts and soft-deleted applications."""
+    """Every item has applied_scholarships; counts aggregate per configuration
+    and exclude drafts and soft-deleted applications."""
     response = await authed_admin_client.get("/api/v1/admin/students")
     assert response.status_code == 200
     body = response.json()
@@ -152,17 +178,18 @@ async def test_list_includes_applied_scholarships_aggregation(authed_admin_clien
     items = _items_by_nycu_id(body)
     assert set(items.keys()) == {"stu001", "stu002", "stu003"}
 
-    phd = seeded_students["phd"]
-    nstc = seeded_students["nstc"]
+    phd_cfg = seeded_students["phd_cfg"]
+    nstc_cfg = seeded_students["nstc_cfg"]
 
-    # applicant_multi: only PHD counts (draft NSTC + soft-deleted PHD excluded);
-    # both qualifying PHD applications aggregate into one entry with count 2
+    # applicant_multi: only the PHD config counts (draft NSTC + soft-deleted PHD
+    # excluded); both qualifying PHD applications aggregate into one config entry
+    # carrying the config name (獎學金配置), with count 2
     multi = items["stu001"]["applied_scholarships"]
     assert multi == [
         {
-            "scholarship_type_id": phd.id,
-            "code": "phd_test",
-            "name": "博士生獎學金",
+            "scholarship_configuration_id": phd_cfg.id,
+            "config_code": "phd_113_test",
+            "name": "博士生獎學金 113學年",
             "application_count": 2,
         }
     ]
@@ -170,9 +197,9 @@ async def test_list_includes_applied_scholarships_aggregation(authed_admin_clien
     single = items["stu002"]["applied_scholarships"]
     assert single == [
         {
-            "scholarship_type_id": nstc.id,
-            "code": "nstc_test",
-            "name": "國科會獎學金",
+            "scholarship_configuration_id": nstc_cfg.id,
+            "config_code": "nstc_113_1_test",
+            "name": "國科會獎學金 113學年第一學期",
             "application_count": 1,
         }
     ]
@@ -237,7 +264,8 @@ async def test_student_detail_includes_applied_scholarships(authed_admin_client,
     assert response.status_code == 200
     data = response.json()["data"]
     assert len(data["applied_scholarships"]) == 1
-    assert data["applied_scholarships"][0]["code"] == "phd_test"
+    assert data["applied_scholarships"][0]["config_code"] == "phd_113_test"
+    assert data["applied_scholarships"][0]["name"] == "博士生獎學金 113學年"
     assert data["applied_scholarships"][0]["application_count"] == 2
 
 

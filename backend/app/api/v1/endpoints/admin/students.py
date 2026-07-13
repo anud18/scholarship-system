@@ -13,7 +13,7 @@ from app.core.security import require_admin
 from app.db.deps import get_db
 from app.models.application import Application
 from app.models.enums import ApplicationStatus
-from app.models.scholarship import ScholarshipType
+from app.models.scholarship import ScholarshipConfiguration
 from app.models.user import EmployeeStatus, User, UserRole
 from app.services.student_service import StudentService
 
@@ -38,11 +38,14 @@ def applied_application_filters() -> list:
 
 
 async def get_applied_scholarships_map(db: AsyncSession, user_ids: list[int]) -> dict[int, list[dict]]:
-    """Aggregate which scholarship types each user has applied for.
+    """Aggregate which scholarship configurations each user has applied for.
 
-    Returns {user_id: [{scholarship_type_id, code, name, application_count}]},
-    one entry per distinct scholarship type with the number of qualifying
-    applications (see applied_application_filters for what qualifies).
+    Returns {user_id: [{scholarship_configuration_id, config_code, name, application_count}]},
+    one entry per distinct scholarship configuration (獎學金配置) with the number
+    of qualifying applications (see applied_application_filters for what qualifies).
+    ``name`` is the configuration name (config_name, e.g. "博士生獎學金 114學年").
+    Applications with no configuration link are omitted (in practice every
+    submitted application carries one).
     """
     applied_map: dict[int, list[dict]] = {}
     if not user_ids:
@@ -51,23 +54,28 @@ async def get_applied_scholarships_map(db: AsyncSession, user_ids: list[int]) ->
     stmt = (
         select(
             Application.user_id,
-            ScholarshipType.id,
-            ScholarshipType.code,
-            ScholarshipType.name,
+            ScholarshipConfiguration.id,
+            ScholarshipConfiguration.config_code,
+            ScholarshipConfiguration.config_name,
             func.count(Application.id),
         )
-        .join(ScholarshipType, Application.scholarship_type_id == ScholarshipType.id)
+        .join(ScholarshipConfiguration, Application.scholarship_configuration_id == ScholarshipConfiguration.id)
         .where(Application.user_id.in_(user_ids), *applied_application_filters())
-        .group_by(Application.user_id, ScholarshipType.id, ScholarshipType.code, ScholarshipType.name)
-        .order_by(ScholarshipType.id)
+        .group_by(
+            Application.user_id,
+            ScholarshipConfiguration.id,
+            ScholarshipConfiguration.config_code,
+            ScholarshipConfiguration.config_name,
+        )
+        .order_by(ScholarshipConfiguration.id)
     )
     result = await db.execute(stmt)
-    for user_id, type_id, type_code, type_name, application_count in result.all():
+    for user_id, config_id, config_code, config_name, application_count in result.all():
         applied_map.setdefault(user_id, []).append(
             {
-                "scholarship_type_id": type_id,
-                "code": type_code,
-                "name": type_name,
+                "scholarship_configuration_id": config_id,
+                "config_code": config_code,
+                "name": config_name,
                 "application_count": application_count,
             }
         )
@@ -114,9 +122,10 @@ async def get_all_students(
     """
     Get all students with pagination, search, and filters
 
-    Each student item includes applied_scholarships: the scholarship types the
-    student has submitted applications for (drafts and deleted applications
-    excluded), with per-type application counts.
+    Each student item includes applied_scholarships: the scholarship
+    configurations (獎學金配置) the student has submitted applications for
+    (drafts and deleted applications excluded), with per-configuration
+    application counts.
 
     Requires admin or super_admin role.
     """

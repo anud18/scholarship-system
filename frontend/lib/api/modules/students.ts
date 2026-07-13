@@ -24,8 +24,9 @@ type PaginatedResponse<T> = {
 };
 
 export type AppliedScholarship = {
-  scholarship_type_id: number;
-  code: string;
+  scholarship_configuration_id: number;
+  config_code: string;
+  /** Configuration name (獎學金配置), e.g. "博士生獎學金 114學年". */
   name: string;
   application_count: number;
 };

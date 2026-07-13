@@ -372,7 +372,7 @@ export function StudentListManagement() {
                           <div className="flex flex-wrap gap-1">
                             {student.applied_scholarships.map((scholarship) => (
                               <Badge
-                                key={scholarship.scholarship_type_id}
+                                key={scholarship.scholarship_configuration_id}
                                 variant="outline"
                                 className="text-xs"
                               >
