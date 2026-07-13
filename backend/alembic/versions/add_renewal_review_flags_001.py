@@ -13,7 +13,7 @@ current behavior (renewal review dates were validated against the general
 flags before this change).
 
 Revision ID: add_renewal_review_flags_001
-Revises: harden_enrollment_rule_001
+Revises: 20260712_app_user_idx
 """
 
 import sqlalchemy as sa
@@ -21,7 +21,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "add_renewal_review_flags_001"
-down_revision = "harden_enrollment_rule_001"
+down_revision = "20260712_app_user_idx"
 branch_labels = None
 depends_on = None
 

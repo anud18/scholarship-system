@@ -2402,19 +2402,17 @@ class ApplicationService:
                 .where(
                     # Only applications that require professor review — general
                     # applications follow requires_professor_recommendation,
-                    # renewals follow the renewal-specific admin flag.
+                    # renewals follow the renewal-specific admin flag. The
+                    # configuration is already joined above, so filter its
+                    # columns directly instead of EXISTS subqueries.
                     or_(
                         and_(
                             Application.is_renewal.is_(False),
-                            Application.scholarship_configuration.has(
-                                ScholarshipConfiguration.requires_professor_recommendation.is_(True)
-                            ),
+                            ScholarshipConfiguration.requires_professor_recommendation.is_(True),
                         ),
                         and_(
                             Application.is_renewal.is_(True),
-                            Application.scholarship_configuration.has(
-                                ScholarshipConfiguration.renewal_requires_professor_review.is_(True)
-                            ),
+                            ScholarshipConfiguration.renewal_requires_professor_review.is_(True),
                         ),
                     ),
                     # Only applications assigned to this specific professor
@@ -2622,7 +2620,7 @@ class ApplicationService:
             # Skip time restrictions if review periods are not configured (e.g., in test environment)
             if application.is_renewal:
                 # Renewal professor review must be enabled by the admin at all
-                if not config.renewal_requires_professor_review:
+                if not config.requires_professor_review_for(True):
                     logger.warning(
                         f"Professor review submission blocked: renewal professor review "
                         f"not required for config {config.id}"

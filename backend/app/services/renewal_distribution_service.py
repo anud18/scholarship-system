@@ -35,8 +35,17 @@ class RenewalDistributionService:
         and/or college review).
 
         - renewal_requires_college_review = True    -> [college_reviewed]
-        - only renewal_requires_professor_review    -> [professor_reviewed]
-        - neither review required                   -> [student_submitted]
+        - only renewal_requires_professor_review    -> [professor_reviewed,
+                                                        college_reviewed]
+        - neither review required                   -> [student_submitted,
+                                                        professor_review,
+                                                        professor_reviewed,
+                                                        college_review,
+                                                        college_reviewed]
+
+        Stages beyond the required one stay eligible so an admin who relaxes
+        the renewal review requirements mid-cycle does not strand renewals
+        that already advanced past the (new) terminal stage.
 
         When no configuration row exists we conservatively default to
         college_reviewed: matches the dominant pattern in this codebase and
@@ -51,11 +60,17 @@ class RenewalDistributionService:
         if config is None:
             return [ReviewStage.college_reviewed]
 
-        if bool(config.renewal_requires_college_review):
+        if config.renewal_requires_college_review:
             return [ReviewStage.college_reviewed]
-        if bool(config.renewal_requires_professor_review):
-            return [ReviewStage.professor_reviewed]
-        return [ReviewStage.student_submitted]
+        if config.renewal_requires_professor_review:
+            return [ReviewStage.professor_reviewed, ReviewStage.college_reviewed]
+        return [
+            ReviewStage.student_submitted,
+            ReviewStage.professor_review,
+            ReviewStage.professor_reviewed,
+            ReviewStage.college_review,
+            ReviewStage.college_reviewed,
+        ]
 
     async def auto_approve_passed_reviews(self, scholarship_type_id: int, academic_year: int) -> Dict[str, object]:
         """Auto-approve renewal applications past their terminal review stage.

@@ -454,9 +454,7 @@ class ReviewService:
         # College is the only post-professor required-reviewer surface today.
         # Add chained gates here as the pipeline grows (admin, finance, …).
         # Renewals carry their own admin-configured college-review flag.
-        requires_college = bool(
-            config.renewal_requires_college_review if application.is_renewal else config.requires_college_review
-        )
+        requires_college = config.requires_college_review_for(bool(application.is_renewal))
         return latest_reviewer_role == "professor" and requires_college
 
     async def update_application_status(self, application_id: int) -> str:

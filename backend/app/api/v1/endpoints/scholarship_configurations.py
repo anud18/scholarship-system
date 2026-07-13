@@ -1092,9 +1092,9 @@ async def update_scholarship_configuration(
 
         # Update review periods
         if "renewal_requires_professor_review" in config_data:
-            config.renewal_requires_professor_review = bool(config_data["renewal_requires_professor_review"])
+            config.renewal_requires_professor_review = config_data["renewal_requires_professor_review"]
         if "renewal_requires_college_review" in config_data:
-            config.renewal_requires_college_review = bool(config_data["renewal_requires_college_review"])
+            config.renewal_requires_college_review = config_data["renewal_requires_college_review"]
         if "renewal_professor_review_start" in config_data:
             config.renewal_professor_review_start = parse_date_field(config_data["renewal_professor_review_start"])
         if "renewal_professor_review_end" in config_data:
