@@ -151,6 +151,9 @@ export interface Application {
   allow_college_view_distribution?: boolean;
   professor_review_completed?: boolean;
   college_review_completed?: boolean;
+  /** 教授端佇列專用：檢視的教授是否已對本申請留下審核紀錄。
+   *  非教授端點回傳 undefined。 */
+  has_professor_reviewed?: boolean;
   form_data?: Record<string, any>;
   submitted_form_data?: Record<string, any>;
   meta_data?: Record<string, any>;
