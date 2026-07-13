@@ -26,16 +26,17 @@ def applied_application_filters() -> list:
     """Filter clauses for applications that count as "the student applied".
 
     An application counts once the student has submitted it (draft = not yet
-    applied); soft-deleted rows and rows without a scholarship type or
-    configuration link are excluded. Shared by the list annotation and the
-    scholarship filters so the badges shown (which join on the configuration)
-    always match what the filters return.
+    applied); soft-deleted rows and rows without a scholarship type link are
+    excluded. Shared by the list annotation and the scholarship filters so the
+    badges shown always match what the filters return — the annotation LEFT
+    JOINs the configuration (and falls back to the denormalized scholarship_name
+    label), so legacy applications with a NULL scholarship_configuration_id are
+    still counted here and surfaced as a badge, never hidden.
     """
     return [
         Application.deleted_at.is_(None),
         Application.status.notin_([ApplicationStatus.draft.value, ApplicationStatus.deleted.value]),
         Application.scholarship_type_id.isnot(None),
-        Application.scholarship_configuration_id.isnot(None),
     ]
 
 
@@ -44,36 +45,45 @@ async def get_applied_scholarships_map(db: AsyncSession, user_ids: list[int]) ->
 
     Returns {user_id: [{scholarship_configuration_id, config_code, name, application_count}]},
     one entry per distinct scholarship configuration (獎學金配置) with the number
-    of qualifying applications (see applied_application_filters for what qualifies —
-    it excludes applications with no configuration link, matching this join).
+    of qualifying applications (see applied_application_filters for what qualifies).
     ``name`` is the configuration name (config_name, e.g. "博士生獎學金 114學年").
+
+    The configuration is LEFT JOINed: a legacy application with a NULL
+    scholarship_configuration_id still yields a badge, grouped by and labelled
+    with its denormalized ``scholarship_name`` snapshot (``scholarship_configuration_id``
+    / ``config_code`` are then None). This keeps the badge set identical to what
+    the has_application / scholarship_type_id filters return.
     """
     applied_map: dict[int, list[dict]] = {}
     if not user_ids:
         return applied_map
 
+    # config_name when the configuration is linked, else the denormalized snapshot.
+    name_label = func.coalesce(ScholarshipConfiguration.config_name, Application.scholarship_name)
     stmt = (
         select(
             Application.user_id,
             ScholarshipConfiguration.id,
             ScholarshipConfiguration.config_code,
-            ScholarshipConfiguration.config_name,
+            name_label,
             func.count(Application.id),
         )
-        .join(ScholarshipConfiguration, Application.scholarship_configuration_id == ScholarshipConfiguration.id)
+        .outerjoin(ScholarshipConfiguration, Application.scholarship_configuration_id == ScholarshipConfiguration.id)
         .where(Application.user_id.in_(user_ids), *applied_application_filters())
-        # config_code / config_name are functionally dependent on the grouped PK
-        # (ScholarshipConfiguration.id), so they need not be listed in GROUP BY.
-        .group_by(Application.user_id, ScholarshipConfiguration.id)
+        # Group by the display identity: the linked config (id + code) or, for a
+        # NULL-config legacy row, the fallback name. The PK can be NULL under the
+        # outer join, so the selected config columns are listed explicitly rather
+        # than relying on functional dependency.
+        .group_by(Application.user_id, ScholarshipConfiguration.id, ScholarshipConfiguration.config_code, name_label)
         .order_by(ScholarshipConfiguration.id)
     )
     result = await db.execute(stmt)
-    for user_id, config_id, config_code, config_name, application_count in result.all():
+    for user_id, config_id, config_code, name, application_count in result.all():
         applied_map.setdefault(user_id, []).append(
             {
                 "scholarship_configuration_id": config_id,
                 "config_code": config_code,
-                "name": config_name,
+                "name": name,
                 "application_count": application_count,
             }
         )

@@ -56,6 +56,7 @@ async def seeded_students(client):
         ("applicant_multi", "stu001", "多申請學生"),
         ("applicant_single", "stu002", "單申請學生"),
         ("non_applicant", "stu003", "未申請學生"),
+        ("legacy_applicant", "stu004", "舊資料學生"),
     ]:
         user = User(
             nycu_id=nycu_id,
@@ -156,6 +157,20 @@ async def seeded_students(client):
             semester="first",
             sub_type_selection_mode="single",
         ),
+        # legacy_applicant: a submitted PHD application with NO configuration link
+        # (scholarship_configuration_id is NULL). It must still count as applied
+        # and surface a badge labelled from the denormalized scholarship_name.
+        Application(
+            app_id="APP-112-0-00009",
+            user_id=students["legacy_applicant"].id,
+            scholarship_type_id=phd.id,
+            scholarship_configuration_id=None,
+            scholarship_name="博士生獎學金（舊制）",
+            status=ApplicationStatus.submitted.value,
+            academic_year=112,
+            semester="first",
+            sub_type_selection_mode="single",
+        ),
     ]
     db.add_all(applications)
     await db.commit()
@@ -176,7 +191,7 @@ async def test_list_includes_applied_scholarships_aggregation(authed_admin_clien
     body = response.json()
     assert body["success"] is True
     items = _items_by_nycu_id(body)
-    assert set(items.keys()) == {"stu001", "stu002", "stu003"}
+    assert set(items.keys()) == {"stu001", "stu002", "stu003", "stu004"}
 
     phd_cfg = seeded_students["phd_cfg"]
     nstc_cfg = seeded_students["nstc_cfg"]
@@ -206,6 +221,18 @@ async def test_list_includes_applied_scholarships_aggregation(authed_admin_clien
 
     assert items["stu003"]["applied_scholarships"] == []
 
+    # legacy_applicant: NULL-config app still surfaces a badge, labelled from the
+    # scholarship_name snapshot, with null configuration id / code.
+    legacy = items["stu004"]["applied_scholarships"]
+    assert legacy == [
+        {
+            "scholarship_configuration_id": None,
+            "config_code": None,
+            "name": "博士生獎學金（舊制）",
+            "application_count": 1,
+        }
+    ]
+
 
 @pytest.mark.asyncio
 async def test_filter_by_scholarship_type_id(authed_admin_client, seeded_students):
@@ -217,8 +244,9 @@ async def test_filter_by_scholarship_type_id(authed_admin_client, seeded_student
     response = await authed_admin_client.get("/api/v1/admin/students", params={"scholarship_type_id": phd.id})
     assert response.status_code == 200
     body = response.json()
-    assert body["data"]["total"] == 1
-    assert set(_items_by_nycu_id(body).keys()) == {"stu001"}
+    # stu001 (config PHD) + stu004 (legacy NULL-config PHD) both match the type
+    assert body["data"]["total"] == 2
+    assert set(_items_by_nycu_id(body).keys()) == {"stu001", "stu004"}
 
     # stu001's NSTC application is a draft → only stu002 matches NSTC
     response = await authed_admin_client.get("/api/v1/admin/students", params={"scholarship_type_id": nstc.id})
@@ -232,8 +260,9 @@ async def test_filter_has_application_true(authed_admin_client, seeded_students)
     response = await authed_admin_client.get("/api/v1/admin/students", params={"has_application": "true"})
     assert response.status_code == 200
     body = response.json()
-    assert body["data"]["total"] == 2
-    assert set(_items_by_nycu_id(body).keys()) == {"stu001", "stu002"}
+    # stu004's legacy NULL-config application must count as "applied"
+    assert body["data"]["total"] == 3
+    assert set(_items_by_nycu_id(body).keys()) == {"stu001", "stu002", "stu004"}
 
 
 @pytest.mark.asyncio
