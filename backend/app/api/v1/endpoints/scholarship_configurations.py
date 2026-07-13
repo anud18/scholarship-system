@@ -869,6 +869,14 @@ async def create_scholarship_configuration(
         # Create new configuration
         from app.utils.date_utils import parse_date_field
 
+        # Non-nullable boolean columns: only literal true enables a flag, so
+        # an explicit JSON null cannot reach the DB as None (500). Renewal
+        # review dates are only meaningful when the matching flag is on —
+        # drop them otherwise so no silently-ignored windows are persisted
+        # (mirrors ScholarshipConfigurationBase.validate_renewal_review_dates).
+        renewal_requires_professor_review = config_data.get("renewal_requires_professor_review") is True
+        renewal_requires_college_review = config_data.get("renewal_requires_college_review") is True
+
         new_config = ScholarshipConfiguration(
             scholarship_type_id=scholarship_type_id,
             academic_year=config_data["academic_year"],
@@ -884,14 +892,28 @@ async def create_scholarship_configuration(
             renewal_application_end_date=parse_date_field(config_data.get("renewal_application_end_date")),
             application_start_date=parse_date_field(config_data.get("application_start_date")),
             application_end_date=parse_date_field(config_data.get("application_end_date")),
-            # Non-nullable boolean columns: only literal true enables the flag,
-            # so an explicit JSON null cannot reach the DB as None (500).
-            renewal_requires_professor_review=config_data.get("renewal_requires_professor_review") is True,
-            renewal_professor_review_start=parse_date_field(config_data.get("renewal_professor_review_start")),
-            renewal_professor_review_end=parse_date_field(config_data.get("renewal_professor_review_end")),
-            renewal_requires_college_review=config_data.get("renewal_requires_college_review") is True,
-            renewal_college_review_start=parse_date_field(config_data.get("renewal_college_review_start")),
-            renewal_college_review_end=parse_date_field(config_data.get("renewal_college_review_end")),
+            renewal_requires_professor_review=renewal_requires_professor_review,
+            renewal_professor_review_start=(
+                parse_date_field(config_data.get("renewal_professor_review_start"))
+                if renewal_requires_professor_review
+                else None
+            ),
+            renewal_professor_review_end=(
+                parse_date_field(config_data.get("renewal_professor_review_end"))
+                if renewal_requires_professor_review
+                else None
+            ),
+            renewal_requires_college_review=renewal_requires_college_review,
+            renewal_college_review_start=(
+                parse_date_field(config_data.get("renewal_college_review_start"))
+                if renewal_requires_college_review
+                else None
+            ),
+            renewal_college_review_end=(
+                parse_date_field(config_data.get("renewal_college_review_end"))
+                if renewal_requires_college_review
+                else None
+            ),
             requires_professor_recommendation=config_data.get("requires_professor_recommendation", False),
             professor_review_start=parse_date_field(config_data.get("professor_review_start")),
             professor_review_end=parse_date_field(config_data.get("professor_review_end")),
@@ -1122,6 +1144,17 @@ async def update_scholarship_configuration(
             config.college_review_end = parse_date_field(config_data["college_review_end"])
         if "review_deadline" in config_data:
             config.review_deadline = parse_date_field(config_data["review_deadline"])
+
+        # Renewal review dates are only meaningful when the matching flag is
+        # on — clear them otherwise so no silently-ignored windows persist
+        # (mirrors the UI, which clears the dates when a flag is unchecked,
+        # and ScholarshipConfigurationBase.validate_renewal_review_dates).
+        if not config.renewal_requires_professor_review:
+            config.renewal_professor_review_start = None
+            config.renewal_professor_review_end = None
+        if not config.renewal_requires_college_review:
+            config.renewal_college_review_start = None
+            config.renewal_college_review_end = None
 
         # Supplementary import toggle (admin opens this per-configuration after
         # distribution has been finalized; flag gates all colleges' rankings

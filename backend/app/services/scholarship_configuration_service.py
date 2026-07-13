@@ -241,12 +241,30 @@ class ScholarshipConfigurationService:
             application_end_date=config_data.get("application_end_date"),
             # Non-nullable boolean columns: only literal True enables the flag,
             # so an explicit null cannot reach the DB as None (integrity error).
+            # Renewal review dates are only meaningful when the matching flag
+            # is on — drop them otherwise (no silently-ignored windows).
             renewal_requires_professor_review=config_data.get("renewal_requires_professor_review") is True,
-            renewal_professor_review_start=config_data.get("renewal_professor_review_start"),
-            renewal_professor_review_end=config_data.get("renewal_professor_review_end"),
+            renewal_professor_review_start=(
+                config_data.get("renewal_professor_review_start")
+                if config_data.get("renewal_requires_professor_review") is True
+                else None
+            ),
+            renewal_professor_review_end=(
+                config_data.get("renewal_professor_review_end")
+                if config_data.get("renewal_requires_professor_review") is True
+                else None
+            ),
             renewal_requires_college_review=config_data.get("renewal_requires_college_review") is True,
-            renewal_college_review_start=config_data.get("renewal_college_review_start"),
-            renewal_college_review_end=config_data.get("renewal_college_review_end"),
+            renewal_college_review_start=(
+                config_data.get("renewal_college_review_start")
+                if config_data.get("renewal_requires_college_review") is True
+                else None
+            ),
+            renewal_college_review_end=(
+                config_data.get("renewal_college_review_end")
+                if config_data.get("renewal_requires_college_review") is True
+                else None
+            ),
             requires_professor_recommendation=config_data.get("requires_professor_recommendation", False),
             professor_review_start=config_data.get("professor_review_start"),
             professor_review_end=config_data.get("professor_review_end"),
@@ -320,6 +338,15 @@ class ScholarshipConfigurationService:
         for field in updatable_fields:
             if field in config_data:
                 setattr(config, field, config_data[field])
+
+        # Renewal review dates are only meaningful when the matching flag is
+        # on — clear them otherwise so no silently-ignored windows persist.
+        if not config.renewal_requires_professor_review:
+            config.renewal_professor_review_start = None
+            config.renewal_professor_review_end = None
+        if not config.renewal_requires_college_review:
+            config.renewal_college_review_start = None
+            config.renewal_college_review_end = None
 
         config.updated_by = updated_by_user_id
 
