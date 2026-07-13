@@ -6,9 +6,10 @@ college_ranking step. Once they have cleared the required review stages
 from `under_review` straight to `approved` with `review_stage =
 quota_distributed`.
 
-The terminal stage is configuration-driven so scholarships that skip college
-review (`ScholarshipConfiguration.requires_college_review = False`) only need
-the professor review to finish before auto-approval.
+The terminal stage is configuration-driven via the renewal-specific flags
+(`ScholarshipConfiguration.renewal_requires_professor_review` /
+`renewal_requires_college_review`): a renewal only needs the review steps the
+administrator enabled for renewals before auto-approval — possibly none.
 """
 
 from typing import Dict, List
@@ -29,10 +30,26 @@ class RenewalDistributionService:
 
     async def _resolve_terminal_stages(self, scholarship_type_id: int, academic_year: int) -> List[ReviewStage]:
         """Return the review stage(s) at which a renewal becomes eligible
-        for auto-approval, based on the configuration's review-flow flags.
+        for auto-approval, based on the configuration's renewal review flags
+        (admin decides per configuration whether renewals need professor
+        and/or college review).
 
-        - requires_college_review = True (default) -> [college_reviewed]
-        - requires_college_review = False          -> [professor_reviewed]
+        - renewal_requires_college_review = True    -> [college_reviewed]
+        - only renewal_requires_professor_review    -> [professor_reviewed,
+                                                        college_review,
+                                                        college_reviewed]
+        - neither review required                   -> [student_submitted,
+                                                        professor_review,
+                                                        professor_reviewed,
+                                                        college_review,
+                                                        college_reviewed]
+
+        Stages at or beyond the last REQUIRED review stay eligible so an
+        admin who relaxes the renewal review requirements mid-cycle does not
+        strand renewals that already advanced past the (new) terminal stage —
+        e.g. a renewal parked at the in-progress college_review stage has
+        already cleared professor review, which is all the professor-only
+        configuration demands.
 
         When no configuration row exists we conservatively default to
         college_reviewed: matches the dominant pattern in this codebase and
@@ -44,23 +61,31 @@ class RenewalDistributionService:
                 ScholarshipConfiguration.academic_year == academic_year,
             )
         )
-        requires_college = True
-        if config is not None:
-            # `requires_college_review` defaults to False at the column level
-            # but the active scholarship configurations in this system have it
-            # set explicitly; trust whatever the row says.
-            requires_college = bool(getattr(config, "requires_college_review", True))
-
-        if requires_college:
+        if config is None:
             return [ReviewStage.college_reviewed]
-        return [ReviewStage.professor_reviewed]
+
+        if config.renewal_requires_college_review:
+            return [ReviewStage.college_reviewed]
+        if config.renewal_requires_professor_review:
+            return [
+                ReviewStage.professor_reviewed,
+                ReviewStage.college_review,
+                ReviewStage.college_reviewed,
+            ]
+        return [
+            ReviewStage.student_submitted,
+            ReviewStage.professor_review,
+            ReviewStage.professor_reviewed,
+            ReviewStage.college_review,
+            ReviewStage.college_reviewed,
+        ]
 
     async def auto_approve_passed_reviews(self, scholarship_type_id: int, academic_year: int) -> Dict[str, object]:
         """Auto-approve renewal applications past their terminal review stage.
 
         Matches:
             - is_renewal = True
-            - status = under_review
+            - status = under_review (or submitted when no review is required)
             - review_stage in terminal stages (per configuration)
             - scholarship_type_id / academic_year as supplied
 
@@ -80,13 +105,20 @@ class RenewalDistributionService:
             scholarship_type_id=scholarship_type_id, academic_year=academic_year
         )
 
+        # When no review step is required (terminal stage = student_submitted),
+        # the renewal never left `submitted` — accept it alongside the
+        # reviewed `under_review` rows.
+        eligible_statuses = [ApplicationStatus.under_review]
+        if ReviewStage.student_submitted in terminal_stages:
+            eligible_statuses.append(ApplicationStatus.submitted)
+
         stmt = (
             update(Application)
             .where(
                 Application.scholarship_type_id == scholarship_type_id,
                 Application.academic_year == academic_year,
                 Application.is_renewal.is_(True),
-                Application.status == ApplicationStatus.under_review,
+                Application.status.in_(eligible_statuses),
                 Application.review_stage.in_(terminal_stages),
             )
             .values(

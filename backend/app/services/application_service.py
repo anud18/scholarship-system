@@ -695,10 +695,11 @@ class ApplicationService:
             application_document_original_filename=application.application_document_original_filename,
             requires_professor_recommendation=bool(
                 application.scholarship_configuration
-                and application.scholarship_configuration.requires_professor_recommendation
+                and application.scholarship_configuration.requires_professor_review_for(bool(application.is_renewal))
             ),
             requires_college_review=bool(
-                application.scholarship_configuration and application.scholarship_configuration.requires_college_review
+                application.scholarship_configuration
+                and application.scholarship_configuration.requires_college_review_for(bool(application.is_renewal))
             ),
             allow_college_view_distribution=bool(
                 application.scholarship_configuration
@@ -1009,10 +1010,11 @@ class ApplicationService:
             # Workflow configuration flags
             "requires_professor_recommendation": bool(
                 application.scholarship_configuration
-                and application.scholarship_configuration.requires_professor_recommendation
+                and application.scholarship_configuration.requires_professor_review_for(bool(application.is_renewal))
             ),
             "requires_college_review": bool(
-                application.scholarship_configuration and application.scholarship_configuration.requires_college_review
+                application.scholarship_configuration
+                and application.scholarship_configuration.requires_college_review_for(bool(application.is_renewal))
             ),
             "allow_college_view_distribution": bool(
                 application.scholarship_configuration
@@ -2398,9 +2400,20 @@ class ApplicationService:
                 )
                 .join(Application.scholarship_configuration)
                 .where(
-                    # Only applications that require professor recommendation
-                    Application.scholarship_configuration.has(
-                        ScholarshipConfiguration.requires_professor_recommendation.is_(True)
+                    # Only applications that require professor review — general
+                    # applications follow requires_professor_recommendation,
+                    # renewals follow the renewal-specific admin flag. The
+                    # configuration is already joined above, so filter its
+                    # columns directly instead of EXISTS subqueries.
+                    or_(
+                        and_(
+                            Application.is_renewal.is_(False),
+                            ScholarshipConfiguration.requires_professor_recommendation.is_(True),
+                        ),
+                        and_(
+                            Application.is_renewal.is_(True),
+                            ScholarshipConfiguration.renewal_requires_professor_review.is_(True),
+                        ),
                     ),
                     # Only applications assigned to this specific professor
                     Application.professor_id == professor_id,
@@ -2500,12 +2513,12 @@ class ApplicationService:
                         scholarship_configuration=(
                             {
                                 "requires_professor_recommendation": (
-                                    app.scholarship_configuration.requires_professor_recommendation
+                                    app.scholarship_configuration.requires_professor_review_for(bool(app.is_renewal))
                                     if app.scholarship_configuration
                                     else False
                                 ),
                                 "requires_college_review": (
-                                    app.scholarship_configuration.requires_college_review
+                                    app.scholarship_configuration.requires_college_review_for(bool(app.is_renewal))
                                     if app.scholarship_configuration
                                     else False
                                 ),
@@ -2540,8 +2553,9 @@ class ApplicationService:
             if not application or not application.scholarship_configuration:
                 return False
 
-            # Check if scholarship requires professor recommendation
-            if not application.scholarship_configuration.requires_professor_recommendation:
+            # Check if this application kind requires professor review
+            # (renewals carry their own admin-configured flag)
+            if not application.scholarship_configuration.requires_professor_review_for(bool(application.is_renewal)):
                 return False
 
             # Check if application is assigned to this specific professor
@@ -2605,6 +2619,14 @@ class ApplicationService:
             # Check professor review period for SUBMISSION (this is where time restriction applies)
             # Skip time restrictions if review periods are not configured (e.g., in test environment)
             if application.is_renewal:
+                # Renewal professor review must be enabled by the admin at all
+                if not config.requires_professor_review_for(True):
+                    logger.warning(
+                        f"Professor review submission blocked: renewal professor review "
+                        f"not required for config {config.id}"
+                    )
+                    return False
+
                 # Check renewal review period
                 renewal_start = config.renewal_professor_review_start
                 renewal_end = config.renewal_professor_review_end
@@ -2871,9 +2893,10 @@ class ApplicationService:
             if not professor:
                 raise NotFoundError(f"Professor with NYCU ID {professor_nycu_id} not found")
 
-            # Check if scholarship requires professor review
+            # Check if this application kind requires professor review
+            # (renewals carry their own admin-configured flag)
             config = application.scholarship_configuration
-            if not config or not config.requires_professor_recommendation:
+            if not config or not config.requires_professor_review_for(bool(application.is_renewal)):
                 raise ValidationError("This scholarship does not require professor review")
 
             # Check permission for college admins

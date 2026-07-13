@@ -7239,9 +7239,10 @@ export interface paths {
          * @description Admin-triggered: auto-approve renewal applications past their review stage.
          *
          *     Renewals skip the college_ranking phase by design — once they have cleared
-         *     the required reviews (professor +/- college, per `ScholarshipConfiguration`),
-         *     this endpoint flips them from `under_review` to `approved` with
-         *     `review_stage = quota_distributed`.
+         *     the reviews the admin enabled for renewals (`renewal_requires_professor_review`
+         *     / `renewal_requires_college_review` on `ScholarshipConfiguration`; possibly
+         *     none), this endpoint flips them from `under_review` (or `submitted` when no
+         *     review is required) to `approved` with `review_stage = quota_distributed`.
          *
          *     Args:
          *         scholarship_type_id: Path — scholarship type to process.

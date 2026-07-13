@@ -351,8 +351,10 @@ export interface ScholarshipConfiguration {
   renewal_application_end_date?: string;
   application_start_date?: string;
   application_end_date?: string;
+  renewal_requires_professor_review: boolean;
   renewal_professor_review_start?: string;
   renewal_professor_review_end?: string;
+  renewal_requires_college_review: boolean;
   renewal_college_review_start?: string;
   renewal_college_review_end?: string;
   requires_professor_recommendation: boolean;
@@ -1214,8 +1216,10 @@ export interface ScholarshipConfigurationFormData {
   renewal_application_end_date?: string;
   application_start_date?: string;
   application_end_date?: string;
+  renewal_requires_professor_review?: boolean;
   renewal_professor_review_start?: string;
   renewal_professor_review_end?: string;
+  renewal_requires_college_review?: boolean;
   renewal_college_review_start?: string;
   renewal_college_review_end?: string;
   requires_professor_recommendation?: boolean;

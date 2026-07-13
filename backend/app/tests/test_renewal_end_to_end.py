@@ -230,6 +230,8 @@ async def test_full_renewal_challenge_e2e(db: AsyncSession):
         has_college_quota=True,
         requires_professor_recommendation=True,
         requires_college_review=True,
+        renewal_requires_professor_review=True,
+        renewal_requires_college_review=True,
         quotas={"nstc": {"EE": 8}, "moe_1w": {"EE": 6}},
         shared_quota_sources=[{"source_config_code": "e2e-phd-config-113", "sub_types": ["nstc"]}],
     )
