@@ -249,26 +249,18 @@ function ProfessorReviewComponentInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reviewModalOpen, subTypes, reviewData.items.length]);
 
-  // Render the professor-centric 狀態 badges for a queue row.
+  // Render the professor-centric 狀態 badge for a queue row.
   //
   // The queue is bucketed by whether THIS professor has reviewed (待審核 vs
-  // 已完成), so the status column shows that same signal — 待審核 / 已審核 —
-  // rather than the global application status (which stays 審批中 while a
-  // reviewed app waits for the college, and would look unfinished here).
-  // A secondary badge surfaces the downstream stage (學院/管理員/造冊…) so the
-  // professor can still see where the application went after them.
-  const renderReviewStatusBadges = (app: Application) => {
+  // 已完成), so the status column shows only that same signal — 待審核 / 已審核.
+  // Downstream stages (學院/管理員/配額分發…) are intentionally NOT shown here:
+  // the professor only cares about their own step.
+  const renderReviewStatusBadge = (app: Application) => {
     const reviewed = app.has_professor_reviewed === true;
-    const downstreamLabel = app.review_stage
-      ? STAGE_LABEL_ZH[app.review_stage]
-      : undefined;
     return (
-      <>
-        <Badge variant={reviewed ? "default" : "secondary"}>
-          {reviewed ? "已審核" : "待審核"}
-        </Badge>
-        {downstreamLabel && <Badge variant="outline">{downstreamLabel}</Badge>}
-      </>
+      <Badge variant={reviewed ? "default" : "secondary"}>
+        {reviewed ? "已審核" : "待審核"}
+      </Badge>
     );
   };
 
@@ -661,7 +653,7 @@ function ProfessorReviewComponentInner({
                             </TableCell>
                             <TableCell>
                               <div className="flex gap-2">
-                                {renderReviewStatusBadges(app)}
+                                {renderReviewStatusBadge(app)}
                               </div>
                             </TableCell>
                             <TableCell>
@@ -700,7 +692,7 @@ function ProfessorReviewComponentInner({
                               </p>
                             </div>
                             <div className="flex flex-wrap items-start gap-1 justify-end">
-                              {renderReviewStatusBadges(app)}
+                              {renderReviewStatusBadge(app)}
                             </div>
                           </div>
 
