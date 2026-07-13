@@ -75,7 +75,9 @@ async def get_applied_scholarships_map(db: AsyncSession, user_ids: list[int]) ->
         # outer join, so the selected config columns are listed explicitly rather
         # than relying on functional dependency.
         .group_by(Application.user_id, ScholarshipConfiguration.id, ScholarshipConfiguration.config_code, name_label)
-        .order_by(ScholarshipConfiguration.id)
+        # Order by the display label so a student's badges are deterministic even
+        # when several are legacy (config.id NULL); id is a stable tiebreaker.
+        .order_by(name_label, ScholarshipConfiguration.id)
     )
     result = await db.execute(stmt)
     for user_id, config_id, config_code, name, application_count in result.all():
