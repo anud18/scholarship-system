@@ -239,10 +239,12 @@ class ScholarshipConfigurationService:
             renewal_application_end_date=config_data.get("renewal_application_end_date"),
             application_start_date=config_data.get("application_start_date"),
             application_end_date=config_data.get("application_end_date"),
-            renewal_requires_professor_review=config_data.get("renewal_requires_professor_review", False),
+            # Non-nullable boolean columns: only literal True enables the flag,
+            # so an explicit null cannot reach the DB as None (integrity error).
+            renewal_requires_professor_review=config_data.get("renewal_requires_professor_review") is True,
             renewal_professor_review_start=config_data.get("renewal_professor_review_start"),
             renewal_professor_review_end=config_data.get("renewal_professor_review_end"),
-            renewal_requires_college_review=config_data.get("renewal_requires_college_review", False),
+            renewal_requires_college_review=config_data.get("renewal_requires_college_review") is True,
             renewal_college_review_start=config_data.get("renewal_college_review_start"),
             renewal_college_review_end=config_data.get("renewal_college_review_end"),
             requires_professor_recommendation=config_data.get("requires_professor_recommendation", False),
@@ -307,6 +309,13 @@ class ScholarshipConfigurationService:
             "effective_end_date",
             "version",
         ]
+
+        # The renewal_requires_* columns are non-nullable: normalize to a real
+        # boolean (only literal True enables) before the generic setattr loop
+        # so an explicit null cannot reach the DB as None (integrity error).
+        for flag in ("renewal_requires_professor_review", "renewal_requires_college_review"):
+            if flag in config_data:
+                config_data[flag] = config_data[flag] is True
 
         for field in updatable_fields:
             if field in config_data:
