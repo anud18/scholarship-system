@@ -36,6 +36,7 @@ class RenewalDistributionService:
 
         - renewal_requires_college_review = True    -> [college_reviewed]
         - only renewal_requires_professor_review    -> [professor_reviewed,
+                                                        college_review,
                                                         college_reviewed]
         - neither review required                   -> [student_submitted,
                                                         professor_review,
@@ -43,9 +44,12 @@ class RenewalDistributionService:
                                                         college_review,
                                                         college_reviewed]
 
-        Stages beyond the required one stay eligible so an admin who relaxes
-        the renewal review requirements mid-cycle does not strand renewals
-        that already advanced past the (new) terminal stage.
+        Stages at or beyond the last REQUIRED review stay eligible so an
+        admin who relaxes the renewal review requirements mid-cycle does not
+        strand renewals that already advanced past the (new) terminal stage —
+        e.g. a renewal parked at the in-progress college_review stage has
+        already cleared professor review, which is all the professor-only
+        configuration demands.
 
         When no configuration row exists we conservatively default to
         college_reviewed: matches the dominant pattern in this codebase and
@@ -63,7 +67,11 @@ class RenewalDistributionService:
         if config.renewal_requires_college_review:
             return [ReviewStage.college_reviewed]
         if config.renewal_requires_professor_review:
-            return [ReviewStage.professor_reviewed, ReviewStage.college_reviewed]
+            return [
+                ReviewStage.professor_reviewed,
+                ReviewStage.college_review,
+                ReviewStage.college_reviewed,
+            ]
         return [
             ReviewStage.student_submitted,
             ReviewStage.professor_review,
