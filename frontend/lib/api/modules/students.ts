@@ -24,8 +24,11 @@ type PaginatedResponse<T> = {
 };
 
 export type AppliedScholarship = {
-  scholarship_type_id: number;
-  code: string;
+  /** Null for a legacy application with no configuration link. */
+  scholarship_configuration_id: number | null;
+  config_code: string | null;
+  /** Configuration name (獎學金配置), e.g. "博士生獎學金 114學年"; falls back to the
+   *  application's scholarship_name snapshot for legacy null-config rows. */
   name: string;
   application_count: number;
 };

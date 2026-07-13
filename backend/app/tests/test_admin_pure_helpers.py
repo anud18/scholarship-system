@@ -90,7 +90,14 @@ def test_convert_applied_scholarships_defaults_to_empty_list():
 
 def test_convert_applied_scholarships_passes_through():
     # Pin: provided aggregation list is embedded verbatim.
-    applied = [{"scholarship_type_id": 1, "code": "phd", "name": "博士生獎學金", "application_count": 2}]
+    applied = [
+        {
+            "scholarship_configuration_id": 1,
+            "config_code": "phd_114",
+            "name": "博士生獎學金 114學年",
+            "application_count": 2,
+        }
+    ]
     out = convert_student_to_dict(_user(), applied_scholarships=applied)
     assert out["applied_scholarships"] == applied
 

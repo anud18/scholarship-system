@@ -13,7 +13,7 @@ from app.core.security import require_admin
 from app.db.deps import get_db
 from app.models.application import Application
 from app.models.enums import ApplicationStatus
-from app.models.scholarship import ScholarshipType
+from app.models.scholarship import ScholarshipConfiguration
 from app.models.user import EmployeeStatus, User, UserRole
 from app.services.student_service import StudentService
 
@@ -28,46 +28,64 @@ def applied_application_filters() -> list:
     An application counts once the student has submitted it (draft = not yet
     applied); soft-deleted rows and rows without a scholarship type link are
     excluded. Shared by the list annotation and the scholarship filters so the
-    badges shown always match what the filters return.
+    badges shown always match what the filters return — the annotation LEFT
+    JOINs the configuration (and falls back to the denormalized scholarship_name
+    label), so legacy applications with a NULL scholarship_configuration_id are
+    still counted here and surfaced as a badge, never hidden.
     """
     return [
         Application.deleted_at.is_(None),
-        Application.status.notin_([ApplicationStatus.draft, ApplicationStatus.deleted]),
+        Application.status.notin_([ApplicationStatus.draft.value, ApplicationStatus.deleted.value]),
         Application.scholarship_type_id.isnot(None),
     ]
 
 
 async def get_applied_scholarships_map(db: AsyncSession, user_ids: list[int]) -> dict[int, list[dict]]:
-    """Aggregate which scholarship types each user has applied for.
+    """Aggregate which scholarship configurations each user has applied for.
 
-    Returns {user_id: [{scholarship_type_id, code, name, application_count}]},
-    one entry per distinct scholarship type with the number of qualifying
-    applications (see applied_application_filters for what qualifies).
+    Returns {user_id: [{scholarship_configuration_id, config_code, name, application_count}]},
+    one entry per distinct scholarship configuration (獎學金配置) with the number
+    of qualifying applications (see applied_application_filters for what qualifies).
+    ``name`` is the configuration name (config_name, e.g. "博士生獎學金 114學年").
+
+    The configuration is LEFT JOINed: a legacy application with a NULL
+    scholarship_configuration_id still yields a badge, grouped by and labelled
+    with its denormalized ``scholarship_name`` snapshot (``scholarship_configuration_id``
+    / ``config_code`` are then None). This keeps the badge set identical to what
+    the has_application / scholarship_type_id filters return.
     """
-    applied_map: dict[int, list[dict]] = {user_id: [] for user_id in user_ids}
+    applied_map: dict[int, list[dict]] = {}
     if not user_ids:
         return applied_map
 
+    # config_name when the configuration is linked, else the denormalized snapshot.
+    name_label = func.coalesce(ScholarshipConfiguration.config_name, Application.scholarship_name)
     stmt = (
         select(
             Application.user_id,
-            ScholarshipType.id,
-            ScholarshipType.code,
-            ScholarshipType.name,
+            ScholarshipConfiguration.id,
+            ScholarshipConfiguration.config_code,
+            name_label,
             func.count(Application.id),
         )
-        .join(ScholarshipType, Application.scholarship_type_id == ScholarshipType.id)
+        .outerjoin(ScholarshipConfiguration, Application.scholarship_configuration_id == ScholarshipConfiguration.id)
         .where(Application.user_id.in_(user_ids), *applied_application_filters())
-        .group_by(Application.user_id, ScholarshipType.id, ScholarshipType.code, ScholarshipType.name)
-        .order_by(ScholarshipType.id)
+        # Group by the display identity: the linked config (id + code) or, for a
+        # NULL-config legacy row, the fallback name. The PK can be NULL under the
+        # outer join, so the selected config columns are listed explicitly rather
+        # than relying on functional dependency.
+        .group_by(Application.user_id, ScholarshipConfiguration.id, ScholarshipConfiguration.config_code, name_label)
+        # Order by the display label so a student's badges are deterministic even
+        # when several are legacy (config.id NULL); id is a stable tiebreaker.
+        .order_by(name_label, ScholarshipConfiguration.id)
     )
     result = await db.execute(stmt)
-    for user_id, type_id, type_code, type_name, application_count in result.all():
-        applied_map[user_id].append(
+    for user_id, config_id, config_code, name, application_count in result.all():
+        applied_map.setdefault(user_id, []).append(
             {
-                "scholarship_type_id": type_id,
-                "code": type_code,
-                "name": type_name,
+                "scholarship_configuration_id": config_id,
+                "config_code": config_code,
+                "name": name,
                 "application_count": application_count,
             }
         )
@@ -114,9 +132,10 @@ async def get_all_students(
     """
     Get all students with pagination, search, and filters
 
-    Each student item includes applied_scholarships: the scholarship types the
-    student has submitted applications for (drafts and deleted applications
-    excluded), with per-type application counts.
+    Each student item includes applied_scholarships: the scholarship
+    configurations (獎學金配置) the student has submitted applications for
+    (drafts and deleted applications excluded), with per-configuration
+    application counts.
 
     Requires admin or super_admin role.
     """
