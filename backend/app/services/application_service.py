@@ -37,7 +37,6 @@ from app.services.eligibility_service import EligibilityService
 from app.services.email_automation_service import email_automation_service
 from app.services.email_service import EmailService
 from app.services.minio_service import minio_service
-from app.services.review_phase_filter import apply_renewal_phase_filter
 from app.services.student_service import StudentService
 from app.utils.phone_validation import (
     TAIWAN_MOBILE_MESSAGE,
@@ -2376,6 +2375,16 @@ class ApplicationService:
         return document_type_names.get(file_type, file_type)
 
     # Professor Review Methods
+    @staticmethod
+    def _professor_reviewed(professor_id: int):
+        """Correlated predicate: this professor authored an ApplicationReview for the row.
+
+        Shared by the professor queue (:meth:`get_professor_applications_paginated`)
+        and the dashboard badge (:meth:`get_professor_review_stats`) so the
+        "has this professor reviewed?" split cannot drift between the two.
+        """
+        return Application.reviews.any(ApplicationReview.reviewer_id == professor_id)
+
     async def get_professor_applications_paginated(
         self,
         professor_id: int,
@@ -2422,32 +2431,24 @@ class ApplicationService:
                 )
             )
 
-            # Apply status filter to base query
+            # Discriminate pending vs completed by whether THIS professor has
+            # already recorded a review, NOT by Application.status.
+            #
+            # Status is unreliable here: a professor "approve" on a scholarship
+            # that requires college review deliberately keeps status at
+            # under_review (issue #182), so a status-based "pending" filter kept
+            # showing applications the professor had already reviewed. The only
+            # sound signal that the professor is done is the existence of an
+            # ApplicationReview row authored by them.
+            reviewed_by_me = self._professor_reviewed(professor_id)
+
             if status_filter == "pending":
-                base_query = base_query.where(
-                    Application.status.in_(
-                        [
-                            ApplicationStatus.submitted.value,
-                            ApplicationStatus.under_review.value,  # Include under_review in pending
-                        ]
-                    )
-                )
-                # Phase 4 (renewal routing): pending professor lists must only
-                # include applications matching the *current* review phase —
-                # renewal apps during the renewal_professor_review window,
-                # non-renewal apps during the general professor_review window.
-                base_query = apply_renewal_phase_filter(base_query, role="professor", alias_name="prof_phase_cfg")
+                # 待審核 — assigned to me but I have not reviewed yet.
+                base_query = base_query.where(~reviewed_by_me)
             elif status_filter == "completed":
-                base_query = base_query.where(
-                    Application.status.in_(
-                        [
-                            ApplicationStatus.approved.value,
-                            ApplicationStatus.partial_approved.value,
-                            ApplicationStatus.rejected.value,
-                        ]
-                    )
-                )
-            # "all" or None shows all applications (no additional status filter)
+                # 已完成 — assigned to me and I have already reviewed.
+                base_query = base_query.where(reviewed_by_me)
+            # "all" or None → 全部 = 待審核 + 已完成 (no review-existence filter)
 
             # Get total count with same filters
             count_query = select(func.count()).select_from(base_query.subquery())
@@ -2684,8 +2685,6 @@ class ApplicationService:
           surfacing it here would require a join on
           ScholarshipConfiguration.professor_review_end_date)
         """
-        already_reviewed = select(ApplicationReview.application_id).where(ApplicationReview.reviewer_id == professor_id)
-
         pending_query = select(sa_func.count(Application.id)).where(
             Application.professor_id == professor_id,
             Application.status.in_(
@@ -2694,7 +2693,7 @@ class ApplicationService:
                     ApplicationStatus.under_review.value,
                 ]
             ),
-            Application.id.not_in(already_reviewed),
+            ~self._professor_reviewed(professor_id),
         )
 
         completed_query = select(sa_func.count(ApplicationReview.id)).where(

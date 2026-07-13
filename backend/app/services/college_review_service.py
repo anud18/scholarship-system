@@ -306,8 +306,8 @@ class CollegeReviewService:
         # application was invisible to the college. We intentionally drop that
         # gate here: pending (submitted / under_review) and historical (approved /
         # partial_approved / rejected) rows are all shown, scoped to the college
-        # by the ``college_code`` filter below. The professor listing keeps its
-        # own renewal-phase filter — only college visibility is broadened.
+        # by the ``college_code`` filter below. The professor listing likewise no
+        # longer phase-gates; it buckets by whether the professor has reviewed.
         stmt = (
             select(Application)
             .options(
