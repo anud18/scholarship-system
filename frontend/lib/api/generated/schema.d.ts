@@ -2314,9 +2314,10 @@ export interface paths {
          * Get All Students
          * @description Get all students with pagination, search, and filters
          *
-         *     Each student item includes applied_scholarships: the scholarship types the
-         *     student has submitted applications for (drafts and deleted applications
-         *     excluded), with per-type application counts.
+         *     Each student item includes applied_scholarships: the scholarship
+         *     configurations (獎學金配置) the student has submitted applications for
+         *     (drafts and deleted applications excluded), with per-configuration
+         *     application counts.
          *
          *     Requires admin or super_admin role.
          */

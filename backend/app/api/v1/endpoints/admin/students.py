@@ -26,14 +26,16 @@ def applied_application_filters() -> list:
     """Filter clauses for applications that count as "the student applied".
 
     An application counts once the student has submitted it (draft = not yet
-    applied); soft-deleted rows and rows without a scholarship type link are
-    excluded. Shared by the list annotation and the scholarship filters so the
-    badges shown always match what the filters return.
+    applied); soft-deleted rows and rows without a scholarship type or
+    configuration link are excluded. Shared by the list annotation and the
+    scholarship filters so the badges shown (which join on the configuration)
+    always match what the filters return.
     """
     return [
         Application.deleted_at.is_(None),
         Application.status.notin_([ApplicationStatus.draft.value, ApplicationStatus.deleted.value]),
         Application.scholarship_type_id.isnot(None),
+        Application.scholarship_configuration_id.isnot(None),
     ]
 
 
@@ -42,10 +44,9 @@ async def get_applied_scholarships_map(db: AsyncSession, user_ids: list[int]) ->
 
     Returns {user_id: [{scholarship_configuration_id, config_code, name, application_count}]},
     one entry per distinct scholarship configuration (獎學金配置) with the number
-    of qualifying applications (see applied_application_filters for what qualifies).
+    of qualifying applications (see applied_application_filters for what qualifies —
+    it excludes applications with no configuration link, matching this join).
     ``name`` is the configuration name (config_name, e.g. "博士生獎學金 114學年").
-    Applications with no configuration link are omitted (in practice every
-    submitted application carries one).
     """
     applied_map: dict[int, list[dict]] = {}
     if not user_ids:
@@ -61,12 +62,9 @@ async def get_applied_scholarships_map(db: AsyncSession, user_ids: list[int]) ->
         )
         .join(ScholarshipConfiguration, Application.scholarship_configuration_id == ScholarshipConfiguration.id)
         .where(Application.user_id.in_(user_ids), *applied_application_filters())
-        .group_by(
-            Application.user_id,
-            ScholarshipConfiguration.id,
-            ScholarshipConfiguration.config_code,
-            ScholarshipConfiguration.config_name,
-        )
+        # config_code / config_name are functionally dependent on the grouped PK
+        # (ScholarshipConfiguration.id), so they need not be listed in GROUP BY.
+        .group_by(Application.user_id, ScholarshipConfiguration.id)
         .order_by(ScholarshipConfiguration.id)
     )
     result = await db.execute(stmt)
