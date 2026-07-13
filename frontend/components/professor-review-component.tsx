@@ -38,8 +38,6 @@ import { Search, Eye, CheckCircle, AlertCircle, Clock, X, FileText } from "lucid
 import apiClient, { Application, ApiResponse } from "@/lib/api";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { User } from "@/types/user";
-import { getDisplayStatusInfo } from "@/lib/utils/application-helpers";
-import { Locale } from "@/lib/validators";
 
 interface ProfessorReviewComponentProps {
   user: User;
@@ -251,28 +249,27 @@ function ProfessorReviewComponentInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reviewModalOpen, subTypes, reviewData.items.length]);
 
-  // Get status badge variant
-  const getStatusVariant = (status: string) => {
-    switch (status) {
-      case "under_review":
-        return "default";
-      case "submitted":
-        return "secondary";
-      default:
-        return "outline";
-    }
-  };
-
-  // Get status display text
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case "under_review":
-        return "審核中";
-      case "submitted":
-        return "已提交";
-      default:
-        return status;
-    }
+  // Render the professor-centric 狀態 badges for a queue row.
+  //
+  // The queue is bucketed by whether THIS professor has reviewed (待審核 vs
+  // 已完成), so the status column shows that same signal — 待審核 / 已審核 —
+  // rather than the global application status (which stays 審批中 while a
+  // reviewed app waits for the college, and would look unfinished here).
+  // A secondary badge surfaces the downstream stage (學院/管理員/造冊…) so the
+  // professor can still see where the application went after them.
+  const renderReviewStatusBadges = (app: Application) => {
+    const reviewed = app.has_professor_reviewed === true;
+    const downstreamLabel = app.review_stage
+      ? STAGE_LABEL_ZH[app.review_stage]
+      : undefined;
+    return (
+      <>
+        <Badge variant={reviewed ? "default" : "secondary"}>
+          {reviewed ? "已審核" : "待審核"}
+        </Badge>
+        {downstreamLabel && <Badge variant="outline">{downstreamLabel}</Badge>}
+      </>
+    );
   };
 
   // Open review modal
@@ -664,21 +661,7 @@ function ProfessorReviewComponentInner({
                             </TableCell>
                             <TableCell>
                               <div className="flex gap-2">
-                                {(() => {
-                                  const statusInfo = getDisplayStatusInfo(app, "zh");
-                                  return (
-                                    <>
-                                      <Badge variant={statusInfo.statusVariant}>
-                                        {statusInfo.statusLabel}
-                                      </Badge>
-                                      {statusInfo.showStage && statusInfo.stageLabel && (
-                                        <Badge variant={statusInfo.stageVariant}>
-                                          {statusInfo.stageLabel}
-                                        </Badge>
-                                      )}
-                                    </>
-                                  );
-                                })()}
+                                {renderReviewStatusBadges(app)}
                               </div>
                             </TableCell>
                             <TableCell>
@@ -704,7 +687,6 @@ function ProfessorReviewComponentInner({
                       offscreen as it was in the table layout (P1 audit). */}
                   <div className="md:hidden divide-y">
                     {filteredApplications.map(app => {
-                      const statusInfo = getDisplayStatusInfo(app, "zh");
                       return (
                         <div key={app.id} className="p-4 space-y-3">
                           {/* Header: name + status */}
@@ -718,14 +700,7 @@ function ProfessorReviewComponentInner({
                               </p>
                             </div>
                             <div className="flex flex-wrap items-start gap-1 justify-end">
-                              <Badge variant={statusInfo.statusVariant}>
-                                {statusInfo.statusLabel}
-                              </Badge>
-                              {statusInfo.showStage && statusInfo.stageLabel && (
-                                <Badge variant={statusInfo.stageVariant}>
-                                  {statusInfo.stageLabel}
-                                </Badge>
-                              )}
+                              {renderReviewStatusBadges(app)}
                             </div>
                           </div>
 

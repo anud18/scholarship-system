@@ -650,6 +650,10 @@ class ApplicationListResponse(BaseModel):
     # Admin toggle (ScholarshipConfiguration.allow_college_view_distribution):
     # the student timeline's final step is only checked once this is opened
     allow_college_view_distribution: bool = False
+    # Professor-centric review status for the professor queue: True once the
+    # viewing professor has an ApplicationReview row for this application.
+    # None for endpoints/roles where "the professor" is not defined.
+    has_professor_reviewed: Optional[bool] = None
 
     @property
     def is_editable(self) -> bool:

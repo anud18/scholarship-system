@@ -267,6 +267,30 @@ async def test_status_filter_completed_is_apps_with_professor_review(db: AsyncSe
 
 
 @pytest.mark.asyncio
+async def test_has_professor_reviewed_flag_reflects_review_existence(db: AsyncSession):
+    """The response's has_professor_reviewed flag drives the 待審核/已審核 status
+    badge, so it must be True exactly for apps this professor has reviewed —
+    including a reviewed app still sitting at under_review (issue #182)."""
+    student = await _seed_user(db, role=UserRole.student, nycu_id="profpag_stu_flag")
+    prof = await _seed_user(db, role=UserRole.professor, nycu_id="profpag_prof_flag")
+    cfg = await _seed_config(db, requires_prof=True, suffix="flag")
+
+    unreviewed = await _seed_app(
+        db, student=student, config=cfg, status=ApplicationStatus.under_review.value, professor_id=prof.id, suffix="f1"
+    )
+    reviewed = await _seed_app(
+        db, student=student, config=cfg, status=ApplicationStatus.under_review.value, professor_id=prof.id, suffix="f2"
+    )
+    await _seed_review(db, application=reviewed, reviewer_id=prof.id)
+
+    service = ApplicationService(db)
+    apps, _ = await service.get_professor_applications_paginated(professor_id=prof.id, status_filter="all")
+    flag_by_id = {a.id: a.has_professor_reviewed for a in apps}
+    assert flag_by_id[reviewed.id] is True
+    assert flag_by_id[unreviewed.id] is False
+
+
+@pytest.mark.asyncio
 async def test_pagination_returns_correct_slice_and_total(db: AsyncSession):
     """page=2, size=2 returns rows 3-4. total_count reflects the full filtered set."""
     student = await _seed_user(db, role=UserRole.student, nycu_id="profpag_stu_page")

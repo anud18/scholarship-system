@@ -2406,6 +2406,7 @@ class ApplicationService:
                         ScholarshipConfiguration.scholarship_type
                     ),
                     selectinload(Application.student),
+                    selectinload(Application.reviews),
                 )
                 .join(Application.scholarship_configuration)
                 .where(
@@ -2530,6 +2531,9 @@ class ApplicationService:
                             if app.scholarship_configuration
                             else None
                         ),
+                        # Professor-centric review status: has THIS professor
+                        # recorded a review? Mirrors the pending/completed split.
+                        has_professor_reviewed=any(review.reviewer_id == professor_id for review in app.reviews),
                     )
                 )
 
