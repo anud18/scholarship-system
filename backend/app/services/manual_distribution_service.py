@@ -1120,7 +1120,7 @@ class ManualDistributionService:
             to_restore = [(item, wanted[item.id]) for item in items_result.scalars().all()]
 
         rejected_map = await self._batch_load_rejected_map(
-            [item.application_id for item, _ in to_restore if item.application_id is not None]
+            list({item.application_id for item, _ in to_restore if item.application_id is not None})
         )
 
         # Now restore from snapshot — a snapshot may predate a reviewer reject

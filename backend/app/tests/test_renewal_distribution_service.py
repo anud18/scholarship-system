@@ -320,3 +320,86 @@ async def test_skips_renewal_whose_subtype_was_rejected_in_review(
     refreshed = await db.scalar(select(Application).where(Application.id == rejected_app.id))
     assert refreshed.status == ApplicationStatus.under_review
     assert refreshed.review_stage == ReviewStage.college_reviewed
+
+
+@pytest.mark.asyncio
+async def test_professor_only_approves_in_progress_college_review_stage(
+    db: AsyncSession,
+    test_user: User,
+    test_scholarship: ScholarshipType,
+):
+    """Regression: professor-only configuration must also auto-approve a
+    renewal parked at the in-progress `college_review` stage — it already
+    cleared the required professor review, and after the admin disabled
+    renewal college review the phase filter hides it from college reviewers,
+    so no reviewer can ever advance it to `college_reviewed`."""
+    config = _make_config(
+        test_scholarship.id,
+        renewal_requires_professor_review=True,
+        renewal_requires_college_review=False,
+    )
+    db.add(config)
+    await db.commit()
+
+    renewal = await _make_application(
+        db,
+        user=test_user,
+        scholarship_type=test_scholarship,
+        is_renewal=True,
+        status=ApplicationStatus.under_review,
+        review_stage=ReviewStage.college_review,
+        app_id_suffix="00035",
+    )
+
+    service = RenewalDistributionService(db)
+    result = await service.auto_approve_passed_reviews(
+        scholarship_type_id=test_scholarship.id,
+        academic_year=CURRENT_ACADEMIC_YEAR,
+    )
+
+    assert result["approved_count"] == 1
+    assert result["approved_ids"] == [renewal.id]
+
+    refreshed = await db.scalar(select(Application).where(Application.id == renewal.id))
+    assert refreshed.status == ApplicationStatus.approved
+    assert refreshed.review_stage == ReviewStage.quota_distributed
+
+
+@pytest.mark.asyncio
+async def test_auto_approves_submitted_renewal_when_no_review_required(
+    db: AsyncSession,
+    test_user: User,
+    test_scholarship: ScholarshipType,
+):
+    """Admin disabled BOTH renewal review steps -> a renewal that is merely
+    `submitted` at `student_submitted` auto-approves without any reviewer."""
+    config = _make_config(
+        test_scholarship.id,
+        renewal_requires_professor_review=False,
+        renewal_requires_college_review=False,
+    )
+    db.add(config)
+    await db.commit()
+
+    renewal = await _make_application(
+        db,
+        user=test_user,
+        scholarship_type=test_scholarship,
+        is_renewal=True,
+        status=ApplicationStatus.submitted,
+        review_stage=ReviewStage.student_submitted,
+        app_id_suffix="00040",
+    )
+
+    service = RenewalDistributionService(db)
+    result = await service.auto_approve_passed_reviews(
+        scholarship_type_id=test_scholarship.id,
+        academic_year=CURRENT_ACADEMIC_YEAR,
+    )
+
+    assert result["approved_count"] == 1
+    assert result["approved_ids"] == [renewal.id]
+
+    refreshed = await db.scalar(select(Application).where(Application.id == renewal.id))
+    assert refreshed.status == ApplicationStatus.approved
+    assert refreshed.review_stage == ReviewStage.quota_distributed
