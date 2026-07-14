@@ -9,7 +9,7 @@
  * scope), query-filter shapes, and the SIS data sub-route
  * which fetches fresh upstream data.
  *
- * 9 cases.
+ * 10 cases.
  */
 
 import { createStudentsApi } from "../students";
@@ -37,8 +37,9 @@ describe("createStudentsApi", () => {
   // ─── getAll list with filters ──────────────────────────────────────
 
   it("getAll GETs /admin/students with all filters", async () => {
-    // Pin: 5 optional filters per docstring (page/size/search/
-    // dept_code/status). SNAKE_CASE preserved.
+    // Pin: 7 optional filters per docstring (page/size/search/
+    // dept_code/status/scholarship_type_id/has_application).
+    // SNAKE_CASE preserved.
     mockedRaw.GET.mockResolvedValueOnce(
       _ok({ items: [], total: 0, page: 1, size: 20, pages: 0 })
     );
@@ -49,6 +50,8 @@ describe("createStudentsApi", () => {
       search: "wang",
       dept_code: "4460",
       status: "在學",
+      scholarship_type_id: 3,
+      has_application: true,
     });
     expect(mockedRaw.GET).toHaveBeenCalledWith("/api/v1/admin/students", {
       params: {
@@ -58,9 +61,25 @@ describe("createStudentsApi", () => {
           search: "wang",
           dept_code: "4460",
           status: "在學",
+          scholarship_type_id: 3,
+          has_application: true,
         },
       },
     });
+  });
+
+  it("getAll passes has_application=false through (not dropped as falsy)", async () => {
+    // Pin: `false` filters students who applied for NOTHING —
+    // a falsy-check refactor dropping it would silently turn
+    // the 未申請 filter into no filter at all.
+    mockedRaw.GET.mockResolvedValueOnce(
+      _ok({ items: [], total: 0, page: 1, size: 20, pages: 0 })
+    );
+    const api = createStudentsApi();
+    await api.getAll({ has_application: false });
+    expect(mockedRaw.GET.mock.calls[0][1].params.query.has_application).toBe(
+      false
+    );
   });
 
   it("getAll forwards undefined query when no params", async () => {

@@ -37,7 +37,6 @@ from app.services.eligibility_service import EligibilityService
 from app.services.email_automation_service import email_automation_service
 from app.services.email_service import EmailService
 from app.services.minio_service import minio_service
-from app.services.review_phase_filter import apply_renewal_phase_filter
 from app.services.student_service import StudentService
 from app.utils.phone_validation import (
     TAIWAN_MOBILE_MESSAGE,
@@ -695,10 +694,11 @@ class ApplicationService:
             application_document_original_filename=application.application_document_original_filename,
             requires_professor_recommendation=bool(
                 application.scholarship_configuration
-                and application.scholarship_configuration.requires_professor_recommendation
+                and application.scholarship_configuration.requires_professor_review_for(bool(application.is_renewal))
             ),
             requires_college_review=bool(
-                application.scholarship_configuration and application.scholarship_configuration.requires_college_review
+                application.scholarship_configuration
+                and application.scholarship_configuration.requires_college_review_for(bool(application.is_renewal))
             ),
             allow_college_view_distribution=bool(
                 application.scholarship_configuration
@@ -1009,10 +1009,11 @@ class ApplicationService:
             # Workflow configuration flags
             "requires_professor_recommendation": bool(
                 application.scholarship_configuration
-                and application.scholarship_configuration.requires_professor_recommendation
+                and application.scholarship_configuration.requires_professor_review_for(bool(application.is_renewal))
             ),
             "requires_college_review": bool(
-                application.scholarship_configuration and application.scholarship_configuration.requires_college_review
+                application.scholarship_configuration
+                and application.scholarship_configuration.requires_college_review_for(bool(application.is_renewal))
             ),
             "allow_college_view_distribution": bool(
                 application.scholarship_configuration
@@ -2374,6 +2375,16 @@ class ApplicationService:
         return document_type_names.get(file_type, file_type)
 
     # Professor Review Methods
+    @staticmethod
+    def _professor_reviewed(professor_id: int):
+        """Correlated predicate: this professor authored an ApplicationReview for the row.
+
+        Shared by the professor queue (:meth:`get_professor_applications_paginated`)
+        and the dashboard badge (:meth:`get_professor_review_stats`) so the
+        "has this professor reviewed?" split cannot drift between the two.
+        """
+        return Application.reviews.any(ApplicationReview.reviewer_id == professor_id)
+
     async def get_professor_applications_paginated(
         self,
         professor_id: int,
@@ -2395,12 +2406,24 @@ class ApplicationService:
                         ScholarshipConfiguration.scholarship_type
                     ),
                     selectinload(Application.student),
+                    selectinload(Application.reviews),
                 )
                 .join(Application.scholarship_configuration)
                 .where(
-                    # Only applications that require professor recommendation
-                    Application.scholarship_configuration.has(
-                        ScholarshipConfiguration.requires_professor_recommendation.is_(True)
+                    # Only applications that require professor review — general
+                    # applications follow requires_professor_recommendation,
+                    # renewals follow the renewal-specific admin flag. The
+                    # configuration is already joined above, so filter its
+                    # columns directly instead of EXISTS subqueries.
+                    or_(
+                        and_(
+                            Application.is_renewal.is_(False),
+                            ScholarshipConfiguration.requires_professor_recommendation.is_(True),
+                        ),
+                        and_(
+                            Application.is_renewal.is_(True),
+                            ScholarshipConfiguration.renewal_requires_professor_review.is_(True),
+                        ),
                     ),
                     # Only applications assigned to this specific professor
                     Application.professor_id == professor_id,
@@ -2409,32 +2432,24 @@ class ApplicationService:
                 )
             )
 
-            # Apply status filter to base query
+            # Discriminate pending vs completed by whether THIS professor has
+            # already recorded a review, NOT by Application.status.
+            #
+            # Status is unreliable here: a professor "approve" on a scholarship
+            # that requires college review deliberately keeps status at
+            # under_review (issue #182), so a status-based "pending" filter kept
+            # showing applications the professor had already reviewed. The only
+            # sound signal that the professor is done is the existence of an
+            # ApplicationReview row authored by them.
+            reviewed_by_me = self._professor_reviewed(professor_id)
+
             if status_filter == "pending":
-                base_query = base_query.where(
-                    Application.status.in_(
-                        [
-                            ApplicationStatus.submitted.value,
-                            ApplicationStatus.under_review.value,  # Include under_review in pending
-                        ]
-                    )
-                )
-                # Phase 4 (renewal routing): pending professor lists must only
-                # include applications matching the *current* review phase —
-                # renewal apps during the renewal_professor_review window,
-                # non-renewal apps during the general professor_review window.
-                base_query = apply_renewal_phase_filter(base_query, role="professor", alias_name="prof_phase_cfg")
+                # 待審核 — assigned to me but I have not reviewed yet.
+                base_query = base_query.where(~reviewed_by_me)
             elif status_filter == "completed":
-                base_query = base_query.where(
-                    Application.status.in_(
-                        [
-                            ApplicationStatus.approved.value,
-                            ApplicationStatus.partial_approved.value,
-                            ApplicationStatus.rejected.value,
-                        ]
-                    )
-                )
-            # "all" or None shows all applications (no additional status filter)
+                # 已完成 — assigned to me and I have already reviewed.
+                base_query = base_query.where(reviewed_by_me)
+            # "all" or None → 全部 = 待審核 + 已完成 (no review-existence filter)
 
             # Get total count with same filters
             count_query = select(func.count()).select_from(base_query.subquery())
@@ -2500,12 +2515,12 @@ class ApplicationService:
                         scholarship_configuration=(
                             {
                                 "requires_professor_recommendation": (
-                                    app.scholarship_configuration.requires_professor_recommendation
+                                    app.scholarship_configuration.requires_professor_review_for(bool(app.is_renewal))
                                     if app.scholarship_configuration
                                     else False
                                 ),
                                 "requires_college_review": (
-                                    app.scholarship_configuration.requires_college_review
+                                    app.scholarship_configuration.requires_college_review_for(bool(app.is_renewal))
                                     if app.scholarship_configuration
                                     else False
                                 ),
@@ -2516,6 +2531,9 @@ class ApplicationService:
                             if app.scholarship_configuration
                             else None
                         ),
+                        # Professor-centric review status: has THIS professor
+                        # recorded a review? Mirrors the pending/completed split.
+                        has_professor_reviewed=any(review.reviewer_id == professor_id for review in app.reviews),
                     )
                 )
 
@@ -2540,8 +2558,9 @@ class ApplicationService:
             if not application or not application.scholarship_configuration:
                 return False
 
-            # Check if scholarship requires professor recommendation
-            if not application.scholarship_configuration.requires_professor_recommendation:
+            # Check if this application kind requires professor review
+            # (renewals carry their own admin-configured flag)
+            if not application.scholarship_configuration.requires_professor_review_for(bool(application.is_renewal)):
                 return False
 
             # Check if application is assigned to this specific professor
@@ -2605,6 +2624,14 @@ class ApplicationService:
             # Check professor review period for SUBMISSION (this is where time restriction applies)
             # Skip time restrictions if review periods are not configured (e.g., in test environment)
             if application.is_renewal:
+                # Renewal professor review must be enabled by the admin at all
+                if not config.requires_professor_review_for(True):
+                    logger.warning(
+                        f"Professor review submission blocked: renewal professor review "
+                        f"not required for config {config.id}"
+                    )
+                    return False
+
                 # Check renewal review period
                 renewal_start = config.renewal_professor_review_start
                 renewal_end = config.renewal_professor_review_end
@@ -2662,8 +2689,6 @@ class ApplicationService:
           surfacing it here would require a join on
           ScholarshipConfiguration.professor_review_end_date)
         """
-        already_reviewed = select(ApplicationReview.application_id).where(ApplicationReview.reviewer_id == professor_id)
-
         pending_query = select(sa_func.count(Application.id)).where(
             Application.professor_id == professor_id,
             Application.status.in_(
@@ -2672,7 +2697,7 @@ class ApplicationService:
                     ApplicationStatus.under_review.value,
                 ]
             ),
-            Application.id.not_in(already_reviewed),
+            ~self._professor_reviewed(professor_id),
         )
 
         completed_query = select(sa_func.count(ApplicationReview.id)).where(
@@ -2871,9 +2896,10 @@ class ApplicationService:
             if not professor:
                 raise NotFoundError(f"Professor with NYCU ID {professor_nycu_id} not found")
 
-            # Check if scholarship requires professor review
+            # Check if this application kind requires professor review
+            # (renewals carry their own admin-configured flag)
             config = application.scholarship_configuration
-            if not config or not config.requires_professor_recommendation:
+            if not config or not config.requires_professor_review_for(bool(application.is_renewal)):
                 raise ValidationError("This scholarship does not require professor review")
 
             # Check permission for college admins

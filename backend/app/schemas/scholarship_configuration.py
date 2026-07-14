@@ -62,8 +62,11 @@ class ScholarshipConfigurationBase(BaseModel):
     application_end_date: Optional[datetime] = None
 
     # 續領審查期間 (從 ScholarshipType 移至此處)
+    # 管理員決定續領是否需要教授/學院審查（與一般申請的 requires_* 各自獨立）
+    renewal_requires_professor_review: bool = False
     renewal_professor_review_start: Optional[datetime] = None
     renewal_professor_review_end: Optional[datetime] = None
+    renewal_requires_college_review: bool = False
     renewal_college_review_start: Optional[datetime] = None
     renewal_college_review_end: Optional[datetime] = None
 
@@ -115,17 +118,20 @@ class ScholarshipConfigurationBase(BaseModel):
 
     @model_validator(mode="after")
     def validate_renewal_review_dates(self):
-        """Renewal review dates must not be set unless the matching review step
-        is required. Implemented as a model-level validator so it can read the
-        requires_* flags reliably regardless of field-definition order (a
-        field_validator on the *_end field runs before the flags are populated).
+        """Renewal review dates must not be set unless the matching renewal
+        review step is required. Implemented as a model-level validator so it
+        can read the renewal_requires_* flags reliably regardless of
+        field-definition order (a field_validator on the *_end field runs
+        before the flags are populated).
         """
-        if not self.requires_professor_recommendation and (
+        if not self.renewal_requires_professor_review and (
             self.renewal_professor_review_end or self.renewal_professor_review_start
         ):
-            raise ValueError("續領教授審查時間不應設定當不需要教授推薦時")
-        if not self.requires_college_review and (self.renewal_college_review_end or self.renewal_college_review_start):
-            raise ValueError("續領學院審查時間不應設定當不需要學院審查時")
+            raise ValueError("續領教授審查時間不應設定當續領不需要教授審查時")
+        if not self.renewal_requires_college_review and (
+            self.renewal_college_review_end or self.renewal_college_review_start
+        ):
+            raise ValueError("續領學院審查時間不應設定當續領不需要學院審查時")
         return self
 
     @field_validator("effective_end_date")
@@ -178,8 +184,10 @@ class ScholarshipConfigurationUpdate(BaseModel):
     application_end_date: Optional[datetime] = None
 
     # 續領審查期間 (從 ScholarshipType 移至此處)
+    renewal_requires_professor_review: Optional[bool] = None
     renewal_professor_review_start: Optional[datetime] = None
     renewal_professor_review_end: Optional[datetime] = None
+    renewal_requires_college_review: Optional[bool] = None
     renewal_college_review_start: Optional[datetime] = None
     renewal_college_review_end: Optional[datetime] = None
 

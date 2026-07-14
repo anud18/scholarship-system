@@ -10,8 +10,9 @@ Contract pinned (6 cases):
 - Base filter: only applications assigned to the calling professor.
 - Base filter: only statuses in {submitted, under_review, approved,
   partial_approved, rejected}; drafts are excluded.
-- status_filter='pending' narrows to {submitted, under_review}.
-- status_filter='completed' narrows to {approved, partial_approved, rejected}.
+- status_filter='pending' → applications this professor has NOT reviewed yet
+  (no ApplicationReview row authored by them), regardless of Application.status.
+- status_filter='completed' → applications this professor HAS reviewed.
 - Pagination: page=2, size=2 returns rows 3-4 of an ordered set; total
   count reflects the full filtered set, not the page.
 - No implicit cap: the default call (size omitted) returns EVERY assigned
@@ -25,9 +26,24 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.application import Application, ApplicationStatus
+from app.models.review import ApplicationReview
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole, UserType
 from app.services.application_service import ApplicationService
+
+
+async def _seed_review(db: AsyncSession, *, application: Application, reviewer_id: int) -> ApplicationReview:
+    """Record a professor review for ``application`` — the signal that moves it
+    from 待審核 (pending) to 已完成 (completed)."""
+    review = ApplicationReview(
+        application_id=application.id,
+        reviewer_id=reviewer_id,
+        recommendation="approve",
+        reviewed_at=datetime.now(timezone.utc),
+    )
+    db.add(review)
+    await db.commit()
+    return review
 
 
 async def _seed_user(db: AsyncSession, *, role: UserRole, nycu_id: str) -> User:
@@ -56,9 +72,8 @@ async def _seed_config(db: AsyncSession, *, requires_prof: bool, suffix: str) ->
         academic_year=114,
         application_start_date=datetime(2025, 1, 1, tzinfo=timezone.utc),
         application_end_date=datetime(2030, 1, 1, tzinfo=timezone.utc),
-        # The "pending" professor queue overlays a review-phase filter that
-        # requires an open professor-review window; without these the renewal
-        # phase filter excludes every row (total=0).
+        # Review windows are retained for realism, but the professor queue no
+        # longer phase-gates — it buckets by whether the professor has reviewed.
         professor_review_start=datetime(2025, 1, 1, tzinfo=timezone.utc),
         professor_review_end=datetime(2030, 1, 1, tzinfo=timezone.utc),
         requires_professor_recommendation=requires_prof,
@@ -181,42 +196,57 @@ async def test_excludes_drafts(db: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_status_filter_pending_narrows_to_submitted_and_under_review(db: AsyncSession):
+async def test_status_filter_pending_is_apps_without_professor_review(db: AsyncSession):
+    """pending = assigned apps this professor has NOT reviewed yet — independent
+    of Application.status. A professor-approved app whose scholarship requires
+    college review stays at under_review (issue #182) but must NOT appear in
+    pending once the review row exists."""
     student = await _seed_user(db, role=UserRole.student, nycu_id="profpag_stu_pending")
     prof = await _seed_user(db, role=UserRole.professor, nycu_id="profpag_prof_pending")
     cfg = await _seed_config(db, requires_prof=True, suffix="pending")
 
+    # Two apps left un-reviewed → pending.
     await _seed_app(
         db, student=student, config=cfg, status=ApplicationStatus.submitted.value, professor_id=prof.id, suffix="p1"
     )
     await _seed_app(
         db, student=student, config=cfg, status=ApplicationStatus.under_review.value, professor_id=prof.id, suffix="p2"
     )
-    await _seed_app(
-        db, student=student, config=cfg, status=ApplicationStatus.approved.value, professor_id=prof.id, suffix="p3"
+    # Two apps the professor already reviewed (still under_review) → NOT pending.
+    reviewed_a = await _seed_app(
+        db, student=student, config=cfg, status=ApplicationStatus.under_review.value, professor_id=prof.id, suffix="p3"
     )
-    await _seed_app(
-        db, student=student, config=cfg, status=ApplicationStatus.rejected.value, professor_id=prof.id, suffix="p4"
+    reviewed_b = await _seed_app(
+        db, student=student, config=cfg, status=ApplicationStatus.approved.value, professor_id=prof.id, suffix="p4"
     )
+    await _seed_review(db, application=reviewed_a, reviewer_id=prof.id)
+    await _seed_review(db, application=reviewed_b, reviewer_id=prof.id)
 
     service = ApplicationService(db)
     apps, total = await service.get_professor_applications_paginated(professor_id=prof.id, status_filter="pending")
     assert total == 2
+    returned = {a.id for a in apps}
+    assert reviewed_a.id not in returned
+    assert reviewed_b.id not in returned
 
 
 @pytest.mark.asyncio
-async def test_status_filter_completed_narrows_to_approved_partial_rejected(db: AsyncSession):
+async def test_status_filter_completed_is_apps_with_professor_review(db: AsyncSession):
+    """completed = assigned apps this professor HAS reviewed — independent of
+    Application.status."""
     student = await _seed_user(db, role=UserRole.student, nycu_id="profpag_stu_done")
     prof = await _seed_user(db, role=UserRole.professor, nycu_id="profpag_prof_done")
     cfg = await _seed_config(db, requires_prof=True, suffix="done")
 
+    # Un-reviewed → NOT completed.
     await _seed_app(
         db, student=student, config=cfg, status=ApplicationStatus.submitted.value, professor_id=prof.id, suffix="d1"
     )
-    await _seed_app(
-        db, student=student, config=cfg, status=ApplicationStatus.approved.value, professor_id=prof.id, suffix="d2"
+    # Three reviewed apps spanning different statuses → all completed.
+    r1 = await _seed_app(
+        db, student=student, config=cfg, status=ApplicationStatus.under_review.value, professor_id=prof.id, suffix="d2"
     )
-    await _seed_app(
+    r2 = await _seed_app(
         db,
         student=student,
         config=cfg,
@@ -224,13 +254,40 @@ async def test_status_filter_completed_narrows_to_approved_partial_rejected(db: 
         professor_id=prof.id,
         suffix="d3",
     )
-    await _seed_app(
+    r3 = await _seed_app(
         db, student=student, config=cfg, status=ApplicationStatus.rejected.value, professor_id=prof.id, suffix="d4"
     )
+    for app in (r1, r2, r3):
+        await _seed_review(db, application=app, reviewer_id=prof.id)
 
     service = ApplicationService(db)
     apps, total = await service.get_professor_applications_paginated(professor_id=prof.id, status_filter="completed")
     assert total == 3
+    assert {a.id for a in apps} == {r1.id, r2.id, r3.id}
+
+
+@pytest.mark.asyncio
+async def test_has_professor_reviewed_flag_reflects_review_existence(db: AsyncSession):
+    """The response's has_professor_reviewed flag drives the 待審核/已審核 status
+    badge, so it must be True exactly for apps this professor has reviewed —
+    including a reviewed app still sitting at under_review (issue #182)."""
+    student = await _seed_user(db, role=UserRole.student, nycu_id="profpag_stu_flag")
+    prof = await _seed_user(db, role=UserRole.professor, nycu_id="profpag_prof_flag")
+    cfg = await _seed_config(db, requires_prof=True, suffix="flag")
+
+    unreviewed = await _seed_app(
+        db, student=student, config=cfg, status=ApplicationStatus.under_review.value, professor_id=prof.id, suffix="f1"
+    )
+    reviewed = await _seed_app(
+        db, student=student, config=cfg, status=ApplicationStatus.under_review.value, professor_id=prof.id, suffix="f2"
+    )
+    await _seed_review(db, application=reviewed, reviewer_id=prof.id)
+
+    service = ApplicationService(db)
+    apps, _ = await service.get_professor_applications_paginated(professor_id=prof.id, status_filter="all")
+    flag_by_id = {a.id: a.has_professor_reviewed for a in apps}
+    assert flag_by_id[reviewed.id] is True
+    assert flag_by_id[unreviewed.id] is False
 
 
 @pytest.mark.asyncio

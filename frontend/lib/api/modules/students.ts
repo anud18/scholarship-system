@@ -23,6 +23,16 @@ type PaginatedResponse<T> = {
   pages: number;
 };
 
+export type AppliedScholarship = {
+  /** Null for a legacy application with no configuration link. */
+  scholarship_configuration_id: number | null;
+  config_code: string | null;
+  /** Configuration name (獎學金配置), e.g. "博士生獎學金 114學年"; falls back to the
+   *  application's scholarship_name snapshot for legacy null-config rows. */
+  name: string;
+  application_count: number;
+};
+
 export type Student = {
   id: number;
   nycu_id: string;
@@ -34,6 +44,7 @@ export type Student = {
   dept_name?: string;
   college_code?: string;
   comment?: string;
+  applied_scholarships?: AppliedScholarship[];
   created_at: string;
   updated_at?: string;
   last_login_at?: string;
@@ -92,6 +103,8 @@ export function createStudentsApi() {
      * @param params.search - Search by name, email, or NYCU ID
      * @param params.dept_code - Filter by department code
      * @param params.status - Filter by status (在學/畢業)
+     * @param params.scholarship_type_id - Filter by scholarship type the student has applied for
+     * @param params.has_application - Filter by whether the student has applied for any scholarship
      */
     getAll: async (params?: {
       page?: number;
@@ -99,6 +112,8 @@ export function createStudentsApi() {
       search?: string;
       dept_code?: string;
       status?: string;
+      scholarship_type_id?: number;
+      has_application?: boolean;
     }): Promise<ApiResponse<PaginatedResponse<Student>>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/students', {
         params: { query: params },

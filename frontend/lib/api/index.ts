@@ -120,6 +120,7 @@ export type {
 
 // Re-export Students module types
 export type {
+  AppliedScholarship,
   Student,
   StudentStats,
   StudentSISBasicInfo,

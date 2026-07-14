@@ -197,3 +197,6 @@ frontend/junit.xml
 
 # Local-only mock student datasets (contain real-looking student IDs)
 mock-student-api/students_local.py
+
+# Hypothesis test cache
+.hypothesis/

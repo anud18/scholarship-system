@@ -2314,6 +2314,11 @@ export interface paths {
          * Get All Students
          * @description Get all students with pagination, search, and filters
          *
+         *     Each student item includes applied_scholarships: the scholarship
+         *     configurations (獎學金配置) the student has submitted applications for
+         *     (drafts and deleted applications excluded), with per-configuration
+         *     application counts.
+         *
          *     Requires admin or super_admin role.
          */
         get: operations["get_all_students_api_v1_admin_students_get"];
@@ -7235,9 +7240,10 @@ export interface paths {
          * @description Admin-triggered: auto-approve renewal applications past their review stage.
          *
          *     Renewals skip the college_ranking phase by design — once they have cleared
-         *     the required reviews (professor +/- college, per `ScholarshipConfiguration`),
-         *     this endpoint flips them from `under_review` to `approved` with
-         *     `review_stage = quota_distributed`.
+         *     the reviews the admin enabled for renewals (`renewal_requires_professor_review`
+         *     / `renewal_requires_college_review` on `ScholarshipConfiguration`; possibly
+         *     none), this endpoint flips them from `under_review` (or `submitted` when no
+         *     review is required) to `approved` with `review_stage = quota_distributed`.
          *
          *     Args:
          *         scholarship_type_id: Path — scholarship type to process.
@@ -15138,6 +15144,10 @@ export interface operations {
                 dept_code?: string | null;
                 /** @description Filter by status (在學/畢業) */
                 status?: string | null;
+                /** @description Filter by scholarship type the student has applied for */
+                scholarship_type_id?: number | null;
+                /** @description Filter by whether the student has applied for any scholarship */
+                has_application?: boolean | null;
             };
             header?: never;
             path?: never;

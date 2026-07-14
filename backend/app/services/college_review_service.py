@@ -306,8 +306,8 @@ class CollegeReviewService:
         # application was invisible to the college. We intentionally drop that
         # gate here: pending (submitted / under_review) and historical (approved /
         # partial_approved / rejected) rows are all shown, scoped to the college
-        # by the ``college_code`` filter below. The professor listing keeps its
-        # own renewal-phase filter — only college visibility is broadened.
+        # by the ``college_code`` filter below. The professor listing likewise no
+        # longer phase-gates; it buckets by whether the professor has reviewed.
         stmt = (
             select(Application)
             .options(
@@ -406,11 +406,13 @@ class CollegeReviewService:
                 "created_at": app.created_at,
                 "student_data": student_payload,
                 "is_renewal": app.is_renewal,
-                # Whether this scholarship requires a professor recommendation step.
+                # Whether this application requires a professor recommendation step
+                # (renewals carry their own admin-configured flag).
                 # Lets the college UI distinguish "professor hasn't recommended yet"
                 # (show 教授審核中) from "no professor step at all" (show —).
                 "requires_professor_recommendation": bool(
-                    app.scholarship_configuration and app.scholarship_configuration.requires_professor_recommendation
+                    app.scholarship_configuration
+                    and app.scholarship_configuration.requires_professor_review_for(bool(app.is_renewal))
                 ),
                 # Professor review details
                 "professor_review_completed": any(

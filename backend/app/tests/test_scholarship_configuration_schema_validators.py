@@ -119,13 +119,13 @@ def test_quotas_matrix_sum_within_total_accepted():
 
 
 def test_renewal_professor_review_dates_rejected_without_feature_flag():
-    """Setting renewal review end-date without requires_professor_recommendation
+    """Setting renewal review end-date without renewal_requires_professor_review
     → reject. Otherwise the dates are saved but ignored by runtime — silent UX bug."""
     end = datetime.now(timezone.utc) + timedelta(days=10)
     with pytest.raises(ValidationError) as exc:
         ScholarshipConfigurationBase(
             **_base_payload(
-                requires_professor_recommendation=False,
+                renewal_requires_professor_review=False,
                 renewal_professor_review_end=end,
             )
         )
@@ -137,12 +137,27 @@ def test_renewal_professor_review_dates_accepted_with_feature_flag():
     end = datetime.now(timezone.utc) + timedelta(days=10)
     cfg = ScholarshipConfigurationBase(
         **_base_payload(
-            requires_professor_recommendation=True,
+            renewal_requires_professor_review=True,
             renewal_professor_review_start=start,
             renewal_professor_review_end=end,
         )
     )
     assert cfg.renewal_professor_review_end == end
+
+
+def test_renewal_professor_review_flag_independent_of_general_flag():
+    """Pin the split: the general requires_professor_recommendation flag no
+    longer gates renewal review dates — only the renewal flag does."""
+    end = datetime.now(timezone.utc) + timedelta(days=10)
+    with pytest.raises(ValidationError) as exc:
+        ScholarshipConfigurationBase(
+            **_base_payload(
+                requires_professor_recommendation=True,  # general flag alone is not enough
+                renewal_requires_professor_review=False,
+                renewal_professor_review_end=end,
+            )
+        )
+    assert "續領教授審查時間" in str(exc.value)
 
 
 # ─── validate_renewal_college_review ─────────────────────────────────
@@ -155,11 +170,24 @@ def test_renewal_college_review_dates_rejected_without_feature_flag():
     with pytest.raises(ValidationError) as exc:
         ScholarshipConfigurationBase(
             **_base_payload(
-                requires_college_review=False,
+                renewal_requires_college_review=False,
                 renewal_college_review_end=end,
             )
         )
     assert "續領學院審查時間" in str(exc.value)
+
+
+def test_renewal_college_review_dates_accepted_with_feature_flag():
+    start = datetime.now(timezone.utc)
+    end = datetime.now(timezone.utc) + timedelta(days=10)
+    cfg = ScholarshipConfigurationBase(
+        **_base_payload(
+            renewal_requires_college_review=True,
+            renewal_college_review_start=start,
+            renewal_college_review_end=end,
+        )
+    )
+    assert cfg.renewal_college_review_end == end
 
 
 # ─── validate_effective_dates ────────────────────────────────────────

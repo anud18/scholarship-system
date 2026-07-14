@@ -4,15 +4,18 @@ Verifies that renewal applications that have completed their required review
 stages are auto-approved (status -> approved, review_stage -> quota_distributed),
 while non-renewal and not-yet-reviewed applications are left untouched.
 
-The "terminal" review stage is configuration-driven:
-    - When ScholarshipConfiguration.requires_college_review = True:
+The "terminal" review stage is driven by the renewal-specific admin flags:
+    - When ScholarshipConfiguration.renewal_requires_college_review = True:
         terminal stage is ReviewStage.college_reviewed
-    - When requires_college_review = False:
+    - When only renewal_requires_professor_review = True:
         terminal stage is ReviewStage.professor_reviewed
+    - When neither renewal review is required:
+        terminal stage is ReviewStage.student_submitted (status may still
+        be `submitted`)
 
 These tests use the same conftest fixtures as the other renewal tests
 (`db`, `test_user`, `test_scholarship`), plus a locally-built
-ScholarshipConfiguration with `requires_college_review` set.
+ScholarshipConfiguration with the renewal review flags set.
 """
 
 from datetime import datetime, timezone
@@ -40,11 +43,12 @@ def _make_config(
     scholarship_type_id: int,
     *,
     academic_year: int = CURRENT_ACADEMIC_YEAR,
-    requires_college_review: bool = True,
+    renewal_requires_professor_review: bool = True,
+    renewal_requires_college_review: bool = True,
     config_code: str = "RDS-CFG",
 ) -> ScholarshipConfiguration:
-    """Build a ScholarshipConfiguration row exposing the review flags
-    used by RenewalDistributionService to decide the terminal stage.
+    """Build a ScholarshipConfiguration row exposing the renewal review
+    flags used by RenewalDistributionService to decide the terminal stage.
     """
     return ScholarshipConfiguration(
         scholarship_type_id=scholarship_type_id,
@@ -56,7 +60,9 @@ def _make_config(
         currency="TWD",
         is_active=True,
         requires_professor_recommendation=True,
-        requires_college_review=requires_college_review,
+        requires_college_review=True,
+        renewal_requires_professor_review=renewal_requires_professor_review,
+        renewal_requires_college_review=renewal_requires_college_review,
     )
 
 
@@ -106,8 +112,8 @@ async def test_auto_approves_renewals_with_passed_reviews(
     """Two renewal applications, both already at `college_reviewed` and in
     `under_review`, should be auto-approved and advanced to `quota_distributed`.
     """
-    # Configuration requires college review -> terminal stage is college_reviewed.
-    config = _make_config(test_scholarship.id, requires_college_review=True)
+    # Configuration requires renewal college review -> terminal stage is college_reviewed.
+    config = _make_config(test_scholarship.id, renewal_requires_college_review=True)
     db.add(config)
     await db.commit()
 
@@ -159,7 +165,7 @@ async def test_does_not_approve_non_renewal(
 ):
     """A non-renewal (is_renewal=False) application at college_reviewed must be
     left in `under_review`."""
-    config = _make_config(test_scholarship.id, requires_college_review=True)
+    config = _make_config(test_scholarship.id, renewal_requires_college_review=True)
     db.add(config)
     await db.commit()
 
@@ -195,7 +201,7 @@ async def test_does_not_approve_not_yet_reviewed(
 ):
     """A renewal application still in `professor_review` (not yet at the
     terminal `college_reviewed` stage) must NOT be auto-approved."""
-    config = _make_config(test_scholarship.id, requires_college_review=True)
+    config = _make_config(test_scholarship.id, renewal_requires_college_review=True)
     db.add(config)
     await db.commit()
 
@@ -224,6 +230,48 @@ async def test_does_not_approve_not_yet_reviewed(
 
 
 @pytest.mark.asyncio
+async def test_terminal_stage_professor_when_college_not_required_for_renewal(
+    db: AsyncSession,
+    test_user: User,
+    test_scholarship: ScholarshipType,
+):
+    """renewal_requires_college_review=False + renewal_requires_professor_review=True
+    -> a renewal at `professor_reviewed` auto-approves. The GENERAL
+    requires_college_review flag stays True to pin that renewals no longer
+    follow the general-application flags."""
+    config = _make_config(
+        test_scholarship.id,
+        renewal_requires_professor_review=True,
+        renewal_requires_college_review=False,
+    )
+    db.add(config)
+    await db.commit()
+
+    renewal = await _make_application(
+        db,
+        user=test_user,
+        scholarship_type=test_scholarship,
+        is_renewal=True,
+        status=ApplicationStatus.under_review,
+        review_stage=ReviewStage.professor_reviewed,
+        app_id_suffix="00030",
+    )
+
+    service = RenewalDistributionService(db)
+    result = await service.auto_approve_passed_reviews(
+        scholarship_type_id=test_scholarship.id,
+        academic_year=CURRENT_ACADEMIC_YEAR,
+    )
+
+    assert result["approved_count"] == 1
+    assert result["approved_ids"] == [renewal.id]
+
+    refreshed = await db.scalar(select(Application).where(Application.id == renewal.id))
+    assert refreshed.status == ApplicationStatus.approved
+    assert refreshed.review_stage == ReviewStage.quota_distributed
+
+
+@pytest.mark.asyncio
 async def test_skips_renewal_whose_subtype_was_rejected_in_review(
     db: AsyncSession,
     test_user: User,
@@ -232,7 +280,7 @@ async def test_skips_renewal_whose_subtype_was_rejected_in_review(
     """A renewal at the terminal stage whose sub_scholarship_type carries a
     reviewer reject (不同意) must NOT be auto-approved — it stays under_review
     and is reported in skipped_rejected_ids (rejection gate, 回發 leak path)."""
-    config = _make_config(test_scholarship.id, requires_college_review=True)
+    config = _make_config(test_scholarship.id)
     db.add(config)
     await db.commit()
 
@@ -243,7 +291,7 @@ async def test_skips_renewal_whose_subtype_was_rejected_in_review(
         is_renewal=True,
         status=ApplicationStatus.under_review,
         review_stage=ReviewStage.college_reviewed,
-        app_id_suffix="00030",
+        app_id_suffix="00050",
     )
     review = ApplicationReview(
         application_id=rejected_app.id,

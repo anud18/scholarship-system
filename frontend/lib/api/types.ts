@@ -151,6 +151,9 @@ export interface Application {
   allow_college_view_distribution?: boolean;
   professor_review_completed?: boolean;
   college_review_completed?: boolean;
+  /** 教授端佇列專用：檢視的教授是否已對本申請留下審核紀錄。
+   *  非教授端點回傳 undefined。 */
+  has_professor_reviewed?: boolean;
   form_data?: Record<string, any>;
   submitted_form_data?: Record<string, any>;
   meta_data?: Record<string, any>;
@@ -351,8 +354,10 @@ export interface ScholarshipConfiguration {
   renewal_application_end_date?: string;
   application_start_date?: string;
   application_end_date?: string;
+  renewal_requires_professor_review: boolean;
   renewal_professor_review_start?: string;
   renewal_professor_review_end?: string;
+  renewal_requires_college_review: boolean;
   renewal_college_review_start?: string;
   renewal_college_review_end?: string;
   requires_professor_recommendation: boolean;
@@ -1214,8 +1219,10 @@ export interface ScholarshipConfigurationFormData {
   renewal_application_end_date?: string;
   application_start_date?: string;
   application_end_date?: string;
+  renewal_requires_professor_review?: boolean;
   renewal_professor_review_start?: string;
   renewal_professor_review_end?: string;
+  renewal_requires_college_review?: boolean;
   renewal_college_review_start?: string;
   renewal_college_review_end?: string;
   requires_professor_recommendation?: boolean;
