@@ -310,8 +310,6 @@ class TestApplicationServiceListResponse:
         application.created_at = now
         application.updated_at = now
         application.meta_data = None
-        application.application_document_url = None
-        application.application_document_original_filename = None
 
         user = Mock(spec=User)
         user.nycu_id = "112550001"

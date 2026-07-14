@@ -364,57 +364,6 @@ describe("createApplicationsApi", () => {
     expect(mockedRaw.GET.mock.calls[0][1].params.query).toBeUndefined();
   });
 
-  // ─── uploadApplicationDocument / deleteApplicationDocument (raw) ──
-
-  it("uploadApplicationDocument uses raw fetch + Bearer from localStorage.auth_token", async () => {
-    // Pin: bypasses typedClient because uses upload-proxy. Token
-    // pulled from localStorage.auth_token (NOT typedClient.getToken
-    // — different storage key from the rest of the module).
-    Object.defineProperty(global, "localStorage", {
-      value: { getItem: jest.fn(() => "abc-token") },
-      writable: true,
-    });
-    const fetchMock = jest.fn().mockResolvedValue({
-      ok: true,
-      json: jest
-        .fn()
-        .mockResolvedValue({
-          success: true,
-          data: { application_document_url: "/u/xx.pdf" },
-        }),
-    });
-    global.fetch = fetchMock as any;
-
-    const api = createApplicationsApi();
-    await api.uploadApplicationDocument(42, new File(["x"], "x.pdf"));
-    const [url, opts] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/v1/application-document-upload-proxy?id=42");
-    expect(opts.method).toBe("POST");
-    expect(opts.headers.Authorization).toBe("Bearer abc-token");
-  });
-
-  it("deleteApplicationDocument uses raw fetch DELETE on SAME proxy URL", async () => {
-    // Pin: DELETE on the proxy — same URL + Authorization header
-    // contract as upload. Pin so refactor doesn't split into
-    // separate proxy endpoints.
-    Object.defineProperty(global, "localStorage", {
-      value: { getItem: jest.fn(() => "abc-token") },
-      writable: true,
-    });
-    const fetchMock = jest.fn().mockResolvedValue({
-      ok: true,
-      json: jest.fn().mockResolvedValue({ success: true, data: null }),
-    });
-    global.fetch = fetchMock as any;
-
-    const api = createApplicationsApi();
-    await api.deleteApplicationDocument(42);
-    const [url, opts] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/v1/application-document-upload-proxy?id=42");
-    expect(opts.method).toBe("DELETE");
-    expect(opts.headers.Authorization).toBe("Bearer abc-token");
-  });
-
   // ─── saveApplicationDraft normalization ───────────────────────────
 
   it("saveApplicationDraft normalizes response with default success message when data has id", async () => {

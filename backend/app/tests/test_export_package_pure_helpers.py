@@ -22,8 +22,7 @@ import pytest
 
 from app.services.export_package_service import (
     _sanitize_filename,
-    _ext_for_application_document,
-    _application_document_entry,
+    _label_for_file_type,
     _fetch_and_write,
     FILE_TYPE_LABELS,
     DEGREE_LABELS,
@@ -169,72 +168,34 @@ class TestDegreeLabels:
             assert isinstance(key, str), f"DEGREE_LABELS key {key!r} is not str"
 
 
-class TestExtForApplicationDocument:
-    """Pin: extension derivation for the student-uploaded 申請文件.
-    Prefers the original filename's extension, falls back to the
-    stored MinIO object name's suffix."""
+class TestLabelForFileType:
+    """Pin: ZIP filename labels. Fixed types map through
+    FILE_TYPE_LABELS; admin-configured dynamic document types keep
+    their configured name (the ApplicationFile file_type IS the
+    configured document_name) so each configured document stays
+    identifiable in the export."""
 
-    def test_uses_original_filename_extension(self):
-        assert _ext_for_application_document("申請文件.pdf", "application-documents/12_x.pdf") == ".pdf"
+    def test_fixed_type_maps_to_zh_label(self):
+        assert _label_for_file_type("transcript") == "成績單"
 
-    def test_original_filename_extension_wins_over_object_name(self):
-        assert _ext_for_application_document("draft.docx", "application-documents/12_x.pdf") == ".docx"
+    def test_dynamic_custom_type_keeps_its_configured_name(self):
+        # An admin-defined dynamic document (e.g. 語言檢定證明) is not in
+        # FILE_TYPE_LABELS — the export must keep the configured name,
+        # NOT collapse it into 其他文件.
+        assert _label_for_file_type("語言檢定證明") == "語言檢定證明"
 
-    def test_falls_back_to_object_name_when_no_original(self):
-        assert _ext_for_application_document(None, "application-documents/12_x.pdf") == ".pdf"
+    def test_other_maps_to_generic_label(self):
+        assert _label_for_file_type("other") == "其他文件"
 
-    def test_empty_original_falls_back_to_object_name(self):
-        assert _ext_for_application_document("", "application-documents/12_x.pdf") == ".pdf"
-
-    def test_returns_empty_when_no_extension_anywhere(self):
-        assert _ext_for_application_document("noext", "application-documents/12_x") == ""
-
-    def test_directory_dot_not_mistaken_for_extension(self):
-        # A dot in a directory segment must not be treated as the
-        # file extension — only the last path segment counts.
-        assert _ext_for_application_document(None, "v1.2/objectname") == ""
-
-
-class TestApplicationDocumentEntry:
-    """Pin: descriptor for placing the student-uploaded 申請文件 into
-    the ZIP. Returns None when the application has no 申請文件."""
-
-    def test_returns_none_when_no_object_name(self):
-        assert _application_document_entry(None, "x.pdf", "117_資工系", "310_王小明") is None
-
-    def test_returns_none_when_object_name_empty(self):
-        assert _application_document_entry("", "x.pdf", "117_資工系", "310_王小明") is None
-
-    def test_builds_entry_with_expected_paths(self):
-        entry = _application_document_entry(
-            "application-documents/12_x.pdf",
-            "申請文件.pdf",
-            "117_資工系",
-            "310_王小明",
-        )
-        assert entry == {
-            "object_name": "application-documents/12_x.pdf",
-            "zip_path": "117_資工系/310_王小明_申請文件.pdf",
-            "error_path": "117_資工系/_錯誤_找不到檔案_申請文件.txt",
-            "error_label": "申請文件.pdf",
-        }
-
-    def test_error_label_falls_back_to_object_name(self):
-        entry = _application_document_entry("application-documents/12_x.pdf", None, "117_資工系", "310_王小明")
-        assert entry["error_label"] == "application-documents/12_x.pdf"
-
-    def test_zip_filename_is_sanitized(self):
-        # A student name containing a path separator must not escape
-        # the student folder (ZIP path-traversal guard).
-        entry = _application_document_entry("application-documents/12_x.pdf", "x.pdf", "117_資工系", "310_a/b")
-        assert "/" not in entry["zip_path"].rsplit("/", 1)[-1]
+    def test_empty_type_maps_to_generic_label(self):
+        assert _label_for_file_type("") == "其他文件"
 
 
 class TestFetchAndWrite:
-    """Pin: the shared MinIO fetch-and-write used by both the
-    app.files loop and the 申請文件. On success the bytes land at
-    zip_path; on any MinIO error a placeholder .txt lands at
-    error_path instead (the ZIP build never aborts)."""
+    """Pin: the shared MinIO fetch-and-write used by the app.files
+    loop. On success the bytes land at zip_path; on any MinIO error
+    a placeholder .txt lands at error_path instead (the ZIP build
+    never aborts)."""
 
     def test_success_writes_bytes_and_releases_connection(self):
         import asyncio
