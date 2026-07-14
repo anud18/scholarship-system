@@ -248,6 +248,30 @@ async def test_finalize_blocked_when_allocated_subtype_rejected(db: AsyncSession
 
 
 @pytest.mark.asyncio
+async def test_allocate_blocked_when_rejected_with_mixed_case(db: AsyncSession):
+    # Sub-type codes are free-form strings — the gate must normalize BOTH the
+    # stored review code and the allocation input before comparing.
+    service, item_id, sch_id = await _setup(db, suffix="rejcase", requires_prof=False, rejected_sub_types=["NSTC"])
+    with pytest.raises(ValueError, match="不同意"):
+        await service._validate_allocations(sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": "nstc "}])
+
+
+@pytest.mark.asyncio
+async def test_restore_allocation_blocked_when_subtype_rejected(db: AsyncSession):
+    # A reviewer reject recorded while the application was suspended must not
+    # be overridden by the admin restore (復發) path.
+    service, item_id, sch_id = await _setup(
+        db, suffix="rejreaffirm", rejected_sub_types=["nstc"], allocated_sub_type="nstc"
+    )
+    item = await db.get(CollegeRankingItem, item_id)
+    app = await db.get(Application, item.application_id)
+    app.quota_allocation_status = "suspended"
+    await db.commit()
+    with pytest.raises(ValueError, match="不同意"):
+        await service.restore_allocation(app.id, admin_user_id=1)
+
+
+@pytest.mark.asyncio
 async def test_restore_skips_rejected_subtype(db: AsyncSession):
     # A history snapshot predating the reject must not re-allocate it.
     service, item_id, sch_id = await _setup(db, suffix="rejrestore", rejected_sub_types=["nstc"])
