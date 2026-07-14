@@ -23,6 +23,7 @@ permissions:
 
 env:
   NODE_VERSION: '22'
+  BUN_VERSION: '1.3.11'
   PYTHON_VERSION: '3.13'
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
@@ -126,19 +127,30 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('frontend/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
 
       - name: Install frontend dependencies
         working-directory: ./frontend
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       # Generate types
       - name: Generate OpenAPI types
         working-directory: ./frontend
         run: |
           echo "🚀 Generating TypeScript types from OpenAPI schema..."
-          npm run api:generate
+          bun run api:generate
 
       # Check for differences
       - name: Check if types are up-to-date
@@ -151,7 +163,7 @@ jobs:
             echo ""
             echo "The OpenAPI schema has changed. Please run the following locally:"
             echo "  cd frontend"
-            echo "  npm run api:generate"
+            echo "  bun run api:generate"
             echo ""
             echo "Then commit the updated types:"
             echo "  git add lib/api/generated/schema.d.ts"
@@ -167,7 +179,7 @@ jobs:
         working-directory: ./frontend
         run: |
           echo "🔍 Running TypeScript type checker..."
-          npm run type-check
+          bun run type-check
 
       # Cleanup
       - name: Stop backend server
@@ -194,7 +206,7 @@ jobs:
             **To fix this:**
             \`\`\`bash
             cd frontend
-            npm run api:generate
+            bun run api:generate
             git add lib/api/generated/schema.d.ts
             git commit -m 'chore: update API types'
             git push
@@ -218,16 +230,27 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('frontend/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
 
       - name: Install dependencies
         working-directory: ./frontend
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Build frontend
         working-directory: ./frontend
-        run: npm run build
+        run: bun run build
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8000
 

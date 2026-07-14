@@ -13,6 +13,7 @@ concurrency:
 
 env:
   NODE_VERSION: '22'
+  BUN_VERSION: '1.3.11'
   PYTHON_VERSION: '3.13'
   REGISTRY: ghcr.io
   USER: ${{ github.repository_owner }}
@@ -110,13 +111,28 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
 
+      # Bun installs dependencies; Node (pinned via setup-node) still runs the
+      # toolchain binaries (next/eslint/jest shebangs are node).
       - name: Setup Node.js (if needed)
         if: matrix.check == 'frontend-lint' || matrix.check == 'dependency-check'
         uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Bun (if needed)
+        if: matrix.check == 'frontend-lint' || matrix.check == 'dependency-check'
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache Bun dependencies (if needed)
+        if: matrix.check == 'frontend-lint' || matrix.check == 'dependency-check'
+        uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('frontend/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
 
       - name: Backend Lint & Format Check
         if: matrix.check == 'backend-lint' && needs.changes.outputs.backend == 'true'
@@ -184,12 +200,12 @@ jobs:
         # frontend-lint gate could NEVER fail — lint errors sailed through
         # green. Lint is clean today; keep it hard-gated.
         run: |
-          npm ci
-          npm run lint
+          bun install --frozen-lockfile
+          bun run lint
 
       - name: Dependency Vulnerability Check
         if: matrix.check == 'dependency-check'
-        # npm audit is HARD-gated at high severity: a high/critical advisory in
+        # bun audit is HARD-gated at high severity: a high/critical advisory in
         # the dependency tree fails this job. (It used to end in `|| true`,
         # which made the whole check structurally incapable of failing.)
         # safety stays warn-only: it needs network/API access that is flaky on
@@ -203,7 +219,7 @@ jobs:
                 || echo "::warning title=safety::safety check reported issues (warn-only)"
             fi
             if [[ -f "frontend/package.json" ]]; then
-              cd frontend && npm audit --audit-level=high
+              cd frontend && bun install --frozen-lockfile && bun audit --audit-level=high
             fi
           fi
 
@@ -432,28 +448,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      # Bun installs dependencies; jest itself still executes on Node
+      # (pinned via setup-node), so test behavior is unchanged.
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
 
-      - name: Cache npm dependencies
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache Bun dependencies
         uses: actions/cache@v5
         with:
-          path: ~/.npm
-          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('frontend/bun.lock') }}
           restore-keys: |
-            ${{ runner.os }}-npm-
+            ${{ runner.os }}-bun-
 
       - name: Install dependencies
         working-directory: ./frontend
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Run frontend tests
         working-directory: ./frontend
-        run: npm run test:ci
+        run: bun run test:ci
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -525,8 +546,19 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('frontend/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
 
       - name: Bring up docker-compose.dev.yml
         # Best-effort bringup. The compose file references private GHCR
@@ -584,18 +616,18 @@ jobs:
           # docker compose up --build (above) can leave behind a
           # node_modules tree owned by the in-container root user when
           # the bind-mount + anonymous-volume interplay misbehaves on
-          # the runner. Subsequent host-level `npm ci` then trips with
-          # EACCES on a random transitive dep (we've seen @adobe).
+          # the runner. Subsequent host-level `bun install` then trips
+          # with EACCES on a random transitive dep (we've seen @adobe).
           # Re-take ownership before installing — no-op if the dir is
           # already runner-owned or doesn't exist.
           sudo chown -R "$(id -u):$(id -g)" node_modules 2>/dev/null || true
-          npm ci
-          npx playwright install --with-deps chromium
+          bun install --frozen-lockfile
+          bunx playwright install --with-deps chromium
 
       - name: Run @smoke specs
         if: env.READY == '1'
         working-directory: ./frontend
-        run: npx playwright test --grep=@smoke
+        run: bunx playwright test --grep=@smoke
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:3000
 

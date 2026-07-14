@@ -146,9 +146,9 @@ When adding new type assertions:
 Run the full test suite to verify type safety:
 
 ```bash
-npm run type-check  # TypeScript compilation
-npm test            # All 377 tests
-npm run lint        # ESLint validation
+bun run type-check  # TypeScript compilation
+bun run test            # All 377 tests
+bun run lint        # ESLint validation
 ```
 
 All three should pass with zero errors.
@@ -165,7 +165,7 @@ All three should pass with zero errors.
 Regenerate TypeScript types from backend OpenAPI schema:
 
 ```bash
-npm run api:generate  # Requires backend running on localhost:8000
+bun run api:generate  # Requires backend running on localhost:8000
 ```
 
 ---
