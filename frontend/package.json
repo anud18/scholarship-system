@@ -4,7 +4,7 @@
   "private": true,
   "engines": {
     "node": ">=22",
-    "npm": ">=10"
+    "bun": ">=1.2"
   },
   "scripts": {
     "copy-pdf-worker": "node scripts/copy-pdf-worker.mjs",
@@ -22,7 +22,7 @@
     "test:watch": "jest --watch",
     "test:debug": "node --inspect-brk node_modules/.bin/jest --runInBand",
     "test:api": "node test-api-connection.js",
-    "dev:safe": "npm run test:api && npm run dev",
+    "dev:safe": "bun run test:api && bun run dev",
     "type-check": "tsc --noEmit --skipLibCheck",
     "api:generate": "openapi-typescript http://localhost:8000/api/v1/openapi.json -o ./lib/api/generated/schema.d.ts",
     "api:watch": "openapi-typescript http://localhost:8000/api/v1/openapi.json -o ./lib/api/generated/schema.d.ts --watch",
@@ -128,13 +128,8 @@
     "whatwg-fetch": "^3.6.20"
   },
   "overrides": {
-    "@react-email/preview-server": {
-      "next": "15.5.18",
-      "postcss": "$postcss"
-    },
-    "next": {
-      "postcss": "$postcss"
-    },
+    "next": "15.5.18",
+    "postcss": "^8.5.10",
     "@isaacs/brace-expansion": ">=5.0.1",
     "glob": ">=13.0.2",
     "test-exclude": "^8.0.0",

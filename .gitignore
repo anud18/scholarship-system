@@ -187,8 +187,9 @@ docs/staging-tests/**/*
 !docs/staging-tests/.gitkeep
 !docs/staging-tests/README.md
 
-# npm-managed repo — never commit bun lockfile or test report artifacts
-frontend/bun.lock
+# bun-managed repo (bun.lock is the single committed lockfile) — never
+# commit npm lockfiles or test report artifacts
+frontend/package-lock.json
 frontend/junit.xml
 # claude 
 .claude/worktrees/

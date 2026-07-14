@@ -17,11 +17,11 @@
  *   | asserted otherwise                                    |          |                                                                            |
  *
  * The dev's loop:
- *   npm run e2e
+ *   bun run e2e
  *   → on failure read attached backend-logs.txt + db-state.json
  *   → classify per the table
  *   → patch the right layer
- *   → npm run e2e -- specs/<file>.spec.ts until green
+ *   → bun run e2e -- specs/<file>.spec.ts until green
  *
  * Never silence an assertion to make it pass.
  */

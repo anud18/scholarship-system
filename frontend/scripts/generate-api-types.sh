@@ -72,7 +72,7 @@ if [[ "$CI_MODE" == "true" ]]; then
     echo "❌ Error: Generated types differ from committed types!"
     echo ""
     echo "The OpenAPI schema has changed. Please run:"
-    echo "  npm run api:generate"
+    echo "  bun run api:generate"
     echo ""
     echo "Then commit the updated types:"
     echo "  git add lib/api/generated/schema.d.ts"

@@ -381,7 +381,7 @@ After modifying backend schemas or endpoints:
 
 ```bash
 # Ensure backend is running
-cd frontend && npm run api:generate
+cd frontend && bun run api:generate
 git add lib/api/generated/schema.d.ts
 ```
 
@@ -557,13 +557,13 @@ python -m pytest app/tests/test_auth.py -v
 
 ```bash
 # Run all frontend tests
-cd frontend && npm run test:ci
+cd frontend && bun run test:ci
 
 # Watch mode for development
-npm run test:watch
+bun run test:watch
 
 # Debug mode
-npm run test:debug
+bun run test:debug
 ```
 
 ### Performance Testing
@@ -691,7 +691,7 @@ if ".." in filename or "/" in filename or "\\" in filename:
 ### 6. OpenAPI Type Generation
 After schema changes:
 ```bash
-cd frontend && npm run api:generate
+cd frontend && bun run api:generate
 ```
 
 ## Documentation
@@ -735,7 +735,7 @@ cd frontend && npm run api:generate
 
 5. **Type Generation**: If modifying schemas:
    ```bash
-   cd frontend && npm run api:generate
+   cd frontend && bun run api:generate
    ```
 
 6. **Commit**: Use English commit messages

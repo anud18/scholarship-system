@@ -430,7 +430,7 @@ Migration `6b5cb44d2fe3` creates the `application_sequences` table and initializ
 **When modifying API endpoints/schemas**, regenerate TypeScript types to maintain type safety:
 
 ```bash
-cd frontend && npm run api:generate
+cd frontend && bun run api:generate
 git add lib/api/generated/schema.d.ts
 ```
 
