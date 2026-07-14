@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.application import Application
+from app.models.review import ApplicationReview, ApplicationReviewItem
 from app.models.enums import ApplicationStatus, ReviewStage
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User
@@ -220,6 +221,57 @@ async def test_does_not_approve_not_yet_reviewed(
     refreshed = await db.scalar(select(Application).where(Application.id == in_flight.id))
     assert refreshed.status == ApplicationStatus.under_review
     assert refreshed.review_stage == ReviewStage.professor_review
+
+
+@pytest.mark.asyncio
+async def test_skips_renewal_whose_subtype_was_rejected_in_review(
+    db: AsyncSession,
+    test_user: User,
+    test_scholarship: ScholarshipType,
+):
+    """A renewal at the terminal stage whose sub_scholarship_type carries a
+    reviewer reject (不同意) must NOT be auto-approved — it stays under_review
+    and is reported in skipped_rejected_ids (rejection gate, 回發 leak path)."""
+    config = _make_config(test_scholarship.id, requires_college_review=True)
+    db.add(config)
+    await db.commit()
+
+    rejected_app = await _make_application(
+        db,
+        user=test_user,
+        scholarship_type=test_scholarship,
+        is_renewal=True,
+        status=ApplicationStatus.under_review,
+        review_stage=ReviewStage.college_reviewed,
+        app_id_suffix="00030",
+    )
+    review = ApplicationReview(
+        application_id=rejected_app.id,
+        reviewer_id=test_user.id,
+        recommendation="reject",
+        reviewed_at=datetime.now(timezone.utc),
+    )
+    db.add(review)
+    await db.commit()
+    await db.refresh(review)
+    # Mixed case on purpose: the gate must normalize both sides.
+    db.add(
+        ApplicationReviewItem(review_id=review.id, sub_type_code="General", recommendation="reject", comments="不同意")
+    )
+    await db.commit()
+
+    service = RenewalDistributionService(db)
+    result = await service.auto_approve_passed_reviews(
+        scholarship_type_id=test_scholarship.id,
+        academic_year=CURRENT_ACADEMIC_YEAR,
+    )
+
+    assert result["approved_count"] == 0
+    assert result["skipped_rejected_ids"] == [rejected_app.id]
+
+    refreshed = await db.scalar(select(Application).where(Application.id == rejected_app.id))
+    assert refreshed.status == ApplicationStatus.under_review
+    assert refreshed.review_stage == ReviewStage.college_reviewed
 
 
 # Touched at import-time so unused-import linters don't strip the helper alias.

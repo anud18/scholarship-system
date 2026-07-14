@@ -911,12 +911,14 @@ class ManualDistributionService:
             and item.is_allocated
             and item.allocated_sub_type
         ]
-        rejected_map = await self._batch_load_rejected_map([app.id for _, app in finalizable])
-        rejected_violations = [
-            f"{app.app_id} → {item.allocated_sub_type}"
-            for item, app in finalizable
-            if _norm_sub_type(item.allocated_sub_type) in rejected_map.get(app.id, set())
-        ]
+        rejected_map = await self._batch_load_rejected_map(list({app.id for _, app in finalizable}))
+        rejected_violations = list(
+            dict.fromkeys(
+                f"{app.app_id} → {item.allocated_sub_type}"
+                for item, app in finalizable
+                if _norm_sub_type(item.allocated_sub_type) in rejected_map.get(app.id, set())
+            )
+        )
         if rejected_violations:
             raise ValueError(
                 "以下核配之子類型審核不同意，無法確認分發，請先取消該勾選：" + "、".join(rejected_violations)
@@ -1221,12 +1223,14 @@ class ManualDistributionService:
 
         # Layer 1 — rejection gate (unconditional, no exemptions): mirrors the
         # disabled checkbox in the UI so a crafted request can't bypass it.
-        rejected = await self._batch_load_rejected_map([app.id for _, app in resolved])
-        rejected_violations = [
-            f"{app.app_id} → {alloc['sub_type_code']}"
-            for alloc, app in resolved
-            if _norm_sub_type(alloc["sub_type_code"]) in rejected.get(app.id, set())
-        ]
+        rejected = await self._batch_load_rejected_map(list({app.id for _, app in resolved}))
+        rejected_violations = list(
+            dict.fromkeys(
+                f"{app.app_id} → {alloc['sub_type_code']}"
+                for alloc, app in resolved
+                if _norm_sub_type(alloc["sub_type_code"]) in rejected.get(app.id, set())
+            )
+        )
         if rejected_violations:
             raise ValueError("以下分發之子類型審核不同意，無法分發：" + "、".join(rejected_violations))
 
