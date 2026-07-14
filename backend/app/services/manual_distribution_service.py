@@ -1115,7 +1115,7 @@ class ManualDistributionService:
         to_restore: list[tuple[CollegeRankingItem, dict[str, Any]]] = []
         if wanted:
             items_result = await self.db.execute(
-                select(CollegeRankingItem).where(CollegeRankingItem.id.in_(wanted.keys()))
+                select(CollegeRankingItem).where(CollegeRankingItem.id.in_(list(wanted.keys())))
             )
             to_restore = [(item, wanted[item.id]) for item in items_result.scalars().all()]
 

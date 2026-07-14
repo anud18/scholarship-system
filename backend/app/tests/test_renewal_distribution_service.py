@@ -272,7 +272,3 @@ async def test_skips_renewal_whose_subtype_was_rejected_in_review(
     refreshed = await db.scalar(select(Application).where(Application.id == rejected_app.id))
     assert refreshed.status == ApplicationStatus.under_review
     assert refreshed.review_stage == ReviewStage.college_reviewed
-
-
-# Touched at import-time so unused-import linters don't strip the helper alias.
-_ = datetime.now(timezone.utc)
