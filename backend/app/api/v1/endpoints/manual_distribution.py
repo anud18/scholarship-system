@@ -377,9 +377,12 @@ async def restore_from_history(
         )
 
         await db.commit()
+        message = f"Restored {restore_result['restored_count']} allocations from history"
+        if restore_result.get("skipped_rejected"):
+            message += f" ({restore_result['skipped_rejected']} skipped: sub-type rejected in review)"
         return {
             "success": True,
-            "message": f"Restored {restore_result['restored_count']} allocations from history",
+            "message": message,
             "data": restore_result,
         }
     except ValueError as e:

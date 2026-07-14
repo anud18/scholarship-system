@@ -157,6 +157,8 @@ export interface RestoreRequest {
 
 export interface RestoreResult {
   restored_count: number;
+  /** Snapshot rows NOT restored because the sub-type was rejected (不同意) in review. */
+  skipped_rejected: number;
 }
 
 export interface RosterSummary {

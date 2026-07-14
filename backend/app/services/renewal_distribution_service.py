@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.application import Application
 from app.models.enums import ApplicationStatus, ReviewStage
 from app.models.scholarship import ScholarshipConfiguration
+from app.services.manual_distribution_service import _norm_sub_type, load_rejected_subtype_map
 
 
 class RenewalDistributionService:
@@ -89,6 +90,11 @@ class RenewalDistributionService:
             - review_stage in terminal stages (per configuration)
             - scholarship_type_id / academic_year as supplied
 
+        Applications whose sub_scholarship_type carries a reviewer reject
+        (不同意) are excluded and reported as skipped — the rejection gate is
+        unconditional across every distribution writer, and a rejected renewal
+        can reach a terminal stage here via the admin 回發 override path.
+
         Side effects:
             - Updates matched applications:
                 status = approved
@@ -99,6 +105,7 @@ class RenewalDistributionService:
             {
               "approved_count": int,
               "approved_ids": List[int],
+              "skipped_rejected_ids": List[int],
             }
         """
         terminal_stages = await self._resolve_terminal_stages(
@@ -112,27 +119,42 @@ class RenewalDistributionService:
         if ReviewStage.student_submitted in terminal_stages:
             eligible_statuses.append(ApplicationStatus.submitted)
 
-        stmt = (
-            update(Application)
-            .where(
-                Application.scholarship_type_id == scholarship_type_id,
-                Application.academic_year == academic_year,
-                Application.is_renewal.is_(True),
-                Application.status.in_(eligible_statuses),
-                Application.review_stage.in_(terminal_stages),
-            )
-            .values(
-                status=ApplicationStatus.approved,
-                review_stage=ReviewStage.quota_distributed,
-            )
-            .returning(Application.id)
-            .execution_options(synchronize_session="fetch")
+        candidate_filters = (
+            Application.scholarship_type_id == scholarship_type_id,
+            Application.academic_year == academic_year,
+            Application.is_renewal.is_(True),
+            Application.status.in_(eligible_statuses),
+            Application.review_stage.in_(terminal_stages),
         )
-        result = await self.db.execute(stmt)
-        approved_ids = [row[0] for row in result.all()]
+
+        candidates = (
+            await self.db.execute(select(Application.id, Application.sub_scholarship_type).where(*candidate_filters))
+        ).all()
+        rejected_map = await load_rejected_subtype_map(self.db, [app_id for app_id, _ in candidates])
+        skipped_rejected_ids = [
+            app_id for app_id, sub_type in candidates if _norm_sub_type(sub_type) in rejected_map.get(app_id, set())
+        ]
+        skipped_set = set(skipped_rejected_ids)
+
+        approved_ids: List[int] = []
+        approvable_ids = [app_id for app_id, _ in candidates if app_id not in skipped_set]
+        if approvable_ids:
+            stmt = (
+                update(Application)
+                .where(Application.id.in_(approvable_ids), *candidate_filters)
+                .values(
+                    status=ApplicationStatus.approved,
+                    review_stage=ReviewStage.quota_distributed,
+                )
+                .returning(Application.id)
+                .execution_options(synchronize_session="fetch")
+            )
+            result = await self.db.execute(stmt)
+            approved_ids = [row[0] for row in result.all()]
         await self.db.commit()
 
         return {
             "approved_count": len(approved_ids),
             "approved_ids": approved_ids,
+            "skipped_rejected_ids": skipped_rejected_ids,
         }

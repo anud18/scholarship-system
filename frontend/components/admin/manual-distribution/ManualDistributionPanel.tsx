@@ -684,9 +684,12 @@ export function ManualDistributionPanel({
         { history_id: historyId }
       );
       if (resp.success && resp.data) {
+        const skipped = resp.data.skipped_rejected ?? 0;
         setSaveMessage({
           type: "success",
-          text: `成功還原 ${resp.data.restored_count} 筆分配紀錄`,
+          text:
+            `成功還原 ${resp.data.restored_count} 筆分配紀錄` +
+            (skipped > 0 ? `（${skipped} 筆因審核不同意已略過）` : ""),
         });
         setShowHistoryDialog(false);
         await reloadServerSnapshot();
@@ -1367,8 +1370,11 @@ export function ManualDistributionPanel({
                                     student.applied_sub_types.includes(
                                       col.sub_type
                                     );
+                                  // rejected_sub_types arrive lowercased from
+                                  // the backend; normalize the config key so
+                                  // case-differing sub-type codes still match.
                                   const isRejected = rejectedSubTypes.includes(
-                                    col.sub_type
+                                    col.sub_type.toLowerCase().trim()
                                   );
                                   const isChecked =
                                     curAlloc?.sub_type === col.sub_type &&
@@ -1393,9 +1399,15 @@ export function ManualDistributionPanel({
                                   // revert any tick made mid-request.
                                   const isMutating =
                                     isSaving || isFinalizing || isRestoring;
+                                  // A rejected sub-type can't be (re)checked,
+                                  // but a cell that is ALREADY checked must
+                                  // stay clickable so the admin can uncheck it
+                                  // — finalize hard-blocks rejected
+                                  // allocations with 「請先取消該勾選」, which
+                                  // would deadlock against a disabled cell.
                                   const disabled =
                                     !isApplied ||
-                                    isRejected ||
+                                    (isRejected && !isChecked) ||
                                     atCapacity ||
                                     isFallbackColumn ||
                                     isCancelled ||
@@ -1428,7 +1440,9 @@ export function ManualDistributionPanel({
                                             : !isApplied
                                               ? `未申請 ${col.display_name}`
                                               : isRejected
-                                                ? `教授不推薦 ${col.display_name}`
+                                                ? isChecked
+                                                  ? `審核不同意 ${col.display_name}，請取消勾選`
+                                                  : `審核不同意（不推薦）${col.display_name}`
                                                 : atCapacity
                                                   ? `${col.display_name} 名額已滿`
                                                   : isChecked

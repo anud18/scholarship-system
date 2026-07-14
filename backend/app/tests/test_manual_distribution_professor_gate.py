@@ -1,10 +1,16 @@
-"""Tests for the professor-approval gate on manual distribution.
+"""Tests for the professor-review gates on manual distribution.
 
-Rule (用戶需求): 分發時一定要教授有同意「那個」子類型才能被分發到。
-Enforced in ManualDistributionService._validate_allocations (called first by
-allocate()), so a violation blocks the whole allocate() call before any mutation.
+Rules (用戶需求):
+  1. 分發時一定要教授有同意「那個」子類型才能被分發到 (positive approval gate).
+  2. 教授審核「不同意」的子類型，分發時絕不可被分發到 (rejection gate).
 
-Exemptions:
+Both are enforced in ManualDistributionService._validate_allocations (called
+first by allocate()), so a violation blocks the whole allocate() call before
+any mutation. The rejection gate additionally guards finalize() (rejects may
+arrive after the allocation was saved) and restore_from_history() (a snapshot
+may predate the reject).
+
+Exemptions (positive approval gate ONLY — the rejection gate has none):
   - renewal applications (續領豁免)
   - scholarships that don't require a professor recommendation step
 """
@@ -33,10 +39,14 @@ async def _setup(
     is_renewal: bool = False,
     requires_prof: bool = True,
     approved_sub_types: list[str] | None = None,
+    rejected_sub_types: list[str] | None = None,
+    is_finalized: bool = False,
+    allocated_sub_type: str | None = None,
 ) -> tuple[ManualDistributionService, int, int]:
     """Build a student + scholarship config + application + ranking item, and
-    optionally a professor review approving the given sub-types.
+    optionally a professor review approving/rejecting the given sub-types.
 
+    ``is_finalized`` / ``allocated_sub_type`` prepare a finalize()-ready state.
     Returns (service, ranking_item_id, scholarship_type_id).
     """
     student = User(
@@ -96,18 +106,28 @@ async def _setup(
     await db.commit()
     await db.refresh(app)
 
-    if approved_sub_types:
+    if approved_sub_types or rejected_sub_types:
+        if not approved_sub_types:
+            overall = "reject"
+        elif rejected_sub_types:
+            overall = "partial_approve"
+        else:
+            overall = "approve"
         review = ApplicationReview(
             application_id=app.id,
             reviewer_id=professor.id,
-            recommendation="approve",
+            recommendation=overall,
             reviewed_at=datetime.now(timezone.utc),
         )
         db.add(review)
         await db.commit()
         await db.refresh(review)
-        for st in approved_sub_types:
+        for st in approved_sub_types or []:
             db.add(ApplicationReviewItem(review_id=review.id, sub_type_code=st, recommendation="approve"))
+        for st in rejected_sub_types or []:
+            db.add(
+                ApplicationReviewItem(review_id=review.id, sub_type_code=st, recommendation="reject", comments="不同意")
+            )
         await db.commit()
 
     ranking = CollegeRanking(
@@ -117,12 +137,18 @@ async def _setup(
         semester=SEM,
         total_applications=1,
         total_quota=5,
+        is_finalized=is_finalized,
     )
     db.add(ranking)
     await db.commit()
     await db.refresh(ranking)
 
     item = CollegeRankingItem(ranking_id=ranking.id, application_id=app.id, rank_position=1)
+    if allocated_sub_type:
+        item.is_allocated = True
+        item.allocated_sub_type = allocated_sub_type
+        item.allocation_config_id = cfg.id
+        item.status = "allocated"
     db.add(item)
     await db.commit()
     await db.refresh(item)
@@ -173,3 +199,87 @@ async def test_unallocate_is_never_blocked(db: AsyncSession):
     # sub_type_code=None means unallocate — must never be gated.
     service, item_id, sch_id = await _setup(db, suffix="unalloc", approved_sub_types=None)
     await service._validate_allocations(sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": None}])
+
+
+# --- Rejection gate (教授不同意 → 絕不可分發, no exemptions) ---
+
+
+@pytest.mark.asyncio
+async def test_allocate_blocked_when_professor_rejected_subtype(db: AsyncSession):
+    service, item_id, sch_id = await _setup(
+        db, suffix="rej", approved_sub_types=["nstc"], rejected_sub_types=["moe_1w"]
+    )
+    with pytest.raises(ValueError, match="不同意"):
+        await service._validate_allocations(
+            sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": "moe_1w"}]
+        )
+
+
+@pytest.mark.asyncio
+async def test_allocate_blocked_when_rejected_even_without_professor_step(db: AsyncSession):
+    # requires_professor_recommendation=False exempts the positive approval
+    # gate, but an explicit reject must still block.
+    service, item_id, sch_id = await _setup(db, suffix="rejnoprof", requires_prof=False, rejected_sub_types=["nstc"])
+    with pytest.raises(ValueError, match="不同意"):
+        await service._validate_allocations(sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": "nstc"}])
+
+
+@pytest.mark.asyncio
+async def test_allocate_blocked_when_rejected_for_renewal(db: AsyncSession):
+    # Renewal exemption applies to the positive approval gate only — an
+    # explicit reject still blocks a renewal allocation.
+    service, item_id, sch_id = await _setup(db, suffix="rejrenew", is_renewal=True, rejected_sub_types=["nstc"])
+    with pytest.raises(ValueError, match="不同意"):
+        await service._validate_allocations(sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": "nstc"}])
+
+
+@pytest.mark.asyncio
+async def test_finalize_blocked_when_allocated_subtype_rejected(db: AsyncSession):
+    # A reject that arrives AFTER the allocation was saved must block finalize.
+    service, _item_id, sch_id = await _setup(
+        db,
+        suffix="rejfin",
+        rejected_sub_types=["nstc"],
+        is_finalized=True,
+        allocated_sub_type="nstc",
+    )
+    with pytest.raises(ValueError, match="不同意"):
+        await service.finalize(sch_id, YEAR, SEM)
+
+
+@pytest.mark.asyncio
+async def test_allocate_blocked_when_rejected_with_mixed_case(db: AsyncSession):
+    # Sub-type codes are free-form strings — the gate must normalize BOTH the
+    # stored review code and the allocation input before comparing.
+    service, item_id, sch_id = await _setup(db, suffix="rejcase", requires_prof=False, rejected_sub_types=["NSTC"])
+    with pytest.raises(ValueError, match="不同意"):
+        await service._validate_allocations(sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": "nstc "}])
+
+
+@pytest.mark.asyncio
+async def test_restore_allocation_blocked_when_subtype_rejected(db: AsyncSession):
+    # A reviewer reject recorded while the application was suspended must not
+    # be overridden by the admin restore (復發) path.
+    service, item_id, sch_id = await _setup(
+        db, suffix="rejreaffirm", rejected_sub_types=["nstc"], allocated_sub_type="nstc"
+    )
+    item = await db.get(CollegeRankingItem, item_id)
+    app = await db.get(Application, item.application_id)
+    app.quota_allocation_status = "suspended"
+    await db.commit()
+    with pytest.raises(ValueError, match="不同意"):
+        await service.restore_allocation(app.id, admin_user_id=1)
+
+
+@pytest.mark.asyncio
+async def test_restore_skips_rejected_subtype(db: AsyncSession):
+    # A history snapshot predating the reject must not re-allocate it.
+    service, item_id, sch_id = await _setup(db, suffix="rejrestore", rejected_sub_types=["nstc"])
+    result = await service.restore_from_history(
+        sch_id,
+        YEAR,
+        SEM,
+        {str(item_id): {"sub_type": "nstc", "allocation_config_id": None, "status": "allocated"}},
+    )
+    assert result["restored_count"] == 0
+    assert result["skipped_rejected"] == 1
