@@ -102,9 +102,10 @@ class RenewalDistributionService:
         skipped_rejected_ids = [
             app_id for app_id, sub_type in candidates if _norm_sub_type(sub_type) in rejected_map.get(app_id, set())
         ]
+        skipped_set = set(skipped_rejected_ids)
 
         approved_ids: List[int] = []
-        approvable_ids = [app_id for app_id, _ in candidates if app_id not in set(skipped_rejected_ids)]
+        approvable_ids = [app_id for app_id, _ in candidates if app_id not in skipped_set]
         if approvable_ids:
             stmt = (
                 update(Application)
