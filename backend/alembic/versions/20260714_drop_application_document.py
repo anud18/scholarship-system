@@ -37,7 +37,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    existing = _existing_columns(op.get_bind())
+    bind = op.get_bind()
+    if "applications" not in sa.inspect(bind).get_table_names():
+        return
+    existing = _existing_columns(bind)
     if "application_document_url" not in existing:
         op.add_column("applications", sa.Column("application_document_url", sa.String(500), nullable=True))
     if "application_document_original_filename" not in existing:
