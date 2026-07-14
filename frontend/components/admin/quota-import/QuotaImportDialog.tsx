@@ -53,7 +53,7 @@ export function QuotaImportDialog({
               <tr>
                 <th className="border p-1 text-left">子類型＼學院</th>
                 {knownColleges.map(c => (
-                  <th key={c.code} className="border p-1">{c.code}</th>
+                  <th key={c.code} className="border p-1">{c.name || c.code}</th>
                 ))}
               </tr>
             </thead>

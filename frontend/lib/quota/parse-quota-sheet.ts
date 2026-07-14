@@ -135,7 +135,7 @@ export function parseQuotaSheet(
     for (const c of knownColleges) {
       const before = currentQuotas?.[s.code]?.[c.code] ?? 0;
       if (before > 0 && quotas[s.code][c.code] === 0) {
-        warnings.push({ kind: "zeroed", severity: "warning", message: `此匯入會將 ${s.code}/${c.code} 由 ${before} 歸零` });
+        warnings.push({ kind: "zeroed", severity: "warning", message: `此匯入會將 ${s.label || s.code}/${c.name || c.code} 由 ${before} 歸零` });
       }
     }
   }

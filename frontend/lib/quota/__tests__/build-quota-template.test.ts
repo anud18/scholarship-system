@@ -17,9 +17,9 @@ describe("buildQuotaMatrixRows", () => {
     expect(parsed).toEqual(quotas);
   });
 
-  it("emits a header row of college codes and pre-fills 0 for missing cells", () => {
+  it("emits a header row of college names and pre-fills 0 for missing cells", () => {
     const rows = buildQuotaMatrixRows({ nstc: { C: 9 } }, COLLEGES, SUBTYPES);
-    expect(rows[0].slice(1)).toEqual(["C", "E"]);
+    expect(rows[0].slice(1)).toEqual(["資訊", "電機"]);
     expect(rows[1]).toEqual(["nstc", 9, 0]);
     expect(rows[2]).toEqual(["moe_1w", 0, 0]);
   });

@@ -8,7 +8,9 @@ export function buildQuotaMatrixRows(
   knownColleges: KnownCollege[],
   knownSubTypes: KnownSubType[],
 ): (string | number)[][] {
-  const header: (string | number)[] = [CORNER_LABEL, ...knownColleges.map(c => c.code)];
+  // Header shows the Chinese college name (falling back to code). parseQuotaSheet
+  // resolves a header by code OR name OR nameEn, so this stays round-trip safe.
+  const header: (string | number)[] = [CORNER_LABEL, ...knownColleges.map(c => c.name || c.code)];
   const body = knownSubTypes.map(s => [
     s.code,
     ...knownColleges.map(c => quotas?.[s.code]?.[c.code] ?? 0),
