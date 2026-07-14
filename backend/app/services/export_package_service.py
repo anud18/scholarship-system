@@ -62,43 +62,19 @@ def _sanitize_filename(name: str) -> str:
     return re.sub(r'[/\\:*?"<>|]', "_", name).strip()
 
 
-def _ext_for_application_document(original_filename: Optional[str], object_name: str) -> str:
-    """Extension (with leading dot) for the student-uploaded 申請文件.
+def _label_for_file_type(file_type: str) -> str:
+    """Human label for an uploaded file's type in the ZIP filename.
 
-    Prefers the original filename's extension, falls back to the stored
-    object name's suffix. Only the last path segment is inspected, so a dot
-    in a directory name is never mistaken for an extension.
+    Fixed document types map through FILE_TYPE_LABELS; admin-configured
+    dynamic document types keep their configured name (the ApplicationFile
+    file_type IS the configured document_name) so each document stays
+    identifiable in the export instead of collapsing into 其他文件.
     """
-    for source in (original_filename, object_name):
-        if source:
-            last_segment = source.rsplit("/", 1)[-1]
-            if "." in last_segment:
-                return "." + last_segment.rsplit(".", 1)[1]
-    return ""
-
-
-def _application_document_entry(
-    object_name: Optional[str],
-    original_filename: Optional[str],
-    base_path: str,
-    student_prefix: str,
-) -> Optional[Dict[str, str]]:
-    """Describe where the student-uploaded 申請文件 goes in the ZIP.
-
-    Returns None when the application has no 申請文件. Otherwise returns the
-    kwargs for `_fetch_and_write`: the source object name, the sanitized ZIP
-    path, the error-placeholder path, and a human label for the error text.
-    """
-    if not object_name:
-        return None
-    ext = _ext_for_application_document(original_filename, object_name)
-    filename = _sanitize_filename(f"{student_prefix}_申請文件{ext}")
-    return {
-        "object_name": object_name,
-        "zip_path": f"{base_path}/{filename}",
-        "error_path": f"{base_path}/_錯誤_找不到檔案_申請文件.txt",
-        "error_label": original_filename or object_name,
-    }
+    if file_type in FILE_TYPE_LABELS:
+        return FILE_TYPE_LABELS[file_type]
+    if file_type and file_type != "other":
+        return file_type
+    return "其他文件"
 
 
 async def _fetch_and_write(
@@ -295,7 +271,7 @@ class ExportPackageService:
             ft = af.file_type or "other"
             file_type_counter[ft] += 1
             count = file_type_counter[ft]
-            label = FILE_TYPE_LABELS.get(ft, "其他文件")
+            label = _label_for_file_type(ft)
 
             # Determine file extension from original filename or mime_type
             ext = ""
@@ -319,17 +295,6 @@ class ExportPackageService:
                 error_path=f"{base_path}/_錯誤_找不到檔案_{_sanitize_filename(label)}.txt",
                 error_label=af.original_filename or af.object_name,
             )
-
-        # Student-uploaded 申請文件 — stored on the application itself,
-        # not as an ApplicationFile, so the app.files loop above misses it.
-        entry = _application_document_entry(
-            app.application_document_url,
-            app.application_document_original_filename,
-            base_path,
-            student_prefix,
-        )
-        if entry:
-            await _fetch_and_write(zf, self.minio, **entry)
 
     def _generate_summary_pdf(
         self,

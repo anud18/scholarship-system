@@ -82,18 +82,15 @@ describe("middleware framing for same-origin preview proxies", () => {
   }
 
   // ALL framable file-preview proxies now live under the single /api/v1/preview
-  // prefix. system-docs / supp-docs / application-document are the routes that
-  // previously sat outside the prefix and recurred the "refused to connect" bug —
-  // they are the core regression guard for the unification.
+  // prefix. system-docs / supp-docs are the routes that previously sat outside
+  // the prefix and recurred the "refused to connect" bug — they are the core
+  // regression guard for the unification.
   const PREVIEW_ROUTES = [
     "https://ss.test.nycu.edu.tw/api/v1/preview?fileId=1&applicationId=1&type=pdf",
     "https://ss.test.nycu.edu.tw/api/v1/preview/terms?scholarshipType=phd",
     "https://ss.test.nycu.edu.tw/api/v1/preview/examples?documentId=1",
     "https://ss.test.nycu.edu.tw/api/v1/preview/system-docs?key=regulations_url",
     "https://ss.test.nycu.edu.tw/api/v1/preview/supp-docs?id=1",
-    // numeric id — the application-document route validates /^\d+$/ and the caller
-    // passes the numeric application PK, so keep the test URL realistic.
-    "https://ss.test.nycu.edu.tw/api/v1/preview/application-document?id=87",
   ];
 
   it.each(PREVIEW_ROUTES)("prod: %s is framable same-origin (SAMEORIGIN + frame-ancestors 'self')", (url) => {

@@ -29,7 +29,7 @@ export function middleware(request: NextRequest) {
   // ALL same-origin file-preview proxies live under the single `/api/v1/preview`
   // namespace (the multiplexer at `/api/v1/preview` plus `/api/v1/preview/terms`,
   // `/api/v1/preview/examples`, `/api/v1/preview/system-docs`,
-  // `/api/v1/preview/supp-docs`, `/api/v1/preview/application-document`). They are
+  // `/api/v1/preview/supp-docs`). They are
   // rendered INSIDE an <iframe> by the app (file-preview-dialog,
   // application-detail-dialog, review dialogs, the student wizard, …). The global
   // clickjacking posture (`frame-ancestors 'none'` + `X-Frame-Options: DENY`)

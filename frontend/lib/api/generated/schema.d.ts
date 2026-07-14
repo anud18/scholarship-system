@@ -940,34 +940,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/applications/{application_id}/application-document": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Application Document File
-         * @description Stream the 申請文件 from MinIO. Owner or staff can access.
-         */
-        get: operations["get_application_document_file_api_v1_applications__application_id__application_document_get"];
-        put?: never;
-        /**
-         * Upload Application Document
-         * @description Upload 申請文件 for a specific application (student only, must own the application).
-         */
-        post: operations["upload_application_document_api_v1_applications__application_id__application_document_post"];
-        /**
-         * Delete Application Document
-         * @description Delete 申請文件 for a specific application.
-         */
-        delete: operations["delete_application_document_api_v1_applications__application_id__application_document_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/applications/{application_id}/document-requests": {
         parameters: {
             query?: never;
@@ -8345,10 +8317,6 @@ export interface components {
             updated_at: string;
             /** Meta Data */
             meta_data?: Record<string, never> | null;
-            /** Application Document Url */
-            application_document_url?: string | null;
-            /** Application Document Original Filename */
-            application_document_original_filename?: string | null;
             /**
              * Reviews
              * @default []
@@ -8695,14 +8663,6 @@ export interface components {
             new_quota: number;
             /** Academic Year */
             academic_year?: number | null;
-        };
-        /** Body_upload_application_document_api_v1_applications__application_id__application_document_post */
-        Body_upload_application_document_api_v1_applications__application_id__application_document_post: {
-            /**
-             * File
-             * Format: binary
-             */
-            file: string;
         };
         /** Body_upload_bank_document_file_api_v1_user_profiles_me_bank_document_file_post */
         Body_upload_bank_document_file_api_v1_user_profiles_me_bank_document_file_post: {
@@ -12520,103 +12480,6 @@ export interface operations {
             path: {
                 /** @description Application ID */
                 id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_application_document_file_api_v1_applications__application_id__application_document_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                application_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    upload_application_document_api_v1_applications__application_id__application_document_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                application_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["Body_upload_application_document_api_v1_applications__application_id__application_document_post"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_application_document_api_v1_applications__application_id__application_document_delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                application_id: number;
             };
             cookie?: never;
         };

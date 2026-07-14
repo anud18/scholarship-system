@@ -99,14 +99,6 @@ interface SubmittedDocumentPayload {
   document_id?: string;
 }
 
-// Fields the backend attaches to an Application row that aren't on the
-// canonical Application type (the application-level attached document — a
-// student-uploaded "main file" separate from the per-field documents).
-interface ApplicationDocumentAttachment {
-  application_document_url?: string;
-  application_document_original_filename?: string;
-}
-
 // Files in dynamicFileData are normalized to UploadedFileLike at restore time
 // (see line ~610), so we narrow the `isUploaded` check via a localized type.
 type FileWithUploadedFlag = File & { isUploaded?: boolean };
@@ -183,20 +175,7 @@ export function ScholarshipApplicationStep({
     filename: string;
     type: string;
   } | null>(null);
-  const [applicationDocumentFiles, setApplicationDocumentFiles] = useState<
-    File[]
-  >([]);
-  const [existingApplicationDocument, setExistingApplicationDocument] =
-    useState<string | null>(null);
-  const [existingApplicationDocumentName, setExistingApplicationDocumentName] =
-    useState<string>("");
   const savedApplicationIdRef = useRef<number | null>(null);
-  const [showAppDocPreview, setShowAppDocPreview] = useState(false);
-  const [appDocPreviewFile, setAppDocPreviewFile] = useState<{
-    url: string;
-    filename: string;
-    type: string;
-  } | null>(null);
 
   // Submit preview dialog
   const [showSubmitPreview, setShowSubmitPreview] = useState(false);
@@ -241,9 +220,6 @@ export function ScholarshipApplicationStep({
       documentUploaded: "已上傳文件",
       preview: "預覽",
       deleteBankDoc: "刪除",
-      applicationDocument: "申請文件",
-      applicationDocumentUploaded: "申請文件已上傳",
-      deleteAppDoc: "刪除",
       fileFormats: "支援格式：JPG, JPEG, PNG, PDF",
       fileSizeLimit: "檔案大小限制：10MB",
       savePersonalInfo: "儲存個人資料",
@@ -289,7 +265,6 @@ export function ScholarshipApplicationStep({
       // Toast messages
       documentDeleted: "文件已刪除",
       deleteFailed: "刪除失敗",
-      applicationDocumentDeleted: "申請文件已刪除",
       // Submit preview dialog
       submitPreview: {
         title: "申請資料預覽",
@@ -307,7 +282,6 @@ export function ScholarshipApplicationStep({
         postOfficeAccount: "郵局局號加帳號共 14 碼",
         uploadedDocuments: "上傳文件",
         passbookCover: "存摺封面",
-        applicationDocument: "申請文件",
         uploaded: "已上傳",
         notUploaded: "未上傳",
         pending: "待上傳",
@@ -350,9 +324,6 @@ export function ScholarshipApplicationStep({
       documentUploaded: "Document Uploaded",
       preview: "Preview",
       deleteBankDoc: "Delete",
-      applicationDocument: "Application Document",
-      applicationDocumentUploaded: "Application document uploaded",
-      deleteAppDoc: "Delete",
       fileFormats: "Supported formats: JPG, JPEG, PNG, PDF",
       fileSizeLimit: "File size limit: 10MB",
       savePersonalInfo: "Save Personal Info",
@@ -402,7 +373,6 @@ export function ScholarshipApplicationStep({
       // Toast messages
       documentDeleted: "Document deleted",
       deleteFailed: "Delete failed",
-      applicationDocumentDeleted: "Application document deleted",
       // Submit preview dialog
       submitPreview: {
         title: "Application Preview",
@@ -421,7 +391,6 @@ export function ScholarshipApplicationStep({
         postOfficeAccount: "Post Office Account",
         uploadedDocuments: "Uploaded Documents",
         passbookCover: "Passbook Cover",
-        applicationDocument: "Application Document",
         uploaded: "Uploaded",
         notUploaded: "Not uploaded",
         pending: "Pending",
@@ -554,29 +523,6 @@ export function ScholarshipApplicationStep({
     setShowBankDocPreview(true);
   };
 
-  const handlePreviewAppDocument = () => {
-    const appId = editingApplication?.id ?? savedApplicationIdRef.current;
-    if (!existingApplicationDocument || !appId) return;
-    const filename =
-      existingApplicationDocumentName ||
-      existingApplicationDocument.split("/").pop()?.split("?")[0] ||
-      "application_document";
-    const token = localStorage.getItem("auth_token") || "";
-    const cacheBuster = encodeURIComponent(filename);
-    const previewUrl = `/api/v1/preview/application-document?id=${appId}&token=${encodeURIComponent(token)}&v=${cacheBuster}`;
-    let fileTypeDisplay = "other";
-    if (filename.toLowerCase().endsWith(".pdf"))
-      fileTypeDisplay = "application/pdf";
-    else if (
-      [".jpg", ".jpeg", ".png"].some(ext =>
-        filename.toLowerCase().endsWith(ext)
-      )
-    )
-      fileTypeDisplay = "image";
-    setAppDocPreviewFile({ url: previewUrl, filename, type: fileTypeDisplay });
-    setShowAppDocPreview(true);
-  };
-
   const handleDeleteBankDocument = async () => {
     try {
       const response = await api.userProfiles.deleteBankDocument();
@@ -584,23 +530,6 @@ export function ScholarshipApplicationStep({
         toast.success(text.documentDeleted);
         setExistingBankDocument(null);
         await refreshProfile();
-      } else {
-        throw new Error(response.message || "Delete failed");
-      }
-    } catch (err: unknown) {
-      toast.error((err instanceof Error ? err.message : text.deleteFailed));
-    }
-  };
-
-  const handleDeleteAppDocument = async () => {
-    const appId = editingApplication?.id ?? savedApplicationIdRef.current;
-    if (!appId) return;
-    try {
-      const response = await api.applications.deleteApplicationDocument(appId);
-      if (response.success) {
-        toast.success(text.applicationDocumentDeleted);
-        setExistingApplicationDocument(null);
-        setExistingApplicationDocumentName("");
       } else {
         throw new Error(response.message || "Delete failed");
       }
@@ -727,16 +656,6 @@ export function ScholarshipApplicationStep({
           }
         });
         setDynamicFileData(existingFileData);
-      }
-
-      // Load application document
-      const editingApp = editingApplication as Application &
-        ApplicationDocumentAttachment;
-      if (editingApp.application_document_url) {
-        setExistingApplicationDocument(editingApp.application_document_url);
-        setExistingApplicationDocumentName(
-          editingApp.application_document_original_filename || ""
-        );
       }
 
       // Set agreed to terms
@@ -1012,26 +931,6 @@ export function ScholarshipApplicationStep({
           }
         }
 
-        // Upload application document if provided
-        if (applicationDocumentFiles.length > 0) {
-          const uploadedFile = applicationDocumentFiles[0];
-          const appDocResp = await api.applications.uploadApplicationDocument(
-            editingApplication.id,
-            uploadedFile
-          );
-          if (appDocResp.success) {
-            setExistingApplicationDocument(
-              appDocResp.data?.application_document_url || null
-            );
-            setExistingApplicationDocumentName(
-              (appDocResp.data as ApplicationDocumentAttachment | undefined)
-                ?.application_document_original_filename ||
-                uploadedFile.name
-            );
-            setApplicationDocumentFiles([]);
-          }
-        }
-
         toast.success(text.draftSaved);
       } else {
         // Create new draft
@@ -1044,26 +943,6 @@ export function ScholarshipApplicationStep({
           for (const [docType, files] of Object.entries(dynamicFileData)) {
             for (const file of files) {
               await uploadDocument(application.id, file, docType);
-            }
-          }
-
-          // Upload application document if provided
-          if (applicationDocumentFiles.length > 0) {
-            const uploadedFile = applicationDocumentFiles[0];
-            const appDocResp = await api.applications.uploadApplicationDocument(
-              application.id,
-              uploadedFile
-            );
-            if (appDocResp.success) {
-              setExistingApplicationDocument(
-                appDocResp.data?.application_document_url || null
-              );
-              setExistingApplicationDocumentName(
-                (appDocResp.data as ApplicationDocumentAttachment | undefined)
-                ?.application_document_original_filename ||
-                  uploadedFile.name
-              );
-              setApplicationDocumentFiles([]);
             }
           }
 
@@ -1157,14 +1036,6 @@ export function ScholarshipApplicationStep({
           }
         }
 
-        // Upload application document if provided
-        if (applicationDocumentFiles.length > 0) {
-          await api.applications.uploadApplicationDocument(
-            editingApplication.id,
-            applicationDocumentFiles[0]
-          );
-          setApplicationDocumentFiles([]);
-        }
       } else {
         // Create new application
         const application = await createApplication(applicationData, true);
@@ -1182,14 +1053,6 @@ export function ScholarshipApplicationStep({
           }
         }
 
-        // Upload application document if provided
-        if (applicationDocumentFiles.length > 0) {
-          await api.applications.uploadApplicationDocument(
-            applicationId,
-            applicationDocumentFiles[0]
-          );
-          setApplicationDocumentFiles([]);
-        }
       }
 
       // Submit application
@@ -1660,6 +1523,13 @@ export function ScholarshipApplicationStep({
             />
           )}
 
+          {/* Admin-configured document note (獎學金管理設定 → 文件設定) */}
+          {selectedScholarship && applicationDocumentNote && (
+            <p className="text-sm text-gray-600 whitespace-pre-line">
+              {applicationDocumentNote}
+            </p>
+          )}
+
           {/* Progress indicator */}
           {selectedScholarship && (
             <div className="space-y-2">
@@ -1722,61 +1592,6 @@ export function ScholarshipApplicationStep({
                   {text.agreeTerms}
                 </Label>
               </div>
-            </div>
-          )}
-
-          {/* Application Document Upload */}
-          {selectedScholarship && (
-            <div className="pt-4 border-t">
-              <h4 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                <FileText className="h-5 w-5 text-nycu-blue-600" />
-                {text.applicationDocument}
-              </h4>
-
-              {applicationDocumentNote && (
-                <p className="text-sm text-gray-600 whitespace-pre-line mb-4">
-                  {applicationDocumentNote}
-                </p>
-              )}
-
-              {existingApplicationDocument ? (
-                <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
-                  <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-                  <span className="text-sm text-green-800 flex-1">
-                    {text.applicationDocumentUploaded}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handlePreviewAppDocument}
-                    className="text-nycu-blue-600"
-                  >
-                    <Eye className="h-4 w-4 mr-1" />
-                    {text.preview}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleDeleteAppDocument}
-                    className="text-red-600"
-                  >
-                    <X className="h-4 w-4 mr-1" />
-                    {text.deleteAppDoc}
-                  </Button>
-                </div>
-              ) : (
-                <FileUpload
-                  onFilesChange={setApplicationDocumentFiles}
-                  acceptedTypes={[".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx"]}
-                  maxSize={10 * 1024 * 1024}
-                  maxFiles={1}
-                  initialFiles={applicationDocumentFiles}
-                  fileType="application_document"
-                  locale={locale}
-                />
-              )}
-              <p className="text-xs text-gray-500 mt-2">{text.fileFormats}</p>
-              <p className="text-xs text-gray-500">{text.fileSizeLimit}</p>
             </div>
           )}
 
@@ -1848,14 +1663,6 @@ export function ScholarshipApplicationStep({
         isOpen={showBankDocPreview}
         onClose={() => setShowBankDocPreview(false)}
         file={bankDocPreviewFile}
-        locale={locale}
-      />
-
-      {/* Application Document Preview Dialog */}
-      <FilePreviewDialog
-        isOpen={showAppDocPreview}
-        onClose={() => setShowAppDocPreview(false)}
-        file={appDocPreviewFile}
         locale={locale}
       />
 
@@ -2023,47 +1830,6 @@ export function ScholarshipApplicationStep({
                   </div>
                 </div>
 
-                {/* Application Document */}
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-500">
-                    {text.submitPreview.applicationDocument}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    {existingApplicationDocument ? (
-                      <>
-                        <CheckCircle className="h-4 w-4 text-green-600" />
-                        <span className="text-green-700 font-medium">
-                          {text.submitPreview.uploaded}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handlePreviewAppDocument}
-                          className="h-6 px-2 text-nycu-blue-600"
-                        >
-                          <Eye className="h-3 w-3 mr-1" />
-                          {text.submitPreview.previewBtn}
-                        </Button>
-                      </>
-                    ) : applicationDocumentFiles.length > 0 ? (
-                      <>
-                        <CheckCircle className="h-4 w-4 text-green-600" />
-                        <span className="text-green-700 font-medium">
-                          {locale === "zh"
-                            ? `${text.submitPreview.pending}：${applicationDocumentFiles[0].name}`
-                            : `${text.submitPreview.pending}: ${applicationDocumentFiles[0].name}`}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <AlertCircle className="h-4 w-4 text-amber-500" />
-                        <span className="text-amber-700">
-                          {text.submitPreview.notUploaded}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </div>
               </div>
             </div>
 

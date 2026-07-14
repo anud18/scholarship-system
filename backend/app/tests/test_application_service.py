@@ -352,8 +352,6 @@ class TestApplicationService:
         mock_application.created_at = datetime.now(timezone.utc)
         mock_application.updated_at = datetime.now(timezone.utc)
         mock_application.meta_data = None
-        mock_application.application_document_url = None
-        mock_application.application_document_original_filename = None
         mock_application.amount = None
         mock_application.scholarship_configuration = None
         mock_application.scholarship = None
@@ -426,8 +424,6 @@ class TestApplicationService:
         mock_application.created_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
         mock_application.updated_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
         mock_application.meta_data = None
-        mock_application.application_document_url = None
-        mock_application.application_document_original_filename = None
         mock_application.amount = None
         mock_application.files = []
         mock_application.reviews = []
