@@ -110,6 +110,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
+      # Node is still needed alongside Bun: the frontend postinstall hook
+      # runs `node scripts/copy-pdf-worker.mjs` and engines pins node>=22.
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
@@ -249,6 +256,12 @@ jobs:
           pip install pip-audit
           pip-audit --desc -r requirements.txt
         continue-on-error: true
+
+      # Node pinned for the postinstall hook (see frontend-security above).
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
