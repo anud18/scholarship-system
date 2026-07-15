@@ -8,9 +8,11 @@ Handles:
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
+from urllib.parse import quote as _url_quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -21,12 +23,17 @@ from app.models.college_review import CollegeRanking, CollegeRankingItem
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User
 from app.schemas.response import ApiResponse
+from app.services.college_distribution_export_service import (
+    CollegeDistributionExportService,
+    flatten_sub_types,
+)
 from app.services.college_review_service import (
     CollegeReviewError,
     CollegeReviewService,
 )
 
 from ._helpers import assert_can_manage_ranking, load_college_distribution_results, normalize_semester_value
+from .application_summary_export import XLSX_MEDIA_TYPE
 
 logger = logging.getLogger(__name__)
 
@@ -438,4 +445,56 @@ async def get_college_distribution_results(
         success=True,
         message="分發結果" if data["distribution_executed"] else "尚未分發",
         data=data,
+    )
+
+
+@router.get("/distribution-results/export")
+async def export_college_distribution_results(
+    scholarship_type_id: int,
+    academic_year: int,
+    semester: Optional[str] = None,
+    format: Literal["xlsx", "pdf"] = Query("xlsx", description="Output format: xlsx (default) or pdf"),
+    current_user: User = Depends(require_college),
+    db: AsyncSession = Depends(get_db),
+):
+    """Export this college's own distribution results as Excel (default) or PDF.
+
+    Reads through the SAME loader as the JSON endpoint, so the file can never show a
+    student the panel would not. Carries no PII (學號/姓名/系所 + outcome only), so
+    unlike the 學生資料彙整表 export it writes no pii_access AuditLog.
+    """
+    data = await load_college_distribution_results(
+        db,
+        current_user=current_user,
+        scholarship_type_id=scholarship_type_id,
+        academic_year=academic_year,
+        semester=semester,
+    )
+    rows = flatten_sub_types(data["sub_types"])
+
+    scholarship_name = (
+        await db.execute(select(ScholarshipType.name).where(ScholarshipType.id == scholarship_type_id))
+    ).scalar_one_or_none() or "獎學金"
+
+    college_label = current_user.college_code
+    title = f"{academic_year}學年度{scholarship_name}分發結果（{college_label}）"
+    extension = format  # Literal["xlsx", "pdf"] — extension IS the format
+    base_filename = f"{academic_year}學年度{scholarship_name}分發結果_{college_label}.{extension}"
+    encoded = _url_quote(base_filename, safe="")
+
+    service = CollegeDistributionExportService()
+    if format == "pdf":
+        payload = service.build_pdf(rows=rows, title=title)
+        media_type = "application/pdf"
+    else:
+        payload = service.build_workbook(rows=rows, title=title, sheet_name=f"{academic_year}學年")
+        media_type = XLSX_MEDIA_TYPE
+
+    return StreamingResponse(
+        iter([payload]),
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded}",
+            "Content-Length": str(len(payload)),
+        },
     )
