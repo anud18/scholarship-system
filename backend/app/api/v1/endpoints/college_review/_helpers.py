@@ -264,6 +264,16 @@ async def load_export_aux_data(
     return dynamic_fields, sub_type_labels, account_number_by_user, advisor_string_by_user
 
 
+def _item_priority(item: CollegeRankingItem) -> tuple:
+    """Dedup precedence for two ranking items of the same application.
+
+    A real allocation outranks a backup slot, which outranks a bare ranked row.
+    Returned as a tuple so ties compare equal and the caller keeps the first
+    (rank-ordered) item.
+    """
+    return (1 if item.is_allocated else 0, 1 if item.backup_allocations else 0)
+
+
 async def load_college_distribution_results(
     db: AsyncSession,
     *,
@@ -346,23 +356,54 @@ async def load_college_distribution_results(
             selectinload(CollegeRankingItem.application).load_only(Application.student_data, Application.deleted_at)
         )
         .where(CollegeRankingItem.ranking_id.in_(ranking_ids))
+        # Explicit order: dedup below keeps the FIRST item on a priority tie, so
+        # arbitrary DB return order would make the kept row nondeterministic.
+        # Mirrors manual_distribution_service.get_students_for_distribution.
+        .order_by(CollegeRankingItem.rank_position, CollegeRankingItem.id)
     )
     items = (await db.execute(items_stmt)).scalars().all()
 
-    groups: Dict[str, Dict[str, list]] = defaultdict(lambda: {"admitted": [], "backup": [], "rejected": []})
-
+    # Dedup by application_id BEFORE grouping. An application can legitimately appear
+    # in two finalized rankings of the same college (e.g. a "default" ranking
+    # finalized alongside a specific sub-type one) — allocation state lives per
+    # ranking-item, so without this the same student renders as BOTH 正取 (from the
+    # allocated item) and 未錄取 (from the unallocated duplicate). Precedence mirrors
+    # manual_distribution_service.get_students_for_distribution: prefer the item
+    # carrying the real allocation, then one carrying a backup slot; ties keep the
+    # first, which the ORDER BY above makes deterministic.
+    kept_by_app: Dict[int, CollegeRankingItem] = {}
     for item in items:
         appn = item.application
-        if not appn or not appn.student_data:
+        if not appn or not appn.student_data or appn.deleted_at is not None:
             continue
-        if appn.deleted_at is not None:
-            continue
-        sd = appn.student_data
         # College scoping (Python-side; student_data is encrypted JSON, the academy
         # code is plaintext). Reuse the canonical accessor so key-alias changes stay
         # in one place.
-        if get_college_code_from_data(sd) != college_code:
+        if get_college_code_from_data(appn.student_data) != college_code:
             continue
+        existing = kept_by_app.get(item.application_id)
+        if existing is None:
+            kept_by_app[item.application_id] = item
+            continue
+        if _item_priority(item) > _item_priority(existing):
+            kept_by_app[item.application_id] = item
+        elif item.is_allocated and existing.is_allocated:
+            # Both duplicates carry a live allocation — a data anomaly this view can
+            # only surface one of. Log so the hidden allocation is discoverable.
+            logger.warning(
+                "Application %s has two allocated ranking items (%s, %s) in college %s; "
+                "distribution results show only %s",
+                item.application_id,
+                existing.id,
+                item.id,
+                college_code,
+                existing.id,
+            )
+
+    groups: Dict[str, Dict[str, list]] = defaultdict(lambda: {"admitted": [], "backup": [], "rejected": []})
+
+    for item in kept_by_app.values():
+        sd = item.application.student_data
         student = {
             "student_number": get_nycu_id_from_data(sd) or "N/A",
             "student_name": get_student_name_from_data(sd),
@@ -388,7 +429,13 @@ async def load_college_distribution_results(
                 groups[st_code]["backup"].append({**student, "backup_position": ba.get("backup_position")})
                 handled = True
         if not handled:
-            groups[fallback_code]["rejected"].append(student)
+            # Carry rank_position so the export's 名次 column is populated and sortable.
+            groups[fallback_code]["rejected"].append({**student, "rank_position": item.rank_position})
+
+    def _pos_key(value: Optional[int]) -> tuple:
+        # None sorts LAST. A bare `or 0` would collide None with 0 and interleave
+        # unpositioned rows among rank 0/1.
+        return (value is None, value or 0)
 
     sub_types = []
     for code in sorted(groups.keys()):
@@ -399,9 +446,9 @@ async def load_college_distribution_results(
                 "code": code,
                 "label": m["label"],
                 "label_en": m["label_en"],
-                "admitted": sorted(g["admitted"], key=lambda s: s.get("rank_position") or 0),
-                "backup": sorted(g["backup"], key=lambda s: s.get("backup_position") or 0),
-                "rejected": g["rejected"],
+                "admitted": sorted(g["admitted"], key=lambda s: _pos_key(s.get("rank_position"))),
+                "backup": sorted(g["backup"], key=lambda s: _pos_key(s.get("backup_position"))),
+                "rejected": sorted(g["rejected"], key=lambda s: _pos_key(s.get("rank_position"))),
             }
         )
 

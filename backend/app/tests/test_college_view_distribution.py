@@ -426,3 +426,126 @@ async def test_distribution_results_department_missing_renders_empty_string(
     assert resp.status_code == 200
     nstc = next(g for g in resp.json()["data"]["sub_types"] if g["code"] == "nstc")
     assert nstc["admitted"][0]["department"] == ""
+
+
+@pytest.mark.asyncio
+async def test_distribution_results_dedup_prefers_allocated_item(college_client_factory, config, sch_type, db):
+    """An application can legitimately sit in TWO finalized rankings of the same
+    college (a 'default' ranking alongside a sub-type one). Allocation state lives
+    per-ranking-item, so without dedup the same student renders as BOTH 正取 and
+    未錄取. Keep one row per application, preferring the item that carries the real
+    allocation. Mirrors manual_distribution_service.get_students_for_distribution.
+    """
+    config.allow_college_view_distribution = True
+    await db.commit()
+
+    def _ranking(name, sub_type_code):
+        return CollegeRanking(
+            scholarship_type_id=sch_type.id,
+            sub_type_code=sub_type_code,
+            academic_year=114,
+            semester="first",
+            college_code="A",
+            ranking_name=name,
+            total_applications=1,
+            is_finalized=True,
+            distribution_executed=True,
+            allocated_count=1,
+        )
+
+    r_default = _ranking("default 114-1", "default")
+    r_nstc = _ranking("nstc 114-1", "nstc")
+    db.add_all([r_default, r_nstc])
+    await db.commit()
+    await db.refresh(r_default)
+    await db.refresh(r_nstc)
+
+    student = User(
+        nycu_id="cvd_student_DUP1",
+        email="cvd_student_DUP1@university.edu",
+        name="重複生",
+        user_type=UserType.student,
+        role=UserRole.student,
+    )
+    db.add(student)
+    appn = Application(
+        app_id="APP-CVD-DUP1",
+        student=student,
+        scholarship_type_id=sch_type.id,
+        academic_year=114,
+        semester="first",
+        status="approved",
+        sub_type_selection_mode=SubTypeSelectionMode.single,
+        student_data=_student_data("DUP1", "重複生", "A"),
+    )
+    db.add(appn)
+    await db.commit()
+    await db.refresh(appn)
+
+    db.add_all(
+        [
+            # unallocated duplicate in the 'default' ranking -> would render 未錄取
+            CollegeRankingItem(
+                ranking_id=r_default.id,
+                application_id=appn.id,
+                rank_position=1,
+                is_allocated=False,
+                status="ranked",
+            ),
+            # the real allocation
+            CollegeRankingItem(
+                ranking_id=r_nstc.id,
+                application_id=appn.id,
+                rank_position=1,
+                is_allocated=True,
+                allocated_sub_type="nstc",
+                status="allocated",
+            ),
+        ]
+    )
+    await db.commit()
+
+    cclient = await college_client_factory("A")
+    resp = await cclient.get(
+        DIST_URL, params={"scholarship_type_id": sch_type.id, "academic_year": 114, "semester": "first"}
+    )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+
+    appearances = [
+        (g["code"], bucket)
+        for g in data["sub_types"]
+        for bucket in ("admitted", "backup", "rejected")
+        for s in g[bucket]
+        if s["student_number"] == "DUP1"
+    ]
+    assert appearances == [("nstc", "admitted")], f"expected exactly one 正取 row, got {appearances}"
+
+
+@pytest.mark.asyncio
+async def test_distribution_results_rejected_carries_rank_position(college_client_factory, config, sch_type, db):
+    """未錄取 rows must carry 名次 so the export's 名次 column is populated."""
+    config.allow_college_view_distribution = True
+    await db.commit()
+    await _seed_distribution(db, sch_type, executed=True)
+
+    cclient = await college_client_factory("A")
+    resp = await cclient.get(
+        DIST_URL, params={"scholarship_type_id": sch_type.id, "academic_year": 114, "semester": "first"}
+    )
+    nstc = next(g for g in resp.json()["data"]["sub_types"] if g["code"] == "nstc")
+    assert nstc["rejected"][0]["rank_position"] == 3  # A003 was seeded at rank 3
+
+
+@pytest.mark.asyncio
+async def test_distribution_results_ordering_is_deterministic(college_client_factory, config, sch_type, db):
+    """Same input, same order — the items query must be explicitly ordered."""
+    config.allow_college_view_distribution = True
+    await db.commit()
+    await _seed_distribution(db, sch_type, executed=True)
+
+    cclient = await college_client_factory("A")
+    params = {"scholarship_type_id": sch_type.id, "academic_year": 114, "semester": "first"}
+    first = (await cclient.get(DIST_URL, params=params)).json()["data"]
+    second = (await cclient.get(DIST_URL, params=params)).json()["data"]
+    assert first == second
