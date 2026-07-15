@@ -4767,11 +4767,35 @@ export interface paths {
          * Get College Distribution Results
          * @description College-facing: this college's own students' distribution outcomes by sub-type.
          *
-         *     Gated by ScholarshipConfiguration.allow_college_view_distribution (admin toggle).
-         *     Scoped to the caller's college_code. Allocation outcome only — no payment PII,
-         *     no allocation-year labels (outcomes for one sub-type are merged across years).
+         *     All gating, college scoping and grouping live in
+         *     ``load_college_distribution_results`` so this endpoint and the Excel/PDF export
+         *     can never disagree about which students a college may see.
          */
         get: operations["get_college_distribution_results_api_v1_college_review_distribution_results_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/distribution-results/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export College Distribution Results
+         * @description Export this college's own distribution results as Excel (default) or PDF.
+         *
+         *     Reads through the SAME loader as the JSON endpoint, so the file can never show a
+         *     student the panel would not. Carries no PII (學號/姓名/系所 + outcome only), so
+         *     unlike the 學生資料彙整表 export it writes no pii_access AuditLog.
+         */
+        get: operations["export_college_distribution_results_api_v1_college_review_distribution_results_export_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -19096,6 +19120,41 @@ export interface operations {
                 scholarship_type_id: number;
                 academic_year: number;
                 semester?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_college_distribution_results_api_v1_college_review_distribution_results_export_get: {
+        parameters: {
+            query: {
+                scholarship_type_id: number;
+                academic_year: number;
+                semester?: string | null;
+                /** @description Output format: xlsx (default) or pdf */
+                format?: "xlsx" | "pdf";
             };
             header?: never;
             path?: never;
