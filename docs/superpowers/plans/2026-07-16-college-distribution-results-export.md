@@ -1169,11 +1169,18 @@ class TestBuildWorkbook:
         ws = self._load(payload)
         assert [c.value for c in ws[3]] == ["國科會", "正取", 1, "310460031", "王小明", "電子研"]
 
-    def test_missing_position_renders_empty_not_none(self):
+    def test_missing_position_renders_an_empty_cell_not_the_string_none(self):
+        """A None 名次 must never render the literal string "None".
+
+        _row_cells maps None -> "", and openpyxl normalizes an empty string to an
+        empty cell (readback value is None, NOT ""). Both are correct; the bug this
+        guards against is the cell reading "None".
+        """
         rows = [DistributionExportRow("國科會", "未錄取", None, "X1", "無名次", "電子研")]
         svc = CollegeDistributionExportService()
         ws = self._load(svc.build_workbook(rows=rows, title="T", sheet_name="S"))
-        assert ws.cell(row=3, column=3).value == ""
+        value = ws.cell(row=3, column=3).value
+        assert value is None, f"expected an empty cell, got {value!r}"
 
     def test_zero_rows_still_emits_the_header(self):
         svc = CollegeDistributionExportService()
@@ -1508,9 +1515,9 @@ class CollegeDistributionExportService:
 python3 -m pytest app/tests/test_college_distribution_export_service.py -p no:cacheprovider --no-cov -v
 ```
 
-Expected: **14 passed**.
+Expected: **13 passed** (5 flatten + 5 workbook + 3 pdf).
 
-Note: the PDF tests need the WQY font at `/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc`. If they fail on the host with `TTFError`, run just the PDF class inside the backend helper container instead — the font ships in the image (`backend/Dockerfile:27`), not necessarily on the host.
+Note: the PDF tests need the WQY font at `/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc`. Verified present on this host (16MB), so they run here as-is.
 
 - [ ] **Step 5: Lint and commit**
 
@@ -2297,7 +2304,7 @@ ranking table share one implementation."
 python3 -m pytest app/tests -m "not integration and not asyncio" -p no:cacheprovider --no-cov -q
 ```
 
-Expected: **3047 + 14 = 3061 passed**, 0 failed. (The 14 new sync tests from Task 5 land here.)
+Expected: **3047 + 13 = 3060 passed**, 0 failed. (The 13 new sync tests from Task 5 land here.)
 
 - [ ] **Step 2: Integration lane for the touched files**
 
