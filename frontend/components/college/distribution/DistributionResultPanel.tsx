@@ -25,6 +25,7 @@ export function DistributionResultPanel({ scholarshipType }: DistributionResultP
   const [data, setData] = useState<DistributionResults | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,8 +61,6 @@ export function DistributionResultPanel({ scholarshipType }: DistributionResultP
       cancelled = true;
     };
   }, [scholarshipType.id, selectedAcademicYear, selectedSemester]);
-
-  const [exporting, setExporting] = useState(false);
 
   const handleExport = async (format: "xlsx" | "pdf") => {
     if (typeof selectedAcademicYear !== "number") return;

@@ -5,8 +5,14 @@ Pure rendering logic — receives the ``sub_types`` structure produced by
 layer is responsible for loading and authorizing the data.
 
 ``build_workbook`` and ``build_pdf`` share one source of truth for the column set
-(``_headers``) and per-row cell values (``_row_cells``), so the two formats never
-drift apart — the same discipline as ``college_ranking_export_service``.
+(``_headers``), per-row cell values (``_row_cells``) and column sizing
+(``_COLUMNS`` weights), so the two formats never drift apart.
+
+This module is a deliberate FORK of ``college_ranking_export_service`` — the
+table-rendering chassis (PDF styles, KeepInFrame cells, border/width helpers) was
+copied from it rather than shared, so a fix to that chassis likely belongs in BOTH
+modules. If a THIRD export service is ever needed, extract the shared chassis
+instead of forking again.
 
 Unlike the 學生資料彙整表 export this carries NO PII (no 身分證字號, no 匯款帳號):
 colleges get exactly what the 分發結果 panel already shows them.
@@ -107,8 +113,10 @@ class CollegeDistributionExportService:
         headers = self._headers()
         total_cols = len(headers)
 
-        # Row 1: title (merged across all columns)
-        ws.cell(row=1, column=1, value=title)
+        # Row 1: title (merged across all columns). Sanitized like the data rows: the
+        # caller's f-string happens to lead with an int today, but that is incidental —
+        # this keeps a formula trigger impossible regardless of how the title is built.
+        ws.cell(row=1, column=1, value=sanitize_excel_cell(title))
         if total_cols > 1:
             ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=total_cols)
         title_cell = ws.cell(row=1, column=1)
@@ -132,7 +140,7 @@ class CollegeDistributionExportService:
 
         max_row = len(rows) + 2
         self._apply_borders(ws, max_row=max_row, max_col=total_cols)
-        self._apply_column_widths(ws, headers)
+        self._apply_column_widths(ws)
         ws.freeze_panes = "A3"
 
         buf = io.BytesIO()
@@ -156,9 +164,10 @@ class CollegeDistributionExportService:
 
         page_width, page_height = landscape(A4)
         usable_width = page_width - (self._PDF_MARGIN_PT * 2)
-        col_widths = self._pdf_col_widths(headers, usable_width)
-        # A reportlab Table cannot split ONE row across pages, so cap each cell to the
-        # usable content height and let KeepInFrame shrink anything taller.
+        col_widths = self._pdf_col_widths(usable_width)
+        # A reportlab Table cannot split ONE row across pages, so a single very long
+        # cell would raise LayoutError and fail the WHOLE export. Cap each cell to the
+        # usable content height and let KeepInFrame shrink anything taller to fit.
         cell_max_height = page_height - (self._PDF_MARGIN_PT * 2) - self._PDF_HEADER_RESERVE_PT
 
         title_style = ParagraphStyle(
@@ -233,7 +242,9 @@ class CollegeDistributionExportService:
     # Vertical space reserved (per page) for the title + spacer + repeated header row.
     _PDF_HEADER_RESERVE_PT = 60
 
-    def _pdf_col_widths(self, headers: List[str], usable_width: float) -> List[float]:
+    def _pdf_col_widths(self, usable_width: float) -> List[float]:
+        # Unlike the sibling service the column set here is static, so the weights come
+        # straight from _COL_WEIGHTS — no headers argument needed.
         total = sum(_COL_WEIGHTS) or 1.0
         return [usable_width * w / total for w in _COL_WEIGHTS]
 
@@ -272,8 +283,16 @@ class CollegeDistributionExportService:
             for c in range(1, max_col + 1):
                 ws.cell(row=r, column=c).border = border
 
-    def _apply_column_widths(self, ws, headers: List[str]) -> None:
-        for idx, header in enumerate(headers, start=1):
-            text_len = max(len(str(header)), 6)
-            width = min(max(text_len + 4, 10), 30)
+    # Excel width per unit of PDF column weight, plus a fixed padding allowance. Chosen
+    # so the narrowest column (名次, weight 0.6) still fits its header comfortably.
+    _XLSX_WIDTH_PER_WEIGHT = 8
+    _XLSX_WIDTH_PADDING = 6
+
+    def _apply_column_widths(self, ws) -> None:
+        # Sized from the SAME _COLUMNS weights the PDF uses, so the two formats keep
+        # one source of truth for relative column sizing (deriving width from header
+        # text length instead would clamp every 2-char CJK header to an identical
+        # width, silently ignoring the weights).
+        for idx, weight in enumerate(_COL_WEIGHTS, start=1):
+            width = round(self._XLSX_WIDTH_PER_WEIGHT * weight) + self._XLSX_WIDTH_PADDING
             ws.column_dimensions[get_column_letter(idx)].width = width

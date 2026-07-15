@@ -472,15 +472,17 @@ async def export_college_distribution_results(
     )
     rows = flatten_sub_types(data["sub_types"])
 
+    # scalar_one() not scalar_one_or_none(): the loader above already 403s unless this
+    # ScholarshipType exists and is active, and name is NOT NULL — so a miss here means
+    # a broken invariant that must surface, not be papered over with a default title.
     scholarship_name = (
         await db.execute(select(ScholarshipType.name).where(ScholarshipType.id == scholarship_type_id))
-    ).scalar_one_or_none() or "獎學金"
+    ).scalar_one()
 
     college_label = current_user.college_code
-    title = f"{academic_year}學年度{scholarship_name}分發結果（{college_label}）"
-    extension = format  # Literal["xlsx", "pdf"] — extension IS the format
-    base_filename = f"{academic_year}學年度{scholarship_name}分發結果_{college_label}.{extension}"
-    encoded = _url_quote(base_filename, safe="")
+    stem = f"{academic_year}學年度{scholarship_name}分發結果"
+    title = f"{stem}（{college_label}）"
+    encoded = _url_quote(f"{stem}_{college_label}.{format}", safe="")
 
     service = CollegeDistributionExportService()
     if format == "pdf":
