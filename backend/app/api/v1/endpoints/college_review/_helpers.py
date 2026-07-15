@@ -3,18 +3,27 @@ Shared helper functions for college review endpoints
 """
 
 import logging
-from typing import Any, Iterable, Optional
+from collections import defaultdict
+from typing import Any, Dict, Iterable, Optional
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from app.models.application import Application
 from app.models.application_field import ApplicationField, FieldType
+from app.models.college_review import CollegeRanking, CollegeRankingItem
 from app.models.professor_student import ProfessorStudentRelationship
-from app.models.scholarship import ScholarshipType
+from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import AdminScholarship, User
 from app.models.user_profile import UserProfile
 from app.services.college_ranking_export_service import DynamicFieldSpec
+from app.utils.application_helpers import (
+    get_college_code_from_data,
+    get_nycu_id_from_data,
+    get_student_name_from_data,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -253,3 +262,142 @@ async def load_export_aux_data(
             advisor_string_by_user[uid] = profile_advisor_by_user[uid]
 
     return dynamic_fields, sub_type_labels, account_number_by_user, advisor_string_by_user
+
+
+async def load_college_distribution_results(
+    db: AsyncSession,
+    *,
+    current_user: User,
+    scholarship_type_id: int,
+    academic_year: int,
+    semester: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Load this college's own students' distribution outcomes, grouped by sub-type.
+
+    Single source of truth for the college-facing distribution read: BOTH the JSON
+    endpoint and the Excel/PDF export call this, so the two surfaces can never
+    disagree about which students a college may see. Allocation outcome only — no
+    payment PII, no allocation-year labels (outcomes for one sub-type are merged
+    across years).
+
+    Gate order is deliberate: permission before flag, so a college with no binding
+    never learns the toggle's state.
+    """
+    college_code = current_user.college_code
+    if not college_code:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="使用者未綁定學院")
+
+    normalized_semester = normalize_semester_value(semester)
+
+    config_stmt = select(ScholarshipConfiguration).where(
+        and_(
+            ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+            ScholarshipConfiguration.academic_year == academic_year,
+            ScholarshipConfiguration.is_active.is_(True),
+        )
+    )
+    if normalized_semester:
+        config_stmt = config_stmt.where(ScholarshipConfiguration.semester == normalized_semester)
+    else:
+        config_stmt = config_stmt.where(ScholarshipConfiguration.semester.is_(None))
+    config = (await db.execute(config_stmt)).scalar_one_or_none()
+    if not config:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到對應的獎學金配置")
+
+    if not config.allow_college_view_distribution:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="分發結果尚未開放查看")
+
+    ranking_stmt = select(CollegeRanking).where(
+        and_(
+            CollegeRanking.scholarship_type_id == scholarship_type_id,
+            CollegeRanking.academic_year == academic_year,
+        )
+    )
+    if normalized_semester:
+        ranking_stmt = ranking_stmt.where(CollegeRanking.semester == normalized_semester)
+    else:
+        ranking_stmt = ranking_stmt.where(CollegeRanking.semester.is_(None))
+    rankings = (await db.execute(ranking_stmt)).scalars().all()
+    ranking_ids = [r.id for r in rankings]
+    ranking_sub_type = {r.id: r.sub_type_code for r in rankings}
+    distribution_executed = any(r.distribution_executed for r in rankings)
+
+    if not ranking_ids or not distribution_executed:
+        return {"distribution_executed": distribution_executed, "sub_types": []}
+
+    st_stmt = (
+        select(ScholarshipType)
+        .options(selectinload(ScholarshipType.sub_type_configs))
+        .where(ScholarshipType.id == scholarship_type_id)
+    )
+    scholarship_type = (await db.execute(st_stmt)).scalar_one_or_none()
+    label_map: Dict[str, Dict[str, str]] = {}
+    if scholarship_type and getattr(scholarship_type, "sub_type_configs", None):
+        for sc in scholarship_type.sub_type_configs:
+            if sc.sub_type_code:
+                label_map[sc.sub_type_code] = {
+                    "label": sc.name or sc.sub_type_code,
+                    "label_en": sc.name_en or sc.name or sc.sub_type_code,
+                }
+
+    items_stmt = (
+        select(CollegeRankingItem)
+        .options(
+            selectinload(CollegeRankingItem.application).load_only(Application.student_data, Application.deleted_at)
+        )
+        .where(CollegeRankingItem.ranking_id.in_(ranking_ids))
+    )
+    items = (await db.execute(items_stmt)).scalars().all()
+
+    groups: Dict[str, Dict[str, list]] = defaultdict(lambda: {"admitted": [], "backup": [], "rejected": []})
+
+    for item in items:
+        appn = item.application
+        if not appn or not appn.student_data:
+            continue
+        if appn.deleted_at is not None:
+            continue
+        sd = appn.student_data
+        # College scoping (Python-side; student_data is encrypted JSON, the academy
+        # code is plaintext). Reuse the canonical accessor so key-alias changes stay
+        # in one place.
+        if get_college_code_from_data(sd) != college_code:
+            continue
+        student = {
+            "student_number": get_nycu_id_from_data(sd) or "N/A",
+            "student_name": get_student_name_from_data(sd),
+        }
+        fallback_code = ranking_sub_type.get(item.ranking_id) or "unallocated"
+
+        handled = False
+        if item.is_allocated and item.allocated_sub_type:
+            groups[item.allocated_sub_type]["admitted"].append({**student, "rank_position": item.rank_position})
+            handled = True
+        if item.backup_allocations and isinstance(item.backup_allocations, list):
+            for ba in item.backup_allocations:
+                if not isinstance(ba, dict):
+                    continue
+                st_code = ba.get("sub_type")
+                if not st_code:
+                    continue
+                groups[st_code]["backup"].append({**student, "backup_position": ba.get("backup_position")})
+                handled = True
+        if not handled:
+            groups[fallback_code]["rejected"].append(student)
+
+    sub_types = []
+    for code in sorted(groups.keys()):
+        m = label_map.get(code, {"label": code, "label_en": code})
+        g = groups[code]
+        sub_types.append(
+            {
+                "code": code,
+                "label": m["label"],
+                "label_en": m["label_en"],
+                "admitted": sorted(g["admitted"], key=lambda s: s.get("rank_position") or 0),
+                "backup": sorted(g["backup"], key=lambda s: s.get("backup_position") or 0),
+                "rejected": g["rejected"],
+            }
+        )
+
+    return {"distribution_executed": True, "sub_types": sub_types}
