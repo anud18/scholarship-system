@@ -63,7 +63,11 @@ export function DistributionResultPanel({ scholarshipType }: DistributionResultP
   }, [scholarshipType.id, selectedAcademicYear, selectedSemester]);
 
   const handleExport = async (format: "xlsx" | "pdf") => {
-    if (typeof selectedAcademicYear !== "number") return;
+    // Mirror the loader's guard exactly: typeof alone admits NaN/Infinity, which would
+    // send academic_year=NaN and earn a 422. Unreachable today (a non-finite year makes
+    // the loader bail, so the 尚未分發 branch renders and this dropdown never mounts) —
+    // but that safety is an accident of render order, so don't depend on it.
+    if (typeof selectedAcademicYear !== "number" || !Number.isFinite(selectedAcademicYear)) return;
     setExporting(true);
     try {
       const { exportDistributionResults } = await import("@/lib/api/modules/college");
