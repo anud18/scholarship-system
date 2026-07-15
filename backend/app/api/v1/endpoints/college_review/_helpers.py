@@ -297,6 +297,14 @@ async def load_college_distribution_results(
     if not college_code:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="使用者未綁定學院")
 
+    # Permission BEFORE the flag: a college with no grant on this scholarship must
+    # get a permission error rather than learn the toggle's state. Mirrors
+    # ranking_management.export_ranking_excel and export_package.py.
+    if not await _check_scholarship_permission(current_user, scholarship_type_id, db):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限存取此獎學金類型")
+    if not await _check_academic_year_permission(current_user, academic_year, db):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限存取此學年度")
+
     normalized_semester = normalize_semester_value(semester)
 
     config_stmt = select(ScholarshipConfiguration).where(
@@ -317,10 +325,15 @@ async def load_college_distribution_results(
     if not config.allow_college_view_distribution:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="分發結果尚未開放查看")
 
+    # Rankings are per-college (issue #1034), so scope in SQL: without this,
+    # distribution_executed = any(...) below would OR across EVERY college and a
+    # college whose own distribution has not run would see its students as 未錄取.
+    # Matches ranking_management.get_rankings.
     ranking_stmt = select(CollegeRanking).where(
         and_(
             CollegeRanking.scholarship_type_id == scholarship_type_id,
             CollegeRanking.academic_year == academic_year,
+            CollegeRanking.college_code == college_code,
         )
     )
     if normalized_semester:
