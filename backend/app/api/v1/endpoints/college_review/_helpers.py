@@ -366,6 +366,11 @@ async def load_college_distribution_results(
         student = {
             "student_number": get_nycu_id_from_data(sd) or "N/A",
             "student_name": get_student_name_from_data(sd),
+            # 系所 name from the 申請當時 snapshot. There is no canonical accessor for
+            # the department NAME (get_department_code_from_data returns the CODE), so
+            # read trm_depname directly — the same key manual_distribution.py:492,
+            # payment_rosters.py:1373 and college_ranking_export_service.py:292 use.
+            "department": sd.get("trm_depname") or "",
         }
         fallback_code = ranking_sub_type.get(item.ranking_id) or "unallocated"
 

@@ -91,8 +91,13 @@ async def test_admin_can_toggle_college_view_distribution(admin_client, config, 
 DIST_URL = "/api/v1/college-review/distribution-results"
 
 
-def _student_data(std_code: str, name: str, academy: str) -> dict:
-    return {"std_stdcode": std_code, "std_cname": name, "std_academyno": academy}
+def _student_data(std_code: str, name: str, academy: str, dept: str = "電子研") -> dict:
+    return {
+        "std_stdcode": std_code,
+        "std_cname": name,
+        "std_academyno": academy,
+        "trm_depname": dept,
+    }
 
 
 @pytest_asyncio.fixture
@@ -335,3 +340,89 @@ async def test_distribution_results_empty_when_not_executed(college_client_facto
     data = resp.json()["data"]
     assert data["distribution_executed"] is False
     assert data["sub_types"] == []
+
+
+@pytest.mark.asyncio
+async def test_distribution_results_include_department(college_client_factory, config, sch_type, db):
+    """系所 comes from the student_data snapshot (trm_depname) and appears on
+    admitted, backup AND rejected rows alike."""
+    config.allow_college_view_distribution = True
+    await db.commit()
+    await _seed_distribution(db, sch_type, executed=True)
+
+    cclient = await college_client_factory("A")
+    resp = await cclient.get(
+        DIST_URL, params={"scholarship_type_id": sch_type.id, "academic_year": 114, "semester": "first"}
+    )
+    assert resp.status_code == 200
+    nstc = next(g for g in resp.json()["data"]["sub_types"] if g["code"] == "nstc")
+
+    assert nstc["admitted"][0]["department"] == "電子研"
+    assert nstc["backup"][0]["department"] == "電子研"
+    assert nstc["rejected"][0]["department"] == "電子研"
+
+
+@pytest.mark.asyncio
+async def test_distribution_results_department_missing_renders_empty_string(
+    college_client_factory, config, sch_type, db
+):
+    """A snapshot with no trm_depname must yield "" — never None, never a dept code."""
+    config.allow_college_view_distribution = True
+    await db.commit()
+
+    ranking = CollegeRanking(
+        scholarship_type_id=sch_type.id,
+        sub_type_code="nstc",
+        academic_year=114,
+        semester="first",
+        ranking_name="nstc 114-1 nodept",
+        total_applications=1,
+        is_finalized=True,
+        distribution_executed=True,
+        allocated_count=1,
+    )
+    db.add(ranking)
+    await db.commit()
+    await db.refresh(ranking)
+
+    student = User(
+        nycu_id="cvd_student_ND1",
+        email="cvd_student_ND1@university.edu",
+        name="無系所生",
+        user_type=UserType.student,
+        role=UserRole.student,
+    )
+    db.add(student)
+    appn = Application(
+        app_id="APP-CVD-ND1",
+        student=student,
+        scholarship_type_id=sch_type.id,
+        academic_year=114,
+        semester="first",
+        status="approved",
+        sub_type_selection_mode=SubTypeSelectionMode.single,
+        # no trm_depname key at all
+        student_data={"std_stdcode": "ND1", "std_cname": "無系所生", "std_academyno": "A"},
+    )
+    db.add(appn)
+    await db.commit()
+    await db.refresh(appn)
+    db.add(
+        CollegeRankingItem(
+            ranking_id=ranking.id,
+            application_id=appn.id,
+            rank_position=1,
+            is_allocated=True,
+            allocated_sub_type="nstc",
+            status="allocated",
+        )
+    )
+    await db.commit()
+
+    cclient = await college_client_factory("A")
+    resp = await cclient.get(
+        DIST_URL, params={"scholarship_type_id": sch_type.id, "academic_year": 114, "semester": "first"}
+    )
+    assert resp.status_code == 200
+    nstc = next(g for g in resp.json()["data"]["sub_types"] if g["code"] == "nstc")
+    assert nstc["admitted"][0]["department"] == ""
