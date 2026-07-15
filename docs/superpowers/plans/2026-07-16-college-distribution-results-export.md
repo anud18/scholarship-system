@@ -95,7 +95,7 @@ At the top of `backend/app/api/v1/endpoints/college_review/_helpers.py`, extend 
 
 ```python
 from collections import defaultdict
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, Optional
 
 from sqlalchemy import and_, select
 from sqlalchemy.orm import selectinload
