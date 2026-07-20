@@ -83,6 +83,7 @@ import {
   exportRankingExcel,
   downloadRankingTemplate,
 } from "@/lib/api/modules/college";
+import { triggerBlobDownload } from "@/lib/utils/download";
 import {
   parseRankingSheet,
   type ExcelRankingImportRow,
@@ -121,26 +122,6 @@ function formatIdentityLabel(
   const map = locale === "zh" ? IDENTITY_LABEL_ZH : IDENTITY_LABEL_EN;
   if (code in map) return map[code as keyof typeof map];
   return locale === "zh" ? `身分別 ${code}` : `Identity ${code}`;
-}
-
-// Trigger a browser download for a fetched binary export. Shared by the ranking
-// export and template-download handlers, which both receive { blob, filename }
-// from the college API module.
-function triggerBlobDownload({
-  blob,
-  filename,
-}: {
-  blob: Blob;
-  filename: string;
-}): void {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
 }
 
 interface Application {

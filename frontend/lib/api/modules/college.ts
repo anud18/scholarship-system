@@ -53,6 +53,7 @@ type CreateRankingInput = Omit<CreateRankingRequest, "force_new"> & {
 export interface DistributionStudent {
   student_number: string;
   student_name: string;
+  department: string;
   rank_position?: number;
   backup_position?: number;
 }
@@ -783,6 +784,33 @@ export async function downloadRankingTemplate(
     params,
     `學生資料彙整表_${rankingId}_範本.xlsx`,
     "無法下載範本"
+  );
+}
+
+/**
+ * Download this college's 分發結果 as Excel (default) or PDF.
+ *
+ * Endpoint: GET /api/v1/college-review/distribution-results/export
+ *   `format` is an OPTIONAL query param: "pdf" appends `?format=pdf`; the default
+ *   "xlsx" is omitted entirely, so the xlsx request URL is unchanged.
+ */
+export async function exportDistributionResults(params: {
+  scholarshipTypeId: number;
+  academicYear: number;
+  semester?: string;
+  format?: "xlsx" | "pdf";
+}): Promise<{ blob: Blob; filename: string }> {
+  const format = params.format ?? "xlsx";
+  const search = new URLSearchParams();
+  search.set("scholarship_type_id", String(params.scholarshipTypeId));
+  search.set("academic_year", String(params.academicYear));
+  if (params.semester) search.set("semester", params.semester);
+  if (format !== "xlsx") search.set("format", format);
+  return _fetchBinaryExport(
+    "/api/v1/college-review/distribution-results/export",
+    search,
+    `分發結果_${params.academicYear}.${format}`,
+    "無法匯出分發結果"
   );
 }
 
