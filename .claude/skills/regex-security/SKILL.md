@@ -35,42 +35,27 @@ match = safe_regex_match(user_pattern, value, timeout_seconds=1)
 
 ## Validation Layers
 
-1. **Length Check**: Maximum 200 characters
+Listed in execution order (`validate_regex_pattern` in `regex_validator.py`):
+
+1. **Empty & Length Checks**: rejects empty patterns; maximum 200 characters (`MAX_PATTERN_LENGTH`)
 2. **ReDoS Detection**: 6 dangerous patterns checked:
    - Multiple unbounded wildcards: `.*.*`
    - Multiple unbounded plus: `.+.+`
+   - Adjacent quantified groups: `(a*)*(b*)*`, `(a+)+(b+)+`
    - Nested quantified groups: `(a*)*`, `(a+)+`
-   - Quantifiers on quantified groups
-3. **Timeout Protection**: Signal-based (1 second max)
-4. **Syntax Validation**: Compilation test
-5. **JSON Sanitization**: Round-trip to break taint flow
+3. **JSON Sanitization**: Round-trip to break taint flow (runs BEFORE compilation — the sanitized pattern is what gets compiled)
+4. **Syntax Validation**: Compilation test of the sanitized pattern
+5. **Timeout Protection**: SIGALRM-based (1 second max) — Unix-only; on Windows the `hasattr(signal, "SIGALRM")` guard skips the timeout (all other layers above still run there). The alarm guards compilation here and matching inside `safe_regex_match`/`safe_regex_search`; a bare `validate_regex_pattern(pattern)` call does NOT timeout-guard later matching, so always match through the safe wrappers.
 
 ## CodeQL Suppression
 
-**IMPORTANT**: CodeQL does NOT support inline comment suppressions (e.g., `# lgtm[...]`). The correct way to suppress false positives is using the `filter-sarif` GitHub Action.
+**IMPORTANT**: CodeQL does NOT support inline comment suppressions (e.g., `# lgtm[...]`, `# codeql[...]`). The correct way to suppress false positives is using the `filter-sarif` GitHub Action.
 
-**Implementation** (`.github/workflows/codeql.yml`):
+**Implementation**: see `.github/workflows/codeql.yml` — the authoritative source. The flow is: analyze with `upload: false` → map the matrix language to CodeQL's SARIF filename (`javascript-typescript` → `javascript.sarif`, via the `sarif-lang` step) → run `advanced-security/filter-sarif@v1` for the languages that have a conditional filter step (currently `python` and `javascript-typescript`; the `actions` language has no filter step, so its SARIF uploads unfiltered) → upload `sarif-results/${{ steps.sarif-lang.outputs.name }}.sarif`. To suppress a false positive in a language with no filter step yet, add a new conditional filter-sarif step for it. When adding a suppression, edit the `patterns` block of the matching filter step in that workflow rather than copying a snippet from here, e.g.:
 
 ```yaml
-- name: Perform CodeQL Analysis
-  uses: github/codeql-action/analyze@v4
-  with:
-    output: sarif-results
-    upload: false  # Filter before upload
-
-- name: Filter Python SARIF (Remove False Positives)
-  if: matrix.language == 'python'
-  uses: advanced-security/filter-sarif@v1
-  with:
-    patterns: |
-      -backend/app/core/regex_validator.py:py/regex-injection
-    input: sarif-results/python.sarif
-    output: sarif-results/python.sarif
-
-- name: Upload SARIF to Code Scanning
-  uses: github/codeql-action/upload-sarif@v4
-  with:
-    sarif_file: sarif-results/${{ matrix.language }}.sarif
+patterns: |
+  -backend/app/core/regex_validator.py:py/regex-injection
 ```
 
 **Pattern Syntax**:
@@ -83,8 +68,7 @@ match = safe_regex_match(user_pattern, value, timeout_seconds=1)
 
 ## Test Coverage
 
-See `backend/app/tests/test_regex_validator.py` for comprehensive test suite:
-- 22 test cases covering all security scenarios
+See `backend/app/tests/test_regex_validator.py` for the comprehensive test suite covering:
 - Dangerous pattern rejection tests
 - ReDoS attack prevention tests
 - Edge case coverage (unicode, empty strings, long inputs)
@@ -113,9 +97,9 @@ if validation_regex:
         # Pattern is now safe to use
         match = safe_regex_match(validation_regex, string_value, timeout_seconds=1)
         if not match:
-            raise ValueError(f"Value does not match pattern: {validation_regex}")
+            raise ValueError(f"Value does not match validation pattern: {validation_regex}")
     except RegexValidationError as e:
-        raise ValueError(f"Invalid validation pattern: {str(e)}")
+        raise ValueError(f"Invalid validation pattern: {str(e)}") from e
 ```
 
 ## Security Checklist
