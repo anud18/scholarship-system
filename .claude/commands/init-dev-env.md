@@ -1,5 +1,4 @@
 ---
-name: init-dev-env
 description: Initialize the scholarship system development environment from scratch - starts Docker services, fixes permissions, runs migrations, and seeds the database.
 ---
 
