@@ -10,8 +10,10 @@ import type {
   SubTypeConfigCol,
 } from "@/lib/api/modules/manual-distribution";
 import {
+  buildCollegeNameMap,
   getSavedAllocation,
   makeColKey,
+  resolveCollegeName,
 } from "@/lib/api/modules/manual-distribution";
 
 interface CollegeQuotaMatrixProps {
@@ -22,8 +24,6 @@ interface CollegeQuotaMatrixProps {
   localAllocations: Map<number, LocalAlloc | null>;
   academies: Array<{ code: string; name: string }>;
 }
-
-const UNKNOWN_COLLEGE_LABEL = "未知";
 
 function cellKey(collegeCode: string, colKey: string) {
   return `${collegeCode}|${colKey}`;
@@ -107,21 +107,10 @@ export function CollegeQuotaMatrix({
     return Array.from(codes).sort((a, b) => a.localeCompare(b));
   }, [cols, byColKey, localDelta]);
 
-  const collegeNames = useMemo(() => {
-    const names = new Map<string, string>();
-    for (const academy of academies) {
-      names.set(academy.code, academy.name);
-    }
-    for (const s of students) {
-      if (s.college_code && s.college_name && !names.has(s.college_code)) {
-        names.set(s.college_code, s.college_name);
-      }
-    }
-    return names;
-  }, [academies, students]);
-
-  const resolveCollegeName = (code: string): string =>
-    code ? (collegeNames.get(code) ?? code) : UNKNOWN_COLLEGE_LABEL;
+  const collegeNames = useMemo(
+    () => buildCollegeNameMap(academies, students),
+    [academies, students]
+  );
 
   if (cols.length === 0 || collegeRows.length === 0) return null;
 
@@ -169,7 +158,7 @@ export function CollegeQuotaMatrix({
                   scope="row"
                   className="text-left py-1.5 pr-3 font-medium text-slate-700 whitespace-nowrap"
                 >
-                  {resolveCollegeName(code)}
+                  {resolveCollegeName(collegeNames, code)}
                 </th>
                 {cols.map(col => {
                   const colColleges = byColKey[col.key];

@@ -20,8 +20,10 @@ import type {
   ReleaseChainItem,
 } from "@/lib/api/modules/manual-distribution";
 import {
+  buildCollegeNameMap,
   getSavedAllocation,
   makeColKey,
+  resolveCollegeName,
 } from "@/lib/api/modules/manual-distribution";
 import { User } from "@/types/user";
 import { Button } from "@/components/ui/button";
@@ -720,6 +722,13 @@ export function ManualDistributionPanel({
     });
   }, [students, collegeFilter, searchQuery]);
 
+  // Academies-first code→name map, shared with the quota matrix so every
+  // college label on this screen resolves identically (see buildCollegeNameMap).
+  const collegeNames = useMemo(
+    () => buildCollegeNameMap(academies, students),
+    [academies, students]
+  );
+
   // Group students by college
   const studentsByCollege = useMemo(() => {
     const groups: {
@@ -734,14 +743,14 @@ export function ManualDistributionPanel({
         seen.set(key, []);
         groups.push({
           collegeCode: key,
-          collegeName: s.college_name || key,
+          collegeName: resolveCollegeName(collegeNames, key),
           students: seen.get(key)!,
         });
       }
       seen.get(key)!.push(s);
     }
     return groups;
-  }, [filteredStudents]);
+  }, [filteredStudents, collegeNames]);
 
   const collegeCodes = useMemo(
     () =>
@@ -1047,8 +1056,7 @@ export function ManualDistributionPanel({
                 <option value="">全部學院</option>
                 {collegeCodes.map(code => (
                   <option key={code} value={code}>
-                    {students.find(s => s.college_code === code)
-                      ?.college_name || code}
+                    {resolveCollegeName(collegeNames, code)}
                   </option>
                 ))}
               </select>
@@ -1299,7 +1307,7 @@ export function ManualDistributionPanel({
                               colSpan={12 + subTypeCols.length}
                               className="px-4 py-1.5 text-xs font-bold text-slate-600 border-y border-slate-300"
                             >
-                              {collegeName || collegeCode}
+                              {collegeName}
                             </td>
                           </tr>
                           {collegeStudents.map(student => {
@@ -1461,7 +1469,11 @@ export function ManualDistributionPanel({
                                   );
                                 })}
                                 <td className="px-3 py-2.5 border-r border-slate-100 whitespace-nowrap">
-                                  {student.college_name || student.college_code}
+                                  {resolveCollegeName(
+                                    collegeNames,
+                                    student.college_code,
+                                    student.college_name
+                                  )}
                                 </td>
                                 <td className="px-3 py-2.5 border-r border-slate-100 whitespace-nowrap">
                                   {student.department_name}
@@ -1757,7 +1769,11 @@ export function ManualDistributionPanel({
                                   {student.student_name}
                                 </td>
                                 <td className="px-4 py-1.5">
-                                  {student.college_name || student.college_code}
+                                  {resolveCollegeName(
+                                    collegeNames,
+                                    student.college_code,
+                                    student.college_name
+                                  )}
                                 </td>
                                 <td className="px-4 py-1.5 text-slate-600">
                                   {student.department_name}
