@@ -41,7 +41,7 @@ match = safe_regex_match(user_pattern, value, timeout_seconds=1)
    - Multiple unbounded plus: `.+.+`
    - Nested quantified groups: `(a*)*`, `(a+)+`
    - Quantifiers on quantified groups
-3. **Timeout Protection**: Signal-based (1 second max)
+3. **Timeout Protection**: SIGALRM-based (1 second max) — only active on platforms with `signal.SIGALRM` (Unix-like); on Windows the `hasattr(signal, "SIGALRM")` guard skips it, so ReDoS detection and length limits are the only protection there
 4. **Syntax Validation**: Compilation test
 5. **JSON Sanitization**: Round-trip to break taint flow
 
@@ -49,28 +49,11 @@ match = safe_regex_match(user_pattern, value, timeout_seconds=1)
 
 **IMPORTANT**: CodeQL does NOT support inline comment suppressions (e.g., `# lgtm[...]`). The correct way to suppress false positives is using the `filter-sarif` GitHub Action.
 
-**Implementation** (`.github/workflows/codeql.yml`):
+**Implementation**: see `.github/workflows/codeql.yml` — the authoritative source. The flow is: analyze with `upload: false` → map the matrix language to CodeQL's SARIF filename (`javascript-typescript` → `javascript.sarif`, via the `sarif-lang` step) → run `advanced-security/filter-sarif@v1` per language → upload the filtered `sarif-results/${{ steps.sarif-lang.outputs.name }}.sarif`. When adding a suppression, edit the `patterns` block of the matching filter step in that workflow rather than copying a snippet from here, e.g.:
 
 ```yaml
-- name: Perform CodeQL Analysis
-  uses: github/codeql-action/analyze@v4
-  with:
-    output: sarif-results
-    upload: false  # Filter before upload
-
-- name: Filter Python SARIF (Remove False Positives)
-  if: matrix.language == 'python'
-  uses: advanced-security/filter-sarif@v1
-  with:
-    patterns: |
-      -backend/app/core/regex_validator.py:py/regex-injection
-    input: sarif-results/python.sarif
-    output: sarif-results/python.sarif
-
-- name: Upload SARIF to Code Scanning
-  uses: github/codeql-action/upload-sarif@v4
-  with:
-    sarif_file: sarif-results/${{ matrix.language }}.sarif
+patterns: |
+  -backend/app/core/regex_validator.py:py/regex-injection
 ```
 
 **Pattern Syntax**:
@@ -83,8 +66,7 @@ match = safe_regex_match(user_pattern, value, timeout_seconds=1)
 
 ## Test Coverage
 
-See `backend/app/tests/test_regex_validator.py` for comprehensive test suite:
-- 22 test cases covering all security scenarios
+See `backend/app/tests/test_regex_validator.py` for the comprehensive test suite covering:
 - Dangerous pattern rejection tests
 - ReDoS attack prevention tests
 - Edge case coverage (unicode, empty strings, long inputs)

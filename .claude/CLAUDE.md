@@ -255,7 +255,7 @@ Examples:
 - **Concurrency Safety**: Uses database-level row locking (`FOR UPDATE`) to prevent duplicate numbers
 - **Auto-Creation**: Sequence records are created automatically when first application is made
 
-Implementation: `app/models/application_sequence.py` + `_generate_app_id` in `app/services/application_service.py`.
+Implementation: `backend/app/models/application_sequence.py` + `_generate_app_id` in `backend/app/services/application_service.py`.
 
 #### Migration
 Migration `6b5cb44d2fe3` creates the `application_sequences` table and initializes sequences from existing applications.
