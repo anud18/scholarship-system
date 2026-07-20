@@ -20,7 +20,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { triggerBlobDownload } from "@/lib/utils/download";
 
@@ -29,32 +28,11 @@ interface DistributionResultPanelProps {
   scholarshipType: { id: number; code: string; name: string };
 }
 
-type DistributionStatus = "admitted" | "backup" | "rejected";
+type DistributionStatus = "admitted" | "rejected";
 
-interface PendingRow extends DistributionStudent {
-  status: "backup" | "rejected";
-  groupLabel: string;
-}
-
-const STATUS_CONFIG: Record<
-  DistributionStatus,
-  { label: string; badgeClass: string; dotClass: string }
-> = {
-  admitted: {
-    label: "正取",
-    badgeClass: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    dotClass: "bg-emerald-500",
-  },
-  backup: {
-    label: "備取",
-    badgeClass: "border-amber-200 bg-amber-50 text-amber-700",
-    dotClass: "bg-amber-500",
-  },
-  rejected: {
-    label: "未錄取",
-    badgeClass: "border-gray-200 bg-gray-100 text-gray-500",
-    dotClass: "bg-gray-400",
-  },
+const STATUS_CONFIG: Record<DistributionStatus, { label: string; dotClass: string }> = {
+  admitted: { label: "正取", dotClass: "bg-emerald-500" },
+  rejected: { label: "未錄取", dotClass: "bg-gray-400" },
 };
 
 export function DistributionResultPanel({ scholarshipType }: DistributionResultPanelProps) {
@@ -142,22 +120,17 @@ export function DistributionResultPanel({ scholarshipType }: DistributionResultP
 
   // Rejected students come back under the RANKING's sub-type code (e.g. a literal
   // "default" group), which is meaningless to the college — so render one card per
-  // sub-type that actually admitted students, and pool every 備取/未錄取 row into a
-  // single combined table.
+  // sub-type that actually admitted students, and pool everyone else into a single
+  // 未錄取 table. Backend "backup" rows fold in too: nothing in the current
+  // distribution flow ever writes backup_allocations, so 備取 is not a real state.
   const admittedGroups = data.sub_types.filter((g) => g.admitted.length > 0);
   const byPosition = (a?: number, b?: number) =>
     (a === undefined ? Number.MAX_SAFE_INTEGER : a) - (b === undefined ? Number.MAX_SAFE_INTEGER : b);
-  const pendingRows: PendingRow[] = [
-    ...data.sub_types
-      .flatMap((g) => g.backup.map((s) => ({ ...s, status: "backup" as const, groupLabel: g.label })))
-      .sort((a, b) => byPosition(a.backup_position, b.backup_position)),
-    ...data.sub_types
-      .flatMap((g) => g.rejected.map((s) => ({ ...s, status: "rejected" as const, groupLabel: g.label })))
-      .sort((a, b) => byPosition(a.rank_position, b.rank_position)),
-  ];
-  const backupCount = pendingRows.filter((r) => r.status === "backup").length;
+  const rejectedRows: DistributionStudent[] = data.sub_types
+    .flatMap((g) => [...g.backup, ...g.rejected])
+    .sort((a, b) => byPosition(a.rank_position, b.rank_position));
 
-  if (admittedGroups.length === 0 && pendingRows.length === 0) {
+  if (admittedGroups.length === 0 && rejectedRows.length === 0) {
     return <div className="py-12 text-center text-sm text-gray-500">尚未分發，暫無結果</div>;
   }
 
@@ -218,47 +191,27 @@ export function DistributionResultPanel({ scholarshipType }: DistributionResultP
         </div>
       ))}
 
-      {pendingRows.length > 0 && (
+      {rejectedRows.length > 0 && (
         <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-gray-50/80 px-4 py-3">
-            <h3 className="text-base font-semibold text-gray-800">備取／未錄取</h3>
-            <div className="flex items-center gap-4">
-              <StatusCount status="backup" count={backupCount} />
-              <StatusCount status="rejected" count={pendingRows.length - backupCount} />
-            </div>
+            <h3 className="text-base font-semibold text-gray-800">未錄取</h3>
+            <StatusCount status="rejected" count={rejectedRows.length} />
           </div>
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="h-10 w-24">狀態</TableHead>
-                <TableHead className="h-10 w-24 text-center">備取序</TableHead>
-                {backupCount > 0 && <TableHead className="h-10">申請類別</TableHead>}
+                <TableHead className="h-10 w-20 text-center">排名</TableHead>
                 <TableHead className="h-10">姓名</TableHead>
                 <TableHead className="h-10">學號</TableHead>
                 <TableHead className="h-10">系所</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {pendingRows.map((row) => (
-                <TableRow
-                  key={`${row.status}-${row.groupLabel}-${row.student_number}`}
-                  className={row.status === "rejected" ? "text-gray-400" : "text-gray-700"}
-                >
-                  <TableCell className="py-2.5">
-                    <Badge variant="outline" className={STATUS_CONFIG[row.status].badgeClass}>
-                      {STATUS_CONFIG[row.status].label}
-                    </Badge>
-                  </TableCell>
+              {rejectedRows.map((row) => (
+                <TableRow key={row.student_number} className="text-gray-500">
                   <TableCell className="py-2.5 text-center tabular-nums">
-                    {row.status === "backup" && typeof row.backup_position === "number"
-                      ? row.backup_position
-                      : "—"}
+                    {typeof row.rank_position === "number" ? row.rank_position : "—"}
                   </TableCell>
-                  {backupCount > 0 && (
-                    <TableCell className="py-2.5">
-                      {row.status === "backup" ? row.groupLabel : "—"}
-                    </TableCell>
-                  )}
                   <TableCell className="py-2.5 font-medium">{row.student_name}</TableCell>
                   <TableCell className="py-2.5 tabular-nums">{row.student_number}</TableCell>
                   <TableCell className="py-2.5">{row.department || "—"}</TableCell>
