@@ -31,9 +31,9 @@ interface DistributionResultPanelProps {
 
 type DistributionStatus = "admitted" | "backup" | "rejected";
 
-interface DistributionRow extends DistributionStudent {
-  status: DistributionStatus;
-  order?: number;
+interface PendingRow extends DistributionStudent {
+  status: "backup" | "rejected";
+  groupLabel: string;
 }
 
 const STATUS_CONFIG: Record<
@@ -140,6 +140,27 @@ export function DistributionResultPanel({ scholarshipType }: DistributionResultP
     return <div className="py-12 text-center text-sm text-gray-500">尚未分發，暫無結果</div>;
   }
 
+  // Rejected students come back under the RANKING's sub-type code (e.g. a literal
+  // "default" group), which is meaningless to the college — so render one card per
+  // sub-type that actually admitted students, and pool every 備取/未錄取 row into a
+  // single combined table.
+  const admittedGroups = data.sub_types.filter((g) => g.admitted.length > 0);
+  const byPosition = (a?: number, b?: number) =>
+    (a === undefined ? Number.MAX_SAFE_INTEGER : a) - (b === undefined ? Number.MAX_SAFE_INTEGER : b);
+  const pendingRows: PendingRow[] = [
+    ...data.sub_types
+      .flatMap((g) => g.backup.map((s) => ({ ...s, status: "backup" as const, groupLabel: g.label })))
+      .sort((a, b) => byPosition(a.backup_position, b.backup_position)),
+    ...data.sub_types
+      .flatMap((g) => g.rejected.map((s) => ({ ...s, status: "rejected" as const, groupLabel: g.label })))
+      .sort((a, b) => byPosition(a.rank_position, b.rank_position)),
+  ];
+  const backupCount = pendingRows.filter((r) => r.status === "backup").length;
+
+  if (admittedGroups.length === 0 && pendingRows.length === 0) {
+    return <div className="py-12 text-center text-sm text-gray-500">尚未分發，暫無結果</div>;
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-end">
@@ -166,60 +187,87 @@ export function DistributionResultPanel({ scholarshipType }: DistributionResultP
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      {data.sub_types.map((group) => {
-        const rows: DistributionRow[] = [
-          ...group.admitted.map((s) => ({ ...s, status: "admitted" as const, order: s.rank_position })),
-          ...group.backup.map((s) => ({ ...s, status: "backup" as const, order: s.backup_position })),
-          ...group.rejected.map((s) => ({ ...s, status: "rejected" as const })),
-        ];
-        return (
-          <div key={group.code} className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-gray-50/80 px-4 py-3">
-              <h3 className="text-base font-semibold text-gray-800">{group.label}</h3>
-              <div className="flex items-center gap-4">
-                <StatusCount status="admitted" count={group.admitted.length} />
-                <StatusCount status="backup" count={group.backup.length} />
-                <StatusCount status="rejected" count={group.rejected.length} />
-              </div>
-            </div>
-            {rows.length === 0 ? (
-              <p className="px-4 py-8 text-center text-sm text-gray-400">此類別暫無分發名單</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="h-10 w-20 text-center">順位</TableHead>
-                    <TableHead className="h-10 w-24">狀態</TableHead>
-                    <TableHead className="h-10">姓名</TableHead>
-                    <TableHead className="h-10">學號</TableHead>
-                    <TableHead className="h-10">系所</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((row) => (
-                    <TableRow
-                      key={`${row.status}-${row.student_number}`}
-                      className={row.status === "rejected" ? "text-gray-400" : "text-gray-700"}
-                    >
-                      <TableCell className="py-2.5 text-center tabular-nums">
-                        {typeof row.order === "number" ? row.order : "—"}
-                      </TableCell>
-                      <TableCell className="py-2.5">
-                        <Badge variant="outline" className={STATUS_CONFIG[row.status].badgeClass}>
-                          {STATUS_CONFIG[row.status].label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="py-2.5 font-medium">{row.student_name}</TableCell>
-                      <TableCell className="py-2.5 tabular-nums">{row.student_number}</TableCell>
-                      <TableCell className="py-2.5">{row.department || "—"}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+      {admittedGroups.map((group) => (
+        <div key={group.code} className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-gray-50/80 px-4 py-3">
+            <h3 className="text-base font-semibold text-gray-800">{group.label}</h3>
+            <StatusCount status="admitted" count={group.admitted.length} />
           </div>
-        );
-      })}
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="h-10 w-20 text-center">順位</TableHead>
+                <TableHead className="h-10">姓名</TableHead>
+                <TableHead className="h-10">學號</TableHead>
+                <TableHead className="h-10">系所</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {group.admitted.map((s) => (
+                <TableRow key={s.student_number} className="text-gray-700">
+                  <TableCell className="py-2.5 text-center tabular-nums">
+                    {typeof s.rank_position === "number" ? s.rank_position : "—"}
+                  </TableCell>
+                  <TableCell className="py-2.5 font-medium">{s.student_name}</TableCell>
+                  <TableCell className="py-2.5 tabular-nums">{s.student_number}</TableCell>
+                  <TableCell className="py-2.5">{s.department || "—"}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      ))}
+
+      {pendingRows.length > 0 && (
+        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-gray-50/80 px-4 py-3">
+            <h3 className="text-base font-semibold text-gray-800">備取／未錄取</h3>
+            <div className="flex items-center gap-4">
+              <StatusCount status="backup" count={backupCount} />
+              <StatusCount status="rejected" count={pendingRows.length - backupCount} />
+            </div>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="h-10 w-24">狀態</TableHead>
+                <TableHead className="h-10 w-24 text-center">備取序</TableHead>
+                {backupCount > 0 && <TableHead className="h-10">申請類別</TableHead>}
+                <TableHead className="h-10">姓名</TableHead>
+                <TableHead className="h-10">學號</TableHead>
+                <TableHead className="h-10">系所</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {pendingRows.map((row) => (
+                <TableRow
+                  key={`${row.status}-${row.groupLabel}-${row.student_number}`}
+                  className={row.status === "rejected" ? "text-gray-400" : "text-gray-700"}
+                >
+                  <TableCell className="py-2.5">
+                    <Badge variant="outline" className={STATUS_CONFIG[row.status].badgeClass}>
+                      {STATUS_CONFIG[row.status].label}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="py-2.5 text-center tabular-nums">
+                    {row.status === "backup" && typeof row.backup_position === "number"
+                      ? row.backup_position
+                      : "—"}
+                  </TableCell>
+                  {backupCount > 0 && (
+                    <TableCell className="py-2.5">
+                      {row.status === "backup" ? row.groupLabel : "—"}
+                    </TableCell>
+                  )}
+                  <TableCell className="py-2.5 font-medium">{row.student_name}</TableCell>
+                  <TableCell className="py-2.5 tabular-nums">{row.student_number}</TableCell>
+                  <TableCell className="py-2.5">{row.department || "—"}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </div>
   );
 }
