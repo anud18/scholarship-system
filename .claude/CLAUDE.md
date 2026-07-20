@@ -230,66 +230,6 @@ When standardizing existing endpoints:
 - [ ] Verify with `python -m flake8` (check F401 unused imports)
 - [ ] Test endpoint returns expected format
 
-#### Common Issues & Solutions
-
-**1. Syntax errors after regex replacement**:
-```bash
-# Fix double commas
-python -c "import re; content = open('file.py').read(); \
-    content = re.sub(r',,+', ',', content); \
-    open('file.py', 'w').write(content)"
-
-# Fix trailing commas before closing brackets
-python -c "import re; content = open('file.py').read(); \
-    content = re.sub(r',(\s*[}\]\)])', r'\1', content); \
-    open('file.py', 'w').write(content)"
-```
-
-**2. Decorator missing commas**:
-```python
-# ❌ WRONG (after response_model removal)
-@router.post("/announcements"
-    status_code=status.HTTP_201_CREATED)
-
-# ✅ CORRECT
-@router.post("/announcements",
-    status_code=status.HTTP_201_CREATED)
-```
-
-**3. Auto-formatting solution**:
-```bash
-# Let black handle all formatting issues
-python -m black path/to/file.py
-```
-
-**4. Unused imports after migration**:
-```python
-# Remove these if no longer used:
-from app.schemas.common import MessageResponse  # Old single-field response
-from app.schemas.application import ApplicationResponse  # Replaced by dict wrapping
-```
-
-#### Batch Migration Script Template
-```python
-import re
-
-with open('endpoint.py', 'r') as f:
-    content = f.read()
-
-# Remove response_model parameters
-content = re.sub(r',?\s*response_model\s*=\s*[^\n\)]*(?:\[[^\]]*\])?[^\n\)]*', '', content)
-
-# Clean up formatting
-content = re.sub(r',,+', ',', content)
-content = re.sub(r',(\s*[}\]\)])', r'\1', content)
-
-with open('endpoint.py', 'w') as f:
-    f.write(content)
-
-# Then run black to fix all formatting
-# python -m black endpoint.py
-```
-
 ### 6. Application ID Format
 
 **Sequential Application Numbering**: Application IDs follow a structured format for better tracking and management.
@@ -315,19 +255,7 @@ Examples:
 - **Concurrency Safety**: Uses database-level row locking (`FOR UPDATE`) to prevent duplicate numbers
 - **Auto-Creation**: Sequence records are created automatically when first application is made
 
-#### Key Components
-```python
-# Model: app/models/application_sequence.py
-class ApplicationSequence(Base):
-    academic_year = Column(Integer, primary_key=True)
-    semester = Column(String(20), primary_key=True)
-    last_sequence = Column(Integer, default=0)
-
-# Service: app/services/application_service.py
-async def _generate_app_id(self, academic_year: int, semester: Optional[str]) -> str:
-    # Uses database locking for thread-safe sequence generation
-    # Returns formatted app_id: APP-{year}-{code}-{seq:05d}
-```
+Implementation: `app/models/application_sequence.py` + `_generate_app_id` in `app/services/application_service.py`.
 
 #### Migration
 Migration `6b5cb44d2fe3` creates the `application_sequences` table and initializes sequences from existing applications.
@@ -348,32 +276,7 @@ Migration `6b5cb44d2fe3` creates the `application_sequences` table and initializ
 - ❌ Student-filled form data (bank account, contact phone, etc.)
 - ❌ Application-specific data (scholarship type, application status, etc.)
 
-**Schema Definition**: `backend/app/schemas/student_snapshot.py`
-
-```python
-# Example student_data structure
-{
-    # API 1: 學生基本資料
-    "std_stdcode": "310460031",
-    "std_cname": "王小明",
-    "com_email": "nctutest@g2.nctu.edu.tw",
-    "std_academyno": "A",
-    "std_depno": "4460",
-    # ... all API 1 fields
-
-    # API 2: 學生學期資料 (申請當時)
-    "trm_year": 114,
-    "trm_term": 1,
-    "trm_academyname": "人社院",
-    "trm_depname": "教育博",
-    "trm_ascore_gpa": 3.8,
-    # ... all API 2 fields
-
-    # Internal metadata
-    "_api_fetched_at": "2025-10-22T17:27:08Z",
-    "_term_data_status": "success"
-}
-```
+**Schema Definition**: `backend/app/schemas/student_snapshot.py` (see it for the full field list — API 1 `std_*`/`com_*` fields, API 2 `trm_*` fields, plus the `_api_fetched_at`/`_term_data_status` metadata keys).
 
 #### submitted_form_data (JSON Field)
 **Purpose**: Student-filled dynamic form data.
@@ -382,28 +285,7 @@ Migration `6b5cb44d2fe3` creates the `application_sequences` table and initializ
 - Dynamic form fields (bank_account, contact_phone, etc.)
 - Uploaded document metadata
 
-**Schema**: See `ApplicationFormData` in `backend/app/schemas/application.py`
-
-```python
-# Example submitted_form_data structure
-{
-    "fields": {
-        "bank_account": {
-            "field_id": "bank_account",
-            "field_type": "text",
-            "value": "123456789",
-            "required": true
-        }
-    },
-    "documents": [
-        {
-            "document_id": "bank_account_cover",
-            "file_path": "...",
-            "upload_time": "2024-03-19T10:00:00Z"
-        }
-    ]
-}
-```
+**Schema**: See `ApplicationFormData` in `backend/app/schemas/application.py` (a `fields` map of field-id → typed value entries, plus a `documents` list of upload metadata).
 
 #### Review Data Principles
 **No Scoring System**: Review mechanism simplified to recommendation/ranking mode.
@@ -511,126 +393,7 @@ if not resolved_path.startswith(expected_dir):
 
 ## Regex Injection Prevention
 
-**CRITICAL**: When accepting regex patterns from users (e.g., for configuration validation), never use `re.escape()` as it would break functionality. Instead, use comprehensive validation.
-
-### Use Case
-Administrators need to define custom regex patterns for validating configuration values (emails, API keys, port numbers, etc.). These patterns must remain functional while being secure against regex injection and ReDoS attacks.
-
-### Security Architecture
-
-**Core Module**: `backend/app/core/regex_validator.py`
-
-This module provides secure wrapper functions for regex operations:
-- `validate_regex_pattern()` - Validates pattern before use
-- `safe_regex_match()` - Safe pattern matching
-- `safe_regex_search()` - Safe pattern searching
-- `validate_and_sanitize_pattern()` - JSON round-trip sanitization
-
-### Multi-Layer Validation
-
-```python
-# ✅ CORRECT - Use safe wrappers
-from app.core.regex_validator import validate_regex_pattern, safe_regex_match
-
-# Validate pattern first
-validate_regex_pattern(user_pattern, timeout_seconds=1)
-
-# Use safe wrapper (includes re-validation)
-match = safe_regex_match(user_pattern, value, timeout_seconds=1)
-```
-
-### Validation Layers
-
-1. **Length Check**: Maximum 200 characters
-2. **ReDoS Detection**: 6 dangerous patterns checked:
-   - Multiple unbounded wildcards: `.*.*`
-   - Multiple unbounded plus: `.+.+`
-   - Nested quantified groups: `(a*)*`, `(a+)+`
-   - Quantifiers on quantified groups
-3. **Timeout Protection**: Signal-based (1 second max)
-4. **Syntax Validation**: Compilation test
-5. **JSON Sanitization**: Round-trip to break taint flow
-
-### CodeQL Suppression
-
-**IMPORTANT**: CodeQL does NOT support inline comment suppressions (e.g., `# lgtm[...]`). The correct way to suppress false positives is using the `filter-sarif` GitHub Action.
-
-**Implementation** (`.github/workflows/codeql.yml`):
-
-```yaml
-- name: Perform CodeQL Analysis
-  uses: github/codeql-action/analyze@v4
-  with:
-    output: sarif-results
-    upload: false  # Filter before upload
-
-- name: Filter Python SARIF (Remove False Positives)
-  if: matrix.language == 'python'
-  uses: advanced-security/filter-sarif@v1
-  with:
-    patterns: |
-      -backend/app/core/regex_validator.py:py/regex-injection
-    input: sarif-results/python.sarif
-    output: sarif-results/python.sarif
-
-- name: Upload SARIF to Code Scanning
-  uses: github/codeql-action/upload-sarif@v4
-  with:
-    sarif_file: sarif-results/${{ matrix.language }}.sarif
-```
-
-**Pattern Syntax**:
-- `-<file-path>:<query-id>` - Exclude specific query from specific file
-- `+<file-path>:<query-id>` - Include only this query for this file
-
-**Documentation**:
-- All suppression justifications are in `.github/codeql/codeql-config.yml`
-- The filter-sarif action is the official supported method
-
-### Test Coverage
-
-See `backend/app/tests/test_regex_validator.py` for comprehensive test suite:
-- 22 test cases covering all security scenarios
-- Dangerous pattern rejection tests
-- ReDoS attack prevention tests
-- Edge case coverage (unicode, empty strings, long inputs)
-
-### DO NOT Use re.escape()
-
-```python
-# ❌ WRONG - Breaks regex functionality
-safe_pattern = re.escape(user_pattern)  # Turns "^\d{3}$" into "\\^\\d\\{3\\}\\$"
-re.match(safe_pattern, "123")  # Won't match!
-
-# ✅ CORRECT - Use validation wrapper
-validate_regex_pattern(user_pattern)
-safe_regex_match(user_pattern, "123")  # Works correctly!
-```
-
-### Integration Example
-
-```python
-# In config_management_service.py
-if validation_regex:
-    try:
-        # SECURITY: Validate regex pattern first
-        validate_regex_pattern(validation_regex, timeout_seconds=1)
-
-        # Pattern is now safe to use
-        match = safe_regex_match(validation_regex, string_value, timeout_seconds=1)
-        if not match:
-            raise ValueError(f"Value does not match pattern: {validation_regex}")
-    except RegexValidationError as e:
-        raise ValueError(f"Invalid validation pattern: {str(e)}")
-```
-
-### Security Checklist
-- [ ] Use `validate_regex_pattern()` before any regex operation with user input
-- [ ] Use `safe_regex_match()` or `safe_regex_search()` wrappers (not direct `re.match()`)
-- [ ] Never use `re.escape()` for admin-provided validation patterns
-- [ ] Suppress false positives via `filter-sarif` in CodeQL workflow (not inline comments)
-- [ ] Set appropriate timeout (default: 1 second)
-- [ ] Test with malicious patterns in unit tests
+**CRITICAL**: Never use `re.escape()` on admin-provided validation patterns (it breaks them), and never call `re.match()`/`re.search()` on them directly — always use the safe wrappers in `backend/app/core/regex_validator.py` (`validate_regex_pattern()`, `safe_regex_match()`, `safe_regex_search()`). For the full validation architecture, ReDoS rules, CodeQL `filter-sarif` suppression workflow, and integration examples, use the **regex-security** skill.
 
 ## File Upload & Preview Architecture
 
