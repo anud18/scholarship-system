@@ -5,10 +5,11 @@ Handles Excel/CSV parsing, validation, and application creation
 for college staff importing offline collected student data.
 """
 
+import asyncio
 import io
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
 from sqlalchemy import select
@@ -161,6 +162,36 @@ SUB_TYPE_CODE_BY_LABEL = {
 }
 
 
+# Cap on concurrent SIS calls per batch — parallel enough to keep a ~200-row
+# sheet inside the frontend proxy window (issue #1172: sequential per-row
+# lookups took 20-45s and the proxied socket was reset) without flooding SIS.
+SIS_LOOKUP_CONCURRENCY = 10
+
+
+async def _fetch_per_student(
+    student_ids: List[str],
+    fetch: Callable[[str], Awaitable[Any]],
+) -> Dict[str, Any]:
+    """Run one SIS lookup per student concurrently (bounded) and return
+    student_id → result, storing a raised exception as the value so callers
+    keep their per-row error handling.
+
+    SIS lookups are pure HTTP (StudentService holds no AsyncSession), so they
+    are safe to parallelize; DB-bound work must stay sequential in callers.
+    """
+    semaphore = asyncio.Semaphore(SIS_LOOKUP_CONCURRENCY)
+
+    async def bounded_fetch(student_id: str) -> Any:
+        async with semaphore:
+            return await fetch(student_id)
+
+    results = await asyncio.gather(
+        *(bounded_fetch(student_id) for student_id in student_ids),
+        return_exceptions=True,
+    )
+    return dict(zip(student_ids, results))
+
+
 def _make_warning(
     message: str,
     *,
@@ -262,6 +293,15 @@ class BatchImportService:
             prof_result = await self.db.execute(prof_stmt)
             professor_map = {p.nycu_id: p for p in prof_result.scalars().all()}
 
+        # Concurrent snapshot prefetch — the sequential per-row SIS fetch was
+        # the preview-request bottleneck (issue #1172).
+        snapshot_map = await _fetch_per_student(
+            [row.get("student_id") for row in parsed_data],
+            lambda student_id: self.student_service.get_student_snapshot(
+                student_id, academic_year=str(academic_year), semester=semester
+            ),
+        )
+
         for row in parsed_data:
             student_id = row.get("student_id")
             row_number = row.get("row_number")
@@ -278,12 +318,10 @@ class BatchImportService:
                     )
                 )
 
-            try:
-                snapshot = await self.student_service.get_student_snapshot(
-                    student_id, academic_year=str(academic_year), semester=semester
-                )
-            except Exception:  # noqa: BLE001 — any SIS failure demotes to a skip warning
-                logger.warning("Eligibility precheck skipped for %s (SIS error)", student_id, exc_info=True)
+            snapshot = snapshot_map.get(student_id)
+            if isinstance(snapshot, BaseException):
+                # Any SIS failure demotes to a skip warning
+                logger.warning("Eligibility precheck skipped for %s (SIS error)", student_id, exc_info=snapshot)
                 warnings.append(
                     _make_warning(
                         f"無法取得學生 {student_id} 的學籍資料，已跳過資格預檢。",
@@ -716,15 +754,18 @@ class BatchImportService:
         student_map = {s.nycu_id: s for s in students}
 
         # Query SIS API first for ALL students (both existing and new)
-        # This allows us to validate new students using current SIS data
+        # This allows us to validate new students using current SIS data.
+        # Lookups run concurrently (issue #1172) — the sequential per-student
+        # loop was the other half of the preview-request bottleneck.
         sis_data_map: Dict[str, Optional[Dict[str, Any]]] = {}
         api_codes: Dict[str, str] = {}
         if getattr(self.student_service, "api_enabled", False):
+            basic_info_map = await _fetch_per_student(student_ids, self.student_service.get_student_basic_info)
             api_failed = False
             for student_id in student_ids:
-                try:
-                    api_data = await self.student_service.get_student_basic_info(student_id)
-                except ServiceUnavailableError:
+                api_data = basic_info_map.get(student_id)
+                if isinstance(api_data, ServiceUnavailableError):
+                    # One global warning no matter how many lookups failed
                     if not api_failed:
                         add_warning(
                             None,
@@ -732,12 +773,13 @@ class BatchImportService:
                             "學籍系統目前不可用，已跳過即時系所驗證。",
                         )
                         api_failed = True
-                    break
-                except Exception:  # pylint: disable=broad-except
+                    sis_data_map[student_id] = None
+                    continue
+                if isinstance(api_data, BaseException):
                     logger.warning(
                         "Student API unexpected error for %s",
                         student_id,
-                        exc_info=True,
+                        exc_info=api_data,
                     )
                     add_warning(
                         student_id,
@@ -896,23 +938,29 @@ class BatchImportService:
 
         # Bulk create missing users
         if missing_student_ids:
+            # Concurrent SIS prefetch for the new users (issue #1172)
+            basic_info_map = await _fetch_per_student(
+                [row["student_id"] for row in parsed_data if row["student_id"] in missing_student_ids],
+                self.student_service.get_student_basic_info,
+            )
+
             new_users = []
             for row in parsed_data:
                 student_id = row["student_id"]
                 if student_id in missing_student_ids:
-                    # Attempt to fetch SIS data for new users
-                    sis_data = None
-                    try:
-                        sis_data = await self.student_service.get_student_basic_info(student_id)
-                    except ServiceUnavailableError:
+                    sis_data = basic_info_map.get(student_id)
+                    if isinstance(sis_data, ServiceUnavailableError):
                         logger.warning(
                             f"SIS API unavailable for student {student_id}. Creating user with batch import data."
                         )
-                    except Exception:
-                        logger.exception(
+                        sis_data = None
+                    elif isinstance(sis_data, BaseException):
+                        logger.error(
                             "Error fetching SIS data for student %s. Creating user with batch import data.",
                             student_id,
+                            exc_info=sis_data,
                         )
+                        sis_data = None
 
                     new_user = User(
                         nycu_id=student_id,
@@ -1090,6 +1138,15 @@ class BatchImportService:
             # submitted_at timestamp for the whole batch is intended).
             submitted_values = build_submitted_application_values(scholarship, scholarship_config)
 
+            # Concurrent SIS snapshot prefetch — the sequential per-row fetch
+            # made confirm as slow as the upload preview was (issue #1172).
+            snapshot_map = await _fetch_per_student(
+                [row["student_id"] for row in parsed_data],
+                lambda sid: self.student_service.get_student_snapshot(
+                    sid, academic_year=str(academic_year), semester=semester
+                ),
+            )
+
             # Step 2: Bulk create applications
             applications = []
             for idx, row_data in enumerate(parsed_data):
@@ -1103,24 +1160,23 @@ class BatchImportService:
                 # online submissions block during the import, intentionally).
                 app_id = await generate_app_id(self.db, academic_year, semester, suffix="U", commit=False)
 
-                # Create application
-                # Fetch student snapshot from SIS API (includes both basic info and term data)
+                # Prefetched SIS snapshot (includes both basic info and term data)
                 student_data = None
-                try:
-                    student_data = await self.student_service.get_student_snapshot(
-                        student_id, academic_year=str(academic_year), semester=semester
-                    )
-                except (NotFoundError, ServiceUnavailableError):
+                snapshot = snapshot_map.get(student_id)
+                if isinstance(snapshot, (NotFoundError, ServiceUnavailableError)):
                     logger.warning(
                         "SIS API unavailable or student not found for %s. Creating application without student snapshot.",
                         student_id,
-                        exc_info=True,
+                        exc_info=snapshot,
                     )
-                except Exception:
-                    logger.exception(
+                elif isinstance(snapshot, BaseException):
+                    logger.error(
                         "Error fetching student snapshot for %s. Creating application without student snapshot.",
                         student_id,
+                        exc_info=snapshot,
                     )
+                else:
+                    student_data = snapshot
 
                 submitted_form_data = self._build_submitted_form_data(
                     field_definitions, row_data.get("custom_fields", {})
