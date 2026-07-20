@@ -980,6 +980,14 @@ class ManualDistributionService:
                     )
                 approved_count += 1
                 approved_by_ranking[item.ranking_id] = approved_by_ranking.get(item.ranking_id, 0) + 1
+            elif app.is_renewal:
+                # Funded renewals are auto-included in college rankings (#71)
+                # but their allocation state is owned by the renewal-import
+                # path, not by matrix distribution — mirroring the
+                # is_renewal.is_(False) guard in _winner_filters. Downgrading
+                # them to quota-rejected here broke revoke/suspend and
+                # inflated rejected_count (#1171).
+                pass
             elif item.is_supplementary and not item.is_allocated:
                 # Supplementary students pending a second distribution pass —
                 # leave status as 'ranked' so they appear in the next allocation.
