@@ -4,6 +4,7 @@ Unit tests for BatchImportService
 Tests file parsing, validation, bulk operations, and transaction rollback.
 """
 
+import asyncio
 import io
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
@@ -13,7 +14,7 @@ import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import BatchImportError
+from app.core.exceptions import BatchImportError, ServiceUnavailableError
 from app.models.application import Application, ApplicationStatus
 from app.models.batch_import import BatchImport
 from app.models.enums import BatchImportStatus, ReviewStage, Semester
@@ -1008,6 +1009,106 @@ async def test_bulk_check_eligibility_skips_row_when_check_raises(db, scholarshi
     assert skip_warnings[0]["student_id"] == "313554001"
     # A raised check must NOT produce an eligibility_failed warning.
     assert not any(w["warning_type"] == "eligibility_failed" for w in warnings)
+
+
+# ─── concurrent SIS lookups (issue #1172) ────────────────────────────
+#
+# Sequential per-row SIS lookups made a ~200-row upload take 20-45s and
+# blow past the frontend proxy window (ECONNRESET → user-facing 500).
+# Lookups now run concurrently via _fetch_per_student.
+
+
+@pytest.mark.asyncio
+async def test_fetch_per_student_runs_lookups_concurrently():
+    """All lookups must be in flight at once: each fake fetch blocks until
+    every other fetch has started, so a sequential implementation would
+    dead-end in the wait_for timeout (surfacing as an exception value)."""
+    from app.services.batch_import_service import _fetch_per_student
+
+    started: set = set()
+    all_started = asyncio.Event()
+
+    async def fetch(student_id):
+        started.add(student_id)
+        if len(started) == 3:
+            all_started.set()
+        await asyncio.wait_for(all_started.wait(), timeout=5)
+        return {"std_stdcode": student_id}
+
+    result = await _fetch_per_student(["s1", "s2", "s3"], fetch)
+
+    assert result == {
+        "s1": {"std_stdcode": "s1"},
+        "s2": {"std_stdcode": "s2"},
+        "s3": {"std_stdcode": "s3"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_fetch_per_student_maps_exceptions_per_student():
+    """A failed lookup must surface as that student's value (not abort the
+    batch), so callers keep their per-row demote-to-warning handling."""
+    from app.services.batch_import_service import _fetch_per_student
+
+    async def fetch(student_id):
+        if student_id == "bad":
+            raise ServiceUnavailableError("SIS down")
+        return {"std_stdcode": student_id}
+
+    result = await _fetch_per_student(["good", "bad"], fetch)
+
+    assert result["good"] == {"std_stdcode": "good"}
+    assert isinstance(result["bad"], ServiceUnavailableError)
+
+
+@pytest.mark.asyncio
+async def test_bulk_validate_sis_unavailable_warns_once_and_validates_all(db):
+    """SIS being down must produce ONE global warning while every student
+    still gets permission/duplicate results (previously the loop broke and
+    skipped the remaining students silently)."""
+    stub = MagicMock()
+    stub.api_enabled = True
+    stub.get_student_basic_info = AsyncMock(side_effect=ServiceUnavailableError("SIS down"))
+    service = BatchImportService(db, student_service=stub)
+
+    permission_results, duplicate_results, warnings = await service.bulk_validate_permissions_and_duplicates(
+        student_ids=["s1", "s2", "s3"],
+        college_code="E",
+        scholarship_type_id=1,
+        academic_year=114,
+        semester=None,
+    )
+
+    unavailable = [w for w in warnings if w["warning_type"] == "student_api_unavailable"]
+    assert len(unavailable) == 1
+    for student_id in ["s1", "s2", "s3"]:
+        assert permission_results[student_id] == (True, None)
+        assert duplicate_results[student_id] == (False, None)
+
+
+@pytest.mark.asyncio
+async def test_bulk_check_eligibility_snapshot_failure_only_skips_that_row(db, scholarship_with_config, monkeypatch):
+    """A snapshot fetch failing for one student demotes to a per-row skip
+    warning; the other rows still get their eligibility precheck."""
+    service = BatchImportService(db)
+
+    async def fake_snapshot(student_id, academic_year=None, semester=None):
+        if student_id == "313554002":
+            raise ServiceUnavailableError("SIS down")
+        return {"std_stdcode": student_id}
+
+    monkeypatch.setattr(service.student_service, "get_student_snapshot", fake_snapshot)
+
+    parsed_data = [
+        {"student_id": "313554001", "sub_types": ["nstc"], "advisor_nycu_id": None, "row_number": 2},
+        {"student_id": "313554002", "sub_types": ["nstc"], "advisor_nycu_id": None, "row_number": 3},
+    ]
+    warnings = await service.bulk_check_eligibility(parsed_data, scholarship_with_config.id, 114, None)
+
+    skip_warnings = [w for w in warnings if w["warning_type"] == "eligibility_check_skipped"]
+    assert len(skip_warnings) == 1
+    assert skip_warnings[0]["student_id"] == "313554002"
+    assert skip_warnings[0]["row_number"] == 3
 
 
 @pytest.mark.asyncio
