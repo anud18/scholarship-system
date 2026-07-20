@@ -93,6 +93,42 @@ export function getSavedAllocation(s: DistributionStudent): LocalAlloc | null {
     : null;
 }
 
+export const UNKNOWN_COLLEGE_LABEL = "未知";
+
+/**
+ * college_code → display name, academies (reference data) first, then each
+ * student's snapshot college_name for codes the reference table doesn't know.
+ * Single source of truth for the distribution panel: the 所屬學院 filter,
+ * group headers, per-student cells and the quota matrix must all resolve a
+ * code to the SAME name — two codes labelled from different sources is how
+ * "two 藥物科學院 options" and "wrong college's quota row moved" happened.
+ */
+export function buildCollegeNameMap(
+  academies: Array<{ code: string; name: string }>,
+  students: DistributionStudent[]
+): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const academy of academies) {
+    names.set(academy.code, academy.name);
+  }
+  for (const s of students) {
+    if (s.college_code && s.college_name && !names.has(s.college_code)) {
+      names.set(s.college_code, s.college_name);
+    }
+  }
+  return names;
+}
+
+/** Resolved name, falling back to the raw code; empty code → fallback (未知). */
+export function resolveCollegeName(
+  names: Map<string, string>,
+  code: string,
+  emptyCodeFallback?: string
+): string {
+  if (code) return names.get(code) ?? code;
+  return emptyCodeFallback || UNKNOWN_COLLEGE_LABEL;
+}
+
 /** A flattened (sub_type × source-config) column descriptor for the distribution table */
 export interface SubTypeConfigCol {
   sub_type: string;
