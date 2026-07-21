@@ -124,8 +124,11 @@ export function DistributionResultPanel({ scholarshipType }: DistributionResultP
   // 未錄取 table. Backend "backup" rows fold in too: nothing in the current
   // distribution flow ever writes backup_allocations, so 備取 is not a real state.
   const admittedGroups = data.sub_types.filter((g) => g.admitted.length > 0);
-  const byPosition = (a?: number, b?: number) =>
-    (a === undefined ? Number.MAX_SAFE_INTEGER : a) - (b === undefined ? Number.MAX_SAFE_INTEGER : b);
+  // JSON serializes a missing backend rank as null, not undefined — treat both as
+  // "no rank" so unranked rows sort LAST, matching the export's None-last ordering.
+  const byPosition = (a?: number | null, b?: number | null) =>
+    (typeof a === "number" ? a : Number.MAX_SAFE_INTEGER) -
+    (typeof b === "number" ? b : Number.MAX_SAFE_INTEGER);
   const rejectedRows: DistributionStudent[] = data.sub_types
     .flatMap((g) => [...g.backup, ...g.rejected])
     .sort((a, b) => byPosition(a.rank_position, b.rank_position));
@@ -177,8 +180,10 @@ export function DistributionResultPanel({ scholarshipType }: DistributionResultP
               </TableRow>
             </TableHeader>
             <TableBody>
-              {group.admitted.map((s) => (
-                <TableRow key={s.student_number} className="text-gray-700">
+              {group.admitted.map((s, i) => (
+                // student_number can be the backend's "N/A" placeholder for several
+                // students at once, so the index disambiguates the key.
+                <TableRow key={`${s.student_number}-${i}`} className="text-gray-700">
                   <TableCell className="py-2.5 text-center tabular-nums">
                     {typeof s.rank_position === "number" ? s.rank_position : "—"}
                   </TableCell>
@@ -210,8 +215,8 @@ export function DistributionResultPanel({ scholarshipType }: DistributionResultP
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rejectedRows.map((row) => (
-                <TableRow key={row.student_number} className="text-gray-500">
+              {rejectedRows.map((row, i) => (
+                <TableRow key={`${row.student_number}-${i}`} className="text-gray-500">
                   <TableCell className="py-2.5 text-center tabular-nums">
                     {typeof row.rank_position === "number" ? row.rank_position : "—"}
                   </TableCell>
