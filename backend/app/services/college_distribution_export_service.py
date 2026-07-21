@@ -52,18 +52,11 @@ _COLUMNS: List[Tuple[str, float]] = [
     ("學號", 1.2),
     ("姓名", 1.2),
     ("系所", 1.4),
+    ("申請獎學金", 1.8),
 ]
 
 HEADERS: List[str] = [label for label, _ in _COLUMNS]
 _COL_WEIGHTS: List[float] = [weight for _, weight in _COLUMNS]
-
-# (group key, 結果 label, position field) — drives both flattening order and the
-# per-bucket position column, so 正取/備取/未錄取 ordering is defined in one place.
-_OUTCOME_BUCKETS: Tuple[Tuple[str, str, str], ...] = (
-    ("admitted", "正取", "rank_position"),
-    ("backup", "備取", "backup_position"),
-    ("rejected", "未錄取", "rank_position"),
-)
 
 
 @dataclass(frozen=True)
@@ -71,35 +64,52 @@ class DistributionExportRow:
     """One student's outcome within one sub-type."""
 
     sub_type_label: str
-    outcome: str  # 正取 / 備取 / 未錄取
+    outcome: str  # 正取 / 未錄取
     position: Optional[int]
     student_number: str
     student_name: str
     department: str
+    applied_scholarships: str
+
+
+def _export_row(sub_type_label: str, outcome: str, student: Dict[str, Any]) -> DistributionExportRow:
+    return DistributionExportRow(
+        sub_type_label=sub_type_label,
+        outcome=outcome,
+        position=student.get("rank_position"),
+        student_number=student.get("student_number") or "",
+        student_name=student.get("student_name") or "",
+        department=student.get("department") or "",
+        applied_scholarships="、".join(student.get("applied_sub_types") or []),
+    )
+
+
+def _rank_key(student: Dict[str, Any]) -> tuple:
+    rank = student.get("rank_position")
+    return (rank is None, rank or 0)
 
 
 def flatten_sub_types(sub_types: List[Dict[str, Any]]) -> List[DistributionExportRow]:
-    """Flatten the grouped loader payload into export rows.
+    """Flatten the grouped loader payload into export rows, mirroring the panel:
+    per-sub-type 正取 blocks first, then every remaining student pooled into one
+    未錄取 block sorted by college rank.
 
-    Preserves the loader's ordering (it already sorted each bucket), so the export
-    reads in the same order as the panel.
+    Rejected students arrive grouped under their RANKING's sub-type code (e.g. a
+    literal "default"), which is meaningless to the college — so 未錄取 rows carry
+    "—" as 類別 instead of that label. Backend "backup" rows fold into 未錄取 too:
+    nothing in the current distribution flow writes backup_allocations, so 備取 is
+    not a real outcome.
     """
-    rows: List[DistributionExportRow] = []
+    admitted_rows: List[DistributionExportRow] = []
+    leftover_students: List[Dict[str, Any]] = []
     for group in sub_types:
         label = group.get("label") or group.get("code") or ""
-        for key, outcome, position_field in _OUTCOME_BUCKETS:
-            for student in group.get(key) or []:
-                rows.append(
-                    DistributionExportRow(
-                        sub_type_label=label,
-                        outcome=outcome,
-                        position=student.get(position_field),
-                        student_number=student.get("student_number") or "",
-                        student_name=student.get("student_name") or "",
-                        department=student.get("department") or "",
-                    )
-                )
-    return rows
+        for student in group.get("admitted") or []:
+            admitted_rows.append(_export_row(label, "正取", student))
+        leftover_students.extend(group.get("backup") or [])
+        leftover_students.extend(group.get("rejected") or [])
+    rejected_rows = [_export_row("—", "未錄取", s) for s in sorted(leftover_students, key=_rank_key)]
+    return admitted_rows + rejected_rows
 
 
 class CollegeDistributionExportService:
@@ -267,6 +277,7 @@ class CollegeDistributionExportService:
             row.student_number,
             row.student_name,
             row.department,
+            row.applied_scholarships,
         ]
 
     def _safe_str(self, value: Any) -> str:
