@@ -295,12 +295,21 @@ def _group_items_by_sub_type(
             # read trm_depname directly — the same key manual_distribution.py,
             # payment_rosters.py and college_ranking_export_service.py use.
             "department": sd.get("trm_depname") or "",
+            # What the student APPLIED for (vs. what they were allocated) — resolved
+            # to display labels here so the panel/export never need the code map.
+            "applied_sub_types": [
+                (label_map.get(code) or {}).get("label") or code
+                for code in (item.application.scholarship_subtype_list or [])
+            ],
+            # College rank for EVERY bucket — the panel/export pool backup rows into
+            # 未錄取 and order that pool by rank, so backup entries need it too.
+            "rank_position": item.rank_position,
         }
         fallback_code = ranking_sub_type.get(item.ranking_id) or "unallocated"
 
         handled = False
         if item.is_allocated and item.allocated_sub_type:
-            groups[item.allocated_sub_type]["admitted"].append({**student, "rank_position": item.rank_position})
+            groups[item.allocated_sub_type]["admitted"].append(student)
             handled = True
         if item.backup_allocations and isinstance(item.backup_allocations, list):
             for ba in item.backup_allocations:
@@ -312,8 +321,7 @@ def _group_items_by_sub_type(
                 groups[st_code]["backup"].append({**student, "backup_position": ba.get("backup_position")})
                 handled = True
         if not handled:
-            # Carry rank_position so the export's 名次 column is populated and sortable.
-            groups[fallback_code]["rejected"].append({**student, "rank_position": item.rank_position})
+            groups[fallback_code]["rejected"].append(student)
 
     sub_types: List[Dict[str, Any]] = []
     for code in sorted(groups.keys()):
@@ -434,7 +442,9 @@ async def load_college_distribution_results(
     items_stmt = (
         select(CollegeRankingItem)
         .options(
-            selectinload(CollegeRankingItem.application).load_only(Application.student_data, Application.deleted_at)
+            selectinload(CollegeRankingItem.application).load_only(
+                Application.student_data, Application.deleted_at, Application.scholarship_subtype_list
+            )
         )
         .where(CollegeRankingItem.ranking_id.in_(ranking_ids))
         # Explicit order: dedup below keeps the FIRST item on a priority tie, so

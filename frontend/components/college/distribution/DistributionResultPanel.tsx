@@ -5,13 +5,21 @@ import { Loader2, Download, FileSpreadsheet, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { User } from "@/types/user";
 import { useCollegeManagement } from "@/contexts/college-management-context";
-import type { DistributionResults } from "@/lib/api/modules/college";
+import type { DistributionResults, DistributionStudent } from "@/lib/api/modules/college";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { triggerBlobDownload } from "@/lib/utils/download";
 
@@ -19,6 +27,13 @@ interface DistributionResultPanelProps {
   user: User;
   scholarshipType: { id: number; code: string; name: string };
 }
+
+type DistributionStatus = "admitted" | "rejected";
+
+const STATUS_CONFIG: Record<DistributionStatus, { label: string; dotClass: string }> = {
+  admitted: { label: "正取", dotClass: "bg-emerald-500" },
+  rejected: { label: "未錄取", dotClass: "bg-gray-400" },
+};
 
 export function DistributionResultPanel({ scholarshipType }: DistributionResultPanelProps) {
   const { selectedAcademicYear, selectedSemester } = useCollegeManagement();
@@ -103,6 +118,25 @@ export function DistributionResultPanel({ scholarshipType }: DistributionResultP
     return <div className="py-12 text-center text-sm text-gray-500">尚未分發，暫無結果</div>;
   }
 
+  // Rejected students come back under the RANKING's sub-type code (e.g. a literal
+  // "default" group), which is meaningless to the college — so render one card per
+  // sub-type that actually admitted students, and pool everyone else into a single
+  // 未錄取 table. Backend "backup" rows fold in too: nothing in the current
+  // distribution flow ever writes backup_allocations, so 備取 is not a real state.
+  const admittedGroups = data.sub_types.filter((g) => g.admitted.length > 0);
+  // JSON serializes a missing backend rank as null, not undefined — treat both as
+  // "no rank" so unranked rows sort LAST, matching the export's None-last ordering.
+  const byPosition = (a?: number | null, b?: number | null) =>
+    (typeof a === "number" ? a : Number.MAX_SAFE_INTEGER) -
+    (typeof b === "number" ? b : Number.MAX_SAFE_INTEGER);
+  const rejectedRows: DistributionStudent[] = data.sub_types
+    .flatMap((g) => [...g.backup, ...g.rejected])
+    .sort((a, b) => byPosition(a.rank_position, b.rank_position));
+
+  if (admittedGroups.length === 0 && rejectedRows.length === 0) {
+    return <div className="py-12 text-center text-sm text-gray-500">尚未分發，暫無結果</div>;
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-end">
@@ -129,70 +163,84 @@ export function DistributionResultPanel({ scholarshipType }: DistributionResultP
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      {data.sub_types.map((group) => (
-        <div key={group.code} className="rounded-lg border border-gray-200 bg-white p-4">
-          <h3 className="mb-3 text-base font-semibold text-gray-800">{group.label}</h3>
-
-          <Section title="正取" tone="emerald">
-            {group.admitted.map((s) => (
-              <Row key={`a-${s.student_number}`} order={s.rank_position} name={s.student_name} id={s.student_number} department={s.department} />
-            ))}
-          </Section>
-
-          <Section title="備取" tone="amber">
-            {group.backup.map((s) => (
-              <Row key={`b-${s.student_number}`} order={s.backup_position} name={s.student_name} id={s.student_number} department={s.department} />
-            ))}
-          </Section>
-
-          <Section title="未錄取" tone="gray">
-            {group.rejected.map((s) => (
-              <Row key={`r-${s.student_number}`} name={s.student_name} id={s.student_number} department={s.department} />
-            ))}
-          </Section>
+      {admittedGroups.map((group) => (
+        <div key={group.code} className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-gray-50/80 px-4 py-3">
+            <h3 className="text-base font-semibold text-gray-800">{group.label}</h3>
+            <StatusCount status="admitted" count={group.admitted.length} />
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="h-10 w-20 text-center">順位</TableHead>
+                <TableHead className="h-10">姓名</TableHead>
+                <TableHead className="h-10">學號</TableHead>
+                <TableHead className="h-10">系所</TableHead>
+                <TableHead className="h-10">申請獎學金</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {group.admitted.map((s, i) => (
+                // student_number can be the backend's "N/A" placeholder for several
+                // students at once, so the index disambiguates the key.
+                <TableRow key={`${s.student_number}-${i}`} className="text-gray-700">
+                  <TableCell className="py-2.5 text-center tabular-nums">
+                    {typeof s.rank_position === "number" ? s.rank_position : "—"}
+                  </TableCell>
+                  <TableCell className="py-2.5 font-medium">{s.student_name}</TableCell>
+                  <TableCell className="py-2.5 tabular-nums">{s.student_number}</TableCell>
+                  <TableCell className="py-2.5">{s.department || "—"}</TableCell>
+                  <TableCell className="py-2.5">{s.applied_sub_types?.join("、") || "—"}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       ))}
+
+      {rejectedRows.length > 0 && (
+        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-gray-50/80 px-4 py-3">
+            <h3 className="text-base font-semibold text-gray-800">未錄取</h3>
+            <StatusCount status="rejected" count={rejectedRows.length} />
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="h-10 w-20 text-center">排名</TableHead>
+                <TableHead className="h-10">姓名</TableHead>
+                <TableHead className="h-10">學號</TableHead>
+                <TableHead className="h-10">系所</TableHead>
+                <TableHead className="h-10">申請獎學金</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rejectedRows.map((row, i) => (
+                <TableRow key={`${row.student_number}-${i}`} className="text-gray-500">
+                  <TableCell className="py-2.5 text-center tabular-nums">
+                    {typeof row.rank_position === "number" ? row.rank_position : "—"}
+                  </TableCell>
+                  <TableCell className="py-2.5 font-medium">{row.student_name}</TableCell>
+                  <TableCell className="py-2.5 tabular-nums">{row.student_number}</TableCell>
+                  <TableCell className="py-2.5">{row.department || "—"}</TableCell>
+                  <TableCell className="py-2.5">{row.applied_sub_types?.join("、") || "—"}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </div>
   );
 }
 
-function Section({
-  title,
-  tone,
-  children,
-}: {
-  title: string;
-  tone: "emerald" | "amber" | "gray";
-  children: React.ReactNode;
-}) {
-  const hasItems = Array.isArray(children) ? children.length > 0 : !!children;
-  const toneClass =
-    tone === "emerald" ? "text-emerald-700" : tone === "amber" ? "text-amber-700" : "text-gray-500";
+function StatusCount({ status, count }: { status: DistributionStatus; count: number }) {
+  const config = STATUS_CONFIG[status];
   return (
-    <div className="mb-3 last:mb-0">
-      <p className={`mb-1 text-xs font-semibold ${toneClass}`}>{title}</p>
-      {hasItems ? <ul className="space-y-0.5">{children}</ul> : <p className="text-xs text-gray-400">—</p>}
-    </div>
-  );
-}
-
-function Row({
-  order,
-  name,
-  id,
-  department,
-}: {
-  order?: number;
-  name: string;
-  id: string;
-  department: string;
-}) {
-  return (
-    <li className="flex items-center gap-2 text-sm text-gray-700">
-      {typeof order === "number" && <span className="tabular-nums text-gray-400">{order}.</span>}
-      <span>{name}</span>
-      <span className="text-xs text-gray-400">({id})</span>
-      {department && <span className="text-xs text-gray-500">{department}</span>}
-    </li>
+    <span className="flex items-center gap-1.5 text-xs text-gray-600">
+      <span className={`h-2 w-2 rounded-full ${config.dotClass}`} aria-hidden />
+      {config.label}
+      <span className="font-semibold tabular-nums text-gray-800">{count}</span>
+    </span>
   );
 }

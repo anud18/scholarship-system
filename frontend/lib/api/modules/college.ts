@@ -54,8 +54,9 @@ export interface DistributionStudent {
   student_number: string;
   student_name: string;
   department: string;
-  rank_position?: number;
-  backup_position?: number;
+  /** Sub-type labels the student applied for (what they were allocated may differ). */
+  applied_sub_types?: string[];
+  rank_position?: number | null;
 }
 
 export interface DistributionSubTypeGroup {
