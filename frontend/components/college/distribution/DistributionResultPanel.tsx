@@ -173,6 +173,7 @@ export function DistributionResultPanel({ scholarshipType }: DistributionResultP
                 <TableHead className="h-10">姓名</TableHead>
                 <TableHead className="h-10">學號</TableHead>
                 <TableHead className="h-10">系所</TableHead>
+                <TableHead className="h-10">申請獎學金</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -184,6 +185,7 @@ export function DistributionResultPanel({ scholarshipType }: DistributionResultP
                   <TableCell className="py-2.5 font-medium">{s.student_name}</TableCell>
                   <TableCell className="py-2.5 tabular-nums">{s.student_number}</TableCell>
                   <TableCell className="py-2.5">{s.department || "—"}</TableCell>
+                  <TableCell className="py-2.5">{s.applied_sub_types?.join("、") || "—"}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -204,6 +206,7 @@ export function DistributionResultPanel({ scholarshipType }: DistributionResultP
                 <TableHead className="h-10">姓名</TableHead>
                 <TableHead className="h-10">學號</TableHead>
                 <TableHead className="h-10">系所</TableHead>
+                <TableHead className="h-10">申請獎學金</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -215,6 +218,7 @@ export function DistributionResultPanel({ scholarshipType }: DistributionResultP
                   <TableCell className="py-2.5 font-medium">{row.student_name}</TableCell>
                   <TableCell className="py-2.5 tabular-nums">{row.student_number}</TableCell>
                   <TableCell className="py-2.5">{row.department || "—"}</TableCell>
+                  <TableCell className="py-2.5">{row.applied_sub_types?.join("、") || "—"}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
