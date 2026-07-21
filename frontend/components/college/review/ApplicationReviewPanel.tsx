@@ -751,6 +751,14 @@ export function ApplicationReviewPanel({
               <SelectValue placeholder="選擇系所匯出總表" />
             </SelectTrigger>
             <SelectContent>
+              {departmentGroups.length === 0 &&
+                !user.college_code &&
+                user.role !== "admin" &&
+                user.role !== "super_admin" && (
+                  <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                    無可選系所（帳號未設定所屬學院，請聯絡管理員）
+                  </div>
+                )}
               {departmentGroups.map(group => {
                 const value = group.codes.join(",");
                 const label = ambiguousGroupNames.has(group.name)
