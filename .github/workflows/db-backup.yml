@@ -1,0 +1,244 @@
+name: Database Backup
+
+# Scheduled pg_dump backups for the staging and production databases.
+#
+# How it works:
+#   - Jobs run on the self-hosted runner (the DB-VMs sit behind WireGuard,
+#     so GitHub-hosted runners cannot reach them — same constraint as
+#     staging-health-monitor.yml).
+#   - Each job SSHes into the environment's DB-VM and runs
+#     scripts/remote_db_backup.sh, which dumps the postgres container
+#     (custom format, compressed), verifies the archive with
+#     `pg_restore --list`, writes a sha256 checksum, and prunes dated
+#     backup directories past the retention window.
+#   - Backups STAY on the DB-VM under /opt/scholarship/postgres/backups.
+#     Dumps contain PII — they must never be uploaded as GitHub artifacts.
+#   - On any failure an issue labeled `db-backup-failed` is opened
+#     (deduplicated: no new issue while one is still open).
+#
+# Required secrets (per environment):
+#   staging:    STAGING_DB_HOST, STAGING_DB_USER, STAGING_DB_SSH_KEY
+#               (already used by deploy-monitoring-stack.yml)
+#   production: PROD_DB_HOST, PROD_DB_USER, PROD_DB_SSH_KEY
+#
+# Note: production also has an in-container cron backup at 02:00 Taipei
+# (docker-compose.prod-db.yml postgres-backup service). This workflow runs
+# at 03:00 Taipei as an independent, observable backup path — failures
+# surface as GitHub issues instead of dying silently inside a container.
+
+on:
+  schedule:
+    # Cron is UTC; Asia/Taipei = UTC+8.
+    - cron: '30 18 * * *'  # staging    — 02:30 Taipei
+    - cron: '0 19 * * *'   # production — 03:00 Taipei
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to back up'
+        type: choice
+        options:
+          - both
+          - staging
+          - production
+        default: both
+      retention_days:
+        description: 'Days of backups to keep on the DB host'
+        required: false
+        default: '30'
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup-staging:
+    name: Backup Staging DB
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '30 18 * * *') ||
+      (github.event_name == 'workflow_dispatch' &&
+       (github.event.inputs.environment == 'staging' || github.event.inputs.environment == 'both'))
+    runs-on: [self-hosted, scholarship, test]
+    environment: staging
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Pre-flight secret check
+        env:
+          REQUIRED_SECRETS: STAGING_DB_HOST STAGING_DB_USER STAGING_DB_SSH_KEY
+          STAGING_DB_HOST: ${{ secrets.STAGING_DB_HOST }}
+          STAGING_DB_USER: ${{ secrets.STAGING_DB_USER }}
+          STAGING_DB_SSH_KEY: ${{ secrets.STAGING_DB_SSH_KEY }}
+        run: |
+          missing=()
+          for var in $REQUIRED_SECRETS; do
+            if [ -z "${!var}" ]; then
+              missing+=("$var")
+            fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required secrets: ${missing[*]}"
+            exit 1
+          fi
+          echo "✅ All required secrets present"
+
+      - name: Set up SSH key for DB-VM
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.STAGING_DB_SSH_KEY }}" > ~/.ssh/db_backup_staging
+          chmod 600 ~/.ssh/db_backup_staging
+          ssh-keyscan -p 8822 -H ${{ secrets.STAGING_DB_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Run staging backup
+        env:
+          SSH_HOST: ${{ secrets.STAGING_DB_HOST }}
+          SSH_USER: ${{ secrets.STAGING_DB_USER }}
+          SSH_PORT: '8822'
+          DB_CONTAINER: scholarship_postgres_staging
+          ENV_NAME: staging
+          RETENTION_DAYS: ${{ github.event.inputs.retention_days || '30' }}
+        run: |
+          export SSH_KEY_PATH="$HOME/.ssh/db_backup_staging"
+          chmod +x scripts/remote_db_backup.sh
+          scripts/remote_db_backup.sh 2>&1 | tee /tmp/db-backup-staging.log
+          {
+            echo "## Staging DB backup"
+            echo '```'
+            grep -E "BACKUP OK|Pruned|Total dumps" /tmp/db-backup-staging.log || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/db_backup_staging /tmp/db-backup-staging.log
+
+  backup-production:
+    name: Backup Production DB
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '0 19 * * *') ||
+      (github.event_name == 'workflow_dispatch' &&
+       (github.event.inputs.environment == 'production' || github.event.inputs.environment == 'both'))
+    runs-on: [self-hosted, scholarship, test]
+    environment: production
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Pre-flight secret check
+        env:
+          REQUIRED_SECRETS: PROD_DB_HOST PROD_DB_USER PROD_DB_SSH_KEY
+          PROD_DB_HOST: ${{ secrets.PROD_DB_HOST }}
+          PROD_DB_USER: ${{ secrets.PROD_DB_USER }}
+          PROD_DB_SSH_KEY: ${{ secrets.PROD_DB_SSH_KEY }}
+        run: |
+          missing=()
+          for var in $REQUIRED_SECRETS; do
+            if [ -z "${!var}" ]; then
+              missing+=("$var")
+            fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required secrets: ${missing[*]}"
+            echo "::error::Configure them (or an org/environment-level equivalent) to enable production DB backups"
+            exit 1
+          fi
+          echo "✅ All required secrets present"
+
+      - name: Set up SSH key for DB-VM
+        env:
+          SSH_PORT: ${{ secrets.PROD_DB_SSH_PORT || '8822' }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PROD_DB_SSH_KEY }}" > ~/.ssh/db_backup_prod
+          chmod 600 ~/.ssh/db_backup_prod
+          ssh-keyscan -p "$SSH_PORT" -H ${{ secrets.PROD_DB_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Run production backup
+        env:
+          SSH_HOST: ${{ secrets.PROD_DB_HOST }}
+          SSH_USER: ${{ secrets.PROD_DB_USER }}
+          SSH_PORT: ${{ secrets.PROD_DB_SSH_PORT || '8822' }}
+          DB_CONTAINER: scholarship_postgres_prod
+          ENV_NAME: production
+          RETENTION_DAYS: ${{ github.event.inputs.retention_days || '30' }}
+        run: |
+          export SSH_KEY_PATH="$HOME/.ssh/db_backup_prod"
+          chmod +x scripts/remote_db_backup.sh
+          scripts/remote_db_backup.sh 2>&1 | tee /tmp/db-backup-prod.log
+          {
+            echo "## Production DB backup"
+            echo '```'
+            grep -E "BACKUP OK|Pruned|Total dumps" /tmp/db-backup-prod.log || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/db_backup_prod /tmp/db-backup-prod.log
+
+  alert-on-failure:
+    name: Alert on Backup Failure
+    runs-on: ubuntu-latest
+    needs: [backup-staging, backup-production]
+    if: always() && contains(needs.*.result, 'failure')
+    steps:
+      - name: Open issue on backup failure
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const staging = '${{ needs.backup-staging.result }}';
+            const production = '${{ needs.backup-production.result }}';
+            const failed = [
+              ...(staging === 'failure' ? ['staging'] : []),
+              ...(production === 'failure' ? ['production'] : []),
+            ];
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            // Dedupe: don't stack a new issue while one is still open.
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'db-backup-failed',
+              state: 'open',
+            });
+            if (issues.data.length > 0) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issues.data[0].number,
+                body: `Backup failed again for **${failed.join(', ')}**: ${runUrl}`,
+              });
+              return;
+            }
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Database backup failed: ${failed.join(', ')}`,
+              body: [
+                '## Scheduled database backup failed',
+                '',
+                `Failed environment(s): **${failed.join(', ')}**`,
+                `Workflow run: ${runUrl}`,
+                `Detected at: ${new Date().toISOString()}`,
+                '',
+                'Check the run logs, then verify the DB-VM is reachable and the',
+                'postgres container is healthy. Backups live on the DB-VM under',
+                '`/opt/scholarship/postgres/backups`.',
+                '',
+                'This issue was auto-filed by the db-backup workflow. Close it once',
+                'a subsequent backup succeeds.',
+              ].join('\n'),
+              labels: ['db-backup-failed'],
+            });
