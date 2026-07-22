@@ -477,7 +477,7 @@ class ExcelExportService:
             return ""
         sub_type_map = {
             "nstc": "國科會",
-            "moe_1w": "教育部(1萬)",
+            "moe_1w": "教育部(5000)",
             "moe_2w": "教育部(2萬)",
         }
         display = sub_type_map.get(item.allocated_sub_type, item.allocated_sub_type)

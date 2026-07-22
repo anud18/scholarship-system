@@ -223,8 +223,8 @@ describe("getEnrollTypeName", () => {
 
 describe("getSubTypeName", () => {
   const translations = {
-    zh: { nstc: "國科會", moe_1w: "教育部一萬" },
-    en: { nstc: "NSTC", moe_1w: "MOE 10k" },
+    zh: { nstc: "國科會", moe_1w: "教育部5000" },
+    en: { nstc: "NSTC", moe_1w: "MOE 5k" },
   };
 
   it("returns the zh translation by default", () => {
@@ -232,7 +232,7 @@ describe("getSubTypeName", () => {
   });
 
   it("returns the en translation when locale='en'", () => {
-    expect(getSubTypeName("moe_1w", translations, "en")).toBe("MOE 10k");
+    expect(getSubTypeName("moe_1w", translations, "en")).toBe("MOE 5k");
   });
 
   it("falls back to the raw code when translation missing", () => {

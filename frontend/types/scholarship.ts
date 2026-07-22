@@ -8,7 +8,7 @@
 export enum ScholarshipSubType {
   GENERAL = "general", // 一般
   NSTC = "nstc", // 國科會
-  MOE_1W = "moe_1w", // 教育部 1 萬
+  MOE_1W = "moe_1w", // 教育部 (指導教授配合款每月 5000)
   MOE_2W = "moe_2w", // 教育部 2 萬
   // New values can be added via database configuration
 }

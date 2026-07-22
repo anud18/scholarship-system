@@ -96,7 +96,7 @@ def test_format_allocation_display_known_sub_types_with_year():
     assert ExcelExportService._format_allocation_display(item) == "114年 國科會"
 
     item = SimpleNamespace(allocated_sub_type="moe_1w", allocation_year=113)
-    assert ExcelExportService._format_allocation_display(item) == "113年 教育部(1萬)"
+    assert ExcelExportService._format_allocation_display(item) == "113年 教育部(5000)"
 
     item = SimpleNamespace(allocated_sub_type="moe_2w", allocation_year=113)
     assert ExcelExportService._format_allocation_display(item) == "113年 教育部(2萬)"

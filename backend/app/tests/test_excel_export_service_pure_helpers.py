@@ -74,7 +74,7 @@ class TestFormatAllocationDisplay:
 
     def test_moe_1w_with_year(self) -> None:
         result = ExcelExportService._format_allocation_display(_item("moe_1w", 113))
-        assert result == "113年 教育部(1萬)"
+        assert result == "113年 教育部(5000)"
 
     def test_moe_2w_with_year(self) -> None:
         result = ExcelExportService._format_allocation_display(_item("moe_2w", 113))

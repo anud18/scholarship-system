@@ -568,7 +568,7 @@ export function RosterDetailDialog({
                       {item.allocated_sub_type === "nstc"
                         ? "國科會"
                         : item.allocated_sub_type === "moe_1w"
-                          ? "教育部(1萬)"
+                          ? "教育部(5000)"
                           : item.allocated_sub_type === "moe_2w"
                             ? "教育部(2萬)"
                             : item.allocated_sub_type}

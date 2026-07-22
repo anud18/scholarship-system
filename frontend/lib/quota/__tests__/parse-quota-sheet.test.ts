@@ -10,7 +10,7 @@ const COLLEGES: KnownCollege[] = [
 ];
 const SUBTYPES: KnownSubType[] = [
   { code: "nstc", label: "國科會" },
-  { code: "moe_1w", label: "教育部1萬" },
+  { code: "moe_1w", label: "教育部5000" },
 ];
 const sheet = (...rows: unknown[][]) => rows;
 

@@ -239,7 +239,7 @@ export function StudentRosterPreview({
                     {student.allocated_sub_type === "nstc"
                       ? "國科會"
                       : student.allocated_sub_type === "moe_1w"
-                        ? "教育部(1萬)"
+                        ? "教育部(5000)"
                         : student.allocated_sub_type === "moe_2w"
                           ? "教育部(2萬)"
                           : student.allocated_sub_type}
