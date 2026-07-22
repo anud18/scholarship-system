@@ -1633,7 +1633,7 @@ async def download_batch_import_template(
     **範例檔案包含**:
     - 必要欄位: 學號, 學生姓名
     - 可選欄位: 郵局帳號
-    - 子類型欄位: 根據獎學金類型動態生成（使用繁體中文）
+    - 子類型欄位: 根據獎學金類型動態生成（使用繁體中文），1 = 有申請、0 或空白 = 未申請
     - 自訂欄位: 根據 ApplicationField 配置動態生成（使用繁體中文）
 
     **注意**: 系所代碼會自動從學籍系統獲取，不需要在檔案中提供
@@ -1763,15 +1763,17 @@ async def download_batch_import_template(
         )
 
     # Add sub_type sample values if applicable.
-    # Sub-type cells are checkmarks: 1 (or V) = applying for that category,
-    # blank = not applying. Preference order is NOT read from these cells —
-    # the system forces MOE (moe_1w) as first preference, mirroring the
-    # student wizard. Sample rows show both categories checked.
+    # Sub-type cells are checkmarks: 1 (or V/✓) = applying for that category,
+    # 0 or blank = not applying. Preference order is NOT read from these
+    # cells — the system forces MOE (moe_1w) as first preference, mirroring
+    # the student wizard. The two sample rows deliberately contrast 1 and 0
+    # so the semantics are visible in the file itself; the header comments
+    # added below spell them out.
     if scholarship.sub_type_list:
-        for row in sample_data:
-            for sub_type_code in scholarship.sub_type_list:
+        for row_index, row in enumerate(sample_data):
+            for st_index, sub_type_code in enumerate(scholarship.sub_type_list):
                 label = sub_type_labels.get(sub_type_code, sub_type_code)
-                row[label] = 1
+                row[label] = 1 if row_index == 0 or st_index == 0 else 0
 
     # Add custom field sample values
     for field in template_custom_fields:
@@ -1801,7 +1803,16 @@ async def download_batch_import_template(
         df.to_excel(writer, index=False, sheet_name="批次匯入範例")
 
         # Auto-adjust column widths
+        from openpyxl.comments import Comment
         from openpyxl.utils import get_column_letter
+
+        # Sub-type headers (國科會/教育部…) get a hover comment explaining the
+        # checkmark semantics — the 1/0 cell values alone don't tell staff
+        # what they mean.
+        SUB_TYPE_COMMENT_TEXT = "1 = 有申請此類別；0 或空白 = 未申請（亦可填 V 或 ✓）"
+        SUB_TYPE_COMMENT_BOX_HEIGHT = 80
+        SUB_TYPE_COMMENT_BOX_WIDTH = 280
+        sub_type_column_labels = {sub_type_labels.get(code, code) for code in (scholarship.sub_type_list or [])}
 
         worksheet = writer.sheets["批次匯入範例"]
         for idx, col in enumerate(df.columns, 1):
@@ -1831,6 +1842,14 @@ async def download_batch_import_template(
             # Apply width to column
             column_letter = get_column_letter(idx)
             worksheet.column_dimensions[column_letter].width = adjusted_width
+
+            if col in sub_type_column_labels:
+                worksheet.cell(row=1, column=idx).comment = Comment(
+                    SUB_TYPE_COMMENT_TEXT,
+                    "獎學金系統",
+                    height=SUB_TYPE_COMMENT_BOX_HEIGHT,
+                    width=SUB_TYPE_COMMENT_BOX_WIDTH,
+                )
 
     output.seek(0)
 

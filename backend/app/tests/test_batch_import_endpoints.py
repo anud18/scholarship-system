@@ -580,6 +580,23 @@ class TestBatchImportEndpoints:
         # Filename is derived from the scholarship name ("Test Scholarship" -> "Test%20Scholarship").
         assert "Test" in content_disposition
 
+        # Sub-type columns must explain their checkmark semantics: a hover
+        # comment on each header, and sample rows that contrast 1 vs 0.
+        from openpyxl import load_workbook
+
+        worksheet = load_workbook(io.BytesIO(response.content)).active
+        headers = [cell.value for cell in worksheet[1]]
+        for sub_type in ("type_a", "type_b"):
+            header_cell = worksheet.cell(row=1, column=headers.index(sub_type) + 1)
+            assert header_cell.comment is not None
+            assert "1" in header_cell.comment.text and "0" in header_cell.comment.text
+        # First sample row checks both categories; second checks only the
+        # first, so both values 1 and 0 are visible in the file.
+        assert worksheet.cell(row=2, column=headers.index("type_a") + 1).value == 1
+        assert worksheet.cell(row=2, column=headers.index("type_b") + 1).value == 1
+        assert worksheet.cell(row=3, column=headers.index("type_a") + 1).value == 1
+        assert worksheet.cell(row=3, column=headers.index("type_b") + 1).value == 0
+
     @pytest.mark.asyncio
     async def test_upload_accepts_empty_semester_for_yearly(
         self, client: AsyncClient, college_user: User, test_scholarship: ScholarshipType, valid_excel_file
