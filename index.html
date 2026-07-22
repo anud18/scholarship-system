@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Staging evidence — 2026-07-22</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+           margin: 0; padding: 0 24px 80px; max-width: 1100px; margin-inline: auto; }
+    header { padding: 28px 0 12px; border-bottom: 1px solid #ddd; }
+    header h1 { margin: 0 0 6px; font-size: 22px; }
+    header .meta { color: #666; font-size: 13px; }
+    nav.toc { position: sticky; top: 0; background: rgba(255,255,255,0.9); padding: 10px 0;
+              border-bottom: 1px solid #eee; backdrop-filter: blur(6px); }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0e0e0e; color: #e7e7e7; }
+      header { border-color: #333; }
+      header .meta { color: #999; }
+      nav.toc { background: rgba(14,14,14,0.9); border-color: #333; }
+    }
+    nav.toc ol { display: flex; flex-wrap: wrap; gap: 8px 16px; padding-left: 0; list-style: none; margin: 0; }
+    nav.toc a { text-decoration: none; }
+    section.flow { margin: 32px 0; padding-top: 8px; }
+    section.flow > h2 { margin: 0 0 8px; font-size: 17px; }
+    .files { display: grid; grid-template-columns: 1fr; gap: 14px; }
+    .file { padding: 12px; border: 1px solid #e3e3e3; border-radius: 8px; background: #fafafa; }
+    @media (prefers-color-scheme: dark) {
+      .file { border-color: #2a2a2a; background: #161616; }
+    }
+    .file > .name { font-weight: 600; margin-bottom: 6px; word-break: break-word; }
+    .file img { max-width: 100%; height: auto; display: block; border: 1px solid #d0d0d0; border-radius: 4px; }
+    @media (prefers-color-scheme: dark) {
+      .file img { border-color: #333; }
+    }
+    .file .size { color: #888; font-weight: 400; font-size: 12px; }
+    pre.code { margin: 8px 0 0; padding: 10px; background: #f4f4f4; border-radius: 6px;
+               overflow-x: auto; font-size: 12px; line-height: 1.45; }
+    @media (prefers-color-scheme: dark) {
+      pre.code { background: #0a0a0a; }
+    }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 13px; }
+    table th, table td { border: 1px solid #ddd; padding: 6px 10px; text-align: left; vertical-align: top; }
+    @media (prefers-color-scheme: dark) {
+      table th, table td { border-color: #333; }
+    }
+    details summary { cursor: pointer; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; }
+    .summary { color: #666; font-size: 13px; padding: 6px 0 14px; }
+    @media (prefers-color-scheme: dark) {
+      .summary { color: #999; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Staging evidence — 2026-07-22</h1>
+    <div class="meta">1 flows · 3 PNG · 0 JSON · 0 TXT · 0 JS · 275.9 KiB total</div>
+  </header>
+
+  <nav class="toc">
+    <ol>
+      <li><a href="#01-manual-dist-recommendation">01-manual-dist-recommendation</a></li>
+    </ol>
+  </nav>
+
+  <section class="report"><h1>2026-07-22 — manual-distribution 教授推薦/學院推薦 columns</h1>
+<p>Evidence for PR <code>feat/manual-dist-recommendation-columns</code> (feature commit</p>
+<p><code>01be677d</code>): the admin 手動分發 grid gains 教授推薦 and 學院推薦 columns. Playwright spec <code>frontend/e2e/specs/manual-dist-recommendation-columns.spec.ts</code> passed green twice consecutively against the worktree dev stack; see</p>
+<p><code>01-manual-dist-recommendation/REPORT.md</code> for the scenario matrix and the five assertion groups.</p></section>
+
+  
+    <section class="flow" id="01-manual-dist-recommendation">
+      <h2>01-manual-dist-recommendation</h2>
+      <div class="sub-report"><h1>Manual-distribution recommendation columns — e2e verification</h1>
+<p>Feature (branch <code>feat/manual-dist-recommendation-columns</code>, commit <code>01be677d</code>): two new columns on the admin 手動分發 grid, between 申請類別 and the 核配 checkbox group.</p>
+<ul><li>教授推薦 — per-sub-type verdict chips from professor review items</li></ul>
+<p>  (<code>國科會: 推薦</code> emerald / <code>教育部: 不推薦</code> red, reviewer comment in chip <code>title</code>);   amber <code>審核中</code> when the config requires a professor recommendation but no professor   review exists; <code>—</code> when there is no professor step.</p>
+<ul><li>學院推薦 — always leads with the ranking verdict chip (<code>排名: 推薦</code> emerald, or</li></ul>
+<p>  <code>排名: 不推薦</code> red when the ranking item is <code>college_rejected</code> — the 排序 cell then   shows a red <code>N</code>), followed by any per-sub-type college-role review chips.</p>
+<ul><li>Admin-role reviews appear in neither column.</li><li>Chip labels via <code>getSubTypeShortName</code>: <code>nstc</code>→國科會, <code>moe_1w</code>→教育部.</li></ul>
+<h2>Spec</h2>
+<ul><li>File: <code>frontend/e2e/specs/manual-dist-recommendation-columns.spec.ts</code></li><li>Run command:</li></ul>
+<p>      cd frontend       NODE_PATH=/home/howard/scholarship-system/frontend/node_modules \         /home/howard/scholarship-system/frontend/node_modules/.bin/playwright test \         e2e/specs/manual-dist-recommendation-columns.spec.ts --reporter=line</p>
+<p>  (See &quot;Deviation&quot; — the plain <code>npx playwright test</code> form breaks the running dev   container; Playwright is resolved from main's node_modules via <code>NODE_PATH</code> instead   of a <code>frontend/node_modules</code> symlink.)</p>
+<ul><li>Status: PASS — green twice consecutively on the final code (6.9s, 7.1s).</li></ul>
+<h2>Seed (beforeAll, purged in afterAll; idempotent by app_id prefix APP-114-0-9 + ranking tag E2E-REC-DISPLAY)</h2>
+<p>Four ranked applications (all college C, scholarship <code>phd</code> / config 5 / 114 全年, review_stage <code>college_ranked</code>, status <code>submitted</code>, sub-types <code>[&quot;nstc&quot;,&quot;moe_1w&quot;]</code>) plus one finalized <code>college_rankings</code> row (college_code C, is_finalized true) with rank-1..4 items; App3's item <code>college_rejected=true</code>.</p>
+<table><thead><tr><th>#</th><th>student</th><th>rank</th><th>reviews</th><th>expectation</th></tr></thead><tbody><tr><td>App1</td><td>csphd0001 王博士研究生</td><td>1</td><td>professor partial_approve (nstc approve, moe_1w reject &quot;名額有限…&quot;) + college approve (nstc)</td><td>教授: 國科會:推薦 + 教育部:不推薦 · 學院: 排名:推薦 + 國科會:推薦</td></tr><tr><td>App2</td><td>csphd0002 陳AI博士</td><td>2</td><td>none</td><td>教授: 審核中 · 學院: 排名:推薦</td></tr><tr><td>App3</td><td>csphd0003 林機器學習博士</td><td>3 (N)</td><td>professor approve (nstc + moe_1w); item college_rejected</td><td>排序 red N · 學院: 排名:不推薦 · 教授: 國科會:推薦 + 教育部:推薦</td></tr><tr><td>App4</td><td>stuphd001 王博士 (renewal)</td><td>4</td><td>ADMIN reject (nstc, &quot;admin 審查不應顯示&quot;)</td><td>教授: 審核中 · admin comment nowhere · no reject chip</td></tr></tbody></table>
+<h2>Assertions verified (all via expect) — ALL PASS</h2>
+<p>1. Headers 教授推薦 and 學院推薦 exist. 2. App1: 教授推薦 has <code>國科會: 推薦</code> + <code>教育部: 不推薦</code> (reject chip title = comment</p>
+<p>   <code>名額有限，僅推薦國科會</code>); 學院推薦 has <code>排名: 推薦</code> ranking chip AND <code>國科會: 推薦</code>. 3. App2: 教授推薦 <code>審核中</code>; 學院推薦 <code>排名: 推薦</code>. 4. App3: 排序 red <code>N</code>; 學院推薦 <code>排名: 不推薦</code> (no approve ranking chip); 教授推薦 both</p>
+<p>   <code>國科會: 推薦</code> and <code>教育部: 推薦</code>. 5. App4: 教授推薦 <code>審核中</code>; <code>admin 審查不應顯示</code> appears nowhere (admin exclusion);    neither column has a reject chip.</p>
+<h2>Evidence</h2>
+<ul><li>01-grid-overview.png — full student grid, all 4 rows, new columns between 申請類別 and 獲獎獎學金類別（核配勾選）.</li><li>02-professor-college-columns.png — zoom of 排序 + 申請類別 + 教授推薦 + 學院推薦.</li><li>03-college-rejected-row.png — App3 row: red N + 排名: 不推薦.</li></ul>
+<h2>Deviation from the task's practical notes</h2>
+<p>The suggested <code>ln -s …/frontend/node_modules …</code> symlink leaks into the frontend container's <code>/app</code> bind mount and crashes Turbopack (&quot;Symlink node_modules is invalid, it points out of the filesystem root&quot;), restart-looping the container. Root cause: this compose project masks <code>/app/node_modules</code> with an anonymous volume (not a bind of main's node_modules), so the host mountpoint must stay a plain directory. Fix: <code>frontend/ node_modules</code> restored to an empty directory, frontend container restarted (recovered, HTTP 200), and Playwright resolved from main's node_modules via <code>NODE_PATH</code> — no symlink, container healthy. Seed purged in afterAll. No product bug found.</p></div>
+      <div class="files">
+        <div class="file"><div class="name">01-grid-overview.png <span class="size">(191.7 KiB)</span></div><img loading="lazy" src="docs/staging-tests/2026-07-22/01-manual-dist-recommendation/01-grid-overview.png" alt="01-grid-overview.png"></div><div class="file"><div class="name">02-professor-college-columns.png <span class="size">(68.2 KiB)</span></div><img loading="lazy" src="docs/staging-tests/2026-07-22/01-manual-dist-recommendation/02-professor-college-columns.png" alt="02-professor-college-columns.png"></div><div class="file"><div class="name">03-college-rejected-row.png <span class="size">(16.0 KiB)</span></div><img loading="lazy" src="docs/staging-tests/2026-07-22/01-manual-dist-recommendation/03-college-rejected-row.png" alt="03-college-rejected-row.png"></div>
+      </div>
+    </section>
+
+  <footer class="summary">
+    Generated by <code>scripts/evidence/render.mjs</code> · mode: external (sibling assets)
+  </footer>
+</body>
+</html>
