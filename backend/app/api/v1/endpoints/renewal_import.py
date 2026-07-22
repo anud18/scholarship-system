@@ -17,7 +17,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BatchImportError
-from app.core.security import get_current_user
+from app.core.security import require_admin
 from app.db.deps import get_db
 from app.models.audit_log import AuditAction, AuditLog
 from app.models.batch_import import BatchImport, BatchImportStatus
@@ -63,16 +63,6 @@ ALLOWED_UPLOAD_MIME_TYPES = {
 }
 
 
-def require_college_role(current_user: User = Depends(get_current_user)) -> User:
-    """Dependency to require college, admin, or super admin role."""
-    if current_user.role not in [UserRole.college, UserRole.admin, UserRole.super_admin]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="此功能僅限學院或管理員角色使用",
-        )
-    return current_user
-
-
 async def _load_config_in_renewal_period(
     db: AsyncSession,
     scholarship_type_id: int,
@@ -110,7 +100,7 @@ async def upload_renewal_import(
     scholarship_type: str = Query(..., description="獎學金類型代碼", pattern=r"^[a-z_]{1,50}$"),
     academic_year: int = Query(..., description="學年度", ge=100, le=200),
     semester: Optional[str] = Query(None, description="學期", pattern=r"^(first|second|yearly)$"),
-    current_user: User = Depends(require_college_role),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """上傳續領生名單，解析並回傳預覽（僅保留「是 + 通過」的續領生）。"""
@@ -217,7 +207,7 @@ async def upload_renewal_import(
 async def confirm_renewal_import(
     batch_id: int,
     request: RenewalImportConfirmRequest | None = Body(None),
-    current_user: User = Depends(require_college_role),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """確認匯入續領生，建立已核准的續領申請（供造冊使用）。"""
@@ -325,7 +315,7 @@ async def confirm_renewal_import(
 async def get_renewal_import_history(
     skip: int = Query(0, ge=0, description="跳過筆數"),
     limit: int = Query(20, ge=1, le=100, description="每頁筆數"),
-    current_user: User = Depends(require_college_role),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """查詢續領匯入歷史記錄（僅顯示已確認的批次）。"""
@@ -384,7 +374,7 @@ async def get_renewal_import_history(
 @router.get("/{batch_id}/details")
 async def get_renewal_import_details(
     batch_id: int,
-    current_user: User = Depends(require_college_role),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """查詢續領匯入詳細資訊。"""
@@ -437,7 +427,7 @@ async def get_renewal_import_details(
 @router.get("/template")
 async def download_renewal_import_template(
     scholarship_type: str = Query(..., description="獎學金類型代碼", pattern=r"^[a-z_]{1,50}$"),
-    current_user: User = Depends(require_college_role),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """下載續領匯入範例 Excel 檔案。
@@ -448,7 +438,7 @@ async def download_renewal_import_template(
     **注意**: 「獎學金類別」欄位可填 `國科會` 或 `教育部`；僅「學生是否申請續領=是」
     且「續領審核結果=通過」的列會被匯入。
 
-    **權限**: 僅限 college 角色。
+    **權限**: 僅限 admin / super_admin 角色。
     """
     stmt = select(ScholarshipType).where(ScholarshipType.code == scholarship_type)
     scholarship = (await db.execute(stmt)).scalar_one_or_none()

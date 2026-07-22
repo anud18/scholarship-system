@@ -31,7 +31,7 @@ BASE = "/api/v1/college-review/renewal-import"
 def _override_user(user: User):
     """Override the get_current_user dependency to return the given user.
 
-    require_college_role still executes (role gating preserved); only the
+    require_admin still executes (role gating preserved); only the
     underlying get_current_user dependency is replaced. The conftest `client`
     fixture clears all overrides at teardown.
     """
@@ -102,13 +102,12 @@ class TestRenewalImportEndpoints:
     """Test cases for renewal import API endpoints."""
 
     @pytest.fixture
-    async def college_user(self, db: AsyncSession) -> User:
+    async def admin_user(self, db: AsyncSession) -> User:
         user = User(
-            nycu_id="college_renewal",
-            name="College Renewal User",
-            email="college.renewal@test.com",
-            role=UserRole.college,
-            college_code="E",
+            nycu_id="admin_renewal",
+            name="Admin Renewal User",
+            email="admin.renewal@test.com",
+            role=UserRole.admin,
             user_type="employee",
         )
         db.add(user)
@@ -131,13 +130,13 @@ class TestRenewalImportEndpoints:
 
     @pytest.mark.asyncio
     async def test_upload_rejects_outside_renewal_period(
-        self, client: AsyncClient, db: AsyncSession, college_user: User, phd_scholarship: ScholarshipType
+        self, client: AsyncClient, db: AsyncSession, admin_user: User, phd_scholarship: ScholarshipType
     ):
         """Uploading against a config whose renewal window is CLOSED -> 400."""
         db.add(_make_config(phd_scholarship.id, renewal_open=False))
         await db.commit()
 
-        _override_user(college_user)
+        _override_user(admin_user)
         response = await client.post(
             f"{BASE}/upload",
             params={"scholarship_type": "phd", "academic_year": 114, "semester": "first"},
@@ -156,10 +155,10 @@ class TestRenewalImportEndpoints:
 
     @pytest.mark.asyncio
     async def test_upload_missing_config_returns_404(
-        self, client: AsyncClient, db: AsyncSession, college_user: User, phd_scholarship: ScholarshipType
+        self, client: AsyncClient, db: AsyncSession, admin_user: User, phd_scholarship: ScholarshipType
     ):
         """No config for the (year, semester) -> 404 before any file read."""
-        _override_user(college_user)
+        _override_user(admin_user)
         response = await client.post(
             f"{BASE}/upload",
             params={"scholarship_type": "phd", "academic_year": 114, "semester": "first"},
@@ -176,7 +175,7 @@ class TestRenewalImportEndpoints:
 
     @pytest.mark.asyncio
     async def test_upload_happy_path_filters_non_passing_rows(
-        self, client: AsyncClient, db: AsyncSession, college_user: User, phd_scholarship: ScholarshipType, monkeypatch
+        self, client: AsyncClient, db: AsyncSession, admin_user: User, phd_scholarship: ScholarshipType, monkeypatch
     ):
         """Open renewal window + a 2-row sheet -> 200, 1 imported, 1 skipped."""
         db.add(_make_config(phd_scholarship.id, renewal_open=True))
@@ -185,7 +184,7 @@ class TestRenewalImportEndpoints:
         # Disable the external SIS lookup so validate_and_preview is deterministic.
         monkeypatch.setattr(settings, "student_api_enabled", False, raising=False)
 
-        _override_user(college_user)
+        _override_user(admin_user)
         response = await client.post(
             f"{BASE}/upload",
             params={"scholarship_type": "phd", "academic_year": 114, "semester": "first"},
@@ -207,17 +206,24 @@ class TestRenewalImportEndpoints:
         assert data["preview_data"][0]["sub_type"] == "nstc"
 
     @pytest.mark.asyncio
-    async def test_upload_requires_college_role(self, client: AsyncClient, phd_scholarship: ScholarshipType):
-        """Upload endpoint requires college / admin / super_admin role."""
-        student_user = User(
+    @pytest.mark.parametrize(
+        "role,user_type",
+        [(UserRole.student, "student"), (UserRole.college, "employee")],
+    )
+    async def test_upload_requires_admin_role(
+        self, client: AsyncClient, phd_scholarship: ScholarshipType, role: UserRole, user_type: str
+    ):
+        """Upload endpoint is admin / super_admin only — students AND college users get 403."""
+        non_admin_user = User(
             id=999,
-            nycu_id="student_renewal",
-            name="Student User",
-            email="student.renewal@test.com",
-            role=UserRole.student,
-            user_type="student",
+            nycu_id="non_admin_renewal",
+            name="Non Admin User",
+            email="non.admin.renewal@test.com",
+            role=role,
+            college_code="E" if role == UserRole.college else None,
+            user_type=user_type,
         )
-        _override_user(student_user)
+        _override_user(non_admin_user)
         response = await client.post(
             f"{BASE}/upload",
             params={"scholarship_type": "phd", "academic_year": 114, "semester": "first"},
@@ -232,9 +238,9 @@ class TestRenewalImportEndpoints:
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     @pytest.mark.asyncio
-    async def test_download_template(self, client: AsyncClient, college_user: User, phd_scholarship: ScholarshipType):
+    async def test_download_template(self, client: AsyncClient, admin_user: User, phd_scholarship: ScholarshipType):
         """Template download returns an .xlsx attachment."""
-        _override_user(college_user)
+        _override_user(admin_user)
         response = await client.get(f"{BASE}/template", params={"scholarship_type": "phd"})
 
         assert response.status_code == status.HTTP_200_OK
@@ -244,10 +250,10 @@ class TestRenewalImportEndpoints:
         assert ".xlsx" in content_disposition
 
     @pytest.mark.asyncio
-    async def test_confirm_rejects_non_renewal_batch(self, client: AsyncClient, db: AsyncSession, college_user: User):
+    async def test_confirm_rejects_non_renewal_batch(self, client: AsyncClient, db: AsyncSession, admin_user: User):
         """The renewal confirm endpoint must reject a non-renewal batch (import_type='application') -> 404."""
         batch = BatchImport(
-            importer_id=college_user.id,
+            importer_id=admin_user.id,
             college_code="E",
             scholarship_type_id=1,
             academic_year=114,
@@ -262,7 +268,7 @@ class TestRenewalImportEndpoints:
         await db.commit()
         await db.refresh(batch)
 
-        _override_user(college_user)
+        _override_user(admin_user)
         response = await client.post(
             f"{BASE}/{batch.id}/confirm",
             json={"batch_id": batch.id, "confirm": True},
@@ -271,10 +277,10 @@ class TestRenewalImportEndpoints:
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     @pytest.mark.asyncio
-    async def test_confirm_rejects_non_owner(self, client: AsyncClient, db: AsyncSession, college_user: User):
-        """A different non-super-admin user cannot confirm someone else's renewal batch -> 403."""
+    async def test_confirm_rejects_non_owner(self, client: AsyncClient, db: AsyncSession, admin_user: User):
+        """A different non-super-admin admin cannot confirm someone else's renewal batch -> 403."""
         batch = BatchImport(
-            importer_id=college_user.id,
+            importer_id=admin_user.id,
             college_code="E",
             scholarship_type_id=1,
             academic_year=114,
@@ -289,14 +295,14 @@ class TestRenewalImportEndpoints:
         await db.commit()
         await db.refresh(batch)
 
-        # A DIFFERENT college user (not the importer, not super_admin).
+        # A DIFFERENT admin user (not the importer, not super_admin) — passes
+        # require_admin, so the 403 comes from the ownership check.
         other_user = User(
             id=999,
-            nycu_id="other_college",
-            name="Other College User",
-            email="other.college@test.com",
-            role=UserRole.college,
-            college_code="H",
+            nycu_id="other_admin",
+            name="Other Admin User",
+            email="other.admin@test.com",
+            role=UserRole.admin,
             user_type="employee",
         )
         _override_user(other_user)
@@ -309,7 +315,7 @@ class TestRenewalImportEndpoints:
 
     @pytest.mark.asyncio
     async def test_confirm_happy_path_creates_approved_renewals(
-        self, client: AsyncClient, db: AsyncSession, college_user: User, phd_scholarship: ScholarshipType, monkeypatch
+        self, client: AsyncClient, db: AsyncSession, admin_user: User, phd_scholarship: ScholarshipType, monkeypatch
     ):
         """Confirming a pending renewal batch creates an approved is_renewal Application."""
         # Config for the (year, semester) is required by create_renewals_from_batch.
@@ -325,7 +331,7 @@ class TestRenewalImportEndpoints:
             )
         )
         batch = BatchImport(
-            importer_id=college_user.id,
+            importer_id=admin_user.id,
             college_code="E",
             scholarship_type_id=phd_scholarship.id,
             academic_year=114,
@@ -368,7 +374,7 @@ class TestRenewalImportEndpoints:
         # Keep the user-bulk path off the network; the student User is pre-created.
         monkeypatch.setattr(settings, "student_api_enabled", False, raising=False)
 
-        _override_user(college_user)
+        _override_user(admin_user)
         response = await client.post(
             f"{BASE}/{batch.id}/confirm",
             json={"batch_id": batch.id, "confirm": True},

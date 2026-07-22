@@ -272,7 +272,7 @@ export default function ScholarshipManagementSystem() {
 
     if (user.role === "college") {
       return (
-        <TabsList className="grid w-full grid-cols-3 bg-nycu-blue-50 border border-nycu-blue-200">
+        <TabsList className="grid w-full grid-cols-2 bg-nycu-blue-50 border border-nycu-blue-200">
           <TabsTrigger
             value="main"
             className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
@@ -286,13 +286,6 @@ export default function ScholarshipManagementSystem() {
           >
             <Upload className="h-4 w-4" />
             批次匯入
-          </TabsTrigger>
-          <TabsTrigger
-            value="renewal-import"
-            className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
-          >
-            <UserCheck className="h-4 w-4" />
-            {locale === "zh" ? "匯入續領生" : "Import Renewals"}
           </TabsTrigger>
         </TabsList>
       );
@@ -572,8 +565,8 @@ export default function ScholarshipManagementSystem() {
             </TabsContent>
           )}
 
-          {/* 匯入續領生 - college、admin 和 super_admin 角色可見 */}
-          {(user.role === "college" || user.role === "admin" || user.role === "super_admin") && (
+          {/* 匯入續領生 - 只有 admin 和 super_admin 可見 */}
+          {(user.role === "admin" || user.role === "super_admin") && (
             <TabsContent value="renewal-import" className="space-y-4">
               <RenewalImportPanel locale={locale} />
             </TabsContent>
