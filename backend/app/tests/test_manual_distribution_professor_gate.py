@@ -1,18 +1,18 @@
-"""Tests for the professor-review gates on manual distribution.
+"""Tests for the review-reject gate on manual distribution.
 
-Rules (用戶需求):
-  1. 分發時一定要教授有同意「那個」子類型才能被分發到 (positive approval gate).
-  2. 教授審核「不同意」的子類型，分發時絕不可被分發到 (rejection gate).
+Rule (用戶需求): 審核「不同意」的子類型，分發時絕不可被分發到 (rejection
+gate, no exemptions — renewal or not, professor step or not). A sub-type the
+professor merely has NOT approved (no review at all, or no verdict on that
+sub-type) IS allocatable: the grid renders it as 未推薦 (same convention as
+the 學院推薦 column) and the admin decides — one unreviewed application must
+not strand the whole distribution (2026-07 staging fix; the former positive
+professor-approval gate was removed).
 
-Both are enforced in ManualDistributionService._validate_allocations (called
-first by allocate()), so a violation blocks the whole allocate() call before
-any mutation. The rejection gate additionally guards finalize() (rejects may
-arrive after the allocation was saved) and restore_from_history() (a snapshot
-may predate the reject).
-
-Exemptions (positive approval gate ONLY — the rejection gate has none):
-  - renewal applications (續領豁免)
-  - scholarships that don't require a professor recommendation step
+The gate is enforced in ManualDistributionService._validate_allocations
+(called first by allocate()), so a violation blocks the whole allocate() call
+before any mutation. It additionally guards finalize() (rejects may arrive
+after the allocation was saved) and restore_from_history() (a snapshot may
+predate the reject).
 """
 
 from datetime import datetime, timezone
@@ -164,32 +164,30 @@ async def test_allocate_allowed_when_professor_approved_that_subtype(db: AsyncSe
 
 
 @pytest.mark.asyncio
-async def test_allocate_blocked_for_subtype_professor_did_not_approve(db: AsyncSession):
+async def test_allocate_allowed_for_subtype_professor_did_not_review(db: AsyncSession):
     service, item_id, sch_id = await _setup(db, suffix="wrongsub", approved_sub_types=["nstc"])
-    # Professor approved nstc only; allocating to moe_1w must be blocked.
-    with pytest.raises(ValueError, match="教授"):
-        await service._validate_allocations(
-            sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": "moe_1w"}]
-        )
+    # Professor approved nstc only; moe_1w has no verdict → shown as 未推薦
+    # in the grid but still allocatable (no positive-approval gate).
+    await service._validate_allocations(sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": "moe_1w"}])
 
 
 @pytest.mark.asyncio
-async def test_allocate_blocked_when_no_professor_review(db: AsyncSession):
+async def test_allocate_allowed_when_no_professor_review(db: AsyncSession):
+    # No professor review at all — must NOT block the distribution.
     service, item_id, sch_id = await _setup(db, suffix="noreview", approved_sub_types=None)
-    with pytest.raises(ValueError, match="教授"):
-        await service._validate_allocations(sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": "nstc"}])
+    await service._validate_allocations(sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": "nstc"}])
 
 
 @pytest.mark.asyncio
-async def test_allocate_exempts_renewal_application(db: AsyncSession):
-    # Renewal app with no professor approval — must still be allocatable.
+async def test_allocate_allows_renewal_without_professor_review(db: AsyncSession):
+    # Renewal app with no professor approval — allocatable.
     service, item_id, sch_id = await _setup(db, suffix="renewal", is_renewal=True, approved_sub_types=None)
     await service._validate_allocations(sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": "nstc"}])
 
 
 @pytest.mark.asyncio
-async def test_allocate_exempts_scholarship_without_professor_step(db: AsyncSession):
-    # Scholarship that doesn't require professor recommendation — no gate.
+async def test_allocate_allows_scholarship_without_professor_step(db: AsyncSession):
+    # Scholarship that doesn't require professor recommendation — allocatable.
     service, item_id, sch_id = await _setup(db, suffix="noprof", requires_prof=False, approved_sub_types=None)
     await service._validate_allocations(sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": "nstc"}])
 
@@ -201,7 +199,7 @@ async def test_unallocate_is_never_blocked(db: AsyncSession):
     await service._validate_allocations(sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": None}])
 
 
-# --- Rejection gate (教授不同意 → 絕不可分發, no exemptions) ---
+# --- Rejection gate (審核不同意 → 絕不可分發, no exemptions) ---
 
 
 @pytest.mark.asyncio
@@ -217,8 +215,7 @@ async def test_allocate_blocked_when_professor_rejected_subtype(db: AsyncSession
 
 @pytest.mark.asyncio
 async def test_allocate_blocked_when_rejected_even_without_professor_step(db: AsyncSession):
-    # requires_professor_recommendation=False exempts the positive approval
-    # gate, but an explicit reject must still block.
+    # Even without a professor-recommendation step, an explicit reject blocks.
     service, item_id, sch_id = await _setup(db, suffix="rejnoprof", requires_prof=False, rejected_sub_types=["nstc"])
     with pytest.raises(ValueError, match="不同意"):
         await service._validate_allocations(sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": "nstc"}])
@@ -226,8 +223,7 @@ async def test_allocate_blocked_when_rejected_even_without_professor_step(db: As
 
 @pytest.mark.asyncio
 async def test_allocate_blocked_when_rejected_for_renewal(db: AsyncSession):
-    # Renewal exemption applies to the positive approval gate only — an
-    # explicit reject still blocks a renewal allocation.
+    # An explicit reject blocks a renewal allocation too.
     service, item_id, sch_id = await _setup(db, suffix="rejrenew", is_renewal=True, rejected_sub_types=["nstc"])
     with pytest.raises(ValueError, match="不同意"):
         await service._validate_allocations(sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": "nstc"}])

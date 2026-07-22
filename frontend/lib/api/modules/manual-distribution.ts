@@ -28,7 +28,7 @@ export interface DistributionStudent {
   professor_review_items: ReviewItemSummary[];
   /** Per-sub-type college review verdicts supplementing the ranking verdict (學院推薦 column); admin reviews excluded. The college's PRIMARY verdict is the finalized ranking: college_rejected below. */
   college_review_items: ReviewItemSummary[];
-  /** Config requires a professor recommendation step (renewal-aware) — distinguishes 審核中 from no step. */
+  /** Config requires a professor recommendation step (renewal-aware) — distinguishes 未推薦 chips (step required, no verdict yet) from "—" (no professor step). */
   requires_professor_recommendation: boolean;
   allocated_sub_type: string | null;
   /** Config whose quota this student's slot consumes. Seed the checked column from (allocated_sub_type, allocation_config_id). */

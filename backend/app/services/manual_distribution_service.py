@@ -576,7 +576,7 @@ class ManualDistributionService:
                 # display columns. The college's PRIMARY verdict is the
                 # finalized ranking itself (college_rejected below) — its
                 # review items only supplement it. requires_professor_
-                # recommendation lets the UI distinguish "審核中" (step
+                # recommendation lets the UI distinguish 未推薦 chips (step
                 # required, no verdict yet) from "—" (no professor step).
                 "professor_review_items": app_reviews.get("professor", []),
                 "college_review_items": app_reviews.get("college", []),
@@ -1254,26 +1254,27 @@ class ManualDistributionService:
                 raise ValueError(f"Duplicate ranking item: {item_id}")
             seen_items.add(item_id)
 
-        # Review gate (教授審核不同意的子類型不可被分發) — two layers, see
-        # _assert_professor_approved: an unconditional rejection gate plus a
-        # positive professor-approval gate with renewal/config exemptions.
-        await self._assert_professor_approved(allocations)
+        # Review gate (審核不同意的子類型不可被分發) — an explicit reviewer
+        # reject blocks unconditionally. A MISSING professor approval does NOT
+        # block: the grid renders it as 未推薦 (matching the 學院推薦 column)
+        # and the admin decides — distribution must not strand on unreviewed
+        # applications.
+        await self._assert_no_rejected_sub_types(allocations)
 
         # Server-side quota enforcement is net-new (spec §10): the lock gate in
         # allocate/finalize (_assert_round_not_oversubscribed) recounts remaining
         # under SELECT FOR UPDATE on the consumed config rows and rejects
         # oversubscription. The frontend remaining counts are advisory.
 
-    async def _assert_professor_approved(self, allocations: list[dict[str, Any]]) -> None:
-        """Block any allocation to a sub-type the review rejected or the professor did not approve.
+    async def _assert_no_rejected_sub_types(self, allocations: list[dict[str, Any]]) -> None:
+        """Block any allocation to a sub-type an explicit reviewer reject (不同意) covers.
 
         Only allocations that assign a sub-type are checked (``sub_type_code`` set;
-        ``None`` means unallocate). The rejection gate is unconditional: a sub-type
-        with an explicit reviewer reject (不同意) can never be allocated, renewal or
-        not. The positive approval gate additionally requires an explicit professor
-        approve, exempting renewal applications and scholarships that don't require
-        a professor recommendation — for those there is no professor approval to
-        enforce against.
+        ``None`` means unallocate). The gate is unconditional — renewal or not —
+        and mirrors the disabled checkbox in the UI so a crafted request can't
+        bypass it. A sub-type the professor merely has NOT approved yet is
+        allocatable: the grid shows it as 未推薦 and the admin decides, so one
+        unreviewed application can't strand the whole distribution.
         """
         allocating = [a for a in allocations if a.get("sub_type_code")]
         if not allocating:
@@ -1282,7 +1283,7 @@ class ManualDistributionService:
         item_ids = [a["ranking_item_id"] for a in allocating]
         stmt = (
             select(CollegeRankingItem)
-            .options(selectinload(CollegeRankingItem.application).selectinload(Application.scholarship_configuration))
+            .options(selectinload(CollegeRankingItem.application))
             .where(CollegeRankingItem.id.in_(item_ids))
         )
         items = {it.id: it for it in (await self.db.execute(stmt)).scalars().all()}
@@ -1294,8 +1295,6 @@ class ManualDistributionService:
             if app is not None:
                 resolved.append((alloc, app))
 
-        # Layer 1 — rejection gate (unconditional, no exemptions): mirrors the
-        # disabled checkbox in the UI so a crafted request can't bypass it.
         rejected = await self._batch_load_rejected_map(list({app.id for _, app in resolved}))
         rejected_violations = list(
             dict.fromkeys(
@@ -1306,50 +1305,6 @@ class ManualDistributionService:
         )
         if rejected_violations:
             raise ValueError("以下分發之子類型審核不同意，無法分發：" + "、".join(rejected_violations))
-
-        # Layer 2 — positive approval gate (skip renewal apps and scholarships
-        # without a professor recommendation step).
-        gated: list[tuple[dict[str, Any], Application]] = []
-        for alloc, app in resolved:
-            if app.is_renewal:
-                continue
-            cfg = app.scholarship_configuration
-            if not (cfg and cfg.requires_professor_recommendation):
-                continue
-            gated.append((alloc, app))
-
-        if not gated:
-            return
-
-        approved = await self._professor_approved_sub_types({app.id for _, app in gated})
-
-        violations = []
-        for alloc, app in gated:
-            if _norm_sub_type(alloc["sub_type_code"]) not in approved.get(app.id, set()):
-                violations.append(f"{app.app_id} → {alloc['sub_type_code']}")
-
-        if violations:
-            raise ValueError("以下分發未取得教授對該子類型的核准，無法分發：" + "、".join(violations))
-
-    async def _professor_approved_sub_types(self, app_ids: set[int]) -> dict[int, set[str]]:
-        """application_id → set of sub_type_codes a professor recommended ``approve``."""
-        if not app_ids:
-            return {}
-        stmt = (
-            select(ApplicationReview.application_id, ApplicationReviewItem.sub_type_code)
-            .join(ApplicationReviewItem, ApplicationReviewItem.review_id == ApplicationReview.id)
-            .join(User, User.id == ApplicationReview.reviewer_id)
-            .where(
-                ApplicationReview.application_id.in_(app_ids),
-                User.role == UserRole.professor,
-                ApplicationReviewItem.recommendation == "approve",
-            )
-        )
-        result = await self.db.execute(stmt)
-        approved: dict[int, set[str]] = {}
-        for app_id, sub_type_code in result.all():
-            approved.setdefault(app_id, set()).add(_norm_sub_type(sub_type_code))
-        return approved
 
     def _compute_application_identity(self, app: Application) -> str:
         """

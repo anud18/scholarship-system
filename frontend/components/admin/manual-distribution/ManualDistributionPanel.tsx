@@ -110,7 +110,6 @@ const VERDICT_CHIP_BASE =
 const VERDICT_CHIP = {
   approve: `${VERDICT_CHIP_BASE} bg-emerald-50 text-emerald-700 border-emerald-300`,
   reject: `${VERDICT_CHIP_BASE} bg-red-50 text-red-600 border-red-300`,
-  pending: `${VERDICT_CHIP_BASE} bg-amber-50 text-amber-700 border-amber-300`,
   none: `${VERDICT_CHIP_BASE} bg-slate-50 text-slate-500 border-slate-300`,
 };
 
@@ -148,20 +147,24 @@ function ReviewItemChips({
 }
 
 /**
- * 學院推薦 per-sub-type chips: one chip for EVERY applied sub-type, so a
- * sub-type the college rejected (不推薦) or never gave a verdict on (未推薦)
- * is written out instead of silently omitted. Any reject wins over approve
- * (matches the rejected_sub_types convention); review items on sub-types
- * outside the applied list are still appended so no verdict is lost.
+ * Per-sub-type verdict chips for the 教授推薦/學院推薦 columns: one chip for
+ * EVERY applied sub-type, so a sub-type the reviewer rejected (不推薦) or
+ * never gave a verdict on (未推薦) is written out instead of silently
+ * omitted. Any reject wins over approve (matches the rejected_sub_types
+ * convention); review items on sub-types outside the applied list are still
+ * appended so no verdict is lost.
  */
-function CollegeSubTypeVerdictChips({
+function SubTypeVerdictChips({
   appliedSubTypes,
   items,
   quotaStatus,
+  noVerdictTitle,
 }: {
   appliedSubTypes: string[];
   items: ReviewItemSummary[];
   quotaStatus: QuotaStatus;
+  /** Tooltip on the gray 未推薦 chip — names which reviewer gave no verdict. */
+  noVerdictTitle: string;
 }) {
   const norm = (code: string) => code.toLowerCase().trim();
   const applied = Array.from(new Set(appliedSubTypes.map(norm)));
@@ -199,7 +202,7 @@ function CollegeSubTypeVerdictChips({
         return (
           <span
             key={code}
-            title="學院未對此子類型作出推薦審核"
+            title={noVerdictTitle}
             className={VERDICT_CHIP.none}
           >
             {labelFor(code)}: 未推薦
@@ -1494,19 +1497,37 @@ export function ManualDistributionPanel({
                                 </td>
                                 <td className="px-1.5 py-1.5 border-r border-slate-100 leading-snug">
                                   {(student.professor_review_items || [])
-                                    .length > 0 ? (
+                                    .length > 0 ||
+                                  (student.requires_professor_recommendation &&
+                                    (student.applied_sub_types || []).length >
+                                      0) ? (
                                     <div className="flex flex-col gap-0.5">
-                                      <ReviewItemChips
-                                        items={student.professor_review_items}
+                                      {/* Same convention as 學院推薦: a chip
+                                          per applied sub-type, and a missing
+                                          professor verdict renders as 未推薦
+                                          — it no longer blocks allocation,
+                                          the admin decides. */}
+                                      <SubTypeVerdictChips
+                                        appliedSubTypes={
+                                          student.applied_sub_types || []
+                                        }
+                                        items={
+                                          student.professor_review_items || []
+                                        }
                                         quotaStatus={quotaStatus}
+                                        noVerdictTitle="教授未對此子類型作出推薦審核"
                                       />
                                     </div>
                                   ) : student.requires_professor_recommendation ? (
+                                    /* Professor step required but the
+                                       scholarship has no sub-types and no
+                                       verdict yet — chips would be empty, so
+                                       write the 未推薦 out explicitly. */
                                     <span
-                                      className={VERDICT_CHIP.pending}
-                                      title="教授尚未完成推薦審核"
+                                      className={VERDICT_CHIP.none}
+                                      title="教授未作出推薦審核"
                                     >
-                                      審核中
+                                      未推薦
                                     </span>
                                   ) : (
                                     <span className="text-[11px] text-slate-400">
@@ -1536,12 +1557,13 @@ export function ManualDistributionPanel({
                                         排名: 推薦
                                       </span>
                                     )}
-                                    <CollegeSubTypeVerdictChips
+                                    <SubTypeVerdictChips
                                       appliedSubTypes={
                                         student.applied_sub_types || []
                                       }
                                       items={student.college_review_items || []}
                                       quotaStatus={quotaStatus}
+                                      noVerdictTitle="學院未對此子類型作出推薦審核"
                                     />
                                   </div>
                                 </td>

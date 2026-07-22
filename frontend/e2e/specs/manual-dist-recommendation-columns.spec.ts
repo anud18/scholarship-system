@@ -4,11 +4,12 @@
  *
  * The feature adds two columns between 申請類別 and the 核配 checkbox group:
  *
- *   教授推薦 — per-sub-type verdict chips built from professor review items
- *     ("國科會: 推薦" emerald / "教育部: 不推薦" red, reviewer comment in the
- *     title attr); an amber "審核中" chip when the config requires a professor
- *     recommendation but no professor review exists yet; "—" when there is no
- *     professor step at all.
+ *   教授推薦 — one chip per APPLIED sub-type built from professor review
+ *     items ("國科會: 推薦" emerald / "教育部: 不推薦" red, reviewer comment
+ *     in the title attr), gray "未推薦" for sub-types the professor gave no
+ *     verdict on (a missing approval no longer blocks allocation); a single
+ *     unlabeled gray "未推薦" when the step is required but the scholarship
+ *     has no sub-types; "—" when there is no professor step at all.
  *   學院推薦 — ALWAYS leads with the ranking verdict chip: "排名: 推薦" (emerald)
  *     normally, "排名: 不推薦" (red) when the ranking item has college_rejected
  *     (the 排序 cell then shows a red "N") — followed by one chip per APPLIED
@@ -74,7 +75,7 @@ const STUDENTS: SeedStudent[] = [
     renewal: false,
     collegeRejected: false,
   },
-  // App2 — NO reviews → 教授推薦 = 審核中
+  // App2 — NO reviews → 教授推薦 = per-sub-type 未推薦 chips
   {
     appId: "APP-114-0-90002",
     userId: 15,
@@ -94,7 +95,7 @@ const STUDENTS: SeedStudent[] = [
     renewal: false,
     collegeRejected: true,
   },
-  // App4 — renewal; ONLY an admin reject review → excluded → 教授推薦 = 審核中
+  // App4 — renewal; ONLY an admin reject review → excluded → 教授推薦 = 未推薦 chips
   {
     appId: "APP-114-0-90004",
     userId: 6,
@@ -374,9 +375,15 @@ test.describe("Admin manual distribution — 教授推薦 / 學院推薦 columns
         "教育部: 不推薦"
       );
 
-      // Group 3 — App2 (csphd0002): no reviews
+      // Group 3 — App2 (csphd0002): no reviews → every applied sub-type
+      // written out as 未推薦 in the professor column too (no 審核中 blocker)
       const row2 = rowFor(page, "csphd0002");
-      await expect(profCell(row2).locator('[title="教授尚未完成推薦審核"]')).toHaveText("審核中");
+      const prof2 = profCell(row2);
+      await expect(prof2).toContainText("國科會: 未推薦");
+      await expect(prof2).toContainText("教育部: 未推薦");
+      await expect(
+        prof2.locator('[title="教授未對此子類型作出推薦審核"]')
+      ).toHaveCount(2);
       await expect(collegeCell(row2).locator('[title="已列入學院確認排名"]')).toContainText(
         "排名: 推薦"
       );
@@ -400,9 +407,11 @@ test.describe("Admin manual distribution — 教授推薦 / 學院推薦 columns
       await expect(prof3).toContainText("國科會: 推薦");
       await expect(prof3).toContainText("教育部: 推薦");
 
-      // Group 5 — App4 (stuphd001, renewal): admin review excluded
+      // Group 5 — App4 (stuphd001, renewal): admin review excluded → both
+      // sub-types 未推薦 in the professor column
       const row4 = rowFor(page, "stuphd001");
-      await expect(profCell(row4).locator('[title="教授尚未完成推薦審核"]')).toHaveText("審核中");
+      await expect(profCell(row4)).toContainText("國科會: 未推薦");
+      await expect(profCell(row4)).toContainText("教育部: 未推薦");
       // admin comment must appear NOWHERE on the page
       await expect(page.getByText(ADMIN_ONLY_COMMENT)).toHaveCount(0);
       await expect(page.locator(`[title="${ADMIN_ONLY_COMMENT}"]`)).toHaveCount(0);
