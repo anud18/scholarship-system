@@ -5,8 +5,8 @@ get_students_for_distribution must expose, per student row:
     ({sub_type_code, recommendation, comments}) split by reviewer role, with
     admin reviews excluded (the grid IS the admin decision surface);
   - requires_professor_recommendation: renewal-aware config flag so the UI can
-    distinguish 審核中 (professor step required, no verdict yet) from — (no
-    professor step at all).
+    distinguish 未推薦 chips (professor step required, no verdict yet) from —
+    (no professor step at all).
 
 The college's PRIMARY verdict is the finalized ranking itself (the existing
 college_rejected field) — college review items only supplement it, so there is
@@ -208,7 +208,7 @@ async def test_review_item_sub_type_codes_are_normalized(db: AsyncSession):
 async def test_renewal_rows_ignore_general_professor_flag(db: AsyncSession):
     """Renewals read renewal_requires_professor_review, NOT the general flag —
     a renewal of a scholarship whose new-application flow needs a professor
-    step must not show 教授審核中 when the renewal flow skips that step."""
+    step must not show 教授未推薦 chips when the renewal flow skips that step."""
     service, _app, sch_id = await _setup(
         db, suffix="renew", requires_prof=True, renewal_requires_prof=False, is_renewal=True
     )
