@@ -88,6 +88,14 @@ const reactPdf = jest.requireMock("react-pdf") as {
   __renderAllPages: () => void;
 };
 
+/**
+ * Define scroll metrics with a browser-like scrollTop: writes are clamped to
+ * [0, scrollHeight - clientHeight] and any change dispatches a real scroll
+ * event. This mirrors the mechanism behind the zoom-clamp gate-bypass this
+ * suite regression-tests: in a browser, a programmatic scrollTop write (or a
+ * content resize) that lands past the max is clamped to the bottom and fires
+ * a scroll event.
+ */
 function setScrollMetrics(
   el: HTMLElement,
   {
@@ -96,17 +104,43 @@ function setScrollMetrics(
     scrollTop,
   }: { scrollHeight: number; clientHeight: number; scrollTop: number },
 ) {
-  // writable: the viewer restores scroll position after zoom by assigning
-  // scrollTop; a non-writable property would throw under strict mode.
-  Object.defineProperty(el, "scrollHeight", { configurable: true, writable: true, value: scrollHeight });
-  Object.defineProperty(el, "clientHeight", { configurable: true, writable: true, value: clientHeight });
-  Object.defineProperty(el, "scrollTop", { configurable: true, writable: true, value: scrollTop });
+  Object.defineProperty(el, "scrollHeight", {
+    configurable: true,
+    writable: true,
+    value: scrollHeight,
+  });
+  Object.defineProperty(el, "clientHeight", {
+    configurable: true,
+    writable: true,
+    value: clientHeight,
+  });
+  let current = scrollTop;
+  Object.defineProperty(el, "scrollTop", {
+    configurable: true,
+    get: () => current,
+    set: (v: number) => {
+      const max = Math.max(0, (el.scrollHeight as number) - (el.clientHeight as number));
+      const next = Math.max(0, Math.min(v, max));
+      if (next !== current) {
+        current = next;
+        el.dispatchEvent(new Event("scroll"));
+      }
+    },
+  });
 }
 
 function flushRaf() {
   return new Promise<void>((resolve) =>
     requestAnimationFrame(() => resolve()),
   );
+}
+
+function getScroller(container: HTMLElement): HTMLElement {
+  const scroller = container.querySelector(
+    "[data-testid='pdf-scroll-container']",
+  ) as HTMLElement;
+  expect(scroller).not.toBeNull();
+  return scroller;
 }
 
 describe("InlinePdfViewer", () => {
@@ -124,11 +158,7 @@ describe("InlinePdfViewer", () => {
       <InlinePdfViewer url="/fake.pdf" onReachedBottom={onReached} />,
     );
     act(() => reactPdf.__setSuccess(2));
-
-    const scroller = container.querySelector(
-      "[data-testid='pdf-scroll-container']",
-    ) as HTMLElement;
-    expect(scroller).not.toBeNull();
+    const scroller = getScroller(container);
 
     // Initial scroll, not yet at bottom.
     setScrollMetrics(scroller, { scrollHeight: 2000, clientHeight: 500, scrollTop: 100 });
@@ -151,10 +181,7 @@ describe("InlinePdfViewer", () => {
     const { container } = render(
       <InlinePdfViewer url="/fake.pdf" onReachedBottom={onReached} />,
     );
-
-    const scroller = container.querySelector(
-      "[data-testid='pdf-scroll-container']",
-    ) as HTMLElement;
+    const scroller = getScroller(container);
     setScrollMetrics(scroller, { scrollHeight: 400, clientHeight: 500, scrollTop: 0 });
 
     // onLoadSuccess alone (without page render) must NOT auto-latch. This is
@@ -187,10 +214,7 @@ describe("InlinePdfViewer", () => {
     const { container } = render(
       <InlinePdfViewer url="/fake.pdf" onReachedBottom={onReached} />,
     );
-
-    const scroller = container.querySelector(
-      "[data-testid='pdf-scroll-container']",
-    ) as HTMLElement;
+    const scroller = getScroller(container);
     // After all pages render, scrollHeight (1600) >> clientHeight (500)
     setScrollMetrics(scroller, { scrollHeight: 1600, clientHeight: 500, scrollTop: 0 });
 
@@ -234,15 +258,12 @@ describe("InlinePdfViewer", () => {
     expect(screen.getByTestId("pdf-zoom-reset")).toBeDisabled();
   });
 
-  it("does NOT auto-latch a fitting document while zoomed out (gate-bypass guard), but scrolling to the bottom still latches", async () => {
+  it("regression: the scroll-restore clamp during a zoom transition must NOT latch the reading gate", async () => {
     const onReached = jest.fn();
     const { container } = render(
       <InlinePdfViewer url="/fake.pdf" onReachedBottom={onReached} />,
     );
-    const scroller = container.querySelector(
-      "[data-testid='pdf-scroll-container']",
-    ) as HTMLElement;
-    // Overflows at 100%.
+    const scroller = getScroller(container);
     setScrollMetrics(scroller, { scrollHeight: 1600, clientHeight: 500, scrollTop: 0 });
 
     await act(async () => {
@@ -257,10 +278,25 @@ describe("InlinePdfViewer", () => {
     });
     expect(onReached).not.toHaveBeenCalled();
 
-    // Zoom out to 50%; now the whole document "fits" — must NOT auto-latch.
+    // User scrolls partway down (not latched).
+    act(() => {
+      scroller.scrollTop = 1000;
+    });
+    expect(onReached).not.toHaveBeenCalled();
+
+    // Zoom out to 75%. The component's restore writes scrollTop = 750; in the
+    // browser the later canvas shrink clamps scrollTop to the new bottom and
+    // fires a scroll event — the settling window must swallow all of it.
     fireEvent.click(screen.getByTestId("pdf-zoom-out"));
-    fireEvent.click(screen.getByTestId("pdf-zoom-out"));
-    setScrollMetrics(scroller, { scrollHeight: 480, clientHeight: 500, scrollTop: 0 });
+    // Simulate the passive canvas resize: content shrinks, browser clamps the
+    // 750 restore to the new max (1200 - 500 = 700 = bottom) and fires scroll.
+    setScrollMetrics(scroller, { scrollHeight: 1200, clientHeight: 500, scrollTop: 750 });
+    act(() => {
+      scroller.scrollTop = 9999; // clamped to 700 → dispatches scroll at bottom
+    });
+    expect(onReached).not.toHaveBeenCalled();
+
+    // Pages finish rendering at 75%; the settle window closes.
     await act(async () => {
       reactPdf.__renderAllPages();
     });
@@ -269,12 +305,64 @@ describe("InlinePdfViewer", () => {
     });
     expect(onReached).not.toHaveBeenCalled();
 
-    // Back at 100% the document overflows again; reaching the bottom by
-    // scrolling latches as usual.
-    fireEvent.click(screen.getByTestId("pdf-zoom-reset"));
-    setScrollMetrics(scroller, { scrollHeight: 1600, clientHeight: 500, scrollTop: 1098 });
+    // Even a genuine scroll to the bottom at 75% must not latch (content
+    // below 100% is not legible reading), and the hint says so.
     fireEvent.scroll(scroller);
+    expect(onReached).not.toHaveBeenCalled();
+    expect(screen.getByTestId("pdf-zoom-hint")).toBeInTheDocument();
+
+    // Back at 100%: restore targets 700 / 0.75 ≈ 933 in the regrown layout.
+    fireEvent.click(screen.getByTestId("pdf-zoom-reset"));
+    setScrollMetrics(scroller, { scrollHeight: 1600, clientHeight: 500, scrollTop: 700 });
+    await act(async () => {
+      reactPdf.__renderAllPages();
+    });
+    await act(async () => {
+      await flushRaf();
+    });
+    // Not at the bottom (1600 - 933 - 500 = 167 > 8) → still not latched.
+    expect(onReached).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("pdf-zoom-hint")).not.toBeInTheDocument();
+
+    // Now genuinely reach the bottom at 100% → latches exactly once.
+    act(() => {
+      scroller.scrollTop = 1600 - 500;
+    });
     expect(onReached).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-applies the zoom scroll restore after the new-scale layout settles (position kept)", async () => {
+    const { container } = render(<InlinePdfViewer url="/fake.pdf" />);
+    const scroller = getScroller(container);
+    setScrollMetrics(scroller, { scrollHeight: 1600, clientHeight: 500, scrollTop: 0 });
+
+    await act(async () => {
+      reactPdf.__setSuccess(2);
+      await flushRaf();
+    });
+    await act(async () => {
+      reactPdf.__renderAllPages();
+    });
+    await act(async () => {
+      await flushRaf();
+    });
+
+    act(() => {
+      scroller.scrollTop = 900;
+    });
+
+    // Zoom in to 125%: the immediate restore targets 1125, but the old layout
+    // caps scrollTop at 1100 — the browser clamps. Once the canvases grow
+    // (scrollHeight 2000), the settle pass must re-apply the true target.
+    fireEvent.click(screen.getByTestId("pdf-zoom-in"));
+    setScrollMetrics(scroller, { scrollHeight: 2000, clientHeight: 500, scrollTop: scroller.scrollTop });
+    await act(async () => {
+      reactPdf.__renderAllPages();
+    });
+    await act(async () => {
+      await flushRaf();
+    });
+    expect(scroller.scrollTop).toBe(1125);
   });
 
   it("download button delegates to triggerFileDownload with the proxy URL and filename", () => {
@@ -295,7 +383,7 @@ describe("InlinePdfViewer", () => {
     );
   });
 
-  it("fires onLoadError and never fires onReachedBottom when load fails", () => {
+  it("fires onLoadError and never fires onReachedBottom when load fails — and keeps download/open-in-new-tab available", () => {
     const onReached = jest.fn();
     const onErr = jest.fn();
     render(
@@ -312,5 +400,10 @@ describe("InlinePdfViewer", () => {
     expect(onErr).toHaveBeenCalledWith(err);
     expect(onReached).not.toHaveBeenCalled();
     expect(screen.getByText(/重新載入|Reload/)).toBeInTheDocument();
+    // The file may still be downloadable even when pdf.js can't render it, so
+    // the toolbar's escape hatches must survive the error state.
+    expect(screen.getByTestId("pdf-download")).toBeEnabled();
+    expect(screen.getByTestId("pdf-open-new-tab")).toBeEnabled();
+    expect(screen.getByTestId("pdf-zoom-in")).toBeDisabled();
   });
 });

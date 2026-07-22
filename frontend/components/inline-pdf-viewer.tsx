@@ -15,6 +15,7 @@ import {
   RotateCcw,
   ZoomIn,
   ZoomOut,
+  type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -28,10 +29,10 @@ import "react-pdf/dist/Page/TextLayer.css";
 
 interface InlinePdfViewerProps {
   url: string;
-  // Tailwind classes for sizing the scroll container, e.g.
-  // `h-[min(700px,calc(90vh-200px))]`. Required in practice — the
-  // container has no intrinsic height without one. The zoom/download
-  // toolbar adds its own height on top of this.
+  // Tailwind classes sizing the WHOLE viewer (toolbar + scroll area), e.g.
+  // `h-[min(745px,calc(90vh-200px))]`. Required in practice — the component
+  // has no intrinsic height without one. The toolbar consumes its share from
+  // this budget, so callers only need to account for their own chrome.
   className?: string;
   onReachedBottom?: () => void;
   onLoadError?: (err: Error) => void;
@@ -45,29 +46,68 @@ const MIN_SCALE = 0.5;
 const MAX_SCALE = 3;
 const SCALE_STEP = 0.25;
 const DEFAULT_SCALE = 1;
+// Cap on scale × devicePixelRatio for the canvas backing store. Without it,
+// an A4 page at MAX_SCALE on a DPR-2 display needs ~18M backing pixels,
+// past mobile Safari's ~16.7M canvas ceiling — the page would paint blank.
+// With the cap the worst case is ~(595·4)×(842·4) ≈ 8M pixels.
+const MAX_RASTER_FACTOR = 4;
 
 const LABELS = {
   zh: {
     loading: "載入中…",
     error: "無法載入文件",
+    errorFallback: "您仍可使用上方按鈕下載檔案或在新視窗開啟",
     reload: "重新載入",
     zoomIn: "放大",
     zoomOut: "縮小",
     resetZoom: "重設縮放",
+    zoomHint: "縮放低於 100% 時不計入閱讀進度",
     download: "下載",
-    openInNewTab: "另開新視窗",
+    openInNewTab: "在新視窗開啟",
   },
   en: {
     loading: "Loading…",
     error: "Failed to load document",
+    errorFallback:
+      "You can still download the file or open it in a new tab from the toolbar",
     reload: "Reload",
     zoomIn: "Zoom in",
     zoomOut: "Zoom out",
     resetZoom: "Reset zoom",
+    zoomHint: "Zoom below 100% does not count toward reading progress",
     download: "Download",
     openInNewTab: "Open in new tab",
   },
 } as const;
+
+function ToolbarIconButton({
+  icon: Icon,
+  label,
+  testId,
+  disabled,
+  onClick,
+}: {
+  icon: LucideIcon;
+  label: string;
+  testId: string;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-8 w-8"
+      data-testid={testId}
+      title={label}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <Icon className="h-4 w-4" />
+    </Button>
+  );
+}
 
 export function InlinePdfViewer({
   url,
@@ -83,46 +123,91 @@ export function InlinePdfViewer({
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const [scale, setScale] = useState(DEFAULT_SCALE);
+  const [reachedBottom, setReachedBottom] = useState(false);
 
   const latched = useRef(false);
+  // True from a zoom click until every page has re-rendered at the new scale
+  // (plus one frame). While settling, scroll events are ignored: the browser
+  // clamps scrollTop when page canvases resize (react-pdf resizes them in a
+  // passive effect, after our restore below) and dispatches scroll events
+  // that would otherwise satisfy the bottom check without any real reading.
+  const settling = useRef(false);
+  const pendingScrollTop = useRef<number | null>(null);
+
   useEffect(() => {
     latched.current = false;
+    settling.current = false;
+    pendingScrollTop.current = null;
+    setScale(DEFAULT_SCALE);
+    setReachedBottom(false);
   }, [url, reloadToken]);
 
   const fireReached = useCallback(() => {
     if (latched.current) return;
     latched.current = true;
+    setReachedBottom(true);
     onReachedBottom?.();
   }, [onReachedBottom]);
 
-  const handleScroll = useCallback(() => {
-    if (latched.current) return;
+  // Single latch path for both "scrolled to the bottom" and "document fits
+  // without scrolling" (a fitting document has scrollTop 0 and satisfies the
+  // same inequality). Refuses to latch while zoomed below 100% — shrunken
+  // content is not legible reading — and while a zoom transition is settling.
+  const tryLatchAtBottom = useCallback(() => {
+    if (latched.current || settling.current) return;
+    if (scale < DEFAULT_SCALE) return;
     const el = scrollRef.current;
     if (!el) return;
     if (el.scrollHeight - el.scrollTop - el.clientHeight <= SLACK_PX) {
       fireReached();
     }
-  }, [fireReached]);
+  }, [scale, fireReached]);
 
-  // Keep the reading position stable across zoom changes: page height scales
-  // linearly with `scale`, so the equivalent scroll offset is prev * ratio.
-  const pendingScrollTop = useRef<number | null>(null);
-  const zoomTo = useCallback((compute: (prev: number) => number) => {
-    setScale((prev) => {
-      const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, compute(prev)));
-      if (next !== prev && scrollRef.current) {
-        pendingScrollTop.current = (scrollRef.current.scrollTop * next) / prev;
+  const zoomTo = useCallback(
+    (next: number) => {
+      const clamped = Math.min(MAX_SCALE, Math.max(MIN_SCALE, next));
+      if (clamped === scale) return;
+      const el = scrollRef.current;
+      if (el) {
+        // Page height scales linearly with `scale`, so the equivalent scroll
+        // offset is the previous one times the scale ratio.
+        pendingScrollTop.current = (el.scrollTop * clamped) / scale;
       }
-      return next;
-    });
-  }, []);
+      settling.current = true;
+      setRenderedCount(0);
+      setScale(clamped);
+    },
+    [scale],
+  );
 
+  // Best-effort immediate restore so the viewport doesn't visibly jump. The
+  // canvases still have their old sizes here (react-pdf resizes them in a
+  // passive effect), so this write may be clamped; the settle effect below
+  // re-applies the restore once the new-scale layout is final.
   useLayoutEffect(() => {
     if (pendingScrollTop.current === null) return;
     const el = scrollRef.current;
     if (el) el.scrollTop = pendingScrollTop.current;
-    pendingScrollTop.current = null;
   }, [scale]);
+
+  // Runs once all pages have rendered at the current scale (renderedCount is
+  // reset both on document load and on every zoom change): re-apply the
+  // scroll restore against the final layout, then end the settling window and
+  // re-check the bottom/fits condition on the next frame — which also covers
+  // the initial "short document fits without scrolling" auto-latch.
+  useEffect(() => {
+    if (numPages === null || renderedCount < numPages) return;
+    const el = scrollRef.current;
+    if (el && pendingScrollTop.current !== null) {
+      el.scrollTop = pendingScrollTop.current;
+    }
+    pendingScrollTop.current = null;
+    const id = requestAnimationFrame(() => {
+      settling.current = false;
+      tryLatchAtBottom();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [numPages, renderedCount, tryLatchAtBottom]);
 
   const handleLoadSuccess = useCallback(
     ({ numPages: n }: { numPages: number }) => {
@@ -136,30 +221,6 @@ export function InlinePdfViewer({
   const handlePageRenderSuccess = useCallback(() => {
     setRenderedCount((c) => c + 1);
   }, []);
-
-  // Pdf.js renders each <Page> to canvas asynchronously after onLoadSuccess
-  // fires. Checking the fits-without-scrolling condition immediately would
-  // race against canvas painting and could auto-latch on an empty container.
-  // Wait until every page has reported render success, then check on the
-  // next frame so layout has settled.
-  //
-  // Only auto-latch at the default scale: a zoomed-out document that "fits"
-  // would otherwise unlock the reading gate without the content ever being
-  // legible.
-  useEffect(() => {
-    if (scale !== DEFAULT_SCALE) return;
-    if (numPages === null || renderedCount < numPages) return;
-    const el = scrollRef.current;
-    if (!el) return;
-    const id = requestAnimationFrame(() => {
-      const cur = scrollRef.current;
-      if (!cur) return;
-      if (cur.scrollHeight <= cur.clientHeight + SLACK_PX) {
-        fireReached();
-      }
-    });
-    return () => cancelAnimationFrame(id);
-  }, [numPages, renderedCount, fireReached, scale]);
 
   const handleLoadError = useCallback(
     (err: Error) => {
@@ -178,92 +239,81 @@ export function InlinePdfViewer({
   }, [url]);
 
   const labels = LABELS[locale];
-  const isDocumentReady = numPages !== null;
+  const isDocumentReady = numPages !== null && !loadError;
+  const devicePixelRatio =
+    typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+  const effectiveDpr = Math.min(devicePixelRatio, MAX_RASTER_FACTOR / scale);
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-lg border bg-white">
-      {!loadError && (
-        <div className="flex items-center justify-between gap-2 border-b bg-gray-50 px-2 py-1.5">
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              data-testid="pdf-zoom-out"
-              title={labels.zoomOut}
-              aria-label={labels.zoomOut}
-              disabled={!isDocumentReady || scale <= MIN_SCALE}
-              onClick={() => zoomTo((prev) => prev - SCALE_STEP)}
-            >
-              <ZoomOut className="h-4 w-4" />
-            </Button>
+    <div
+      className={`flex flex-col overflow-hidden rounded-lg border bg-white ${className ?? ""}`}
+    >
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b bg-gray-50 px-2 py-1.5">
+        <div className="flex items-center gap-1">
+          <ToolbarIconButton
+            icon={ZoomOut}
+            label={labels.zoomOut}
+            testId="pdf-zoom-out"
+            disabled={!isDocumentReady || scale <= MIN_SCALE}
+            onClick={() => zoomTo(scale - SCALE_STEP)}
+          />
+          <span
+            data-testid="pdf-zoom-level"
+            className="w-12 text-center text-xs font-medium tabular-nums text-gray-600"
+          >
+            {Math.round(scale * 100)}%
+          </span>
+          <ToolbarIconButton
+            icon={ZoomIn}
+            label={labels.zoomIn}
+            testId="pdf-zoom-in"
+            disabled={!isDocumentReady || scale >= MAX_SCALE}
+            onClick={() => zoomTo(scale + SCALE_STEP)}
+          />
+          <ToolbarIconButton
+            icon={RotateCcw}
+            label={labels.resetZoom}
+            testId="pdf-zoom-reset"
+            disabled={!isDocumentReady || scale === DEFAULT_SCALE}
+            onClick={() => zoomTo(DEFAULT_SCALE)}
+          />
+          {scale < DEFAULT_SCALE && !reachedBottom && (
             <span
-              data-testid="pdf-zoom-level"
-              className="w-12 text-center text-xs font-medium tabular-nums text-gray-600"
+              data-testid="pdf-zoom-hint"
+              className="ml-1 text-xs text-amber-600"
             >
-              {Math.round(scale * 100)}%
+              {labels.zoomHint}
             </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              data-testid="pdf-zoom-in"
-              title={labels.zoomIn}
-              aria-label={labels.zoomIn}
-              disabled={!isDocumentReady || scale >= MAX_SCALE}
-              onClick={() => zoomTo((prev) => prev + SCALE_STEP)}
-            >
-              <ZoomIn className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              data-testid="pdf-zoom-reset"
-              title={labels.resetZoom}
-              aria-label={labels.resetZoom}
-              disabled={!isDocumentReady || scale === DEFAULT_SCALE}
-              onClick={() => zoomTo(() => DEFAULT_SCALE)}
-            >
-              <RotateCcw className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              data-testid="pdf-open-new-tab"
-              title={labels.openInNewTab}
-              aria-label={labels.openInNewTab}
-              onClick={handleOpenInNewTab}
-            >
-              <ExternalLink className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              data-testid="pdf-download"
-              title={labels.download}
-              aria-label={labels.download}
-              onClick={handleDownload}
-            >
-              <Download className="h-4 w-4" />
-            </Button>
-          </div>
+          )}
         </div>
-      )}
+        <div className="flex items-center gap-1">
+          <ToolbarIconButton
+            icon={ExternalLink}
+            label={labels.openInNewTab}
+            testId="pdf-open-new-tab"
+            onClick={handleOpenInNewTab}
+          />
+          <ToolbarIconButton
+            icon={Download}
+            label={labels.download}
+            testId="pdf-download"
+            onClick={handleDownload}
+          />
+        </div>
+      </div>
       <div
         ref={scrollRef}
         data-testid="pdf-scroll-container"
-        onScroll={handleScroll}
-        className={`overflow-auto bg-white ${className ?? ""}`}
+        onScroll={tryLatchAtBottom}
+        className="min-h-0 flex-1 overflow-auto bg-white"
       >
         {loadError ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
             <AlertCircle className="h-8 w-8 text-red-500" />
             <p className="text-sm font-medium text-red-700">{labels.error}</p>
+            <p className="text-xs text-muted-foreground">
+              {labels.errorFallback}
+            </p>
             <Button
               size="sm"
               variant="outline"
@@ -301,6 +351,7 @@ export function InlinePdfViewer({
                     key={i + 1}
                     pageNumber={i + 1}
                     scale={scale}
+                    devicePixelRatio={effectiveDpr}
                     renderAnnotationLayer
                     renderTextLayer
                     onRenderSuccess={handlePageRenderSuccess}

@@ -493,9 +493,9 @@ export function NoticeAgreementStep({
                 "regulations_url",
                 publicDocs.regulations_url,
               )!}
-              // 245px = DialogHeader + DialogContent padding + footer row +
-              // border + the viewer's zoom/download toolbar (~45px).
-              className="h-[min(700px,calc(90vh-245px))]"
+              // 200px = DialogHeader + DialogContent padding + footer row +
+              // border. The viewer's toolbar sizes itself inside this budget.
+              className="h-[min(745px,calc(90vh-200px))]"
               locale={locale}
               onReachedBottom={handleReachedBottom}
               downloadFilename={
