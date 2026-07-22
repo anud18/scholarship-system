@@ -1,8 +1,8 @@
 # FastAPI and web framework
-fastapi==0.129.0
-starlette==0.52.1  # Security update
+fastapi==0.139.2  # Drops starlette<1.0 pin, required for starlette security fixes
+starlette==1.3.1  # Security: PYSEC-2026-161/248/249/2280/2281 (form parser limits, FileResponse range clamp, StaticFiles absolute path)
 uvicorn[standard]==0.38.0  # Updated for Python 3.13 compatibility
-python-multipart==0.0.27  # Security: fixed memory exhaustion + DoS (<0.0.26 vulnerable)
+python-multipart==0.0.31  # Security: PYSEC-2026-3036/3037/3040 (urlencoded separator, RFC 2231 params, header name bound)
 
 # Database and ORM
 sqlalchemy==2.0.44  # Updated for Python 3.13 compatibility
@@ -15,14 +15,14 @@ greenlet>=3.0,<4  # Required by SQLAlchemy sync engine (used by health check + A
 PyJWT[crypto]==2.13.0  # Security update: patched CVEs PYSEC-2026-175/176/177/178/179
 passlib[bcrypt]==1.7.4
 bcrypt==4.2.1  # Updated for Python 3.13 compatibility
-cryptography==46.0.7  # Security update — multiple CVEs across HIGH/medium/low (<46.0.7)
+cryptography==49.0.0  # Security: GHSA-537c-gmf6-5ccf (<48.0.1); >=49 required by fastapi-mail 1.6.5
 python-decouple==3.8
 
 # Data validation and serialization
-pydantic==2.10.0  # CRITICAL: Updated from 2.12.3 for Python 3.13 compatibility
-pydantic[email]==2.10.0  # CRITICAL: Updated from 2.12.3 for Python 3.13 compatibility
-pydantic-settings==2.6.0  # Updated to match pydantic version
-email-validator==2.1.0
+pydantic==2.13.4  # >=2.12.5 required by fastapi-mail 1.6.3+
+pydantic[email]==2.13.4  # >=2.12.5 required by fastapi-mail 1.6.3+
+pydantic-settings==2.14.2  # Updated to match pydantic version
+email-validator==2.3.0  # >=2.3.0 required by fastapi-mail 1.6.5
 
 # HTTP client and utilities
 httpx==0.28.1  # Updated for Python 3.13 compatibility
@@ -39,11 +39,11 @@ apscheduler==3.10.4
 croniter==1.4.1
 
 # Email services
-fastapi-mail==1.4.1
+fastapi-mail==1.6.5  # 1.6.3+ required for starlette>=1.0 compatibility
 jinja2==3.1.6  # Security: Fixed sandbox escape vulnerability (GHSA-cpwx-vrp4-4pq7)
 
 # File processing and OCR
-pillow==12.2.0  # Security: fixes OOB write + FITS GZIP decompression bomb (10.3.0<=v<12.2.0 vulnerable)
+pillow==12.3.0  # Security: PYSEC-2026-2253..2257, PYSEC-2026-3451..3454, CVE-2026-54058/59198/59200/59204 (<12.3.0)
 opencv-python==4.12.0.88  # Updated for Python 3.13 compatibility
 pytesseract==0.3.10
 google-generativeai==0.8.3
