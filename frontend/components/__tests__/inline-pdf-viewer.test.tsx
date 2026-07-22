@@ -365,6 +365,60 @@ describe("InlinePdfViewer", () => {
     expect(scroller.scrollTop).toBe(1125);
   });
 
+  it("resets viewer state when the url changes and never latches against the old document", async () => {
+    const onReached = jest.fn();
+    const { container, rerender } = render(
+      <InlinePdfViewer url="/a.pdf" onReachedBottom={onReached} />,
+    );
+    const scroller = getScroller(container);
+    setScrollMetrics(scroller, { scrollHeight: 1600, clientHeight: 500, scrollTop: 0 });
+
+    await act(async () => {
+      reactPdf.__setSuccess(2);
+      await flushRaf();
+    });
+    await act(async () => {
+      reactPdf.__renderAllPages();
+    });
+    await act(async () => {
+      await flushRaf();
+    });
+    // Zoom in so the settle effect re-runs on the url-change commit with the
+    // (stale) fully-rendered counters — the exact hazard being guarded.
+    fireEvent.click(screen.getByTestId("pdf-zoom-in"));
+    await act(async () => {
+      reactPdf.__renderAllPages();
+    });
+    await act(async () => {
+      await flushRaf();
+    });
+    expect(onReached).not.toHaveBeenCalled();
+
+    // Swap the document. The old pages unmount, so the container collapses
+    // and would "fit" — the gate must NOT latch for the not-yet-loaded doc.
+    rerender(<InlinePdfViewer url="/b.pdf" onReachedBottom={onReached} />);
+    setScrollMetrics(scroller, { scrollHeight: 0, clientHeight: 500, scrollTop: 0 });
+    await act(async () => {
+      await flushRaf();
+    });
+    expect(onReached).not.toHaveBeenCalled();
+    // Zoom resets for the new document.
+    expect(screen.getByTestId("pdf-zoom-level")).toHaveTextContent("100%");
+
+    // The new document loads and genuinely fits → latches once, on its own merits.
+    await act(async () => {
+      reactPdf.__setSuccess(1);
+      await flushRaf();
+    });
+    await act(async () => {
+      reactPdf.__renderAllPages();
+    });
+    await act(async () => {
+      await flushRaf();
+    });
+    expect(onReached).toHaveBeenCalledTimes(1);
+  });
+
   it("download button delegates to triggerFileDownload with the proxy URL and filename", () => {
     const { triggerFileDownload } = jest.requireMock("@/lib/utils/download") as {
       triggerFileDownload: jest.Mock;

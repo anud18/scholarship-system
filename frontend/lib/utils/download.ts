@@ -11,7 +11,10 @@ function downloadViaAnchor({
   const link = document.createElement("a");
   link.href = href;
   link.download = filename;
-  if (target) link.target = target;
+  if (target) {
+    link.target = target;
+    link.rel = "noopener noreferrer";
+  }
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

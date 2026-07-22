@@ -133,6 +133,13 @@ export function InlinePdfViewer({
   // that would otherwise satisfy the bottom check without any real reading.
   const settling = useRef(false);
   const pendingScrollTop = useRef<number | null>(null);
+  // Identity of the document instance currently loaded. The settle effect
+  // only acts when this matches the docKey being rendered — otherwise, on a
+  // url change, it could run with stale numPages/renderedCount in the same
+  // commit that unmounts the old pages and latch against the collapsed
+  // container before the new document loads.
+  const docKey = `${url}#${reloadToken}`;
+  const loadedDocKey = useRef<string | null>(null);
 
   useEffect(() => {
     latched.current = false;
@@ -140,6 +147,9 @@ export function InlinePdfViewer({
     pendingScrollTop.current = null;
     setScale(DEFAULT_SCALE);
     setReachedBottom(false);
+    setNumPages(null);
+    setRenderedCount(0);
+    setLoadError(null);
   }, [url, reloadToken]);
 
   const fireReached = useCallback(() => {
@@ -196,6 +206,7 @@ export function InlinePdfViewer({
   // re-check the bottom/fits condition on the next frame — which also covers
   // the initial "short document fits without scrolling" auto-latch.
   useEffect(() => {
+    if (loadedDocKey.current !== docKey) return;
     if (numPages === null || renderedCount < numPages) return;
     const el = scrollRef.current;
     if (el && pendingScrollTop.current !== null) {
@@ -207,15 +218,16 @@ export function InlinePdfViewer({
       tryLatchAtBottom();
     });
     return () => cancelAnimationFrame(id);
-  }, [numPages, renderedCount, tryLatchAtBottom]);
+  }, [numPages, renderedCount, tryLatchAtBottom, docKey]);
 
   const handleLoadSuccess = useCallback(
     ({ numPages: n }: { numPages: number }) => {
+      loadedDocKey.current = docKey;
       setNumPages(n);
       setRenderedCount(0);
       setLoadError(null);
     },
-    [],
+    [docKey],
   );
 
   const handlePageRenderSuccess = useCallback(() => {
