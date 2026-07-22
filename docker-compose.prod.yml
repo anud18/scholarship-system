@@ -57,7 +57,12 @@ services:
       MINIO_ENDPOINT: ${MINIO_HOST}:${MINIO_PORT:-9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-scholarship-documents}
+      # Was MINIO_BUCKET_NAME — a dead env: config.py's `minio_bucket` field
+      # binds MINIO_BUCKET, so the old name was silently ignored and prod has
+      # always used the config default "scholarship-files". Bind the real env
+      # name with that same default so the bucket choice is explicit instead
+      # of accidental (same bug fixed in docker-compose.dev.yml).
+      MINIO_BUCKET: ${MINIO_BUCKET:-scholarship-files}
       MINIO_SECURE: ${MINIO_SECURE:-true}
       # PII Encryption keys (issue #73). JSON map of {version: base64url 32-byte key}.
       # Required in production. Populated by the KMS sidecar at deploy time.

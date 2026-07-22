@@ -57,20 +57,24 @@ services:
       retries: 12
     restart: "no"
 
+  # RustFS replica (matches the staging-db RustFS swap — a MinIO replica
+  # fronting a RustFS live store would mask the semantic differences e2e is
+  # supposed to catch, e.g. owner-binding Deny policies). The workflow's
+  # `mc mirror` seeding works unchanged: mc is a generic S3 client.
   minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
-    container_name: staging_e2e_minio
-    command: server /data --console-address ":9001"
+    image: rustfs/rustfs:1.0.0-beta.8
+    container_name: staging_e2e_rustfs
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin123
+      RUSTFS_ACCESS_KEY: minioadmin
+      RUSTFS_SECRET_KEY: minioadmin123
+      RUSTFS_VOLUMES: /data
     ports:
       - "19000:9000"
       - "19001:9001"
     volumes:
-      - minio_data:/data
+      - rustfs_data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
       interval: 5s
       timeout: 10s
       retries: 12
@@ -189,4 +193,4 @@ services:
 
 volumes:
   postgres_data:
-  minio_data:
+  rustfs_data:

@@ -474,29 +474,15 @@ jobs:
             ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }}:/opt/scholarship/
           echo "✅ docker-compose.staging-db-monitoring.yml transferred"
 
-      - name: Sync staging-db.yml + recreate MinIO for prom auth=public
-        run: |
-          # MINIO_PROMETHEUS_AUTH_TYPE=public has to land via env var, which
-          # means the minio container needs --force-recreate. The main
-          # staging-db stack isn't deployed by this workflow, and the
-          # existing minio container was created under a different compose
-          # project name, so a plain `docker compose up` hits a name
-          # conflict. Force-remove first (volumes persist), then up.
-          scp -P 8822 -i ~/.ssh/staging_db \
-            ./docker-compose.staging-db.yml \
-            ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }}:/opt/scholarship/
-          ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} << 'EOF'
-            cd /opt/scholarship
-            if [ -f docker-compose.staging-db.yml ]; then
-              # Idempotent: if container doesn't exist, rm is a no-op.
-              docker rm -f scholarship_minio_staging 2>/dev/null || true
-              # Match the original compose project name so future deploys
-              # don't keep recreating it under a different name.
-              docker compose -p scholarship_staging_db \
-                -f docker-compose.staging-db.yml up -d minio || \
-                echo "::warning::MinIO recreate failed"
-            fi
-          EOF
+      # NOTE (RustFS migration): the former "Sync staging-db.yml + recreate
+      # MinIO for prom auth=public" step was REMOVED here on purpose. Its only
+      # reason to exist (landing MINIO_PROMETHEUS_AUTH_TYPE=public) is gone —
+      # RustFS has no /minio/v2/metrics endpoints — and keeping it would have
+      # been the runbook's merge-ordering hazard: a monitoring push would
+      # docker-rm the live storage container and boot an EMPTY RustFS with
+      # zero data migrated. The storage container is now only ever (re)created
+      # during the manual cutover (docs/deployment/rustfs-migration-runbook.md,
+      # scripts/migrate_storage_to_rustfs.sh).
 
       - name: Deploy monitoring stack to Staging DB-VM
         run: |
@@ -536,8 +522,10 @@ jobs:
           # Staging metrics arrive via Alloy → Prometheus remote_write —
           # they don't appear in /api/v1/targets. Query up{} instead.
           # AP-VM exporters (5): node, cadvisor, nginx, redis, backend
-          # DB-VM exporters (2): node, postgres
-          MIN_EXPECTED=7
+          # DB-VM exporters (3): node, postgres, storage (blackbox probe of
+          # the RustFS S3 port — up{} reflects the in-process exporter, the
+          # probe result itself is probe_success)
+          MIN_EXPECTED=8
           query_count() {
             curl -s -G "http://localhost:9090/api/v1/query" \
               --data-urlencode "query=$1" \
@@ -545,9 +533,9 @@ jobs:
           }
 
           # Poll until we hit the full expected count AND nothing is
-          # currently down. Just-recreated services (e.g. MinIO after a
-          # docker rm/up cycle) can briefly land in up{}==0 before they
-          # finish booting; waiting them out avoids spurious failures.
+          # currently down. Just-restarted exporters can briefly land in
+          # up{}==0 before they finish booting; waiting them out avoids
+          # spurious failures.
           for i in $(seq 1 24); do
             STAGING_TOTAL=$(query_count 'count(up{environment="staging"}==1)')
             STAGING_DOWN=$(query_count 'count(up{environment="staging"}==0)')

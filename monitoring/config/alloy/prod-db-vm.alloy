@@ -1,7 +1,7 @@
 // Grafana Alloy Configuration for Production Database VM
 // Environment: production
 // Host: db-vm
-// Components: PostgreSQL, MinIO, Redis
+// Components: PostgreSQL, RustFS object storage (service name `minio`), Redis
 
 // =============================================================================
 // LOGGING PIPELINE
@@ -96,31 +96,33 @@ prometheus.scrape "postgres_exporter" {
   scrape_interval = "15s"
 }
 
-// MinIO ships built-in Prometheus metrics on the same port as the API
-// (P9 / issue #74: these three scrapes existed on staging only — prod MinIO
-// dashboards would show No data).
-prometheus.scrape "minio" {
-  targets    = [{ __address__ = "minio:9000" }]
-  forward_to = [prometheus.relabel.add_labels.receiver]
-  job_name   = "minio"
-  scrape_interval = "15s"
-  metrics_path = "/minio/v2/metrics/cluster"
+// Object storage is RustFS (S3-compatible MinIO replacement; the service
+// keeps the `minio` DNS name). RustFS serves NONE of MinIO's
+// /minio/v2/metrics/* endpoints, so the three MinIO scrape jobs that used to
+// live here are gone (runbook "Monitoring gap"). Storage-down signal now
+// comes from an embedded blackbox HTTP probe of the S3 API port:
+// probe_success{job="storage"} == 0 → StorageDown Grafana alert. Disk usage
+// stays covered by node-exporter filesystem metrics (DiskSpaceLow/Critical).
+//
+// valid_status_codes accepts 4xx too: RustFS answers 200 on /health, while
+// MinIO (pre-cutover window / rollback) answers an S3 error on that path —
+// the probe measures "storage process answering HTTP", so it works on both
+// sides of the cutover without a config change.
+prometheus.exporter.blackbox "storage" {
+  config = "{ modules: { storage_http: { prober: http, timeout: 5s, http: { valid_status_codes: [200, 400, 403, 404] } } } }"
+
+  target {
+    name    = "storage_health"
+    address = "http://minio:9000/health"
+    module  = "storage_http"
+  }
 }
 
-prometheus.scrape "minio_bucket" {
-  targets    = [{ __address__ = "minio:9000" }]
+prometheus.scrape "storage" {
+  targets    = prometheus.exporter.blackbox.storage.targets
   forward_to = [prometheus.relabel.add_labels.receiver]
-  job_name   = "minio"
-  scrape_interval = "30s"
-  metrics_path = "/minio/v2/metrics/bucket"
-}
-
-prometheus.scrape "minio_node" {
-  targets    = [{ __address__ = "minio:9000" }]
-  forward_to = [prometheus.relabel.add_labels.receiver]
-  job_name   = "minio"
+  job_name   = "storage"
   scrape_interval = "15s"
-  metrics_path = "/minio/v2/metrics/node"
 }
 
 prometheus.relabel "add_labels" {
