@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Eye, FileText } from "lucide-react";
 import { Locale } from "@/lib/validators";
 import { getTranslation } from "@/lib/i18n";
+import { triggerFileDownload } from "@/lib/utils/download";
 
 interface FilePreviewDialogProps {
   isOpen: boolean;
@@ -67,16 +68,7 @@ export function FilePreviewDialog({
     if (!file) return;
 
     // 如果有專門的下載URL，使用它；否則使用預覽URL
-    const downloadUrl = file.downloadUrl || file.url;
-
-    // 創建一個隱藏的 a 標籤來下載文件
-    const link = document.createElement("a");
-    link.href = downloadUrl;
-    link.download = file.filename;
-    link.target = "_blank";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    triggerFileDownload(file.downloadUrl || file.url, file.filename);
   };
 
   if (!file) return null;
