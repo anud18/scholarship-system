@@ -11,8 +11,9 @@
  *     professor step at all.
  *   學院推薦 — ALWAYS leads with the ranking verdict chip: "排名: 推薦" (emerald)
  *     normally, "排名: 不推薦" (red) when the ranking item has college_rejected
- *     (the 排序 cell then shows a red "N") — followed by any per-sub-type
- *     college-role review chips.
+ *     (the 排序 cell then shows a red "N") — followed by one chip per APPLIED
+ *     sub-type: "國科會: 推薦" / "教育部: 不推薦" from college-role review
+ *     items, or gray "未推薦" when the college gave no verdict for it.
  *
  * Admin-role reviews are excluded from BOTH columns — the grid IS the admin
  * decision surface.
@@ -63,7 +64,7 @@ interface SeedStudent {
 }
 
 const STUDENTS: SeedStudent[] = [
-  // App1 — professor partial_approve (nstc approve, moe_1w reject) + college approve(nstc)
+  // App1 — professor partial_approve (nstc approve, moe_1w reject) + college partial (nstc approve, moe_1w reject)
   {
     appId: "APP-114-0-90001",
     userId: 14,
@@ -107,6 +108,7 @@ const STUDENTS: SeedStudent[] = [
 
 const ADMIN_ONLY_COMMENT = "admin 審查不應顯示";
 const PROF_MOE_REJECT_COMMENT = "名額有限，僅推薦國科會";
+const COLLEGE_MOE_REJECT_COMMENT = "學院不推薦教育部方案";
 
 test.describe.configure({ mode: "serial" });
 
@@ -231,8 +233,9 @@ async function seed(): Promise<void> {
     { sub_type_code: "nstc", recommendation: "approve", comments: null },
     { sub_type_code: "moe_1w", recommendation: "reject", comments: PROF_MOE_REJECT_COMMENT },
   ]);
-  await insertReview(appDbId["APP-114-0-90001"], COLLEGE_REVIEWER_ID, "approve", [
+  await insertReview(appDbId["APP-114-0-90001"], COLLEGE_REVIEWER_ID, "partial_approve", [
     { sub_type_code: "nstc", recommendation: "approve", comments: "學院同意" },
+    { sub_type_code: "moe_1w", recommendation: "reject", comments: COLLEGE_MOE_REJECT_COMMENT },
   ]);
   // App2: (no reviews)
   // App3: professor approve both sub-types
@@ -363,9 +366,13 @@ test.describe("Admin manual distribution — 教授推薦 / 學院推薦 columns
       const rejectChip = prof1.locator(`[title="${PROF_MOE_REJECT_COMMENT}"]`);
       await expect(rejectChip).toHaveText("教育部: 不推薦");
       const college1 = collegeCell(row1);
-      // ranking verdict chip (approve) — located by its title, then the college review chip
+      // ranking verdict chip (approve) — located by its title, then the college review chips
       await expect(college1.locator('[title="已列入學院確認排名"]')).toContainText("排名: 推薦");
       await expect(college1).toContainText("國科會: 推薦");
+      // college reject is written out, comment on hover
+      await expect(college1.locator(`[title="${COLLEGE_MOE_REJECT_COMMENT}"]`)).toHaveText(
+        "教育部: 不推薦"
+      );
 
       // Group 3 — App2 (csphd0002): no reviews
       const row2 = rowFor(page, "csphd0002");
@@ -373,6 +380,9 @@ test.describe("Admin manual distribution — 教授推薦 / 學院推薦 columns
       await expect(collegeCell(row2).locator('[title="已列入學院確認排名"]')).toContainText(
         "排名: 推薦"
       );
+      // no college verdict → every applied sub-type written out as 未推薦
+      await expect(collegeCell(row2)).toContainText("國科會: 未推薦");
+      await expect(collegeCell(row2)).toContainText("教育部: 未推薦");
 
       // Group 4 — App3 (csphd0003): college_rejected
       const row3 = rowFor(page, "csphd0003");
@@ -384,6 +394,8 @@ test.describe("Admin manual distribution — 教授推薦 / 學院推薦 columns
       ).toContainText("排名: 不推薦");
       // no approve ranking chip on a rejected row
       await expect(college3.locator('[title="已列入學院確認排名"]')).toHaveCount(0);
+      await expect(college3).toContainText("國科會: 未推薦");
+      await expect(college3).toContainText("教育部: 未推薦");
       const prof3 = profCell(row3);
       await expect(prof3).toContainText("國科會: 推薦");
       await expect(prof3).toContainText("教育部: 推薦");
@@ -394,9 +406,12 @@ test.describe("Admin manual distribution — 教授推薦 / 學院推薦 columns
       // admin comment must appear NOWHERE on the page
       await expect(page.getByText(ADMIN_ONLY_COMMENT)).toHaveCount(0);
       await expect(page.locator(`[title="${ADMIN_ONLY_COMMENT}"]`)).toHaveCount(0);
-      // no reject chip in either column for app4
+      // no reject chip in either column for app4 — the admin's nstc reject
+      // must NOT surface, so nstc renders as 未推薦, not 不推薦
       await expect(profCell(row4)).not.toContainText("不推薦");
       await expect(collegeCell(row4)).not.toContainText("不推薦");
+      await expect(collegeCell(row4)).toContainText("國科會: 未推薦");
+      await expect(collegeCell(row4)).toContainText("教育部: 未推薦");
     } finally {
       await context.close();
     }

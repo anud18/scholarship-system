@@ -111,6 +111,7 @@ const VERDICT_CHIP = {
   approve: `${VERDICT_CHIP_BASE} bg-emerald-50 text-emerald-700 border-emerald-300`,
   reject: `${VERDICT_CHIP_BASE} bg-red-50 text-red-600 border-red-300`,
   pending: `${VERDICT_CHIP_BASE} bg-amber-50 text-amber-700 border-amber-300`,
+  none: `${VERDICT_CHIP_BASE} bg-slate-50 text-slate-500 border-slate-300`,
 };
 
 /**
@@ -142,6 +143,70 @@ function ReviewItemChips({
           </span>
         );
       })}
+    </>
+  );
+}
+
+/**
+ * 學院推薦 per-sub-type chips: one chip for EVERY applied sub-type, so a
+ * sub-type the college rejected (不推薦) or never gave a verdict on (未推薦)
+ * is written out instead of silently omitted. Any reject wins over approve
+ * (matches the rejected_sub_types convention); review items on sub-types
+ * outside the applied list are still appended so no verdict is lost.
+ */
+function CollegeSubTypeVerdictChips({
+  appliedSubTypes,
+  items,
+  quotaStatus,
+}: {
+  appliedSubTypes: string[];
+  items: ReviewItemSummary[];
+  quotaStatus: QuotaStatus;
+}) {
+  const norm = (code: string) => code.toLowerCase().trim();
+  const applied = Array.from(new Set(appliedSubTypes.map(norm)));
+  const labelFor = (code: string) =>
+    getSubTypeShortName(code, quotaStatus[code]?.display_name || code);
+  const extras = items.filter(item => !applied.includes(norm(item.sub_type_code)));
+  return (
+    <>
+      {applied.map(code => {
+        const verdicts = items.filter(item => norm(item.sub_type_code) === code);
+        const reject = verdicts.find(item => item.recommendation !== "approve");
+        const approve = verdicts.find(item => item.recommendation === "approve");
+        if (reject) {
+          return (
+            <span
+              key={code}
+              title={reject.comments || undefined}
+              className={VERDICT_CHIP.reject}
+            >
+              {labelFor(code)}: 不推薦
+            </span>
+          );
+        }
+        if (approve) {
+          return (
+            <span
+              key={code}
+              title={approve.comments || undefined}
+              className={VERDICT_CHIP.approve}
+            >
+              {labelFor(code)}: 推薦
+            </span>
+          );
+        }
+        return (
+          <span
+            key={code}
+            title="學院未對此子類型作出推薦審核"
+            className={VERDICT_CHIP.none}
+          >
+            {labelFor(code)}: 未推薦
+          </span>
+        );
+      })}
+      <ReviewItemChips items={extras} quotaStatus={quotaStatus} />
     </>
   );
 }
@@ -1471,7 +1536,10 @@ export function ManualDistributionPanel({
                                         排名: 推薦
                                       </span>
                                     )}
-                                    <ReviewItemChips
+                                    <CollegeSubTypeVerdictChips
+                                      appliedSubTypes={
+                                        student.applied_sub_types || []
+                                      }
                                       items={student.college_review_items || []}
                                       quotaStatus={quotaStatus}
                                     />
