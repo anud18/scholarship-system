@@ -34,6 +34,7 @@ from app.models.scholarship import ScholarshipType
 from app.services.export_summary_tables import build_embedded_summary_tables
 from app.services.minio_service import MinIOService
 from app.services.pdf_fonts import CJK_FONT_NAME, ensure_cjk_font
+from app.services.pdf_merge import MergeItem, build_merged_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,13 @@ def _label_for_file_type(file_type: str) -> str:
     return "其他文件"
 
 
+def _is_dynamic_document_type(file_type: str) -> bool:
+    """Whether an ApplicationFile carries an admin-configured dynamic
+    document (its file_type IS the configured document_name). Fixed types
+    and the legacy 其他文件 bucket live in FILE_TYPE_LABELS."""
+    return bool(file_type) and file_type not in FILE_TYPE_LABELS
+
+
 async def _fetch_and_write(
     zf: zipfile.ZipFile,
     minio: MinIOService,
@@ -84,11 +92,12 @@ async def _fetch_and_write(
     zip_path: str,
     error_path: str,
     error_label: str,
-) -> None:
-    """Stream one MinIO object into the ZIP at `zip_path`.
+) -> Optional[bytes]:
+    """Stream one MinIO object into the ZIP at `zip_path` and return its bytes.
 
     On any failure, writes a `_錯誤_…txt` placeholder at `error_path`
-    instead so a single bad object never aborts the whole ZIP build.
+    instead so a single bad object never aborts the whole ZIP build, and
+    returns None.
     """
     try:
         response = await asyncio.to_thread(minio.get_file_stream, object_name)
@@ -98,9 +107,11 @@ async def _fetch_and_write(
             response.close()
             response.release_conn()
         zf.writestr(zip_path, file_bytes)
+        return file_bytes
     except Exception as e:
         logger.exception(f"Failed to fetch file {object_name}")
         zf.writestr(error_path, f"檔案下載失敗：{error_label}\n錯誤：{str(e)}")
+        return None
 
 
 class ExportPackageService:
@@ -264,9 +275,11 @@ class ExportPackageService:
                 f"PDF 生成失敗：{str(e)}",
             )
 
-        # Add uploaded files from ApplicationFile records
+        # Add uploaded files from ApplicationFile records; keep the bytes of
+        # dynamic documents so they can be stitched into one extra PDF below.
         type_totals = Counter(af.file_type or "other" for af in app.files)
         file_type_counter: Dict[str, int] = defaultdict(int)
+        dynamic_items: List[MergeItem] = []
         for af in app.files:
             ft = af.file_type or "other"
             file_type_counter[ft] += 1
@@ -287,7 +300,7 @@ class ExportPackageService:
             else:
                 filename = f"{student_prefix}_{label}{ext}"
 
-            await _fetch_and_write(
+            file_bytes = await _fetch_and_write(
                 zf,
                 self.minio,
                 object_name=af.object_name,
@@ -295,6 +308,38 @@ class ExportPackageService:
                 error_path=f"{base_path}/_錯誤_找不到檔案_{_sanitize_filename(label)}.txt",
                 error_label=af.original_filename or af.object_name,
             )
+
+            if _is_dynamic_document_type(ft):
+                item_label = f"{label} {count}" if type_totals[ft] > 1 else label
+                dynamic_items.append(
+                    MergeItem(
+                        label=item_label,
+                        filename=af.original_filename or af.object_name or "",
+                        content=file_bytes,
+                        error=None if file_bytes is not None else "無法自檔案儲存服務下載",
+                    )
+                )
+
+        # Extra per-student PDF stitching all dynamic documents together
+        if dynamic_items:
+            semester_map = {"first": "第一學期", "second": "第二學期"}
+            semester_label = semester_map.get(semester, "全學年") if semester else "全學年"
+            try:
+                merged_bytes = build_merged_pdf(
+                    title="學生動態文件合併",
+                    subtitle_lines=[
+                        f"{scholarship_name} {academic_year}學年度 {semester_label}",
+                        f"{student.get('std_stdcode', '—')} {student.get('std_cname', '—')}",
+                    ],
+                    items=dynamic_items,
+                )
+                zf.writestr(f"{base_path}/{student_prefix}_動態文件合併.pdf", merged_bytes)
+            except Exception as e:
+                logger.exception(f"Failed to build merged dynamic-documents PDF for app {app.id}")
+                zf.writestr(
+                    f"{base_path}/_錯誤_動態文件合併PDF生成失敗.txt",
+                    f"動態文件合併 PDF 生成失敗：{str(e)}",
+                )
 
     def _generate_summary_pdf(
         self,

@@ -23,6 +23,7 @@ import pytest
 from app.services.export_package_service import (
     _sanitize_filename,
     _label_for_file_type,
+    _is_dynamic_document_type,
     _fetch_and_write,
     FILE_TYPE_LABELS,
     DEGREE_LABELS,
@@ -191,6 +192,23 @@ class TestLabelForFileType:
         assert _label_for_file_type("") == "其他文件"
 
 
+class TestIsDynamicDocumentType:
+    """Pin: the merged-PDF selector. Only admin-configured dynamic documents
+    (file_type IS the configured document_name) join the per-student
+    動態文件合併.pdf; every fixed type and the 其他文件 bucket stay out."""
+
+    @pytest.mark.parametrize("fixed_type", sorted(FILE_TYPE_LABELS.keys()))
+    def test_every_fixed_type_is_not_dynamic(self, fixed_type):
+        assert _is_dynamic_document_type(fixed_type) is False
+
+    def test_configured_document_name_is_dynamic(self):
+        assert _is_dynamic_document_type("語言檢定證明") is True
+
+    def test_empty_and_none_are_not_dynamic(self):
+        assert _is_dynamic_document_type("") is False
+        assert _is_dynamic_document_type(None) is False
+
+
 class TestFetchAndWrite:
     """Pin: the shared MinIO fetch-and-write used by the app.files
     loop. On success the bytes land at zip_path; on any MinIO error
@@ -210,7 +228,7 @@ class TestFetchAndWrite:
 
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as zf:
-            asyncio.run(
+            returned = asyncio.run(
                 _fetch_and_write(
                     zf,
                     minio,
@@ -221,6 +239,9 @@ class TestFetchAndWrite:
                 )
             )
 
+        # Pin: success returns the fetched bytes (reused for the merged
+        # dynamic-documents PDF without a second MinIO round-trip).
+        assert returned == b"PDF-BYTES"
         buf.seek(0)
         with zipfile.ZipFile(buf) as zf:
             assert zf.read("dept/stu/stu_申請文件.pdf") == b"PDF-BYTES"
@@ -239,7 +260,7 @@ class TestFetchAndWrite:
 
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as zf:
-            asyncio.run(
+            returned = asyncio.run(
                 _fetch_and_write(
                     zf,
                     minio,
@@ -250,6 +271,9 @@ class TestFetchAndWrite:
                 )
             )
 
+        # Pin: failure returns None (caller renders a download-failure
+        # placeholder page in the merged PDF instead of file bytes).
+        assert returned is None
         buf.seek(0)
         with zipfile.ZipFile(buf) as zf:
             names = zf.namelist()
