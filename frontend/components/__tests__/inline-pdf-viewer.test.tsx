@@ -72,6 +72,12 @@ jest.mock("react-pdf", () => {
 // Mock the worker side-effect import so it doesn't blow up jsdom.
 jest.mock("@/lib/pdf-worker", () => ({}));
 
+// Spy on the download helper so tests can assert without real anchor clicks.
+jest.mock("@/lib/utils/download", () => ({
+  ...jest.requireActual("@/lib/utils/download"),
+  triggerFileDownload: jest.fn(),
+}));
+
 // react-pdf bundles CSS we don't need under jsdom.
 jest.mock("react-pdf/dist/Page/AnnotationLayer.css", () => ({}), { virtual: true });
 jest.mock("react-pdf/dist/Page/TextLayer.css", () => ({}), { virtual: true });
@@ -90,9 +96,11 @@ function setScrollMetrics(
     scrollTop,
   }: { scrollHeight: number; clientHeight: number; scrollTop: number },
 ) {
-  Object.defineProperty(el, "scrollHeight", { configurable: true, value: scrollHeight });
-  Object.defineProperty(el, "clientHeight", { configurable: true, value: clientHeight });
-  Object.defineProperty(el, "scrollTop", { configurable: true, value: scrollTop });
+  // writable: the viewer restores scroll position after zoom by assigning
+  // scrollTop; a non-writable property would throw under strict mode.
+  Object.defineProperty(el, "scrollHeight", { configurable: true, writable: true, value: scrollHeight });
+  Object.defineProperty(el, "clientHeight", { configurable: true, writable: true, value: clientHeight });
+  Object.defineProperty(el, "scrollTop", { configurable: true, writable: true, value: scrollTop });
 }
 
 function flushRaf() {
@@ -198,6 +206,93 @@ describe("InlinePdfViewer", () => {
     });
 
     expect(onReached).not.toHaveBeenCalled();
+  });
+
+  it("zoom controls change the zoom level within [50%, 300%] and reset restores 100%", () => {
+    render(<InlinePdfViewer url="/fake.pdf" />);
+
+    // Disabled until the document loads.
+    expect(screen.getByTestId("pdf-zoom-in")).toBeDisabled();
+    expect(screen.getByTestId("pdf-zoom-out")).toBeDisabled();
+
+    act(() => reactPdf.__setSuccess(1));
+    expect(screen.getByTestId("pdf-zoom-level")).toHaveTextContent("100%");
+
+    fireEvent.click(screen.getByTestId("pdf-zoom-in"));
+    expect(screen.getByTestId("pdf-zoom-level")).toHaveTextContent("125%");
+
+    // Clamp at MIN_SCALE (50%): 125 → 100 → 75 → 50, then the button disables.
+    const zoomOut = screen.getByTestId("pdf-zoom-out");
+    fireEvent.click(zoomOut);
+    fireEvent.click(zoomOut);
+    fireEvent.click(zoomOut);
+    expect(screen.getByTestId("pdf-zoom-level")).toHaveTextContent("50%");
+    expect(zoomOut).toBeDisabled();
+
+    fireEvent.click(screen.getByTestId("pdf-zoom-reset"));
+    expect(screen.getByTestId("pdf-zoom-level")).toHaveTextContent("100%");
+    expect(screen.getByTestId("pdf-zoom-reset")).toBeDisabled();
+  });
+
+  it("does NOT auto-latch a fitting document while zoomed out (gate-bypass guard), but scrolling to the bottom still latches", async () => {
+    const onReached = jest.fn();
+    const { container } = render(
+      <InlinePdfViewer url="/fake.pdf" onReachedBottom={onReached} />,
+    );
+    const scroller = container.querySelector(
+      "[data-testid='pdf-scroll-container']",
+    ) as HTMLElement;
+    // Overflows at 100%.
+    setScrollMetrics(scroller, { scrollHeight: 1600, clientHeight: 500, scrollTop: 0 });
+
+    await act(async () => {
+      reactPdf.__setSuccess(2);
+      await flushRaf();
+    });
+    await act(async () => {
+      reactPdf.__renderAllPages();
+    });
+    await act(async () => {
+      await flushRaf();
+    });
+    expect(onReached).not.toHaveBeenCalled();
+
+    // Zoom out to 50%; now the whole document "fits" — must NOT auto-latch.
+    fireEvent.click(screen.getByTestId("pdf-zoom-out"));
+    fireEvent.click(screen.getByTestId("pdf-zoom-out"));
+    setScrollMetrics(scroller, { scrollHeight: 480, clientHeight: 500, scrollTop: 0 });
+    await act(async () => {
+      reactPdf.__renderAllPages();
+    });
+    await act(async () => {
+      await flushRaf();
+    });
+    expect(onReached).not.toHaveBeenCalled();
+
+    // Back at 100% the document overflows again; reaching the bottom by
+    // scrolling latches as usual.
+    fireEvent.click(screen.getByTestId("pdf-zoom-reset"));
+    setScrollMetrics(scroller, { scrollHeight: 1600, clientHeight: 500, scrollTop: 1098 });
+    fireEvent.scroll(scroller);
+    expect(onReached).toHaveBeenCalledTimes(1);
+  });
+
+  it("download button delegates to triggerFileDownload with the proxy URL and filename", () => {
+    const { triggerFileDownload } = jest.requireMock("@/lib/utils/download") as {
+      triggerFileDownload: jest.Mock;
+    };
+    triggerFileDownload.mockClear();
+
+    render(
+      <InlinePdfViewer url="/api/v1/preview/system-docs?key=regulations_url" downloadFilename="要點.pdf" />,
+    );
+    act(() => reactPdf.__setSuccess(1));
+
+    fireEvent.click(screen.getByTestId("pdf-download"));
+    expect(triggerFileDownload).toHaveBeenCalledWith(
+      "/api/v1/preview/system-docs?key=regulations_url",
+      "要點.pdf",
+    );
   });
 
   it("fires onLoadError and never fires onReachedBottom when load fails", () => {

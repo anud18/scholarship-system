@@ -20,3 +20,19 @@ export function triggerBlobDownload({
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
+
+/**
+ * Trigger a browser download of an already-authenticated same-origin URL
+ * (e.g. an /api/v1/preview/... proxy URL) via a transient anchor.
+ *
+ * Shared by FilePreviewDialog and InlinePdfViewer download buttons.
+ */
+export function triggerFileDownload(url: string, filename: string): void {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.target = "_blank";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
