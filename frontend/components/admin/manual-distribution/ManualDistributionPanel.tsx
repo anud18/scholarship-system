@@ -10,6 +10,7 @@ import type {
   DistributionStudent,
   LocalAlloc,
   QuotaStatus,
+  ReviewItemSummary,
   SubTypeConfigCol,
   DistributionHistoryRecord,
   RestoreRequest,
@@ -102,6 +103,47 @@ function getSubTypeShortName(sub_type: string, display_name: string): string {
   return display_name.length > 7
     ? display_name.slice(0, 6) + "…"
     : display_name;
+}
+
+const VERDICT_CHIP_BASE =
+  "inline-flex items-center w-fit px-1 py-0.5 rounded border text-[10px] leading-none whitespace-nowrap";
+const VERDICT_CHIP = {
+  approve: `${VERDICT_CHIP_BASE} bg-emerald-50 text-emerald-700 border-emerald-300`,
+  reject: `${VERDICT_CHIP_BASE} bg-red-50 text-red-600 border-red-300`,
+  pending: `${VERDICT_CHIP_BASE} bg-amber-50 text-amber-700 border-amber-300`,
+};
+
+/**
+ * Per-sub-type 推薦/不推薦 chips for the 教授推薦/學院推薦 columns
+ * (reviewer comments on hover); renders nothing when there are no verdicts.
+ */
+function ReviewItemChips({
+  items,
+  quotaStatus,
+}: {
+  items: ReviewItemSummary[];
+  quotaStatus: QuotaStatus;
+}) {
+  return (
+    <>
+      {items.map((item, idx) => {
+        const label = getSubTypeShortName(
+          item.sub_type_code,
+          quotaStatus[item.sub_type_code]?.display_name || item.sub_type_code
+        );
+        const isApprove = item.recommendation === "approve";
+        return (
+          <span
+            key={`${item.sub_type_code}-${idx}`}
+            title={item.comments || undefined}
+            className={isApprove ? VERDICT_CHIP.approve : VERDICT_CHIP.reject}
+          >
+            {label}: {isApprove ? "推薦" : "不推薦"}
+          </span>
+        );
+      })}
+    </>
+  );
 }
 
 export function ManualDistributionPanel({
@@ -1174,7 +1216,7 @@ export function ManualDistributionPanel({
             <div className="overflow-x-auto">
               <table
                 className="w-full text-left border-collapse text-xs"
-                style={{ minWidth: `${950 + subTypeCols.length * 85}px` }}
+                style={{ minWidth: `${1140 + subTypeCols.length * 85}px` }}
               >
                 <thead className="bg-slate-50 text-[13px] text-slate-600">
                   {/* Row 1 */}
@@ -1190,6 +1232,18 @@ export function ManualDistributionPanel({
                       className="px-1.5 py-1.5 border border-slate-200 font-semibold w-32 text-[11px]"
                     >
                       申請類別
+                    </th>
+                    <th
+                      rowSpan={2}
+                      className="px-1.5 py-1.5 border border-slate-200 font-semibold w-24 text-[11px]"
+                    >
+                      教授推薦
+                    </th>
+                    <th
+                      rowSpan={2}
+                      className="px-1.5 py-1.5 border border-slate-200 font-semibold w-24 text-[11px]"
+                    >
+                      學院推薦
                     </th>
                     {subTypeCols.length > 0 && (
                       <th
@@ -1282,7 +1336,7 @@ export function ManualDistributionPanel({
                   {filteredStudents.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={12 + subTypeCols.length}
+                        colSpan={14 + subTypeCols.length}
                         className="px-4 py-10 text-center text-slate-500"
                       >
                         {students.length === 0
@@ -1304,7 +1358,7 @@ export function ManualDistributionPanel({
                             className="bg-slate-100"
                           >
                             <td
-                              colSpan={12 + subTypeCols.length}
+                              colSpan={14 + subTypeCols.length}
                               className="px-4 py-1.5 text-xs font-bold text-slate-600 border-y border-slate-300"
                             >
                               {collegeName}
@@ -1372,6 +1426,56 @@ export function ManualDistributionPanel({
                                       —
                                     </span>
                                   )}
+                                </td>
+                                <td className="px-1.5 py-1.5 border-r border-slate-100 leading-snug">
+                                  {(student.professor_review_items || [])
+                                    .length > 0 ? (
+                                    <div className="flex flex-col gap-0.5">
+                                      <ReviewItemChips
+                                        items={student.professor_review_items}
+                                        quotaStatus={quotaStatus}
+                                      />
+                                    </div>
+                                  ) : student.requires_professor_recommendation ? (
+                                    <span
+                                      className={VERDICT_CHIP.pending}
+                                      title="教授尚未完成推薦審核"
+                                    >
+                                      審核中
+                                    </span>
+                                  ) : (
+                                    <span className="text-[11px] text-slate-400">
+                                      —
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-1.5 py-1.5 border-r border-slate-100 leading-snug">
+                                  <div className="flex flex-col gap-0.5">
+                                    {/* The ranking IS the college's primary
+                                        verdict: rows only exist once the
+                                        college finalized its ranking, and
+                                        N (college_rejected) means 不推薦.
+                                        Review-tab verdicts supplement it. */}
+                                    {student.college_rejected ? (
+                                      <span
+                                        className={VERDICT_CHIP.reject}
+                                        title="學院於確認排名將此生標記為 N（不推薦）"
+                                      >
+                                        排名: 不推薦
+                                      </span>
+                                    ) : (
+                                      <span
+                                        className={VERDICT_CHIP.approve}
+                                        title="已列入學院確認排名"
+                                      >
+                                        排名: 推薦
+                                      </span>
+                                    )}
+                                    <ReviewItemChips
+                                      items={student.college_review_items || []}
+                                      quotaStatus={quotaStatus}
+                                    />
+                                  </div>
                                 </td>
                                 {subTypeCols.map(col => {
                                   const isApplied =
