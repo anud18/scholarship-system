@@ -9,7 +9,9 @@ columns on the admin 手動分發 grid, between 申請類別 and the 核配 chec
   review exists; `—` when there is no professor step.
 - 學院推薦 — always leads with the ranking verdict chip (`排名: 推薦` emerald, or
   `排名: 不推薦` red when the ranking item is `college_rejected` — the 排序 cell then
-  shows a red `N`), followed by any per-sub-type college-role review chips.
+  shows a red `N`), followed by ONE chip per applied sub-type: `推薦` / `不推薦` from
+  college-role review items, or gray `未推薦` when the college gave no verdict for
+  that sub-type (nothing is silently omitted).
 - Admin-role reviews appear in neither column.
 - Chip labels via `getSubTypeShortName`: `nstc`→國科會, `moe_1w`→教育部.
 
@@ -37,21 +39,22 @@ items; App3's item `college_rejected=true`.
 
 | # | student | rank | reviews | expectation |
 |---|---------|------|---------|-------------|
-| App1 | csphd0001 王博士研究生 | 1 | professor partial_approve (nstc approve, moe_1w reject "名額有限…") + college approve (nstc) | 教授: 國科會:推薦 + 教育部:不推薦 · 學院: 排名:推薦 + 國科會:推薦 |
-| App2 | csphd0002 陳AI博士 | 2 | none | 教授: 審核中 · 學院: 排名:推薦 |
-| App3 | csphd0003 林機器學習博士 | 3 (N) | professor approve (nstc + moe_1w); item college_rejected | 排序 red N · 學院: 排名:不推薦 · 教授: 國科會:推薦 + 教育部:推薦 |
-| App4 | stuphd001 王博士 (renewal) | 4 | ADMIN reject (nstc, "admin 審查不應顯示") | 教授: 審核中 · admin comment nowhere · no reject chip |
+| App1 | csphd0001 王博士研究生 | 1 | professor partial_approve (nstc approve, moe_1w reject "名額有限…") + college partial (nstc approve, moe_1w reject "學院不推薦教育部方案") | 教授: 國科會:推薦 + 教育部:不推薦 · 學院: 排名:推薦 + 國科會:推薦 + 教育部:不推薦 |
+| App2 | csphd0002 陳AI博士 | 2 | none | 教授: 審核中 · 學院: 排名:推薦 + 國科會:未推薦 + 教育部:未推薦 |
+| App3 | csphd0003 林機器學習博士 | 3 (N) | professor approve (nstc + moe_1w); item college_rejected | 排序 red N · 學院: 排名:不推薦 + 兩者未推薦 · 教授: 國科會:推薦 + 教育部:推薦 |
+| App4 | stuphd001 王博士 (renewal) | 4 | ADMIN reject (nstc, "admin 審查不應顯示") | 教授: 審核中 · admin comment nowhere · 學院: nstc 未推薦 (NOT 不推薦) + 教育部:未推薦 |
 
 ## Assertions verified (all via expect) — ALL PASS
 
 1. Headers 教授推薦 and 學院推薦 exist.
 2. App1: 教授推薦 has `國科會: 推薦` + `教育部: 不推薦` (reject chip title = comment
-   `名額有限，僅推薦國科會`); 學院推薦 has `排名: 推薦` ranking chip AND `國科會: 推薦`.
-3. App2: 教授推薦 `審核中`; 學院推薦 `排名: 推薦`.
-4. App3: 排序 red `N`; 學院推薦 `排名: 不推薦` (no approve ranking chip); 教授推薦 both
-   `國科會: 推薦` and `教育部: 推薦`.
+   `名額有限，僅推薦國科會`); 學院推薦 has `排名: 推薦`, `國科會: 推薦` AND
+   `教育部: 不推薦` (title = `學院不推薦教育部方案`).
+3. App2: 教授推薦 `審核中`; 學院推薦 `排名: 推薦` + `國科會: 未推薦` + `教育部: 未推薦`.
+4. App3: 排序 red `N`; 學院推薦 `排名: 不推薦` (no approve ranking chip) + both 未推薦;
+   教授推薦 both `國科會: 推薦` and `教育部: 推薦`.
 5. App4: 教授推薦 `審核中`; `admin 審查不應顯示` appears nowhere (admin exclusion);
-   neither column has a reject chip.
+   neither column has a `不推薦` chip — the admin-rejected nstc renders `未推薦`.
 
 ## Evidence
 
