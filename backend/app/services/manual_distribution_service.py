@@ -93,6 +93,48 @@ async def load_rejected_subtype_map(db: AsyncSession, app_ids: list[int]) -> dic
     return rejected_map
 
 
+async def load_review_items_by_role(db: AsyncSession, app_ids: list[int]) -> dict[int, dict[str, list[dict[str, Any]]]]:
+    """Load per-sub-type review verdicts grouped by reviewer role for a batch of applications.
+
+    Returns {application_id: {"professor": [...], "college": [...]}} where each
+    entry is {"sub_type_code", "recommendation", "comments"} — the same summary
+    shape the college review list exposes as professor_review_items. Admin
+    reviews are excluded on purpose: the manual-distribution grid IS the admin
+    decision surface, so only the upstream 教授/學院 verdicts are displayed.
+    Sub-type codes are normalized with _norm_sub_type (matches rejected_sub_types).
+    """
+    review_map: dict[int, dict[str, list[dict[str, Any]]]] = {}
+    if not app_ids:
+        return review_map
+    query = (
+        select(
+            ApplicationReview.application_id,
+            User.role,
+            ApplicationReviewItem.sub_type_code,
+            ApplicationReviewItem.recommendation,
+            ApplicationReviewItem.comments,
+        )
+        .join(ApplicationReviewItem, ApplicationReviewItem.review_id == ApplicationReview.id)
+        .join(User, User.id == ApplicationReview.reviewer_id)
+        .where(
+            ApplicationReview.application_id.in_(app_ids),
+            User.role.in_([UserRole.professor, UserRole.college]),
+        )
+        .order_by(ApplicationReview.reviewed_at, ApplicationReviewItem.id)
+    )
+    result = await db.execute(query)
+    for app_id, role, sub_type_code, recommendation, comments in result:
+        role_key = role.value if hasattr(role, "value") else str(role)
+        review_map.setdefault(app_id, {}).setdefault(role_key, []).append(
+            {
+                "sub_type_code": _norm_sub_type(sub_type_code),
+                "recommendation": recommendation,
+                "comments": comments,
+            }
+        )
+    return review_map
+
+
 def _compute_suggestions(
     unique_items: list,
     default_prefs: list[str],
@@ -388,6 +430,10 @@ class ManualDistributionService:
         """See load_rejected_subtype_map (module-level, shared with the renewal path)."""
         return await load_rejected_subtype_map(self.db, app_ids)
 
+    async def _batch_load_review_items(self, app_ids: list[int]) -> dict[int, dict[str, list[dict[str, Any]]]]:
+        """See load_review_items_by_role (module-level)."""
+        return await load_review_items_by_role(self.db, app_ids)
+
     async def _bulk_system_received_months(
         self,
         items: list[CollegeRankingItem],
@@ -460,7 +506,7 @@ class ManualDistributionService:
         # when an application appears in more than one finalized ranking.
         items_query = (
             select(CollegeRankingItem)
-            .options(selectinload(CollegeRankingItem.application))
+            .options(selectinload(CollegeRankingItem.application).selectinload(Application.scholarship_configuration))
             .where(CollegeRankingItem.ranking_id.in_(ranking_ids))
             .order_by(CollegeRankingItem.rank_position, CollegeRankingItem.id)
         )
@@ -470,6 +516,10 @@ class ManualDistributionService:
         # Batch-load rejected sub-types from professor reviews
         app_ids = [item.application.id for item in items if item.application]
         rejected_map = await self._batch_load_rejected_map(app_ids)
+
+        # Batch-load per-sub-type 教授/學院 review verdicts for the
+        # recommendation display columns.
+        review_items_map = await self._batch_load_review_items(app_ids)
 
         # Bulk-compute system received_months for all students in one query.
         # Admin-imported overrides (source="imported") take precedence over
@@ -512,12 +562,27 @@ class ManualDistributionService:
                 rm_value = system_months.get(student_id_value) if student_id_value else None
                 rm_source = "system" if rm_value is not None else None
 
+            app_reviews = review_items_map.get(app.id, {})
+            cfg = app.scholarship_configuration
+
             student = {
                 "ranking_item_id": item.id,
                 "application_id": app.id,
                 "rank_position": item.rank_position,
                 "applied_sub_types": app.scholarship_subtype_list or [],
                 "rejected_sub_types": list(rejected_map.get(app.id, set())),
+                # Per-sub-type 推薦/不推薦 verdicts from the unified review
+                # table, split by reviewer role for the 教授推薦/學院推薦
+                # display columns. The college's PRIMARY verdict is the
+                # finalized ranking itself (college_rejected below) — its
+                # review items only supplement it. requires_professor_
+                # recommendation lets the UI distinguish "審核中" (step
+                # required, no verdict yet) from "—" (no professor step).
+                "professor_review_items": app_reviews.get("professor", []),
+                "college_review_items": app_reviews.get("college", []),
+                "requires_professor_recommendation": bool(
+                    cfg and cfg.requires_professor_review_for(bool(app.is_renewal))
+                ),
                 "allocated_sub_type": item.allocated_sub_type,
                 # Config whose quota this slot consumes — the frontend grid
                 # seeds the checked column from (allocated_sub_type,

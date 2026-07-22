@@ -45,6 +45,7 @@ async def test_dedup_prefers_allocated_item_over_unallocated_duplicate():
         suspend_reason=None,
         is_renewal=False,
         renewal_year=None,
+        scholarship_configuration=None,
     )
     unallocated = _item(11, 1, app=app, is_allocated=False)
     allocated = _item(12, 2, app=app, is_allocated=True, allocated_sub_type="nstc")
@@ -68,6 +69,7 @@ async def test_dedup_prefers_allocated_item_over_unallocated_duplicate():
     svc = ManualDistributionService(db)
     # Isolate the dedup: stub the per-student/bulk helpers.
     svc._batch_load_rejected_map = AsyncMock(return_value={})
+    svc._batch_load_review_items = AsyncMock(return_value={})
     svc._bulk_system_received_months = AsyncMock(return_value={})
     svc._compute_application_identity = MagicMock(return_value="114新申請")
     svc._compute_term_count = MagicMock(return_value=1)
@@ -96,6 +98,7 @@ async def test_dedup_keeps_single_row_when_no_allocation():
         suspend_reason=None,
         is_renewal=False,
         renewal_year=None,
+        scholarship_configuration=None,
     )
     i1 = _item(21, 1, app=app, is_allocated=False)
     i2 = _item(22, 2, app=app, is_allocated=False)
@@ -115,6 +118,7 @@ async def test_dedup_keeps_single_row_when_no_allocation():
     db.execute = AsyncMock(side_effect=_execute)
     svc = ManualDistributionService(db)
     svc._batch_load_rejected_map = AsyncMock(return_value={})
+    svc._batch_load_review_items = AsyncMock(return_value={})
     svc._bulk_system_received_months = AsyncMock(return_value={})
     svc._compute_application_identity = MagicMock(return_value="114新申請")
     svc._compute_term_count = MagicMock(return_value=1)
@@ -146,6 +150,7 @@ async def test_items_query_orders_by_rank_then_id_for_determinism():
     db.execute = AsyncMock(side_effect=_execute)
     svc = ManualDistributionService(db)
     svc._batch_load_rejected_map = AsyncMock(return_value={})
+    svc._batch_load_review_items = AsyncMock(return_value={})
     svc._bulk_system_received_months = AsyncMock(return_value={})
 
     await svc.get_students_for_distribution(2, 114, "yearly")
@@ -173,6 +178,7 @@ async def test_dedup_both_allocated_collapses_to_single_deterministic_row():
         suspend_reason=None,
         is_renewal=False,
         renewal_year=None,
+        scholarship_configuration=None,
     )
     a1 = _item(31, 1, app=app, is_allocated=True, allocated_sub_type="nstc")
     a2 = _item(32, 2, app=app, is_allocated=True, allocated_sub_type="moe_1w")
@@ -192,6 +198,7 @@ async def test_dedup_both_allocated_collapses_to_single_deterministic_row():
     db.execute = AsyncMock(side_effect=_execute)
     svc = ManualDistributionService(db)
     svc._batch_load_rejected_map = AsyncMock(return_value={})
+    svc._batch_load_review_items = AsyncMock(return_value={})
     svc._bulk_system_received_months = AsyncMock(return_value={})
     svc._compute_application_identity = MagicMock(return_value="114新申請")
     svc._compute_term_count = MagicMock(return_value=1)

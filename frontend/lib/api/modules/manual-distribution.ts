@@ -9,12 +9,27 @@ import { typedClient } from "../typed-client";
 import { toApiResponse } from "../compat";
 import type { ApiResponse } from "../types";
 
+/** One reviewer verdict for one sub-type, shown in the 教授推薦/學院推薦 columns. */
+export interface ReviewItemSummary {
+  /** Normalized (lowercase/stripped) sub-type code, matching rejected_sub_types. */
+  sub_type_code: string;
+  /** "approve" | "reject" */
+  recommendation: string;
+  comments: string | null;
+}
+
 export interface DistributionStudent {
   ranking_item_id: number;
   application_id: number;
   rank_position: number;
   applied_sub_types: string[];
   rejected_sub_types: string[];
+  /** Per-sub-type professor verdicts (教授推薦 column). */
+  professor_review_items: ReviewItemSummary[];
+  /** Per-sub-type college review verdicts supplementing the ranking verdict (學院推薦 column); admin reviews excluded. The college's PRIMARY verdict is the finalized ranking: college_rejected below. */
+  college_review_items: ReviewItemSummary[];
+  /** Config requires a professor recommendation step (renewal-aware) — distinguishes 審核中 from no step. */
+  requires_professor_recommendation: boolean;
   allocated_sub_type: string | null;
   /** Config whose quota this student's slot consumes. Seed the checked column from (allocated_sub_type, allocation_config_id). */
   allocation_config_id: number | null;
