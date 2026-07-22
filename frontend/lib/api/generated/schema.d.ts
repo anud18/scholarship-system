@@ -5520,7 +5520,7 @@ export interface paths {
          *     **注意**: 「獎學金類別」欄位可填 `國科會` 或 `教育部`；僅「學生是否申請續領=是」
          *     且「續領審核結果=通過」的列會被匯入。
          *
-         *     **權限**: 僅限 college 角色。
+         *     **權限**: 僅限 admin / super_admin 角色。
          */
         get: operations["download_renewal_import_template_api_v1_college_review_renewal_import_template_get"];
         put?: never;
