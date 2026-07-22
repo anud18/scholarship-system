@@ -54,7 +54,7 @@
 <body>
   <header>
     <h1>Staging evidence — 2026-07-22</h1>
-    <div class="meta">1 flows · 3 PNG · 0 JSON · 0 TXT · 0 JS · 352.0 KiB total</div>
+    <div class="meta">1 flows · 4 PNG · 0 JSON · 0 TXT · 0 JS · 389.3 KiB total</div>
   </header>
 
   <nav class="toc">
@@ -95,7 +95,7 @@
 <h2>Deviation from the task's practical notes</h2>
 <p>The suggested <code>ln -s …/frontend/node_modules …</code> symlink leaks into the frontend container's <code>/app</code> bind mount and crashes Turbopack (&quot;Symlink node_modules is invalid, it points out of the filesystem root&quot;), restart-looping the container. Root cause: this compose project masks <code>/app/node_modules</code> with an anonymous volume (not a bind of main's node_modules), so the host mountpoint must stay a plain directory. Fix: <code>frontend/ node_modules</code> restored to an empty directory, frontend container restarted (recovered, HTTP 200), and Playwright resolved from main's node_modules via <code>NODE_PATH</code> — no symlink, container healthy. Seed purged in afterAll. No product bug found.</p></div>
       <div class="files">
-        <div class="file"><div class="name">01-grid-overview.png <span class="size">(232.0 KiB)</span></div><img loading="lazy" src="docs/staging-tests/2026-07-22/01-manual-dist-recommendation/01-grid-overview.png" alt="01-grid-overview.png"></div><div class="file"><div class="name">02-professor-college-columns.png <span class="size">(96.3 KiB)</span></div><img loading="lazy" src="docs/staging-tests/2026-07-22/01-manual-dist-recommendation/02-professor-college-columns.png" alt="02-professor-college-columns.png"></div><div class="file"><div class="name">03-college-rejected-row.png <span class="size">(23.6 KiB)</span></div><img loading="lazy" src="docs/staging-tests/2026-07-22/01-manual-dist-recommendation/03-college-rejected-row.png" alt="03-college-rejected-row.png"></div>
+        <div class="file"><div class="name">01-grid-overview.png <span class="size">(232.0 KiB)</span></div><img loading="lazy" src="docs/staging-tests/2026-07-22/01-manual-dist-recommendation/01-grid-overview.png" alt="01-grid-overview.png"></div><div class="file"><div class="name">02-professor-college-columns.png <span class="size">(96.3 KiB)</span></div><img loading="lazy" src="docs/staging-tests/2026-07-22/01-manual-dist-recommendation/02-professor-college-columns.png" alt="02-professor-college-columns.png"></div><div class="file"><div class="name">03-college-rejected-row.png <span class="size">(23.6 KiB)</span></div><img loading="lazy" src="docs/staging-tests/2026-07-22/01-manual-dist-recommendation/03-college-rejected-row.png" alt="03-college-rejected-row.png"></div><div class="file"><div class="name">04-college-verdict-states.png <span class="size">(37.3 KiB)</span></div><img loading="lazy" src="docs/staging-tests/2026-07-22/01-manual-dist-recommendation/04-college-verdict-states.png" alt="04-college-verdict-states.png"></div>
       </div>
     </section>
 
