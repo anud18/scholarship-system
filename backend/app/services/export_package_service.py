@@ -80,7 +80,7 @@ def _label_for_file_type(file_type: str) -> str:
     return "其他文件"
 
 
-def _is_dynamic_document_type(file_type: str) -> bool:
+def _is_dynamic_document_type(file_type: Optional[str]) -> bool:
     """Whether an ApplicationFile carries an admin-configured dynamic
     document (its file_type IS the configured document_name). Fixed types
     and the legacy 其他文件 bucket live in FILE_TYPE_LABELS."""
@@ -328,7 +328,7 @@ class ExportPackageService:
                 object_name=af.object_name,
                 zip_path=f"{base_path}/{_sanitize_filename(filename)}",
                 error_path=f"{base_path}/_錯誤_找不到檔案_{_sanitize_filename(label)}.txt",
-                error_label=af.original_filename or af.object_name,
+                error_label=af.original_filename or af.object_name or "未知檔案",
             )
 
             if _is_dynamic_document_type(ft):

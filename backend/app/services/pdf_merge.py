@@ -153,7 +153,7 @@ def _strip_active_content(writer: PdfWriter) -> None:
     reviewer's viewer. Strip document open-actions, page/annotation /AA
     event handlers, and JavaScript-action annotations outright.
     """
-    root = writer._root_object
+    root = writer.root_object
     for key in ("/OpenAction", "/AA"):
         if key in root:
             del root[key]
