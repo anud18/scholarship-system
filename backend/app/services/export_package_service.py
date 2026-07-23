@@ -34,6 +34,7 @@ from app.models.scholarship import ScholarshipType
 from app.services.export_summary_tables import build_embedded_summary_tables
 from app.services.minio_service import MinIOService
 from app.services.pdf_fonts import CJK_FONT_NAME, ensure_cjk_font
+from app.services.pdf_merge import MergeItem, build_merged_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,8 @@ FILE_TYPE_LABELS: Dict[str, str] = {
     "agreement": "切結書",
     "bank_account_cover": "存摺封面",
     "bank_account_proof": "存摺封面",  # value actually stored on the cloned passbook ApplicationFile
+    "id_card": "身份證",  # minted by batch_import doc_type_map — fixed type, NOT a dynamic document
+    "bank_book": "存摺封面",  # minted by batch_import doc_type_map — fixed type, NOT a dynamic document
     "other": "其他文件",
 }
 
@@ -77,6 +80,45 @@ def _label_for_file_type(file_type: str) -> str:
     return "其他文件"
 
 
+def _is_dynamic_document_type(file_type: Optional[str]) -> bool:
+    """Whether an ApplicationFile carries an admin-configured dynamic
+    document (its file_type IS the configured document_name). Fixed types
+    and the legacy 其他文件 bucket live in FILE_TYPE_LABELS."""
+    return bool(file_type) and file_type not in FILE_TYPE_LABELS
+
+
+def _unique_zip_path(zf: zipfile.ZipFile, path: str) -> str:
+    """Return `path`, suffixed with _2/_3/… if the ZIP already holds an entry
+    at that name. zipfile happily writes duplicate names and most extractors
+    then keep only the last one, silently shadowing the other file — e.g. an
+    admin-configured dynamic document named exactly 動態文件合併 colliding with
+    the merged PDF, or two same-type download failures sharing one error path."""
+
+    def _taken(name: str) -> bool:
+        # getinfo() is a documented O(1) name lookup — no per-call namelist() scan
+        try:
+            zf.getinfo(name)
+            return True
+        except KeyError:
+            return False
+
+    if not _taken(path):
+        return path
+    stem, dot, ext = path.rpartition(".")
+    # Only honour a real extension on the final component: a trailing dot
+    # ("abc.") would yield "abc_2." (Windows strips trailing dots →
+    # re-collision), and a dot only in a parent dir or a leading-dot
+    # basename has no extension to preserve.
+    if not dot or not ext or "/" in ext or not stem or stem.endswith("/"):
+        stem, dot, ext = path, "", ""
+    counter = 2
+    while True:
+        candidate = f"{stem}_{counter}.{ext}" if dot else f"{path}_{counter}"
+        if not _taken(candidate):
+            return candidate
+        counter += 1
+
+
 async def _fetch_and_write(
     zf: zipfile.ZipFile,
     minio: MinIOService,
@@ -84,11 +126,13 @@ async def _fetch_and_write(
     zip_path: str,
     error_path: str,
     error_label: str,
-) -> None:
+) -> Tuple[Optional[bytes], Optional[str]]:
     """Stream one MinIO object into the ZIP at `zip_path`.
 
-    On any failure, writes a `_錯誤_…txt` placeholder at `error_path`
-    instead so a single bad object never aborts the whole ZIP build.
+    Returns (file_bytes, None) on success. On any failure, writes a
+    `_錯誤_…txt` placeholder at `error_path` instead so a single bad object
+    never aborts the whole ZIP build, and returns (None, error message) so
+    the merged PDF's placeholder page can show the same concrete reason.
     """
     try:
         response = await asyncio.to_thread(minio.get_file_stream, object_name)
@@ -97,10 +141,12 @@ async def _fetch_and_write(
         finally:
             response.close()
             response.release_conn()
-        zf.writestr(zip_path, file_bytes)
+        zf.writestr(_unique_zip_path(zf, zip_path), file_bytes)
+        return file_bytes, None
     except Exception as e:
         logger.exception(f"Failed to fetch file {object_name}")
-        zf.writestr(error_path, f"檔案下載失敗：{error_label}\n錯誤：{str(e)}")
+        zf.writestr(_unique_zip_path(zf, error_path), f"檔案下載失敗：{error_label}\n錯誤：{str(e)}")
+        return None, str(e) or "無法自檔案儲存服務下載"
 
 
 class ExportPackageService:
@@ -264,9 +310,11 @@ class ExportPackageService:
                 f"PDF 生成失敗：{str(e)}",
             )
 
-        # Add uploaded files from ApplicationFile records
+        # Add uploaded files from ApplicationFile records; keep the bytes of
+        # dynamic documents so they can be stitched into one extra PDF below.
         type_totals = Counter(af.file_type or "other" for af in app.files)
         file_type_counter: Dict[str, int] = defaultdict(int)
+        dynamic_items: List[MergeItem] = []
         for af in app.files:
             ft = af.file_type or "other"
             file_type_counter[ft] += 1
@@ -287,14 +335,51 @@ class ExportPackageService:
             else:
                 filename = f"{student_prefix}_{label}{ext}"
 
-            await _fetch_and_write(
+            file_bytes, fetch_error = await _fetch_and_write(
                 zf,
                 self.minio,
                 object_name=af.object_name,
                 zip_path=f"{base_path}/{_sanitize_filename(filename)}",
                 error_path=f"{base_path}/_錯誤_找不到檔案_{_sanitize_filename(label)}.txt",
-                error_label=af.original_filename or af.object_name,
+                error_label=af.original_filename or af.object_name or "未知檔案",
             )
+
+            if _is_dynamic_document_type(ft):
+                item_label = f"{label} {count}" if type_totals[ft] > 1 else label
+                dynamic_items.append(
+                    MergeItem(
+                        label=item_label,
+                        filename=af.original_filename or af.object_name or "",
+                        content=file_bytes,
+                        error=fetch_error,
+                    )
+                )
+
+        # Extra per-student PDF stitching all dynamic documents together
+        if dynamic_items:
+            semester_map = {"first": "第一學期", "second": "第二學期"}
+            semester_label = semester_map.get(semester, "全學年") if semester else "全學年"
+            try:
+                # to_thread: pypdf/Pillow/reportlab do seconds of pure CPU per
+                # student — inline they would stall the whole event loop.
+                merged_bytes = await asyncio.to_thread(
+                    build_merged_pdf,
+                    title="學生動態文件合併",
+                    subtitle_lines=[
+                        f"{scholarship_name} {academic_year}學年度 {semester_label}",
+                        # Display surface: raw SIS values (sanitization is for
+                        # ZIP paths), with the same fallbacks as folder naming.
+                        f"{student.get('std_stdcode', 'unknown')} {student.get('std_cname', '未知')}",
+                    ],
+                    items=dynamic_items,
+                )
+                zf.writestr(_unique_zip_path(zf, f"{base_path}/{student_prefix}_動態文件合併.pdf"), merged_bytes)
+            except Exception as e:
+                logger.exception(f"Failed to build merged dynamic-documents PDF for app {app.id}")
+                zf.writestr(
+                    _unique_zip_path(zf, f"{base_path}/_錯誤_動態文件合併PDF生成失敗.txt"),
+                    f"動態文件合併 PDF 生成失敗：{str(e)}",
+                )
 
     def _generate_summary_pdf(
         self,

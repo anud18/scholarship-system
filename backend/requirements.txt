@@ -58,6 +58,7 @@ openpyxl==3.1.2
 
 # PDF generation
 reportlab==4.4.10  # Used by export_package_service
+pypdf==6.14.2  # Merged dynamic-documents PDF in the export package (pdf_merge.py)
 
 # Logging and monitoring
 structlog==24.4.0  # Updated for Python 3.13 compatibility
