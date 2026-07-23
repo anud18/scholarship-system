@@ -418,9 +418,9 @@ test.describe("admin revoke dialog — confirm disabled until reason filled", ()
 const SETUP_STUDENT2 = "csphd0002";
 
 // A missing bank account no longer excludes an item from the roster (it is
-// only a 補件 warning now), but the fixture applications still carry one so
-// the generated items are fully payable and the revoked entry surfaces via
-// get_revoked_suspended_for_roster (PR #916 soft-delete gate on is_included).
+// only a 補件 warning now), so it doesn't affect the is_included gate that
+// get_revoked_suspended_for_roster filters on (PR #916). The fixture
+// applications still carry one so the generated items are fully payable.
 const SETUP_FORM_DATA = {
   fields: {
     bank_account: {

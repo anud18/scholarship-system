@@ -782,8 +782,6 @@ async def preview_roster_students(
             bank_account, field_name = extract_bank_account(application)
             student_info["has_bank_account"] = bool(bank_account)
             student_info["bank_account_field"] = field_name
-            if not bank_account:
-                summary["missing_bank_account_count"] += 1
 
             # Validation Step 5: Final inclusion decision
             is_included = True
@@ -804,6 +802,11 @@ async def preview_roster_students(
 
             student_info["is_included"] = is_included
             student_info["exclusion_reason"] = exclusion_reason
+
+            # 只統計「仍列入造冊」但缺帳戶的學生 — 這個數字驅動前端的補件提醒，
+            # 被其他原因排除者不需補件，不應計入
+            if is_included and not bank_account:
+                summary["missing_bank_account_count"] += 1
 
             if is_included:
                 summary["included_count"] += 1
