@@ -1507,9 +1507,11 @@ async def supplementary_import(
     # Upsert user profiles (bank_account, advisor_name)
     await service.upsert_user_profiles(user_map, rows)
 
-    # Create applications + ranking items
+    # Create applications + ranking items. Pass the resolved configuration so
+    # every application carries scholarship_configuration_id — roster rule
+    # validation depends on it (issue #1213).
     imported_count = await service.create_applications_and_items(
-        rows, user_map, student_data_map, ranking, max_existing_rank
+        rows, user_map, student_data_map, ranking, max_existing_rank, cfg
     )
     ranking.total_applications = len(ranking.items) + imported_count
     await db.commit()

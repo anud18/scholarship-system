@@ -333,15 +333,27 @@ class SupplementaryImportService:
         student_data_map: Dict[str, dict],
         ranking,  # CollegeRanking ORM object
         max_existing_rank: int,
+        scholarship_configuration,  # ScholarshipConfiguration ORM object (same period as ranking)
     ) -> int:
         """Create Application + CollegeRankingItem for each supplementary row.
 
         Returns count of created items.
+
+        `scholarship_configuration` is required: roster rule validation loads
+        that period's rules via applications.scholarship_configuration_id, so
+        an application created without it gets excluded from 造冊 with
+        「未關聯獎學金配置」(issue #1213).
         """
         from sqlalchemy import select
         from app.models.application import Application, ApplicationStatus
         from app.models.application_sequence import ApplicationSequence
         from app.models.college_review import CollegeRankingItem
+
+        if scholarship_configuration is None:
+            raise ValueError(
+                "找不到對應的獎學金配置，無法補充匯入（applications.scholarship_configuration_id "
+                "不可為空，否則造冊時會被排除）。請先建立該學年/學期的獎學金配置。"
+            )
 
         if not rows:
             return 0
@@ -401,6 +413,7 @@ class SupplementaryImportService:
                 app_id=app_id,
                 user_id=user.id,
                 scholarship_type_id=ranking.scholarship_type_id,
+                scholarship_configuration_id=scholarship_configuration.id,
                 academic_year=ranking.academic_year,
                 semester=ranking.semester,
                 status=ApplicationStatus.submitted,

@@ -134,11 +134,11 @@ class TestCreateApplicationsAndItems:
         scholarship_subtype_list — supplementary import must populate it
         (not just sub_type_preferences) or imported students go invisible there.
         """
-        from app.models.scholarship import ScholarshipType
+        from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
         from app.models.college_review import CollegeRanking
         from app.models.user import User as UserModel
 
-        # Minimal scholarship + ranking + creator
+        # Minimal scholarship + config + ranking + creator
         scholarship = ScholarshipType(
             code="phd_subtype_test",
             name="Test",
@@ -146,6 +146,16 @@ class TestCreateApplicationsAndItems:
             status="active",
         )
         db.add(scholarship)
+        await db.flush()
+
+        config = ScholarshipConfiguration(
+            scholarship_type_id=scholarship.id,
+            academic_year=114,
+            config_name="Test 114學年",
+            config_code="phd_subtype_test_114",
+            amount=30000,
+        )
+        db.add(config)
         await db.flush()
 
         creator = UserModel(
@@ -188,7 +198,7 @@ class TestCreateApplicationsAndItems:
         user_map = await service.find_or_create_users(student_data_map)
 
         created = await service.create_applications_and_items(
-            rows, user_map, student_data_map, ranking, max_existing_rank=0
+            rows, user_map, student_data_map, ranking, max_existing_rank=0, scholarship_configuration=config
         )
         await db.flush()
         assert created == 1
@@ -202,3 +212,25 @@ class TestCreateApplicationsAndItems:
             "scholarship_subtype_list must be populated so manual distribution panel " "renders the applied sub-types"
         )
         assert app_row.sub_type_preferences == ["nstc", "moe_1w"]
+        assert app_row.scholarship_configuration_id == config.id, (
+            "scholarship_configuration_id must be set or roster rule validation "
+            "excludes the student with 未關聯獎學金配置 (issue #1213)"
+        )
+
+    async def test_rejects_missing_scholarship_configuration(self, db: AsyncSession):
+        """Creating supplementary applications without a resolved configuration
+        must fail up front — a NULL scholarship_configuration_id application
+        gets excluded from 造冊 later (issue #1213).
+        """
+        service = SupplementaryImportService(db, student_service=AsyncMock())
+        rows = [SupplementaryRow("310460051", 1, ["nstc"], None, None, {})]
+
+        with pytest.raises(ValueError, match="找不到對應的獎學金配置"):
+            await service.create_applications_and_items(
+                rows,
+                user_map={},
+                student_data_map={},
+                ranking=None,
+                max_existing_rank=0,
+                scholarship_configuration=None,
+            )
