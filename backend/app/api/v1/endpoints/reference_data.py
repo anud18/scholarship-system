@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.cache import cached
 from app.core.deps import get_db
+from app.core.enroll_types import merge_enroll_types
 from app.models.application import Application
 from app.models.enums import ApplicationCycle, Semester
 from app.models.scholarship import (
@@ -136,16 +137,9 @@ async def get_enroll_types(
     result = await session.execute(query.order_by(EnrollType.degreeId, EnrollType.code))
     enroll_types = result.scalars().all()
 
-    data = [
-        {
-            "degree_id": enroll_type.degreeId,
-            "code": enroll_type.code,
-            "name": enroll_type.name,
-            "name_en": enroll_type.name_en,
-            "degree_name": enroll_type.degree.name if enroll_type.degree else None,
-        }
-        for enroll_type in enroll_types
-    ]
+    # DB rows first, hardcoded NYCU fallback fills any gaps so every valid
+    # std_enrolltype code resolves to a real name (no more "未知入學方式").
+    data = merge_enroll_types(enroll_types)
     return ApiResponse(success=True, message="Enroll types retrieved successfully", data=data)
 
 
@@ -172,7 +166,9 @@ async def get_all_reference_data(
     return ApiResponse(success=True, message="Reference data retrieved successfully", data=data)
 
 
-@cached(key_fn=lambda *_, **__: "refdata:all:v2", ttl=86400)  # 24 h; :v2 busts stale pre-academy_code cache on deploy
+@cached(
+    key_fn=lambda *_, **__: "refdata:all:v3", ttl=86400
+)  # 24 h; :v3 busts stale pre-enroll_types-fallback cache on deploy
 async def _get_all_reference_data_cached(session: AsyncSession) -> dict:
     """Server-side cached body of /reference-data/all. See the wrapper above for
     the no-store HTTP header rationale."""
@@ -234,16 +230,7 @@ async def _get_all_reference_data_cached(session: AsyncSession) -> dict:
             }
             for department in departments
         ],
-        "enroll_types": [
-            {
-                "degree_id": enroll_type.degreeId,
-                "code": enroll_type.code,
-                "name": enroll_type.name,
-                "name_en": enroll_type.name_en,
-                "degree_name": enroll_type.degree.name if enroll_type.degree else None,
-            }
-            for enroll_type in enroll_types
-        ],
+        "enroll_types": merge_enroll_types(enroll_types),
         "sub_type_translations": sub_type_translations,
     }
 
