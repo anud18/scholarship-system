@@ -367,7 +367,9 @@ class ExportPackageService:
                     title="學生動態文件合併",
                     subtitle_lines=[
                         f"{scholarship_name} {academic_year}學年度 {semester_label}",
-                        f"{std_code} {std_name}",
+                        # Display surface: raw SIS values (sanitization is for
+                        # ZIP paths), with the same fallbacks as folder naming.
+                        f"{student.get('std_stdcode', 'unknown')} {student.get('std_cname', '未知')}",
                     ],
                     items=dynamic_items,
                 )
