@@ -58,7 +58,7 @@ set -euo pipefail
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"; }
 
-if ! docker ps --format '{{.Names}}' | grep -qx "${DB_CONTAINER}"; then
+if ! docker ps --format '{{.Names}}' | grep -qxF "${DB_CONTAINER}"; then
     log "ERROR: container ${DB_CONTAINER} is not running on $(hostname)"
     docker ps --format '  running: {{.Names}}' || true
     exit 1

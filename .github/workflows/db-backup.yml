@@ -232,17 +232,19 @@ jobs:
             }
 
             // Dedupe: don't stack a new issue while one is still open.
+            // listForRepo returns PRs too — only actual issues count.
             const issues = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              labels: 'db-backup-failed',
+              labels: label,
               state: 'open',
             });
-            if (issues.data.length > 0) {
+            const openIssues = issues.data.filter((item) => !item.pull_request);
+            if (openIssues.length > 0) {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: issues.data[0].number,
+                issue_number: openIssues[0].number,
                 body: `Backup failed again for **${failed.join(', ')}**: ${runUrl}`,
               });
               return;
