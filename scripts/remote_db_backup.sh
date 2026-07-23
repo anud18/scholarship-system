@@ -71,7 +71,17 @@ BACKUP_FILE="scholarship_db_${ENV_NAME}_${STAMP}.dump"
 if ! mkdir -p "${TARGET_DIR}" 2>/dev/null; then
     log "mkdir needs elevated permissions, retrying with sudo -n"
     sudo -n mkdir -p "${TARGET_DIR}"
-    sudo -n chown "$(id -un):$(id -gn)" "${TARGET_DIR}"
+fi
+# The dated directory may already exist but be root-owned — on production the
+# 02:00 in-container cron backup (running as root) creates it first, so a
+# plain `mkdir -p` above succeeds without making it writable for this user.
+if [ ! -w "${TARGET_DIR}" ]; then
+    log "${TARGET_DIR} is not writable, taking ownership with sudo -n"
+    if ! sudo -n chown "$(id -un):$(id -gn)" "${TARGET_DIR}"; then
+        log "ERROR: ${TARGET_DIR} is not writable and sudo -n chown failed"
+        log "       Grant the SSH user write access (or passwordless sudo) on ${BACKUP_ROOT}"
+        exit 1
+    fi
 fi
 
 log "Dumping ${PGDB} from ${DB_CONTAINER} -> ${TARGET_DIR}/${BACKUP_FILE}"
@@ -113,7 +123,15 @@ for dir in "${BACKUP_ROOT}"/*/; do
     base=$(basename "${dir}")
     if [[ "${base}" =~ ^[0-9]{8}$ ]] && [ "${base}" -lt "${CUTOFF_DATE}" ]; then
         log "  deleting ${base}"
-        rm -rf "${dir}"
+        # Old directories may contain root-owned files from the in-container
+        # cron backup; fall back to sudo, and never fail the run over pruning —
+        # the new backup already succeeded at this point.
+        if ! rm -rf "${dir}" 2>/dev/null; then
+            if ! sudo -n rm -rf "${dir}" 2>/dev/null; then
+                log "  WARNING: could not delete ${base} (permissions?) — skipping"
+                continue
+            fi
+        fi
         DELETED=$((DELETED + 1))
     fi
 done
