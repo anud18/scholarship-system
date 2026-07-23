@@ -42,8 +42,14 @@ echo "Backup root: ${BACKUP_ROOT} (retention: ${RETENTION_DAYS} days)"
 
 # Pass parameters to the remote shell as safely-quoted env assignments so the
 # remote script body itself can stay single-quoted (no local interpolation).
-REMOTE_ENV=$(printf "DB_CONTAINER=%q ENV_NAME=%q RETENTION_DAYS=%q BACKUP_ROOT=%q" \
-    "$DB_CONTAINER" "$ENV_NAME" "$RETENTION_DAYS" "$BACKUP_ROOT")
+# The command string is parsed by the remote user's LOGIN shell (not
+# necessarily bash), so use POSIX single-quote escaping — `printf %q` can
+# emit bash-only $'...' quoting that /bin/sh would mis-parse.
+shquote() {
+    local escaped=${1//\'/\'\\\'\'}
+    printf "'%s'" "$escaped"
+}
+REMOTE_ENV="DB_CONTAINER=$(shquote "$DB_CONTAINER") ENV_NAME=$(shquote "$ENV_NAME") RETENTION_DAYS=$(shquote "$RETENTION_DAYS") BACKUP_ROOT=$(shquote "$BACKUP_ROOT")"
 
 ssh -p "$SSH_PORT" -i "$SSH_KEY_PATH" \
     -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=30 \
