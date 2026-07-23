@@ -345,9 +345,13 @@ class SupplementaryImportService:
         「未關聯獎學金配置」(issue #1213).
         """
         from sqlalchemy import select
-        from app.models.application import Application, ApplicationStatus
+        from app.models.application import Application
         from app.models.application_sequence import ApplicationSequence
         from app.models.college_review import CollegeRankingItem
+        from app.services.application_builder import (
+            build_submitted_application_values,
+            derive_sub_scholarship_type,
+        )
 
         if scholarship_configuration is None:
             raise ValueError(
@@ -384,6 +388,11 @@ class SupplementaryImportService:
         seq_record.last_sequence = base_seq + len(rows)
         await self.db.flush()
 
+        # Shared submitted-application invariants (status/status_name/review_stage/
+        # submitted_at/amount/scholarship_name) — same source as the student and
+        # batch-import paths; one shared timestamp for the whole import is intended.
+        submitted_values = build_submitted_application_values(ranking.scholarship_type, scholarship_configuration)
+
         created = 0
         for idx, row in enumerate(rows):
             user = user_map.get(row.student_id)
@@ -408,17 +417,27 @@ class SupplementaryImportService:
             # scholarship_subtype_list is what the manual-distribution panel reads
             # as `applied_sub_types`; sub_type_preferences is the ordered preference list
             # used by allocation logic. Set both from the Excel 申請獎學金類別 column so
-            # admin can see + distribute supplementary students.
+            # admin can see + distribute supplementary students. The Excel cell encodes
+            # an explicit 志願 order, so we keep it verbatim (no moe_1w reordering).
+            # sub_scholarship_type must reflect the first preference — roster rule
+            # validation selects rule sets by it, and the default "general" would
+            # pick the wrong rules.
             app = Application(
                 app_id=app_id,
                 user_id=user.id,
                 scholarship_type_id=ranking.scholarship_type_id,
                 scholarship_configuration_id=scholarship_configuration.id,
+                scholarship_name=submitted_values["scholarship_name"],
+                amount=submitted_values["amount"],
                 academic_year=ranking.academic_year,
                 semester=ranking.semester,
-                status=ApplicationStatus.submitted,
+                status=submitted_values["status"],
+                status_name=submitted_values["status_name"],
+                review_stage=submitted_values["review_stage"],
+                submitted_at=submitted_values["submitted_at"],
                 sub_type_selection_mode=ranking.scholarship_type.sub_type_selection_mode,
                 student_data=sis_data,
+                sub_scholarship_type=derive_sub_scholarship_type(row.sub_type_preferences),
                 scholarship_subtype_list=list(row.sub_type_preferences or []),
                 sub_type_preferences=row.sub_type_preferences,
                 submitted_form_data=submitted_form_data,

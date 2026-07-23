@@ -216,6 +216,14 @@ class TestCreateApplicationsAndItems:
             "scholarship_configuration_id must be set or roster rule validation "
             "excludes the student with 未關聯獎學金配置 (issue #1213)"
         )
+        # Shared submitted-application invariants (application_builder parity):
+        # roster rule validation selects rule sets by sub_scholarship_type, so
+        # the "general" default would pick the wrong rules.
+        assert app_row.sub_scholarship_type == "nstc"
+        assert app_row.status == ApplicationStatus.submitted
+        assert app_row.submitted_at is not None
+        assert app_row.amount == 30000
+        assert app_row.scholarship_name == "Test 114學年"
 
     async def test_rejects_missing_scholarship_configuration(self, db: AsyncSession):
         """Creating supplementary applications without a resolved configuration
