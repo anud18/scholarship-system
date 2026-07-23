@@ -564,6 +564,26 @@ jobs:
               | jq '.data.result[].metric'
             exit 1
           fi
+
+          # The blackbox exporter is in-process, so up{job="storage"} stays 1
+          # even when the probed storage endpoint is down — the real liveness
+          # signal is probe_success. Without this, the deploy could report
+          # green while the StorageDown alert is already firing.
+          STORAGE_OK=0
+          for i in $(seq 1 6); do
+            STORAGE_OK=$(query_count 'count(probe_success{environment="staging",job="storage"}==1)')
+            [ "${STORAGE_OK:-0}" -ge 1 ] && break
+            echo "storage probe_success not 1 yet ($i/6)"
+            sleep 10
+          done
+          if [ "${STORAGE_OK:-0}" -lt 1 ]; then
+            echo "::error::storage blackbox probe is not reporting probe_success==1 — the S3 endpoint on the DB-VM is unreachable or the probe series is missing"
+            curl -s -G "http://localhost:9090/api/v1/query" \
+              --data-urlencode 'query=probe_success{environment="staging",job="storage"}' \
+              | jq '.data.result'
+            exit 1
+          fi
+          echo "✅ storage blackbox probe_success==1"
           echo "✅ $STAGING_TOTAL staging targets reporting up=1"
 
           # Loki check (existing; keep)

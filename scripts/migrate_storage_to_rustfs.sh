@@ -48,7 +48,10 @@ RUSTFS_DATA_DIR="${RUSTFS_DATA_DIR:-/opt/scholarship/rustfs/data}"
 RUSTFS_IMAGE="${RUSTFS_IMAGE:-rustfs/rustfs:1.0.0-beta.8}"
 ROSTER_BUCKET="${ROSTER_BUCKET:-roster-files}"
 MIGRATION_CONTAINER="rustfs_migration"
-MC_IMAGE="minio/mc:latest"
+# Pinned: `latest` could silently change mc CLI output/exit-code behavior
+# under a prod migration. Newest release as of pinning (2026-07); same
+# vintage as the repo's pinned minio/minio server tag.
+MC_IMAGE="${MC_IMAGE:-minio/mc:RELEASE.2025-08-13T08-35-41Z}"
 
 : "${MINIO_ROOT_USER:?MINIO_ROOT_USER must be set}"
 : "${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set}"
@@ -59,6 +62,13 @@ die() { echo "[migrate-rustfs] ERROR: $*" >&2; exit 1; }
 
 docker network inspect "$NETWORK" > /dev/null 2>&1 \
   || die "docker network '$NETWORK' not found (prod: set NETWORK=scholarship_prod_db_network)"
+
+# Always remove the temporary RustFS container on exit — success, die, or any
+# set -e failure — so an aborted run can't leave a stray storage container
+# (with live credentials) on the host network. The mirrored data itself
+# persists in RUSTFS_DATA_DIR.
+cleanup() { docker rm -f "$MIGRATION_CONTAINER" > /dev/null 2>&1 || true; }
+trap cleanup EXIT
 
 # --- 1. Prepare the RustFS data directory (RustFS runs as uid 10001) --------
 # Recursive chown only on first creation: on delta re-runs the tree already
@@ -73,20 +83,19 @@ else
   sudo chown 10001:10001 "$RUSTFS_DATA_DIR"
 fi
 
-# --- 2. Start (or reuse) the side-by-side RustFS ----------------------------
-if docker ps --format '{{.Names}}' | grep -qx "$MIGRATION_CONTAINER"; then
-  log "Reusing running $MIGRATION_CONTAINER"
-else
-  docker rm -f "$MIGRATION_CONTAINER" > /dev/null 2>&1 || true
-  log "Starting $MIGRATION_CONTAINER ($RUSTFS_IMAGE) on network $NETWORK"
-  docker run -d --name "$MIGRATION_CONTAINER" \
-    --network "$NETWORK" \
-    -v "$RUSTFS_DATA_DIR:/data" \
-    -e RUSTFS_ACCESS_KEY="$MINIO_ROOT_USER" \
-    -e RUSTFS_SECRET_KEY="$MINIO_ROOT_PASSWORD" \
-    -e RUSTFS_VOLUMES=/data \
-    "$RUSTFS_IMAGE" > /dev/null
-fi
+# --- 2. Start the side-by-side RustFS ---------------------------------------
+# Always start fresh: the EXIT trap removes the container on every normal
+# path, so anything still here is a leftover from a hard kill — don't trust
+# its config. The data dir persists, so a fresh boot is cheap.
+docker rm -f "$MIGRATION_CONTAINER" > /dev/null 2>&1 || true
+log "Starting $MIGRATION_CONTAINER ($RUSTFS_IMAGE) on network $NETWORK"
+docker run -d --name "$MIGRATION_CONTAINER" \
+  --network "$NETWORK" \
+  -v "$RUSTFS_DATA_DIR:/data" \
+  -e RUSTFS_ACCESS_KEY="$MINIO_ROOT_USER" \
+  -e RUSTFS_SECRET_KEY="$MINIO_ROOT_PASSWORD" \
+  -e RUSTFS_VOLUMES=/data \
+  "$RUSTFS_IMAGE" > /dev/null
 
 log "Waiting for RustFS /health"
 for i in $(seq 1 30); do
@@ -182,10 +191,8 @@ log "mc diff clean on both buckets"
 log "Size comparison (old vs new):"
 run_mc "mc du old/$MINIO_BUCKET; mc du new/$MINIO_BUCKET; mc du old/$ROSTER_BUCKET; mc du new/$ROSTER_BUCKET"
 
-# --- 4. Stop the temp container; data stays in RUSTFS_DATA_DIR --------------
-log "Stopping $MIGRATION_CONTAINER (data persists in $RUSTFS_DATA_DIR)"
-docker rm -f "$MIGRATION_CONTAINER" > /dev/null
-
+# --- 4. Done; the EXIT trap removes the temp container, data stays in
+#        RUSTFS_DATA_DIR ------------------------------------------------------
 log "DONE. Next steps (runbook 'Cutover order'):"
 log "  1. If the backend was running during this pass: stop it and re-run this script for the final delta."
 log "  2. Switch the DB stack to the RustFS compose block:"
