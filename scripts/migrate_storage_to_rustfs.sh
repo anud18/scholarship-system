@@ -61,9 +61,17 @@ docker network inspect "$NETWORK" > /dev/null 2>&1 \
   || die "docker network '$NETWORK' not found (prod: set NETWORK=scholarship_prod_db_network)"
 
 # --- 1. Prepare the RustFS data directory (RustFS runs as uid 10001) --------
-log "Preparing $RUSTFS_DATA_DIR (owner uid 10001)"
-sudo mkdir -p "$RUSTFS_DATA_DIR"
-sudo chown -R 10001:10001 "$RUSTFS_DATA_DIR"
+# Recursive chown only on first creation: on delta re-runs the tree already
+# holds the mirrored dataset (written by RustFS itself as uid 10001) and a
+# recursive traversal would be O(objects) for nothing.
+if [ ! -d "$RUSTFS_DATA_DIR" ]; then
+  log "Creating $RUSTFS_DATA_DIR (owner uid 10001)"
+  sudo mkdir -p "$RUSTFS_DATA_DIR"
+  sudo chown -R 10001:10001 "$RUSTFS_DATA_DIR"
+else
+  log "Reusing existing $RUSTFS_DATA_DIR (ensuring top-level owner uid 10001)"
+  sudo chown 10001:10001 "$RUSTFS_DATA_DIR"
+fi
 
 # --- 2. Start (or reuse) the side-by-side RustFS ----------------------------
 if docker ps --format '{{.Names}}' | grep -qx "$MIGRATION_CONTAINER"; then
@@ -103,6 +111,7 @@ run_mc() {
     -e ACCESS_KEY="$MINIO_ROOT_USER" \
     -e SECRET_KEY="$MINIO_ROOT_PASSWORD" \
     --entrypoint sh "$MC_IMAGE" -c '
+      set -e
       mc alias set old "http://$OLD_ENDPOINT" "$ACCESS_KEY" "$SECRET_KEY" > /dev/null
       mc alias set new "http://$NEW_ENDPOINT" "$ACCESS_KEY" "$SECRET_KEY" > /dev/null
       '"$1"
@@ -111,8 +120,9 @@ run_mc() {
 log "Live bucket inventory (confirm MINIO_BUCKET=$MINIO_BUCKET is right):"
 run_mc "mc ls old"
 
+# -F: bucket names are data, not regex (S3 allows `.` in bucket names).
 EXTRA_BUCKETS=$(run_mc "mc ls old" | awk '{print $NF}' | sed 's#/$##' \
-  | grep -vx -e "$MINIO_BUCKET" -e "$ROSTER_BUCKET" || true)
+  | grep -vxF -e "$MINIO_BUCKET" -e "$ROSTER_BUCKET" || true)
 if [ -n "$EXTRA_BUCKETS" ] && [ "${ALLOW_EXTRA_BUCKETS:-0}" != "1" ]; then
   die "unexpected live bucket(s) not covered by this migration:
 $EXTRA_BUCKETS
@@ -120,7 +130,9 @@ Mirror them explicitly or re-run with ALLOW_EXTRA_BUCKETS=1 to declare them aban
 fi
 
 log "Non-ASCII object-key audit (runbook precondition; empty is good):"
-run_mc "mc ls --recursive old/$MINIO_BUCKET old/$ROSTER_BUCKET" | grep -P '[^\x20-\x7e]' \
+# POSIX bracket range in the C locale (= bytes outside \x20-\x7e) instead of
+# grep -P, which isn't available on all host distros.
+run_mc "mc ls --recursive old/$MINIO_BUCKET old/$ROSTER_BUCKET" | LC_ALL=C grep '[^ -~]' \
   && die "non-ASCII object keys found above — eyeball them before mirroring" \
   || log "  none found"
 
