@@ -370,7 +370,7 @@ class ExportPackageService:
             except Exception as e:
                 logger.exception(f"Failed to build merged dynamic-documents PDF for app {app.id}")
                 zf.writestr(
-                    f"{base_path}/_錯誤_動態文件合併PDF生成失敗.txt",
+                    _unique_zip_path(zf, f"{base_path}/_錯誤_動態文件合併PDF生成失敗.txt"),
                     f"動態文件合併 PDF 生成失敗：{str(e)}",
                 )
 
