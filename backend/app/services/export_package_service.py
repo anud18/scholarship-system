@@ -93,8 +93,16 @@ def _unique_zip_path(zf: zipfile.ZipFile, path: str) -> str:
     then keep only the last one, silently shadowing the other file — e.g. an
     admin-configured dynamic document named exactly 動態文件合併 colliding with
     the merged PDF, or two same-type download failures sharing one error path."""
-    existing = set(zf.namelist())
-    if path not in existing:
+
+    def _taken(name: str) -> bool:
+        # getinfo() is a documented O(1) name lookup — no per-call namelist() scan
+        try:
+            zf.getinfo(name)
+            return True
+        except KeyError:
+            return False
+
+    if not _taken(path):
         return path
     stem, dot, ext = path.rpartition(".")
     if not dot:
@@ -102,7 +110,7 @@ def _unique_zip_path(zf: zipfile.ZipFile, path: str) -> str:
     counter = 2
     while True:
         candidate = f"{stem}_{counter}.{ext}" if dot else f"{stem}_{counter}"
-        if candidate not in existing:
+        if not _taken(candidate):
             return candidate
         counter += 1
 
