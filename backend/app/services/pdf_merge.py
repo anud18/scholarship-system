@@ -5,11 +5,13 @@ inside the ZIP; reviewers additionally get one PDF per student that stitches
 the admin-configured dynamic documents together so they can be read in a
 single pass.
 
-Supported inputs mirror ``settings.allowed_file_types``: PDF pages are
-appended as-is (owner-password-only encryption is unlocked with the empty
-user password); JPEG/PNG images are placed on an A4 page scaled to fit; any
-other or unreadable file yields a placeholder page pointing the reviewer at
-the original file shipped alongside the merged PDF.
+Only PDF and JPG/PNG content is rendered inline: PDF pages are appended
+(owner-password-only encryption is unlocked with the empty user password,
+and page-level JavaScript actions are stripped); images are placed on an A4
+page scaled to fit. Anything else — Word files, oversized images, unreadable
+or user-password-encrypted PDFs, failed downloads — yields a placeholder
+page pointing the reviewer at the original file shipped alongside the
+merged PDF.
 """
 
 import io
@@ -21,8 +23,9 @@ from dataclasses import dataclass
 from xml.sax.saxutils import escape as xml_escape  # nosec B406
 from typing import List, Optional
 
-from PIL import Image
+from PIL import Image, ImageOps
 from pypdf import PdfReader, PdfWriter
+from pypdf.generic import ArrayObject, NameObject
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
@@ -36,6 +39,16 @@ from app.services.pdf_fonts import CJK_FONT_NAME, ensure_cjk_font
 logger = logging.getLogger(__name__)
 
 _PAGE_MARGIN = 15 * mm
+
+# Decompression-bomb budget. Upload validation only checks extension and byte
+# size, so a tiny PNG can declare huge dimensions; refuse to decode anything
+# above this many pixels (~A4 at 600dpi is ~35M). Deliberately below Pillow's
+# own warning threshold so we fail deterministically, not via warnings.
+_MAX_IMAGE_PIXELS = 50_000_000
+
+
+class ImageTooLargeError(Exception):
+    """Image declares more pixels than the merge is willing to decode."""
 
 
 @dataclass
@@ -75,11 +88,16 @@ def build_merged_pdf(title: str, subtitle_lines: List[str], items: List[MergeIte
 
 def _render_item(item: MergeItem, heading: str) -> bytes:
     """Render one document's own pages as PDF bytes, degrading to a
-    placeholder page on any unreadable/unsupported content."""
+    placeholder page on any unreadable/unsupported content.
+
+    Content detection is magic-bytes-first: upload validation only checks the
+    filename extension, so an image saved under a .pdf name must still land in
+    the image path instead of a misleading unreadable-PDF placeholder.
+    """
     if item.content is None:
         return _placeholder_page(heading, f"檔案下載失敗：{item.error or '未知錯誤'}")
 
-    if _looks_like_pdf(item.filename, item.content):
+    if _looks_like_pdf(item.content):
         try:
             return _normalize_pdf(item.content)
         except Exception:
@@ -88,6 +106,9 @@ def _render_item(item: MergeItem, heading: str) -> bytes:
 
     try:
         return _image_page(item.content)
+    except ImageTooLargeError:
+        logger.warning("merged-pdf: image too large to merge %s", item.filename)
+        return _placeholder_page(heading, "圖片尺寸過大，無法合併，請開啟資料夾內的原始檔案。")
     except Exception:
         logger.warning("merged-pdf: unsupported or unreadable file %s", item.filename, exc_info=True)
         return _placeholder_page(
@@ -95,30 +116,78 @@ def _render_item(item: MergeItem, heading: str) -> bytes:
         )
 
 
-def _looks_like_pdf(filename: str, content: bytes) -> bool:
-    return content.lstrip()[:5].startswith(b"%PDF") or filename.lower().endswith(".pdf")
+def _looks_like_pdf(content: bytes) -> bool:
+    """PDF magic within the first KB (readers tolerate leading junk); bounded
+    slice so a 10MB upload is never copied just to inspect its header."""
+    return b"%PDF-" in content[:1024]
 
 
 def _normalize_pdf(content: bytes) -> bytes:
-    """Re-serialize an uploaded PDF so the outer merge only ever appends
-    PDFs pypdf fully parsed (unlocking owner-password-only encryption)."""
+    """Re-serialize an uploaded PDF so the outer merge only ever appends PDFs
+    pypdf fully parsed: unlocks owner-password-only encryption, keeps the
+    document /AcroForm (filled form fields stay visible), and strips
+    JavaScript actions so student uploads cannot plant active content in the
+    merged file reviewers open."""
     reader = PdfReader(io.BytesIO(content))
     if reader.is_encrypted:
-        # Raises on a real user password; empty-string works for
-        # owner-password-only ("permissions") encryption.
+        # Empty-string succeeds for owner-password-only ("permissions")
+        # encryption. A real user password leaves the reader locked and the
+        # pages iteration below raises — caught by _render_item's except.
         reader.decrypt("")
     inner = PdfWriter()
-    for page in reader.pages:
-        inner.add_page(page)
+    # append() (not per-page add_page) so the document-level /AcroForm
+    # survives — otherwise NeedAppearances form fields render blank.
+    inner.append(reader)
+    _strip_active_content(inner)
     buf = io.BytesIO()
     inner.write(buf)
     return buf.getvalue()
 
 
+def _strip_active_content(writer: PdfWriter) -> None:
+    """Remove JavaScript/auto-run actions from a writer holding student pages.
+
+    add_page/append never copy the source catalog's /OpenAction, but
+    page- and annotation-level actions travel with the pages: a Link
+    annotation carrying an /S /JavaScript action would execute in the
+    reviewer's viewer. Strip document open-actions, page/annotation /AA
+    event handlers, and JavaScript-action annotations outright.
+    """
+    root = writer._root_object
+    for key in ("/OpenAction", "/AA"):
+        if key in root:
+            del root[key]
+    names = root.get("/Names")
+    if names is not None and "/JavaScript" in names.get_object():
+        del names.get_object()["/JavaScript"]
+
+    for page in writer.pages:
+        if "/AA" in page:
+            del page[NameObject("/AA")]
+        annots = page.get("/Annots")
+        if not annots:
+            continue
+        kept = ArrayObject()
+        for ref in annots:
+            annot = ref.get_object()
+            action = annot.get("/A")
+            if action is not None and action.get_object().get("/S") == "/JavaScript":
+                continue
+            if "/AA" in annot:
+                del annot[NameObject("/AA")]
+            kept.append(ref)
+        page[NameObject("/Annots")] = kept
+
+
 def _image_page(content: bytes) -> bytes:
     """Place a JPEG/PNG on a single A4 page, scaled to fit, aspect kept."""
     img = Image.open(io.BytesIO(content))
+    if img.width * img.height > _MAX_IMAGE_PIXELS:
+        # Header-declared dimensions; checked BEFORE load() so a small file
+        # declaring enormous dimensions never allocates the decoded buffer.
+        raise ImageTooLargeError(f"{img.width}x{img.height} exceeds {_MAX_IMAGE_PIXELS} pixels")
     img.load()  # force full decode so corrupt files fail here
+    img = ImageOps.exif_transpose(img)  # honor phone-camera Orientation tags
 
     # Flatten transparency onto white; normalize exotic modes to RGB.
     if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
@@ -151,8 +220,9 @@ def _image_page(content: bytes) -> bytes:
 
 
 def _append_pdf(writer: PdfWriter, pdf_bytes: bytes) -> None:
-    for page in PdfReader(io.BytesIO(pdf_bytes)).pages:
-        writer.add_page(page)
+    # append() (not per-page add_page) so document-level /AcroForm entries of
+    # normalized student PDFs survive into the final merged output as well.
+    writer.append(PdfReader(io.BytesIO(pdf_bytes)))
 
 
 def _styles() -> dict:

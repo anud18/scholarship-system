@@ -199,6 +199,54 @@ async def test_download_failure_becomes_placeholder_page(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_merged_pdf_name_collision_keeps_both_entries(monkeypatch):
+    # An admin-configured dynamic document named exactly 動態文件合併 must not
+    # shadow (or be shadowed by) the merged artifact — the second writer gets
+    # a _2 suffix instead of a duplicate ZIP entry.
+    minio = _FakeMinio({"obj/tricky.pdf": _blank_pdf(1)})
+    apps = [_mk_app(1, 11, "001", "甲", [_mk_file("動態文件合併", "tricky.pdf", "obj/tricky.pdf")])]
+
+    zf = await _run_export(monkeypatch, apps, minio)
+    names = zf.namelist()
+
+    assert "1000_A系/001_甲/001_甲_動態文件合併.pdf" in names  # the student's upload
+    assert "1000_A系/001_甲/001_甲_動態文件合併_2.pdf" in names  # the merged artifact
+    assert len(names) == len(set(names))  # no duplicate ZIP entries anywhere
+
+
+@pytest.mark.asyncio
+async def test_two_same_type_download_failures_get_distinct_error_files(monkeypatch):
+    # Two files of one dynamic type both missing from storage: the second
+    # error placeholder must not silently overwrite the first.
+    minio = _FakeMinio({})
+    apps = [
+        _mk_app(
+            1,
+            11,
+            "001",
+            "甲",
+            [
+                _mk_file("語言檢定證明", "toefl.pdf", "obj/gone1.pdf"),
+                _mk_file("語言檢定證明", "ielts.pdf", "obj/gone2.pdf"),
+            ],
+        )
+    ]
+
+    zf = await _run_export(monkeypatch, apps, minio)
+    names = zf.namelist()
+
+    assert "1000_A系/001_甲/_錯誤_找不到檔案_語言檢定證明.txt" in names
+    assert "1000_A系/001_甲/_錯誤_找不到檔案_語言檢定證明_2.txt" in names
+    assert len(names) == len(set(names))
+
+    # Both failures still appear in the merged PDF as placeholder pages:
+    # cover(1) + 2 * (separator + download-failure placeholder) = 5
+    merged = zf.read("1000_A系/001_甲/001_甲_動態文件合併.pdf")
+    reader = PdfReader(io.BytesIO(merged))
+    assert len(reader.pages) == 5
+
+
+@pytest.mark.asyncio
 async def test_merge_failure_degrades_to_error_placeholder(monkeypatch):
     minio = _FakeMinio({"obj/toefl.pdf": _blank_pdf(1)})
     apps = [_mk_app(1, 11, "001", "甲", [_mk_file("語言檢定證明", "toefl.pdf", "obj/toefl.pdf")])]
