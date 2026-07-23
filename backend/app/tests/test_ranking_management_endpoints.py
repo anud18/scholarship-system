@@ -518,7 +518,10 @@ class TestRankingFlowAndEnvelope:
         by_id = {a.id: a for a in apps}
         app1 = by_id[ranking_eng_items[0].application_id]
         app2 = by_id[ranking_eng_items[1].application_id]
-        app1.student_data = {**app1.student_data, "std_nation": "中華民國", "std_identity": 1}
+        # app1 also pins the falsy-zero case: std_identity=0 must be preserved,
+        # NOT fall through to the legacy "identity" alias (an `or`-based
+        # fallback would regress this to 1).
+        app1.student_data = {**app1.student_data, "std_nation": "中華民國", "std_identity": 0, "identity": 1}
         app2.student_data = {**app2.student_data, "nationality": "美國", "identity": 2}
         await db.commit()
 
@@ -528,7 +531,7 @@ class TestRankingFlowAndEnvelope:
         items = response.json()["data"]["items"]
         assert len(items) == 2
         snapshots = {item["student_id"]: item["application"]["student_data"] for item in items}
-        assert snapshots["S001"] == {"std_nation": "中華民國", "std_identity": 1}
+        assert snapshots["S001"] == {"std_nation": "中華民國", "std_identity": 0}
         # Legacy alias keys fall back to the canonical snapshot keys
         assert snapshots["S002"] == {"std_nation": "美國", "std_identity": 2}
 

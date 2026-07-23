@@ -357,7 +357,18 @@ export function RankingManagementPanel({
               department_name?: string;
               department_code?: string;
               scholarship_type?: string;
-              eligible_subtypes?: string[];
+              // Objects (not plain codes): backend returns per-subtype review
+              // status, consumed as-is by CollegeRankingTable.
+              eligible_subtypes?: Array<{
+                code: string;
+                is_rejected: boolean;
+                rejected_by?: {
+                  role: string;
+                  name: string;
+                  reviewed_at: string;
+                };
+                rejection_reason?: string;
+              }>;
               is_renewal?: boolean;
               renewal_year?: number | null;
               status?: string;
