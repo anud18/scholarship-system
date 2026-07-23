@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { logger } from "@/lib/utils/logger";
+import { formatAllocatedSubType } from "@/lib/allocation-display";
 import {
   Dialog,
   DialogContent,
@@ -565,13 +566,7 @@ export function RosterDetailDialog({
                           {item.allocation_year}年{" "}
                         </span>
                       )}
-                      {item.allocated_sub_type === "nstc"
-                        ? "國科會"
-                        : item.allocated_sub_type === "moe_1w"
-                          ? "教育部(5000)"
-                          : item.allocated_sub_type === "moe_2w"
-                            ? "教育部(2萬)"
-                            : item.allocated_sub_type}
+                      {formatAllocatedSubType(item.allocated_sub_type)}
                     </span>
                   ) : (
                     <span className="text-muted-foreground">-</span>

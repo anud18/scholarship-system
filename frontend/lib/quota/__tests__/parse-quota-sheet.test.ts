@@ -10,7 +10,9 @@ const COLLEGES: KnownCollege[] = [
 ];
 const SUBTYPES: KnownSubType[] = [
   { code: "nstc", label: "國科會" },
-  { code: "moe_1w", label: "教育部5000" },
+  // Deliberately synthetic — only nstc's label participates in the
+  // matches-by-label test; this one just needs to be a non-code string.
+  { code: "moe_1w", label: "測試子項標籤" },
 ];
 const sheet = (...rows: unknown[][]) => rows;
 

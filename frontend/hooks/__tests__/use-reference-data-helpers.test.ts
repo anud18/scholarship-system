@@ -222,9 +222,12 @@ describe("getEnrollTypeName", () => {
 // ─── Translation-table lookup ────────────────────────────────────────
 
 describe("getSubTypeName", () => {
+  /* Fixture labels are deliberately synthetic (not production wording):
+   * getSubTypeName is a pure lookup of the injected map, and fake values
+   * prove it reads the map rather than any hardcoded copy. */
   const translations = {
-    zh: { nstc: "國科會", moe_1w: "教育部5000" },
-    en: { nstc: "NSTC", moe_1w: "MOE 5k" },
+    zh: { nstc: "國科會", moe_1w: "測試子項標籤" },
+    en: { nstc: "NSTC", moe_1w: "TEST_SUBTYPE_LABEL" },
   };
 
   it("returns the zh translation by default", () => {
@@ -232,7 +235,7 @@ describe("getSubTypeName", () => {
   });
 
   it("returns the en translation when locale='en'", () => {
-    expect(getSubTypeName("moe_1w", translations, "en")).toBe("MOE 5k");
+    expect(getSubTypeName("moe_1w", translations, "en")).toBe("TEST_SUBTYPE_LABEL");
   });
 
   it("falls back to the raw code when translation missing", () => {

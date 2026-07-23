@@ -28,6 +28,16 @@ from app.utils.excel_safety import sanitize_excel_cell
 
 logger = logging.getLogger(__name__)
 
+# 造冊畫面/匯出用的子項目簡短標籤。
+# Keep in sync with ALLOCATED_SUB_TYPE_SHORT_LABELS in
+# frontend/lib/allocation-display.ts — the roster screens must show the
+# same label as the Excel export finance receives.
+SUB_TYPE_SHORT_LABELS = {
+    "nstc": "國科會",
+    "moe_1w": "教育部(5000)",
+    "moe_2w": "教育部(2萬)",
+}
+
 
 class ExcelExportService:
     """Excel匯出服務"""
@@ -475,12 +485,7 @@ class ExcelExportService:
         """Format allocated sub-type + year for Excel display"""
         if not item.allocated_sub_type:
             return ""
-        sub_type_map = {
-            "nstc": "國科會",
-            "moe_1w": "教育部(5000)",
-            "moe_2w": "教育部(2萬)",
-        }
-        display = sub_type_map.get(item.allocated_sub_type, item.allocated_sub_type)
+        display = SUB_TYPE_SHORT_LABELS.get(item.allocated_sub_type, item.allocated_sub_type)
         if item.allocation_year:
             return f"{item.allocation_year}年 {display}"
         return display
