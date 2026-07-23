@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { logger } from "@/lib/utils/logger";
+import { formatAllocatedSubType } from "@/lib/allocation-display";
 import { maskIdNumber } from "@/lib/utils/mask";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -236,13 +237,7 @@ export function StudentRosterPreview({
                         {student.allocation_year}年{" "}
                       </span>
                     )}
-                    {student.allocated_sub_type === "nstc"
-                      ? "國科會"
-                      : student.allocated_sub_type === "moe_1w"
-                        ? "教育部(1萬)"
-                        : student.allocated_sub_type === "moe_2w"
-                          ? "教育部(2萬)"
-                          : student.allocated_sub_type}
+                    {formatAllocatedSubType(student.allocated_sub_type)}
                   </span>
                 ) : (
                   <span className="text-muted-foreground">-</span>

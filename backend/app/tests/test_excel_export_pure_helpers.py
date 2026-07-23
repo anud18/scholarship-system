@@ -1,22 +1,14 @@
 """
-Tests for `ExcelExportService` security + display helpers.
+Tests for the `ExcelExportService._resolve_template_path` security gate.
 
-Two distinct concerns covered:
+It accepts a user-supplied template name and resolves it to a file on
+disk. The allowlist prevents path traversal (e.g. `../../../etc/passwd`).
+These tests pin the allowlist contract so any future change to the
+resolver is intentional.
 
-1. `_resolve_template_path` is a **security gate** — it accepts a
-   user-supplied template name and resolves it to a file on disk. The
-   allowlist prevents path traversal (e.g. `../../../etc/passwd`).
-   These tests pin the allowlist contract so any future change to the
-   resolver is intentional.
-
-2. `_format_allocation_display` produces a roster-row label visible to
-   finance. Wrong rendering of the sub-type name shows the wrong
-   scholarship source on the payment voucher.
-
-2 helpers covered (10 cases).
+(`_format_allocation_display` is covered in
+`test_excel_export_service_pure_helpers.py` — keep its pins there only.)
 """
-
-from types import SimpleNamespace
 
 import pytest
 
@@ -79,40 +71,3 @@ def test_resolve_template_path_allowlist_membership(service):
         "payment_roster_template.xlsx",
         "scholarship_roster.xlsx",
     }
-
-
-# ─── _format_allocation_display ──────────────────────────────────────
-
-
-def test_format_allocation_display_no_sub_type_returns_empty():
-    """Unallocated items render as '' (don't show year-only on roster)."""
-    item = SimpleNamespace(allocated_sub_type=None, allocation_year=2024)
-    assert ExcelExportService._format_allocation_display(item) == ""
-
-
-def test_format_allocation_display_known_sub_types_with_year():
-    """Year prefixed with 年 + Chinese label."""
-    item = SimpleNamespace(allocated_sub_type="nstc", allocation_year=114)
-    assert ExcelExportService._format_allocation_display(item) == "114年 國科會"
-
-    item = SimpleNamespace(allocated_sub_type="moe_1w", allocation_year=113)
-    assert ExcelExportService._format_allocation_display(item) == "113年 教育部(1萬)"
-
-    item = SimpleNamespace(allocated_sub_type="moe_2w", allocation_year=113)
-    assert ExcelExportService._format_allocation_display(item) == "113年 教育部(2萬)"
-
-
-def test_format_allocation_display_unknown_sub_type_passes_through():
-    """Unknown sub-types (admin added a new track) pass through as-is —
-    matches CLAUDE.md §4 (sub-types are config-driven, not enum-constrained)."""
-    item = SimpleNamespace(allocated_sub_type="new_custom_track", allocation_year=114)
-    assert ExcelExportService._format_allocation_display(item) == "114年 new_custom_track"
-
-
-def test_format_allocation_display_no_year_omits_year_prefix():
-    """If allocation_year is missing/0, render just the label (no '0年' prefix)."""
-    item = SimpleNamespace(allocated_sub_type="nstc", allocation_year=None)
-    assert ExcelExportService._format_allocation_display(item) == "國科會"
-
-    item = SimpleNamespace(allocated_sub_type="nstc", allocation_year=0)
-    assert ExcelExportService._format_allocation_display(item) == "國科會"
