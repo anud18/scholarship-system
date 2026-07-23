@@ -134,7 +134,7 @@ confirms all 8 dashboards are clean.
 | `application-logs` | Application Logs | Application |
 | `postgresql-monitoring` | PostgreSQL Monitoring | Database |
 | `redis-monitoring` | Redis Monitoring | Database |
-| `minio-monitoring` | MinIO Monitoring | Database |
+| `storage-monitoring` | Object Storage (RustFS) Monitoring | Database |
 
 ### Automated probe (preferred)
 
@@ -579,7 +579,7 @@ The following alerts were deferred from Phase 2 and redesigned in Phase 3
 | `HighHTTPErrorRate` | `http_requests_total{job="backend"}` live (already confirmed) | Append to `rules-application.yml` (§B4) |
 | `SlowHTTPResponseTimeWarning` | `http_request_duration_seconds_bucket{job="backend"}` live (already confirmed) | Append to `rules-application.yml` (§B5) |
 | `SlowHTTPResponseTimeCritical` | Same histogram | Append to `rules-application.yml` (§B5) |
-| `MinIODown` | MinIO scrape target added to AP-VM Alloy configs (§B6) | Add `prometheus.scrape "minio"` block + append to `rules-application.yml` (§B6) |
+| `StorageDown` (supersedes the formerly-planned `MinIODown`) | Enabled in rules-database.yml: storage is now RustFS, which has no `/minio/v2/metrics/*` endpoints — liveness comes from the DB-VM Alloy blackbox probe (`probe_success{job="storage"}`) | Already enabled; nothing to add |
 
 Enable each alert by merging its YAML into the provisioning alerting files,
 then run Gate 3 to verify the pipeline still works. Run Gate 4 to confirm the

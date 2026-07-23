@@ -39,24 +39,41 @@ services:
           memory: 1G
           cpus: '0.5'
 
-  # MinIO Object Storage for Production
+  # RustFS Object Storage for Production (S3-compatible MinIO replacement;
+  # service keeps the `minio` name so the backend's MINIO_ENDPOINT and the
+  # monitoring probe target stay unchanged).
+  #
+  # CUTOVER (docs/deployment/rustfs-migration-runbook.md): RustFS cannot read
+  # MinIO's on-disk erasure format. Before this block goes live, mirror the
+  # data into /opt/scholarship/rustfs/data with
+  # scripts/migrate_storage_to_rustfs.sh (backend stopped for the final delta
+  # run). Confirm the real prod bucket name with `mc ls` first — the old
+  # compose set a dead MINIO_BUCKET_NAME env, so the backend has been using
+  # the config default "scholarship-files".
+  #
+  # TLS gate: MinIO served TLS from minio_config/certs when present. RustFS
+  # reads certs from RUSTFS_TLS_PATH instead. If the prod backend really runs
+  # MINIO_SECURE=true against this host, provision /opt/scholarship/rustfs/certs
+  # and uncomment the two TLS lines below BEFORE cutover — do not drop the old
+  # minio_config volume until the cert story is replaced.
   minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
-    container_name: scholarship_minio_prod
+    image: rustfs/rustfs:1.0.0-beta.8
+    container_name: scholarship_rustfs_prod
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      RUSTFS_ACCESS_KEY: ${MINIO_ROOT_USER}
+      RUSTFS_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      RUSTFS_VOLUMES: /data
+      # RUSTFS_TLS_PATH: /certs
     ports:
       - "${MINIO_API_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"  # RustFS web console
     volumes:
-      - minio_prod_data:/data
-      - minio_config:/root/.minio
+      - rustfs_prod_data:/data
+      # - /opt/scholarship/rustfs/certs:/certs:ro
     networks:
       - scholarship_prod_db_network
-    command: server /data --console-address ":9001"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
       interval: 30s
       timeout: 20s
       retries: 5
@@ -176,6 +193,22 @@ volumes:
       type: none
       o: bind
       device: /opt/scholarship/postgres/backups
+  # BEFORE first `up`: mkdir -p /opt/scholarship/rustfs/data && chown -R
+  # 10001:10001 /opt/scholarship/rustfs/data (RustFS runs as uid 10001) — the
+  # migration script does both. Point volume snapshots/backups at this new
+  # directory at cutover (scripts/backup.sh only covers postgres; object
+  # storage backup is volume-level).
+  rustfs_prod_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/scholarship/rustfs/data
+  # Rollback escape hatch: the pre-RustFS MinIO data + TLS certs, left
+  # untouched. Also the retention archive if bucket versioning was in use
+  # (mc mirror copies latest versions only). To roll back, restore the old
+  # minio/minio block and point it at these volumes. Remove only after the
+  # compliance-retention decision is recorded (runbook "Versioning audit").
   minio_prod_data:
     driver: local
     driver_opts:

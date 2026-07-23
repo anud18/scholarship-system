@@ -57,3 +57,33 @@ groups:
           summary: "Redis memory usage is high"
           description: "Redis on {{ $labels.instance }} ({{ $labels.environment }}) is using more than 80% of its max memory. Current value: {{ if eq $value 0.0 }}0{{ else }}{{ $value | humanize }}{{ end }}%"
         isPaused: false
+
+      # Object storage (RustFS) liveness. Fed by the Alloy blackbox probe of
+      # the S3 API port on each DB-VM (job="storage" in
+      # monitoring/config/alloy/{staging,prod}-db-vm.alloy) — RustFS has no
+      # /minio/v2/metrics/* endpoints, so this probe replaced the old MinIO
+      # metric scrapes. Disk usage for the storage volume is covered by the
+      # node-exporter DiskSpaceLow/DiskSpaceCritical alerts.
+      - uid: alert-storage-down
+        title: StorageDown
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: prometheus-uid
+            model:
+              expr: probe_success{job="storage"} == 0
+              refId: A
+              instant: true
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        labels:
+          severity: critical
+          category: database
+        annotations:
+          summary: "Object storage (RustFS) is down ({{ $labels.environment }})"
+          description: "The S3 endpoint on the {{ $labels.environment }} DB-VM stopped answering the blackbox health probe. File uploads and downloads (application documents, rosters, regulations PDF) will fail until it recovers."
+        isPaused: false

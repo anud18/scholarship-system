@@ -1,11 +1,40 @@
 # RustFS Migration Runbook — staging / prod / staging-e2e
 
-Status: **dev has already switched** (see `docker-compose.dev.yml`, PR `feat/dev-rustfs-swap`).
-This runbook is the prepared, not-yet-executed cutover plan for the remaining
-environments. The backend keeps the generic python `minio` SDK and all
+Status: **dev has switched** (see `docker-compose.dev.yml`, PR
+`feat/dev-rustfs-swap`) and the **staging/prod cutover is now PREPARED IN THE
+REPO**: the compose files, monitoring replacement, and migration tooling
+below are all merged — what remains is EXECUTING the data migration + cutover
+on each VM during a maintenance window. The backend keeps the generic python `minio` SDK and all
 `MINIO_*` env names — RustFS serves the same S3 API on the same
 `MINIO_ENDPOINT`, so **no application code or GitHub secret changes** are part
 of the cutover.
+
+## What is already merged (this change)
+
+- `docker-compose.staging-db.yml` / `docker-compose.prod-db.yml`: `minio`
+  service now runs `rustfs/rustfs:1.0.0-beta.8` against a NEW bind-backed
+  volume at `/opt/scholarship/rustfs/data` (old MinIO volumes left declared +
+  untouched = rollback/retention archive). **Do not `up -d minio` on a VM
+  until its data has been mirrored** — see `scripts/migrate_storage_to_rustfs.sh`.
+- `docker-compose.staging-e2e.yml`: replica swapped to RustFS in the same
+  change, per the "replica masking semantics" risk.
+- `docker-compose.prod.yml`: dead `MINIO_BUCKET_NAME` env fixed to
+  `MINIO_BUCKET` (default `scholarship-files`, the value prod was already
+  effectively using); the example prod deploy workflow passes the existing
+  `MINIO_BUCKET_NAME` secret into the new env name.
+- Monitoring: the three `/minio/v2/metrics/*` Alloy scrape jobs are gone from
+  both DB-VM configs, replaced by an embedded blackbox HTTP probe of
+  `minio:9000/health` (`job="storage"`, works against MinIO AND RustFS so the
+  pre-cutover window stays green). New `StorageDown` Grafana alert on
+  `probe_success == 0` (rules-database.yml); `minio-monitoring` dashboard
+  replaced by `storage-monitoring`; disk usage remains covered by
+  node-exporter DiskSpaceLow/Critical.
+- `deploy-monitoring-stack.yml`: the "recreate MinIO for prom auth=public"
+  step was REMOVED — this neutralizes the merge-ordering hazard below; the
+  storage container is now only ever (re)created during the manual cutover.
+- `scripts/migrate_storage_to_rustfs.sh`: side-by-side mirror + verify script
+  implementing the "Data migration" section (bucket inventory gate, non-ASCII
+  key audit, `mc mirror --preserve`, `mc diff`, `mc du`).
 
 ## Verified compatibility baseline (dev, 2026-06-11)
 
@@ -143,10 +172,10 @@ docker run --rm --network <net> --entrypoint sh minio/mc:latest -c '
 #    payment_rosters.excel_file_hash (SHA256) can byte-verify roster objects.
 ```
 
-## Compose diffs per environment
+## Compose diffs per environment — APPLIED (kept for review reference)
 
-Apply the same shape as the dev swap (`docker-compose.dev.yml` is the
-reference diff):
+The diffs below have been applied in the repo, following the same shape as
+the dev swap (`docker-compose.dev.yml` is the reference diff):
 
 | File | Changes |
 |---|---|
@@ -157,25 +186,26 @@ reference diff):
 GitHub secrets (`STAGING_MINIO_*`, `MINIO_*`): **no changes** — names and
 values stay; they configure the backend client, not the server.
 
-## ⚠️ CRITICAL merge-ordering hazard (staging)
+## ⚠️ CRITICAL merge-ordering hazard (staging) — RESOLVED
 
-`deploy-monitoring-stack.yml` auto-triggers on any push to main touching
-`monitoring/**`, scp's the REPO's `docker-compose.staging-db.yml` to the VM,
-`docker rm -f scholarship_minio_staging`, and `up -d minio`. **If the RustFS
-staging-db compose block merges to main BEFORE the data-migration maintenance
-window, the next monitoring push destroys the live staging MinIO and boots an
-EMPTY RustFS — every staging file download 404s with zero data migrated.**
-Sequencing rule: the staging-db compose swap must merge in the SAME change
-window as the executed data migration (or the monitoring workflow's
-storage-recreate step must be temporarily disabled first). The same workflow
-also hardcodes the container name `scholarship_minio_staging` — keep that
-container name (or update the workflow in the same PR).
+`deploy-monitoring-stack.yml` used to scp the repo's
+`docker-compose.staging-db.yml` to the VM, `docker rm -f
+scholarship_minio_staging`, and `up -d minio` on every monitoring push — which
+would have destroyed the live staging MinIO and booted an EMPTY RustFS the
+moment the compose swap merged. **That step has been removed in the same
+change as the compose swap** (its only purpose, landing
+`MINIO_PROMETHEUS_AUTH_TYPE=public`, is meaningless on RustFS). The storage
+container is now only ever (re)created manually during the cutover window.
+Note the compose file therefore no longer auto-syncs to the VM either — copy
+it over as part of cutover step 3.
 
 ## Cutover order (per environment)
 
 1. Stop backend (maintenance window) — prevents writes during delta sync
-2. Final `mc mirror` delta + `mc diff` (must be empty)
-3. Switch compose to RustFS block; `docker compose up -d` storage + backend
+2. Final delta: re-run `scripts/migrate_storage_to_rustfs.sh` (`mc mirror` is
+   incremental; script fails if `mc diff` is non-empty)
+3. Copy the RustFS `docker-compose.<env>-db.yml` to the VM (no workflow syncs
+   it anymore) and `docker compose up -d` storage + backend
 4. `docker exec <backend> python -m app.scripts.storage_compat_check` → 14/14
 5. Smoke e2e (staging: the storage-touching @nightly subset; or manual
    upload→preview→roster-download spot check)
@@ -188,19 +218,24 @@ image + old volume, `docker compose up -d`, done. Caveat: objects written
 AFTER cutover exist only in RustFS — `mc mirror new old` them back before
 reverting if any writes happened.
 
-## Monitoring gap (tracked in the GitHub issue created with this runbook)
+## Monitoring gap (tracked in the GitHub issue created with this runbook) — CLOSED
 
-staging-db-vm Alloy scrapes `minio:9000/minio/v2/metrics/{cluster,bucket,node}`
+staging-db-vm Alloy scraped `minio:9000/minio/v2/metrics/{cluster,bucket,node}`
 (3 jobs) feeding the Grafana `minio-monitoring` dashboard. RustFS serves none
-of these. At cutover those scrapes will fail and any up-based alerts will
-fire. **Disable the three scrape jobs in the same change that swaps the
-compose**, and ship replacement observability first:
-- blackbox probe of `:9000/health` (storage-down alerting), and/or
-- S3 synthetic canary (timed put/get/delete via a cron job), and/or
-- RustFS native observability (OTel) once its Prometheus story stabilizes.
+of these. Shipped in the same change as the compose swap:
+- the three scrape jobs removed from BOTH DB-VM Alloy configs;
+- embedded blackbox HTTP probe of `minio:9000/health` (`job="storage"`),
+  tolerant of MinIO's 4xx on that path so it stays green across the
+  pre-cutover window and any rollback;
+- `StorageDown` alert on `probe_success{job="storage"} == 0`
+  (rules-database.yml, critical, 1m);
+- `storage-monitoring` Grafana dashboard replacing `minio-monitoring`;
+- disk usage: unchanged node-exporter DiskSpaceLow/Critical coverage.
 
-Acceptance for staging cutover: equivalent storage-down + disk-usage
-alerting exists.
+Acceptance (storage-down + disk-usage alerting) is met. Still worth doing
+later: an S3 synthetic canary (timed put/get/delete), and RustFS native
+observability (OTel) once its Prometheus story stabilizes — the health probe
+proves the port answers, not that S3 operations succeed.
 
 ## Risk register
 

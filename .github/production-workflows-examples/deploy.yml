@@ -200,7 +200,10 @@ jobs:
       MINIO_PORT: ${{ secrets.MINIO_PORT }}
       MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
       MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
-      MINIO_BUCKET_NAME: ${{ secrets.MINIO_BUCKET_NAME }}
+      # Secret name stays MINIO_BUCKET_NAME (no GitHub secret changes for the
+      # RustFS migration); the compose now interpolates ${MINIO_BUCKET} — the
+      # env name config.py actually binds (old MINIO_BUCKET_NAME env was dead).
+      MINIO_BUCKET: ${{ secrets.MINIO_BUCKET_NAME }}
       MINIO_SECURE: ${{ secrets.MINIO_SECURE }}
       PII_ENCRYPTION_KEYS: ${{ secrets.PII_ENCRYPTION_KEYS }}
       PII_ENCRYPTION_ACTIVE_VERSION: ${{ secrets.PII_ENCRYPTION_ACTIVE_VERSION }}
