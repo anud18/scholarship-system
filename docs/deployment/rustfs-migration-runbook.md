@@ -2,10 +2,9 @@
 
 Status: **dev has switched** (see `docker-compose.dev.yml`, PR
 `feat/dev-rustfs-swap`) and the **staging/prod cutover is now PREPARED IN THE
-REPO** (branch `claude/rustfs-migration-staging-prod`): the compose files,
-monitoring replacement, and migration tooling below are all merged — what
-remains is EXECUTING the data migration + cutover on each VM during a
-maintenance window. The backend keeps the generic python `minio` SDK and all
+REPO**: the compose files, monitoring replacement, and migration tooling
+below are all merged — what remains is EXECUTING the data migration + cutover
+on each VM during a maintenance window. The backend keeps the generic python `minio` SDK and all
 `MINIO_*` env names — RustFS serves the same S3 API on the same
 `MINIO_ENDPOINT`, so **no application code or GitHub secret changes** are part
 of the cutover.

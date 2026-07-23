@@ -118,10 +118,14 @@ run_mc() {
 }
 
 log "Live bucket inventory (confirm MINIO_BUCKET=$MINIO_BUCKET is right):"
-run_mc "mc ls old"
+# Capture once: an auth/network failure aborts here under set -e instead of
+# being swallowed by a downstream `|| true` filter.
+BUCKET_LISTING=$(run_mc "mc ls old")
+echo "$BUCKET_LISTING"
 
 # -F: bucket names are data, not regex (S3 allows `.` in bucket names).
-EXTRA_BUCKETS=$(run_mc "mc ls old" | awk '{print $NF}' | sed 's#/$##' \
+# `|| true` only forgives grep's exit-1-on-no-match, never an mc failure.
+EXTRA_BUCKETS=$(echo "$BUCKET_LISTING" | awk '{print $NF}' | sed 's#/$##' \
   | grep -vxF -e "$MINIO_BUCKET" -e "$ROSTER_BUCKET" || true)
 if [ -n "$EXTRA_BUCKETS" ] && [ "${ALLOW_EXTRA_BUCKETS:-0}" != "1" ]; then
   die "unexpected live bucket(s) not covered by this migration:
@@ -130,11 +134,16 @@ Mirror them explicitly or re-run with ALLOW_EXTRA_BUCKETS=1 to declare them aban
 fi
 
 log "Non-ASCII object-key audit (runbook precondition; empty is good):"
-# POSIX bracket range in the C locale (= bytes outside \x20-\x7e) instead of
+# Capture first (listing failure aborts under set -e), then grep with a POSIX
+# bracket range in the C locale (= bytes outside \x20-\x7e) instead of
 # grep -P, which isn't available on all host distros.
-run_mc "mc ls --recursive old/$MINIO_BUCKET old/$ROSTER_BUCKET" | LC_ALL=C grep '[^ -~]' \
-  && die "non-ASCII object keys found above — eyeball them before mirroring" \
-  || log "  none found"
+KEY_LISTING=$(run_mc "mc ls --recursive old/$MINIO_BUCKET old/$ROSTER_BUCKET")
+NON_ASCII_KEYS=$(echo "$KEY_LISTING" | LC_ALL=C grep '[^ -~]' || true)
+if [ -n "$NON_ASCII_KEYS" ]; then
+  echo "$NON_ASCII_KEYS"
+  die "non-ASCII object keys found above — eyeball them before mirroring"
+fi
+log "  none found"
 
 log "Mirroring old/$MINIO_BUCKET and old/$ROSTER_BUCKET → RustFS (incremental)"
 run_mc "
@@ -145,7 +154,25 @@ run_mc "
 "
 
 log "Verifying with mc diff (must be empty)"
-DIFF_OUT=$(run_mc "mc diff old/$MINIO_BUCKET new/$MINIO_BUCKET; mc diff old/$ROSTER_BUCKET new/$ROSTER_BUCKET")
+# mc diff exit codes vary by build: some return 1 when differences exist,
+# others return 0 and just list them. Treat rc==1 as "differences found" so
+# it reaches the die message below instead of tripping set -e mid-substitution;
+# anything >1 is an operational error (auth/network) and aborts loudly.
+DIFF_OUT=""
+for bucket in "$MINIO_BUCKET" "$ROSTER_BUCKET"; do
+  set +e
+  BUCKET_DIFF=$(run_mc "mc diff old/$bucket new/$bucket")
+  rc=$?
+  set -e
+  if [ "$rc" -gt 1 ]; then
+    echo "$BUCKET_DIFF"
+    die "mc diff old/$bucket new/$bucket failed with exit $rc — operational error, not a content difference"
+  fi
+  if [ "$rc" -eq 1 ] && [ -z "$BUCKET_DIFF" ]; then
+    BUCKET_DIFF="(mc diff exit 1 for $bucket but printed nothing — inspect manually)"
+  fi
+  DIFF_OUT="${DIFF_OUT}${BUCKET_DIFF}"
+done
 if [ -n "$DIFF_OUT" ]; then
   echo "$DIFF_OUT"
   die "mc diff is NOT empty — investigate before cutover (if the backend is still running, this may just be new writes: stop it and re-run for the final delta)"
