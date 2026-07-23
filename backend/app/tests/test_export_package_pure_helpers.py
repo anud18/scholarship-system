@@ -258,6 +258,20 @@ class TestUniqueZipPath:
         zf = self._zf_with(["a/readme"])
         assert _unique_zip_path(zf, "a/readme") == "a/readme_2"
 
+    def test_trailing_dot_never_yields_trailing_dot_candidate(self):
+        # "abc." must not become "abc_2." — Windows strips trailing dots,
+        # which would re-collide the very names this helper de-dupes.
+        zf = self._zf_with(["a/scan."])
+        assert _unique_zip_path(zf, "a/scan.") == "a/scan._2"
+
+    def test_dot_only_in_parent_dir_is_not_an_extension(self):
+        zf = self._zf_with(["a.b/file"])
+        assert _unique_zip_path(zf, "a.b/file") == "a.b/file_2"
+
+    def test_leading_dot_basename_is_not_an_extension(self):
+        zf = self._zf_with(["a/.config"])
+        assert _unique_zip_path(zf, "a/.config") == "a/.config_2"
+
 
 class TestFetchAndWrite:
     """Pin: the shared MinIO fetch-and-write used by the app.files

@@ -105,11 +105,15 @@ def _unique_zip_path(zf: zipfile.ZipFile, path: str) -> str:
     if not _taken(path):
         return path
     stem, dot, ext = path.rpartition(".")
-    if not dot:
-        stem, ext = path, ""
+    # Only honour a real extension on the final component: a trailing dot
+    # ("abc.") would yield "abc_2." (Windows strips trailing dots →
+    # re-collision), and a dot only in a parent dir or a leading-dot
+    # basename has no extension to preserve.
+    if not dot or not ext or "/" in ext or not stem or stem.endswith("/"):
+        stem, dot, ext = path, "", ""
     counter = 2
     while True:
-        candidate = f"{stem}_{counter}.{ext}" if dot else f"{stem}_{counter}"
+        candidate = f"{stem}_{counter}.{ext}" if dot else f"{path}_{counter}"
         if not _taken(candidate):
             return candidate
         counter += 1
