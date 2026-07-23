@@ -74,15 +74,16 @@ class TestFormatAllocationDisplay:
 
     def test_moe_1w_with_year(self) -> None:
         result = ExcelExportService._format_allocation_display(_item("moe_1w", 113))
-        assert result == "113年 教育部(1萬)"
+        assert result == "113年 教育部(5000)"
 
     def test_moe_2w_with_year(self) -> None:
         result = ExcelExportService._format_allocation_display(_item("moe_2w", 113))
         assert result == "113年 教育部(2萬)"
 
     def test_no_year_strips_prefix(self) -> None:
-        """Year omitted → just the localised sub-type label."""
+        """Year omitted or 0 → just the localised sub-type label (no '0年' prefix)."""
         assert ExcelExportService._format_allocation_display(_item("nstc", None)) == "國科會"
+        assert ExcelExportService._format_allocation_display(_item("nstc", 0)) == "國科會"
 
     def test_unknown_sub_type_falls_back_to_raw(self) -> None:
         """An unknown / new sub-type (e.g. a custom config-driven addition
