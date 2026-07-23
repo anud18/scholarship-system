@@ -417,10 +417,10 @@ test.describe("admin revoke dialog — confirm disabled until reason filled", ()
 // Second student for describe #2 suspend sub-fixture (csphd0002).
 const SETUP_STUDENT2 = "csphd0002";
 
-// Roster generation marks an item is_included=false ("缺少銀行帳戶資訊") when
-// the application has no bank account, and get_revoked_suspended_for_roster
-// only returns is_included=true items (PR #916 soft-delete gate) — so the
-// fixture applications must carry one for the revoked entry to surface.
+// A missing bank account no longer excludes an item from the roster (it is
+// only a 補件 warning now), so it doesn't affect the is_included gate that
+// get_revoked_suspended_for_roster filters on (PR #916). The fixture
+// applications still carry one so the generated items are fully payable.
 const SETUP_FORM_DATA = {
   fields: {
     bank_account: {

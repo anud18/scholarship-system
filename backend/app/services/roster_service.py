@@ -817,7 +817,8 @@ class RosterService:
                 exclusion_reasons.append(f"不符合獎學金規則: {'; '.join(failed_rules)}")
             else:
                 exclusion_reasons.append("不符合獎學金資格條件")
-        # 3. 檢查銀行帳戶資訊
+        # 3. 擷取銀行帳戶資訊（僅作快照與提醒用，「缺少銀行帳戶」不構成排除原因：
+        #    學生補件後即可撥款；撥款合格與否由 is_qualified 屬性另行把關）
         # IMPORTANT: Support both nested (schema-compliant) and flat (legacy) data structures
         form_data = application.submitted_form_data or {}
         form_fields = form_data.get("fields", {})
@@ -837,7 +838,6 @@ class RosterService:
                 break
 
         if not bank_account:
-            exclusion_reasons.append("缺少銀行帳戶資訊")
             logger.warning(
                 f"Application {application.id} missing bank account. "
                 f"Checked nested and flat structures. submitted_form_data keys: {list(form_data.keys())}"
@@ -1066,16 +1066,23 @@ class RosterService:
             scholarship_config = application.scholarship_configuration
 
             if not scholarship_config or not student:
-                if not student and not scholarship_config:
-                    missing_reason = "缺少學生資訊/獎學金配置"
-                elif not student:
-                    missing_reason = "缺少學生資訊"
-                else:
-                    missing_reason = "缺少獎學金配置"
+                # 具體說明缺的是哪個關聯、為什麼會缺，讓管理員能直接修資料，
+                # 而不是只看到「缺少獎學金配置」卻不知道原因。
+                app_ref = getattr(application, "app_id", None) or f"#{application.id}"
+                missing_reasons: List[str] = []
+                if not student:
+                    missing_reasons.append(
+                        f"申請 {app_ref} 找不到對應的學生帳號（applications.user_id 無對應使用者，帳號可能已被刪除）"
+                    )
+                if not scholarship_config:
+                    missing_reasons.append(
+                        f"申請 {app_ref} 未關聯獎學金配置（applications.scholarship_configuration_id 為空，"
+                        f"常見於資料匯入或舊資料未建立配置關聯），無法載入該期驗證規則"
+                    )
 
                 return {
                     "is_eligible": False,
-                    "failed_rules": [missing_reason],
+                    "failed_rules": missing_reasons,
                     "warning_rules": [],
                     "details": {},
                 }

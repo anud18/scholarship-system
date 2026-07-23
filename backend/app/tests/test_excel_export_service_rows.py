@@ -356,14 +356,15 @@ def test_is_manual_removal_detects_lock_and_reconcile_prefixes(service):
         is True
     )
     assert (
-        service._is_manual_removal(_mk_scope_item("c", is_included=False, exclusion_reason="缺少銀行帳戶資訊")) is False
+        service._is_manual_removal(_mk_scope_item("c", is_included=False, exclusion_reason="學籍驗證未通過: graduated"))
+        is False
     )
     assert service._is_manual_removal(_mk_scope_item("d", is_included=True, exclusion_reason=None)) is False
 
 
 def test_get_roster_items_default_keeps_auto_excluded_hides_manual(service):
     included = _mk_scope_item("納入", is_included=True)
-    auto_excluded = _mk_scope_item("自動排除", is_included=False, exclusion_reason="缺少銀行帳戶資訊")
+    auto_excluded = _mk_scope_item("自動排除", is_included=False, exclusion_reason="學籍驗證未通過: graduated")
     manual = _mk_scope_item("手動移除", is_included=False, exclusion_reason="鎖定後移除[停發]：x")
     roster = SimpleNamespace(items=[included, auto_excluded, manual])
 
