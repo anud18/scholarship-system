@@ -523,6 +523,16 @@ async def get_ranking(
                                 for subtype in (item.application.scholarship_subtype_list or [])
                             ]
                         ),
+                        # #68: 國籍/身分 — expose only the two snapshot keys the
+                        # ranking table reads, not the full SIS snapshot.
+                        "student_data": {
+                            "std_nation": student_data.get("std_nation") or student_data.get("nationality"),
+                            "std_identity": (
+                                student_data.get("std_identity")
+                                if student_data.get("std_identity") is not None
+                                else student_data.get("identity")
+                            ),
+                        },
                         # Minimal student info - only what's needed for ranking display
                         "student_info": {
                             "display_name": student_name,
