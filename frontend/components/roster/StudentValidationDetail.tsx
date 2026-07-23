@@ -155,7 +155,7 @@ export function StudentValidationDetail({ student }: StudentValidationDetailProp
               <div>
                 <div className="font-semibold text-orange-900 text-xs mb-1">銀行帳戶資訊</div>
                 <div className="text-orange-700 text-xs">
-                  學生尚未填寫銀行帳戶資訊
+                  學生尚未填寫銀行帳戶資訊（仍列入造冊，撥款前需補齊帳戶資料）
                   {student.bank_account_field && (
                     <span className="block mt-1 text-orange-600">
                       欄位名稱: {student.bank_account_field}

@@ -678,8 +678,9 @@ async def preview_roster_students(
                 "missing_data": 0,
                 "verification_failed": 0,
                 "rules_failed": 0,
-                "no_bank_account": 0,
             },
+            # 缺少銀行帳戶不排除造冊，僅提醒補件（撥款前仍會擋）
+            "missing_bank_account_count": 0,
             "total_amount": 0.0,
             "verification_stats": {
                 "verified": 0,
@@ -777,10 +778,12 @@ async def preview_roster_students(
                 logger.warning(f"Eligibility validation failed for application {application.id}", exc_info=True)
                 student_info["is_eligible"] = True  # Don't exclude on validation error
 
-            # Validation Step 4: Bank account check
+            # Validation Step 4: Bank account check（僅提醒，不影響納入與否）
             bank_account, field_name = extract_bank_account(application)
             student_info["has_bank_account"] = bool(bank_account)
             student_info["bank_account_field"] = field_name
+            if not bank_account:
+                summary["missing_bank_account_count"] += 1
 
             # Validation Step 5: Final inclusion decision
             is_included = True
@@ -798,12 +801,6 @@ async def preview_roster_students(
                 failed_rules = student_info["failed_rules"]
                 exclusion_reason = f"不符合獎學金規則: {'; '.join(failed_rules)}"
                 summary["exclusion_breakdown"]["rules_failed"] += 1
-
-            # Check bank account
-            elif not bank_account:
-                is_included = False
-                exclusion_reason = "缺少銀行帳戶資訊"
-                summary["exclusion_breakdown"]["no_bank_account"] += 1
 
             student_info["is_included"] = is_included
             student_info["exclusion_reason"] = exclusion_reason

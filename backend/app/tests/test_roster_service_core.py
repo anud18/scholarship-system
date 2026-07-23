@@ -225,11 +225,12 @@ def test_create_roster_item_included_when_bank_account_present(service: RosterSe
     assert item.bank_account == "00012345678"
 
 
-def test_create_roster_item_excluded_when_bank_account_missing(service: RosterService) -> None:
-    """No bank account anywhere in submitted_form_data ⇒ is_included=False
-    with the 缺少銀行帳戶資訊 reason. Critical because we cannot pay a
-    student with no account number — and the exclusion_reason is what the
-    operator sees in the UI to know WHY they were dropped."""
+def test_create_roster_item_included_when_bank_account_missing(service: RosterService) -> None:
+    """No bank account anywhere in submitted_form_data ⇒ the student is STILL
+    included in the roster (is_included=True, no exclusion_reason) — a missing
+    account is a fixable補件 issue, not an eligibility problem. Payment
+    readiness is gated separately by `is_qualified`, which stays False until
+    the account is filled in."""
     roster = _make_roster()
     application = _make_application(bank_account=None)
 
@@ -241,9 +242,10 @@ def test_create_roster_item_excluded_when_bank_account_missing(service: RosterSe
         eligibility_result={"is_eligible": True, "failed_rules": [], "warning_rules": []},
     )
 
-    assert item.is_included is False
-    assert item.exclusion_reason == "缺少銀行帳戶資訊"
+    assert item.is_included is True
+    assert item.exclusion_reason is None
     assert item.bank_account == ""
+    assert not item.is_qualified  # 撥款仍被擋，直到補齊帳戶
 
 
 def test_create_roster_item_excluded_when_verification_failed(service: RosterService) -> None:

@@ -16,7 +16,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Users, DollarSign, Building2, InfoIcon } from "lucide-react";
+import {
+  Users,
+  DollarSign,
+  Building2,
+  InfoIcon,
+  AlertTriangle,
+} from "lucide-react";
 import { apiClient } from "@/lib/api";
 import {
   useReferenceData,
@@ -68,8 +74,9 @@ interface PreviewData {
       missing_data: number;
       verification_failed: number;
       rules_failed: number;
-      no_bank_account: number;
     };
+    // 缺少銀行帳戶不排除造冊，僅提醒補件
+    missing_bank_account_count: number;
     total_amount: number;
     verification_stats: {
       verified: number;
@@ -405,6 +412,17 @@ export function StudentRosterPreview({
         </Card>
       </div>
 
+      {/* Missing bank account warning — 不排除造冊，但需提醒補件 */}
+      {data.summary.missing_bank_account_count > 0 && (
+        <Alert className="border-orange-300 bg-orange-50 text-orange-800">
+          <AlertTriangle className="h-4 w-4 !text-orange-600" />
+          <AlertDescription>
+            有 {data.summary.missing_bank_account_count}{" "}
+            位學生尚未填寫銀行帳戶資訊，仍會列入造冊，但撥款前需補齊帳戶資料。
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Student List */}
       <Card>
         <CardHeader>
@@ -482,7 +500,7 @@ export function StudentRosterPreview({
                     <p className="text-sm text-muted-foreground mb-3">
                       共 {data.summary.excluded_count} 位學生被排除
                     </p>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                       <div className="p-2 bg-gray-50 rounded border">
                         <div className="text-xs text-gray-600">缺少資料</div>
                         <div className="text-lg font-semibold">
@@ -499,12 +517,6 @@ export function StudentRosterPreview({
                         <div className="text-xs text-gray-600">規則失敗</div>
                         <div className="text-lg font-semibold">
                           {data.summary.exclusion_breakdown.rules_failed}
-                        </div>
-                      </div>
-                      <div className="p-2 bg-gray-50 rounded border">
-                        <div className="text-xs text-gray-600">無銀行帳戶</div>
-                        <div className="text-lg font-semibold">
-                          {data.summary.exclusion_breakdown.no_bank_account}
                         </div>
                       </div>
                     </div>

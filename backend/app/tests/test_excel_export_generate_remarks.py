@@ -98,10 +98,10 @@ def test_excluded_with_reason_includes_reason(service):
     """Pin: when is_included=False AND exclusion_reason is set, the reason
     surfaces in the remarks. This is the auditor's primary signal for
     "why didn't this student get paid?"."""
-    item = _make_item(is_included=False, exclusion_reason="缺少銀行帳戶資訊")
+    item = _make_item(is_included=False, exclusion_reason="學籍驗證未通過: graduated")
     roster = _make_roster()
     result = service._generate_remarks(item, roster)
-    assert "排除原因: 缺少銀行帳戶資訊" in result
+    assert "排除原因: 學籍驗證未通過: graduated" in result
 
 
 def test_excluded_without_reason_omits_reason_label(service):
