@@ -165,6 +165,11 @@ def _strip_active_content(writer: PdfWriter) -> None:
         if "/AA" in page:
             del page[NameObject("/AA")]
         annots = page.get("/Annots")
+        if annots is None:
+            continue
+        # dict.get() does NOT dereference like __getitem__ does — /Annots may
+        # be an IndirectObject pointing at the array, which is not iterable.
+        annots = annots.get_object()
         if not annots:
             continue
         kept = ArrayObject()

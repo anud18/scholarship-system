@@ -126,12 +126,13 @@ async def _fetch_and_write(
     zip_path: str,
     error_path: str,
     error_label: str,
-) -> Optional[bytes]:
-    """Stream one MinIO object into the ZIP at `zip_path` and return its bytes.
+) -> Tuple[Optional[bytes], Optional[str]]:
+    """Stream one MinIO object into the ZIP at `zip_path`.
 
-    On any failure, writes a `_錯誤_…txt` placeholder at `error_path`
-    instead so a single bad object never aborts the whole ZIP build, and
-    returns None.
+    Returns (file_bytes, None) on success. On any failure, writes a
+    `_錯誤_…txt` placeholder at `error_path` instead so a single bad object
+    never aborts the whole ZIP build, and returns (None, error message) so
+    the merged PDF's placeholder page can show the same concrete reason.
     """
     try:
         response = await asyncio.to_thread(minio.get_file_stream, object_name)
@@ -141,11 +142,11 @@ async def _fetch_and_write(
             response.close()
             response.release_conn()
         zf.writestr(_unique_zip_path(zf, zip_path), file_bytes)
-        return file_bytes
+        return file_bytes, None
     except Exception as e:
         logger.exception(f"Failed to fetch file {object_name}")
         zf.writestr(_unique_zip_path(zf, error_path), f"檔案下載失敗：{error_label}\n錯誤：{str(e)}")
-        return None
+        return None, str(e) or "無法自檔案儲存服務下載"
 
 
 class ExportPackageService:
@@ -334,7 +335,7 @@ class ExportPackageService:
             else:
                 filename = f"{student_prefix}_{label}{ext}"
 
-            file_bytes = await _fetch_and_write(
+            file_bytes, fetch_error = await _fetch_and_write(
                 zf,
                 self.minio,
                 object_name=af.object_name,
@@ -350,7 +351,7 @@ class ExportPackageService:
                         label=item_label,
                         filename=af.original_filename or af.object_name or "",
                         content=file_bytes,
-                        error=None if file_bytes is not None else "無法自檔案儲存服務下載",
+                        error=fetch_error,
                     )
                 )
 

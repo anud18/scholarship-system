@@ -268,3 +268,54 @@ class TestBuildMergedPdf:
         action = annots[0].get_object()["/A"]
         assert action["/S"] == "/URI"
         assert "keep-me" in action["/URI"]
+
+    def test_strip_active_content_handles_indirect_annots_array(self):
+        # /Annots stored as an IndirectObject pointing at the array: pypdf's
+        # dict.get() does NOT dereference (unlike __getitem__), so the strip
+        # must resolve the container before iterating instead of raising
+        # TypeError. (pypdf's append() currently materializes the array when
+        # cloning, but that is an implementation detail — the strip must not
+        # depend on it.) Also prove the full merge path stays clean end-to-end.
+        from pypdf.generic import (
+            ArrayObject,
+            DictionaryObject,
+            NameObject,
+            NumberObject,
+            TextStringObject,
+        )
+
+        from app.services.pdf_merge import _strip_active_content
+
+        def _writer_with_indirect_js_annots():
+            w = PdfWriter()
+            page = w.add_blank_page(width=200, height=200)
+            js_annot = DictionaryObject(
+                {
+                    NameObject("/Type"): NameObject("/Annot"),
+                    NameObject("/Subtype"): NameObject("/Link"),
+                    NameObject("/Rect"): ArrayObject(
+                        [NumberObject(0), NumberObject(0), NumberObject(50), NumberObject(50)]
+                    ),
+                    NameObject("/A"): DictionaryObject(
+                        {
+                            NameObject("/S"): NameObject("/JavaScript"),
+                            NameObject("/JS"): TextStringObject("app.alert('indirect-marker')"),
+                        }
+                    ),
+                }
+            )
+            page[NameObject("/Annots")] = w._add_object(ArrayObject([js_annot]))
+            return w
+
+        # Direct strip on a writer whose /Annots is indirect: no TypeError,
+        # and the page's (dereferenced) annotation list is emptied.
+        w = _writer_with_indirect_js_annots()
+        _strip_active_content(w)
+        assert len(w.pages[0]["/Annots"]) == 0
+
+        # Full merge path on the serialized PDF: final output carries no JS.
+        buf = io.BytesIO()
+        _writer_with_indirect_js_annots().write(buf)
+        out = _merge([MergeItem(label="證明", filename="tricky2.pdf", content=buf.getvalue())])
+        assert b"indirect-marker" not in out
+        assert b"/JavaScript" not in out

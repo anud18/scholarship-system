@@ -195,7 +195,11 @@ async def test_download_failure_becomes_placeholder_page(monkeypatch):
     reader = PdfReader(io.BytesIO(zf.read(merged_path)))
     # cover(1) + sep+1 page (toefl) + sep+1 placeholder = 5
     assert len(reader.pages) == 5
-    assert "檔案下載失敗" in reader.pages[4].extract_text()
+    placeholder_text = reader.pages[4].extract_text()
+    assert "檔案下載失敗" in placeholder_text
+    # The concrete fetch error surfaces on the placeholder page, matching
+    # the per-file error txt, so reviewers see the actual reason
+    assert "NoSuchKey" in placeholder_text
 
 
 @pytest.mark.asyncio

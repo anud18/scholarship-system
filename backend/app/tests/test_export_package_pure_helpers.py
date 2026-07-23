@@ -303,9 +303,9 @@ class TestFetchAndWrite:
                 )
             )
 
-        # Pin: success returns the fetched bytes (reused for the merged
-        # dynamic-documents PDF without a second MinIO round-trip).
-        assert returned == b"PDF-BYTES"
+        # Pin: success returns (bytes, None) — the bytes are reused for the
+        # merged dynamic-documents PDF without a second MinIO round-trip.
+        assert returned == (b"PDF-BYTES", None)
         buf.seek(0)
         with zipfile.ZipFile(buf) as zf:
             assert zf.read("dept/stu/stu_申請文件.pdf") == b"PDF-BYTES"
@@ -335,9 +335,10 @@ class TestFetchAndWrite:
                 )
             )
 
-        # Pin: failure returns None (caller renders a download-failure
-        # placeholder page in the merged PDF instead of file bytes).
-        assert returned is None
+        # Pin: failure returns (None, error message) — the caller renders a
+        # download-failure placeholder page in the merged PDF carrying the
+        # same concrete reason as the per-file error txt.
+        assert returned == (None, "object missing")
         buf.seek(0)
         with zipfile.ZipFile(buf) as zf:
             names = zf.namelist()
