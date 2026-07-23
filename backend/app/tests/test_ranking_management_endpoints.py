@@ -500,6 +500,38 @@ class TestRankingFlowAndEnvelope:
         assert body["data"]["ranking_name"] == "ENG nstc ranking"
         assert body["data"]["items"] == []
 
+    async def test_get_detail_items_include_nationality_snapshot(
+        self, client, login, db, rank_users, ranking_eng, ranking_eng_items
+    ):
+        """#1205 follow-up: ranking detail items must surface the 國籍/身分
+        snapshot keys (std_nation/std_identity, with legacy nationality/identity
+        aliases) so the college ranking table doesn't render "-"."""
+        apps = (
+            (
+                await db.execute(
+                    select(Application).where(Application.id.in_([item.application_id for item in ranking_eng_items]))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        by_id = {a.id: a for a in apps}
+        app1 = by_id[ranking_eng_items[0].application_id]
+        app2 = by_id[ranking_eng_items[1].application_id]
+        app1.student_data = {**app1.student_data, "std_nation": "中華民國", "std_identity": 1}
+        app2.student_data = {**app2.student_data, "nationality": "美國", "identity": 2}
+        await db.commit()
+
+        login(rank_users["college_eng"])
+        response = await client.get(f"{RANKINGS_URL}/{ranking_eng.id}")
+        assert response.status_code == 200
+        items = response.json()["data"]["items"]
+        assert len(items) == 2
+        snapshots = {item["student_id"]: item["application"]["student_data"] for item in items}
+        assert snapshots["S001"] == {"std_nation": "中華民國", "std_identity": 1}
+        # Legacy alias keys fall back to the canonical snapshot keys
+        assert snapshots["S002"] == {"std_nation": "美國", "std_identity": 2}
+
     async def test_update_ranking_name_200(self, client, login, rank_users, ranking_eng):
         login(rank_users["college_eng"])
         response = await client.put(f"{RANKINGS_URL}/{ranking_eng.id}", json={"ranking_name": "Renamed"})
