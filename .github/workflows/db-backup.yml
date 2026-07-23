@@ -205,6 +205,27 @@ jobs:
               ...(production === 'failure' ? ['production'] : []),
             ];
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const label = 'db-backup-failed';
+
+            // Creating an issue with a label that doesn't exist on the repo
+            // fails, so pre-create it on demand (same approach as
+            // monitoring-alert-issue.yml).
+            try {
+              await github.rest.issues.getLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: label,
+              });
+            } catch (e) {
+              if (e.status !== 404) throw e;
+              await github.rest.issues.createLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: label,
+                color: 'b60205',
+                description: 'Scheduled database backup failed',
+              });
+            }
 
             // Dedupe: don't stack a new issue while one is still open.
             const issues = await github.rest.issues.listForRepo({

@@ -84,26 +84,33 @@ if [ ! -w "${TARGET_DIR}" ]; then
     fi
 fi
 
+# Dump to a temp file first and only mv into place once verified, so an
+# interrupted/failed pg_dump never leaves a partial file that a later run
+# (or an operator) could mistake for a valid backup. The trap also covers
+# aborts from `set -e`.
+TMP_FILE="${TARGET_DIR}/${BACKUP_FILE}.part"
+trap 'rm -f "${TMP_FILE}"' EXIT INT TERM
+
 log "Dumping ${PGDB} from ${DB_CONTAINER} -> ${TARGET_DIR}/${BACKUP_FILE}"
 docker exec "${DB_CONTAINER}" pg_dump \
     -U "${PGUSER}" -d "${PGDB}" \
     --format=custom --compress=9 \
-    > "${TARGET_DIR}/${BACKUP_FILE}"
+    > "${TMP_FILE}"
 
-if [ ! -s "${TARGET_DIR}/${BACKUP_FILE}" ]; then
+if [ ! -s "${TMP_FILE}" ]; then
     log "ERROR: backup file is empty"
-    rm -f "${TARGET_DIR}/${BACKUP_FILE}"
     exit 1
 fi
 
 # Integrity check: the archive TOC must be readable by pg_restore.
 log "Verifying archive with pg_restore --list"
 if ! docker exec -i "${DB_CONTAINER}" pg_restore --list /dev/stdin \
-        < "${TARGET_DIR}/${BACKUP_FILE}" > /dev/null; then
+        < "${TMP_FILE}" > /dev/null; then
     log "ERROR: pg_restore could not read the archive — backup is corrupt"
-    rm -f "${TARGET_DIR}/${BACKUP_FILE}"
     exit 1
 fi
+
+mv "${TMP_FILE}" "${TARGET_DIR}/${BACKUP_FILE}"
 
 (cd "${TARGET_DIR}" && sha256sum "${BACKUP_FILE}" > "${BACKUP_FILE}.sha256")
 chmod 640 "${TARGET_DIR}/${BACKUP_FILE}" "${TARGET_DIR}/${BACKUP_FILE}.sha256"
