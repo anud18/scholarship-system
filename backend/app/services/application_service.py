@@ -2,6 +2,7 @@
 Application service for scholarship application management
 """
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -1843,11 +1844,13 @@ class ApplicationService:
         if max_file_count is None or max_file_count > 1:
             stale_stmt = stale_stmt.where(ApplicationFile.original_filename == file.filename)
         stale_result = await self.db.execute(stale_stmt)
+        stale_object_names = []
         for stale_file in stale_result.scalars().all():
             if stale_file.object_name and stale_file.object_name != object_name:
-                # delete_file logs and returns False on failure — an orphaned
-                # MinIO object must not block replacing the DB record.
-                minio_service.delete_file(stale_file.object_name)
+                # Deleted from MinIO only AFTER the commit below succeeds — a
+                # failed commit must not leave surviving DB rows pointing at
+                # already-deleted objects.
+                stale_object_names.append(stale_file.object_name)
             await self.db.delete(stale_file)
 
         # Save file metadata to database
@@ -1866,6 +1869,12 @@ class ApplicationService:
         self.db.add(file_record)
         await self.db.commit()
         await self.db.refresh(file_record)
+
+        # Replaced rows are durably gone; now drop their objects. to_thread
+        # because the MinIO client is synchronous network I/O; delete_file
+        # logs and returns False on failure (an orphaned object is harmless).
+        for stale_object_name in stale_object_names:
+            await asyncio.to_thread(minio_service.delete_file, stale_object_name)
 
         return {
             "success": True,

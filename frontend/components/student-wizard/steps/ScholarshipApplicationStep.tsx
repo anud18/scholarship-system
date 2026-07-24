@@ -783,6 +783,9 @@ export function ScholarshipApplicationStep({
     setDynamicFormData({});
     setDynamicFileData({});
     setAgreedToTerms(false); // Reset terms agreement when scholarship changes
+    // The draft saved for the PREVIOUS scholarship must not be reused —
+    // save/submit would otherwise overwrite it with the new scholarship's data.
+    savedApplicationIdRef.current = null;
   };
 
   const handlePreviewTerms = () => {
@@ -1051,6 +1054,10 @@ export function ScholarshipApplicationStep({
 
       // Submit application
       await submitApplicationApi(applicationId);
+
+      // The submitted application must never be targeted by a later
+      // save/submit in this session — a fresh application starts clean.
+      savedApplicationIdRef.current = null;
 
       toast.success(text.submitSuccess);
       onComplete();
