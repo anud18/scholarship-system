@@ -30,15 +30,19 @@ def upgrade() -> None:
         return
 
     # Identical group = same application + type + original filename + size.
-    # Differing content under the same name yields a different file_size and
-    # is therefore preserved; only true re-uploads collapse to one row.
+    # IS NOT DISTINCT FROM treats NULL = NULL as a match without conflating
+    # NULL with ''/-1 sentinels. Rows whose original_filename is NULL are
+    # never touched (nothing identifies them as the same document), and
+    # differing content under one name yields a different file_size and is
+    # preserved; only true re-uploads collapse to one row (newest id wins).
     bind.execute(sa.text("""
             DELETE FROM application_files stale
             USING application_files newer
             WHERE newer.application_id = stale.application_id
-              AND COALESCE(newer.file_type, '') = COALESCE(stale.file_type, '')
-              AND COALESCE(newer.original_filename, '') = COALESCE(stale.original_filename, '')
-              AND COALESCE(newer.file_size, -1) = COALESCE(stale.file_size, -1)
+              AND stale.original_filename IS NOT NULL
+              AND newer.file_type IS NOT DISTINCT FROM stale.file_type
+              AND newer.original_filename IS NOT DISTINCT FROM stale.original_filename
+              AND newer.file_size IS NOT DISTINCT FROM stale.file_size
               AND newer.id > stale.id
             """))
 

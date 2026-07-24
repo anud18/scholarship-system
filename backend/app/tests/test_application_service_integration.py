@@ -326,6 +326,29 @@ class TestUploadReplacesStaleDuplicates:
         mock_minio.delete_file.assert_not_called()
         assert service.db.add.call_count == 1
 
+    async def test_staff_upload_appends_without_deleting(self, service):
+        """Replacement is applicant-only: professor/college/admin uploads
+        attach supplements and must never destroy the student's existing
+        (possibly verified) documents."""
+        user = self._upload_mocks(service, stale_files=[])
+        user.role = UserRole.professor
+        user.can_access_student_data = Mock(return_value=True)
+
+        upload_file = Mock(filename="補充文件.pdf", content_type="application/pdf")
+
+        with patch("app.services.application_service.minio_service") as mock_minio:
+            mock_minio.upload_file = AsyncMock(return_value=("applications/1/documents/new.pdf", 111))
+            mock_minio.delete_file = Mock(return_value=True)
+
+            result = await service.upload_application_file_minio(1, user, upload_file, "成績")
+
+        assert result["success"] is True
+        # Only the application lookup ran — no max-count nor stale queries.
+        assert service.db.execute.await_count == 1
+        service.db.delete.assert_not_awaited()
+        mock_minio.delete_file.assert_not_called()
+        assert service.db.add.call_count == 1
+
     async def test_single_file_slot_replaces_whole_type(self, service):
         """max_file_count == 1: swapping to a DIFFERENTLY-named file must
         still evict the old row — the stale query drops the filename filter."""

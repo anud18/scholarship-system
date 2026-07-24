@@ -176,6 +176,11 @@ export function ScholarshipApplicationStep({
     type: string;
   } | null>(null);
   const savedApplicationIdRef = useRef<number | null>(null);
+  // Restore an editing application into local state only once per id: the
+  // uploads inside a save trigger fetchApplications, and a mid-save re-run of
+  // the restore effect would rebuild dynamicFileData from server data,
+  // dropping files the student added but has not saved yet.
+  const restoredEditingIdRef = useRef<number | null>(null);
 
   // Submit preview dialog
   const [showSubmitPreview, setShowSubmitPreview] = useState(false);
@@ -194,6 +199,7 @@ export function ScholarshipApplicationStep({
     uploadDocument,
     submitApplication: submitApplicationApi,
     updateApplication,
+    fetchApplications,
   } = useApplications();
 
   const t = {
@@ -557,6 +563,9 @@ export function ScholarshipApplicationStep({
   // Load editing application data
   useEffect(() => {
     if (editingApplication && eligibleScholarships.length > 0) {
+      if (restoredEditingIdRef.current === editingApplication.id) return;
+      restoredEditingIdRef.current = editingApplication.id ?? null;
+
       // Find and set the scholarship
       const scholarship = eligibleScholarships.find(
         s => s.code === editingApplication.scholarship_type
@@ -609,7 +618,12 @@ export function ScholarshipApplicationStep({
           editingApplication?.id ?? savedApplicationIdRef.current;
         const previewToken = localStorage.getItem("auth_token") || "";
         formData.documents.forEach((doc: SubmittedDocumentPayload) => {
-          if (doc.document_id && doc.original_filename) {
+          // file_id is stamped by the backend integrator only when an
+          // ApplicationFile row actually exists. An entry without it is a
+          // phantom (the metadata was saved but the upload failed) — restoring
+          // it would show an "uploaded" file that no reviewer can ever see,
+          // and the isUploaded flag would suppress re-upload forever.
+          if (doc.document_id && doc.original_filename && (doc.file_id ?? doc.id)) {
             // Build a SAME-ORIGIN preview URL through the Next /api/v1/preview
             // proxy from file_id, so the iframe never depends on the backend's
             // file_path — that can be an absolute http://localhost:8000 URL when
@@ -874,15 +888,53 @@ export function ScholarshipApplicationStep({
   // flagged `isUploaded` after a successful upload (restored draft files carry
   // the flag already), so repeated 儲存草稿/提交 clicks never re-send the same
   // file — duplicates showed up in the college export as 成績 1..N of one PDF.
+  // The per-file list refresh is skipped; one refresh after the loop suffices.
   const uploadPendingDocuments = async (applicationId: number) => {
+    let uploadedCount = 0;
     for (const [docType, files] of Object.entries(dynamicFileData)) {
       for (const file of files) {
         const pendingFile = file as FileWithUploadedFlag;
         if (pendingFile.isUploaded) continue;
-        await uploadDocument(applicationId, file, docType);
+        await uploadDocument(applicationId, file, docType, {
+          refreshList: false,
+        });
         pendingFile.isUploaded = true;
+        uploadedCount += 1;
       }
     }
+    if (uploadedCount > 0) {
+      await fetchApplications();
+    }
+  };
+
+  // documents[] metadata for save/submit payloads. Slots whose only file was
+  // removed hold an empty array — reading files[0].name would crash the save.
+  const buildDocumentsPayload = () =>
+    Object.entries(dynamicFileData)
+      .filter(([, files]) => files.length > 0)
+      .map(([docType, files]) => {
+        const file = files[0];
+        return {
+          document_id: docType,
+          document_type: docType,
+          file_path: file.name,
+          original_filename: file.name,
+          upload_time: new Date().toISOString(),
+        };
+      });
+
+  // The application a save/submit may target: the draft being edited — but
+  // only while the dropdown still matches its scholarship, otherwise saving
+  // would overwrite draft A with scholarship B's data (the backend update
+  // keeps the original scholarship_type) — or the draft created earlier in
+  // this session.
+  const resolveTargetApplicationId = (): number | null => {
+    const editingMatchesSelection =
+      editingApplication?.scholarship_type === selectedScholarship?.code;
+    return (
+      (editingMatchesSelection ? (editingApplication?.id ?? null) : null) ??
+      savedApplicationIdRef.current
+    );
   };
 
   const handleSaveDraft = async () => {
@@ -905,19 +957,6 @@ export function ScholarshipApplicationStep({
         accountNumber
       );
 
-      const documents = Object.entries(dynamicFileData).map(
-        ([docType, files]) => {
-          const file = files[0];
-          return {
-            document_id: docType,
-            document_type: docType,
-            file_path: file.name,
-            original_filename: file.name,
-            upload_time: new Date().toISOString(),
-          };
-        }
-      );
-
       const applicationData: ApplicationCreate = {
         scholarship_type: selectedScholarship.code,
         configuration_id: selectedScholarship.configuration_id || 0,
@@ -932,15 +971,14 @@ export function ScholarshipApplicationStep({
           subTypePreferences.length > 0 ? subTypePreferences : undefined,
         form_data: {
           fields: formFields,
-          documents: documents,
+          documents: buildDocumentsPayload(),
         },
       };
 
       // A draft created earlier in this session (savedApplicationIdRef) must be
       // updated, not re-created — the create path used to run again on every
       // save click, duplicating the application and all of its files.
-      const existingApplicationId =
-        editingApplication?.id ?? savedApplicationIdRef.current;
+      const existingApplicationId = resolveTargetApplicationId();
 
       if (existingApplicationId) {
         // Update existing draft
@@ -997,19 +1035,6 @@ export function ScholarshipApplicationStep({
         accountNumber
       );
 
-      const documents = Object.entries(dynamicFileData).map(
-        ([docType, files]) => {
-          const file = files[0];
-          return {
-            document_id: docType,
-            document_type: docType,
-            file_path: file.name,
-            original_filename: file.name,
-            upload_time: new Date().toISOString(),
-          };
-        }
-      );
-
       const applicationData: ApplicationCreate = {
         scholarship_type: selectedScholarship.code,
         configuration_id: selectedScholarship.configuration_id || 0,
@@ -1024,7 +1049,7 @@ export function ScholarshipApplicationStep({
           subTypePreferences.length > 0 ? subTypePreferences : undefined,
         form_data: {
           fields: formFields,
-          documents: documents,
+          documents: buildDocumentsPayload(),
         },
       };
 
@@ -1032,8 +1057,7 @@ export function ScholarshipApplicationStep({
 
       // Same session-draft reuse as handleSaveDraft: submitting right after
       // 儲存草稿 must target the draft we already created, not make a new one.
-      const existingApplicationId =
-        editingApplication?.id ?? savedApplicationIdRef.current;
+      const existingApplicationId = resolveTargetApplicationId();
 
       if (existingApplicationId) {
         // Update existing draft
