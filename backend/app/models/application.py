@@ -348,6 +348,12 @@ class ApplicationFile(Base):
     """Application file attachment model"""
 
     __tablename__ = "application_files"
+    __table_args__ = (
+        # Hot path: every upload runs the stale-duplicate SELECT and every
+        # selectinload(Application.files) filters on application_id — Postgres
+        # does not auto-index FK columns.
+        Index("ix_application_files_app_type", "application_id", "file_type"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     application_id = Column(Integer, ForeignKey("applications.id"), nullable=False)

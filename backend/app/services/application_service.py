@@ -2,6 +2,7 @@
 Application service for scholarship application management
 """
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -1773,12 +1774,37 @@ class ApplicationService:
         # Return fresh copy with all relationships loaded
         return await self.get_application_by_id(application_id, user)
 
+    async def _get_document_max_file_count(self, application: Application, file_type: str) -> Optional[int]:
+        """Configured file-count limit of the document slot an upload targets.
+
+        Dynamic documents use the admin-configured 文件名稱 as their file_type,
+        so the slot is the ApplicationDocument row matching the application's
+        scholarship code + that name. Returns None when no configuration
+        exists (fixed types like bank_account_proof, or legacy data)."""
+        from app.models.application_field import ApplicationDocument
+
+        stmt = (
+            select(ApplicationDocument.max_file_count)
+            .join(ScholarshipType, ScholarshipType.code == ApplicationDocument.scholarship_type)
+            .where(
+                ScholarshipType.id == application.scholarship_type_id,
+                ApplicationDocument.document_name == file_type,
+                ApplicationDocument.is_active.is_(True),
+            )
+        )
+        result = await self.db.execute(stmt)
+        return result.scalars().first()
+
     async def upload_application_file_minio(
         self, application_id: int, user: User, file, file_type: str
     ) -> Dict[str, Any]:
         """Upload application file using MinIO"""
-        # Verify application exists and user has access
-        stmt = select(Application).where(Application.id == application_id)
+        # Verify application exists and user has access. FOR UPDATE serializes
+        # concurrent uploads to the same application (double-click, second tab,
+        # the admin dialog's parallel uploads): the replace-stale-rows logic
+        # below is SELECT→DELETE→INSERT and two interleaved requests would
+        # otherwise both miss each other's rows and re-create duplicates.
+        stmt = select(Application).where(Application.id == application_id).with_for_update()
         result = await self.db.execute(stmt)
         application = result.scalar_one_or_none()
 
@@ -1807,6 +1833,35 @@ class ApplicationService:
         # Import ApplicationFile here to avoid circular imports
         from app.models.application import ApplicationFile
 
+        # When the APPLICANT re-uploads a document it must REPLACE the previous
+        # records, not append: repeated draft saves used to send the same file
+        # once per save, and the stale rows surfaced in the college export as
+        # 「成績 1..N」copies of one file. A single-file slot (max_file_count
+        # <= 1, the admin default) replaces every row of its type — swapping to
+        # a differently-named file must not leave the old one behind, since no
+        # per-file delete endpoint exists. Multi-file slots can only match on
+        # the original filename. Staff (professor/college/admin) uploads keep
+        # append semantics: they attach supplements and must never silently
+        # destroy the student's possibly-verified documents.
+        stale_object_names = []
+        is_applicant_upload = user.role == UserRole.student and application.user_id == user.id
+        if is_applicant_upload:
+            max_file_count = await self._get_document_max_file_count(application, file_type)
+            stale_stmt = select(ApplicationFile).where(
+                ApplicationFile.application_id == application_id,
+                ApplicationFile.file_type == file_type,
+            )
+            if max_file_count is None or max_file_count > 1:
+                stale_stmt = stale_stmt.where(ApplicationFile.original_filename == file.filename)
+            stale_result = await self.db.execute(stale_stmt)
+            for stale_file in stale_result.scalars().all():
+                if stale_file.object_name and stale_file.object_name != object_name:
+                    # Deleted from MinIO only AFTER the commit below succeeds — a
+                    # failed commit must not leave surviving DB rows pointing at
+                    # already-deleted objects.
+                    stale_object_names.append(stale_file.object_name)
+                await self.db.delete(stale_file)
+
         # Save file metadata to database
         file_record = ApplicationFile(
             application_id=application_id,
@@ -1823,6 +1878,12 @@ class ApplicationService:
         self.db.add(file_record)
         await self.db.commit()
         await self.db.refresh(file_record)
+
+        # Replaced rows are durably gone; now drop their objects. to_thread
+        # because the MinIO client is synchronous network I/O; delete_file
+        # logs and returns False on failure (an orphaned object is harmless).
+        for stale_object_name in stale_object_names:
+            await asyncio.to_thread(minio_service.delete_file, stale_object_name)
 
         return {
             "success": True,
