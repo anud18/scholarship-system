@@ -239,6 +239,91 @@ class TestApplicationServiceIntegration:
 
 
 @pytest.mark.asyncio
+class TestUploadReplacesStaleDuplicates:
+    """Re-uploading the same document (same file_type + original filename)
+    must REPLACE the previous ApplicationFile rows, not append — repeated
+    draft saves used to duplicate every document, and the college export
+    then listed 成績 1..N copies of one file."""
+
+    @pytest.fixture
+    def service(self):
+        db = Mock(spec=AsyncSession)
+        return ApplicationService(db)
+
+    @staticmethod
+    def _upload_mocks(service, stale_files):
+        """Wire db.execute for the two selects the upload path runs:
+        application lookup, then stale-duplicate lookup."""
+        application = Mock(spec=Application)
+        application.id = 1
+        application.user_id = 7
+
+        app_result = Mock()
+        app_result.scalar_one_or_none.return_value = application
+        stale_result = Mock()
+        stale_result.scalars.return_value.all.return_value = stale_files
+        service.db.execute = AsyncMock(side_effect=[app_result, stale_result])
+        service.db.add = Mock()
+        service.db.delete = AsyncMock()
+        service.db.commit = AsyncMock()
+        service.db.refresh = AsyncMock()
+
+        user = Mock(spec=User)
+        user.id = 7
+        user.role = UserRole.student
+        return user
+
+    @staticmethod
+    def _stale(object_name):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(object_name=object_name)
+
+    async def test_reupload_deletes_stale_rows_and_objects(self, service):
+        stale_files = [
+            self._stale("applications/1/documents/old-1.pdf"),
+            self._stale("applications/1/documents/old-2.pdf"),
+        ]
+        user = self._upload_mocks(service, stale_files)
+        upload_file = Mock(filename="成績單.pdf", content_type="application/pdf")
+
+        with patch("app.services.application_service.minio_service") as mock_minio:
+            mock_minio.upload_file = AsyncMock(return_value=("applications/1/documents/new.pdf", 111))
+            mock_minio.delete_file = Mock(return_value=True)
+
+            result = await service.upload_application_file_minio(1, user, upload_file, "transcript")
+
+        assert result["success"] is True
+        # Both stale rows removed from the DB and their objects from MinIO.
+        assert service.db.delete.await_count == 2
+        deleted_objects = [call.args[0] for call in mock_minio.delete_file.call_args_list]
+        assert deleted_objects == [
+            "applications/1/documents/old-1.pdf",
+            "applications/1/documents/old-2.pdf",
+        ]
+        # Exactly one replacement record inserted.
+        assert service.db.add.call_count == 1
+        new_record = service.db.add.call_args.args[0]
+        assert new_record.object_name == "applications/1/documents/new.pdf"
+        assert new_record.file_type == "transcript"
+
+    async def test_first_upload_deletes_nothing(self, service):
+        user = self._upload_mocks(service, stale_files=[])
+        upload_file = Mock(filename="成績單.pdf", content_type="application/pdf")
+
+        with patch("app.services.application_service.minio_service") as mock_minio:
+            mock_minio.upload_file = AsyncMock(return_value=("applications/1/documents/new.pdf", 111))
+            mock_minio.delete_file = Mock(return_value=True)
+
+            result = await service.upload_application_file_minio(1, user, upload_file, "transcript")
+
+        assert result["success"] is True
+        service.db.delete.assert_not_awaited()
+        mock_minio.delete_file.assert_not_called()
+        assert service.db.add.call_count == 1
+
+
+@pytest.mark.asyncio
 class TestApplicationServiceDashboard:
     """Test dashboard methods"""
 

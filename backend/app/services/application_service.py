@@ -1807,6 +1807,23 @@ class ApplicationService:
         # Import ApplicationFile here to avoid circular imports
         from app.models.application import ApplicationFile
 
+        # Re-uploading the same document must REPLACE the previous record, not
+        # append: repeated draft saves used to send the same file once per save,
+        # and the stale rows surfaced in the college export as「成績 1..N」copies
+        # of one file. Same type + same original filename = same document slot.
+        stale_stmt = select(ApplicationFile).where(
+            ApplicationFile.application_id == application_id,
+            ApplicationFile.file_type == file_type,
+            ApplicationFile.original_filename == file.filename,
+        )
+        stale_result = await self.db.execute(stale_stmt)
+        for stale_file in stale_result.scalars().all():
+            if stale_file.object_name and stale_file.object_name != object_name:
+                # delete_file logs and returns False on failure — an orphaned
+                # MinIO object must not block replacing the DB record.
+                minio_service.delete_file(stale_file.object_name)
+            await self.db.delete(stale_file)
+
         # Save file metadata to database
         file_record = ApplicationFile(
             application_id=application_id,

@@ -867,6 +867,21 @@ export function ScholarshipApplicationStep({
     });
   };
 
+  // Upload every file the student added this session exactly once. Files are
+  // flagged `isUploaded` after a successful upload (restored draft files carry
+  // the flag already), so repeated 儲存草稿/提交 clicks never re-send the same
+  // file — duplicates showed up in the college export as 成績 1..N of one PDF.
+  const uploadPendingDocuments = async (applicationId: number) => {
+    for (const [docType, files] of Object.entries(dynamicFileData)) {
+      for (const file of files) {
+        const pendingFile = file as FileWithUploadedFlag;
+        if (pendingFile.isUploaded) continue;
+        await uploadDocument(applicationId, file, docType);
+        pendingFile.isUploaded = true;
+      }
+    }
+  };
+
   const handleSaveDraft = async () => {
     if (!selectedScholarship) return;
 
@@ -918,19 +933,16 @@ export function ScholarshipApplicationStep({
         },
       };
 
-      if (editingApplication && editingApplication.id) {
+      // A draft created earlier in this session (savedApplicationIdRef) must be
+      // updated, not re-created — the create path used to run again on every
+      // save click, duplicating the application and all of its files.
+      const existingApplicationId =
+        editingApplication?.id ?? savedApplicationIdRef.current;
+
+      if (existingApplicationId) {
         // Update existing draft
-        await updateApplication(editingApplication.id, applicationData);
-
-        // Upload new files only
-        for (const [docType, files] of Object.entries(dynamicFileData)) {
-          for (const file of files) {
-            if (!(file as FileWithUploadedFlag).isUploaded) {
-              await uploadDocument(editingApplication.id, file, docType);
-            }
-          }
-        }
-
+        await updateApplication(existingApplicationId, applicationData);
+        await uploadPendingDocuments(existingApplicationId);
         toast.success(text.draftSaved);
       } else {
         // Create new draft
@@ -938,14 +950,7 @@ export function ScholarshipApplicationStep({
 
         if (application && application.id) {
           savedApplicationIdRef.current = application.id;
-
-          // Upload files
-          for (const [docType, files] of Object.entries(dynamicFileData)) {
-            for (const file of files) {
-              await uploadDocument(application.id, file, docType);
-            }
-          }
-
+          await uploadPendingDocuments(application.id);
           toast.success(text.draftSaved);
         }
       }
@@ -1022,20 +1027,15 @@ export function ScholarshipApplicationStep({
 
       let applicationId: number;
 
-      if (editingApplication && editingApplication.id) {
+      // Same session-draft reuse as handleSaveDraft: submitting right after
+      // 儲存草稿 must target the draft we already created, not make a new one.
+      const existingApplicationId =
+        editingApplication?.id ?? savedApplicationIdRef.current;
+
+      if (existingApplicationId) {
         // Update existing draft
-        await updateApplication(editingApplication.id, applicationData);
-        applicationId = editingApplication.id;
-
-        // Upload new files only
-        for (const [docType, files] of Object.entries(dynamicFileData)) {
-          for (const file of files) {
-            if (!(file as FileWithUploadedFlag).isUploaded) {
-              await uploadDocument(applicationId, file, docType);
-            }
-          }
-        }
-
+        await updateApplication(existingApplicationId, applicationData);
+        applicationId = existingApplicationId;
       } else {
         // Create new application
         const application = await createApplication(applicationData, true);
@@ -1045,15 +1045,9 @@ export function ScholarshipApplicationStep({
         }
         applicationId = application.id;
         savedApplicationIdRef.current = application.id;
-
-        // Upload files
-        for (const [docType, files] of Object.entries(dynamicFileData)) {
-          for (const file of files) {
-            await uploadDocument(applicationId, file, docType);
-          }
-        }
-
       }
+
+      await uploadPendingDocuments(applicationId);
 
       // Submit application
       await submitApplicationApi(applicationId);
