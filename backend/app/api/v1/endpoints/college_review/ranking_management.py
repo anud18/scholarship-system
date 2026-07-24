@@ -24,6 +24,7 @@ from app.core.security import require_college, require_scholarship_manager
 from app.db.deps import get_db
 from app.models.audit_log import AuditAction, AuditLog
 from app.models.college_review import CollegeRanking, CollegeRankingItem
+from app.models.enums import Semester
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.student import Department
 from app.models.user import User, UserRole
@@ -1402,20 +1403,29 @@ async def supplementary_import(
         ScholarshipConfiguration.is_active.is_(True),
     ]
     if normalized_semester is None:
-        cfg_conditions.append(ScholarshipConfiguration.semester.is_(None))
+        # Yearly cycles store semester as either NULL or "yearly" — match both
+        # (same rule as CollegeReviewService.assert_ranking_within_deadline).
+        cfg_conditions.append(
+            or_(
+                ScholarshipConfiguration.semester.is_(None),
+                ScholarshipConfiguration.semester == Semester.yearly.value,
+            )
+        )
     else:
         cfg_conditions.append(ScholarshipConfiguration.semester == normalized_semester)
 
-    cfg_stmt = select(ScholarshipConfiguration).where(and_(*cfg_conditions))
+    cfg_stmt = select(ScholarshipConfiguration).where(and_(*cfg_conditions)).limit(1)
     cfg = (await db.execute(cfg_stmt)).scalar_one_or_none()
     if not cfg or not cfg.allow_supplementary_import:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="補充匯入功能尚未開放")
 
-    # Build label→code map from scholarship sub_type_configs
+    # Build label→code map from scholarship sub_type_configs. Loop variable must
+    # NOT be named "cfg" — that name is the resolved ScholarshipConfiguration
+    # above, which is passed to create_applications_and_items below.
     label_to_code = {
-        cfg.name: cfg.sub_type_code
-        for cfg in (getattr(ranking.scholarship_type, "sub_type_configs", None) or [])
-        if cfg.name and cfg.sub_type_code
+        stc.name: stc.sub_type_code
+        for stc in (getattr(ranking.scholarship_type, "sub_type_configs", None) or [])
+        if stc.name and stc.sub_type_code
     }
 
     # Load dynamic fields (same query as export)
@@ -1507,9 +1517,11 @@ async def supplementary_import(
     # Upsert user profiles (bank_account, advisor_name)
     await service.upsert_user_profiles(user_map, rows)
 
-    # Create applications + ranking items
+    # Create applications + ranking items. Pass the resolved configuration so
+    # every application carries scholarship_configuration_id — roster rule
+    # validation depends on it (issue #1213).
     imported_count = await service.create_applications_and_items(
-        rows, user_map, student_data_map, ranking, max_existing_rank
+        rows, user_map, student_data_map, ranking, max_existing_rank, cfg
     )
     ranking.total_applications = len(ranking.items) + imported_count
     await db.commit()
