@@ -112,6 +112,70 @@ async def test_upload_file_double_extension_bypass_blocked(minio_service, monkey
 
 
 @pytest.mark.asyncio
+async def test_upload_file_chinese_filename_keeps_extension(minio_service, monkeypatch):
+    """A fully non-ASCII filename (勞保加保證明.pdf) must pass extension
+    validation and keep .pdf on the stored object name — sanitizing before
+    the extension check used to strip it to "pdf" and 415 the upload."""
+    monkeypatch.setattr("app.services.minio_service.settings", _make_settings())
+
+    upload = _build_upload_file("勞保加保證明.pdf", b"data")
+    minio_service.client.put_object.return_value = None
+
+    object_name, size = await MinIOService.upload_file(minio_service, upload, application_id=1, file_type="doc")
+
+    assert object_name.startswith("applications/1/documents/")
+    assert object_name.endswith("unnamed_file.pdf")
+    assert size == len(b"data")
+    minio_service.client.put_object.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_upload_file_trailing_space_in_filename_accepted(minio_service, monkeypatch):
+    """Trailing whitespace/dots after the extension ("report.pdf ") must not
+    fail extension validation — the pre-fix code tolerated them via
+    sanitize-first, so the fix must not regress that."""
+    monkeypatch.setattr("app.services.minio_service.settings", _make_settings())
+
+    upload = _build_upload_file("report.pdf ", b"data")
+    minio_service.client.put_object.return_value = None
+
+    object_name, _ = await MinIOService.upload_file(minio_service, upload, application_id=1, file_type="doc")
+
+    assert object_name.endswith("report.pdf")
+
+
+@pytest.mark.asyncio
+async def test_upload_file_object_names_unique_within_same_second(minio_service, monkeypatch):
+    """Two non-ASCII filenames both sanitize to "unnamed_file"; uploads in the
+    same second must still get distinct object names (no silent overwrite)."""
+    monkeypatch.setattr("app.services.minio_service.settings", _make_settings())
+    minio_service.client.put_object.return_value = None
+
+    name1, _ = await MinIOService.upload_file(
+        minio_service, _build_upload_file("勞保加保證明.pdf", b"a"), application_id=1, file_type="doc"
+    )
+    name2, _ = await MinIOService.upload_file(
+        minio_service, _build_upload_file("存摺封面.pdf", b"b"), application_id=1, file_type="doc"
+    )
+
+    assert name1 != name2
+
+
+@pytest.mark.asyncio
+async def test_upload_file_no_extension_rejected(minio_service, monkeypatch):
+    """A filename without any extension must still be rejected."""
+    monkeypatch.setattr("app.services.minio_service.settings", _make_settings())
+
+    upload = _build_upload_file("README", b"data")
+
+    with pytest.raises(HTTPException) as exc:
+        await MinIOService.upload_file(minio_service, upload, application_id=1, file_type="doc")
+
+    assert exc.value.status_code == 415
+    minio_service.client.put_object.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_upload_file_s3_error(minio_service, monkeypatch):
     monkeypatch.setattr("app.services.minio_service.settings", _make_settings())
 
