@@ -251,18 +251,22 @@ class TestUploadReplacesStaleDuplicates:
         return ApplicationService(db)
 
     @staticmethod
-    def _upload_mocks(service, stale_files):
-        """Wire db.execute for the two selects the upload path runs:
-        application lookup, then stale-duplicate lookup."""
+    def _upload_mocks(service, stale_files, max_file_count=None):
+        """Wire db.execute for the three selects the upload path runs:
+        application lookup, document max_file_count lookup, then the
+        stale-duplicate lookup."""
         application = Mock(spec=Application)
         application.id = 1
         application.user_id = 7
+        application.scholarship_type_id = 3
 
         app_result = Mock()
         app_result.scalar_one_or_none.return_value = application
+        max_count_result = Mock()
+        max_count_result.scalars.return_value.first.return_value = max_file_count
         stale_result = Mock()
         stale_result.scalars.return_value.all.return_value = stale_files
-        service.db.execute = AsyncMock(side_effect=[app_result, stale_result])
+        service.db.execute = AsyncMock(side_effect=[app_result, max_count_result, stale_result])
         service.db.add = Mock()
         service.db.delete = AsyncMock()
         service.db.commit = AsyncMock()
@@ -321,6 +325,43 @@ class TestUploadReplacesStaleDuplicates:
         service.db.delete.assert_not_awaited()
         mock_minio.delete_file.assert_not_called()
         assert service.db.add.call_count == 1
+
+    async def test_single_file_slot_replaces_whole_type(self, service):
+        """max_file_count == 1: swapping to a DIFFERENTLY-named file must
+        still evict the old row — the stale query drops the filename filter."""
+        stale = self._stale("applications/1/documents/old-name.pdf")
+        user = self._upload_mocks(service, stale_files=[stale], max_file_count=1)
+        upload_file = Mock(filename="全新檔名.pdf", content_type="application/pdf")
+
+        with patch("app.services.application_service.minio_service") as mock_minio:
+            mock_minio.upload_file = AsyncMock(return_value=("applications/1/documents/new.pdf", 111))
+            mock_minio.delete_file = Mock(return_value=True)
+
+            result = await service.upload_application_file_minio(1, user, upload_file, "成績")
+
+        assert result["success"] is True
+        assert service.db.delete.await_count == 1
+        # The stale SELECT must NOT be narrowed to the (new) original filename
+        # (the column always appears in the SELECT list; check the predicate).
+        stale_query = str(service.db.execute.await_args_list[2].args[0])
+        assert "original_filename =" not in stale_query
+
+    async def test_multi_file_slot_keeps_filename_filter(self, service):
+        """max_file_count > 1: other files of the slot must survive, so the
+        stale query stays keyed on the original filename."""
+        user = self._upload_mocks(service, stale_files=[], max_file_count=3)
+        upload_file = Mock(filename="第二份.pdf", content_type="application/pdf")
+
+        with patch("app.services.application_service.minio_service") as mock_minio:
+            mock_minio.upload_file = AsyncMock(return_value=("applications/1/documents/new.pdf", 111))
+            mock_minio.delete_file = Mock(return_value=True)
+
+            result = await service.upload_application_file_minio(1, user, upload_file, "多檔文件")
+
+        assert result["success"] is True
+        service.db.delete.assert_not_awaited()
+        stale_query = str(service.db.execute.await_args_list[2].args[0])
+        assert "original_filename =" in stale_query
 
 
 @pytest.mark.asyncio

@@ -1773,6 +1773,27 @@ class ApplicationService:
         # Return fresh copy with all relationships loaded
         return await self.get_application_by_id(application_id, user)
 
+    async def _get_document_max_file_count(self, application: Application, file_type: str) -> Optional[int]:
+        """Configured file-count limit of the document slot an upload targets.
+
+        Dynamic documents use the admin-configured 文件名稱 as their file_type,
+        so the slot is the ApplicationDocument row matching the application's
+        scholarship code + that name. Returns None when no configuration
+        exists (fixed types like bank_account_proof, or legacy data)."""
+        from app.models.application_field import ApplicationDocument
+
+        stmt = (
+            select(ApplicationDocument.max_file_count)
+            .join(ScholarshipType, ScholarshipType.code == ApplicationDocument.scholarship_type)
+            .where(
+                ScholarshipType.id == application.scholarship_type_id,
+                ApplicationDocument.document_name == file_type,
+                ApplicationDocument.is_active.is_(True),
+            )
+        )
+        result = await self.db.execute(stmt)
+        return result.scalars().first()
+
     async def upload_application_file_minio(
         self, application_id: int, user: User, file, file_type: str
     ) -> Dict[str, Any]:
@@ -1807,15 +1828,20 @@ class ApplicationService:
         # Import ApplicationFile here to avoid circular imports
         from app.models.application import ApplicationFile
 
-        # Re-uploading the same document must REPLACE the previous record, not
-        # append: repeated draft saves used to send the same file once per save,
-        # and the stale rows surfaced in the college export as「成績 1..N」copies
-        # of one file. Same type + same original filename = same document slot.
+        # Re-uploading a document must REPLACE the previous records, not append:
+        # repeated draft saves used to send the same file once per save, and the
+        # stale rows surfaced in the college export as「成績 1..N」copies of one
+        # file. A single-file slot (max_file_count <= 1, the admin default)
+        # replaces every row of its type — swapping to a differently-named file
+        # must not leave the old one behind, since no per-file delete endpoint
+        # exists. Multi-file slots can only match on the original filename.
+        max_file_count = await self._get_document_max_file_count(application, file_type)
         stale_stmt = select(ApplicationFile).where(
             ApplicationFile.application_id == application_id,
             ApplicationFile.file_type == file_type,
-            ApplicationFile.original_filename == file.filename,
         )
+        if max_file_count is None or max_file_count > 1:
+            stale_stmt = stale_stmt.where(ApplicationFile.original_filename == file.filename)
         stale_result = await self.db.execute(stale_stmt)
         for stale_file in stale_result.scalars().all():
             if stale_file.object_name and stale_file.object_name != object_name:
