@@ -112,8 +112,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      # dependency-check needs Python too: it runs validate_manifest_sync.py
+      # (tomllib, so >=3.11) and pip-installs safety. Without this it would
+      # silently depend on whatever python3 the runner image happens to ship.
       - name: Setup Python (if needed)
-        if: matrix.check == 'backend-lint' || matrix.check == 'security-scan'
+        if: matrix.check == 'backend-lint' || matrix.check == 'security-scan' || matrix.check == 'dependency-check'
         uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
