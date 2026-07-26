@@ -109,10 +109,10 @@ description = "Scholarship Management System Backend API"
 requires-python = ">=3.12"
 dependencies = [
     # FastAPI and web framework
-    "fastapi==0.129.0",
-    "starlette==0.52.1",
+    "fastapi==0.139.2",
+    "starlette==1.3.1",
     "uvicorn[standard]==0.38.0",
-    "python-multipart==0.0.27",
+    "python-multipart==0.0.31",
     
     # Database and ORM
     "sqlalchemy==2.0.44",
@@ -122,17 +122,17 @@ dependencies = [
     "greenlet>=3.0,<4",  # Required by SQLAlchemy sync engine
     
     # Authentication and Security
-    "PyJWT[crypto]==2.12.0",  # Match requirements.txt; closes Dependabot alert #40 (high)
+    "PyJWT[crypto]==2.13.0",
     "passlib[bcrypt]==1.7.4",
     "bcrypt==4.2.1",
-    "cryptography==46.0.7",
+    "cryptography==49.0.0",
     "python-decouple==3.8",
     
     # Data validation and serialization
-    "pydantic==2.10.0",
-    "pydantic[email]==2.10.0",
-    "pydantic-settings==2.6.0",
-    "email-validator==2.1.0",
+    "pydantic==2.13.4",
+    "pydantic[email]==2.13.4",
+    "pydantic-settings==2.14.2",
+    "email-validator==2.3.0",
     
     # HTTP client and utilities
     "httpx==0.28.1",
@@ -149,11 +149,11 @@ dependencies = [
     "croniter==1.4.1",
     
     # Email services
-    "fastapi-mail==1.4.1",
+    "fastapi-mail==1.6.5",
     "jinja2==3.1.6",
     
     # File processing and OCR
-    "pillow==12.2.0",
+    "pillow==12.3.0",
     "opencv-python==4.12.0.88",
     "pytesseract==0.3.10",
     "google-generativeai==0.8.3",
