@@ -21,38 +21,14 @@ env:
   PYTHON_VERSION: '3.13'
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
+# CodeQL analysis lives EXCLUSIVELY in .github/workflows/codeql.yml.
+# A second copy used to run here under category `codeql/language:*`, on the same
+# triggers, without the `config-file` or the `filter-sarif` steps — so it kept
+# re-uploading the very false positives codeql.yml filters out (the
+# regex_validator.py `py/regex-injection` alerts stayed open indefinitely).
+# Do not re-add a CodeQL job here; add queries/suppressions to codeql.yml instead.
+
 jobs:
-  # CodeQL Analysis
-  codeql:
-    name: CodeQL Analysis (${{ matrix.language }})
-    runs-on: ubuntu-latest
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-        - language: actions
-          build-mode: none
-        - language: javascript-typescript
-          build-mode: none
-        - language: python
-          build-mode: none
-
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v5
-
-    - name: Initialize CodeQL
-      uses: github/codeql-action/init@v3
-      with:
-        languages: ${{ matrix.language }}
-        build-mode: ${{ matrix.build-mode }}
-
-    - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v3
-      with:
-        category: "codeql/language:${{matrix.language}}"
-
   # Backend Security Scan
   backend-security:
     name: Backend Security
@@ -282,7 +258,6 @@ jobs:
           script: |
             const summary = `## 🔒 Security Scan Summary
 
-            - ✅ CodeQL Analysis completed
             - ✅ Backend security scan completed
             - ✅ Frontend security scan completed
             - ✅ Credential management validation completed
