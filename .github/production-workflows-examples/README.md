@@ -141,31 +141,68 @@ cp /path/to/development-repo/.github/production-workflows-examples/backup.yml \
 
 在 production repository 設定以下 secrets（Settings → Secrets and variables → Actions）：
 
+> 沒有任何 workflow 使用 SSH。deploy.yml / backup.yml / health-check.yml 都跑在
+> production AP VM 上的 self-hosted runner（labels `[self-hosted, linux]`），
+> 直接操作本機 docker 與 DB VM 的 5432 埠。GitHub-hosted runner 連不到校內 VM。
+
+#### Repository Variables（Settings → Variables → Actions）
+
+| Variable | 必填 | 說明 |
+|----------|------|------|
+| `IMAGE_OWNER` | ✅ | 發布映像檔的 GHCR namespace，也就是**開發 repo 的 owner**（例：`anud18`）。production repo 不建置映像檔，只取用開發流程已經發布、staging 驗過的那一份。 |
+| `PRODUCTION_URL` | ✅ | 例：`https://ss.aa.nycu.edu.tw` |
+| `ENV_FILE` | — | AP VM 上既有 `.env` 的絕對路徑（安裝手冊 5.1，例：`/home/<user>/.env`）。**設了就用它**，GitHub 完全不存這些值。留空則由 deploy.yml 依下方 secrets 產生 `~/scholarship-production/.env`（權限 600）。 |
+| `SSL_CERT_DIR` | — | TLS 憑證資料夾的絕對路徑（例：`/home/<user>/ssl`）。留空則用 repo `nginx/ssl/prod`。兩種 `ENV_FILE` 模式下都以這個變數優先。資料夾內需有 `fullchain.pem`、`privkey.pem`、`chain.pem`。 |
+
 #### 部署相關 (deploy.yml)
 
-| Secret Name | Description | Example |
-|-------------|-------------|---------|
-| `DOCKER_USERNAME` | Docker Hub 用戶名 | `your-username` |
-| `DOCKER_PASSWORD` | Docker Hub 密碼或 token | `dckr_pat_xxxxx` |
-| `PRODUCTION_SSH_KEY` | SSH private key for server | `-----BEGIN OPENSSH PRIVATE KEY-----` |
-| `PRODUCTION_SERVER` | Production server hostname | `production.example.com` |
-| `PRODUCTION_USER` | SSH username | `ubuntu` or `deploy` |
+**設了 `ENV_FILE` 就不需要下面這些 secrets** — 值放在 AP VM 的 `.env` 裡，
+deploy 時會直接驗證該檔案（缺 key、`portal.test`、`ss-test`、`測試` 等都會擋下）。
 
-#### 備份相關 (backup.yml)
+留空 `ENV_FILE` 時才需要設定以下 secrets（會被寫成 AP VM 上的 `.env`）。
+另外若上游 packages 是 private，需要 `GH_PAT`（`read:packages`）才能 pull：
 
 | Secret Name | Description | Example |
 |-------------|-------------|---------|
-| `AWS_ACCESS_KEY_ID` | AWS access key | `AKIAIOSFODNN7EXAMPLE` |
-| `AWS_SECRET_ACCESS_KEY` | AWS secret key | `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY` |
-| `AWS_REGION` | AWS region (optional) | `us-east-1` |
-| `BACKUP_S3_BUCKET` | S3 bucket name | `production-backups` |
+| `DOMAIN` | 對外網域 | `ss.aa.nycu.edu.tw` |
+| `SECRET_KEY` | JWT signing key（≥ 32 字元，且必須與 staging 不同） | `openssl rand -hex 32` |
+| `CORS_ORIGINS` | 允許的前端來源 | `https://ss.aa.nycu.edu.tw` |
+| `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_NAME` | DB VM 的 PostgreSQL 連線資訊 | `10.x.x.x` / `5432` / … |
+| `REDIS_PASSWORD` | Redis 密碼（prod compose 強制要求） | `openssl rand -base64 24` |
+| `MINIO_HOST` / `MINIO_PORT` / `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` / `MINIO_BUCKET_NAME` / `MINIO_SECURE` | 物件儲存 | `10.x.x.x` / `9000` / … |
+| `PII_ENCRYPTION_KEYS` / `PII_ENCRYPTION_ACTIVE_VERSION` | PII 加密金鑰 JSON | `{"v1":"<key>"}` / `v1` |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` | 寄信設定 | `smtp-prod2.nycu.edu.tw` / `587` |
+| `EMAIL_FROM` / `EMAIL_FROM_NAME` | 寄件者（不可含 `ss-test` 或 `測試`） | `noreply@aa.nycu.edu.tw` |
+| `PORTAL_JWT_SERVER_URL` | Portal SSO（不可指向 `portal.test`） | `https://portal.nycu.edu.tw/jwt/portal` |
+| `NEXT_PUBLIC_NYCU_PORTAL_URL` | 前端 Portal 連結 | `https://portal.nycu.edu.tw` |
+| `STUDENT_API_BASE_URL` | 學籍 API（不可是 localhost/mock） | `http://<ip>/api/SoAA` |
+| `SUPER_ADMIN_NYCU_ID` | 可升級為 super_admin 的職編 | `E00001` |
 
-#### 通知相關 (health-check.yml, optional)
+### Container Registry / 映像檔來源
+
+production repo **不建置也不推送映像檔**。開發 repo 的 pipeline 建好推到 GHCR，
+production 只是把同一份 artifact 拉下來跑，確保上線的東西跟 staging 驗過的是
+同一個 image，而不是從 mirror 過來的原始碼重新 build 出的另一份。
+
+部署指定版本：`Deploy to Production` → Run workflow → 填 `tag`
+（例：`main-2c2b89d6` 或 `v1.2.3`）。不填預設 `latest`；`latest` 會浮動，
+無法回滾，正式上線請指定明確 tag。
+
+#### 環境建置相關 (setting-env.yml)
 
 | Secret Name | Description |
 |-------------|-------------|
-| `SLACK_WEBHOOK_URL` | Slack incoming webhook URL |
-| `DISCORD_WEBHOOK_URL` | Discord webhook URL |
+| `DB_VM_USER` / `DB_VM_SSH_KEY` / `DB_VM_SSH_PORT` | 從 AP VM 佈署 DB VM 用（僅此 workflow 需要） |
+
+#### 備份相關 (backup.yml)
+
+不需要額外 secrets——直接重用上面的 `DB_HOST` / `DB_PORT` / `DB_USER` /
+`DB_PASSWORD` / `DB_NAME`。備份檔留在 AP VM 的 `/var/backups/scholarship-system`
+供 IT 轉存（DB VM 無對外網路）。
+
+#### 健康檢查 (health-check.yml)
+
+重用 `DOMAIN` 與 `REDIS_PASSWORD`；失敗時自動開 issue，恢復後自動關閉。
 
 ### 3. 自訂配置
 
@@ -207,27 +244,23 @@ CUTOFF_DATE=$(date -d '90 days ago' +%Y%m%d)  # 改為 90 天
 
 ## 🔐 安全最佳實踐
 
-### SSH Key 設定
+### Self-hosted Runner
+
+部署與維運 workflow 都跑在 AP VM 上的 self-hosted runner，不使用 SSH 金鑰。
+安裝方式見安裝手冊第 6 節；註冊時 labels 需包含 `self-hosted` 與 `linux`，
+並以 service 方式常駐：
 
 ```bash
-# Generate SSH key pair (on your local machine)
-ssh-keygen -t ed25519 -C "github-actions-deploy" -f ~/.ssh/production_deploy
-
-# Add public key to production server
-ssh-copy-id -i ~/.ssh/production_deploy.pub user@production-server
-
-# Copy private key content (including BEGIN/END lines)
-cat ~/.ssh/production_deploy
-# Add to GitHub Secrets as PRODUCTION_SSH_KEY
+sudo ./svc.sh install
+sudo ./svc.sh start
 ```
 
-### Docker Hub Token
+runner 使用者需要 passwordless sudo（deploy.yml 與 backup.yml 都會用到）。
 
-建議使用 access token 而非密碼：
+### Container Registry
 
-1. Docker Hub → Account Settings → Security → Access Tokens
-2. Create new token with name "GitHub Actions"
-3. Copy token and add to secrets as `DOCKER_PASSWORD`
+映像檔推到 GHCR，登入使用 workflow 內建的 `GITHUB_TOKEN`，
+不需要 Docker Hub 帳號或額外 token。
 
 ### AWS IAM 權限
 

@@ -42,7 +42,10 @@ services:
 
   # FastAPI Backend
   backend:
-    image: ghcr.io/anud18/scholarship-system-backend:${TAG:-latest}
+    # Images are built and published by the DEVELOPMENT repository's pipeline;
+    # the production repo only consumes them. IMAGE_OWNER is the GHCR namespace
+    # that owns those packages (i.e. the dev repo's owner), not this repo's.
+    image: ghcr.io/${IMAGE_OWNER:-anud18}/scholarship-system-backend:${TAG:-latest}
     container_name: scholarship_backend_prod
     expose:
       - "8000"
@@ -129,7 +132,7 @@ services:
 
   # Next.js Frontend
   frontend:
-    image: ghcr.io/anud18/scholarship-system-frontend:${TAG:-latest}
+    image: ghcr.io/${IMAGE_OWNER:-anud18}/scholarship-system-frontend:${TAG:-latest}
     container_name: scholarship_frontend_prod
     expose:
       - "3000"
@@ -168,7 +171,12 @@ services:
       - "443:443"
     volumes:
       - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl/prod:/etc/nginx/ssl:ro
+      # Certificate directory. Defaults to the repo's own nginx/ssl/prod (which
+      # deploy.yml copies into the deploy dir), but can be pointed anywhere on
+      # the AP VM — e.g. SSL_CERT_DIR=/home/<user>/ssl per the install manual —
+      # so private keys never have to live in git. Must contain fullchain.pem,
+      # privkey.pem and chain.pem (nginx.prod.conf references all three).
+      - ${SSL_CERT_DIR:-./nginx/ssl/prod}:/etc/nginx/ssl:ro
       - ./logs/nginx:/var/log/nginx
     depends_on:
       - backend
