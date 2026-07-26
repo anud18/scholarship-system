@@ -148,10 +148,9 @@ test.describe("Role-permission boundaries on applications endpoints", () => {
     ).toBe(403);
 
     // 3. College user tries to submit a professor-only review → 403
-    //    (the endpoint checks current_user.is_professor() inline and
-    //    raises 403 if the role is wrong).
+    //    (the route depends on require_professor, which rejects any other role).
     //
-    // Body must satisfy `ReviewCreate` (application_id + items[]) so Pydantic
+    // Body must satisfy the review schema (application_id + items[]) so Pydantic
     // doesn't 422 *before* the role guard runs. The role check is what we
     // want to exercise; a 422 would mask whether the guard exists at all.
     const validReviewBody = {
@@ -171,7 +170,7 @@ test.describe("Role-permission boundaries on applications endpoints", () => {
     const collegeReview = await apiAs(
       collegeLogin.token,
       "POST",
-      `/applications/${appDbId}/review`,
+      `/professor/applications/${appDbId}/review`,
       validReviewBody,
     );
     pushTrace(runState, collegeReview.traceId);
@@ -188,7 +187,7 @@ test.describe("Role-permission boundaries on applications endpoints", () => {
     const studentReview = await apiAs(
       studentLogin.token,
       "POST",
-      `/applications/${appDbId}/review`,
+      `/professor/applications/${appDbId}/review`,
       validReviewBody,
     );
     pushTrace(runState, studentReview.traceId);

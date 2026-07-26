@@ -95,7 +95,7 @@ async def create_review(
     # 驗證送出的子項目「剛好」等於本人現在可審查的子項目（成員檢查 + 全覆蓋檢查）
     normalized_codes = await review_service.validate_review_submission(
         review_data.application_id,
-        current_user.role,
+        current_user,
         [item.sub_type_code for item in review_data.items],
     )
     for item, normalized_code in zip(review_data.items, normalized_codes):
@@ -512,7 +512,7 @@ async def submit_application_review(
         # 驗證送出的子項目「剛好」等於本人現在可審查的子項目（成員檢查 + 全覆蓋檢查）
         normalized_codes = await review_service.validate_review_submission(
             application_id,
-            current_user.role,
+            current_user,
             [item.sub_type_code for item in review_data.items],
         )
         for item, normalized_code in zip(review_data.items, normalized_codes):
@@ -593,9 +593,12 @@ async def submit_application_review(
         # Re-raise FastAPI HTTPException as-is (preserves status code and detail)
         raise
     except ScholarshipException:
-        # Domain errors (validate_review_submission, assert_professor_review_unlocked …)
-        # carry their own status_code and are rendered by scholarship_exception_handler.
-        # Without this they would fall through to the blanket handler below as a 500.
+        # Domain errors (validate_review_submission) carry their own status_code
+        # and are rendered by scholarship_exception_handler. Without this they
+        # would fall through to the blanket handler below as a 500.
+        # NOTE: unlike professor.py this handler does NOT call
+        # assert_professor_review_unlocked, so the #64 college-started lock is
+        # not enforced on this route. Pre-existing gap, tracked separately.
         raise
     except ValueError as e:
         logger.warning(f"Invalid review data for application {application_id}", exc_info=True)

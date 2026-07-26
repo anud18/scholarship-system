@@ -22,6 +22,10 @@ from app.models.user import User, UserRole
 # of these, professor review edits/submits are locked for non-admin users.
 # (See issue #64.)  professor_review and professor_reviewed remain editable so
 # professors can still iterate on their own input before the college takes over.
+# Synthetic sub-type both review dialogs fall back to when a scholarship exposes
+# no active sub-type config (see FALLBACK_SUB_TYPE in the frontend components).
+FALLBACK_SUB_TYPE_CODE = "default"
+
 LOCKED_STAGES_FOR_PROFESSOR_REVIEW = frozenset(
     {
         ReviewStage.college_review.value,
@@ -310,48 +314,72 @@ class ReviewService:
     async def validate_review_submission(
         self,
         application_id: int,
-        current_user_role: Any,
+        current_user: User,
         submitted_codes: List[str],
     ) -> List[str]:
-        """Validate that a review submission matches EXACTLY the sub-types this
-        reviewer may currently decide, and return the normalised codes.
+        """Validate that a review submission matches the sub-types this reviewer
+        may currently decide, and return the normalised codes.
 
-        Two independent checks, both required:
+        Two independent checks:
 
         * **membership** — every submitted code must be in the reviewer's
           reviewable set. Without it a caller could record a verdict on a
           sub-type already rejected upstream, or one the student never applied
           for.
-        * **coverage** — every reviewable code must appear in the submission.
-          A review is stored as ONE row per reviewer whose items are deleted
-          and recreated on each submit, so a partial payload silently destroys
-          the reviewer's earlier verdicts (the dialogs re-hydrate prior items,
-          but fall back to all-"pending" whenever that fetch fails). Requiring
-          full coverage makes a truncated payload a loud 422 instead of quiet
-          data loss, and keeps the application's status resolvable — see
-          ``update_application_status``, which will not finalise a verdict
-          until every configured sub-type has been decided.
+        * **coverage** — every sub-type the reviewer can actually decide must
+          appear in the submission. A review is stored as ONE row per reviewer
+          whose items are deleted and recreated on each submit, so a partial
+          payload silently destroys the reviewer's earlier verdicts (the
+          dialogs re-hydrate prior items, but fall back to all-"pending"
+          whenever that fetch fails). Requiring full coverage makes a truncated
+          payload a loud 422 instead of quiet data loss, and keeps the
+          application's status resolvable — see ``update_application_status``.
+
+        Coverage is deliberately scoped to what the reviewer's form can render
+        rather than to ``reviewable`` outright. ``reviewable`` comes from
+        ``Application.scholarship_subtype_list``, while the form lists only
+        applied sub-types that still have an ACTIVE ``ScholarshipSubTypeConfig``
+        row. Those two can legitimately diverge — sub-types are quotas-driven,
+        so an admin can introduce one with no config row at all, and an existing
+        config can be deactivated mid-cycle. Demanding a sub-type the form
+        cannot show would leave the application permanently unsubmittable, so
+        an undecidable sub-type is skipped; the application simply stays at
+        ``under_review`` until the configuration is fixed.
 
         Raises:
             AuthorizationError: a submitted sub-type is not reviewable (403).
             BusinessLogicError: duplicate or missing sub-types (422).
         """
         from app.core.exceptions import BusinessLogicError
+        from app.services.application_service import ApplicationService
 
-        reviewable = await self.get_reviewable_subtypes(application_id, current_user_role)
+        reviewable = await self.get_reviewable_subtypes(application_id, current_user.role)
+        available = await ApplicationService(self.db).get_application_available_sub_types(application_id, current_user)
+        renderable = {(opt.get("value") or "").lower().strip() for opt in available if isinstance(opt, dict)}
+
         normalized = [code.lower().strip() if isinstance(code, str) else code for code in submitted_codes]
 
         duplicates = sorted({code for code in normalized if normalized.count(code) > 1})
         if duplicates:
             raise BusinessLogicError(f"同一子項目不可重複提交：{'、'.join(str(c) for c in duplicates)}")
 
-        unauthorized = [code for code in normalized if code not in reviewable]
+        if renderable:
+            allowed = set(reviewable)
+            required = [code for code in reviewable if code in renderable]
+        else:
+            # The scholarship exposes no active sub-type config, so both review
+            # dialogs collapse to a single synthetic "default" item. Accept it
+            # instead of 403-ing a reviewer who has nothing else to choose.
+            allowed = set(reviewable) | {FALLBACK_SUB_TYPE_CODE}
+            required = []
+
+        unauthorized = [code for code in normalized if code not in allowed]
         if unauthorized:
             raise AuthorizationError(
                 f"您無權審查子項目 {'、'.join(str(c) for c in unauthorized)}（該子項目可能已被前位審查者拒絕）"
             )
 
-        missing = [code for code in reviewable if code not in normalized]
+        missing = [code for code in required if code not in normalized]
         if missing:
             raise BusinessLogicError(
                 f"必須完成所有可審查子項目才能送出，尚未評估：{'、'.join(str(c) for c in missing)}"
@@ -576,8 +604,19 @@ class ReviewService:
         awaits_further = await self._awaits_further_required_review(application, latest_reviewer_role)
 
         if not all_subtypes_reviewed:
-            # 還有子項目沒人審過 — 無論目前已決定的部分是同意還是拒絕，都還不是定案
-            application.status = ApplicationStatus.under_review.value
+            # 還有子項目沒人審過 — 無論目前已決定的部分是同意還是拒絕，都還不是定案。
+            # Only ever move FORWARD out of a pre-decision status: a record that
+            # already carries a final outcome (e.g. legacy data whose missing
+            # sub-type is no longer decidable, or an application the college has
+            # since settled) must not silently regress to under_review and get
+            # stuck there.
+            current_status = getattr(application.status, "value", application.status)
+            if current_status in (
+                ApplicationStatus.draft.value,
+                ApplicationStatus.submitted.value,
+                ApplicationStatus.under_review.value,
+            ):
+                application.status = ApplicationStatus.under_review.value
         elif all_approved:
             application.status = (
                 ApplicationStatus.under_review.value if awaits_further else ApplicationStatus.approved.value

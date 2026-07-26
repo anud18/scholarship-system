@@ -2106,17 +2106,17 @@ export function ApplicationReviewDialog({
                               </span>
                             </div>
 
-                            {reviewItems.some(item => item.recommendation === 'pending') && (
+                            {reviewItems.some(item => item.recommendation !== 'approve' && item.recommendation !== 'reject') && (
                               <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-md p-3">
                                 <AlertCircle className="h-4 w-4 shrink-0" />
                                 <span>
                                   {locale === "zh"
                                     ? `請對所有子項目做出審核決定，尚未審核：${reviewItems
-                                        .filter(item => item.recommendation === 'pending')
+                                        .filter(item => item.recommendation !== 'approve' && item.recommendation !== 'reject')
                                         .map(item => getSubTypeLabel(item.sub_type_code))
                                         .join("、")}`
                                     : `Please make a decision for every sub-type. Still pending: ${reviewItems
-                                        .filter(item => item.recommendation === 'pending')
+                                        .filter(item => item.recommendation !== 'approve' && item.recommendation !== 'reject')
                                         .map(item => getSubTypeLabel(item.sub_type_code))
                                         .join(", ")}`}
                                 </span>
@@ -2144,7 +2144,7 @@ export function ApplicationReviewDialog({
                                 reviewItems.length === 0 ||
                                 // Every sub-type must be decided — a partial submission
                                 // would drop the ones left out (items are replaced wholesale).
-                                reviewItems.some(item => item.recommendation === 'pending') ||
+                                reviewItems.some(item => item.recommendation !== 'approve' && item.recommendation !== 'reject') ||
                                 reviewItems.some(item => item.recommendation === 'reject' && (!item.comments || item.comments.trim() === ''))
                               }
                               size="lg"

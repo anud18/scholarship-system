@@ -12,9 +12,10 @@ role-scoping logic downstream of authentication runs unmodified.
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import delete as sa_delete
 
 from app.models.application import Application, ApplicationStatus
-from app.models.scholarship import ScholarshipType, SubTypeSelectionMode
+from app.models.scholarship import ScholarshipSubTypeConfig, ScholarshipType, SubTypeSelectionMode
 from app.models.user import User, UserRole, UserType
 
 REVIEWS_PREFIX = "/api/v1/reviews"
@@ -113,6 +114,22 @@ async def review_scholarship(db) -> ScholarshipType:
     db.add(scholarship)
     await db.commit()
     await db.refresh(scholarship)
+
+    # Active sub-type configs are what the review form actually renders, and
+    # the submit-time coverage check is scoped to them. Without these rows the
+    # dialogs would fall back to a single synthetic "default" item, so the
+    # multi-sub-type behaviour under test would not be reachable.
+    for order, (code, name) in enumerate((("nstc", "國科會"), ("moe_1w", "教育部一萬")), start=1):
+        db.add(
+            ScholarshipSubTypeConfig(
+                scholarship_type_id=scholarship.id,
+                sub_type_code=code,
+                name=name,
+                display_order=order,
+                is_active=True,
+            )
+        )
+    await db.commit()
     return scholarship
 
 
@@ -421,6 +438,35 @@ class TestReviewSubmissionCoverage:
         login(review_users["professor"])
         response = await client.post(_submit_url(review_application.id), json=_approve_items("nstc", "nstc", "moe_1w"))
         assert response.status_code == 422
+
+    async def test_subtype_without_active_config_does_not_block_submission(
+        self, db, client, login, review_users, review_application
+    ):
+        """Coverage must not demand a sub-type the review form cannot render.
+
+        Sub-types are quotas-driven, so a student can hold one that has no
+        ``ScholarshipSubTypeConfig`` row (or whose row was deactivated
+        mid-cycle). Those never appear in the form, so requiring them would
+        make the application permanently unsubmittable.
+        """
+        review_application.scholarship_subtype_list = ["nstc", "moe_1w", "moe_2w"]
+        db.add(review_application)
+        await db.commit()
+
+        login(review_users["professor"])
+        response = await client.post(_submit_url(review_application.id), json=_approve_items("nstc", "moe_1w"))
+        assert response.status_code == 200, response.text
+
+    async def test_submission_allowed_when_no_subtype_has_an_active_config(
+        self, db, client, login, review_users, review_application
+    ):
+        """With nothing renderable the dialogs submit a synthetic "default" item."""
+        await db.execute(sa_delete(ScholarshipSubTypeConfig))
+        await db.commit()
+
+        login(review_users["professor"])
+        response = await client.post(_submit_url(review_application.id), json=_approve_items("default"))
+        assert response.status_code == 200, response.text
 
     async def test_professor_update_path_also_requires_full_coverage(
         self, db, client, login, review_users, review_application

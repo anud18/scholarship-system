@@ -177,7 +177,7 @@ async def submit_professor_review(
         # 驗證送出的子項目「剛好」等於本人現在可審查的子項目（成員檢查 + 全覆蓋檢查）
         normalized_codes = await review_service.validate_review_submission(
             application_id,
-            current_user.role,
+            current_user,
             [item.sub_type_code for item in review_data.items],
         )
         for item, normalized_code in zip(review_data.items, normalized_codes):
@@ -283,7 +283,7 @@ async def update_professor_review(
         # is the path the UI takes for every re-review.
         normalized_codes = await review_service.validate_review_submission(
             application_id,
-            current_user.role,
+            current_user,
             [item.sub_type_code for item in review_data.items],
         )
         for item, normalized_code in zip(review_data.items, normalized_codes):
@@ -295,6 +295,14 @@ async def update_professor_review(
             review_id=review_id,
             items=items_data,
         )
+
+        # Same business metric as the POST path (#159). The UI sends PUT for
+        # every re-review, so counting only POST under-reports the professor
+        # dimension for exactly the case that happens most.
+        scholarship_reviews_total.labels(
+            reviewer_type="professor",
+            action=str(review.recommendation) if review.recommendation else "unknown",
+        ).inc()
 
         # Return new format response directly
         review_response = ReviewResponse(
