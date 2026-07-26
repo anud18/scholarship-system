@@ -59,6 +59,11 @@ jobs:
               - '.github/workflows/**'
             dependencies:
               - 'backend/requirements*.txt'
+              # pyproject.toml is what the Dockerfiles install from, so a change
+              # here ships to production even though no requirements file moved.
+              - 'backend/pyproject.toml'
+              - 'mock-student-api/requirements.txt'
+              - 'mock-student-api/pyproject.toml'
               - 'frontend/package*.json'
 
       # Guard: feature-branch PRs may NOT include raw evidence files. They
@@ -93,7 +98,10 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     needs: changes
-    if: ${{ needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true' }}
+    # `dependencies` is included so a PR touching only mock-student-api/ (which
+    # matches neither the backend nor the frontend filter) still runs the
+    # manifest-sync guard below.
+    if: ${{ needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true' || needs.changes.outputs.dependencies == 'true' }}
 
     strategy:
       fail-fast: false
@@ -104,8 +112,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      # dependency-check needs Python too: it runs validate_manifest_sync.py
+      # (tomllib, so >=3.11) and pip-installs safety. Without this it would
+      # silently depend on whatever python3 the runner image happens to ship.
       - name: Setup Python (if needed)
-        if: matrix.check == 'backend-lint' || matrix.check == 'security-scan'
+        if: matrix.check == 'backend-lint' || matrix.check == 'security-scan' || matrix.check == 'dependency-check'
         uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -202,6 +213,15 @@ jobs:
         run: |
           bun install --frozen-lockfile
           bun run lint
+
+      # Hard-gated and deliberately NOT behind the `dependencies` path filter:
+      # this catches pre-existing drift, not just drift a PR introduces. The
+      # Dockerfiles install from pyproject.toml while CI installs, tests and
+      # audits requirements.txt, so a stale pyproject ships un-audited pins
+      # with CI fully green (that is how 28 Dependabot alerts accumulated).
+      - name: Validate dependency manifests are in sync
+        if: matrix.check == 'dependency-check'
+        run: python3 scripts/validate_manifest_sync.py
 
       - name: Dependency Vulnerability Check
         if: matrix.check == 'dependency-check'
