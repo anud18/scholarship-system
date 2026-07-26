@@ -56,6 +56,13 @@ class ReviewService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    @staticmethod
+    def _normalized_subtypes(application: Application) -> List[str]:
+        """該申請配置的完整子項目代碼清單（小寫並去除空白，無設定則回退為單一 "default" 項）."""
+        raw_subtypes = application.scholarship_subtype_list or []
+        normalized = [code.lower().strip() if isinstance(code, str) else code for code in raw_subtypes]
+        return normalized or ["default"]
+
     async def assert_professor_review_unlocked(self, application_id: int, current_user: User) -> None:
         """
         Guard: raise AuthorizationError if professor review on this application is
@@ -185,13 +192,10 @@ class ReviewService:
             return []
 
         # 取得所有子項目（正規化為小寫並去除空白）
-        raw_subtypes = application.scholarship_subtype_list or []
-        all_subtypes = [code.lower().strip() if isinstance(code, str) else code for code in raw_subtypes]
-        if not all_subtypes:
-            all_subtypes = ["default"]
+        all_subtypes = self._normalized_subtypes(application)
 
         logger.info(f"[Auth Debug] Application {application_id} - Role: {current_user_role}")
-        logger.info(f"[Auth Debug] Raw sub-types from DB: {raw_subtypes}")
+        logger.info(f"[Auth Debug] Raw sub-types from DB: {application.scholarship_subtype_list}")
         logger.info(f"[Auth Debug] Normalized all_subtypes: {all_subtypes}")
 
         # 取得子項目累積狀態
@@ -302,6 +306,58 @@ class ReviewService:
 
         logger.warning(f"[Auth Debug] Unknown role '{role_str}' (original: {current_user_role}) - returning empty list")
         return []
+
+    async def validate_review_submission(
+        self,
+        application_id: int,
+        current_user_role: Any,
+        submitted_codes: List[str],
+    ) -> List[str]:
+        """Validate that a review submission matches EXACTLY the sub-types this
+        reviewer may currently decide, and return the normalised codes.
+
+        Two independent checks, both required:
+
+        * **membership** — every submitted code must be in the reviewer's
+          reviewable set. Without it a caller could record a verdict on a
+          sub-type already rejected upstream, or one the student never applied
+          for.
+        * **coverage** — every reviewable code must appear in the submission.
+          A review is stored as ONE row per reviewer whose items are deleted
+          and recreated on each submit, so a partial payload silently destroys
+          the reviewer's earlier verdicts (the dialogs re-hydrate prior items,
+          but fall back to all-"pending" whenever that fetch fails). Requiring
+          full coverage makes a truncated payload a loud 422 instead of quiet
+          data loss, and keeps the application's status resolvable — see
+          ``update_application_status``, which will not finalise a verdict
+          until every configured sub-type has been decided.
+
+        Raises:
+            AuthorizationError: a submitted sub-type is not reviewable (403).
+            BusinessLogicError: duplicate or missing sub-types (422).
+        """
+        from app.core.exceptions import BusinessLogicError
+
+        reviewable = await self.get_reviewable_subtypes(application_id, current_user_role)
+        normalized = [code.lower().strip() if isinstance(code, str) else code for code in submitted_codes]
+
+        duplicates = sorted({code for code in normalized if normalized.count(code) > 1})
+        if duplicates:
+            raise BusinessLogicError(f"同一子項目不可重複提交：{'、'.join(str(c) for c in duplicates)}")
+
+        unauthorized = [code for code in normalized if code not in reviewable]
+        if unauthorized:
+            raise AuthorizationError(
+                f"您無權審查子項目 {'、'.join(str(c) for c in unauthorized)}（該子項目可能已被前位審查者拒絕）"
+            )
+
+        missing = [code for code in reviewable if code not in normalized]
+        if missing:
+            raise BusinessLogicError(
+                f"必須完成所有可審查子項目才能送出，尚未評估：{'、'.join(str(c) for c in missing)}"
+            )
+
+        return normalized
 
     async def calculate_overall_recommendation(self, items: List[Dict[str, Any]]) -> str:
         """
@@ -461,6 +517,17 @@ class ReviewService:
         """
         根據子項目累積狀態更新 Application 狀態和階段
 
+        A verdict (approved/rejected/partial_approved) is only final once every
+        sub-type the application was configured with has actually been decided
+        by someone. Reviewers (professors especially — the UI's "審核進度 X/N"
+        supports submitting one sub-type at a time) may leave some sub-types
+        untouched in a given submission; `get_subtype_cumulative_status` simply
+        omits those from its result, so judging all_approved/all_rejected over
+        that partial set alone would prematurely finalize the application (and,
+        for an all-reject submission, permanently lock the professor out — see
+        the professor-reject-is-terminal policy) before the remaining sub-types
+        are ever reviewed.
+
         Args:
             application_id: 申請 ID
 
@@ -479,9 +546,13 @@ class ReviewService:
         if not subtype_status:
             return application.status
 
-        # 計算整體狀態（用戶可見）
-        all_approved = all(status["status"] == "approved" for status in subtype_status.values())
-        all_rejected = all(status["status"] == "rejected" for status in subtype_status.values())
+        # 是否每一個設定好的子項目都已經有人做出決定
+        all_subtypes = self._normalized_subtypes(application)
+        all_subtypes_reviewed = set(all_subtypes) <= set(subtype_status.keys())
+
+        # 計算整體狀態（用戶可見）— 未涵蓋全部子項目前不視為定案
+        all_approved = all_subtypes_reviewed and all(s["status"] == "approved" for s in subtype_status.values())
+        all_rejected = all_subtypes_reviewed and all(s["status"] == "rejected" for s in subtype_status.values())
 
         # Determine latest reviewer role first — used both for review_stage
         # below AND for gating the terminal status transitions (issue #182).
@@ -502,33 +573,27 @@ class ReviewService:
                 else str(latest_review.reviewer.role).lower()
             )
 
-        if latest_reviewer_role == "professor":
-            application.review_stage = ReviewStage.professor_reviewed.value
-            awaits_further = await self._awaits_further_required_review(application, latest_reviewer_role)
-            if all_approved:
-                application.status = (
-                    ApplicationStatus.under_review.value if awaits_further else ApplicationStatus.approved.value
-                )
-            elif all_rejected:
-                application.status = ApplicationStatus.rejected.value
-            return application.status
-
         awaits_further = await self._awaits_further_required_review(application, latest_reviewer_role)
 
-        if all_approved:
+        if not all_subtypes_reviewed:
+            # 還有子項目沒人審過 — 無論目前已決定的部分是同意還是拒絕，都還不是定案
+            application.status = ApplicationStatus.under_review.value
+        elif all_approved:
             application.status = (
                 ApplicationStatus.under_review.value if awaits_further else ApplicationStatus.approved.value
             )
         elif all_rejected:
             application.status = ApplicationStatus.rejected.value
         else:
-            # 部分同意
+            # 部分同意（子項目意見不一致）
             application.status = (
                 ApplicationStatus.under_review.value if awaits_further else ApplicationStatus.partial_approved.value
             )
 
         # 根據審查者角色更新階段
-        if latest_reviewer_role == "college":
+        if latest_reviewer_role == "professor":
+            application.review_stage = ReviewStage.professor_reviewed.value
+        elif latest_reviewer_role == "college":
             application.review_stage = ReviewStage.college_reviewed.value
         elif latest_reviewer_role in ("admin", "super_admin"):
             application.review_stage = ReviewStage.admin_reviewed.value

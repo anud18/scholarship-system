@@ -8,7 +8,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import AuthorizationError, NotFoundError
+from app.core.exceptions import AuthorizationError, NotFoundError, ScholarshipException
+from app.core.metrics import scholarship_reviews_total
 from app.core.security import require_professor
 from app.db.deps import get_db
 from app.models.user import User
@@ -173,6 +174,15 @@ async def submit_professor_review(
         # Admins/super_admins are allowed through inside the helper.
         await review_service.assert_professor_review_unlocked(application_id, current_user)
 
+        # 驗證送出的子項目「剛好」等於本人現在可審查的子項目（成員檢查 + 全覆蓋檢查）
+        normalized_codes = await review_service.validate_review_submission(
+            application_id,
+            current_user.role,
+            [item.sub_type_code for item in review_data.items],
+        )
+        for item, normalized_code in zip(review_data.items, normalized_codes):
+            item.sub_type_code = normalized_code
+
         # Create review using unified ReviewService - use new format directly
         items_data = [item.model_dump() for item in review_data.items]
         review = await review_service.create_review(
@@ -180,6 +190,16 @@ async def submit_professor_review(
             reviewer_id=current_user.id,
             items=items_data,
         )
+
+        # Business metric for the Scholarship System Overview dashboard (#159).
+        # This used to live on the unreachable POST /applications/{id}/review
+        # handler, so the professor dimension never actually incremented; it
+        # belongs on the live submit path. College's counterpart is emitted in
+        # CollegeReviewService.
+        scholarship_reviews_total.labels(
+            reviewer_type="professor",
+            action=str(review.recommendation) if review.recommendation else "unknown",
+        ).inc()
 
         # Return new format response directly
         review_response = ReviewResponse(
@@ -213,6 +233,11 @@ async def submit_professor_review(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found") from exc
     except AuthorizationError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except ScholarshipException:
+        # Domain errors (e.g. validate_review_submission's coverage check) carry
+        # their own status_code; scholarship_exception_handler renders them.
+        # Without this they would surface as a misleading 500.
+        raise
     except Exception as e:
         logger.exception("Error submitting professor review")
         raise HTTPException(

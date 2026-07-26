@@ -15,6 +15,7 @@ from sqlalchemy.exc import DatabaseError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from app.core.exceptions import ScholarshipException
 from app.core.security import get_current_user
 from app.db.deps import get_db
 from app.models.application import Application, ApplicationStatus
@@ -86,29 +87,18 @@ async def create_review(
     # 授權範圍 (#1081)：學生不得審查；教授僅限其指導的申請，且教授全部拒絕後不得再審。
     _assert_review_submission_allowed(current_user, application)
 
-    # 取得可審查的子項目
-    reviewable_subtypes = await review_service.get_reviewable_subtypes(review_data.application_id, current_user.role)
-
     logger.info(
         f"[Create Review] Application {review_data.application_id} - User {current_user.id} ({current_user.role})"
     )
-    logger.info(f"[Create Review] Reviewable sub-types: {reviewable_subtypes}")
     logger.info(f"[Create Review] Submitted items: {[item.sub_type_code for item in review_data.items]}")
 
-    # 驗證所有待審查的子項目都在可審查列表中
-    # Normalize submitted codes to lowercase and strip whitespace
-    for item in review_data.items:
-        normalized_code = item.sub_type_code.lower().strip() if item.sub_type_code else item.sub_type_code
-        logger.info(f"[Create Review] Checking item: original='{item.sub_type_code}', normalized='{normalized_code}'")
-
-        if normalized_code not in reviewable_subtypes:
-            logger.warning(f"[Create Review] Authorization failed: '{normalized_code}' not in {reviewable_subtypes}")
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"您無權審查子項目 '{item.sub_type_code}'（該子項目可能已被前位審查者拒絕）",
-            )
-
-        # Update the item with normalized code
+    # 驗證送出的子項目「剛好」等於本人現在可審查的子項目（成員檢查 + 全覆蓋檢查）
+    normalized_codes = await review_service.validate_review_submission(
+        review_data.application_id,
+        current_user.role,
+        [item.sub_type_code for item in review_data.items],
+    )
+    for item, normalized_code in zip(review_data.items, normalized_codes):
         item.sub_type_code = normalized_code
 
     # 驗證拒絕時是否有評論
@@ -516,31 +506,16 @@ async def submit_application_review(
         # Use unified ReviewService for creating/updating reviews
         review_service = ReviewService(db)
 
-        # Get reviewable sub-types for this user to validate permissions
-        reviewable_subtypes = await review_service.get_reviewable_subtypes(application_id, current_user.role)
-
         logger.info(f"[Review Submit] Application {application_id} - User {current_user.id} ({current_user.role})")
-        logger.info(f"[Review Submit] Reviewable sub-types: {reviewable_subtypes}")
         logger.info(f"[Review Submit] Submitted items: {[item.sub_type_code for item in review_data.items]}")
 
-        # Validate all submitted sub-types are reviewable by this user
-        # Normalize submitted codes to lowercase and strip whitespace
-        for item in review_data.items:
-            normalized_code = item.sub_type_code.lower().strip() if item.sub_type_code else item.sub_type_code
-            logger.info(
-                f"[Review Submit] Checking item: original='{item.sub_type_code}', normalized='{normalized_code}'"
-            )
-
-            if normalized_code not in reviewable_subtypes:
-                logger.warning(
-                    f"[Review Submit] Authorization failed: '{normalized_code}' not in {reviewable_subtypes}"
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"You are not authorized to review sub-type '{item.sub_type_code}' (may have been rejected by previous reviewer)",
-                )
-
-            # Update the item with normalized code
+        # 驗證送出的子項目「剛好」等於本人現在可審查的子項目（成員檢查 + 全覆蓋檢查）
+        normalized_codes = await review_service.validate_review_submission(
+            application_id,
+            current_user.role,
+            [item.sub_type_code for item in review_data.items],
+        )
+        for item, normalized_code in zip(review_data.items, normalized_codes):
             item.sub_type_code = normalized_code
 
         # Validate reject items have comments
@@ -616,6 +591,11 @@ async def submit_application_review(
 
     except HTTPException:
         # Re-raise FastAPI HTTPException as-is (preserves status code and detail)
+        raise
+    except ScholarshipException:
+        # Domain errors (validate_review_submission, assert_professor_review_unlocked …)
+        # carry their own status_code and are rendered by scholarship_exception_handler.
+        # Without this they would fall through to the blanket handler below as a 500.
         raise
     except ValueError as e:
         logger.warning(f"Invalid review data for application {application_id}", exc_info=True)

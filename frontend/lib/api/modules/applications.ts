@@ -294,28 +294,6 @@ export function createApplicationsApi() {
     },
 
     /**
-     * Submit recommendation for application
-     * Type-safe: Path parameter and body validated
-     */
-    submitRecommendation: async (
-      applicationId: number,
-      reviewStage: string,
-      recommendation: string,
-      selectedAwards?: string[]
-    ): Promise<ApiResponse<Application>> => {
-      const response = await typedClient.raw.POST('/api/v1/applications/{id}/review', {
-        params: { path: { id: applicationId } },
-        body: {
-          id: applicationId,
-          review_stage: reviewStage,
-          recommendation,
-          ...(selectedAwards ? { selected_awards: selectedAwards } : {}),
-        } as never,
-      });
-      return toApiResponse<Application>(response);
-    },
-
-    /**
      * Get audit trail for application
      * Type-safe: Path and query parameters validated
      */

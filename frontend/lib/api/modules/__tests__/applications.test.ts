@@ -275,35 +275,6 @@ describe("createApplicationsApi", () => {
     );
   });
 
-  // ─── submitRecommendation ─────────────────────────────────────────
-
-  it("submitRecommendation POSTs /{id}/review with conditional selected_awards", async () => {
-    // Pin: selected_awards spread-conditionally — omitted entirely
-    // when undefined (NOT included as undefined). Pin so refactor
-    // doesn't send selected_awards: undefined which backend
-    // Pydantic may reject.
-    mockedRaw.POST.mockResolvedValueOnce({});
-    const api = createApplicationsApi();
-    await api.submitRecommendation(42, "professor", "approve");
-    const body = mockedRaw.POST.mock.calls[0][1].body;
-    expect(body).toEqual({
-      id: 42,
-      review_stage: "professor",
-      recommendation: "approve",
-    });
-    expect("selected_awards" in body).toBe(false);
-  });
-
-  it("submitRecommendation includes selected_awards when provided", async () => {
-    mockedRaw.POST.mockResolvedValueOnce({});
-    const api = createApplicationsApi();
-    await api.submitRecommendation(42, "college", "approve", ["nstc", "moe_1w"]);
-    expect(mockedRaw.POST.mock.calls[0][1].body.selected_awards).toEqual([
-      "nstc",
-      "moe_1w",
-    ]);
-  });
-
   // ─── getAuditTrail defaults ───────────────────────────────────────
 
   it("getAuditTrail defaults limit=50 offset=0 with conditional action_filter", async () => {
