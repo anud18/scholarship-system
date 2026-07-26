@@ -277,6 +277,18 @@ async def update_professor_review(
         # Block professor edits once the college has started reviewing (#64).
         await review_service.assert_professor_review_unlocked(application_id, current_user)
 
+        # 驗證送出的子項目「剛好」等於本人現在可審查的子項目（成員檢查 + 全覆蓋檢查）。
+        # update_review replaces this reviewer's items wholesale, so an
+        # incomplete payload here would delete the verdicts it omits — and this
+        # is the path the UI takes for every re-review.
+        normalized_codes = await review_service.validate_review_submission(
+            application_id,
+            current_user.role,
+            [item.sub_type_code for item in review_data.items],
+        )
+        for item, normalized_code in zip(review_data.items, normalized_codes):
+            item.sub_type_code = normalized_code
+
         # Update review using unified ReviewService - use new format directly
         items_data = [item.model_dump() for item in review_data.items]
         review = await review_service.update_review(
@@ -316,6 +328,10 @@ async def update_professor_review(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except NotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review not found") from exc
+    except ScholarshipException:
+        # Domain errors (e.g. validate_review_submission's coverage check) carry
+        # their own status_code; scholarship_exception_handler renders them.
+        raise
     except Exception as e:
         logger.exception("Error updating professor review")
         raise HTTPException(

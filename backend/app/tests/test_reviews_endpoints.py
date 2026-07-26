@@ -422,6 +422,39 @@ class TestReviewSubmissionCoverage:
         response = await client.post(_submit_url(review_application.id), json=_approve_items("nstc", "nstc", "moe_1w"))
         assert response.status_code == 422
 
+    async def test_professor_update_path_also_requires_full_coverage(
+        self, db, client, login, review_users, review_application
+    ):
+        """PUT /professor/.../review/{id} is the path the UI takes on RE-review.
+
+        It replaces the reviewer's items wholesale, so an incomplete payload
+        deleted the verdicts it omitted — caught by an end-to-end Playwright
+        run after the POST path was already guarded.
+        """
+        login(review_users["professor"])
+        created = await client.post(
+            _submit_url(review_application.id),
+            json={
+                "items": [
+                    {"sub_type_code": "nstc", "recommendation": "approve"},
+                    {"sub_type_code": "moe_1w", "recommendation": "reject", "comments": "not eligible"},
+                ]
+            },
+        )
+        assert created.status_code == 200
+        review_id = created.json()["data"]["id"]
+
+        partial = await client.put(
+            f"/api/v1/professor/applications/{review_application.id}/review/{review_id}",
+            json={"items": [{"sub_type_code": "nstc", "recommendation": "approve"}]},
+        )
+        assert partial.status_code == 422
+
+        # The omitted sub-type's verdict must still be on record.
+        stored = await client.get(_submit_url(review_application.id))
+        assert stored.status_code == 200
+        assert sorted(item["sub_type_code"] for item in stored.json()["data"]["items"]) == ["moe_1w", "nstc"]
+
     async def test_college_must_cover_subtypes_professor_left_open(
         self, client, login, review_users, review_application
     ):
