@@ -20,6 +20,7 @@ from app.schemas.application_field import (
     ApplicationFieldUpdate,
     ScholarshipFormConfigResponse,
 )
+from app.services.form_field_labels import FIXED_FIELD_LABELS
 
 
 class ApplicationFieldService:
@@ -273,7 +274,7 @@ class ApplicationFieldService:
             "id": 0,  # Temporary ID for fixed field
             "scholarship_type": scholarship_type,
             "field_name": "postal_account",
-            "field_label": "郵局帳號",
+            "field_label": FIXED_FIELD_LABELS["postal_account"],
             "field_label_en": "Post Office/ESUN Bank Account Number",
             "field_type": "text",
             "is_required": True,
@@ -341,7 +342,7 @@ class ApplicationFieldService:
                 "id": 0,  # Temporary ID for fixed field
                 "scholarship_type": scholarship_type,
                 "field_name": "advisor_name",
-                "field_label": "指導教授姓名",
+                "field_label": FIXED_FIELD_LABELS["advisor_name"],
                 "field_label_en": "Advisor Name",
                 "field_type": "text",
                 "is_required": True,
@@ -367,7 +368,7 @@ class ApplicationFieldService:
                 "id": 0,  # Temporary ID for fixed field
                 "scholarship_type": scholarship_type,
                 "field_name": "advisor_email",
-                "field_label": "指導教授Email",
+                "field_label": FIXED_FIELD_LABELS["advisor_email"],
                 "field_label_en": "Advisor Email",
                 "field_type": "email",
                 "is_required": True,
@@ -393,7 +394,7 @@ class ApplicationFieldService:
                 "id": 0,  # Temporary ID for fixed field
                 "scholarship_type": scholarship_type,
                 "field_name": "advisor_nycu_id",
-                "field_label": "指導教授本校人事編號",
+                "field_label": FIXED_FIELD_LABELS["advisor_nycu_id"],
                 "field_label_en": "Advisor NYCU ID",
                 "field_type": "text",
                 "is_required": True,

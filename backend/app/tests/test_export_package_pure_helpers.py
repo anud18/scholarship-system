@@ -112,7 +112,7 @@ class TestFileTypeLabels:
         # bank_book are minted by batch_import's doc_type_map. Every
         # fixed type MUST be listed here or it is misclassified as an
         # admin-configured dynamic document and swept into the merged
-        # 動態文件合併.pdf.
+        # 申請資料合併檔.pdf.
         expected_keys = {
             "transcript",
             "research_proposal",
@@ -213,7 +213,8 @@ class TestLabelForFileType:
 class TestIsDynamicDocumentType:
     """Pin: the merged-PDF selector. Only admin-configured dynamic documents
     (file_type IS the configured document_name) join the per-student
-    動態文件合併.pdf; every fixed type and the 其他文件 bucket stay out."""
+    申請資料合併檔.pdf alongside the generated summary; every fixed type and the
+    其他文件 bucket stay out."""
 
     @pytest.mark.parametrize("fixed_type", sorted(FILE_TYPE_LABELS.keys()))
     def test_every_fixed_type_is_not_dynamic(self, fixed_type):
@@ -230,7 +231,7 @@ class TestIsDynamicDocumentType:
 class TestUniqueZipPath:
     """Pin: duplicate-entry defense. zipfile writes duplicate names without
     error and most extractors keep only the last, silently shadowing a file
-    (e.g. a dynamic document named 動態文件合併 vs the merged artifact)."""
+    (e.g. a dynamic document named 申請資料合併檔 vs the merged artifact)."""
 
     def _zf_with(self, names):
         import io

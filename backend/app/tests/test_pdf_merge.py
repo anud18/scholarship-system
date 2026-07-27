@@ -1,5 +1,5 @@
 """Unit tests for `app.services.pdf_merge.build_merged_pdf` — the per-student
-merged dynamic-documents PDF shipped inside the college export ZIP.
+申請資料合併檔 PDF shipped inside the college export ZIP.
 
 Layout contract pinned here: page 1 is a cover listing every document, then
 each document contributes one separator page followed by its own pages —
@@ -50,7 +50,7 @@ def _encrypted_pdf(user_password, owner_password=None):
 
 def _merge(items):
     return build_merged_pdf(
-        title="學生動態文件合併",
+        title="申請資料合併檔",
         subtitle_lines=["某獎學金 114學年度 第一學期", "001 甲"],
         items=items,
     )
@@ -77,7 +77,7 @@ class TestBuildMergedPdf:
             ]
         )
         cover = PdfReader(io.BytesIO(out)).pages[0].extract_text()
-        assert "學生動態文件合併" in cover
+        assert "申請資料合併檔" in cover
         assert "某獎學金 114學年度 第一學期" in cover
         assert cover.index("1. 語言檢定證明") < cover.index("2. 社團證明")
 

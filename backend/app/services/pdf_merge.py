@@ -1,9 +1,9 @@
-"""Merge student-uploaded documents into a single PDF.
+"""Merge a student's application documents into a single PDF.
 
-The college export package ships each student's uploaded files individually
-inside the ZIP; reviewers additionally get one PDF per student that stitches
-the admin-configured dynamic documents together so they can be read in a
-single pass.
+The college export package ships each student's files individually inside the
+ZIP; reviewers additionally get one 申請資料合併檔 PDF per student that stitches
+the generated 學生資料彙整 summary and the admin-configured dynamic documents
+together so they can be read in a single pass.
 
 Only PDF and JPG/PNG content is rendered inline: PDF pages are appended
 (owner-password-only encryption is unlocked with the empty user password,
