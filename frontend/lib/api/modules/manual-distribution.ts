@@ -326,6 +326,66 @@ export function isCancelledAllocation(s: DistributionStudent): boolean {
   );
 }
 
+/** Sub-type codes are free-form strings; compare them normalized (mirrors the backend's _norm_sub_type). */
+function normSubType(code: string | null | undefined): string {
+  return (code ?? "").toLowerCase().trim();
+}
+
+export type UnallocatedReason =
+  | "cancelled"
+  | "college_rejected"
+  | "not_applied"
+  | "review_rejected"
+  | "no_quota";
+
+export const UNALLOCATED_REASON_LABEL: Record<UnallocatedReason, string> = {
+  cancelled: "已撤銷／停發",
+  college_rejected: "學院不予推薦",
+  not_applied: "未申請任何子類型",
+  review_rejected: "審核不同意",
+  no_quota: "名額不足",
+};
+
+/**
+ * Why the auto-allocation could not place this student.
+ *
+ * Only meaningful for a row the backend returned no sub-type for. The order
+ * mirrors the backend's own short-circuits in _compute_suggestions, so the
+ * reason shown is the one that actually stopped it. "no_quota" is the residual:
+ * the student is allocatable but every sub-type they want is exhausted.
+ *
+ * Exists because 「名額已用盡」 was being reported for rows that were really
+ * blocked by a review reject — including rejects from a reviewer whose verdict
+ * the 教授推薦/學院推薦 columns do not render, leaving no visible explanation.
+ */
+export function classifyUnallocated(s: DistributionStudent): UnallocatedReason {
+  // college_rejected FIRST — _compute_suggestions short-circuits on it before
+  // it ever reads quota_allocation_status, so for a row that is both, the
+  // college's rejection is what actually stopped the allocation. (The 撤銷/停發
+  // state is not hidden by this: the row renders its own status control.)
+  if (s.college_rejected) return "college_rejected";
+  if (isCancelledAllocation(s)) return "cancelled";
+  const applied = s.applied_sub_types ?? [];
+  if (applied.length === 0) return "not_applied";
+  const rejected = new Set((s.rejected_sub_types ?? []).map(normSubType));
+  if (applied.every(a => rejected.has(normSubType(a)))) return "review_rejected";
+  return "no_quota";
+}
+
+/** Reason → count over the given students, most common first; zero counts omitted. */
+export function summarizeUnallocated(
+  students: DistributionStudent[]
+): Array<{ reason: UnallocatedReason; count: number }> {
+  const tally = new Map<UnallocatedReason, number>();
+  for (const s of students) {
+    const reason = classifyUnallocated(s);
+    tally.set(reason, (tally.get(reason) ?? 0) + 1);
+  }
+  return [...tally.entries()]
+    .map(([reason, count]) => ({ reason, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
 export interface RosterSummary {
   id: number;
   roster_code: string;

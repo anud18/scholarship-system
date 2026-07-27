@@ -162,6 +162,24 @@ async def load_review_items_by_role(db: AsyncSession, app_ids: list[int]) -> dic
     return review_map
 
 
+def _canonical_sub_type(code: Optional[str], allowed_configs_by_sub_type: dict[str, list[int]]) -> str:
+    """Map a student-supplied sub-type string onto the config's own spelling.
+
+    The quota tracker and the allowed-config index are keyed by the EXACT keys of
+    `ScholarshipConfiguration.quotas`, while a student's applied/preference lists
+    are free-form strings stored by other code paths. Matching them normalized
+    (lower/strip) and returning the config's spelling keeps the downstream
+    lookups exact — and keeps `allocated_sub_type` written in the canonical form
+    the quota columns use. Unknown codes pass through normalized, which simply
+    finds no quota, exactly as before.
+    """
+    normalized = _norm_sub_type(code)
+    for configured in allowed_configs_by_sub_type:
+        if _norm_sub_type(configured) == normalized:
+            return configured
+    return normalized
+
+
 def _dedupe_preview_items(all_items: list, college_code: Optional[str] = None) -> list:
     """Select the ranking items auto_allocate_preview should suggest for.
 
@@ -270,9 +288,17 @@ def _compute_suggestions(
         applied = app.scholarship_subtype_list or []
         rejected = rejected_map.get(app.id, set())
         raw_prefs: list[str] = app.sub_type_preferences or applied or default_prefs
-        applied_set = set(applied)
+        # Compare NORMALIZED on both sides. sub_type_preferences and
+        # scholarship_subtype_list are free-form admin/student-supplied strings
+        # written by different code paths, so "NSTC" / " nstc" vs "nstc" happens;
+        # a raw `in` test silently emptied the whole preference list and the
+        # student came out unallocatable with quota still free.
+        applied_set = {_norm_sub_type(p) for p in applied}
         preferences: list[str] = [
-            p for p in raw_prefs if (p in applied_set if applied_set else True) and _norm_sub_type(p) not in rejected
+            canonical
+            for canonical in (_canonical_sub_type(p, allowed_configs_by_sub_type) for p in raw_prefs)
+            if (_norm_sub_type(canonical) in applied_set if applied_set else True)
+            and _norm_sub_type(canonical) not in rejected
         ]
 
         allocated_sub_type: Optional[str] = None
