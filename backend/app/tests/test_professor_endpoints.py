@@ -347,6 +347,11 @@ class TestProfessorReviewEndpoints:
 
             mock_review_service = mock_review_service_class.return_value
             mock_review_service.assert_professor_review_unlocked = AsyncMock(return_value=None)
+            # Returns the normalised codes for the submitted items; the endpoint
+            # zips them back onto review_data.items.
+            mock_review_service.validate_review_submission = AsyncMock(
+                return_value=[item.sub_type_code for item in sample_review_create.items]
+            )
             mock_review_service.create_review = AsyncMock(return_value=mock_review)
 
             result = await submit_professor_review(

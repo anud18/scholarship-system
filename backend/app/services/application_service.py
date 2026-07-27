@@ -16,7 +16,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.cache import invalidate as cache_invalidate
 from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFoundError, ValidationError
-from app.core.metrics import scholarship_applications_total, scholarship_reviews_total
+from app.core.metrics import scholarship_applications_total
 from app.core.schema_validation import serialize_value
 from app.models.audit_log import AuditAction, AuditLog
 from app.models.application import Application, ApplicationStatus
@@ -1659,122 +1659,6 @@ class ApplicationService:
             "file_type": file_type,
             "filename": getattr(file, "filename", "unknown"),
         }
-
-    async def create_professor_review(self, application_id: int, user: User, review_data) -> ApplicationResponse:
-        """Create a professor review record and notify college reviewers"""
-        from app.models.enums import ReviewStage
-
-        stmt = select(Application).where(Application.id == application_id)
-        result = await self.db.execute(stmt)
-        application = result.scalar_one_or_none()
-        if not application:
-            raise NotFoundError("Application", str(application_id))
-        # Only the assigned professor can submit
-        if application.professor_id != user.id:
-            raise AuthorizationError("You are not the assigned professor for this application")
-
-        # Calculate overall recommendation from items
-        # all approve → 'approve', all reject → 'reject', mixed → 'partial_approve'
-        item_recommendations = [item.recommendation for item in review_data.items]
-        if all(r == "approve" for r in item_recommendations):
-            overall_recommendation = "approve"
-        elif all(r == "reject" for r in item_recommendations):
-            overall_recommendation = "reject"
-        else:
-            overall_recommendation = "partial_approve"
-
-        # Build combined comments from items
-        combined_comments = (
-            "\n".join(f"[{item.sub_type_code}] {item.comments}" for item in review_data.items if item.comments) or None
-        )
-
-        reviewed_at = datetime.now(timezone.utc)
-
-        # Upsert: update existing review if professor already submitted one
-        stmt_existing = select(ApplicationReview).where(
-            ApplicationReview.application_id == application_id,
-            ApplicationReview.reviewer_id == user.id,
-        )
-        result_existing = await self.db.execute(stmt_existing)
-        review = result_existing.scalar_one_or_none()
-
-        if review:
-            review.recommendation = overall_recommendation
-            review.comments = combined_comments
-            review.reviewed_at = reviewed_at
-            # Delete existing items and re-create
-            from sqlalchemy import delete as sa_delete
-
-            await self.db.execute(sa_delete(ApplicationReviewItem).where(ApplicationReviewItem.review_id == review.id))
-            await self.db.flush()
-        else:
-            review = ApplicationReview(
-                application_id=application_id,
-                reviewer_id=user.id,
-                recommendation=overall_recommendation,
-                comments=combined_comments,
-                reviewed_at=reviewed_at,
-            )
-            self.db.add(review)
-            await self.db.flush()  # Get the review ID
-
-        # Create per-sub-type review items
-        for item_data in review_data.items:
-            review_item = ApplicationReviewItem(
-                review_id=review.id,
-                sub_type_code=item_data.sub_type_code,
-                recommendation=item_data.recommendation,
-                comments=item_data.comments,
-            )
-            self.db.add(review_item)
-
-        # Advance review_stage to professor_reviewed
-        application.review_stage = ReviewStage.professor_reviewed.value
-        application.updated_at = datetime.now(timezone.utc)
-
-        await self.db.commit()
-
-        # Business metric: count professor review actions for the
-        # Scholarship System Overview dashboard. Action is derived from
-        # the overall recommendation so dashboards can split approve vs
-        # reject (issue #159).
-        scholarship_reviews_total.labels(
-            reviewer_type="professor",
-            action=str(overall_recommendation) if overall_recommendation else "unknown",
-        ).inc()
-
-        # 觸發教授審查提交事件（會觸發自動化郵件規則）
-        try:
-            stmt_student = select(User).where(User.id == application.user_id)
-            result_student = await self.db.execute(stmt_student)
-            student = result_student.scalar_one_or_none()
-
-            stmt_scholarship = select(ScholarshipType).where(ScholarshipType.id == application.scholarship_type_id)
-            result_scholarship = await self.db.execute(stmt_scholarship)
-            scholarship = result_scholarship.scalar_one_or_none()
-
-            await email_automation_service.trigger_professor_review_submitted(
-                db=self.db,
-                application_id=application.id,
-                review_data={
-                    "app_id": application.app_id,
-                    "student_name": student.name if student else "Unknown",
-                    "professor_name": user.name,
-                    "professor_email": user.email,
-                    "scholarship_type": scholarship.name if scholarship else "Unknown",
-                    "scholarship_type_id": application.scholarship_type_id,
-                    "review_result": overall_recommendation,
-                    "review_date": reviewed_at.strftime("%Y-%m-%d"),
-                    "professor_recommendation": overall_recommendation,
-                    "college_name": "",
-                    "review_deadline": "",
-                },
-            )
-        except Exception:
-            logger.exception("Failed to trigger professor review automation")
-
-        # Return fresh copy with all relationships loaded
-        return await self.get_application_by_id(application_id, user)
 
     async def _get_document_max_file_count(self, application: Application, file_type: str) -> Optional[int]:
         """Configured file-count limit of the document slot an upload targets.

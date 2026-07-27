@@ -868,26 +868,6 @@ export interface paths {
         patch: operations["update_application_status_api_v1_applications__id__status_patch"];
         trace?: never;
     };
-    "/api/v1/applications/{id}/review": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Submit Professor Review
-         * @description Submit professor's review and selected awards for an application
-         */
-        post: operations["submit_professor_review_api_v1_applications__id__review_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/applications/college/review": {
         parameters: {
             query?: never;
@@ -12383,42 +12363,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApplicationStatusUpdateResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    submit_professor_review_api_v1_applications__id__review_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Application ID */
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReviewCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

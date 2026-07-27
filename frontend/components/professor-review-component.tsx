@@ -370,23 +370,29 @@ function ProfessorReviewComponentInner({
     try {
       let response: ProfessorReviewResponse;
 
-      // Filter out pending items - only send approve/reject items to API
-      const filteredItems = reviewData.items
-        .filter(
-          item => item.recommendation === 'approve' || item.recommendation === 'reject'
-        )
-        .map(item => ({
-          sub_type_code: item.sub_type_code,
-          recommendation: item.recommendation as 'approve' | 'reject',
-          comments: item.comments
-        }));
+      // Every applied sub-type must be decided. A review is stored as one row
+      // per reviewer whose items are replaced wholesale on each submit, so a
+      // partial payload would drop the sub-types left out — the backend now
+      // rejects it (422). Gate here to give a clear message instead.
+      const undecidedItems = reviewData.items.filter(
+        item => item.recommendation !== 'approve' && item.recommendation !== 'reject'
+      );
 
-      // Validate that at least one item has been evaluated
-      if (filteredItems.length === 0) {
-        setError('請至少對一個獎學金申請項目進行評估（選擇同意或不同意）');
+      if (undecidedItems.length > 0) {
+        setError(
+          `請對所有獎學金申請項目進行評估（選擇同意或不同意），尚未評估：${undecidedItems
+            .map(item => getSubTypeLabel(item.sub_type_code))
+            .join('、')}`
+        );
         setLoading(false);
         return;
       }
+
+      const filteredItems = reviewData.items.map(item => ({
+        sub_type_code: item.sub_type_code,
+        recommendation: item.recommendation as 'approve' | 'reject',
+        comments: item.comments
+      }));
 
       // Validate that all rejected items have comments
       const rejectedWithoutComments = filteredItems.filter(
@@ -943,6 +949,22 @@ function ProfessorReviewComponentInner({
                 </Card>
               )}
 
+              {/* Every sub-type must be decided before submitting. Without this
+                  the submit button just sits disabled with no stated reason. */}
+              {!isLocked && reviewData.items.some(
+                item => item.recommendation !== "approve" && item.recommendation !== "reject"
+              ) && (
+                <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-md p-3 mb-3">
+                  <span>
+                    請對所有獎學金申請項目進行評估（選擇同意或不同意），尚未評估：
+                    {reviewData.items
+                      .filter(item => item.recommendation !== "approve" && item.recommendation !== "reject")
+                      .map(item => getSubTypeLabel(item.sub_type_code))
+                      .join("、")}
+                  </span>
+                </div>
+              )}
+
               {/* Actions */}
               <div className="flex justify-end gap-2">
                 <Button
@@ -957,8 +979,11 @@ function ProfessorReviewComponentInner({
                   disabled={
                     isLocked ||
                     loading ||
-                    !reviewData.items.some(
-                      item => item.recommendation === "approve" || item.recommendation === "reject"
+                    reviewData.items.length === 0 ||
+                    // Every sub-type must be decided — a partial submission would
+                    // drop the ones left out (items are replaced wholesale).
+                    reviewData.items.some(
+                      item => item.recommendation !== "approve" && item.recommendation !== "reject"
                     ) ||
                     reviewData.items.some(
                       item => item.recommendation === "reject" && (!item.comments || item.comments.trim() === "")

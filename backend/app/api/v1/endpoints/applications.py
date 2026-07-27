@@ -15,7 +15,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import AuthorizationError, NotFoundError, ScholarshipException
 from app.core.security import get_current_user, require_staff, require_student
 from app.db.deps import get_db
-from app.models.audit_log import AuditAction
 from app.models.enums import REAPPLY_ALLOWED_APPLICATION_STATUSES
 from app.models.user import User
 from app.schemas.application import (
@@ -25,7 +24,6 @@ from app.schemas.application import (
     ApplicationUpdate,
     StudentDataSchema,
 )
-from app.schemas.review import ReviewCreate
 from app.services.application_audit_service import ApplicationAuditService
 from app.services.application_service import ApplicationService
 
@@ -721,45 +719,6 @@ async def update_application_status(
         "success": True,
         "message": "狀態已更新",
         "data": result_dict,
-    }
-
-
-@router.post("/{id}/review")
-async def submit_professor_review(
-    id: int = Path(..., description="Application ID"),
-    review_data: ReviewCreate = ...,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    request: Request = None,
-):
-    """Submit professor's review and selected awards for an application"""
-    if not current_user.is_professor():
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=403, detail="Only professors can submit this review.")
-    service = ApplicationService(db)
-    result = await service.create_professor_review(id, current_user, review_data)
-
-    # Log audit trail for professor review
-    audit_service = ApplicationAuditService(db)
-    await audit_service.log_application_operation(
-        application_id=id,
-        action=AuditAction.approve,
-        user=current_user,
-        request=request,
-        description=f"指導教授提交審查意見 {result.app_id if hasattr(result, 'app_id') else f'APP-{id}'}",
-        new_values={
-            "professor_id": current_user.id,
-            "professor_name": current_user.name,
-            "review_comment": review_data.professor_comment if hasattr(review_data, "professor_comment") else None,
-        },
-        meta_data={"app_id": result.app_id if hasattr(result, "app_id") else f"APP-{id}", "review_type": "professor"},
-    )
-
-    return {
-        "success": True,
-        "message": "審查已提交",
-        "data": _serialize_result(result),
     }
 
 

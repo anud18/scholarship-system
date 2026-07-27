@@ -12,9 +12,10 @@ role-scoping logic downstream of authentication runs unmodified.
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import delete as sa_delete
 
 from app.models.application import Application, ApplicationStatus
-from app.models.scholarship import ScholarshipType, SubTypeSelectionMode
+from app.models.scholarship import ScholarshipSubTypeConfig, ScholarshipType, SubTypeSelectionMode
 from app.models.user import User, UserRole, UserType
 
 REVIEWS_PREFIX = "/api/v1/reviews"
@@ -113,6 +114,22 @@ async def review_scholarship(db) -> ScholarshipType:
     db.add(scholarship)
     await db.commit()
     await db.refresh(scholarship)
+
+    # Active sub-type configs are what the review form actually renders, and
+    # the submit-time coverage check is scoped to them. Without these rows the
+    # dialogs would fall back to a single synthetic "default" item, so the
+    # multi-sub-type behaviour under test would not be reachable.
+    for order, (code, name) in enumerate((("nstc", "國科會"), ("moe_1w", "教育部一萬")), start=1):
+        db.add(
+            ScholarshipSubTypeConfig(
+                scholarship_type_id=scholarship.id,
+                sub_type_code=code,
+                name=name,
+                display_order=order,
+                is_active=True,
+            )
+        )
+    await db.commit()
     return scholarship
 
 
@@ -290,8 +307,9 @@ class TestReviewsAuthorization:
 
     async def test_assigned_professor_can_submit_review(self, client, login, review_users, review_application):
         # Enforced rule (#1081): the assigned professor CAN still submit.
+        # Must cover every applied sub-type — a partial submission is a 422.
         login(review_users["professor"])
-        response = await client.post(_submit_url(review_application.id), json=_approve_items("nstc"))
+        response = await client.post(_submit_url(review_application.id), json=_approve_items("nstc", "moe_1w"))
         assert response.status_code == 200
         assert response.json()["success"] is True
 
@@ -381,6 +399,124 @@ class TestReviewsPolicy:
 
 
 @pytest.mark.api
+class TestReviewSubmissionCoverage:
+    """A submission must decide EXACTLY the reviewer's currently-reviewable sub-types.
+
+    A reviewer's items are deleted and recreated on every submit, so a payload
+    that omits a sub-type would silently destroy that sub-type's earlier verdict
+    — and would leave the application unable to reach a final status. The
+    submission is rejected instead of being partially applied.
+    """
+
+    async def test_partial_submission_is_rejected(self, client, login, review_users, review_application):
+        # review_application applies for ["nstc", "moe_1w"]; deciding only nstc
+        # used to be accepted (and, for a reject, terminally rejected the app).
+        login(review_users["professor"])
+        response = await client.post(_submit_url(review_application.id), json=_approve_items("nstc"))
+        assert response.status_code == 422
+        assert "moe_1w" in response.json()["message"]
+
+    async def test_partial_reject_does_not_reject_the_application(
+        self, db, client, login, review_users, review_application
+    ):
+        """The dangerous case: a lone reject must not slip through as "all rejected"."""
+        login(review_users["professor"])
+        payload = {"items": [{"sub_type_code": "nstc", "recommendation": "reject", "comments": "not eligible"}]}
+        response = await client.post(_submit_url(review_application.id), json=payload)
+        assert response.status_code == 422
+
+        await db.refresh(review_application)
+        status_value = getattr(review_application.status, "value", review_application.status)
+        assert status_value != ApplicationStatus.rejected.value
+
+    async def test_full_submission_is_accepted(self, client, login, review_users, review_application):
+        login(review_users["professor"])
+        response = await client.post(_submit_url(review_application.id), json=_approve_items("nstc", "moe_1w"))
+        assert response.status_code == 200
+
+    async def test_duplicate_subtype_is_rejected(self, client, login, review_users, review_application):
+        login(review_users["professor"])
+        response = await client.post(_submit_url(review_application.id), json=_approve_items("nstc", "nstc", "moe_1w"))
+        assert response.status_code == 422
+
+    async def test_subtype_without_active_config_does_not_block_submission(
+        self, db, client, login, review_users, review_application
+    ):
+        """Coverage must not demand a sub-type the review form cannot render.
+
+        Sub-types are quotas-driven, so a student can hold one that has no
+        ``ScholarshipSubTypeConfig`` row (or whose row was deactivated
+        mid-cycle). Those never appear in the form, so requiring them would
+        make the application permanently unsubmittable.
+        """
+        review_application.scholarship_subtype_list = ["nstc", "moe_1w", "moe_2w"]
+        db.add(review_application)
+        await db.commit()
+
+        login(review_users["professor"])
+        response = await client.post(_submit_url(review_application.id), json=_approve_items("nstc", "moe_1w"))
+        assert response.status_code == 200, response.text
+
+    async def test_submission_allowed_when_no_subtype_has_an_active_config(
+        self, db, client, login, review_users, review_application
+    ):
+        """With nothing renderable the dialogs submit a synthetic "default" item."""
+        await db.execute(sa_delete(ScholarshipSubTypeConfig))
+        await db.commit()
+
+        login(review_users["professor"])
+        response = await client.post(_submit_url(review_application.id), json=_approve_items("default"))
+        assert response.status_code == 200, response.text
+
+    async def test_professor_update_path_also_requires_full_coverage(
+        self, db, client, login, review_users, review_application
+    ):
+        """PUT /professor/.../review/{id} is the path the UI takes on RE-review.
+
+        It replaces the reviewer's items wholesale, so an incomplete payload
+        deleted the verdicts it omitted — caught by an end-to-end Playwright
+        run after the POST path was already guarded.
+        """
+        login(review_users["professor"])
+        created = await client.post(
+            _submit_url(review_application.id),
+            json={
+                "items": [
+                    {"sub_type_code": "nstc", "recommendation": "approve"},
+                    {"sub_type_code": "moe_1w", "recommendation": "reject", "comments": "not eligible"},
+                ]
+            },
+        )
+        assert created.status_code == 200
+        review_id = created.json()["data"]["id"]
+
+        partial = await client.put(
+            f"/api/v1/professor/applications/{review_application.id}/review/{review_id}",
+            json={"items": [{"sub_type_code": "nstc", "recommendation": "approve"}]},
+        )
+        assert partial.status_code == 422
+
+        # The omitted sub-type's verdict must still be on record.
+        stored = await client.get(_submit_url(review_application.id))
+        assert stored.status_code == 200
+        assert sorted(item["sub_type_code"] for item in stored.json()["data"]["items"]) == ["moe_1w", "nstc"]
+
+    async def test_college_must_cover_subtypes_professor_left_open(
+        self, client, login, review_users, review_application
+    ):
+        """College's required set is its own reviewable set, not the full applied list."""
+        login(review_users["professor"])
+        prof = await client.post(_submit_url(review_application.id), json=_approve_items("nstc", "moe_1w"))
+        assert prof.status_code == 200
+
+        login(review_users["college"])
+        partial = await client.post(_submit_url(review_application.id), json=_approve_items("nstc"))
+        assert partial.status_code == 422
+
+        full = await client.post(_submit_url(review_application.id), json=_approve_items("nstc", "moe_1w"))
+        assert full.status_code == 200
+
+
 class TestReviewsValidation:
     """Input validation and not-found handling."""
 
@@ -403,7 +539,14 @@ class TestReviewsValidation:
 
     async def test_reject_without_comments_400(self, client, login, review_users, review_application):
         login(review_users["professor"])
-        payload = {"items": [{"sub_type_code": "nstc", "recommendation": "reject", "comments": None}]}
+        # Covers every applied sub-type so the submission clears the coverage
+        # check and actually reaches the reject-needs-comments validation.
+        payload = {
+            "items": [
+                {"sub_type_code": "nstc", "recommendation": "reject", "comments": None},
+                {"sub_type_code": "moe_1w", "recommendation": "approve", "comments": None},
+            ]
+        }
         response = await client.post(_submit_url(review_application.id), json=payload)
         assert response.status_code == 400
 
@@ -468,11 +611,18 @@ class TestReviewsEnvelopeAndFlow:
 
     async def test_subtype_code_is_normalized(self, client, login, review_users, review_application):
         login(review_users["professor"])
-        payload = {"items": [{"sub_type_code": " NSTC ", "recommendation": "approve"}]}
+        payload = {
+            "items": [
+                {"sub_type_code": " NSTC ", "recommendation": "approve"},
+                {"sub_type_code": "moe_1w", "recommendation": "approve"},
+            ]
+        }
         response = await client.post(_submit_url(review_application.id), json=payload)
         assert response.status_code == 200
         items = response.json()["data"]["items"]
-        assert items[0]["sub_type_code"] == "nstc"
+        # Padded/upper-cased code is normalised before it is stored, and the
+        # coverage check matches on the normalised form.
+        assert sorted(item["sub_type_code"] for item in items) == ["moe_1w", "nstc"]
 
     async def test_get_own_review_returns_null_when_absent(self, client, login, review_users, review_application):
         login(review_users["professor"])
@@ -484,14 +634,14 @@ class TestReviewsEnvelopeAndFlow:
 
     async def test_get_own_review_after_submit(self, client, login, review_users, review_application):
         login(review_users["professor"])
-        submitted = await client.post(_submit_url(review_application.id), json=_approve_items("nstc"))
+        submitted = await client.post(_submit_url(review_application.id), json=_approve_items("nstc", "moe_1w"))
         assert submitted.status_code == 200
 
         response = await client.get(_submit_url(review_application.id))
         assert response.status_code == 200
         data = response.json()["data"]
         assert data["reviewer_id"] == review_users["professor"].id
-        assert data["items"][0]["sub_type_code"] == "nstc"
+        assert sorted(item["sub_type_code"] for item in data["items"]) == ["moe_1w", "nstc"]
 
     async def test_reviewable_subtypes_professor_sees_all(self, client, login, review_users, review_application):
         login(review_users["professor"])
