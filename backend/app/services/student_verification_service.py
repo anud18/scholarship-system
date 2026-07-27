@@ -13,7 +13,7 @@ from requests.packages.urllib3.util.retry import Retry
 
 from app.core.config import settings
 from app.core.exceptions import StudentVerificationError
-from app.models.payment_roster import StudentVerificationStatus
+from app.models.payment_roster import STUDENT_VERIFICATION_STATUS_LABELS, StudentVerificationStatus
 
 logger = logging.getLogger(__name__)
 
@@ -431,14 +431,8 @@ class StudentVerificationService:
         取得驗證狀態的顯示標籤
         """
         labels = {
-            "zh": {
-                StudentVerificationStatus.VERIFIED: "已驗證",
-                StudentVerificationStatus.GRADUATED: "已畢業",
-                StudentVerificationStatus.SUSPENDED: "休學中",
-                StudentVerificationStatus.WITHDRAWN: "已退學",
-                StudentVerificationStatus.API_ERROR: "驗證錯誤",
-                StudentVerificationStatus.NOT_FOUND: "查無此人",
-            },
+            # zh 文案取自 STUDENT_VERIFICATION_STATUS_LABELS（單一真相來源）
+            "zh": STUDENT_VERIFICATION_STATUS_LABELS,
             "en": {
                 StudentVerificationStatus.VERIFIED: "Verified",
                 StudentVerificationStatus.GRADUATED: "Graduated",

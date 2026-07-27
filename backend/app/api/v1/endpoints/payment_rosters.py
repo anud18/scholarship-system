@@ -27,6 +27,7 @@ from app.models.payment_roster import (
     RosterStatus,
     RosterTriggerType,
     StudentVerificationStatus,
+    verification_status_label,
 )
 from app.models.user import User, UserRole
 from app.schemas.response import ApiResponse
@@ -794,7 +795,7 @@ async def preview_roster_students(
             # Check verification status
             if verification_status != StudentVerificationStatus.VERIFIED:
                 is_included = False
-                exclusion_reason = f"學籍驗證未通過: {verification_status.value}"
+                exclusion_reason = f"學籍驗證未通過：{verification_status_label(verification_status)}"
                 summary["exclusion_breakdown"]["verification_failed"] += 1
 
             # Check eligibility rules
@@ -1331,7 +1332,7 @@ async def get_roster_items(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     verification_status: Optional[StudentVerificationStatus] = Query(None),
-    is_qualified: Optional[bool] = Query(None),
+    is_included: Optional[bool] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -1358,8 +1359,8 @@ async def get_roster_items(
         # 套用篩選條件
         if verification_status:
             stmt = stmt.where(PaymentRosterItem.verification_status == verification_status)
-        if is_qualified is not None:
-            stmt = stmt.where(PaymentRosterItem.is_qualified == is_qualified)
+        if is_included is not None:
+            stmt = stmt.where(PaymentRosterItem.is_included.is_(is_included))
 
         # 分頁查詢
         stmt = stmt.order_by(PaymentRosterItem.created_at).offset(skip).limit(limit)
@@ -1895,11 +1896,11 @@ async def get_roster_statistics(
             ).scalar()
             verification_stats[status_val.value] = item_count
 
-        # 統計合格/不合格人數
+        # 統計納入造冊/排除人數（與造冊詳情、Excel「納入造冊」欄同源）
         qualified_stmt = (
             select(count())
             .select_from(PaymentRosterItem)
-            .where(PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.is_qualified.is_(True))
+            .where(PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.is_included.is_(True))
         )
         qualified_result = await db.execute(qualified_stmt)
         qualified_count = qualified_result.scalar() or 0
@@ -1907,7 +1908,7 @@ async def get_roster_statistics(
         disqualified_stmt = (
             select(count())
             .select_from(PaymentRosterItem)
-            .where(PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.is_qualified.is_(False))
+            .where(PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.is_included.is_(False))
         )
         disqualified_result = await db.execute(disqualified_stmt)
         disqualified_count = disqualified_result.scalar() or 0
