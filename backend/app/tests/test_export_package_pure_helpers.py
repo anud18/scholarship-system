@@ -173,10 +173,17 @@ class TestDegreeLabels:
         assert set(DEGREE_LABELS.keys()) == {"1", "2", "3"}
 
     def test_degree_labels_are_zh_tw(self):
-        # Pin: zh-TW canonical names — 學士/碩士/博士.
-        assert DEGREE_LABELS["1"] == "學士"
+        # Pin: zh-TW canonical names, DESCENDING — 1 is the highest
+        # degree, not the lowest. This pin previously asserted the
+        # inverted order, which printed 學位 學士 on every PhD
+        # student's export. Three authoritative sources agree on the
+        # order below: the `degrees` reference table the frontend
+        # renders from, the std_degree doc in app/schemas/student.py
+        # ("1:博士, 2:碩士, 3:學士"), and StudentInfo.get_student_type()
+        # mapping "1" -> phd. Do not "restore" the ascending order.
+        assert DEGREE_LABELS["1"] == "博士"
         assert DEGREE_LABELS["2"] == "碩士"
-        assert DEGREE_LABELS["3"] == "博士"
+        assert DEGREE_LABELS["3"] == "學士"
 
     def test_keys_are_strings_not_ints(self):
         # Pin: SIS API returns std_degree as INT but the labels

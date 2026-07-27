@@ -65,10 +65,14 @@ FILE_TYPE_LABELS: Dict[str, str] = {
     "other": "其他文件",
 }
 
+# SIS 攻讀學位 codes. Descending, NOT ascending — 1 is the highest degree.
+# Authoritative sources, all agreeing: the `degrees` reference table the
+# frontend renders from (1=博士, 2=碩士, 3=學士), the std_degree field doc in
+# app/schemas/student.py, and StudentInfo.get_student_type() mapping "1"→phd.
 DEGREE_LABELS: Dict[str, str] = {
-    "1": "學士",
+    "1": "博士",
     "2": "碩士",
-    "3": "博士",
+    "3": "學士",
 }
 
 

@@ -20,7 +20,7 @@ from app.services.export_package_service import ExportPackageService
 from app.services.form_field_labels import FIXED_FIELD_LABELS
 
 
-def _mk_app(fields):
+def _mk_app(fields, trm_degree="1"):
     return SimpleNamespace(
         id=1,
         student_data={
@@ -28,7 +28,7 @@ def _mk_app(fields):
             "std_cname": "甲",
             "trm_depname": "A系",
             "trm_academyname": "某學院",
-            "trm_degree": "3",
+            "trm_degree": trm_degree,
         },
         submitted_form_data={"fields": fields, "documents": []},
     )
@@ -147,6 +147,27 @@ class TestFormFieldSection:
         # the sections that do not depend on submitted data are still there
         assert "一、基本資料" in text
         assert "學生資料彙整" in text
+
+
+class TestDegreeRendering:
+    """The rendered 學位 row, not just the DEGREE_LABELS dict. SIS codes run
+    DESCENDING (1 is the highest degree); the inverted map this replaces made
+    every PhD student's export read 學位 學士."""
+
+    @pytest.mark.parametrize("code,expected", [("1", "博士"), ("2", "碩士"), ("3", "學士")])
+    def test_degree_row_matches_the_sis_code(self, code, expected):
+        svc = ExportPackageService(db=None, minio_service=None)
+        pdf = svc._generate_summary_pdf(_mk_app({}, trm_degree=code), "某獎學金", 114, "first", {})
+        text = PdfReader(io.BytesIO(pdf)).pages[0].extract_text()
+
+        assert f"學位\n{expected}" in text
+
+    def test_unknown_degree_code_falls_back_to_the_raw_value(self):
+        svc = ExportPackageService(db=None, minio_service=None)
+        pdf = svc._generate_summary_pdf(_mk_app({}, trm_degree="9"), "某獎學金", 114, "first", {})
+        text = PdfReader(io.BytesIO(pdf)).pages[0].extract_text()
+
+        assert "學位\n9" in text
 
 
 class TestSummaryPdfBasics:
