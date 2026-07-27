@@ -146,21 +146,34 @@ async def load_review_items_by_role(db: AsyncSession, app_ids: list[int]) -> dic
 def _dedupe_preview_items(all_items: list, college_code: Optional[str] = None) -> list:
     """Select the ranking items auto_allocate_preview should suggest for.
 
-    Keeps the first item per application_id, drops items whose application is
-    missing or soft-deleted, and — when `college_code` is given — keeps only
-    that college's students so an admin can run the distribution one college at
-    a time. The college filter is applied BEFORE the dedup bookkeeping so a
+    One item per application_id, dropping items whose application is missing or
+    soft-deleted, and — when `college_code` is given — keeping only that
+    college's students so an admin can run the distribution one college at a
+    time. The college filter is applied BEFORE the dedup bookkeeping so a
     skipped application never shadows a later item.
+
+    An application can legitimately appear in two finalized rankings, and the
+    duplicate that carries the allocation is PREFERRED — same rule as
+    get_students_for_distribution, so the preview keys its suggestions on the
+    same ranking_item_id the grid renders. Picking the other duplicate would
+    make a suggestion the grid cannot match: silently dropped at best, staged
+    onto a row the admin never saw at worst. Callers must feed items in a
+    deterministic order (rank_position, id) for the same reason.
     """
-    seen_app_ids: set[int] = set()
+    index_by_app: dict[int, int] = {}
     unique_items: list = []
     for item in all_items:
         app = item.application
-        if app is None or app.deleted_at is not None or app.id in seen_app_ids:
+        if app is None or app.deleted_at is not None:
             continue
         if college_code and (app.student_data or {}).get("std_academyno", "") != college_code:
             continue
-        seen_app_ids.add(app.id)
+        existing_idx = index_by_app.get(app.id)
+        if existing_idx is not None:
+            if item.is_allocated and not unique_items[existing_idx].is_allocated:
+                unique_items[existing_idx] = item
+            continue
+        index_by_app[app.id] = len(unique_items)
         unique_items.append(item)
     return unique_items
 
@@ -1226,25 +1239,14 @@ class ManualDistributionService:
         to_restore: list[tuple[CollegeRankingItem, dict[str, Any]]] = []
         if wanted:
             items_result = await self.db.execute(
-                select(CollegeRankingItem).where(CollegeRankingItem.id.in_(list(wanted.keys())))
+                select(CollegeRankingItem)
+                .options(selectinload(CollegeRankingItem.application))
+                .where(CollegeRankingItem.id.in_(list(wanted.keys())))
             )
             to_restore = [(item, wanted[item.id]) for item in items_result.scalars().all()]
 
         restore_app_ids = list({item.application_id for item, _ in to_restore if item.application_id is not None})
         rejected_map = await self._batch_load_rejected_map(restore_app_ids)
-
-        # Applications the admin has since 撤銷/停發 — a snapshot taken before
-        # that cancellation still holds their slot, so restoring it blindly
-        # would resurrect a student who is meant to stay out.
-        cancelled_app_ids: set[int] = set()
-        if restore_app_ids:
-            cancelled_rows = await self.db.execute(
-                select(Application.id).where(
-                    Application.id.in_(restore_app_ids),
-                    Application.quota_allocation_status.in_(CANCELLED_ALLOCATION_STATUSES),
-                )
-            )
-            cancelled_app_ids = set(cancelled_rows.scalars().all())
 
         # Now restore from snapshot — a snapshot may predate a reviewer reject
         # (不同意) or a 撤銷/停發, so those rows are skipped instead of re-allocated.
@@ -1261,12 +1263,23 @@ class ManualDistributionService:
                     alloc_data["sub_type"],
                 )
                 continue
-            if item.application_id in cancelled_app_ids:
+            app = item.application
+            # A snapshot taken before a 撤銷/停發 still holds that student's slot;
+            # re-allocating it would resurrect someone meant to stay out. Write the
+            # slot identity back WITHOUT is_allocated so the cancel state survives:
+            # quota stays free (consumers count on is_allocated — see
+            # _winner_filters) while 復發 can still re-affirm the exact same slot,
+            # which restore_allocation drives off allocated_sub_type.
+            if app is not None and app.quota_allocation_status in CANCELLED_ALLOCATION_STATUSES:
                 skipped_cancelled += 1
+                item.allocated_sub_type = alloc_data["sub_type"]
+                item.allocation_config_id = alloc_data.get("allocation_config_id")
                 logger.info(
-                    "restore_from_history: skipping ranking_item %s — application %s is revoked/suspended",
+                    "restore_from_history: not re-allocating ranking_item %s — application %s is %s "
+                    "(slot identity preserved for 復發)",
                     item.id,
                     item.application_id,
+                    app.quota_allocation_status,
                 )
                 continue
             item.is_allocated = True
@@ -1317,36 +1330,40 @@ class ManualDistributionService:
                 raise ValueError(f"Duplicate ranking item: {item_id}")
             seen_items.add(item_id)
 
+        # Both allocation gates below read the same (allocation → application)
+        # pairs, so resolve them ONCE — a save can carry hundreds of ranking
+        # item ids and each resolve is a query plus its selectin follow-up.
+        resolved = await self._resolve_allocating_apps(allocations)
+
         # Review gate (審核不同意的子類型不可被分發) — an explicit reviewer
         # reject blocks unconditionally. A MISSING professor approval does NOT
         # block: the grid renders it as 未推薦 (matching the 學院推薦 column)
         # and the admin decides — distribution must not strand on unreviewed
         # applications.
-        await self._assert_no_rejected_sub_types(allocations)
+        await self._assert_no_rejected_sub_types(resolved)
 
         # 撤銷／停發 gate — mirrors the disabled checkbox in the UI so neither a
         # stale grid nor a crafted request can re-allocate a student the admin
         # deliberately pulled out of the distribution.
-        await self._assert_no_cancelled_applications(allocations)
+        self._assert_no_cancelled_applications(resolved)
 
         # Server-side quota enforcement is net-new (spec §10): the lock gate in
         # allocate/finalize (_assert_round_not_oversubscribed) recounts remaining
         # under SELECT FOR UPDATE on the consumed config rows and rejects
         # oversubscription. The frontend remaining counts are advisory.
 
-    async def _assert_no_rejected_sub_types(self, allocations: list[dict[str, Any]]) -> None:
-        """Block any allocation to a sub-type an explicit reviewer reject (不同意) covers.
+    async def _resolve_allocating_apps(
+        self, allocations: list[dict[str, Any]]
+    ) -> list[tuple[dict[str, Any], Application]]:
+        """Pair each SUB-TYPE-ASSIGNING allocation with its Application.
 
-        Only allocations that assign a sub-type are checked (``sub_type_code`` set;
-        ``None`` means unallocate). The gate is unconditional — renewal or not —
-        and mirrors the disabled checkbox in the UI so a crafted request can't
-        bypass it. A sub-type the professor merely has NOT approved yet is
-        allocatable: the grid shows it as 未推薦 and the admin decides, so one
-        unreviewed application can't strand the whole distribution.
+        Allocations with ``sub_type_code=None`` mean unallocate and are dropped —
+        no allocation gate applies to them. Shared by the gates in
+        _validate_allocations so they resolve the same rows only once.
         """
         allocating = [a for a in allocations if a.get("sub_type_code")]
         if not allocating:
-            return
+            return []
 
         item_ids = [a["ranking_item_id"] for a in allocating]
         stmt = (
@@ -1362,6 +1379,21 @@ class ManualDistributionService:
             app = item.application if item else None
             if app is not None:
                 resolved.append((alloc, app))
+        return resolved
+
+    async def _assert_no_rejected_sub_types(self, resolved: list[tuple[dict[str, Any], Application]]) -> None:
+        """Block any allocation to a sub-type an explicit reviewer reject (不同意) covers.
+
+        Takes the (allocation, application) pairs from _resolve_allocating_apps —
+        already limited to allocations that assign a sub-type. The gate is
+        unconditional — renewal or not — and mirrors the disabled checkbox in the
+        UI so a crafted request can't bypass it. A sub-type the professor merely
+        has NOT approved yet is allocatable: the grid shows it as 未推薦 and the
+        admin decides, so one unreviewed application can't strand the whole
+        distribution.
+        """
+        if not resolved:
+            return
 
         rejected = await self._batch_load_rejected_map(list({app.id for _, app in resolved}))
         rejected_violations = list(
@@ -1374,36 +1406,22 @@ class ManualDistributionService:
         if rejected_violations:
             raise ValueError("以下分發之子類型審核不同意，無法分發：" + "、".join(rejected_violations))
 
-    async def _assert_no_cancelled_applications(self, allocations: list[dict[str, Any]]) -> None:
+    def _assert_no_cancelled_applications(self, resolved: list[tuple[dict[str, Any], Application]]) -> None:
         """Block any allocation onto a 撤銷 (revoked) / 停發 (suspended) application.
 
         Cancelling frees the ranking item (``is_allocated=False``) so the slot can
         go to someone else — which also makes the student look allocatable again.
         The admin's decision wins: allocating to them is refused here, and
         restoring them is a separate explicit action (restore_allocation).
-        Only allocations that assign a sub-type are checked (``sub_type_code``
-        set; ``None`` means unallocate, which stays allowed).
+        Takes the (allocation, application) pairs from _resolve_allocating_apps,
+        so unallocate rows (``sub_type_code=None``) are already excluded and stay
+        allowed.
         """
-        allocating = [a for a in allocations if a.get("sub_type_code")]
-        if not allocating:
-            return
-
-        item_ids = [a["ranking_item_id"] for a in allocating]
-        stmt = (
-            select(CollegeRankingItem)
-            .options(selectinload(CollegeRankingItem.application))
-            .where(CollegeRankingItem.id.in_(item_ids))
-        )
-        items = {it.id: it for it in (await self.db.execute(stmt)).scalars().all()}
-
-        violations: list[str] = []
-        for alloc in allocating:
-            item = items.get(alloc["ranking_item_id"])
-            app = item.application if item else None
-            if app is None or app.quota_allocation_status not in CANCELLED_ALLOCATION_STATUSES:
-                continue
-            label = "撤銷" if app.quota_allocation_status == "revoked" else "停發"
-            violations.append(f"{app.app_id}（{label}）")
+        violations = [
+            f"{app.app_id}（{'撤銷' if app.quota_allocation_status == 'revoked' else '停發'}）"
+            for _, app in resolved
+            if app.quota_allocation_status in CANCELLED_ALLOCATION_STATUSES
+        ]
         if violations:
             raise ValueError("以下申請已撤銷／停發，無法分發：" + "、".join(dict.fromkeys(violations)))
 
@@ -1548,11 +1566,14 @@ class ManualDistributionService:
 
         ranking_ids = [r.id for r in rankings]
 
-        # Load items with eagerly loaded Application
+        # Load items with eagerly loaded Application. Ordered by (rank_position,
+        # id) — same as get_students_for_distribution — so the dedup below picks
+        # the SAME duplicate the grid renders.
         items_query = (
             select(CollegeRankingItem)
             .options(selectinload(CollegeRankingItem.application))
             .where(CollegeRankingItem.ranking_id.in_(ranking_ids))
+            .order_by(CollegeRankingItem.rank_position, CollegeRankingItem.id)
         )
         result = await self.db.execute(items_query)
         all_items = result.scalars().all()
@@ -1609,8 +1630,9 @@ class ManualDistributionService:
             for sub_type, college_quotas in cfg.quotas.items():
                 if not isinstance(college_quotas, dict):
                     continue
-                for college_code, quota in college_quotas.items():
-                    quota_tracker[(cid, sub_type, college_code)] = int(quota)
+                # NOT `college_code` — that is this method's parameter.
+                for matrix_college, quota in college_quotas.items():
+                    quota_tracker[(cid, sub_type, matrix_college)] = int(quota)
 
         # Subtract every already-allocated ranking item pointing at these configs
         # (across ALL rankings, not just this round — global pool).
@@ -1698,7 +1720,7 @@ class ManualDistributionService:
             raise ValueError(f"Application {application_id} not found")
 
         prior_status = app.quota_allocation_status
-        if prior_status not in ("revoked", "suspended"):
+        if prior_status not in CANCELLED_ALLOCATION_STATUSES:
             raise ValueError(
                 f"Application {application_id} is not revoked/suspended " f"(quota_allocation_status={prior_status})"
             )
@@ -1792,7 +1814,7 @@ class ManualDistributionService:
             raise ValueError(f"Application {application_id} not found")
 
         # 2. Conflict check
-        if app.quota_allocation_status in ("revoked", "suspended"):
+        if app.quota_allocation_status in CANCELLED_ALLOCATION_STATUSES:
             raise ValueError(f"Application {application_id} already {app.quota_allocation_status}")
 
         # 3. 400 check

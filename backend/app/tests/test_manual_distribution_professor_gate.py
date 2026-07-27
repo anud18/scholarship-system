@@ -338,19 +338,36 @@ async def test_allocate_allowed_for_normal_allocation_status(db: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_restore_skips_cancelled_application(db: AsyncSession):
-    # A history snapshot predating the 撤銷 must not resurrect the allocation.
-    service, item_id, sch_id = await _setup(db, suffix="cancelrestore")
+    # A history snapshot predating the 撤銷 must not resurrect the allocation —
+    # but it must not destroy the slot identity either: _cancel_allocation keeps
+    # allocated_sub_type precisely so 復發 can re-affirm the same slot, and
+    # restore_from_history clears every item before re-applying the snapshot.
+    service, item_id, sch_id = await _setup(db, suffix="cancelrestore", allocated_sub_type="nstc")
     item = await db.get(CollegeRankingItem, item_id)
     app = await db.get(Application, item.application_id)
+    cfg_id = item.allocation_config_id
+    # Simulate the post-cancel state: slot freed, sub-type preserved.
     app.quota_allocation_status = "revoked"
+    item.is_allocated = False
     await db.commit()
+
     result = await service.restore_from_history(
         sch_id,
         YEAR,
         SEM,
-        {str(item_id): {"sub_type": "nstc", "allocation_config_id": None, "status": "allocated"}},
+        {str(item_id): {"sub_type": "nstc", "allocation_config_id": cfg_id, "status": "allocated"}},
     )
     assert result["restored_count"] == 0
     assert result["skipped_cancelled"] == 1
+
     refreshed = await db.get(CollegeRankingItem, item_id)
+    await db.refresh(refreshed)
+    # Still cancelled (no quota consumed) …
     assert refreshed.is_allocated is False
+    # … but 復發 can still re-affirm the exact same slot.
+    assert refreshed.allocated_sub_type == "nstc"
+    assert refreshed.allocation_config_id == cfg_id
+    await service.restore_allocation(app.id, admin_user_id=1)
+    reaffirmed = await db.get(CollegeRankingItem, item_id)
+    await db.refresh(reaffirmed)
+    assert reaffirmed.is_allocated is True

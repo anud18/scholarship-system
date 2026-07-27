@@ -764,6 +764,23 @@ class TestDedupePreviewItems:
         assert [i.id for i in _dedupe_preview_items(items)] == [101, 102]
         assert [i.id for i in _dedupe_preview_items(items, "")] == [101, 102]
 
+    def test_allocated_duplicate_wins_over_the_first_seen(self, _dedupe_preview_items):
+        """Same rule as get_students_for_distribution: the grid shows the
+        allocated duplicate, so the preview must key on that same item — else it
+        suggests a ranking_item_id the grid cannot match."""
+        app = _make_app(1, college="A")
+        items = [
+            _make_item(101, rank_position=1, app=app),
+            _make_item(102, rank_position=2, app=app, is_allocated=True, allocated_sub_type="nstc"),
+        ]
+        assert [i.id for i in _dedupe_preview_items(items)] == [102]
+        # …and the first-seen item wins when neither duplicate is allocated.
+        plain = [
+            _make_item(201, rank_position=1, app=app),
+            _make_item(202, rank_position=2, app=app),
+        ]
+        assert [i.id for i in _dedupe_preview_items(plain)] == [201]
+
     def test_unknown_college_students_only_match_the_empty_filter(self, _dedupe_preview_items):
         """A student with no std_academyno never leaks into a named college's run."""
         item = _make_item(101, rank_position=1, app=_make_app(1, college=""))

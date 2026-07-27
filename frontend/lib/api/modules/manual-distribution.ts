@@ -170,6 +170,96 @@ export interface AllocationSuggestion {
   allocation_config_id: number | null;
 }
 
+export interface MergeSuggestionsResult {
+  /** A NEW map — callers must not mutate `current`. */
+  next: Map<number, LocalAlloc | null>;
+  /** How many blank rows the suggestions filled. */
+  filled: number;
+  /** Suggestions dropped because the per-college budget was exhausted. */
+  blocked: number;
+}
+
+/**
+ * Merge auto-allocation suggestions into the staged allocation map.
+ *
+ * Single implementation for the on-load preview and the per-college 預設分發
+ * button, so both apply the same rules: only rows in `eligibleItemIds` (in the
+ * grid, right college, not 撤銷/停發), only rows with NO allocation yet (saved
+ * or hand-picked selections are never overwritten).
+ *
+ * `budget` (from buildCollegeBudget) caps how many more rows may be staged per
+ * (sub_type, config) column. It is REQUIRED whenever suggestions are merged on
+ * top of unsaved staged work: the backend computes suggestions against
+ * persisted consumers only, so without it a hand-picked-then-auto-filled
+ * college can exceed its matrix row. The map is mutated as budget is consumed.
+ */
+export function mergeSuggestions(
+  current: Map<number, LocalAlloc | null>,
+  suggestions: AllocationSuggestion[],
+  eligibleItemIds: Set<number>,
+  budget?: Map<string, number>
+): MergeSuggestionsResult {
+  const next = new Map(current);
+  let filled = 0;
+  let blocked = 0;
+  for (const s of suggestions) {
+    if (!s.sub_type_code || s.allocation_config_id == null) continue;
+    if (!eligibleItemIds.has(s.ranking_item_id)) continue;
+    if (next.get(s.ranking_item_id)) continue;
+    const key = makeColKey(s.sub_type_code, s.allocation_config_id);
+    if (budget) {
+      const left = budget.get(key);
+      // Absent key = no per-college cap for that column (non-matrix config).
+      if (left !== undefined) {
+        if (left <= 0) {
+          blocked++;
+          continue;
+        }
+        budget.set(key, left - 1);
+      }
+    }
+    next.set(s.ranking_item_id, {
+      sub_type: s.sub_type_code,
+      config_id: s.allocation_config_id,
+    });
+    filled++;
+  }
+  return { next, filled, blocked };
+}
+
+/**
+ * Remaining per-(sub_type, config) headroom for ONE college: its matrix total
+ * minus everything currently staged for that college (staged ⊇ saved, since the
+ * grid seeds local state from the server snapshot).
+ *
+ * Columns whose config carries no per-college matrix (`by_college === null`)
+ * are omitted — they have no per-college cap to enforce.
+ */
+export function buildCollegeBudget(
+  quotaStatus: QuotaStatus,
+  students: DistributionStudent[],
+  allocations: Map<number, LocalAlloc | null>,
+  collegeCode: string
+): Map<string, number> {
+  const budget = new Map<string, number>();
+  for (const [sub_type, stData] of Object.entries(quotaStatus)) {
+    for (const cfg of stData.by_config) {
+      const cell = cfg.by_college?.[collegeCode];
+      if (!cell) continue;
+      budget.set(makeColKey(sub_type, cfg.config_id), cell.total);
+    }
+  }
+  for (const s of students) {
+    if ((s.college_code || "") !== collegeCode) continue;
+    const alloc = allocations.get(s.ranking_item_id);
+    if (!alloc) continue;
+    const key = makeColKey(alloc.sub_type, alloc.config_id);
+    const left = budget.get(key);
+    if (left !== undefined) budget.set(key, left - 1);
+  }
+  return budget;
+}
+
 export interface AllocateRequest {
   scholarship_type_id: number;
   academic_year: number;
