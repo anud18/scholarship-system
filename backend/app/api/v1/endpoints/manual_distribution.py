@@ -378,8 +378,13 @@ async def restore_from_history(
 
         await db.commit()
         message = f"Restored {restore_result['restored_count']} allocations from history"
+        skipped = []
         if restore_result.get("skipped_rejected"):
-            message += f" ({restore_result['skipped_rejected']} skipped: sub-type rejected in review)"
+            skipped.append(f"{restore_result['skipped_rejected']} skipped: sub-type rejected in review")
+        if restore_result.get("skipped_cancelled"):
+            skipped.append(f"{restore_result['skipped_cancelled']} skipped: application revoked/suspended")
+        if skipped:
+            message += f" ({'; '.join(skipped)})"
         return {
             "success": True,
             "message": message,
@@ -858,6 +863,7 @@ async def revoke_application_allocation(
             app_id=result.get("app_id", f"APP-{application_id}"),
             user=current_user,
             reason=request.reason,
+            prior_quota_status=result.get("prior_quota_allocation_status"),
             affected_unlocked_rosters=result.get("affected_unlocked_rosters"),
             request=http_request,
         )
@@ -896,6 +902,7 @@ async def suspend_application_allocation(
             app_id=result.get("app_id", f"APP-{application_id}"),
             user=current_user,
             reason=request.reason,
+            prior_quota_status=result.get("prior_quota_allocation_status"),
             affected_unlocked_rosters=result.get("affected_unlocked_rosters"),
             request=http_request,
         )
@@ -943,6 +950,7 @@ async def restore_application_allocation(
             app_id=result.get("app_id", f"APP-{application_id}"),
             user=current_user,
             prior_status=result.get("restored_from", "unknown"),
+            restored_quota_status=result.get("quota_allocation_status"),
             prior_reason=result.get("restored_reason"),
             original_cancellation_log_id=original_log_id,
             request=http_request,

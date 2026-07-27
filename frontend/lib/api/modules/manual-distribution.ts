@@ -38,6 +38,8 @@ export interface DistributionStudent {
   status: string;
   /** Application-level allocation status: "allocated" | "revoked" | "suspended" | "rejected" | null. Drives the row status control + checkbox disabling. */
   quota_allocation_status: string | null;
+  /** quota_allocation_status as it was when the student was 撤銷/停發'd (null while not cancelled). The only way to tell a funded cancel from a pre-分發 one — allocated_sub_type survives a cancel. */
+  cancelled_from_quota_status: string | null;
   revoke_reason: string | null;
   suspend_reason: string | null;
   college_rejected: boolean;

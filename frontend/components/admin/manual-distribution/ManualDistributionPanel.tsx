@@ -1455,12 +1455,17 @@ export function ManualDistributionPanel({
                                   ? "suspended"
                                   : "normal";
                             const isCancelled = cancelStatus !== "normal";
-                            // Holds (or held — allocated_sub_type survives a
-                            // cancel) a quota slot. Only tunes the wording of
-                            // the status control + dialog: 撤銷/停發 before
-                            // 確認分發 excludes the student from the round
-                            // instead of pulling them out of a roster.
-                            const hasAllocation = !!student.allocated_sub_type;
+                            // Was this student actually FUNDED (post-確認分發)?
+                            // Mirrors the backend's own pre/post-distribution
+                            // test so the dialog and toast never promise a
+                            // roster removal or a 「重新佔用配額」 restore that
+                            // won't happen. allocated_sub_type is the wrong
+                            // signal here: it is set by a mere saved 核配 and
+                            // survives a cancel.
+                            const hasAllocation = isCancelled
+                              ? student.cancelled_from_quota_status ===
+                                "allocated"
+                              : student.quota_allocation_status === "allocated";
                             return (
                               <tr
                                 key={student.ranking_item_id}

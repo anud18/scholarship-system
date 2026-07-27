@@ -543,3 +543,103 @@ async def test_auto_allocate_preview_skips_a_cancelled_student(db, pending_appli
     await db.commit()
     restored = await svc.auto_allocate_preview(scholarship_type_id=1, academic_year=114, semester="first")
     assert any(s["ranking_item_id"] == pending_item.id and s["sub_type_code"] == "nstc" for s in restored)
+
+
+@pytest_asyncio.fixture
+async def saved_but_unfinalized_item(db, finalized_ranking, pending_application):
+    """A 儲存目前配置 tick that has NOT been through 確認分發: the slot lives on
+    the ranking item (is_allocated=True) while the application's
+    quota_allocation_status is still NULL."""
+    from app.models.scholarship import ScholarshipConfiguration
+
+    cfg = ScholarshipConfiguration(
+        scholarship_type_id=1,
+        config_code="RESTORE-SAVED-114",
+        config_name="Restore saved 114",
+        academic_year=114,
+        semester="first",
+        amount=50000,
+        has_college_quota=True,
+        quotas={"nstc": {"C": 5}},
+    )
+    db.add(cfg)
+    await db.commit()
+    await db.refresh(cfg)
+
+    item = CollegeRankingItem(
+        ranking_id=finalized_ranking.id,
+        application_id=pending_application.id,
+        rank_position=6,
+        is_allocated=True,
+        allocated_sub_type="nstc",
+        allocation_config_id=cfg.id,
+        status="allocated",
+    )
+    db.add(item)
+    await db.commit()
+    await db.refresh(item)
+    return item
+
+
+@pytest.mark.asyncio
+async def test_restore_reaffirms_a_saved_but_unfinalized_allocation(
+    db, pending_application, saved_but_unfinalized_item, admin_db_user
+):
+    """The item's slot must come back even though the APPLICATION goes back to
+    a non-allocated state — the saved 核配 lives on the ranking item, and
+    keying its restore off the quota snapshot would silently drop it."""
+    svc = ManualDistributionService(db)
+
+    await svc.revoke_allocation(pending_application.id, admin_db_user.id, "違反要點")
+    await db.commit()
+    await db.refresh(saved_but_unfinalized_item)
+    assert saved_but_unfinalized_item.is_allocated is False
+    assert saved_but_unfinalized_item.allocated_sub_type == "nstc"
+
+    result = await svc.restore_allocation(pending_application.id, admin_db_user.id)
+    await db.commit()
+    await db.refresh(saved_but_unfinalized_item)
+    await db.refresh(pending_application)
+
+    # The tick is back...
+    assert saved_but_unfinalized_item.is_allocated is True
+    assert saved_but_unfinalized_item.allocated_sub_type == "nstc"
+    assert result["reaffirmed_ranking_items"] == 1
+    # ...but the application is NOT retroactively awarded.
+    assert pending_application.status == ApplicationStatus.submitted
+    assert pending_application.quota_allocation_status is None
+    assert result["restored_allocation"] is False
+
+
+@pytest.mark.asyncio
+async def test_restore_from_history_skips_a_cancelled_student(
+    db, pending_application, saved_but_unfinalized_item, admin_db_user
+):
+    """A history snapshot predating a 撤銷/停發 must not resurrect the slot:
+    finalize skips cancelled applications, so it would be consumed but never
+    awarded — and the grid renders the tick disabled, deadlocking every save."""
+    svc = ManualDistributionService(db)
+    snapshot = {
+        str(saved_but_unfinalized_item.id): {
+            "sub_type": "nstc",
+            "allocation_config_id": saved_but_unfinalized_item.allocation_config_id,
+            "status": "allocated",
+        }
+    }
+
+    await svc.revoke_allocation(pending_application.id, admin_db_user.id, "違反要點")
+    await db.commit()
+
+    result = await svc.restore_from_history(
+        scholarship_type_id=1,
+        academic_year=114,
+        semester="first",
+        allocations_snapshot=snapshot,
+        admin_user_id=admin_db_user.id,
+    )
+    await db.commit()
+    await db.refresh(saved_but_unfinalized_item)
+
+    assert result["restored_count"] == 0
+    assert result["skipped_cancelled"] == 1
+    assert saved_but_unfinalized_item.is_allocated is False

@@ -598,6 +598,12 @@ class ManualDistributionService:
                 # distribution-row status control (正常/撤銷/停發) and
                 # disables the 核配 checkboxes once revoked/suspended.
                 "quota_allocation_status": app.quota_allocation_status,
+                # The quota status this student held when they were 撤銷/停發'd.
+                # quota_allocation_status only says they are cancelled NOW, and
+                # allocated_sub_type survives a cancel, so this is the only way
+                # the grid can tell "was funded, will lose a roster line" from
+                # "was never funded, just excluded from the round".
+                "cancelled_from_quota_status": app.cancelled_from_quota_status,
                 "revoke_reason": app.revoke_reason,
                 "suspend_reason": app.suspend_reason,
                 "college_rejected": item.college_rejected,
@@ -1188,7 +1194,9 @@ class ManualDistributionService:
         to_restore: list[tuple[CollegeRankingItem, dict[str, Any]]] = []
         if wanted:
             items_result = await self.db.execute(
-                select(CollegeRankingItem).where(CollegeRankingItem.id.in_(list(wanted.keys())))
+                select(CollegeRankingItem)
+                .options(selectinload(CollegeRankingItem.application))
+                .where(CollegeRankingItem.id.in_(list(wanted.keys())))
             )
             to_restore = [(item, wanted[item.id]) for item in items_result.scalars().all()]
 
@@ -1197,9 +1205,11 @@ class ManualDistributionService:
         )
 
         # Now restore from snapshot — a snapshot may predate a reviewer reject
-        # (不同意), so rejected sub-types are skipped instead of re-allocated.
+        # (不同意) or a 撤銷/停發, so those items are skipped instead of
+        # re-allocated.
         restored_count = 0
         skipped_rejected = 0
+        skipped_cancelled = 0
         for item, alloc_data in to_restore:
             sub_type = _norm_sub_type(alloc_data["sub_type"])
             if item.application_id is not None and sub_type in rejected_map.get(item.application_id, set()):
@@ -1208,6 +1218,20 @@ class ManualDistributionService:
                     "restore_from_history: skipping ranking_item %s — sub_type %s was rejected in review",
                     item.id,
                     alloc_data["sub_type"],
+                )
+                continue
+            # A snapshot taken before the student was 撤銷/停發 must not
+            # resurrect their slot: finalize skips cancelled applications, so
+            # the slot would be consumed by consumers_count yet never awarded —
+            # and the grid renders the resulting tick DISABLED (已撤銷／停發),
+            # leaving the admin unable to untick it and unable to save.
+            if item.application is not None and item.application.quota_allocation_status in ("revoked", "suspended"):
+                skipped_cancelled += 1
+                logger.info(
+                    "restore_from_history: skipping ranking_item %s — application %s is %s",
+                    item.id,
+                    item.application_id,
+                    item.application.quota_allocation_status,
                 )
                 continue
             item.is_allocated = True
@@ -1236,7 +1260,11 @@ class ManualDistributionService:
         except Exception:
             logger.warning("Failed to record restore history", exc_info=True)
 
-        return {"restored_count": restored_count, "skipped_rejected": skipped_rejected}
+        return {
+            "restored_count": restored_count,
+            "skipped_rejected": skipped_rejected,
+            "skipped_cancelled": skipped_cancelled,
+        }
 
     async def _validate_allocations(
         self,
@@ -1650,12 +1678,17 @@ class ManualDistributionService:
         # the endpoint's audit log preserves it as old_values (G18/G9).
         prior_reason = app.revoke_reason if prior_status == "revoked" else app.suspend_reason
 
-        # Where this application goes back to. `cancelled_from_status` is the
+        # Where the APPLICATION ROW goes back to. `cancelled_from_status` is the
         # presence marker for the snapshot (it is never NULL when one was
         # taken), so a NULL quota snapshot can still mean "was pre-distribution".
         # Rows cancelled before the snapshot columns existed carry no snapshot
         # at all; by construction those could only have been cancelled from
         # approved/allocated, which is exactly the fallback.
+        #
+        # The RANKING ITEM is restored independently, below — a saved-but-not-
+        # finalized 核配 lives entirely on the item (is_allocated=True while
+        # quota_allocation_status is still NULL), so keying the item's restore
+        # off the quota snapshot would silently drop the admin's saved tick.
         if app.cancelled_from_status is not None:
             target_quota_status = app.cancelled_from_quota_status
             try:
@@ -1671,9 +1704,7 @@ class ManualDistributionService:
         else:
             target_quota_status = "allocated"
             target_app_status = ApplicationStatus.approved
-        # Only an allocation-backed restore re-consumes a quota slot; a
-        # pre-distribution one just returns the student to the candidate pool.
-        restoring_allocation = target_quota_status == "allocated"
+        restored_to_allocated = target_quota_status == "allocated"
 
         ranking_items_result = await self.db.execute(
             select(CollegeRankingItem).where(CollegeRankingItem.application_id == application_id)
@@ -1684,18 +1715,16 @@ class ManualDistributionService:
         # Rejection gate: a reviewer reject (不同意) recorded while the
         # application was revoked/suspended must not be overridden by restore —
         # same rule as allocate/finalize (restore is the 5th allocation writer).
-        # Only an allocation-backed restore re-awards anything, so a
-        # pre-distribution restore is not gated by it (the student simply goes
-        # back into the pool, where allocate/finalize apply the gate anyway).
-        if restoring_allocation:
-            rejected = (await self._batch_load_rejected_map([application_id])).get(application_id, set())
-            blocked_sub_types = [
-                ri.allocated_sub_type
-                for ri in ranking_items
-                if ri.allocated_sub_type and _norm_sub_type(ri.allocated_sub_type) in rejected
-            ]
-            if blocked_sub_types:
-                raise ValueError(f"無法復發：子類型 {'、'.join(blocked_sub_types)} 審核不同意，不可恢復該核配")
+        # Naturally a no-op when no item holds a sub-type, i.e. when there is no
+        # allocation to re-award.
+        rejected = (await self._batch_load_rejected_map([application_id])).get(application_id, set())
+        blocked_sub_types = [
+            ri.allocated_sub_type
+            for ri in ranking_items
+            if ri.allocated_sub_type and _norm_sub_type(ri.allocated_sub_type) in rejected
+        ]
+        if blocked_sub_types:
+            raise ValueError(f"無法復發：子類型 {'、'.join(blocked_sub_types)} 審核不同意，不可恢復該核配")
 
         app.status = target_app_status
         app.quota_allocation_status = target_quota_status
@@ -1713,16 +1742,17 @@ class ManualDistributionService:
         # Re-affirm the allocation on the ranking item(s) so the student
         # re-consumes the quota slot and a finalize run re-approves them. The
         # allocated_sub_type / allocation_year were preserved at cancel time, so
-        # we only flip is_allocated back for items that actually held a slot.
-        # A pre-distribution cancel never held one — its item keeps
-        # is_allocated=False and the admin re-ticks the 核配 checkbox.
+        # `allocated_sub_type` is exactly the "held a slot at cancel time" test:
+        # allocate() clears it when a tick is removed, and it covers BOTH a
+        # finalized allocation and a saved-but-not-yet-finalized 核配 (the
+        # latter has quota_allocation_status NULL, so gating this on the quota
+        # snapshot would drop the admin's saved tick on the floor).
         reaffirmed_config_ids: set = set()
-        if restoring_allocation:
-            for ri in ranking_items:
-                if ri.allocated_sub_type:
-                    ri.is_allocated = True
-                    if ri.allocation_config_id is not None:
-                        reaffirmed_config_ids.add(ri.allocation_config_id)
+        for ri in ranking_items:
+            if ri.allocated_sub_type:
+                ri.is_allocated = True
+                if ri.allocation_config_id is not None:
+                    reaffirmed_config_ids.add(ri.allocation_config_id)
 
         # #1081 finding I: re-affirming a slot re-consumes quota, so it can push a
         # round over its total (revoke → reallocate the freed slot → restore the
@@ -1755,9 +1785,13 @@ class ManualDistributionService:
             "restored_from": prior_status,
             "restored_reason": prior_reason,
             # The state replayed from the snapshot — lets the caller tell an
-            # allocation-backed restore from a pre-distribution one.
+            # award-backed restore from a pre-distribution one (and gives the
+            # audit log the real value instead of a hardcoded "allocated").
             "restored_to_status": target_app_status.value,
-            "restored_allocation": restoring_allocation,
+            "restored_allocation": restored_to_allocated,
+            # Ranking-item slots re-affirmed — non-zero for a saved-but-not-
+            # finalized 核配 even when restored_allocation is False.
+            "reaffirmed_ranking_items": sum(1 for ri in ranking_items if ri.allocated_sub_type),
             "restored_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -1787,8 +1821,9 @@ class ManualDistributionService:
         # it was — flipping it to approved/allocated would fabricate an award
         # that never happened — so the prior state is recorded here and
         # consumed by restore_allocation.
+        prior_quota_status = app.quota_allocation_status
         app.cancelled_from_status = app.status.value if hasattr(app.status, "value") else str(app.status)
-        app.cancelled_from_quota_status = app.quota_allocation_status
+        app.cancelled_from_quota_status = prior_quota_status
 
         # Find the CollegeRankingItem(s) for this application (the rows that drove
         # the allocation in the manual-distribution flow). The spec response
@@ -1854,6 +1889,9 @@ class ManualDistributionService:
             "app_id": app.app_id,
             "ranking_item_id": ranking_item_id,
             "quota_allocation_status": app.quota_allocation_status,
+            # The real pre-cancel state — the endpoint's audit row records this
+            # instead of assuming "allocated" (撤銷/停發 is legal pre-分發).
+            "prior_quota_allocation_status": prior_quota_status,
             timestamp_key: now.isoformat(),
             "affected_unlocked_rosters": affected_roster_ids,
         }
