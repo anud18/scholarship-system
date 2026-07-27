@@ -36,6 +36,7 @@ export interface PaymentRecord {
   scholarship_name: string;
   scholarship_amount: string; // Decimal serialized as string
   scholarship_subtype: string | null;
+  scholarship_type_id: number | null;
   allocation_year: number | null;
   locked_at: string | null;
   // G25 (#987): post-payment revocation/suspension context — null for
@@ -52,6 +53,34 @@ export interface HistorySummary {
   total_amount: string;
   scholarship_type_count: number;
   snapshot_name: string | null;
+  /**
+   * 總領月份數 — 匯入 + 系統 summed across every scholarship type. Per-type
+   * caps (the 36-month PhD limit) apply to the individual entries in
+   * `received_months`, not to this total.
+   */
+  total_received_months: number;
+}
+
+/**
+ * 已領月份數 for one scholarship type: `total_months = imported_months +
+ * system_months`. The imported half is a lifetime baseline from 國科會's file;
+ * the system half is counted from this student's own payment records. The two
+ * never cover the same month.
+ *
+ * The `raw_row` / `file_name` / `imported_at` fields are present only when an
+ * import exists, and back the「檔案明細」expander.
+ */
+export interface ReceivedMonthsBreakdown {
+  scholarship_type_id: number | null;
+  scholarship_name: string;
+  total_months: number;
+  imported_months: number;
+  system_months: number;
+  award_start_month: string | null;
+  award_current_month: string | null;
+  raw_row: Record<string, string> | null;
+  file_name: string | null;
+  imported_at: string | null;
 }
 
 export interface StudentScholarshipHistoryData {
@@ -59,6 +88,7 @@ export interface StudentScholarshipHistoryData {
   academic_info: AcademicInfo;
   summary: HistorySummary;
   payment_records: PaymentRecord[];
+  received_months: ReceivedMonthsBreakdown[];
 }
 
 export function createStudentHistoryApi() {

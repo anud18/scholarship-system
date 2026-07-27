@@ -16,7 +16,7 @@ from typing import Any, Dict, Optional, Tuple
 from sqlalchemy.orm import Session
 
 from app.models.scholarship import ScholarshipConfiguration
-from app.services.received_months_service import calculate_received_months
+from app.services.received_months_service import calculate_total_received_months
 from app.utils.application_helpers import get_college_code_from_data
 
 logger = logging.getLogger(__name__)
@@ -165,14 +165,20 @@ def _calculate_received_months(db: Session, student_nycu_id: str, scholarship_co
     Calculate total months a student has received this scholarship.
 
     Delegates to the shared received_months_service so both PhD eligibility
-    and manual distribution report the same numbers. See
+    and manual distribution report the same numbers: the imported 國科會
+    baseline plus this config's system-computed months. See
     docs/received-months-calculation.md.
 
     On any error returns 0 (fail open) so eligibility checks don't block
     promotion due to transient DB problems.
     """
     try:
-        months = calculate_received_months(db, student_nycu_id, scholarship_config.id)
+        months = calculate_total_received_months(
+            db,
+            student_nycu_id,
+            scholarship_config_id=scholarship_config.id,
+            scholarship_type_id=scholarship_config.scholarship_type_id,
+        )
         logger.info(
             f"Student {student_nycu_id} has received {months} months " f"for scholarship_config {scholarship_config.id}"
         )

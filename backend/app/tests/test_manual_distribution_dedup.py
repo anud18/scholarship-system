@@ -25,8 +25,6 @@ def _item(item_id, rank, *, app, is_allocated, allocated_sub_type=None):
         status="allocated" if is_allocated else "ranked",
         college_rejected=False,
         is_supplementary=False,
-        received_months=None,
-        received_months_source=None,
         application=app,
     )
 
@@ -73,6 +71,7 @@ async def test_dedup_prefers_allocated_item_over_unallocated_duplicate():
     svc._batch_load_rejected_map = AsyncMock(return_value={})
     svc._batch_load_review_items = AsyncMock(return_value={})
     svc._bulk_system_received_months = AsyncMock(return_value={})
+    svc._bulk_imported_received_months = AsyncMock(return_value={})
     svc._compute_application_identity = MagicMock(return_value="114新申請")
     svc._compute_term_count = MagicMock(return_value=1)
     svc._format_enrollment_date = MagicMock(return_value="")
@@ -124,6 +123,7 @@ async def test_dedup_keeps_single_row_when_no_allocation():
     svc._batch_load_rejected_map = AsyncMock(return_value={})
     svc._batch_load_review_items = AsyncMock(return_value={})
     svc._bulk_system_received_months = AsyncMock(return_value={})
+    svc._bulk_imported_received_months = AsyncMock(return_value={})
     svc._compute_application_identity = MagicMock(return_value="114新申請")
     svc._compute_term_count = MagicMock(return_value=1)
     svc._format_enrollment_date = MagicMock(return_value="")
@@ -156,6 +156,7 @@ async def test_items_query_orders_by_rank_then_id_for_determinism():
     svc._batch_load_rejected_map = AsyncMock(return_value={})
     svc._batch_load_review_items = AsyncMock(return_value={})
     svc._bulk_system_received_months = AsyncMock(return_value={})
+    svc._bulk_imported_received_months = AsyncMock(return_value={})
 
     await svc.get_students_for_distribution(2, 114, "yearly")
 
@@ -206,6 +207,7 @@ async def test_dedup_both_allocated_collapses_to_single_deterministic_row():
     svc._batch_load_rejected_map = AsyncMock(return_value={})
     svc._batch_load_review_items = AsyncMock(return_value={})
     svc._bulk_system_received_months = AsyncMock(return_value={})
+    svc._bulk_imported_received_months = AsyncMock(return_value={})
     svc._compute_application_identity = MagicMock(return_value="114新申請")
     svc._compute_term_count = MagicMock(return_value=1)
     svc._format_enrollment_date = MagicMock(return_value="")

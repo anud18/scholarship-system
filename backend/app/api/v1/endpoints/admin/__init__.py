@@ -33,6 +33,7 @@ from .dashboard import router as dashboard_router
 from .email_templates import router as email_templates_router
 from .permissions import router as permissions_router
 from .professors import router as professors_router
+from .received_months import router as received_months_router
 from .rules import router as rules_router
 from .scholarships import router as scholarships_router
 from .student_history import router as student_history_router
@@ -59,6 +60,11 @@ router.include_router(
     student_history_router,
     prefix="/student-history",
     tags=["Admin - Student History"],
+)
+router.include_router(
+    received_months_router,
+    prefix="/received-months",
+    tags=["Admin - Received Months"],
 )
 router.include_router(cache_router, tags=["Admin - Cache"])
 router.include_router(audit_logs_router, tags=["Admin - Audit Logs"])

@@ -1201,59 +1201,7 @@ export function ManualDistributionPanel({
                 )}
                 儲存目前配置
               </Button>
-              <label className="cursor-pointer inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded border border-slate-300 bg-white hover:bg-slate-50 text-slate-700">
-                <svg
-                  className="w-3.5 h-3.5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-                  />
-                </svg>
-                匯入已領月份數
-                <input
-                  type="file"
-                  accept=".xlsx"
-                  className="hidden"
-                  onChange={async e => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    try {
-                      const result =
-                        await apiClient.manualDistribution.importReceivedMonths(
-                          scholarshipTypeId,
-                          selectedAcademicYear,
-                          selectedSemester,
-                          file
-                        );
-                      if (result.success && result.data) {
-                        const { matched, not_found } = result.data;
-                        setSaveMessage({
-                          type: "success",
-                          text: `成功匯入 ${matched} 筆${not_found.length > 0 ? `，${not_found.length} 筆學號未找到` : ""}`,
-                        });
-                        await fetchData();
-                      } else {
-                        setSaveMessage({
-                          type: "error",
-                          text: result.message || "匯入失敗",
-                        });
-                      }
-                    } catch (err) {
-                      setSaveMessage({
-                        type: "error",
-                        text: "匯入失敗，請確認檔案格式",
-                      });
-                    }
-                    e.target.value = "";
-                  }}
-                />
-              </label>
+              
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button
@@ -1980,8 +1928,11 @@ export function ManualDistributionPanel({
                                   {student.term_count ?? "-"}
                                 </td>
                                 <td className="px-3 py-2.5 border-r border-slate-100 text-center whitespace-nowrap">
-                                  <span className={student.received_months_source === "imported" ? "text-blue-600 font-medium" : ""}>{student.received_months ?? "-"}</span>
-                                  {student.received_months_source === "imported" && <span className="ml-0.5 text-[9px] text-blue-400">匯</span>}
+                                  {/* 已領月份數 = 匯入 + 系統. The 匯 marker means an
+                                      imported 國科會 baseline contributed to the total;
+                                      see docs/received-months-calculation.md. */}
+                                  <span className={student.received_months_source?.includes("imported") ? "text-blue-600 font-medium" : ""}>{student.received_months ?? "-"}</span>
+                                  {student.received_months_source?.includes("imported") && <span className="ml-0.5 text-[9px] text-blue-400" title="含匯入的國科會已領月份數">匯</span>}
                                 </td>
                                 <td className="px-3 py-2.5 border-r border-slate-100 font-medium whitespace-nowrap">
                                   {student.student_name}

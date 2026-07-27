@@ -9,7 +9,7 @@ remaining quotas can be allocated to current-year students.
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Optional, Sequence
 
 from sqlalchemy import and_, case as sa_case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +23,10 @@ from app.models.review import ApplicationReview, ApplicationReviewItem
 from app.models.payment_roster import PaymentRoster, PaymentRosterItem, RosterStatus
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipSubTypeConfig
 from app.models.user import User, UserRole
-from app.services.received_months_service import calculate_received_months_bulk_async
+from app.services.received_months_service import (
+    calculate_received_months_bulk_async,
+    get_imported_months_bulk_async,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -627,6 +630,30 @@ class ManualDistributionService:
             return {}
         config_id = config_row[0]
 
+        student_ids = self._student_numbers_for(items)
+        if not student_ids:
+            return {}
+
+        return await calculate_received_months_bulk_async(self.db, student_ids, config_id)
+
+    async def _bulk_imported_received_months(
+        self,
+        items: Sequence[CollegeRankingItem],
+        scholarship_type_id: int,
+    ) -> dict[str, int]:
+        """Bulk-load the imported 國科會 baseline keyed by student std_stdcode.
+
+        Unlike the system half this is NOT year-scoped: the imported value is a
+        lifetime total per (學號, scholarship_type).
+        """
+        student_ids = self._student_numbers_for(items)
+        if not student_ids:
+            return {}
+        return await get_imported_months_bulk_async(self.db, student_ids, scholarship_type_id)
+
+    @staticmethod
+    def _student_numbers_for(items: Sequence[CollegeRankingItem]) -> list[str]:
+        """學號 of every item whose application is present and not soft-deleted."""
         student_ids: list[str] = []
         for item in items:
             app = item.application
@@ -635,11 +662,7 @@ class ManualDistributionService:
             sid = (app.student_data or {}).get("std_stdcode", "")
             if sid:
                 student_ids.append(sid)
-
-        if not student_ids:
-            return {}
-
-        return await calculate_received_months_bulk_async(self.db, student_ids, config_id)
+        return student_ids
 
     async def get_students_for_distribution(
         self,
@@ -689,10 +712,11 @@ class ManualDistributionService:
         # recommendation display columns.
         review_items_map = await self._batch_load_review_items(app_ids)
 
-        # Bulk-compute system received_months for all students in one query.
-        # Admin-imported overrides (source="imported") take precedence over
-        # system values — see docs/received-months-calculation.md.
+        # Bulk-load both halves of 已領月份數 in one query each — the imported
+        # 國科會 baseline and this year's system-computed months. They are added,
+        # not overridden; see docs/received-months-calculation.md.
         system_months = await self._bulk_system_received_months(items, scholarship_type_id, academic_year, semester)
+        imported_months = await self._bulk_imported_received_months(items, scholarship_type_id)
 
         students = []
         index_by_app: dict[int, int] = {}
@@ -721,14 +745,23 @@ class ManualDistributionService:
             # Format enrollment date (ROC calendar)
             enrollment_date = self._format_enrollment_date(student_data)
 
-            # Resolve received_months: imported overrides win, else system value
-            if item.received_months_source == "imported" and item.received_months is not None:
-                rm_value = item.received_months
-                rm_source = "imported"
+            # 已領月份數 = 匯入 (lifetime 國科會 baseline) + 系統 (this year's
+            # rosters). The two never cover the same month — see
+            # docs/adr/0001-received-months-are-additive.md. `source` tells the
+            # UI which halves contributed, so an admin can see where the
+            # number came from.
+            student_id_value = student_data.get("std_stdcode", "")
+            rm_imported = imported_months.get(student_id_value, 0) if student_id_value else 0
+            rm_system = system_months.get(student_id_value) if student_id_value else None
+
+            if rm_imported or rm_system is not None:
+                rm_value = rm_imported + (rm_system or 0)
+                rm_source = (
+                    "imported+system" if rm_imported and rm_system else ("imported" if rm_imported else "system")
+                )
             else:
-                student_id_value = student_data.get("std_stdcode", "")
-                rm_value = system_months.get(student_id_value) if student_id_value else None
-                rm_source = "system" if rm_value is not None else None
+                rm_value = None
+                rm_source = None
 
             app_reviews = review_items_map.get(app.id, {})
             cfg = app.scholarship_configuration

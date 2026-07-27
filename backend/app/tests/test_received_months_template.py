@@ -1,172 +1,161 @@
 """
-Tests for `backend/scripts/generate_received_months_sample.py`.
+Tests for the 匯入已領月份數 example workbook.
 
-Script had ZERO test references. Generates the Excel template
-shipped to admins for the "已領月份數 import" feature — drift
-in HEADER columns or sample-row schema would silently break
-admin uploads (column mismatch when matched by name in
-manual_distribution.importReceivedMonths handler).
-
-Wave 6a145 pins HEADER tuple shape, sample-row contract, and
-build_workbook() output structure (sheet title, frozen panes,
-column widths, header styling) without invoking file IO.
+The point of these is anti-drift: the template is fed straight back through the
+real parser, so a change to either side that breaks the other fails here rather
+than in an admin's face.
 """
 
-import importlib.util
-import sys
-from pathlib import Path
+from io import BytesIO
 
+import openpyxl
 import pytest
 
-# Import the script as a module (it's outside the package tree).
-_SCRIPT_PATH = Path("/app/scripts/generate_received_months_sample.py")
-if not _SCRIPT_PATH.exists():
-    # Local dev path fallback
-    _SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "generate_received_months_sample.py"
+from app.services.received_months_parser import (
+    EXAMPLE_ROW_MARKER,
+    HEADER_CURRENT_MONTH,
+    HEADER_START_MONTH,
+    HEADER_STATED_TOTAL,
+    HEADER_STUDENT_NUMBER,
+    parse_received_months_workbook,
+)
+from app.services.received_months_template import (
+    BLANK_ROW_COUNT,
+    EXAMPLE_ROW,
+    SHEET_TITLE,
+    TEMPLATE_COLUMNS,
+    WORKBOOK_TITLE,
+    build_received_months_template,
+)
+
+
+def _rows(content: bytes):
+    workbook = openpyxl.load_workbook(BytesIO(content), data_only=True)
+    sheet = workbook.active
+    rows = list(sheet.iter_rows(values_only=True))
+    workbook.close()
+    return rows
 
 
 @pytest.fixture(scope="module")
-def script_module():
-    spec = importlib.util.spec_from_file_location("generate_received_months_sample", _SCRIPT_PATH)
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules["generate_received_months_sample"] = mod
-    spec.loader.exec_module(mod)
-    return mod
+def template_bytes() -> bytes:
+    return build_received_months_template()
+
+
+class TestShape:
+    def test_sheet_is_titled_in_zh_tw(self, template_bytes):
+        workbook = openpyxl.load_workbook(BytesIO(template_bytes))
+        assert workbook.active.title == SHEET_TITLE
+        workbook.close()
+
+    def test_row_1_is_the_merged_title(self, template_bytes):
+        assert _rows(template_bytes)[0][0] == WORKBOOK_TITLE
+
+    def test_row_2_is_the_header(self, template_bytes):
+        assert list(_rows(template_bytes)[1]) == TEMPLATE_COLUMNS
+
+    def test_row_3_is_the_example(self, template_bytes):
+        # openpyxl reads a written "" back as None, so compare on text.
+        written = ["" if c is None else c for c in _rows(template_bytes)[2]]
+        assert written == EXAMPLE_ROW
+
+    def test_blank_rows_are_pre_numbered(self, template_bytes):
+        rows = _rows(template_bytes)[3:]
+        assert len(rows) == BLANK_ROW_COUNT
+        assert [r[0] for r in rows] == list(range(1, BLANK_ROW_COUNT + 1))
+        # Every other cell empty — nothing for the admin to clear out.
+        assert all(all(c in ("", None) for c in r[1:]) for r in rows)
+
+    def test_header_and_title_stay_visible_when_scrolling(self, template_bytes):
+        workbook = openpyxl.load_workbook(BytesIO(template_bytes))
+        assert workbook.active.freeze_panes == "A3"
+        workbook.close()
 
 
 class TestHeaderContract:
-    """Pin SECURITY: HEADER columns drive admin import matching.
-    Drift would silently mismatch the `已領月份數` column and
-    fail import for all rows."""
+    """The columns the parser derives from must be present, by exact name."""
 
-    def test_header_is_2_columns(self, script_module):
-        # Pin: exactly 2 columns. Pin so refactor adding a column
-        # without coordinating with the importer breaks loudly.
-        assert len(script_module.HEADER) == 2
+    @pytest.mark.parametrize(
+        "header",
+        [HEADER_STUDENT_NUMBER, HEADER_START_MONTH, HEADER_CURRENT_MONTH, HEADER_STATED_TOTAL],
+    )
+    def test_parser_relevant_header_present(self, header):
+        assert header in TEMPLATE_COLUMNS
 
-    def test_header_first_column_is_xuehao(self, script_module):
-        # Pin: zh-TW "學號" (student ID) as first column.
-        # Pin so refactor doesn't rename to "Student ID" / "stdcode"
-        # which would mismatch the importer's column-by-name lookup.
-        assert script_module.HEADER[0] == "學號"
-
-    def test_header_second_column_is_received_months(self, script_module):
-        # Pin: zh-TW "已領月份數" as second column.
-        # Pin so refactor doesn't change to "Received Months" /
-        # "month_count" — admin UI explicitly tells users to fill
-        # this column.
-        assert script_module.HEADER[1] == "已領月份數"
+    def test_no_duplicate_headers(self):
+        assert len(TEMPLATE_COLUMNS) == len(set(TEMPLATE_COLUMNS))
 
 
-class TestSampleRowsContract:
-    """Pin: 5 sample rows showing admins the expected format."""
+class TestRoundTripThroughTheParser:
+    """The template must be readable by the very parser it feeds."""
 
-    def test_five_sample_rows(self, script_module):
-        # Pin: exactly 5 examples. Pin so refactor doesn't shrink
-        # to 1 (insufficient for admin to understand format).
-        assert len(script_module.SAMPLE_ROWS) == 5
+    def test_blank_template_reports_no_importable_rows(self, template_bytes):
+        # The 範例 row and the pre-numbered blanks are all skipped, so an
+        # untouched template has nothing to import — and says so clearly.
+        with pytest.raises(ValueError, match="沒有可匯入的資料列"):
+            parse_received_months_workbook(_rows(template_bytes))
 
-    def test_each_sample_row_is_2_tuple(self, script_module):
-        # Pin: (student_id, months) tuple shape.
-        for row in script_module.SAMPLE_ROWS:
-            assert len(row) == 2
+    def test_filled_template_parses_with_the_derived_month_count(self, template_bytes):
+        workbook = openpyxl.load_workbook(BytesIO(template_bytes))
+        sheet = workbook.active
+        # Fill the first blank row (row 4) the way an admin would.
+        for column, value in enumerate(
+            ["1", "電機學院", "電機工程學系", "310460031", "陳小明", "113年9月", "115年8月", "116年8月", 24, "", ""],
+            start=1,
+        ):
+            sheet.cell(row=4, column=column, value=value)
+        buffer = BytesIO()
+        workbook.save(buffer)
+        workbook.close()
 
-    def test_student_ids_are_strings(self, script_module):
-        # Pin: student_id is STRING (NCTU IDs may start with 0 / 4).
-        # Pin so refactor doesn't change to int (which would drop
-        # leading zeros and break the lookup).
-        for sid, _ in script_module.SAMPLE_ROWS:
-            assert isinstance(sid, str)
-            assert sid  # non-empty
+        result = parse_received_months_workbook(_rows(buffer.getvalue()))
 
-    def test_months_are_non_negative_ints(self, script_module):
-        # Pin: 已領月份數 is int >= 0. Pin so refactor doesn't
-        # accidentally use float (Excel format) and break the
-        # subtraction math in distribution calc.
-        for _, months in script_module.SAMPLE_ROWS:
-            assert isinstance(months, int)
-            assert months >= 0
+        assert len(result.rows) == 1, "the 範例 row must not be imported alongside it"
+        parsed = result.rows[0]
+        assert parsed.student_number == "310460031"
+        assert parsed.months == 24
+        assert parsed.error is None
+        assert parsed.warning is None
 
-    def test_zero_months_example_present(self, script_module):
-        # Pin: at least ONE sample with months=0. Pin so admins
-        # see that "0" is a valid value (don't leave empty cells
-        # which Excel→openpyxl maps to None and breaks the import).
-        months_values = [m for _, m in script_module.SAMPLE_ROWS]
-        assert 0 in months_values
+    def test_the_example_row_is_never_imported(self, template_bytes):
+        workbook = openpyxl.load_workbook(BytesIO(template_bytes))
+        sheet = workbook.active
+        sheet.cell(row=4, column=4, value="310460031")
+        sheet.cell(row=4, column=6, value="114年1月")
+        sheet.cell(row=4, column=7, value="114年3月")
+        buffer = BytesIO()
+        workbook.save(buffer)
+        workbook.close()
 
-    def test_non_trivial_months_examples_present(self, script_module):
-        # Pin: variety of non-zero values (12, 18, 24) showing
-        # admins the realistic range.
-        months_values = [m for _, m in script_module.SAMPLE_ROWS]
-        assert any(m >= 12 for m in months_values)
-        assert any(m >= 18 for m in months_values)
+        result = parse_received_months_workbook(_rows(buffer.getvalue()))
 
+        assert [r.student_number for r in result.rows] == ["310460031"]
+        assert EXAMPLE_ROW_MARKER not in [r.student_number for r in result.rows]
 
-class TestBuildWorkbook:
-    """Pin: build_workbook() output structure."""
+    def test_the_examples_own_numbers_are_self_consistent(self, template_bytes):
+        """國科會's demo row states 24 months for 113年9月→115年8月.
 
-    def test_workbook_has_one_sheet_titled_zh_tw(self, script_module):
-        # Pin: single sheet titled "已領月份數" (zh-TW). Pin so
-        # refactor doesn't switch to English sheet name (admin
-        # might select wrong sheet on multi-sheet uploads).
-        wb = script_module.build_workbook()
-        assert len(wb.sheetnames) == 1
-        assert wb.active.title == "已領月份數"
+        If the stated total and the derived span ever disagreed, the template
+        would be teaching admins a number the parser would warn about.
+        """
+        headers = TEMPLATE_COLUMNS
+        example = dict(zip(headers, EXAMPLE_ROW))
 
-    def test_header_row_is_row_1(self, script_module):
-        # Pin: row 1 contains HEADER. Pin so refactor doesn't add
-        # a title/comment row above and shift the data row index.
-        wb = script_module.build_workbook()
-        ws = wb.active
-        assert ws.cell(row=1, column=1).value == "學號"
-        assert ws.cell(row=1, column=2).value == "已領月份數"
+        # Promote the demo row to a real one. Both the 學號 and the NO cell have
+        # to change: the parser skips a row carrying 範例 in ANY cell, which is
+        # exactly why the demo row is safe to ship inside the template.
+        def promote(header):
+            if header == HEADER_STUDENT_NUMBER:
+                return "310460031"
+            value = example[header]
+            return 1 if value == EXAMPLE_ROW_MARKER else value
 
-    def test_header_cells_are_bold(self, script_module):
-        # Pin: header row uses bold font. Visual cue for admins.
-        wb = script_module.build_workbook()
-        ws = wb.active
-        assert ws.cell(row=1, column=1).font.bold is True
-        assert ws.cell(row=1, column=2).font.bold is True
+        rows = [
+            (WORKBOOK_TITLE,) + (None,) * (len(headers) - 1),
+            tuple(headers),
+            tuple(promote(h) for h in headers),
+        ]
+        result = parse_received_months_workbook(rows)
 
-    def test_sample_rows_appear_starting_at_row_2(self, script_module):
-        # Pin: row 2 onwards has sample data.
-        wb = script_module.build_workbook()
-        ws = wb.active
-        # First sample row: ("310551005", 12)
-        assert ws.cell(row=2, column=1).value == "310551005"
-        assert ws.cell(row=2, column=2).value == 12
-
-    def test_freeze_panes_at_a2_keeps_header_visible(self, script_module):
-        # Pin: freeze_panes='A2' so header stays visible when
-        # admin scrolls. Pin so refactor doesn't remove the
-        # freeze and degrade the UX.
-        wb = script_module.build_workbook()
-        ws = wb.active
-        assert ws.freeze_panes == "A2"
-
-    def test_column_widths_set_for_readability(self, script_module):
-        # Pin: column A width=16, column B width=14 for legible
-        # display of standard student IDs (9 chars) + zh-TW
-        # header text.
-        wb = script_module.build_workbook()
-        ws = wb.active
-        assert ws.column_dimensions["A"].width == 16
-        assert ws.column_dimensions["B"].width == 14
-
-    def test_all_5_sample_rows_present(self, script_module):
-        # Pin: all 5 sample rows materialize in the worksheet
-        # (rows 2-6).
-        wb = script_module.build_workbook()
-        ws = wb.active
-        for offset, (sid, months) in enumerate(script_module.SAMPLE_ROWS):
-            row_idx = 2 + offset
-            assert ws.cell(row=row_idx, column=1).value == sid
-            assert ws.cell(row=row_idx, column=2).value == months
-
-    def test_no_row_7_data_leakage(self, script_module):
-        # Pin: only 5 sample rows + 1 header = max row 6.
-        # Pin so refactor adding more samples gets a deliberate
-        # test update.
-        wb = script_module.build_workbook()
-        ws = wb.active
-        assert ws.cell(row=7, column=1).value is None
+        assert result.rows[0].months == example[HEADER_STATED_TOTAL]
+        assert result.rows[0].warning is None
