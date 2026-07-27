@@ -38,8 +38,8 @@ export interface DistributionStudent {
   status: string;
   /** Application-level allocation status: "allocated" | "revoked" | "suspended" | "rejected" | null. Drives the row status control + checkbox disabling. */
   quota_allocation_status: string | null;
-  /** quota_allocation_status as it was when the student was 撤銷/停發'd (null while not cancelled). The only way to tell a funded cancel from a pre-分發 one — allocated_sub_type survives a cancel. */
-  cancelled_from_quota_status: string | null;
+  /** Holds a funded award — or, once 撤銷/停發'd, gets one back on 復原. Derived server-side so it mirrors restore_allocation (legacy fallback included); drives the status control + dialog copy. NOT the same as is_allocated, which is the ranking item's live funding flag. */
+  holds_award: boolean;
   revoke_reason: string | null;
   suspend_reason: string | null;
   college_rejected: boolean;
@@ -172,6 +172,108 @@ export interface AllocationSuggestion {
   allocation_config_id: number | null;
 }
 
+export interface MergeSuggestionsResult {
+  /** A NEW map — callers must not mutate `current`. */
+  next: Map<number, LocalAlloc | null>;
+  /** How many blank rows the suggestions filled. */
+  filled: number;
+  /** Suggestions dropped because the per-college budget was exhausted. */
+  blocked: number;
+}
+
+/**
+ * Merge auto-allocation suggestions into the staged allocation map.
+ *
+ * Single implementation for the on-load preview and the per-college 預設分發
+ * button, so both apply the same rules: only rows in `eligibleItemIds` (in the
+ * grid, right college, not 撤銷/停發), only rows with NO allocation yet (saved
+ * or hand-picked selections are never overwritten).
+ *
+ * `budget` (from buildCollegeBudget) caps how many more rows may be staged per
+ * (sub_type, config) column. It is REQUIRED whenever suggestions are merged on
+ * top of unsaved staged work: the backend computes suggestions against
+ * persisted consumers only, so without it a hand-picked-then-auto-filled
+ * college can exceed its matrix row. The map is mutated as budget is consumed.
+ */
+export function mergeSuggestions(
+  current: Map<number, LocalAlloc | null>,
+  suggestions: AllocationSuggestion[],
+  eligibleItemIds: Set<number>,
+  budget?: Map<string, number>
+): MergeSuggestionsResult {
+  const next = new Map(current);
+  let filled = 0;
+  let blocked = 0;
+  for (const s of suggestions) {
+    if (!s.sub_type_code || s.allocation_config_id == null) continue;
+    if (!eligibleItemIds.has(s.ranking_item_id)) continue;
+    if (next.get(s.ranking_item_id)) continue;
+    const key = makeColKey(s.sub_type_code, s.allocation_config_id);
+    if (budget) {
+      const left = budget.get(key);
+      // Absent key = no per-college cap for that column (non-matrix config).
+      if (left !== undefined) {
+        if (left <= 0) {
+          blocked++;
+          continue;
+        }
+        budget.set(key, left - 1);
+      }
+    }
+    next.set(s.ranking_item_id, {
+      sub_type: s.sub_type_code,
+      config_id: s.allocation_config_id,
+    });
+    filled++;
+  }
+  return { next, filled, blocked };
+}
+
+/**
+ * Remaining per-(sub_type, config) headroom for ONE college, as of the CURRENT
+ * staged state.
+ *
+ * Baseline is the server's LIVE `remaining`, not the matrix `total`: consumers
+ * count globally (winners in any finalized ranking plus approved renewals — see
+ * consumers_by_college), so a `total`-based baseline would silently hand out
+ * headroom already taken by rows this grid never shows.
+ *
+ * `remaining` has already subtracted each row's SAVED allocation, so only
+ * unsaved changes may move the budget: a saved row adds its slot back, the
+ * staged allocation then takes one. A row staged exactly as saved nets to zero;
+ * an untick frees a slot; a fresh tick consumes one.
+ *
+ * Columns whose config carries no per-college matrix (`by_college === null`)
+ * are omitted — they have no per-college cap to enforce.
+ */
+export function buildCollegeBudget(
+  quotaStatus: QuotaStatus,
+  students: DistributionStudent[],
+  allocations: Map<number, LocalAlloc | null>,
+  collegeCode: string
+): Map<string, number> {
+  const budget = new Map<string, number>();
+  for (const [sub_type, stData] of Object.entries(quotaStatus)) {
+    for (const cfg of stData.by_config) {
+      const cell = cfg.by_college?.[collegeCode];
+      if (!cell) continue;
+      budget.set(makeColKey(sub_type, cfg.config_id), cell.remaining);
+    }
+  }
+  const bump = (alloc: LocalAlloc | null | undefined, delta: number) => {
+    if (!alloc) return;
+    const key = makeColKey(alloc.sub_type, alloc.config_id);
+    const left = budget.get(key);
+    if (left !== undefined) budget.set(key, left + delta);
+  };
+  for (const s of students) {
+    if ((s.college_code || "") !== collegeCode) continue;
+    bump(getSavedAllocation(s), +1); // give the saved slot back …
+    bump(allocations.get(s.ranking_item_id), -1); // … then charge what is staged
+  }
+  return budget;
+}
+
 export interface AllocateRequest {
   scholarship_type_id: number;
   academic_year: number;
@@ -212,6 +314,16 @@ export interface RestoreResult {
   restored_count: number;
   /** Snapshot rows NOT restored because the sub-type was rejected (不同意) in review. */
   skipped_rejected: number;
+  /** Snapshot rows NOT restored because the application is now 撤銷/停發. */
+  skipped_cancelled: number;
+}
+
+/** True when the student was pulled out of the distribution (撤銷/停發) and must not be (re)allocated. */
+export function isCancelledAllocation(s: DistributionStudent): boolean {
+  return (
+    s.quota_allocation_status === "revoked" ||
+    s.quota_allocation_status === "suspended"
+  );
 }
 
 export interface RosterSummary {
@@ -546,11 +658,16 @@ export function createManualDistributionApi() {
 
     /**
      * Get auto-allocation preview suggestions.
+     *
+     * Pass `college_code` to run the distribution for a single college — the
+     * backend still evaluates quotas globally, so the suggestions match what a
+     * whole-scholarship run would produce for that college.
      */
     getAutoAllocatePreview: async (
       scholarship_type_id: number,
       academic_year: number,
-      semester: string
+      semester: string,
+      college_code?: string
     ): Promise<ApiResponse<{ suggestions: AllocationSuggestion[] }>> => {
       const response = await typedClient.raw.GET(
         "/api/v1/manual-distribution/auto-allocate-preview",
@@ -560,6 +677,7 @@ export function createManualDistributionApi() {
               scholarship_type_id,
               academic_year,
               semester,
+              ...(college_code ? { college_code } : {}),
             },
           },
         }

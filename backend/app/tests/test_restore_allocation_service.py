@@ -535,8 +535,12 @@ async def test_auto_allocate_preview_skips_a_cancelled_student(db, pending_appli
     await svc.suspend_allocation(pending_application.id, admin_db_user.id, "畢業")
     await db.commit()
 
+    # The item is still returned, but with NO sub-type — an explicit clearing
+    # entry, so a stale tick on the grid is unstaged rather than left behind.
     after = await svc.auto_allocate_preview(scholarship_type_id=1, academic_year=114, semester="first")
-    assert all(s["ranking_item_id"] != pending_item.id for s in after)
+    suggestion = next(s for s in after if s["ranking_item_id"] == pending_item.id)
+    assert suggestion["sub_type_code"] is None
+    assert suggestion["allocation_config_id"] is None
 
     # Restoring puts them back in the pool.
     await svc.restore_allocation(pending_application.id, admin_db_user.id)
@@ -643,3 +647,43 @@ async def test_restore_from_history_skips_a_cancelled_student(
     assert result["restored_count"] == 0
     assert result["skipped_cancelled"] == 1
     assert saved_but_unfinalized_item.is_allocated is False
+
+
+# ---------------------------------------------------------------------------
+# _holds_award: the grid's copy must agree with what restore actually does,
+# including for rows cancelled before the snapshot columns existed.
+# ---------------------------------------------------------------------------
+
+
+def test_holds_award_matches_restore_for_every_cancel_shape():
+    """Pins the contract between _holds_award (drives the grid's wording) and
+    restore_allocation's snapshot replay + legacy fallback."""
+    from types import SimpleNamespace
+
+    from app.services.manual_distribution_service import _holds_award
+
+    def app(quota, snap_status=None, snap_quota=None):
+        return SimpleNamespace(
+            quota_allocation_status=quota,
+            cancelled_from_status=snap_status,
+            cancelled_from_quota_status=snap_quota,
+        )
+
+    # Live rows.
+    assert _holds_award(app("allocated")) is True
+    assert _holds_award(app(None)) is False
+    assert _holds_award(app("rejected")) is False
+
+    # Cancelled AFTER 確認分發 — restore puts the award back.
+    assert _holds_award(app("revoked", "approved", "allocated")) is True
+    assert _holds_award(app("suspended", "approved", "allocated")) is True
+
+    # Cancelled BEFORE it — restore only re-enters them into the round.
+    assert _holds_award(app("suspended", "submitted", None)) is False
+    assert _holds_award(app("revoked", "submitted", "rejected")) is False
+
+    # Legacy row (cancelled before the snapshot columns existed): no snapshot,
+    # so restore falls back to approved/allocated — the copy must say so, even
+    # though cancelled_from_quota_status is NULL exactly like the pre-分發 case.
+    assert _holds_award(app("revoked")) is True
+    assert _holds_award(app("suspended")) is True

@@ -14,7 +14,13 @@
  * 16 cases.
  */
 
-import { createManualDistributionApi } from "../manual-distribution";
+import {
+  buildCollegeBudget,
+  createManualDistributionApi,
+  isCancelledAllocation,
+  makeColKey,
+  mergeSuggestions,
+} from "../manual-distribution";
 import { typedClient } from "../../typed-client";
 
 jest.mock("../../typed-client", () => ({
@@ -250,6 +256,28 @@ describe("createManualDistributionApi", () => {
     );
   });
 
+  it("getAutoAllocatePreview spreads college_code for a single-college run", async () => {
+    // Pin: the per-college 預設分發 button scopes the preview to one
+    // college. The param must only appear when supplied — an empty
+    // string would narrow the whole-scholarship run to nothing.
+    mockedRaw.GET.mockResolvedValueOnce({});
+    const api = createManualDistributionApi();
+    await api.getAutoAllocatePreview(7, 114, "first", "C");
+    expect(mockedRaw.GET).toHaveBeenCalledWith(
+      "/api/v1/manual-distribution/auto-allocate-preview",
+      {
+        params: {
+          query: {
+            scholarship_type_id: 7,
+            academic_year: 114,
+            semester: "first",
+            college_code: "C",
+          },
+        },
+      }
+    );
+  });
+
   // ─── generateRostersFromDistribution ──────────────────────────────
 
   it("generateRostersFromDistribution POSTs with optional flags", async () => {
@@ -470,5 +498,185 @@ describe("createManualDistributionApi", () => {
       expect.objectContaining({ method: "POST" })
     );
     expect(res.success).toBe(true);
+  });
+});
+
+// ─── mergeSuggestions / buildCollegeBudget ────────────────────────────
+//
+// The staging rules shared by the on-load auto-preview and the per-college
+// 預設分發 button. SECURITY-CRITICAL: what these two functions stage is what
+// 儲存 persists, and the save-time server gate only recounts the GLOBAL pool —
+// the per-college matrix cap is enforced here.
+
+describe("mergeSuggestions", () => {
+  const suggestion = (
+    ranking_item_id: number,
+    sub_type_code: string | null = "nstc",
+    allocation_config_id: number | null = 115
+  ) => ({ ranking_item_id, sub_type_code, allocation_config_id });
+
+  it("fills only eligible, still-blank rows and never mutates the input map", () => {
+    const current = new Map([[2, { sub_type: "moe_1w", config_id: 115 }]]);
+    const res = mergeSuggestions(
+      current,
+      [suggestion(1), suggestion(2), suggestion(3)],
+      new Set([1, 2]) // 3 is not in the grid / not this college
+    );
+    expect(res.filled).toBe(1);
+    expect(res.next.get(1)).toEqual({ sub_type: "nstc", config_id: 115 });
+    // 2 keeps the admin's hand-picked value; 3 was never eligible.
+    expect(res.next.get(2)).toEqual({ sub_type: "moe_1w", config_id: 115 });
+    expect(res.next.has(3)).toBe(false);
+    expect(current.size).toBe(1);
+  });
+
+  it("skips suggestions with no sub_type or no config (unallocatable rows)", () => {
+    const res = mergeSuggestions(
+      new Map(),
+      [suggestion(1, null, null), suggestion(2, "nstc", null)],
+      new Set([1, 2])
+    );
+    expect(res.filled).toBe(0);
+    expect(res.next.size).toBe(0);
+  });
+
+  it("stops at the per-college budget and reports the overflow", () => {
+    // College has 2 nstc slots; 3 students suggested for it.
+    const budget = new Map([[makeColKey("nstc", 115), 2]]);
+    const res = mergeSuggestions(
+      new Map(),
+      [suggestion(1), suggestion(2), suggestion(3)],
+      new Set([1, 2, 3]),
+      budget
+    );
+    expect(res.filled).toBe(2);
+    expect(res.blocked).toBe(1);
+    expect(res.next.has(3)).toBe(false);
+  });
+
+  it("leaves columns absent from the budget uncapped (non-matrix configs)", () => {
+    const budget = new Map([[makeColKey("moe_1w", 115), 0]]);
+    const res = mergeSuggestions(
+      new Map(),
+      [suggestion(1), suggestion(2)],
+      new Set([1, 2]),
+      budget
+    );
+    expect(res.filled).toBe(2);
+    expect(res.blocked).toBe(0);
+  });
+});
+
+describe("buildCollegeBudget", () => {
+  const quotaStatus = {
+    nstc: {
+      display_name: "國科會",
+      by_config: [
+        {
+          config_id: 115,
+          config_code: "phd_115",
+          academic_year: 115,
+          is_own: true,
+          total: 10,
+          remaining: 8,
+          by_college: {
+            C: { total: 2, allocated: 1, remaining: 1 },
+            D: { total: 5, allocated: 0, remaining: 5 },
+          },
+        },
+      ],
+    },
+    moe_1w: {
+      display_name: "教育部",
+      by_config: [
+        {
+          config_id: 115,
+          config_code: "phd_115",
+          academic_year: 115,
+          is_own: true,
+          total: 4,
+          remaining: 4,
+          by_college: null, // no per-college matrix
+        },
+      ],
+    },
+  } as unknown as Parameters<typeof buildCollegeBudget>[0];
+
+  // college C: total 2, allocated 1 (globally — may include rows this grid
+  // never shows, e.g. an approved renewal), remaining 1.
+  const student = (
+    ranking_item_id: number,
+    college_code: string,
+    saved?: { sub_type: string; config_id: number }
+  ) =>
+    ({
+      ranking_item_id,
+      college_code,
+      is_allocated: !!saved,
+      allocated_sub_type: saved?.sub_type ?? null,
+      allocation_config_id: saved?.config_id ?? null,
+    }) as never;
+
+  it("starts from live remaining, not total, and charges unsaved staging", () => {
+    // Baseline remaining=1; student 1 is a FRESH tick (no saved allocation), so
+    // it consumes the last slot. A total-based baseline would have said 1 left —
+    // headroom that a consumer outside this grid already took.
+    const budget = buildCollegeBudget(
+      quotaStatus,
+      [student(1, "C"), student(2, "C"), student(3, "D")],
+      new Map([
+        [1, { sub_type: "nstc", config_id: 115 }],
+        [3, { sub_type: "nstc", config_id: 115 }], // college D — must not count
+      ]),
+      "C"
+    );
+    expect(budget.get(makeColKey("nstc", 115))).toBe(0);
+  });
+
+  it("nets a row staged exactly as saved to zero", () => {
+    // The saved row is already inside `remaining`; re-staging it unchanged must
+    // not double-charge the college.
+    const saved = { sub_type: "nstc", config_id: 115 };
+    const budget = buildCollegeBudget(
+      quotaStatus,
+      [student(1, "C", saved)],
+      new Map([[1, saved]]),
+      "C"
+    );
+    expect(budget.get(makeColKey("nstc", 115))).toBe(1);
+  });
+
+  it("frees a slot when a saved allocation is unticked", () => {
+    const saved = { sub_type: "nstc", config_id: 115 };
+    const budget = buildCollegeBudget(
+      quotaStatus,
+      [student(1, "C", saved)],
+      new Map([[1, null]]),
+      "C"
+    );
+    expect(budget.get(makeColKey("nstc", 115))).toBe(2);
+  });
+
+  it("omits columns with no per-college matrix so they stay uncapped", () => {
+    const budget = buildCollegeBudget(quotaStatus, [], new Map(), "C");
+    expect(budget.has(makeColKey("moe_1w", 115))).toBe(false);
+  });
+
+  it("omits colleges the matrix does not list", () => {
+    const budget = buildCollegeBudget(quotaStatus, [], new Map(), "Z");
+    expect(budget.size).toBe(0);
+  });
+});
+
+describe("isCancelledAllocation", () => {
+  const s = (quota_allocation_status: string | null) =>
+    ({ quota_allocation_status }) as never;
+
+  it("is true only for 撤銷/停發", () => {
+    expect(isCancelledAllocation(s("revoked"))).toBe(true);
+    expect(isCancelledAllocation(s("suspended"))).toBe(true);
+    expect(isCancelledAllocation(s("allocated"))).toBe(false);
+    expect(isCancelledAllocation(s("rejected"))).toBe(false);
+    expect(isCancelledAllocation(s(null))).toBe(false);
   });
 });
