@@ -290,6 +290,136 @@ describe("ApplicationFormDataDisplay", () => {
     // (not currently testing async behavior since it depends on timing)
   });
 
+  // The 郵局帳號 / 指導教授 fixed fields are in every scholarship's form config
+  // but live on the student's UserProfile, so the detail response — not
+  // submitted_form_data — is where their values come from. See
+  // `lib/utils/profile-owned-fields.ts`.
+  describe("UserProfile-owned fixed fields", () => {
+    const fixedFieldLabels = {
+      postal_account: { zh: "郵局帳號", en: "Post Office Account" },
+      advisor_name: { zh: "指導教授姓名", en: "Advisor Name" },
+      advisor_email: { zh: "指導教授Email", en: "Advisor Email" },
+      advisor_nycu_id: { zh: "指導教授本校人事編號", en: "Advisor NYCU ID" },
+    };
+
+    it("renders 郵局帳號 once when the submitted snapshot uses the account_number alias", async () => {
+      const application = {
+        postal_account: "12341234123412",
+        submitted_form_data: {
+          fields: { account_number: { value: "12341234123412" } },
+        },
+      };
+
+      render(
+        <ApplicationFormDataDisplay
+          formData={application}
+          locale="zh"
+          fieldLabels={fixedFieldLabels}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getAllByText("郵局帳號")).toHaveLength(1);
+        expect(screen.getByText("12341234123412")).toBeInTheDocument();
+      });
+    });
+
+    it("renders 郵局帳號 once when the snapshot stores both synonyms", async () => {
+      // Submissions from the older wizard carry postal_account AND
+      // account_number, both holding the one account the student typed.
+      const application = {
+        submitted_form_data: {
+          fields: {
+            postal_account: { value: "12341234123412" },
+            account_number: { value: "12341234123412" },
+          },
+        },
+      };
+
+      render(
+        <ApplicationFormDataDisplay
+          formData={application}
+          locale="zh"
+          fieldLabels={fixedFieldLabels}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getAllByText("郵局帳號")).toHaveLength(1);
+        expect(screen.getAllByText("12341234123412")).toHaveLength(1);
+      });
+    });
+
+    it("renders 指導教授 values from the application instead of 未填寫", async () => {
+      const application = {
+        advisor_name: "王老師",
+        advisor_email: "advisor@nycu.edu.tw",
+        advisor_nycu_id: "A12345",
+        submitted_form_data: {
+          fields: { contact_phone: { value: "0987878978" } },
+        },
+      };
+
+      render(
+        <ApplicationFormDataDisplay
+          formData={application}
+          locale="zh"
+          fieldLabels={fixedFieldLabels}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("王老師")).toBeInTheDocument();
+        expect(screen.getByText("advisor@nycu.edu.tw")).toBeInTheDocument();
+        expect(screen.getByText("A12345")).toBeInTheDocument();
+        // Only 郵局帳號 is genuinely unfilled here.
+        expect(screen.getAllByText("未填寫")).toHaveLength(1);
+      });
+    });
+
+    it("still shows 未填寫 when the student never filled the section in", async () => {
+      const application = {
+        submitted_form_data: {
+          fields: { contact_phone: { value: "0987878978" } },
+        },
+      };
+
+      render(
+        <ApplicationFormDataDisplay
+          formData={application}
+          locale="zh"
+          fieldLabels={fixedFieldLabels}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getAllByText("未填寫")).toHaveLength(4);
+      });
+    });
+
+    it("prefers the submitted snapshot over the current profile value", async () => {
+      const application = {
+        postal_account: "99999999999999",
+        submitted_form_data: {
+          fields: { account_number: { value: "12341234123412" } },
+        },
+      };
+
+      render(
+        <ApplicationFormDataDisplay
+          formData={application}
+          locale="zh"
+          fieldLabels={fixedFieldLabels}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("12341234123412")).toBeInTheDocument();
+        expect(screen.queryByText("99999999999999")).not.toBeInTheDocument();
+      });
+    });
+  });
+
   it("should handle malformed form data gracefully", async () => {
     const formData = {
       submitted_form_data: {

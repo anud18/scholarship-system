@@ -9,6 +9,67 @@ import {
   formatFieldName,
   formatFieldValue,
 } from "@/lib/utils/application-helpers";
+import {
+  canonicalizeFieldId,
+  collectProfileOwnedFieldValues,
+} from "@/lib/utils/profile-owned-fields";
+
+interface ApplicationFormDataDisplayProps {
+  formData:
+    | Record<string, any>
+    | {
+        form_data?: Record<string, any>;
+        submitted_form_data?: Record<string, any>;
+        fields?: Record<string, any>;
+      };
+  locale: Locale;
+  fieldLabels?: { [key: string]: { zh?: string; en?: string } };
+}
+
+// Never rendered as form data: `files` is upload bookkeeping and `agree_terms`
+// has its own consent row in the dialog.
+const EXCLUDED_FIELD_IDS = new Set(["files", "agree_terms"]);
+
+/**
+ * The values to show for one application: the submitted dynamic fields (with the
+ * 郵局帳號 synonyms collapsed onto one id) plus the fixed fields that live on the
+ * student's UserProfile instead of `submitted_form_data`. Without the second
+ * source, 郵局帳號 renders twice (once filled, once「未填寫」) and the whole
+ * 指導教授 section renders as「未填寫」— see `profile-owned-fields.ts`.
+ */
+const collectDisplayValues = (
+  formData: ApplicationFormDataDisplayProps["formData"]
+): Record<string, unknown> => {
+  const values: Record<string, unknown> = {};
+  const fields =
+    (formData as { submitted_form_data?: { fields?: Record<string, unknown> } })
+      ?.submitted_form_data?.fields || {};
+
+  Object.entries(fields).forEach(([fieldId, fieldData]) => {
+    if (!fieldData || typeof fieldData !== "object" || !("value" in fieldData)) {
+      return;
+    }
+    const value = (fieldData as { value: unknown }).value;
+    if (value === null || value === undefined || value === "") return;
+    if (EXCLUDED_FIELD_IDS.has(fieldId)) return;
+
+    // Older submissions store the account under both synonyms; keep the first
+    // one so the rendered value doesn't depend on JSON key order.
+    const canonicalId = canonicalizeFieldId(fieldId);
+    if (canonicalId in values) return;
+    values[canonicalId] = value;
+  });
+
+  Object.entries(
+    collectProfileOwnedFieldValues(formData as Record<string, unknown>)
+  ).forEach(([fieldId, value]) => {
+    // A submitted snapshot wins over the current profile: it is what the
+    // student sent with this application.
+    if (!(fieldId in values)) values[fieldId] = value;
+  });
+
+  return values;
+};
 
 // 獲取欄位標籤（優先使用動態標籤，後備使用靜態標籤）
 const getFieldLabel = (
@@ -36,18 +97,6 @@ const getFieldLabel = (
   return fallbackLabel;
 };
 
-interface ApplicationFormDataDisplayProps {
-  formData:
-    | Record<string, any>
-    | {
-        form_data?: Record<string, any>;
-        submitted_form_data?: Record<string, any>;
-        fields?: Record<string, any>;
-      };
-  locale: Locale;
-  fieldLabels?: { [key: string]: { zh?: string; en?: string } };
-}
-
 export function ApplicationFormDataDisplay({
   formData,
   locale,
@@ -56,80 +105,29 @@ export function ApplicationFormDataDisplay({
   const [formattedData, setFormattedData] = useState<Record<string, any>>({});
   const [isLoading, setIsLoading] = useState(true);
 
-  // Debug logging
-
-    logger.debug(
-    "📋 fields 是物件:",
-    typeof formData?.submitted_form_data?.fields === "object"
-  );
-  logger.debug(
-    "📋 fields 鍵值:",
-    formData?.submitted_form_data?.fields
-      ? Object.keys(formData.submitted_form_data.fields)
-      : "N/A"
-  );
-  logger.debug(
-    "📋 原始 fields 物件:",
-    formData?.submitted_form_data?.fields
-  );
-  logger.debug("🏷️ 接收到的 fieldLabels:", fieldLabels);
   logger.debug(
     "🏷️ fieldLabels 鍵值:",
     fieldLabels ? Object.keys(fieldLabels) : "沒有標籤"
   );
 
-
-    if (formData?.submitted_form_data) {
-
-  }
-
   useEffect(() => {
     const formatData = async () => {
       setIsLoading(true);
-      const formatted: Record<string, any> = {};
+      const formatted = collectDisplayValues(formData);
 
-      // 只處理新格式：submitted_form_data.fields
-      const fields = formData?.submitted_form_data?.fields || {};
-
-
-      logger.debug("🔄 Processing fields:", fields);
-      logger.debug("🔄 Fields entries count:", Object.entries(fields).length);
-      logger.debug("🔄 All field keys:", Object.keys(fields));
-
-      for (const [fieldId, fieldData] of Object.entries(fields)) {
-        if (
-          fieldData &&
-          typeof fieldData === "object" &&
-          "value" in fieldData
-        ) {
-          const value = (fieldData as { value: unknown }).value;
-
-          // 跳過空值、files 欄位和 agree_terms
-          if (
-            value !== null &&
-            value !== undefined &&
-            value !== "" &&
-            fieldId !== "files" &&
-            fieldId !== "agree_terms"
-          ) {
-            if (fieldId === "scholarship_type") {
-              try {
-                formatted[fieldId] = await formatFieldValue(
-                  fieldId,
-                  value,
-                  locale
-                );
-              } catch (error) {
-                logger.warn(
-                  `Failed to format scholarship type: ${value}`,
-                  error
-                );
-                formatted[fieldId] = value;
-              }
-            } else {
-              formatted[fieldId] = value;
-            }
-          }
+      // scholarship_type stores the code — resolve it to the scholarship's name.
+      if (formatted.scholarship_type !== undefined) {
+        try {
+          formatted.scholarship_type = await formatFieldValue(
+            "scholarship_type",
+            formatted.scholarship_type,
+            locale
+          );
+        } catch (error) {
+          logger.warn(
+            `Failed to format scholarship type: ${formatted.scholarship_type}`,
+            error
+          );
         }
       }
 
@@ -142,24 +140,8 @@ export function ApplicationFormDataDisplay({
   }, [formData, locale]);
 
   if (isLoading) {
-    // 處理載入狀態的顯示
-    const dataToShow: Record<string, any> = {};
-    const fields = formData?.submitted_form_data?.fields || {};
-
-    Object.entries(fields).forEach(([fieldId, fieldData]: [string, any]) => {
-      if (fieldData && typeof fieldData === "object" && "value" in fieldData) {
-        const value = fieldData.value;
-        if (
-          value !== null &&
-          value !== undefined &&
-          value !== "" &&
-          fieldId !== "files" &&
-          fieldId !== "agree_terms"
-        ) {
-          dataToShow[fieldId] = value;
-        }
-      }
-    });
+    // 處理載入狀態的顯示（scholarship_type 尚未解析成名稱）
+    const dataToShow = collectDisplayValues(formData);
 
     // 如果沒有表單資料，顯示訊息
     if (Object.keys(dataToShow).length === 0) {
@@ -239,9 +221,9 @@ export function ApplicationFormDataDisplay({
       })}
 
       {/* 顯示 fieldLabels 中存在但 formattedData 中沒有值的字段 */}
-      {fieldLabels && Object.entries(fieldLabels).map(([fieldName, labels]) => {
-        // 如果這個字段已經在 formattedData 中，跳過
-        if (fieldName in formattedData) {
+      {fieldLabels && Object.entries(fieldLabels).map(([fieldName]) => {
+        // 如果這個字段已經在 formattedData 中，跳過（郵局帳號的同義 id 也算）
+        if (canonicalizeFieldId(fieldName) in formattedData) {
           return null;
         }
 

@@ -46,6 +46,7 @@ import {
   formatFieldName,
   formatDisplayValue,
 } from "@/lib/utils/application-helpers";
+import { canonicalizeFieldId } from "@/lib/utils/profile-owned-fields";
 import { useReferenceData, getDegreeName } from "@/hooks/use-reference-data";
 import {
   getAcademyName,
@@ -496,10 +497,25 @@ export function ApplicationDetailDialog({
     const dynamicFields: Record<string, any> = {};
     const basicFields: Record<string, any> = {};
 
-    // 處理後端的 submitted_form_data.fields 結構
-    if (formData.submitted_form_data && formData.submitted_form_data.fields) {
-      // 後端結構：{ submitted_form_data: { fields: { field_id: { value: "..." } } } }
-      Object.entries(formData.submitted_form_data.fields).forEach(
+    // 郵局帳號 is submitted as `account_number` but the form config calls it
+    // `postal_account`; without canonicalizing it counts as an extra「基本欄位」
+    // and 郵局帳號 gets rendered a second time in the 申請表單欄位 card.
+    const assignField = (rawFieldId: string, value: any) => {
+      const fieldId = canonicalizeFieldId(rawFieldId);
+      if (applicationFields.includes(fieldId)) {
+        dynamicFields[fieldId] = value;
+      } else {
+        basicFields[fieldId] = value;
+      }
+    };
+
+    // 後端結構：{ submitted_form_data: { fields: { field_id: { value: "..." } } } }
+    // 或已展開的 { fields: ... }
+    const wrappedFields =
+      formData.submitted_form_data?.fields || formData.fields;
+
+    if (wrappedFields) {
+      Object.entries(wrappedFields).forEach(
         ([fieldId, fieldData]: [string, any]) => {
           if (
             fieldData &&
@@ -513,36 +529,7 @@ export function ApplicationDetailDialog({
               fieldId !== "files" &&
               fieldId !== "agree_terms"
             ) {
-              if (applicationFields.includes(fieldId)) {
-                dynamicFields[fieldId] = value;
-              } else {
-                basicFields[fieldId] = value;
-              }
-            }
-          }
-        }
-      );
-    } else if (formData.fields) {
-      // 直接處理 fields 結構
-      Object.entries(formData.fields).forEach(
-        ([fieldId, fieldData]: [string, any]) => {
-          if (
-            fieldData &&
-            typeof fieldData === "object" &&
-            "value" in fieldData
-          ) {
-            const value = fieldData.value;
-            if (
-              value &&
-              value !== "" &&
-              fieldId !== "files" &&
-              fieldId !== "agree_terms"
-            ) {
-              if (applicationFields.includes(fieldId)) {
-                dynamicFields[fieldId] = value;
-              } else {
-                basicFields[fieldId] = value;
-              }
+              assignField(fieldId, value);
             }
           }
         }
@@ -559,11 +546,7 @@ export function ApplicationDetailDialog({
           return;
         }
 
-        if (applicationFields.includes(key)) {
-          dynamicFields[key] = value;
-        } else {
-          basicFields[key] = value;
-        }
+        assignField(key, value);
       });
     }
 

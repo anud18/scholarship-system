@@ -170,6 +170,10 @@ export interface Application {
   student_no?: string;
   /** 郵局帳號 (from the student's UserProfile.account_number, not submitted_form_data) */
   postal_account?: string | null;
+  /** 指導教授資訊 (from the student's UserProfile, not submitted_form_data) */
+  advisor_name?: string | null;
+  advisor_email?: string | null;
+  advisor_nycu_id?: string | null;
   student_termcount?: number;
   gpa?: number;
   department?: string;

@@ -299,6 +299,13 @@ export const formatFieldName = (fieldName: string, locale: Locale) => {
     contact_address: locale === "zh" ? "通訊地址" : "Contact Address",
     bank_account: locale === "zh" ? "銀行帳戶" : "Bank Account",
     account_number: locale === "zh" ? "郵局帳號" : "Post Office Account",
+    // Fixed fields injected into every form config (see the backend's
+    // FIXED_FIELD_LABELS) — needed as a fallback when the config fails to load.
+    postal_account: locale === "zh" ? "郵局帳號" : "Post Office Account",
+    advisor_name: locale === "zh" ? "指導教授姓名" : "Advisor Name",
+    advisor_email: locale === "zh" ? "指導教授Email" : "Advisor Email",
+    advisor_nycu_id:
+      locale === "zh" ? "指導教授本校人事編號" : "Advisor NYCU ID",
     research_proposal: locale === "zh" ? "研究計畫" : "Research Proposal",
     budget_plan: locale === "zh" ? "預算規劃" : "Budget Plan",
     milestone_plan: locale === "zh" ? "里程碑規劃" : "Milestone Plan",

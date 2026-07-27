@@ -259,6 +259,27 @@ class ApplicationService:
             **student_fields,  # Spread extracted student fields
         )
 
+    async def _load_profile_owned_fields(self, user_id: int) -> Dict[str, Optional[str]]:
+        """讀取存放在 UserProfile 的固定欄位（郵局帳號、指導教授資訊）。
+
+        申請精靈把這幾個欄位存進 UserProfile 而非 submitted_form_data，但表單設定
+        (ApplicationFieldService.inject_fixed_fields) 仍會把它們列為 postal_account /
+        advisor_* 固定欄位。前端表單資料頁若只看 submitted_form_data，這些欄位一律
+        顯示「未填寫」，所以由這裡把權威值一併帶進 ApplicationResponse。
+
+        No profile row yet (student has never saved the section) → all None.
+        """
+        from app.models.user_profile import UserProfile
+
+        result = await self.db.execute(select(UserProfile).where(UserProfile.user_id == user_id))
+        profile = result.scalar_one_or_none()
+        return {
+            "postal_account": profile.account_number if profile else None,
+            "advisor_name": profile.advisor_name if profile else None,
+            "advisor_email": profile.advisor_email if profile else None,
+            "advisor_nycu_id": profile.advisor_nycu_id if profile else None,
+        }
+
     def _convert_semester_to_string(self, semester) -> Optional[str]:
         """
         Convert semester to string format for schema validation
@@ -906,13 +927,10 @@ class ApplicationService:
         if not student_fields.get("student_no") and application.student:
             student_fields["student_no"] = application.student.nycu_id
 
-        # 郵局帳號 lives on the student's UserProfile (student self-service and
-        # batch import both write it there — never into submitted_form_data).
-        from app.models.user_profile import UserProfile
-
-        profile_result = await self.db.execute(select(UserProfile).where(UserProfile.user_id == application.user_id))
-        student_profile = profile_result.scalar_one_or_none()
-        postal_account = student_profile.account_number if student_profile else None
+        # 郵局帳號 and 指導教授資訊 live on the student's UserProfile (the wizard's
+        # fixed-field section and batch import both write them there — never into
+        # submitted_form_data), so every form-data view has to read them from here.
+        profile_owned_fields = await self._load_profile_owned_fields(application.user_id)
 
         # Build sub_type labels from scholarship.sub_type_configs
         sub_type_labels = {}
@@ -997,7 +1015,7 @@ class ApplicationService:
             "scholarship_name": scholarship_name,
             "amount": amount,
             "currency": currency,
-            "postal_account": postal_account,
+            **profile_owned_fields,  # 郵局帳號 + 指導教授資訊 (UserProfile-owned)
             **student_fields,  # Spread extracted student fields
             # Workflow configuration flags
             "requires_professor_recommendation": bool(
