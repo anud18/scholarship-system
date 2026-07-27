@@ -368,3 +368,178 @@ async def test_restore_blocked_when_slot_already_reallocated(db, admin_db_user):
     # pool=1, B already consumes it → restoring A would make it 2/1.
     with pytest.raises(ValueError, match="配額超額|超過總配額"):
         await svc.restore_allocation(app_a.id, admin_db_user.id)
+
+
+# ---------------------------------------------------------------------------
+# Pre-確認分發 撤銷/停發: the student is excluded from the round rather than
+# pulled out of a roster, and restore must NOT invent an award.
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def pending_application(db, admin_db_user):
+    """A ranked-but-not-yet-distributed application (still 待分發)."""
+    from app.models.scholarship import SubTypeSelectionMode
+    from app.models.enums import ReviewStage
+
+    app = Application(
+        user_id=admin_db_user.id,
+        app_id="APP-TEST-RESTORE-PRE-001",
+        scholarship_type_id=1,
+        academic_year=114,
+        semester="first",
+        status=ApplicationStatus.submitted,
+        review_stage=ReviewStage.student_draft,
+        sub_type_selection_mode=SubTypeSelectionMode.single,
+        scholarship_subtype_list=["nstc"],
+        student_data={"std_academyno": "C", "std_cname": "待分發生"},
+        quota_allocation_status=None,
+    )
+    db.add(app)
+    await db.commit()
+    await db.refresh(app)
+    return app
+
+
+@pytest_asyncio.fixture
+async def pending_item(db, finalized_ranking, pending_application):
+    """That application's ranking item — ranked, no quota slot yet."""
+    item = CollegeRankingItem(
+        ranking_id=finalized_ranking.id,
+        application_id=pending_application.id,
+        rank_position=5,
+        is_allocated=False,
+        status="ranked",
+    )
+    db.add(item)
+    await db.commit()
+    await db.refresh(item)
+    return item
+
+
+@pytest.mark.asyncio
+async def test_suspend_before_distribution_then_restore_round_trips_prior_state(
+    db, pending_application, pending_item, admin_db_user
+):
+    svc = ManualDistributionService(db)
+
+    await svc.suspend_allocation(pending_application.id, admin_db_user.id, "休學")
+    await db.commit()
+    await db.refresh(pending_application)
+    await db.refresh(pending_item)
+    assert pending_application.status == ApplicationStatus.cancelled
+    assert pending_application.quota_allocation_status == "suspended"
+    assert pending_application.cancelled_from_status == "submitted"
+    assert pending_application.cancelled_from_quota_status is None
+    # Nothing to free — the item never held a slot.
+    assert pending_item.is_allocated is False
+
+    result = await svc.restore_allocation(pending_application.id, admin_db_user.id)
+    await db.commit()
+    await db.refresh(pending_application)
+    await db.refresh(pending_item)
+
+    # The key guarantee: back to 待分發, NOT approved/allocated.
+    assert pending_application.status == ApplicationStatus.submitted
+    assert pending_application.quota_allocation_status is None
+    assert pending_application.cancelled_from_status is None
+    assert pending_application.cancelled_from_quota_status is None
+    assert pending_item.is_allocated is False
+    assert result["restored_allocation"] is False
+    assert result["restored_to_status"] == "submitted"
+
+
+@pytest.mark.asyncio
+async def test_finalize_skips_application_cancelled_before_distribution(
+    db, pending_application, pending_item, finalized_ranking, admin_db_user
+):
+    """A pre-distribution 停發 must survive 確認分發 — neither re-approved nor
+    downgraded to quota-rejected."""
+    svc = ManualDistributionService(db)
+    await svc.suspend_allocation(pending_application.id, admin_db_user.id, "退學")
+    await db.commit()
+
+    await svc.finalize(scholarship_type_id=1, academic_year=114, semester="first")
+    await db.commit()
+    await db.refresh(pending_application)
+
+    assert pending_application.status == ApplicationStatus.cancelled
+    assert pending_application.quota_allocation_status == "suspended"
+
+
+@pytest.mark.asyncio
+async def test_allocate_rejects_a_cancelled_student(db, pending_application, pending_item, admin_db_user):
+    """The grid disables the 核配 checkbox for a cancelled student; a stale or
+    crafted payload must not get past the service either."""
+    from app.models.scholarship import ScholarshipConfiguration
+
+    cfg = ScholarshipConfiguration(
+        scholarship_type_id=1,
+        config_code="RESTORE-PRE-114",
+        config_name="Restore pre 114",
+        academic_year=114,
+        semester="first",
+        amount=50000,
+        has_college_quota=True,
+        quotas={"nstc": {"C": 5}},
+    )
+    db.add(cfg)
+    await db.commit()
+    await db.refresh(cfg)
+
+    svc = ManualDistributionService(db)
+    await svc.revoke_allocation(pending_application.id, admin_db_user.id, "違反要點")
+    await db.commit()
+
+    with pytest.raises(ValueError, match="已撤銷／停發"):
+        await svc.allocate(
+            scholarship_type_id=1,
+            academic_year=114,
+            semester="first",
+            allocations=[
+                {
+                    "ranking_item_id": pending_item.id,
+                    "sub_type_code": "nstc",
+                    "allocation_config_id": cfg.id,
+                }
+            ],
+            admin_user_id=admin_db_user.id,
+        )
+
+
+@pytest.mark.asyncio
+async def test_auto_allocate_preview_skips_a_cancelled_student(db, pending_application, pending_item, admin_db_user):
+    """預設分發 must not hand the slot straight back to a student the admin
+    just 撤銷/停發'd — the cancel clears is_allocated, which would otherwise
+    make them look like a fresh candidate."""
+    from app.models.scholarship import ScholarshipConfiguration
+
+    cfg = ScholarshipConfiguration(
+        scholarship_type_id=1,
+        config_code="RESTORE-PRE-114-AUTO",
+        config_name="Restore pre 114 auto",
+        academic_year=114,
+        semester="first",
+        amount=50000,
+        has_college_quota=True,
+        quotas={"nstc": {"C": 5}},
+    )
+    db.add(cfg)
+    await db.commit()
+
+    svc = ManualDistributionService(db)
+
+    before = await svc.auto_allocate_preview(scholarship_type_id=1, academic_year=114, semester="first")
+    assert any(s["ranking_item_id"] == pending_item.id and s["sub_type_code"] == "nstc" for s in before)
+
+    await svc.suspend_allocation(pending_application.id, admin_db_user.id, "畢業")
+    await db.commit()
+
+    after = await svc.auto_allocate_preview(scholarship_type_id=1, academic_year=114, semester="first")
+    assert all(s["ranking_item_id"] != pending_item.id for s in after)
+
+    # Restoring puts them back in the pool.
+    await svc.restore_allocation(pending_application.id, admin_db_user.id)
+    await db.commit()
+    restored = await svc.auto_allocate_preview(scholarship_type_id=1, academic_year=114, semester="first")
+    assert any(s["ranking_item_id"] == pending_item.id and s["sub_type_code"] == "nstc" for s in restored)

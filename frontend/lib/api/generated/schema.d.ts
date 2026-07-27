@@ -7627,7 +7627,10 @@ export interface paths {
         put?: never;
         /**
          * Revoke Application Allocation
-         * @description 撤銷已分發學生：從未鎖定造冊移除 + 標記 application 為 cancelled/revoked。
+         * @description 撤銷學生獎學金：從未鎖定造冊移除 + 標記 application 為 cancelled/revoked。
+         *
+         *     分發前後皆可執行——分發前撤銷等同把該生排除於本次分發（預設分發不再建議、
+         *     確認分發會略過）。復原時會回到撤銷當下的狀態。
          */
         post: operations["revoke_application_allocation_api_v1_manual_distribution_applications__application_id__revoke_post"];
         delete?: never;
@@ -7647,7 +7650,10 @@ export interface paths {
         put?: never;
         /**
          * Suspend Application Allocation
-         * @description 停發已分發學生：從未鎖定造冊移除 + 標記 application 為 cancelled/suspended。
+         * @description 停發學生獎學金：從未鎖定造冊移除 + 標記 application 為 cancelled/suspended。
+         *
+         *     分發前後皆可執行——分發前停發（休學/退學/畢業）等同把該生排除於本次分發。
+         *     復原時會回到停發當下的狀態。
          */
         post: operations["suspend_application_allocation_api_v1_manual_distribution_applications__application_id__suspend_post"];
         delete?: never;
@@ -7667,8 +7673,10 @@ export interface paths {
         put?: never;
         /**
          * Restore Application Allocation
-         * @description 恢復已撤銷/停發學生為正常分發（quota_allocation_status -> allocated）。
-         *     不會自動還原造冊項目，需重新生成造冊。
+         * @description 恢復已撤銷/停發學生：回到撤銷/停發當下的狀態。
+         *
+         *     分發後撤銷者回到 approved/allocated 並重新佔用名額；分發前撤銷者回到當時的
+         *     申請狀態，重新成為可分發的候選人。不會自動還原造冊項目，需重新生成造冊。
          */
         post: operations["restore_application_allocation_api_v1_manual_distribution_applications__application_id__restore_post"];
         delete?: never;

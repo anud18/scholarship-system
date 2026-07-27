@@ -841,7 +841,10 @@ async def revoke_application_allocation(
     current_user=Depends(get_current_admin_user),
     http_request: Request = None,
 ):
-    """撤銷已分發學生：從未鎖定造冊移除 + 標記 application 為 cancelled/revoked。"""
+    """撤銷學生獎學金：從未鎖定造冊移除 + 標記 application 為 cancelled/revoked。
+
+    分發前後皆可執行——分發前撤銷等同把該生排除於本次分發（預設分發不再建議、
+    確認分發會略過）。復原時會回到撤銷當下的狀態。"""
     service = ManualDistributionService(db)
     try:
         result = await service.revoke_allocation(
@@ -876,7 +879,10 @@ async def suspend_application_allocation(
     current_user=Depends(get_current_admin_user),
     http_request: Request = None,
 ):
-    """停發已分發學生：從未鎖定造冊移除 + 標記 application 為 cancelled/suspended。"""
+    """停發學生獎學金：從未鎖定造冊移除 + 標記 application 為 cancelled/suspended。
+
+    分發前後皆可執行——分發前停發（休學/退學/畢業）等同把該生排除於本次分發。
+    復原時會回到停發當下的狀態。"""
     service = ManualDistributionService(db)
     try:
         result = await service.suspend_allocation(
@@ -909,8 +915,10 @@ async def restore_application_allocation(
     current_user=Depends(get_current_admin_user),
     http_request: Request = None,
 ):
-    """恢復已撤銷/停發學生為正常分發（quota_allocation_status -> allocated）。
-    不會自動還原造冊項目，需重新生成造冊。"""
+    """恢復已撤銷/停發學生：回到撤銷/停發當下的狀態。
+
+    分發後撤銷者回到 approved/allocated 並重新佔用名額；分發前撤銷者回到當時的
+    申請狀態，重新成為可分發的候選人。不會自動還原造冊項目，需重新生成造冊。"""
     service = ManualDistributionService(db)
     try:
         result = await service.restore_allocation(

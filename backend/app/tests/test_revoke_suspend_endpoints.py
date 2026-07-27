@@ -1,6 +1,7 @@
 """Pin: revoke + suspend POST endpoints return the ApiResponse envelope,
-require admin auth, reject empty reason (422), surface conflict as 409,
-surface non-allocated as 400."""
+require admin auth, reject empty reason (422), surface conflict as 409, and
+accept a not-yet-allocated application (a pre-確認分發 撤銷/停發 excludes the
+student from the round)."""
 
 import pytest
 import pytest_asyncio
@@ -152,7 +153,8 @@ async def allocated_application(db, admin_db_user):
 
 @pytest_asyncio.fixture
 async def unallocated_application(db, admin_db_user):
-    """Application without quota_allocation_status='allocated'."""
+    """Application without quota_allocation_status='allocated' — i.e. still
+    awaiting 確認分發. 撤銷/停發 is allowed here too."""
     from app.models.application import Application, ApplicationStatus
     from app.models.scholarship import SubTypeSelectionMode
     from app.models.enums import ReviewStage
@@ -163,7 +165,7 @@ async def unallocated_application(db, admin_db_user):
         scholarship_type_id=1,
         academic_year=114,
         semester="first",
-        status=ApplicationStatus.approved,
+        status=ApplicationStatus.submitted,
         review_stage=ReviewStage.student_draft,
         sub_type_selection_mode=SubTypeSelectionMode.single,
         sub_scholarship_type="nstc",
@@ -227,12 +229,68 @@ async def test_revoke_twice_returns_409(client_admin: AsyncClient, allocated_app
 
 
 @pytest.mark.asyncio
-async def test_revoke_non_allocated_returns_400(client_admin: AsyncClient, unallocated_application):
+async def test_revoke_non_allocated_succeeds_and_snapshots_prior_state(
+    client_admin: AsyncClient, db, unallocated_application
+):
+    """A student who 休學/退學 before 確認分發 must be markable so the round
+    skips them — and the pre-cancel state has to be recorded so restore can put
+    the application back instead of inventing an award."""
     resp = await client_admin.post(
         f"/api/v1/manual-distribution/applications/{unallocated_application.id}/revoke",
         json={"reason": "x"},
     )
-    assert resp.status_code == 400
+    assert resp.status_code == 200
+    assert resp.json()["data"]["quota_allocation_status"] == "revoked"
+
+    await db.refresh(unallocated_application)
+    assert unallocated_application.cancelled_from_status == "submitted"
+    assert unallocated_application.cancelled_from_quota_status is None
+
+
+@pytest.mark.asyncio
+async def test_restore_non_allocated_returns_to_prior_state_not_approved(
+    client_admin: AsyncClient, db, unallocated_application
+):
+    await client_admin.post(
+        f"/api/v1/manual-distribution/applications/{unallocated_application.id}/suspend",
+        json={"reason": "休學"},
+    )
+    resp = await client_admin.post(
+        f"/api/v1/manual-distribution/applications/{unallocated_application.id}/restore",
+    )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["restored_from"] == "suspended"
+    assert data["restored_to_status"] == "submitted"
+    assert data["restored_allocation"] is False
+    # quota_allocation_status goes back to NULL, NOT "allocated" — this student
+    # was never funded.
+    assert data["quota_allocation_status"] is None
+
+    await db.refresh(unallocated_application)
+    from app.models.enums import ApplicationStatus as _AppStatus
+
+    assert unallocated_application.status == _AppStatus.submitted
+    assert unallocated_application.quota_allocation_status is None
+    assert unallocated_application.cancelled_from_status is None
+    assert unallocated_application.cancelled_from_quota_status is None
+
+
+@pytest.mark.asyncio
+async def test_restore_allocated_returns_to_approved_allocated(client_admin: AsyncClient, db, allocated_application):
+    """The post-分發 path is unchanged: back to approved/allocated."""
+    await client_admin.post(
+        f"/api/v1/manual-distribution/applications/{allocated_application.id}/revoke",
+        json={"reason": "violated"},
+    )
+    resp = await client_admin.post(
+        f"/api/v1/manual-distribution/applications/{allocated_application.id}/restore",
+    )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["quota_allocation_status"] == "allocated"
+    assert data["restored_to_status"] == "approved"
+    assert data["restored_allocation"] is True
 
 
 _CANCEL_ACTIONS = [("revoke", "撤銷", "violated"), ("suspend", "停發", "leave")]
@@ -261,10 +319,12 @@ async def test_cancellation_sends_notification_email_to_admin(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("action,label,reason", _CANCEL_ACTIONS)
 async def test_failed_cancellation_does_not_send_email(
-    client_admin: AsyncClient, unallocated_application, email_send_mock, action, label, reason
+    client_admin: AsyncClient, email_send_mock, action, label, reason
 ):
+    """A cancel that never happened must not notify. 404-ish (unknown id)
+    surfaces as 400 via the endpoint's ValueError branch."""
     resp = await client_admin.post(
-        f"/api/v1/manual-distribution/applications/{unallocated_application.id}/{action}",
+        f"/api/v1/manual-distribution/applications/99999999/{action}",
         json={"reason": reason},
     )
     assert resp.status_code == 400
