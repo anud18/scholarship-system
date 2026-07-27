@@ -191,6 +191,7 @@ class StudentScholarshipHistoryService:
         self,
         records: List[PaymentRecord],
         snapshot_name: Optional[str],
+        received_months: List[ReceivedMonthsBreakdown],
     ) -> HistorySummary:
         total_amount = sum((r.scholarship_amount for r in records), Decimal("0"))
         type_count = len({r.scholarship_name for r in records})
@@ -199,6 +200,10 @@ class StudentScholarshipHistoryService:
             total_amount=total_amount,
             scholarship_type_count=type_count,
             snapshot_name=snapshot_name,
+            # 總領月份數 across every scholarship type. Per-type caps (the
+            # 36-month PhD limit) are checked against the individual
+            # breakdowns, never against this sum.
+            total_received_months=sum(b.total_months for b in received_months),
         )
 
     async def get_history(
@@ -245,11 +250,16 @@ class StudentScholarshipHistoryService:
                 error_code="NOT_FOUND",
             )
 
-        summary = self._build_summary(records, snapshot_name=snapshot_name)
+        received_months = self._build_received_months(records, imported_records)
+        summary = self._build_summary(
+            records,
+            snapshot_name=snapshot_name,
+            received_months=received_months,
+        )
         return StudentScholarshipHistoryData(
             student_number=student_number,
             academic_info=academic_info,
             summary=summary,
             payment_records=records,
-            received_months=self._build_received_months(records, imported_records),
+            received_months=received_months,
         )

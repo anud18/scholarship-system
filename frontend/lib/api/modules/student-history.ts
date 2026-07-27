@@ -53,6 +53,12 @@ export interface HistorySummary {
   total_amount: string;
   scholarship_type_count: number;
   snapshot_name: string | null;
+  /**
+   * 總領月份數 — 匯入 + 系統 summed across every scholarship type. Per-type
+   * caps (the 36-month PhD limit) apply to the individual entries in
+   * `received_months`, not to this total.
+   */
+  total_received_months: number;
 }
 
 /**

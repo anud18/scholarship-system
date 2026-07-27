@@ -73,6 +73,14 @@ class HistorySummary(BaseModel):
     total_records: int
     total_amount: Decimal
     scholarship_type_count: int = Field(..., description="Number of distinct scholarship_name values")
+    total_received_months: int = Field(
+        0,
+        description=(
+            "總領月份數 — 匯入 + 系統 summed across every scholarship type. "
+            "Caps such as the 36-month PhD limit apply per scholarship type, "
+            "not to this total; the per-type split is in received_months."
+        ),
+    )
     snapshot_name: Optional[str] = Field(
         None,
         description="Student name from the most recent roster item; used when SIS fails",
