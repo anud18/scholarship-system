@@ -502,6 +502,11 @@ export function ApplicationDetailDialog({
     // and 郵局帳號 gets rendered a second time in the 申請表單欄位 card.
     const assignField = (rawFieldId: string, value: any) => {
       const fieldId = canonicalizeFieldId(rawFieldId);
+      // First writer wins, matching ApplicationFormDataDisplay — otherwise a
+      // legacy submission carrying both synonyms could resolve to a different
+      // account here than in the 動態申請欄位 card.
+      if (fieldId in dynamicFields || fieldId in basicFields) return;
+
       if (applicationFields.includes(fieldId)) {
         dynamicFields[fieldId] = value;
       } else {

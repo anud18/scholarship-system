@@ -397,6 +397,56 @@ describe("ApplicationFormDataDisplay", () => {
       });
     });
 
+    it("does not merge fields the scholarship's form config never declared", async () => {
+      // 指導教授 fields are only injected when the scholarship requires
+      // professor review; a profile filled in for another scholarship must not
+      // add them to this application's form data.
+      const application = {
+        advisor_name: "王老師",
+        postal_account: "12341234123412",
+        submitted_form_data: {
+          fields: { contact_phone: { value: "0987878978" } },
+        },
+      };
+
+      render(
+        <ApplicationFormDataDisplay
+          formData={application}
+          locale="zh"
+          fieldLabels={{
+            postal_account: { zh: "郵局帳號", en: "Post Office Account" },
+          }}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("12341234123412")).toBeInTheDocument();
+      });
+      expect(screen.queryByText("王老師")).not.toBeInTheDocument();
+    });
+
+    it("still reports 無表單資料 when nothing was submitted", async () => {
+      // A profile value alone is not evidence the student filled a form in.
+      const application = {
+        postal_account: "12341234123412",
+        advisor_name: "王老師",
+        submitted_form_data: { fields: {} },
+      };
+
+      render(
+        <ApplicationFormDataDisplay
+          formData={application}
+          locale="zh"
+          fieldLabels={fixedFieldLabels}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("無表單資料")).toBeInTheDocument();
+      });
+      expect(screen.queryByText("12341234123412")).not.toBeInTheDocument();
+    });
+
     it("prefers the submitted snapshot over the current profile value", async () => {
       const application = {
         postal_account: "99999999999999",
