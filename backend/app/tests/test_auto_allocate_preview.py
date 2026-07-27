@@ -731,6 +731,65 @@ class TestCancelledApplicationsNeverSuggested:
         assert results[0]["sub_type_code"] == "nstc"
 
 
+class TestPreferenceCodesAreMatchedNormalized:
+    """sub_type_preferences and scholarship_subtype_list are written by different
+    code paths, so their spelling can differ. A raw string comparison silently
+    emptied the whole preference list and the student came out unallocatable
+    with quota still free (staging 114, 資訊學院/人社院)."""
+
+    @pytest.mark.parametrize("pref", ["NSTC", " nstc", "nstc ", "Nstc"])
+    def test_case_and_whitespace_variants_still_allocate(self, _compute_suggestions, pref):
+        app = _make_app(1, college="A", sub_type_preferences=[pref], scholarship_subtype_list=["nstc"])
+        results = _compute_suggestions(
+            unique_items=[_make_item(101, rank_position=1, app=app)],
+            default_prefs=["nstc"],
+            prev_alloc_configs={},
+            allowed_configs_by_sub_type={"nstc": [115]},
+            quota_tracker=_build_quota_tracker({(115, "nstc", "A"): 1}),
+            own_config_id=115,
+        )
+        # …and the ALLOCATED code is the config's own spelling, not the student's.
+        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_config_id": 115}
+
+    def test_applied_list_variant_is_matched_too(self, _compute_suggestions):
+        app = _make_app(1, college="A", sub_type_preferences=["nstc"], scholarship_subtype_list=[" NSTC "])
+        results = _compute_suggestions(
+            unique_items=[_make_item(101, rank_position=1, app=app)],
+            default_prefs=["nstc"],
+            prev_alloc_configs={},
+            allowed_configs_by_sub_type={"nstc": [115]},
+            quota_tracker=_build_quota_tracker({(115, "nstc", "A"): 1}),
+            own_config_id=115,
+        )
+        assert results[0]["sub_type_code"] == "nstc"
+
+    def test_a_sub_type_never_applied_for_is_still_excluded(self, _compute_suggestions):
+        """Normalizing must not turn the applied-list filter into a no-op."""
+        app = _make_app(1, college="A", sub_type_preferences=["moe_1w"], scholarship_subtype_list=["nstc"])
+        results = _compute_suggestions(
+            unique_items=[_make_item(101, rank_position=1, app=app)],
+            default_prefs=["nstc"],
+            prev_alloc_configs={},
+            allowed_configs_by_sub_type={"nstc": [115], "moe_1w": [115]},
+            quota_tracker=_build_quota_tracker({(115, "nstc", "A"): 1, (115, "moe_1w", "A"): 1}),
+            own_config_id=115,
+        )
+        assert results[0]["sub_type_code"] is None
+
+    def test_reviewer_reject_still_blocks_a_variant_spelling(self, _compute_suggestions):
+        app = _make_app(1, college="A", sub_type_preferences=["NSTC"], scholarship_subtype_list=["nstc"])
+        results = _compute_suggestions(
+            unique_items=[_make_item(101, rank_position=1, app=app)],
+            default_prefs=["nstc"],
+            prev_alloc_configs={},
+            allowed_configs_by_sub_type={"nstc": [115]},
+            quota_tracker=_build_quota_tracker({(115, "nstc", "A"): 1}),
+            own_config_id=115,
+            rejected_map={1: {"nstc"}},
+        )
+        assert results[0]["sub_type_code"] is None
+
+
 class TestDedupePreviewItems:
     """Item selection for the preview: dedup, soft-delete, single-college filter."""
 

@@ -16,10 +16,12 @@
 
 import {
   buildCollegeBudget,
+  classifyUnallocated,
   createManualDistributionApi,
   isCancelledAllocation,
   makeColKey,
   mergeSuggestions,
+  summarizeUnallocated,
 } from "../manual-distribution";
 import { typedClient } from "../../typed-client";
 
@@ -678,5 +680,83 @@ describe("isCancelledAllocation", () => {
     expect(isCancelledAllocation(s("allocated"))).toBe(false);
     expect(isCancelledAllocation(s("rejected"))).toBe(false);
     expect(isCancelledAllocation(s(null))).toBe(false);
+  });
+});
+
+describe("classifyUnallocated / summarizeUnallocated", () => {
+  const student = (o: Record<string, unknown>) =>
+    ({
+      quota_allocation_status: null,
+      college_rejected: false,
+      applied_sub_types: ["nstc"],
+      rejected_sub_types: [],
+      ...o,
+    }) as never;
+
+  it("reports 撤銷/停發 before anything else", () => {
+    expect(
+      classifyUnallocated(
+        student({ quota_allocation_status: "revoked", college_rejected: true })
+      )
+    ).toBe("cancelled");
+  });
+
+  it("reports the college's own rejection", () => {
+    expect(classifyUnallocated(student({ college_rejected: true }))).toBe(
+      "college_rejected"
+    );
+  });
+
+  it("reports an empty application", () => {
+    expect(classifyUnallocated(student({ applied_sub_types: [] }))).toBe(
+      "not_applied"
+    );
+  });
+
+  it("reports a review reject only when it covers EVERY applied sub-type", () => {
+    // The invisible case: a reject from a role the 教授推薦/學院推薦 columns
+    // don't render still blocks the allocation.
+    expect(
+      classifyUnallocated(
+        student({
+          applied_sub_types: ["nstc", "moe_1w"],
+          rejected_sub_types: ["nstc", "moe_1w"],
+        })
+      )
+    ).toBe("review_rejected");
+    // One sub-type still open ⇒ the blocker was quota, not the review.
+    expect(
+      classifyUnallocated(
+        student({
+          applied_sub_types: ["nstc", "moe_1w"],
+          rejected_sub_types: ["nstc"],
+        })
+      )
+    ).toBe("no_quota");
+  });
+
+  it("compares sub-type codes normalized, like the backend", () => {
+    expect(
+      classifyUnallocated(
+        student({ applied_sub_types: [" NSTC"], rejected_sub_types: ["nstc"] })
+      )
+    ).toBe("review_rejected");
+  });
+
+  it("falls through to 名額不足 for an otherwise allocatable student", () => {
+    expect(classifyUnallocated(student({}))).toBe("no_quota");
+  });
+
+  it("tallies reasons, most common first", () => {
+    expect(
+      summarizeUnallocated([
+        student({ applied_sub_types: ["nstc"], rejected_sub_types: ["nstc"] }),
+        student({ applied_sub_types: ["nstc"], rejected_sub_types: ["nstc"] }),
+        student({}),
+      ])
+    ).toEqual([
+      { reason: "review_rejected", count: 2 },
+      { reason: "no_quota", count: 1 },
+    ]);
   });
 });

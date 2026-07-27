@@ -28,6 +28,8 @@ import {
   makeColKey,
   mergeSuggestions,
   resolveCollegeName,
+  summarizeUnallocated,
+  UNALLOCATED_REASON_LABEL,
 } from "@/lib/api/modules/manual-distribution";
 import { User } from "@/types/user";
 import { Button } from "@/components/ui/button";
@@ -959,12 +961,29 @@ export function ManualDistributionPanel({
         }
         const overflowNote =
           blocked > 0 ? `，另有 ${blocked} 筆因學院名額已滿未分配` : "";
+        // Nothing staged: say WHY per row rather than guessing 「名額已用盡」.
+        // A review reject is the common invisible cause — the 教授推薦/學院推薦
+        // columns only render professor and college verdicts, so a reject from
+        // another reviewer role blocks every sub-type with nothing on screen to
+        // explain it.
+        const stillBlank = students.filter(
+          s =>
+            (s.college_code || "") === collegeCode &&
+            !next.get(s.ranking_item_id) &&
+            !clearedItemIds.has(s.ranking_item_id)
+        );
+        const reasons = summarizeUnallocated(stillBlank)
+          .map(
+            ({ reason, count }) =>
+              `${count} 筆${UNALLOCATED_REASON_LABEL[reason]}`
+          )
+          .join("、");
         setSaveMessage({
           type: "success",
           text:
             filled > 0
               ? `${collegeName}：已預設分配 ${filled} 筆${overflowNote}，請確認後儲存`
-              : `${collegeName}：無可預設分配的名額（學生已分配完畢或名額已用盡）`,
+              : `${collegeName}：無可預設分配${reasons ? `（${reasons}）` : ""}`,
         });
       } catch (error) {
         logger.error("College auto-allocate error", { error: error });
