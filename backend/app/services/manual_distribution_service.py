@@ -64,6 +64,21 @@ def _config_semester_condition(semester: str):
 # preview — would read them as free candidates and hand the slot straight back.
 CANCELLED_ALLOCATION_STATUSES = ("revoked", "suspended")
 
+# Why 預設分發 could not place a student. Emitted per ranking item so the grid
+# can say WHICH student and WHY instead of inferring it from what it can see —
+# a reject from a reviewer role the grid does not render (admin) is otherwise
+# invisible, and "quota full" is indistinguishable from "never a candidate".
+UNALLOCATED_COLLEGE_REJECTED = "college_rejected"
+UNALLOCATED_CANCELLED = "cancelled"
+UNALLOCATED_QUOTA_FULL = "quota_full"
+UNALLOCATED_REVIEW_REJECTED = "review_rejected"
+UNALLOCATED_NOT_APPLIED = "not_applied"
+# The student's college has no cell in the quota matrix at all — an unmapped
+# 學院代碼, or a config that carries no per-college quota. Distinct from
+# quota_full: no amount of quota fixes it, so saying 「名額不足」 would send the
+# admin to edit a matrix row that does not exist.
+UNALLOCATED_NO_COLLEGE_QUOTA = "no_college_quota"
+
 
 def _holds_award(app: Application) -> bool:
     """Does this application hold a funded award — or, if 撤銷/停發, get one back
@@ -180,7 +195,11 @@ def _canonical_sub_type(code: Optional[str], allowed_configs_by_sub_type: dict[s
     return normalized
 
 
-def _dedupe_preview_items(all_items: list, college_code: Optional[str] = None) -> list:
+def _dedupe_preview_items(
+    all_items: list,
+    college_code: Optional[str] = None,
+    staged_ids: Optional[set[int]] = None,
+) -> list:
     """Select the ranking items auto_allocate_preview should suggest for.
 
     One item per application_id, dropping items whose application is missing or
@@ -190,13 +209,24 @@ def _dedupe_preview_items(all_items: list, college_code: Optional[str] = None) -
     skipped application never shadows a later item.
 
     An application can legitimately appear in two finalized rankings, and the
-    duplicate that carries the allocation is PREFERRED — same rule as
-    get_students_for_distribution, so the preview keys its suggestions on the
-    same ranking_item_id the grid renders. Picking the other duplicate would
+    duplicate the GRID renders is preferred, so the preview keys its suggestions
+    on a ranking_item_id the grid can match. Picking the other duplicate would
     make a suggestion the grid cannot match: silently dropped at best, staged
-    onto a row the admin never saw at worst. Callers must feed items in a
+    onto a row the admin never saw at worst. `staged_ids` — the rows the caller
+    has on screen — is the direct evidence of which duplicate that is; without
+    it, fall back to the persisted allocation (the rule
+    get_students_for_distribution uses). Callers must feed items in a
     deterministic order (rank_position, id) for the same reason.
     """
+    staged_ids = staged_ids or set()
+
+    def _preferred(candidate, incumbent) -> bool:
+        if staged_ids:
+            candidate_staged = candidate.id in staged_ids
+            if candidate_staged != (incumbent.id in staged_ids):
+                return candidate_staged
+        return bool(candidate.is_allocated) and not incumbent.is_allocated
+
     index_by_app: dict[int, int] = {}
     unique_items: list = []
     for item in all_items:
@@ -207,7 +237,7 @@ def _dedupe_preview_items(all_items: list, college_code: Optional[str] = None) -
             continue
         existing_idx = index_by_app.get(app.id)
         if existing_idx is not None:
-            if item.is_allocated and not unique_items[existing_idx].is_allocated:
+            if _preferred(item, unique_items[existing_idx]):
                 unique_items[existing_idx] = item
             continue
         index_by_app[app.id] = len(unique_items)
@@ -223,6 +253,7 @@ def _compute_suggestions(
     quota_tracker: dict[tuple, int],
     own_config_id: int,
     rejected_map: Optional[dict[int, set[str]]] = None,
+    undecided_ids: Optional[set[int]] = None,
 ) -> list[dict]:
     """
     Pure allocation logic (no DB access).  Extracted so it can be unit-tested
@@ -232,7 +263,7 @@ def _compute_suggestions(
     ----------
     unique_items:
         CollegeRankingItem objects (with .application pre-loaded) already
-        deduplicated by application_id.  Already-allocated items are skipped.
+        deduplicated by application_id.
     default_prefs:
         Ordered sub_type codes; last-resort preference fallback.
     prev_alloc_configs:
@@ -249,25 +280,46 @@ def _compute_suggestions(
         The requesting config id (default target when no prior slot applies).
     rejected_map:
         {application_id: {rejected_sub_type_codes}} — excluded from allocation.
+    undecided_ids:
+        Ranking item ids that are 未決 on the CALLER's screen and therefore open
+        to a suggestion. Everything else is already decided — either staged by
+        hand or saved — and is skipped (its quota was charged when the tracker
+        was seeded). Omit to fall back to the persisted `is_allocated` flag,
+        which is only correct when nothing is staged.
 
     Returns
     -------
     list[dict]
-        [{"ranking_item_id", "sub_type_code", "allocation_config_id"}, ...]
-        One entry per unallocated input item, in allocation order.
+        [{"ranking_item_id", "sub_type_code", "allocation_config_id", "reason"}, ...]
+        One entry per 未決 input item, in allocation order. `reason` is None on a
+        successful allocation and an UNALLOCATED_REASON_* code otherwise.
     """
     if rejected_map is None:
         rejected_map = {}
+
+    def _is_undecided(item) -> bool:
+        if undecided_ids is None:
+            return not item.is_allocated
+        return item.id in undecided_ids
+
     sorted_items = sorted(
-        [item for item in unique_items if not item.is_allocated],
+        [item for item in unique_items if _is_undecided(item)],
         key=lambda i: (0 if i.application.is_renewal else 1, i.rank_position),
     )
 
     results: list[dict] = []
 
+    def _unplaced(item_id: int, reason: str) -> dict:
+        return {
+            "ranking_item_id": item_id,
+            "sub_type_code": None,
+            "allocation_config_id": None,
+            "reason": reason,
+        }
+
     for item in sorted_items:
         if getattr(item, "college_rejected", False):
-            results.append({"ranking_item_id": item.id, "sub_type_code": None, "allocation_config_id": None})
+            results.append(_unplaced(item.id, UNALLOCATED_COLLEGE_REJECTED))
             continue
 
         app = item.application
@@ -276,7 +328,7 @@ def _compute_suggestions(
         # state and must never be re-suggested, even though cancelling freed
         # their ranking item (is_allocated=False). No quota is consumed.
         if app.quota_allocation_status in CANCELLED_ALLOCATION_STATUSES:
-            results.append({"ranking_item_id": item.id, "sub_type_code": None, "allocation_config_id": None})
+            results.append(_unplaced(item.id, UNALLOCATED_CANCELLED))
             continue
 
         college = (app.student_data or {}).get("std_academyno", "")
@@ -294,12 +346,15 @@ def _compute_suggestions(
         # a raw `in` test silently emptied the whole preference list and the
         # student came out unallocatable with quota still free.
         applied_set = {_norm_sub_type(p) for p in applied}
-        preferences: list[str] = [
+        # Kept separately from `preferences` so an empty preference list can say
+        # WHICH filter emptied it: sub-types the student may draw before review
+        # is considered, versus what survives review.
+        applicable: list[str] = [
             canonical
             for canonical in (_canonical_sub_type(p, allowed_configs_by_sub_type) for p in raw_prefs)
             if (_norm_sub_type(canonical) in applied_set if applied_set else True)
-            and _norm_sub_type(canonical) not in rejected
         ]
+        preferences: list[str] = [c for c in applicable if _norm_sub_type(c) not in rejected]
 
         allocated_sub_type: Optional[str] = None
         allocated_config: Optional[int] = None
@@ -323,13 +378,30 @@ def _compute_suggestions(
             if allocated_sub_type:
                 break
 
-        results.append(
-            {
-                "ranking_item_id": item.id,
-                "sub_type_code": allocated_sub_type,
-                "allocation_config_id": allocated_config,
-            }
-        )
+        if allocated_sub_type:
+            results.append(
+                {
+                    "ranking_item_id": item.id,
+                    "sub_type_code": allocated_sub_type,
+                    "allocation_config_id": allocated_config,
+                    "reason": None,
+                }
+            )
+        elif preferences:
+            # A missing tracker key reads as zero remaining, so "ran out" and
+            # "never had a cell" are the same failure here — tell them apart by
+            # asking whether any cell exists at all.
+            has_cell = any(
+                (cid, sub_type, college) in quota_tracker
+                for sub_type in preferences
+                for cid in allowed_configs_by_sub_type.get(sub_type, [own_config_id])
+            )
+            results.append(_unplaced(item.id, UNALLOCATED_QUOTA_FULL if has_cell else UNALLOCATED_NO_COLLEGE_QUOTA))
+        elif applicable:
+            # Every sub-type they could draw was rejected (不同意) in review.
+            results.append(_unplaced(item.id, UNALLOCATED_REVIEW_REJECTED))
+        else:
+            results.append(_unplaced(item.id, UNALLOCATED_NOT_APPLIED))
 
     return results
 
@@ -1604,16 +1676,17 @@ class ManualDistributionService:
         academic_year: int,
         semester: str,
         college_code: Optional[str] = None,
+        staged: Optional[list[dict]] = None,
     ) -> list[dict]:
         """
         Compute auto-allocation suggestions without persisting any changes.
 
         Algorithm:
         1. Load finalized CollegeRanking records + their items (with Application eager-loaded).
-        2. Deduplicate items by application_id (keep first seen).
+        2. Deduplicate items by application_id (keep the one the caller renders).
         3. Load default preferences and previous allocation years for renewal students.
         4. Build quota tracker from config (current year + prior years per sub-type).
-        5. Subtract already-allocated items from tracker.
+        5. Subtract the allocations in force — see `staged` — from the tracker.
         6. Sort students: renewal first, then by rank_position ascending.
         7. Allocate sequentially following preference order and quota constraints.
 
@@ -1624,8 +1697,18 @@ class ManualDistributionService:
         (config_id, sub_type, college_code), so no other college's students can
         be affected by the ones skipped here.
 
-        Returns list of {"ranking_item_id", "sub_type_code", "allocation_config_id"} dicts.
-        Only unallocated items are included in the output.
+        `staged` is the caller's on-screen state — [{"ranking_item_id",
+        "sub_type_code", "allocation_config_id"}] covering EVERY row it renders,
+        for every college, with a null sub_type_code for a 未決 row. Where it
+        speaks, it overrides the database: a row the admin unticked frees its
+        slot for someone else here and now, and a row they ticked by hand is
+        already decided — charged against the quota, never re-suggested. Without
+        it the tracker falls back to the persisted allocations, which is only
+        the truth when nothing is staged (the first load of a fresh screen).
+
+        Returns list of {"ranking_item_id", "sub_type_code",
+        "allocation_config_id", "reason"} dicts — one per 未決 item, `reason`
+        naming why when nothing could be allocated.
         """
         # --- Step 0: Load finalized rankings ---
         ranking_query = select(CollegeRanking).where(
@@ -1656,9 +1739,17 @@ class ManualDistributionService:
         result = await self.db.execute(items_query)
         all_items = result.scalars().all()
 
-        # Deduplicate by application_id (keep first seen), skip soft-deleted,
-        # and keep only the requested college when one was given.
-        unique_items = _dedupe_preview_items(all_items, college_code)
+        # Index the raw rows before dedup: the staged overlay is keyed on
+        # ranking_item_id across EVERY college, so charging it needs items the
+        # college filter is about to drop.
+        items_by_id = {item.id: item for item in all_items}
+        staged_ids = (
+            {row["ranking_item_id"] for row in staged if row.get("ranking_item_id") in items_by_id} if staged else set()
+        )
+
+        # Deduplicate by application_id (keeping the row the caller renders),
+        # skip soft-deleted, and keep only the requested college when one was given.
+        unique_items = _dedupe_preview_items(all_items, college_code, staged_ids)
 
         if not unique_items:
             return []
@@ -1697,6 +1788,32 @@ class ManualDistributionService:
                 c["config_id"] for c in await self.distributable_pool(requesting_config, st)
             ]
 
+        # Resolve the overlay against the config's own spelling of each sub-type,
+        # so a staged "NSTC" charges the same tracker cell a suggested "nstc"
+        # would. A staged sub-type with no config attached consumes the
+        # requesting config, matching how `allocate` reads the same wire shape.
+        staged_map: Optional[dict[int, Optional[tuple[str, int]]]] = None
+        if staged is not None:
+            staged_map = {}
+            for row in staged:
+                item_id = row.get("ranking_item_id")
+                if item_id not in items_by_id:
+                    continue
+                # Reject duplicates rather than letting the last one win, exactly
+                # as `allocate` does for this same wire shape: a row staged twice
+                # would silently collapse, freeing its slot from the tracker while
+                # the screen still shows it taken.
+                if item_id in staged_map:
+                    raise ValueError(f"Duplicate ranking item: {item_id}")
+                sub_type_code = row.get("sub_type_code")
+                if not sub_type_code:
+                    staged_map[item_id] = None
+                    continue
+                staged_map[item_id] = (
+                    _canonical_sub_type(sub_type_code, allowed_configs_by_sub_type),
+                    row.get("allocation_config_id") or requesting_config.id,
+                )
+
         # --- Step 2: Build the per-(config, sub_type, college) tracker ---
         # Seed from each consumed config's matrix so per-college caps survive,
         # then subtract every existing global consumer of that config so the
@@ -1725,6 +1842,11 @@ class ManualDistributionService:
         )
         existing_items = (await self.db.execute(existing_stmt)).scalars().all()
         for ex in existing_items:
+            # A row the caller has on screen is accounted for by the overlay
+            # below — charging the saved allocation too would bill it twice, and
+            # would keep billing it after the admin unticked the box.
+            if staged_map is not None and ex.id in staged_map:
+                continue
             if not ex.allocated_sub_type or ex.application is None:
                 continue
             college = (ex.application.student_data or {}).get("std_academyno", "")
@@ -1748,6 +1870,32 @@ class ManualDistributionService:
             if key in quota_tracker:
                 quota_tracker[key] = max(0, quota_tracker[key] - 1)
 
+        # Charge every allocation staged on screen, for EVERY college — the
+        # quota pool is shared, so one college's unsaved ticks are the reason
+        # another college may have nothing left to hand out.
+        if staged_map is not None:
+            for item_id, staged_alloc in staged_map.items():
+                if staged_alloc is None:
+                    continue
+                sub_type, cfg_id = staged_alloc
+                item = items_by_id.get(item_id)
+                if item is None or item.application is None:
+                    continue
+                college = (item.application.student_data or {}).get("std_academyno", "")
+                key = (cfg_id, sub_type, college)
+                if key in quota_tracker:
+                    quota_tracker[key] = max(0, quota_tracker[key] - 1)
+
+        # Who is still open to a suggestion. A row absent from the overlay is
+        # one the caller never rendered, so its saved state is all we know.
+        undecided_ids: Optional[set[int]] = None
+        if staged_map is not None:
+            undecided_ids = {
+                item.id
+                for item in unique_items
+                if (staged_map[item.id] is None if item.id in staged_map else not item.is_allocated)
+            }
+
         # Load rejected sub-types from professor reviews.
         app_ids = [item.application.id for item in unique_items]
         rejected_map = await self._batch_load_rejected_map(app_ids)
@@ -1760,6 +1908,7 @@ class ManualDistributionService:
             quota_tracker=quota_tracker,
             own_config_id=requesting_config.id,
             rejected_map=rejected_map,
+            undecided_ids=undecided_ids,
         )
 
     async def revoke_allocation(self, application_id: int, admin_user_id: int, reason: str) -> dict:

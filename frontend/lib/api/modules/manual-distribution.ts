@@ -170,108 +170,59 @@ export interface AllocationSuggestion {
   ranking_item_id: number;
   sub_type_code: string | null;
   allocation_config_id: number | null;
+  /** Why nothing could be allocated. Null on a successful suggestion. */
+  reason?: UnallocatedReason | null;
 }
 
 export interface MergeSuggestionsResult {
   /** A NEW map — callers must not mutate `current`. */
   next: Map<number, LocalAlloc | null>;
-  /** How many blank rows the suggestions filled. */
+  /** How many 未決 rows the suggestions filled. */
   filled: number;
-  /** Suggestions dropped because the per-college budget was exhausted. */
-  blocked: number;
 }
 
 /**
  * Merge auto-allocation suggestions into the staged allocation map.
  *
- * Single implementation for the on-load preview and the per-college 預設分發
- * button, so both apply the same rules: only rows in `eligibleItemIds` (in the
- * grid, right college, not 撤銷/停發), only rows with NO allocation yet (saved
- * or hand-picked selections are never overwritten).
+ * Single implementation for the on-load preview and the 預設分發 buttons, so
+ * both apply the same rules: only rows in `eligibleItemIds` (in the grid, right
+ * college, not 撤銷/停發), and only 未決 rows — a row already carrying an
+ * allocation is decided, and is never overwritten.
  *
- * `budget` (from buildCollegeBudget) caps how many more rows may be staged per
- * (sub_type, config) column. It is REQUIRED whenever suggestions are merged on
- * top of unsaved staged work: the backend computes suggestions against
- * persisted consumers only, so without it a hand-picked-then-auto-filled
- * college can exceed its matrix row. The map is mutated as budget is consumed.
+ * No quota cap here. The suggestions were computed against the same staged map
+ * this merges into (see getAutoAllocatePreview's `staged`), so the server has
+ * already spent exactly the headroom the screen has left; a second cap applied
+ * here could only wrongly drop a row the server deliberately allocated.
  */
 export function mergeSuggestions(
   current: Map<number, LocalAlloc | null>,
   suggestions: AllocationSuggestion[],
-  eligibleItemIds: Set<number>,
-  budget?: Map<string, number>
+  eligibleItemIds: Set<number>
 ): MergeSuggestionsResult {
   const next = new Map(current);
   let filled = 0;
-  let blocked = 0;
   for (const s of suggestions) {
     if (!s.sub_type_code || s.allocation_config_id == null) continue;
     if (!eligibleItemIds.has(s.ranking_item_id)) continue;
     if (next.get(s.ranking_item_id)) continue;
-    const key = makeColKey(s.sub_type_code, s.allocation_config_id);
-    if (budget) {
-      const left = budget.get(key);
-      // Absent key = no per-college cap for that column (non-matrix config).
-      if (left !== undefined) {
-        if (left <= 0) {
-          blocked++;
-          continue;
-        }
-        budget.set(key, left - 1);
-      }
-    }
     next.set(s.ranking_item_id, {
       sub_type: s.sub_type_code,
       config_id: s.allocation_config_id,
     });
     filled++;
   }
-  return { next, filled, blocked };
+  return { next, filled };
 }
 
-/**
- * Remaining per-(sub_type, config) headroom for ONE college, as of the CURRENT
- * staged state.
- *
- * Baseline is the server's LIVE `remaining`, not the matrix `total`: consumers
- * count globally (winners in any finalized ranking plus approved renewals — see
- * consumers_by_college), so a `total`-based baseline would silently hand out
- * headroom already taken by rows this grid never shows.
- *
- * `remaining` has already subtracted each row's SAVED allocation, so only
- * unsaved changes may move the budget: a saved row adds its slot back, the
- * staged allocation then takes one. A row staged exactly as saved nets to zero;
- * an untick frees a slot; a fresh tick consumes one.
- *
- * Columns whose config carries no per-college matrix (`by_college === null`)
- * are omitted — they have no per-college cap to enforce.
- */
-export function buildCollegeBudget(
-  quotaStatus: QuotaStatus,
-  students: DistributionStudent[],
-  allocations: Map<number, LocalAlloc | null>,
-  collegeCode: string
-): Map<string, number> {
-  const budget = new Map<string, number>();
-  for (const [sub_type, stData] of Object.entries(quotaStatus)) {
-    for (const cfg of stData.by_config) {
-      const cell = cfg.by_college?.[collegeCode];
-      if (!cell) continue;
-      budget.set(makeColKey(sub_type, cfg.config_id), cell.remaining);
-    }
-  }
-  const bump = (alloc: LocalAlloc | null | undefined, delta: number) => {
-    if (!alloc) return;
-    const key = makeColKey(alloc.sub_type, alloc.config_id);
-    const left = budget.get(key);
-    if (left !== undefined) budget.set(key, left + delta);
-  };
-  for (const s of students) {
-    if ((s.college_code || "") !== collegeCode) continue;
-    bump(getSavedAllocation(s), +1); // give the saved slot back …
-    bump(allocations.get(s.ranking_item_id), -1); // … then charge what is staged
-  }
-  return budget;
+/** The staged map on the wire — every row the grid renders, 未決 rows included. */
+export function toStagedItems(
+  allocations: Map<number, LocalAlloc | null>
+): AllocationItem[] {
+  return Array.from(allocations.entries()).map(([ranking_item_id, alloc]) => ({
+    ranking_item_id,
+    sub_type_code: alloc?.sub_type ?? null,
+    allocation_config_id: alloc?.config_id ?? null,
+  }));
 }
 
 export interface AllocateRequest {
@@ -326,59 +277,65 @@ export function isCancelledAllocation(s: DistributionStudent): boolean {
   );
 }
 
-/** Sub-type codes are free-form strings; compare them normalized (mirrors the backend's _norm_sub_type). */
-function normSubType(code: string | null | undefined): string {
-  return (code ?? "").toLowerCase().trim();
-}
-
+/**
+ * Why 預設分發 could not place a student. Decided by the backend, which is the
+ * only place that knows — a reject from a reviewer role the grid does not
+ * render is invisible here, and "the quota ran out" cannot be told apart from
+ * "they were never a candidate" by looking at the row.
+ *
+ * Mirrors the UNALLOCATED_* constants in manual_distribution_service.py.
+ */
 export type UnallocatedReason =
   | "cancelled"
   | "college_rejected"
   | "not_applied"
   | "review_rejected"
-  | "no_quota";
+  | "quota_full"
+  | "no_college_quota";
 
 export const UNALLOCATED_REASON_LABEL: Record<UnallocatedReason, string> = {
   cancelled: "已撤銷／停發",
   college_rejected: "學院不予推薦",
-  not_applied: "未申請任何子類型",
+  not_applied: "未申請可分配的子類型",
   review_rejected: "審核不同意",
-  no_quota: "名額不足",
+  quota_full: "名額不足",
+  no_college_quota: "該學院無此類別名額",
 };
 
 /**
- * Why the auto-allocation could not place this student.
- *
- * Only meaningful for a row the backend returned no sub-type for. The order
- * mirrors the backend's own short-circuits in _compute_suggestions, so the
- * reason shown is the one that actually stopped it. "no_quota" is the residual:
- * the student is allocatable but every sub-type they want is exhausted.
- *
- * Exists because 「名額已用盡」 was being reported for rows that were really
- * blocked by a review reject — including rejects from a reviewer whose verdict
- * the 教授推薦/學院推薦 columns do not render, leaving no visible explanation.
+ * Label for a reason code, surviving one the backend added and this build has
+ * not learnt yet. The union is a hand-kept mirror of the UNALLOCATED_*
+ * constants and the response is untyped, so an unknown code reaches here with
+ * no type error — showing the raw code beats 「未分配: undefined」.
  */
-export function classifyUnallocated(s: DistributionStudent): UnallocatedReason {
-  // college_rejected FIRST — _compute_suggestions short-circuits on it before
-  // it ever reads quota_allocation_status, so for a row that is both, the
-  // college's rejection is what actually stopped the allocation. (The 撤銷/停發
-  // state is not hidden by this: the row renders its own status control.)
-  if (s.college_rejected) return "college_rejected";
-  if (isCancelledAllocation(s)) return "cancelled";
-  const applied = s.applied_sub_types ?? [];
-  if (applied.length === 0) return "not_applied";
-  const rejected = new Set((s.rejected_sub_types ?? []).map(normSubType));
-  if (applied.every(a => rejected.has(normSubType(a)))) return "review_rejected";
-  return "no_quota";
+export function unallocatedReasonLabel(reason: UnallocatedReason): string {
+  return UNALLOCATED_REASON_LABEL[reason] ?? reason;
 }
 
-/** Reason → count over the given students, most common first; zero counts omitted. */
-export function summarizeUnallocated(
-  students: DistributionStudent[]
+/**
+ * ranking_item_id → why it was left 未決, for the rows the run could not place.
+ *
+ * 撤銷/停發 rows are dropped: they were never candidates, and the grid already
+ * states their status on the row itself. Counting them would report a dozen
+ * "failures" for a college where nothing actually went wrong.
+ */
+export function reasonsBySuggestion(
+  suggestions: AllocationSuggestion[]
+): Map<number, UnallocatedReason> {
+  const reasons = new Map<number, UnallocatedReason>();
+  for (const s of suggestions) {
+    if (s.sub_type_code || !s.reason || s.reason === "cancelled") continue;
+    reasons.set(s.ranking_item_id, s.reason);
+  }
+  return reasons;
+}
+
+/** Reason → count, most common first; zero counts omitted. */
+export function summarizeReasons(
+  reasons: Map<number, UnallocatedReason>
 ): Array<{ reason: UnallocatedReason; count: number }> {
   const tally = new Map<UnallocatedReason, number>();
-  for (const s of students) {
-    const reason = classifyUnallocated(s);
+  for (const reason of reasons.values()) {
     tally.set(reason, (tally.get(reason) ?? 0) + 1);
   }
   return [...tally.entries()]
@@ -717,29 +674,37 @@ export function createManualDistributionApi() {
     },
 
     /**
-     * Get auto-allocation preview suggestions.
+     * Get auto-allocation preview suggestions. Writes nothing.
      *
      * Pass `college_code` to run the distribution for a single college — the
      * backend still evaluates quotas globally, so the suggestions match what a
      * whole-scholarship run would produce for that college.
+     *
+     * Pass `staged` — the grid's CURRENT allocations for every row it renders,
+     * every college — to have the plan computed against the screen instead of
+     * the saved distribution. Omit it only on a screen that has staged nothing.
      */
     getAutoAllocatePreview: async (
       scholarship_type_id: number,
       academic_year: number,
       semester: string,
-      college_code?: string
+      college_code?: string,
+      staged?: AllocationItem[]
     ): Promise<ApiResponse<{ suggestions: AllocationSuggestion[] }>> => {
-      const response = await typedClient.raw.GET(
+      const response = await typedClient.raw.POST(
         "/api/v1/manual-distribution/auto-allocate-preview",
         {
-          params: {
-            query: {
-              scholarship_type_id,
-              academic_year,
-              semester,
-              ...(college_code ? { college_code } : {}),
-            },
-          },
+          body: {
+            scholarship_type_id,
+            academic_year,
+            semester,
+            ...(college_code ? { college_code } : {}),
+            // `staged !== undefined`, not a truthiness test: an EMPTY overlay is
+            // a real answer ("this screen renders no rows") and JS and Python
+            // disagree about `[]`, so a truthiness test here would ship one
+            // meaning and have the server read another.
+            ...(staged !== undefined ? { staged } : {}),
+          } as never,
         }
       );
       return toApiResponse(response) as ApiResponse<{

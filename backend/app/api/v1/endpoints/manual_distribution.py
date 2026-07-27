@@ -45,6 +45,17 @@ class AllocateRequest(BaseModel):
     allocations: list[AllocationItem]
 
 
+class AutoAllocatePreviewRequest(BaseModel):
+    scholarship_type_id: int
+    academic_year: int
+    semester: str
+    college_code: Optional[str] = None  # Restrict suggestions to one college
+    # The caller's on-screen allocations for every row it renders, all colleges
+    # — same shape as AllocateRequest.allocations, a null sub_type_code meaning
+    # 未決. None (the field omitted) falls back to the saved state.
+    staged: Optional[list[AllocationItem]] = None
+
+
 class FinalizeRequest(BaseModel):
     scholarship_type_id: int
     academic_year: int
@@ -195,12 +206,9 @@ async def get_distribution_state(
     }
 
 
-@router.get("/auto-allocate-preview")
+@router.post("/auto-allocate-preview")
 async def auto_allocate_preview(
-    scholarship_type_id: int = Query(...),
-    academic_year: int = Query(...),
-    semester: str = Query(...),
-    college_code: Optional[str] = Query(None, description="Restrict suggestions to one college"),
+    request: AutoAllocatePreviewRequest,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_admin_user),
 ):
@@ -209,20 +217,31 @@ async def auto_allocate_preview(
     Pass `college_code` to run the distribution for a single college; quotas are
     still evaluated against the global live remaining, so the result matches what
     a whole-scholarship run would suggest for that college.
+
+    Pass `staged` — the caller's on-screen allocations for every row it renders,
+    every college — to have the suggestions computed against that state instead
+    of the saved one. Unticked rows free their slot immediately; hand-ticked rows
+    are treated as decided. POST rather than GET because that state is a body,
+    not a query string; nothing is written either way.
     """
     try:
         service = ManualDistributionService(db)
         suggestions = await service.auto_allocate_preview(
-            scholarship_type_id=scholarship_type_id,
-            academic_year=academic_year,
-            semester=semester,
-            college_code=college_code,
+            scholarship_type_id=request.scholarship_type_id,
+            academic_year=request.academic_year,
+            semester=request.semester,
+            college_code=request.college_code,
+            staged=[item.model_dump() for item in request.staged] if request.staged is not None else None,
         )
         return {
             "success": True,
             "message": "Auto-allocation preview generated",
             "data": {"suggestions": suggestions},
         }
+    except ValueError as e:
+        # A malformed overlay (e.g. the same ranking item staged twice) — same
+        # 400 `allocate` gives for the same wire shape.
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except Exception as e:
         logger.error("Error generating auto-allocation preview: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to generate auto-allocation preview") from e

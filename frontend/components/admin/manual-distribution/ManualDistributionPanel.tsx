@@ -21,15 +21,17 @@ import type {
   ReleaseChainItem,
 } from "@/lib/api/modules/manual-distribution";
 import {
-  buildCollegeBudget,
   buildCollegeNameMap,
   getSavedAllocation,
   isCancelledAllocation,
   makeColKey,
   mergeSuggestions,
+  reasonsBySuggestion,
   resolveCollegeName,
-  summarizeUnallocated,
-  UNALLOCATED_REASON_LABEL,
+  summarizeReasons,
+  toStagedItems,
+  unallocatedReasonLabel,
+  type UnallocatedReason,
 } from "@/lib/api/modules/manual-distribution";
 import { User } from "@/types/user";
 import { Button } from "@/components/ui/button";
@@ -86,7 +88,10 @@ interface ManualDistributionPanelProps {
 
 const ALL_ACADEMIES_SYSTEM = "__all__";
 
-/** Seed local allocation state from the server snapshot (null = unallocated). */
+/** In-flight marker for the whole-page 預設分發 run; no college_code collides. */
+const ALL_COLLEGES = "__all_colleges__";
+
+/** Seed local allocation state from the server snapshot (null = 未決). */
 function seedAllocations(
   students: DistributionStudent[]
 ): Map<number, LocalAlloc | null> {
@@ -303,12 +308,12 @@ export function ManualDistributionPanel({
   useEffect(() => {
     localAllocationsRef.current = localAllocations;
   }, [localAllocations]);
-  // Rows the admin explicitly unticked. In localAllocations an untick and a
-  // never-allocated row are BOTH null, so without this the per-college
-  // 預設分發 would re-fill a row the admin deliberately cleared — including one
-  // whose saved allocation they were removing. Reset whenever local state is
-  // reseeded from the server (the clear is then either saved or discarded).
-  const [clearedItemIds, setClearedItemIds] = useState<Set<number>>(new Set());
+  // Why the last 預設分發 run left a row 未決, keyed by ranking_item_id. Comes
+  // straight from the backend, which is the only place that can tell a review
+  // reject from an exhausted quota. Cleared whenever the grid is reseeded.
+  const [unallocatedReasons, setUnallocatedReasons] = useState<
+    Map<number, UnallocatedReason>
+  >(new Map());
   const [collegeFilter, setCollegeFilter] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
@@ -339,7 +344,7 @@ export function ManualDistributionPanel({
     }>;
   } | null>(null);
   const [previewApplied, setPreviewApplied] = useState(false);
-  // college_code currently running the per-college 預設分發 button (null = idle).
+  // Which 預設分發 run is in flight: a college_code, ALL_COLLEGES, or null (idle).
   const [autoAllocatingCollege, setAutoAllocatingCollege] = useState<
     string | null
   >(null);
@@ -412,7 +417,7 @@ export function ManualDistributionPanel({
     setIsLoading(true);
     setSaveMessage(null);
     setPreviewApplied(false);
-    setClearedItemIds(new Set());
+    setUnallocatedReasons(new Map());
     try {
       const [studentsResp, quotaResp] = await Promise.all([
         apiClient.manualDistribution.getStudents(
@@ -437,7 +442,11 @@ export function ManualDistributionPanel({
             await apiClient.manualDistribution.getAutoAllocatePreview(
               scholarshipTypeId,
               selectedAcademicYear,
-              selectedSemester
+              selectedSemester,
+              undefined,
+              // The overlay a fresh screen would send equals the saved state, so
+              // it is omitted: the server's own snapshot IS this screen.
+              undefined
             );
           if (previewResp.success && previewResp.data) {
             previewSuggestions = previewResp.data.suggestions;
@@ -446,12 +455,11 @@ export function ManualDistributionPanel({
           // Preview is optional; proceed without it
         }
 
-        // Apply auto-preview suggestions for unallocated students. Eligible =
-        // rows the grid actually renders, minus 撤銷/停發 — a suggestion for a
-        // row that is not on screen (a duplicate ranking item, or a cancelled
-        // student behind a disabled checkbox) would be saved without the admin
-        // ever being able to see or untick it. No budget: this runs against a
-        // fresh server snapshot, so the backend's own quota counts are exact.
+        // Apply auto-preview suggestions for 未決 students. Eligible = rows the
+        // grid actually renders, minus 撤銷/停發 — a suggestion for a row that is
+        // not on screen (a duplicate ranking item, or a cancelled student behind
+        // a disabled checkbox) would be saved without the admin ever being able
+        // to see or untick it.
         //
         // Quota status is the same kind of prerequisite: the 核配 columns are
         // derived from it, so if it failed to load the grid renders NO columns
@@ -475,6 +483,9 @@ export function ManualDistributionPanel({
         setStudents(studentsResp.data);
         setPreviewApplied(merged.filled > 0);
         setLocalAllocations(merged.next);
+        setUnallocatedReasons(
+          hasQuota ? reasonsBySuggestion(previewSuggestions) : new Map()
+        );
       }
       if (quotaResp.success && quotaResp.data) {
         setQuotaStatus(quotaResp.data);
@@ -511,9 +522,9 @@ export function ManualDistributionPanel({
       setLocalAllocations(seedAllocations(studentsResp.data));
       // The reseed is server-only, so any auto-preview suggestions are gone
       // (saved or discarded) — clear the "已自動預設分配" notice, and with it
-      // the record of deliberate unticks (now persisted or thrown away).
+      // the reasons, which described a screen that no longer exists.
       setPreviewApplied(false);
-      setClearedItemIds(new Set());
+      setUnallocatedReasons(new Map());
     }
     if (quotaResp.success && quotaResp.data) {
       setQuotaStatus(quotaResp.data);
@@ -658,18 +669,13 @@ export function ManualDistributionPanel({
     sub_type: string,
     config_id: number
   ) => {
-    // Read the render-scoped state, NOT localAllocationsRef: the ref is written
-    // in an effect (it exists so an await'd handler can see edits made while its
-    // request was in flight) and can therefore trail the committed render that
-    // produced this click.
-    const cur = localAllocations.get(rankingItemId);
-    const isUncheck =
-      cur?.sub_type === sub_type && cur?.config_id === config_id;
-    // Remember a deliberate clear so 預設分發 leaves that row alone.
-    setClearedItemIds(prev => {
-      const next = new Set(prev);
-      if (isUncheck) next.add(rankingItemId);
-      else next.delete(rankingItemId);
+    // Unticking returns the row to 未決 — nothing else is remembered about it.
+    // A 未決 row is open to 預設分發 again and its slot is free for someone
+    // else; to keep a student out of the round entirely, use 撤銷/停發.
+    setUnallocatedReasons(prev => {
+      if (!prev.has(rankingItemId)) return prev;
+      const next = new Map(prev);
+      next.delete(rankingItemId);
       return next;
     });
     setLocalAllocations(prev => {
@@ -878,27 +884,30 @@ export function ManualDistributionPanel({
   };
 
   /**
-   * Run the default distribution for ONE college.
+   * Run the default distribution — for ONE college, or for all of them when
+   * `collegeCode` is null.
    *
-   * Same algorithm as the on-load auto-preview, scoped server-side to this
-   * college (quotas are still evaluated globally). It covers the college's WHOLE
-   * ranking, not just the rows a 搜尋 filter leaves on screen — the suggestions
-   * are a rank-ordered plan, and applying half of one would hand a slot to the
-   * wrong student.
+   * The plan is computed against THIS SCREEN: the current staged allocations go
+   * up with the request, so a box the admin unticked has genuinely released its
+   * slot and a box they ticked by hand has genuinely taken one. Reading the
+   * saved distribution instead is what made the button report 「名額已用盡」 next
+   * to visibly empty columns.
+   *
+   * It covers the WHOLE ranking in scope, not just the rows a 搜尋 filter leaves
+   * on screen — the suggestions are a rank-ordered plan, and applying half of
+   * one would hand a slot to the wrong student.
    *
    * Staged locally only — nothing is persisted until the admin presses 儲存 —
-   * and it never touches a row that already carries an allocation (saved or
-   * hand-picked) NOR one the admin explicitly unticked (clearedItemIds), so it
-   * is safe to press repeatedly: it only fills rows nobody has decided on.
+   * and it only fills 未決 rows, so it is safe to press repeatedly and never
+   * overwrites a deliberate tick.
    */
-  const handleCollegeAutoAllocate = useCallback(
-    async (collegeCode: string, collegeName: string) => {
+  const handleAutoAllocate = useCallback(
+    async (collegeCode: string | null, scopeName: string) => {
       if (!scholarshipTypeId || !selectedAcademicYear || !selectedSemester)
         return;
       // No columns means quota status never loaded (or carries no allocatable
-      // slot). Without it there is no per-college cap to enforce AND nothing on
-      // screen to show what was staged — refuse rather than stage invisible,
-      // uncapped allocations that 儲存 would happily persist.
+      // slot). Without it there is nothing on screen to show what was staged —
+      // refuse rather than stage invisible allocations that 儲存 would persist.
       if (subTypeCols.length === 0) {
         setSaveMessage({
           type: "error",
@@ -906,93 +915,87 @@ export function ManualDistributionPanel({
         });
         return;
       }
-      setAutoAllocatingCollege(collegeCode);
+      setAutoAllocatingCollege(collegeCode ?? ALL_COLLEGES);
       setSaveMessage(null);
       try {
+        // Read through the ref, NOT the value captured before the await: the
+        // checkboxes stay live during the request, so both the overlay sent up
+        // and the map merged into must be the latest committed state.
         const resp = await apiClient.manualDistribution.getAutoAllocatePreview(
           scholarshipTypeId,
           selectedAcademicYear,
           selectedSemester,
-          collegeCode
+          collegeCode ?? undefined,
+          toStagedItems(localAllocationsRef.current)
         );
         if (!resp.success || !resp.data) {
           setSaveMessage({
             type: "error",
-            text: resp.message || `${collegeName} 預設分發失敗`,
+            text: resp.message || `${scopeName} 預設分發失敗`,
           });
           return;
         }
         const suggestions = resp.data.suggestions;
-        // Eligible = this college's rows only (never touch another group), minus
-        // 撤銷/停發 students, who keep their state and stay unallocated, and
-        // minus rows the admin explicitly unticked — pressing the button again
-        // must not undo a deliberate clear.
+        // Eligible = the rows in scope (never touch another group), minus
+        // 撤銷/停發 students, who keep their state and stay unallocated.
         const eligibleItemIds = new Set(
           students
             .filter(
               s =>
-                (s.college_code || "") === collegeCode &&
-                !isCancelledAllocation(s) &&
-                !clearedItemIds.has(s.ranking_item_id)
+                (collegeCode === null ||
+                  (s.college_code || "") === collegeCode) &&
+                !isCancelledAllocation(s)
             )
             .map(s => s.ranking_item_id)
         );
-        // Read through the ref, NOT the value captured before the await: the
-        // checkboxes stay live during the request, and merging into the stale
-        // map would silently revert anything the admin ticked meanwhile.
-        const staged = localAllocationsRef.current;
-        // The backend counted only PERSISTED consumers, so cap the merge by this
-        // college's matrix row minus what is already staged — otherwise
-        // hand-picking first and then pressing this button over-allocates the
-        // college (the save-time gate only recounts the global pool).
-        const budget = buildCollegeBudget(
-          quotaStatus,
-          students,
-          staged,
-          collegeCode
-        );
-        const { next, filled, blocked } = mergeSuggestions(
-          staged,
+        const { next, filled } = mergeSuggestions(
+          localAllocationsRef.current,
           suggestions,
-          eligibleItemIds,
-          budget
+          eligibleItemIds
         );
         if (filled > 0) {
           setLocalAllocations(next);
           setPreviewApplied(true);
         }
-        let text: string;
-        if (filled > 0) {
-          const overflowNote =
-            blocked > 0 ? `，另有 ${blocked} 筆因學院名額已滿未分配` : "";
-          text = `${collegeName}：已預設分配 ${filled} 筆${overflowNote}，請確認後儲存`;
-        } else {
-          // Nothing staged: say WHY per row rather than guessing 「名額已用盡」.
-          // A review reject is the common invisible cause — the 教授推薦/學院推薦
-          // columns only render professor and college verdicts, so a reject from
-          // another reviewer role blocks every sub-type with nothing on screen
-          // to explain it. Only this branch needs the breakdown, so the scan
-          // stays off the path that did allocate something.
-          const stillBlank = students.filter(
-            s =>
-              (s.college_code || "") === collegeCode &&
-              !next.get(s.ranking_item_id) &&
-              !clearedItemIds.has(s.ranking_item_id)
-          );
-          const reasons = summarizeUnallocated(stillBlank)
-            .map(
-              ({ reason, count }) =>
-                `${count} 筆${UNALLOCATED_REASON_LABEL[reason]}`
-            )
-            .join("、");
-          text = `${collegeName}：無可預設分配${reasons ? `（${reasons}）` : ""}`;
-        }
+        // Refresh the explanation for every row this run considered: a row it
+        // actually staged loses its old one, an unplaced row takes the
+        // backend's verdict. Rows out of scope keep whatever an earlier run
+        // said. Keyed on what the merge STAGED, not on what the server
+        // suggested — a suggestion the merge dropped as ineligible leaves the
+        // row 未決, so clearing its reason would strip the only explanation on
+        // screen.
+        const runReasons = reasonsBySuggestion(suggestions);
+        setUnallocatedReasons(prev => {
+          const merged = new Map(prev);
+          for (const s of suggestions) {
+            if (s.sub_type_code && next.get(s.ranking_item_id)) {
+              merged.delete(s.ranking_item_id);
+            }
+          }
+          for (const [itemId, reason] of runReasons) {
+            merged.set(itemId, reason);
+          }
+          return merged;
+        });
+
+        const breakdown = summarizeReasons(runReasons)
+          .map(
+            ({ reason, count }) =>
+              `${count} 筆${unallocatedReasonLabel(reason)}`
+          )
+          .join("、");
+        const text =
+          filled > 0
+            ? `${scopeName}：已預設分配 ${filled} 筆${
+                breakdown ? `，另有 ${breakdown}` : ""
+              }，請確認後儲存`
+            : `${scopeName}：無可預設分配${breakdown ? `（${breakdown}）` : ""}`;
         setSaveMessage({ type: "success", text });
       } catch (error) {
-        logger.error("College auto-allocate error", { error: error });
+        logger.error("Auto-allocate error", { error: error });
         setSaveMessage({
           type: "error",
-          text: `${collegeName} 預設分發時發生錯誤`,
+          text: `${scopeName} 預設分發時發生錯誤`,
         });
       } finally {
         setAutoAllocatingCollege(null);
@@ -1003,9 +1006,7 @@ export function ManualDistributionPanel({
       selectedAcademicYear,
       selectedSemester,
       students,
-      quotaStatus,
       subTypeCols,
-      clearedItemIds,
     ]
   );
 
@@ -1125,6 +1126,31 @@ export function ManualDistributionPanel({
                 <Download className="h-4 w-4 mr-1" />
                 匯出 Excel
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={
+                  subTypeCols.length === 0 ||
+                  autoAllocatingCollege !== null ||
+                  isLoading ||
+                  isSaving ||
+                  isFinalizing ||
+                  isRestoring
+                }
+                title={
+                  subTypeCols.length === 0
+                    ? "名額資料尚未載入，無法執行預設分發"
+                    : "依排名與志願序自動預設分配所有學院尚未核配的學生（依目前畫面狀態計算，僅填空白，儲存前可修改）"
+                }
+                onClick={() => handleAutoAllocate(null, "全部學院")}
+              >
+                {autoAllocatingCollege === ALL_COLLEGES ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                ) : (
+                  <Wand2 className="h-4 w-4 mr-1" />
+                )}
+                全部預設分發
+              </Button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button
@@ -1146,10 +1172,15 @@ export function ManualDistributionPanel({
                     <AlertDialogCancel>取消</AlertDialogCancel>
                     <AlertDialogAction
                       onClick={() => {
-                        setLocalAllocations(new Map());
-                        // 清空 is "start over", not a per-row decision — leave
-                        // every row open to 預設分發 again.
-                        setClearedItemIds(new Set());
+                        // Every row explicitly 未決 — NOT an empty map. An empty
+                        // map says nothing about these rows, so 儲存 would send
+                        // no allocations and clear nothing, and 預設分發 would
+                        // send an empty overlay and fall straight back to the
+                        // saved distribution the admin just cleared.
+                        setLocalAllocations(
+                          new Map(students.map(s => [s.ranking_item_id, null]))
+                        );
+                        setUnallocatedReasons(new Map());
                       }}
                     >
                       確認清空
@@ -1649,13 +1680,10 @@ export function ManualDistributionPanel({
                                       ? "無學院代碼，無法執行預設分發"
                                       : subTypeCols.length === 0
                                         ? "名額資料尚未載入，無法執行預設分發"
-                                        : `依排名與志願序自動預設分配 ${collegeName} 尚未核配的學生（僅填空白，儲存前可修改）`
+                                        : `依排名與志願序自動預設分配 ${collegeName} 尚未核配的學生（依目前畫面狀態計算，僅填空白，儲存前可修改）`
                                   }
                                   onClick={() =>
-                                    handleCollegeAutoAllocate(
-                                      collegeCode,
-                                      collegeName
-                                    )
+                                    handleAutoAllocate(collegeCode, collegeName)
                                   }
                                 >
                                   {autoAllocatingCollege === collegeCode ? (
@@ -1674,6 +1702,12 @@ export function ManualDistributionPanel({
                             const curAlloc = localAllocations.get(
                               student.ranking_item_id
                             );
+                            // Only meaningful while the row is still 未決: once
+                            // it carries an allocation, whatever stopped an
+                            // earlier run no longer describes it.
+                            const unallocatedReason = curAlloc
+                              ? undefined
+                              : unallocatedReasons.get(student.ranking_item_id);
                             // Phase 8.2: surface challenge metadata from the
                             // /state payload (keyed by application_id).
                             const challengeMeta = challengeAppMap.get(
@@ -1809,6 +1843,21 @@ export function ManualDistributionPanel({
                                       quotaStatus={quotaStatus}
                                       noVerdictTitle="學院未對此子類型作出推薦審核"
                                     />
+                                    {/* Why the last 預設分發 left this row
+                                        blank, straight from the backend.
+                                        撤銷/停發 is omitted — the row's own
+                                        status control already says so. */}
+                                    {unallocatedReason && (
+                                      <span
+                                        className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200"
+                                        title={`預設分發未分配：${unallocatedReasonLabel(unallocatedReason)}`}
+                                      >
+                                        未分配:{" "}
+                                        {unallocatedReasonLabel(
+                                          unallocatedReason
+                                        )}
+                                      </span>
+                                    )}
                                   </div>
                                 </td>
                                 {subTypeCols.map(col => {
@@ -1843,8 +1892,19 @@ export function ManualDistributionPanel({
                                   // its success path reseeds localAllocations
                                   // from the server, which would silently
                                   // revert any tick made mid-request.
+                                  //
+                                  // 預設分發 counts too. It sends the staged map
+                                  // up and merges the reply back into it, so a
+                                  // tick landing in between is both lost AND
+                                  // uncounted — the server would hand out a slot
+                                  // it does not know was just taken, and nothing
+                                  // downstream re-checks the per-college matrix
+                                  // (the save gate only recounts the global pool).
                                   const isMutating =
-                                    isSaving || isFinalizing || isRestoring;
+                                    isSaving ||
+                                    isFinalizing ||
+                                    isRestoring ||
+                                    autoAllocatingCollege !== null;
                                   // A rejected sub-type can't be (re)checked,
                                   // but a cell that is ALREADY checked must
                                   // stay clickable so the admin can uncheck it
