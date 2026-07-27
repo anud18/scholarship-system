@@ -1102,3 +1102,42 @@ class TestDedupePrefersTheRowTheGridRenders:
         allocated = _make_item(102, rank_position=1, app=app, is_allocated=True)
 
         assert [i.id for i in _dedupe_preview_items([plain, allocated], None, {999})] == [102]
+
+
+class TestNoCollegeQuotaIsNotQuotaFull:
+    """「名額不足」 must mean a cell that ran out, not a cell that never existed.
+
+    A missing tracker key reads as zero remaining, so both look identical from
+    the allocation loop — and telling an admin 名額不足 for an unmapped 學院代碼
+    sends them to edit a matrix row that is not there.
+    """
+
+    def _run(self, _compute_suggestions, college, tracker):
+        app = _make_app(1, college=college, sub_type_preferences=["nstc"])
+        return _compute_suggestions(
+            unique_items=[_make_item(101, 1, app)],
+            default_prefs=["nstc"],
+            prev_alloc_configs={},
+            allowed_configs_by_sub_type={"nstc": [115]},
+            quota_tracker=_build_quota_tracker(tracker),
+            own_config_id=115,
+        )
+
+    def test_exhausted_cell_is_quota_full(self, _compute_suggestions):
+        results = self._run(_compute_suggestions, "A", {(115, "nstc", "A"): 0})
+        assert results[0]["reason"] == "quota_full"
+
+    def test_college_absent_from_the_matrix(self, _compute_suggestions):
+        # The matrix lists college A only; this student is in Z.
+        results = self._run(_compute_suggestions, "Z", {(115, "nstc", "A"): 5})
+        assert results[0]["reason"] == "no_college_quota"
+
+    def test_unmapped_empty_college_code(self, _compute_suggestions):
+        # std_academyno missing entirely — the grid renders these under 未知.
+        results = self._run(_compute_suggestions, "", {(115, "nstc", "A"): 5})
+        assert results[0]["reason"] == "no_college_quota"
+
+    def test_config_with_no_per_college_matrix_at_all(self, _compute_suggestions):
+        # has_college_quota=False seeds no tracker entries whatsoever.
+        results = self._run(_compute_suggestions, "A", {})
+        assert results[0]["reason"] == "no_college_quota"

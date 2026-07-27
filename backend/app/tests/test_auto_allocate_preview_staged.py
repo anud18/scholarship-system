@@ -320,3 +320,45 @@ async def test_a_row_missing_from_the_overlay_falls_back_to_its_saved_state(
     by_item = await _preview(db, college_code="D", staged=_staged((first.id, None, None), (second.id, None, None)))
 
     assert d_item.id not in by_item, "still allocated in the database, so still decided"
+
+
+# ---------------------------------------------------------------------------
+# Malformed / degenerate overlays
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_the_same_row_staged_twice_is_rejected(db, college_c, config_one_slot_per_college):
+    """`allocate` raises on a duplicated ranking item; so must the preview.
+
+    A dict build would let the last entry win, so the row's slot vanishes from
+    the tracker while the screen still shows it taken — and the run hands that
+    slot to somebody else.
+    """
+    first, second = college_c
+
+    with pytest.raises(ValueError, match=f"Duplicate ranking item: {first.id}"):
+        await _preview(
+            db,
+            staged=_staged(
+                (first.id, "nstc", config_one_slot_per_college.id),
+                (first.id, None, None),
+                (second.id, None, None),
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_an_empty_overlay_means_an_empty_screen_not_a_cleared_one(db, college_c):
+    """`staged=[]` says "I render no rows", so the saved state still stands.
+
+    This is why the grid must send an explicit null per row when the admin
+    presses 清空 — an empty list would silently restore the very distribution
+    they just cleared.
+    """
+    first, second = college_c
+
+    by_item = await _preview(db, staged=[])
+
+    assert first.id not in by_item, "the saved allocation still holds its slot"
+    assert by_item[second.id]["reason"] == "quota_full"

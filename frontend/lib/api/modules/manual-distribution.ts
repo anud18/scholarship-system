@@ -290,7 +290,8 @@ export type UnallocatedReason =
   | "college_rejected"
   | "not_applied"
   | "review_rejected"
-  | "quota_full";
+  | "quota_full"
+  | "no_college_quota";
 
 export const UNALLOCATED_REASON_LABEL: Record<UnallocatedReason, string> = {
   cancelled: "已撤銷／停發",
@@ -298,15 +299,32 @@ export const UNALLOCATED_REASON_LABEL: Record<UnallocatedReason, string> = {
   not_applied: "未申請可分配的子類型",
   review_rejected: "審核不同意",
   quota_full: "名額不足",
+  no_college_quota: "該學院無此類別名額",
 };
 
-/** ranking_item_id → why it was left 未決, for the rows the run could not place. */
+/**
+ * Label for a reason code, surviving one the backend added and this build has
+ * not learnt yet. The union is a hand-kept mirror of the UNALLOCATED_*
+ * constants and the response is untyped, so an unknown code reaches here with
+ * no type error — showing the raw code beats 「未分配: undefined」.
+ */
+export function unallocatedReasonLabel(reason: UnallocatedReason): string {
+  return UNALLOCATED_REASON_LABEL[reason] ?? reason;
+}
+
+/**
+ * ranking_item_id → why it was left 未決, for the rows the run could not place.
+ *
+ * 撤銷/停發 rows are dropped: they were never candidates, and the grid already
+ * states their status on the row itself. Counting them would report a dozen
+ * "failures" for a college where nothing actually went wrong.
+ */
 export function reasonsBySuggestion(
   suggestions: AllocationSuggestion[]
 ): Map<number, UnallocatedReason> {
   const reasons = new Map<number, UnallocatedReason>();
   for (const s of suggestions) {
-    if (s.sub_type_code || !s.reason) continue;
+    if (s.sub_type_code || !s.reason || s.reason === "cancelled") continue;
     reasons.set(s.ranking_item_id, s.reason);
   }
   return reasons;
@@ -681,7 +699,11 @@ export function createManualDistributionApi() {
             academic_year,
             semester,
             ...(college_code ? { college_code } : {}),
-            ...(staged ? { staged } : {}),
+            // `staged !== undefined`, not a truthiness test: an EMPTY overlay is
+            // a real answer ("this screen renders no rows") and JS and Python
+            // disagree about `[]`, so a truthiness test here would ship one
+            // meaning and have the server read another.
+            ...(staged !== undefined ? { staged } : {}),
           } as never,
         }
       );

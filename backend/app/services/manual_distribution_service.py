@@ -73,6 +73,11 @@ UNALLOCATED_CANCELLED = "cancelled"
 UNALLOCATED_QUOTA_FULL = "quota_full"
 UNALLOCATED_REVIEW_REJECTED = "review_rejected"
 UNALLOCATED_NOT_APPLIED = "not_applied"
+# The student's college has no cell in the quota matrix at all — an unmapped
+# 學院代碼, or a config that carries no per-college quota. Distinct from
+# quota_full: no amount of quota fixes it, so saying 「名額不足」 would send the
+# admin to edit a matrix row that does not exist.
+UNALLOCATED_NO_COLLEGE_QUOTA = "no_college_quota"
 
 
 def _holds_award(app: Application) -> bool:
@@ -383,7 +388,15 @@ def _compute_suggestions(
                 }
             )
         elif preferences:
-            results.append(_unplaced(item.id, UNALLOCATED_QUOTA_FULL))
+            # A missing tracker key reads as zero remaining, so "ran out" and
+            # "never had a cell" are the same failure here — tell them apart by
+            # asking whether any cell exists at all.
+            has_cell = any(
+                (cid, sub_type, college) in quota_tracker
+                for sub_type in preferences
+                for cid in allowed_configs_by_sub_type.get(sub_type, [own_config_id])
+            )
+            results.append(_unplaced(item.id, UNALLOCATED_QUOTA_FULL if has_cell else UNALLOCATED_NO_COLLEGE_QUOTA))
         elif applicable:
             # Every sub-type they could draw was rejected (不同意) in review.
             results.append(_unplaced(item.id, UNALLOCATED_REVIEW_REJECTED))
@@ -1786,6 +1799,12 @@ class ManualDistributionService:
                 item_id = row.get("ranking_item_id")
                 if item_id not in items_by_id:
                     continue
+                # Reject duplicates rather than letting the last one win, exactly
+                # as `allocate` does for this same wire shape: a row staged twice
+                # would silently collapse, freeing its slot from the tracker while
+                # the screen still shows it taken.
+                if item_id in staged_map:
+                    raise ValueError(f"Duplicate ranking item: {item_id}")
                 sub_type_code = row.get("sub_type_code")
                 if not sub_type_code:
                     staged_map[item_id] = None

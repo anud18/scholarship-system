@@ -30,7 +30,7 @@ import {
   resolveCollegeName,
   summarizeReasons,
   toStagedItems,
-  UNALLOCATED_REASON_LABEL,
+  unallocatedReasonLabel,
   type UnallocatedReason,
 } from "@/lib/api/modules/manual-distribution";
 import { User } from "@/types/user";
@@ -957,14 +957,20 @@ export function ManualDistributionPanel({
           setLocalAllocations(next);
           setPreviewApplied(true);
         }
-        // Refresh the explanation for every row this run considered: an
-        // allocated row loses its old one, an unplaced row takes the backend's
-        // verdict. Rows out of scope keep whatever an earlier run said.
+        // Refresh the explanation for every row this run considered: a row it
+        // actually staged loses its old one, an unplaced row takes the
+        // backend's verdict. Rows out of scope keep whatever an earlier run
+        // said. Keyed on what the merge STAGED, not on what the server
+        // suggested — a suggestion the merge dropped as ineligible leaves the
+        // row 未決, so clearing its reason would strip the only explanation on
+        // screen.
         const runReasons = reasonsBySuggestion(suggestions);
         setUnallocatedReasons(prev => {
           const merged = new Map(prev);
           for (const s of suggestions) {
-            if (s.sub_type_code) merged.delete(s.ranking_item_id);
+            if (s.sub_type_code && next.get(s.ranking_item_id)) {
+              merged.delete(s.ranking_item_id);
+            }
           }
           for (const [itemId, reason] of runReasons) {
             merged.set(itemId, reason);
@@ -975,7 +981,7 @@ export function ManualDistributionPanel({
         const breakdown = summarizeReasons(runReasons)
           .map(
             ({ reason, count }) =>
-              `${count} 筆${UNALLOCATED_REASON_LABEL[reason]}`
+              `${count} 筆${unallocatedReasonLabel(reason)}`
           )
           .join("、");
         const text =
@@ -1166,9 +1172,14 @@ export function ManualDistributionPanel({
                     <AlertDialogCancel>取消</AlertDialogCancel>
                     <AlertDialogAction
                       onClick={() => {
-                        // Every row back to 未決, and no stale explanation of a
-                        // distribution that no longer exists.
-                        setLocalAllocations(new Map());
+                        // Every row explicitly 未決 — NOT an empty map. An empty
+                        // map says nothing about these rows, so 儲存 would send
+                        // no allocations and clear nothing, and 預設分發 would
+                        // send an empty overlay and fall straight back to the
+                        // saved distribution the admin just cleared.
+                        setLocalAllocations(
+                          new Map(students.map(s => [s.ranking_item_id, null]))
+                        );
                         setUnallocatedReasons(new Map());
                       }}
                     >
@@ -1836,20 +1847,17 @@ export function ManualDistributionPanel({
                                         blank, straight from the backend.
                                         撤銷/停發 is omitted — the row's own
                                         status control already says so. */}
-                                    {unallocatedReason &&
-                                      unallocatedReason !== "cancelled" && (
-                                        <span
-                                          className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200"
-                                          title={`預設分發未分配：${UNALLOCATED_REASON_LABEL[unallocatedReason]}`}
-                                        >
-                                          未分配:{" "}
-                                          {
-                                            UNALLOCATED_REASON_LABEL[
-                                              unallocatedReason
-                                            ]
-                                          }
-                                        </span>
-                                      )}
+                                    {unallocatedReason && (
+                                      <span
+                                        className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200"
+                                        title={`預設分發未分配：${unallocatedReasonLabel(unallocatedReason)}`}
+                                      >
+                                        未分配:{" "}
+                                        {unallocatedReasonLabel(
+                                          unallocatedReason
+                                        )}
+                                      </span>
+                                    )}
                                   </div>
                                 </td>
                                 {subTypeCols.map(col => {
@@ -1884,8 +1892,19 @@ export function ManualDistributionPanel({
                                   // its success path reseeds localAllocations
                                   // from the server, which would silently
                                   // revert any tick made mid-request.
+                                  //
+                                  // 預設分發 counts too. It sends the staged map
+                                  // up and merges the reply back into it, so a
+                                  // tick landing in between is both lost AND
+                                  // uncounted — the server would hand out a slot
+                                  // it does not know was just taken, and nothing
+                                  // downstream re-checks the per-college matrix
+                                  // (the save gate only recounts the global pool).
                                   const isMutating =
-                                    isSaving || isFinalizing || isRestoring;
+                                    isSaving ||
+                                    isFinalizing ||
+                                    isRestoring ||
+                                    autoAllocatingCollege !== null;
                                   // A rejected sub-type can't be (re)checked,
                                   // but a cell that is ALREADY checked must
                                   // stay clickable so the admin can uncheck it

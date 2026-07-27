@@ -238,6 +238,10 @@ async def auto_allocate_preview(
             "message": "Auto-allocation preview generated",
             "data": {"suggestions": suggestions},
         }
+    except ValueError as e:
+        # A malformed overlay (e.g. the same ranking item staged twice) — same
+        # 400 `allocate` gives for the same wire shape.
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except Exception as e:
         logger.error("Error generating auto-allocation preview: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to generate auto-allocation preview") from e

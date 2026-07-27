@@ -21,7 +21,9 @@ import {
   reasonsBySuggestion,
   summarizeReasons,
   toStagedItems,
+  unallocatedReasonLabel,
   UNALLOCATED_REASON_LABEL,
+  type UnallocatedReason,
 } from "../manual-distribution";
 import { typedClient } from "../../typed-client";
 
@@ -270,6 +272,26 @@ describe("createManualDistributionApi", () => {
           academic_year: 114,
           semester: "first",
           college_code: "C",
+        },
+      }
+    );
+  });
+
+  it("getAutoAllocatePreview sends an EMPTY overlay rather than dropping it", async () => {
+    // `[]` is truthy in JS and falsy in Python, so a truthiness guard here
+    // would ship "no rows are allocated" and have the server read "no overlay
+    // given" — silently planning against the SAVED distribution instead.
+    mockedRaw.POST.mockResolvedValueOnce({});
+    const api = createManualDistributionApi();
+    await api.getAutoAllocatePreview(7, 114, "first", undefined, []);
+    expect(mockedRaw.POST).toHaveBeenCalledWith(
+      "/api/v1/manual-distribution/auto-allocate-preview",
+      {
+        body: {
+          scholarship_type_id: 7,
+          academic_year: 114,
+          semester: "first",
+          staged: [],
         },
       }
     );
@@ -658,15 +680,31 @@ describe("reasonsBySuggestion / summarizeReasons", () => {
     ]);
   });
 
+  it("drops 撤銷/停發 rows — they were never candidates", () => {
+    // They render their own status control, and counting them would report a
+    // dozen "failures" for a college where nothing actually went wrong.
+    expect(reasonsBySuggestion([s(1, null, "cancelled")]).size).toBe(0);
+  });
+
   it("labels every reason the backend can emit", () => {
     // Pin: the union mirrors the UNALLOCATED_* constants in
     // manual_distribution_service.py — a new code must land in both.
     expect(Object.keys(UNALLOCATED_REASON_LABEL).sort()).toEqual([
       "cancelled",
       "college_rejected",
+      "no_college_quota",
       "not_applied",
       "quota_full",
       "review_rejected",
     ]);
+  });
+
+  it("falls back to the raw code for a reason this build has not learnt", () => {
+    // The union is hand-kept and the response is untyped, so a backend that
+    // ships a new code first must not render 「未分配: undefined」.
+    expect(unallocatedReasonLabel("quota_full")).toBe("名額不足");
+    expect(
+      unallocatedReasonLabel("brand_new_code" as UnallocatedReason)
+    ).toBe("brand_new_code");
   });
 });
