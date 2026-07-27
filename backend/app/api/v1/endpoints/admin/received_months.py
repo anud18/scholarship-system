@@ -5,20 +5,43 @@ the 學生領獎紀錄查詢 page.
 """
 
 import logging
+from io import BytesIO
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import require_admin
 from app.db.deps import get_db
 from app.models.user import User
 from app.services.received_months_import_service import ReceivedMonthsImportService
+from app.services.received_months_template import build_received_months_template
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 ALLOWED_EXTENSION = ".xlsx"
+XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+TEMPLATE_FILENAME = "獲獎生已領月份統計表_範例.xlsx"
+
+
+@router.get("/template")
+async def download_received_months_template(
+    current_user: User = Depends(require_admin),
+):
+    """Download the example workbook for 匯入已領月份數.
+
+    Binary download, so this returns the file rather than the usual
+    {success, message, data} envelope.
+    """
+    encoded_filename = quote(TEMPLATE_FILENAME, encoding="utf-8")
+    return StreamingResponse(
+        BytesIO(build_received_months_template()),
+        media_type=XLSX_MEDIA_TYPE,
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"},
+    )
 
 
 @router.post("/preview")

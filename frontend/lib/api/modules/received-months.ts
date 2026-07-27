@@ -78,6 +78,47 @@ function authHeaders(): Record<string, string> {
 
 export function createReceivedMonthsApi() {
   return {
+    /**
+     * Download the example workbook — 國科會's blank 獲獎生已領月份統計表.
+     * Triggers a browser download; resolves once the click is dispatched.
+     */
+    downloadTemplate: async (): Promise<void> => {
+      const response = await fetch("/api/v1/admin/received-months/template", {
+        method: "GET",
+        headers: authHeaders(),
+      });
+
+      if (!response.ok) {
+        let detail = "";
+        try {
+          const body = await response.clone().json();
+          detail = body?.message || body?.detail || "";
+        } catch {
+          // Non-JSON error body — surface the status alone.
+        }
+        throw new Error(
+          `下載範例失敗 (${response.status}${detail ? `: ${detail}` : ""})`,
+        );
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+
+      // filename*=UTF-8''… (RFC 5987) — the name is Chinese.
+      const disposition = response.headers.get("content-disposition");
+      let filename = "received-months-template.xlsx";
+      const match = disposition?.match(/filename\*=UTF-8''([^;]+)/);
+      if (match) filename = decodeURIComponent(match[1].trim());
+
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    },
+
     /** Parse and stage an upload. Writes nothing to the ledger. */
     preview: async (
       scholarshipTypeId: number,

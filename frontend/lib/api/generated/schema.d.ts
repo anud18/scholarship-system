@@ -2403,6 +2403,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/received-months/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Received Months Template
+         * @description Download the example workbook for 匯入已領月份數.
+         *
+         *     Binary download, so this returns the file rather than the usual
+         *     {success, message, data} envelope.
+         */
+        get: operations["download_received_months_template_api_v1_admin_received_months_template_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/received-months/preview": {
         parameters: {
             query?: never;
@@ -15207,6 +15230,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_received_months_template_api_v1_admin_received_months_template_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, Loader2, Upload, XCircle } from "lucide-react";
+import { AlertTriangle, Download, Loader2, Upload, XCircle } from "lucide-react";
 
 import {
   Dialog,
@@ -85,6 +85,15 @@ export function ImportReceivedMonthsDialog({
       cancelled = true;
     };
   }, [open]);
+
+  const handleDownloadTemplate = async () => {
+    setError(null);
+    try {
+      await apiClient.receivedMonths.downloadTemplate();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "下載範例失敗");
+    }
+  };
 
   const handlePreview = async () => {
     if (!file || !typeId) return;
@@ -243,7 +252,16 @@ export function ImportReceivedMonthsDialog({
           </div>
         )}
 
-        <DialogFooter>
+        <DialogFooter className="sm:justify-between">
+          <Button
+            variant="ghost"
+            onClick={handleDownloadTemplate}
+            disabled={busy}
+            className="sm:mr-auto"
+          >
+            <Download className="mr-2 h-4 w-4" />
+            下載範例
+          </Button>
           <Button variant="outline" onClick={handleCancel} disabled={busy}>
             取消
           </Button>

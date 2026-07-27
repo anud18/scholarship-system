@@ -3,10 +3,17 @@
 Checked-in templates for admin-facing imports. Download directly; no auth
 required for the static file, but the actual upload requires admin login.
 
-## 匯入已領月份數
+## received-months-example.xlsx
 
-沒有專屬範本 — 直接上傳國科會核發的「獲獎生已領月份統計表」原始檔即可，
-入口在**學生領獎紀錄查詢**頁的「匯入已領月份數」按鈕。
+「匯入已領月份數」的範例檔，複製國科會「獲獎生已領月份統計表」的空白表格式：
+第 1 列標題、第 2 列表頭、第 3 列國科會的`範例`示範列，其後為預先編號的空白列。
+
+入口在**學生領獎紀錄查詢**頁的「匯入已領月份數」對話框，可直接按「下載範例」取得
+（`GET /api/v1/admin/received-months/template`）。實務上也可以不用這個範例，
+直接上傳國科會核發的原始檔。
+
+> 這個檔案與「下載範例」按鈕提供的內容出自同一個 `build_received_months_template()`，
+> 不會各自漂移。
 
 解析規則（表頭以名稱定位，不依欄位位置）：
 
@@ -25,5 +32,11 @@ required for the static file, but the actual upload requires admin login.
 - 系統中查無此學號者**仍會匯入**，待該生日後提出申請時即可套用
 - 檔案格式必須為 `.xlsx`（不支援 `.xls`），上傳大小上限 5 MB
 - 先「預覽」再「確認匯入」；未確認前不會寫入任何資料
+
+**重新產生**
+
+```bash
+python3 backend/scripts/generate_received_months_sample.py
+```
 
 計算邏輯與系統自動計算的定義請見 [docs/received-months-calculation.md](../received-months-calculation.md)。
