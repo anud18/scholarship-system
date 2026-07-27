@@ -301,6 +301,12 @@ export function ManualDistributionPanel({
   useEffect(() => {
     localAllocationsRef.current = localAllocations;
   }, [localAllocations]);
+  // Rows the admin explicitly unticked. In localAllocations an untick and a
+  // never-allocated row are BOTH null, so without this the per-college
+  // 預設分發 would re-fill a row the admin deliberately cleared — including one
+  // whose saved allocation they were removing. Reset whenever local state is
+  // reseeded from the server (the clear is then either saved or discarded).
+  const [clearedItemIds, setClearedItemIds] = useState<Set<number>>(new Set());
   const [collegeFilter, setCollegeFilter] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
@@ -402,6 +408,7 @@ export function ManualDistributionPanel({
     setIsLoading(true);
     setSaveMessage(null);
     setPreviewApplied(false);
+    setClearedItemIds(new Set());
     try {
       const [studentsResp, quotaResp] = await Promise.all([
         apiClient.manualDistribution.getStudents(
@@ -491,8 +498,10 @@ export function ManualDistributionPanel({
       setStudents(studentsResp.data);
       setLocalAllocations(seedAllocations(studentsResp.data));
       // The reseed is server-only, so any auto-preview suggestions are gone
-      // (saved or discarded) — clear the "已自動預設分配" notice.
+      // (saved or discarded) — clear the "已自動預設分配" notice, and with it
+      // the record of deliberate unticks (now persisted or thrown away).
       setPreviewApplied(false);
+      setClearedItemIds(new Set());
     }
     if (quotaResp.success && quotaResp.data) {
       setQuotaStatus(quotaResp.data);
@@ -637,11 +646,24 @@ export function ManualDistributionPanel({
     sub_type: string,
     config_id: number
   ) => {
+    const cur = localAllocationsRef.current.get(rankingItemId);
+    const isUncheck =
+      cur?.sub_type === sub_type && cur?.config_id === config_id;
+    // Remember a deliberate clear so 預設分發 leaves that row alone.
+    setClearedItemIds(prev => {
+      const next = new Set(prev);
+      if (isUncheck) next.add(rankingItemId);
+      else next.delete(rankingItemId);
+      return next;
+    });
     setLocalAllocations(prev => {
       const next = new Map(prev);
-      const cur = next.get(rankingItemId);
+      const prevAlloc = next.get(rankingItemId);
       // Radio-like: clicking active → uncheck; clicking other → set exclusively
-      if (cur?.sub_type === sub_type && cur?.config_id === config_id) {
+      if (
+        prevAlloc?.sub_type === sub_type &&
+        prevAlloc?.config_id === config_id
+      ) {
         next.set(rankingItemId, null);
       } else {
         next.set(rankingItemId, { sub_type, config_id });
@@ -849,8 +871,9 @@ export function ManualDistributionPanel({
    * wrong student.
    *
    * Staged locally only — nothing is persisted until the admin presses 儲存 —
-   * and it never overwrites a cell that already carries an allocation (saved or
-   * hand-picked), so it is safe to press repeatedly: it only fills the blanks.
+   * and it never touches a row that already carries an allocation (saved or
+   * hand-picked) NOR one the admin explicitly unticked (clearedItemIds), so it
+   * is safe to press repeatedly: it only fills rows nobody has decided on.
    */
   const handleCollegeAutoAllocate = useCallback(
     async (collegeCode: string, collegeName: string) => {
@@ -874,13 +897,16 @@ export function ManualDistributionPanel({
         }
         const suggestions = resp.data.suggestions;
         // Eligible = this college's rows only (never touch another group), minus
-        // 撤銷/停發 students, who keep their state and stay unallocated.
+        // 撤銷/停發 students, who keep their state and stay unallocated, and
+        // minus rows the admin explicitly unticked — pressing the button again
+        // must not undo a deliberate clear.
         const eligibleItemIds = new Set(
           students
             .filter(
               s =>
                 (s.college_code || "") === collegeCode &&
-                !isCancelledAllocation(s)
+                !isCancelledAllocation(s) &&
+                !clearedItemIds.has(s.ranking_item_id)
             )
             .map(s => s.ranking_item_id)
         );
@@ -933,6 +959,7 @@ export function ManualDistributionPanel({
       selectedSemester,
       students,
       quotaStatus,
+      clearedItemIds,
     ]
   );
 
@@ -1074,6 +1101,9 @@ export function ManualDistributionPanel({
                     <AlertDialogAction
                       onClick={() => {
                         setLocalAllocations(new Map());
+                        // 清空 is "start over", not a per-row decision — leave
+                        // every row open to 預設分發 again.
+                        setClearedItemIds(new Set());
                       }}
                     >
                       確認清空
