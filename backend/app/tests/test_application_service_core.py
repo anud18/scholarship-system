@@ -31,6 +31,7 @@ from app.models.application import Application, ApplicationStatus
 from app.models.enums import ReviewStage
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole, UserType
+from app.models.user_profile import UserProfile
 from app.schemas.application import ApplicationFormData, ApplicationUpdate, DynamicFormField
 from app.services.application_service import ApplicationService
 
@@ -278,6 +279,54 @@ async def test_get_nonexistent_application_returns_none(db: AsyncSession, silenc
     result = await service.get_application_by_id(999_999, student)
 
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# get_application_by_id — UserProfile-owned fixed fields. 郵局帳號 and the
+# 指導教授 trio are form-config fields (ApplicationFieldService injects them)
+# that the wizard writes to UserProfile, never into submitted_form_data, so
+# the detail response is the only place a form-data view can read them. Losing
+# them here makes every one of those fields render as「未填寫」.
+# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_get_exposes_profile_owned_fixed_fields(db: AsyncSession, silence_collaborators):
+    student = await _seed_user(db, role=UserRole.student, name="S", nycu_id="s_get_prof")
+    cfg = await _seed_config(db, suffix="get_prof")
+    app = await _seed_app(db, student=student, config=cfg, status=ApplicationStatus.submitted.value, suffix="get_prof")
+    db.add(
+        UserProfile(
+            user_id=student.id,
+            account_number="12341234123412",
+            advisor_name="王老師",
+            advisor_email="advisor@nycu.edu.tw",
+            advisor_nycu_id="A12345",
+        )
+    )
+    await db.commit()
+    service = ApplicationService(db)
+
+    result = await service.get_application_by_id(app.id, student)
+
+    assert result.postal_account == "12341234123412"
+    assert result.advisor_name == "王老師"
+    assert result.advisor_email == "advisor@nycu.edu.tw"
+    assert result.advisor_nycu_id == "A12345"
+
+
+@pytest.mark.asyncio
+async def test_get_profile_owned_fields_are_none_without_profile(db: AsyncSession, silence_collaborators):
+    """A student who never saved the fixed-field section has no UserProfile row."""
+    student = await _seed_user(db, role=UserRole.student, name="S", nycu_id="s_get_noprof")
+    cfg = await _seed_config(db, suffix="get_noprof")
+    app = await _seed_app(db, student=student, config=cfg, status=ApplicationStatus.draft.value, suffix="get_noprof")
+    service = ApplicationService(db)
+
+    result = await service.get_application_by_id(app.id, student)
+
+    assert result.postal_account is None
+    assert result.advisor_name is None
+    assert result.advisor_email is None
+    assert result.advisor_nycu_id is None
 
 
 # ---------------------------------------------------------------------------
