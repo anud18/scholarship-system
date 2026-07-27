@@ -602,10 +602,25 @@ describe("buildCollegeBudget", () => {
     },
   } as unknown as Parameters<typeof buildCollegeBudget>[0];
 
-  const student = (ranking_item_id: number, college_code: string) =>
-    ({ ranking_item_id, college_code }) as never;
+  // college C: total 2, allocated 1 (globally — may include rows this grid
+  // never shows, e.g. an approved renewal), remaining 1.
+  const student = (
+    ranking_item_id: number,
+    college_code: string,
+    saved?: { sub_type: string; config_id: number }
+  ) =>
+    ({
+      ranking_item_id,
+      college_code,
+      is_allocated: !!saved,
+      allocated_sub_type: saved?.sub_type ?? null,
+      allocation_config_id: saved?.config_id ?? null,
+    }) as never;
 
-  it("subtracts allocations STAGED for that college from its matrix total", () => {
+  it("starts from live remaining, not total, and charges unsaved staging", () => {
+    // Baseline remaining=1; student 1 is a FRESH tick (no saved allocation), so
+    // it consumes the last slot. A total-based baseline would have said 1 left —
+    // headroom that a consumer outside this grid already took.
     const budget = buildCollegeBudget(
       quotaStatus,
       [student(1, "C"), student(2, "C"), student(3, "D")],
@@ -615,7 +630,31 @@ describe("buildCollegeBudget", () => {
       ]),
       "C"
     );
+    expect(budget.get(makeColKey("nstc", 115))).toBe(0);
+  });
+
+  it("nets a row staged exactly as saved to zero", () => {
+    // The saved row is already inside `remaining`; re-staging it unchanged must
+    // not double-charge the college.
+    const saved = { sub_type: "nstc", config_id: 115 };
+    const budget = buildCollegeBudget(
+      quotaStatus,
+      [student(1, "C", saved)],
+      new Map([[1, saved]]),
+      "C"
+    );
     expect(budget.get(makeColKey("nstc", 115))).toBe(1);
+  });
+
+  it("frees a slot when a saved allocation is unticked", () => {
+    const saved = { sub_type: "nstc", config_id: 115 };
+    const budget = buildCollegeBudget(
+      quotaStatus,
+      [student(1, "C", saved)],
+      new Map([[1, null]]),
+      "C"
+    );
+    expect(budget.get(makeColKey("nstc", 115))).toBe(2);
   });
 
   it("omits columns with no per-college matrix so they stay uncapped", () => {

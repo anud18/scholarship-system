@@ -228,9 +228,18 @@ export function mergeSuggestions(
 }
 
 /**
- * Remaining per-(sub_type, config) headroom for ONE college: its matrix total
- * minus everything currently staged for that college (staged ⊇ saved, since the
- * grid seeds local state from the server snapshot).
+ * Remaining per-(sub_type, config) headroom for ONE college, as of the CURRENT
+ * staged state.
+ *
+ * Baseline is the server's LIVE `remaining`, not the matrix `total`: consumers
+ * count globally (winners in any finalized ranking plus approved renewals — see
+ * consumers_by_college), so a `total`-based baseline would silently hand out
+ * headroom already taken by rows this grid never shows.
+ *
+ * `remaining` has already subtracted each row's SAVED allocation, so only
+ * unsaved changes may move the budget: a saved row adds its slot back, the
+ * staged allocation then takes one. A row staged exactly as saved nets to zero;
+ * an untick frees a slot; a fresh tick consumes one.
  *
  * Columns whose config carries no per-college matrix (`by_college === null`)
  * are omitted — they have no per-college cap to enforce.
@@ -246,16 +255,19 @@ export function buildCollegeBudget(
     for (const cfg of stData.by_config) {
       const cell = cfg.by_college?.[collegeCode];
       if (!cell) continue;
-      budget.set(makeColKey(sub_type, cfg.config_id), cell.total);
+      budget.set(makeColKey(sub_type, cfg.config_id), cell.remaining);
     }
   }
-  for (const s of students) {
-    if ((s.college_code || "") !== collegeCode) continue;
-    const alloc = allocations.get(s.ranking_item_id);
-    if (!alloc) continue;
+  const bump = (alloc: LocalAlloc | null | undefined, delta: number) => {
+    if (!alloc) return;
     const key = makeColKey(alloc.sub_type, alloc.config_id);
     const left = budget.get(key);
-    if (left !== undefined) budget.set(key, left - 1);
+    if (left !== undefined) budget.set(key, left + delta);
+  };
+  for (const s of students) {
+    if ((s.college_code || "") !== collegeCode) continue;
+    bump(getSavedAllocation(s), +1); // give the saved slot back …
+    bump(allocations.get(s.ranking_item_id), -1); // … then charge what is staged
   }
   return budget;
 }

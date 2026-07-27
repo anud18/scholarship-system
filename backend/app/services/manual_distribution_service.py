@@ -1647,7 +1647,8 @@ class ManualDistributionService:
         # Seed from each consumed config's matrix so per-college caps survive,
         # then subtract every existing global consumer of that config so the
         # tracker reflects live remaining (honors the cross-config pool cap).
-        quota_tracker: dict[tuple[str, int, str], int] = {}
+        # Keys are (config_id, sub_type, college_code) — see _compute_suggestions.
+        quota_tracker: dict[tuple[int, str, str], int] = {}
         for cid, cfg in all_configs.items():
             if not cfg.has_college_quota or not cfg.quotas:
                 continue
