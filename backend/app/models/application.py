@@ -160,6 +160,12 @@ class Application(Base):
     suspended_at = Column(DateTime(timezone=True), nullable=True)
     suspended_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     suspend_reason = Column(Text, nullable=True)
+    # 撤銷/停發當下的狀態快照。撤銷/停發可以在「確認分發」之前執行（學生休學/
+    # 退學讓他必須被排除於本次分發），此時把申請恢復成 approved/allocated 是錯的
+    # ——復原必須把 status / quota_allocation_status 放回取消前的值。
+    # NULL = 尚未被撤銷/停發（或已復原）。
+    cancelled_from_status = Column(String(30), nullable=True)
+    cancelled_from_quota_status = Column(String(20), nullable=True)
 
     # 時間戳記
     submitted_at = Column(DateTime(timezone=True))

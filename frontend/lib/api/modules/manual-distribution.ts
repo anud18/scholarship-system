@@ -38,6 +38,8 @@ export interface DistributionStudent {
   status: string;
   /** Application-level allocation status: "allocated" | "revoked" | "suspended" | "rejected" | null. Drives the row status control + checkbox disabling. */
   quota_allocation_status: string | null;
+  /** Holds a funded award — or, once 撤銷/停發'd, gets one back on 復原. Derived server-side so it mirrors restore_allocation (legacy fallback included); drives the status control + dialog copy. NOT the same as is_allocated, which is the ranking item's live funding flag. */
+  holds_award: boolean;
   revoke_reason: string | null;
   suspend_reason: string | null;
   college_rejected: boolean;

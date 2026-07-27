@@ -1,15 +1,23 @@
 "use client";
 
 /**
- * Compact segmented "sliding bar" that BOTH shows a distributed student's
- * current allocation status (正常 / 撤銷 / 停發) and drives the revoke/suspend
- * actions. The active segment is colour-coded and an animated indicator slides
- * to it, so an admin can tell at a glance who has already been revoked or
- * suspended while scanning a dense table.
+ * Compact segmented "sliding bar" that BOTH shows a student's current
+ * allocation status (正常 / 撤銷 / 停發) and drives the revoke/suspend actions.
+ * The active segment is colour-coded and an animated indicator slides to it, so
+ * an admin can tell at a glance who has already been revoked or suspended while
+ * scanning a dense table.
  *
- * Reversible: from 正常 you can revoke/suspend; from a terminal state the
- * 正常 segment restores back to allocated. To switch directly between 撤銷 and
- * 停發, restore to 正常 first (the other action segment is inert while terminal).
+ * Rendered for EVERY student in the distribution roster, not only the
+ * already-allocated ones: a student who 休學/退學/畢業 between 學院排序 and
+ * 確認分發 has to be markable up front so 預設分發 stops suggesting them and
+ * 確認分發 skips them. `hasAllocation` only tunes the wording — a
+ * not-yet-allocated 撤銷/停發 excludes the student from the round rather than
+ * pulling them out of a roster.
+ *
+ * Reversible: from 正常 you can revoke/suspend; from a terminal state the 正常
+ * segment restores back to whatever the student was before. To switch directly
+ * between 撤銷 and 停發, restore to 正常 first (the other action segment is
+ * inert while terminal).
  */
 
 export type AllocationStatus = "normal" | "revoked" | "suspended";
@@ -18,6 +26,11 @@ interface AllocationStatusControlProps {
   status: AllocationStatus;
   /** Revoke or suspend reason, surfaced as a tooltip once terminal. */
   reason?: string | null;
+  /**
+   * Whether the student holds (or held) a quota slot. Drives tooltip wording
+   * only — both states are fully actionable.
+   */
+  hasAllocation?: boolean;
   onRevoke: () => void;
   onSuspend: () => void;
   /** Restore a revoked/suspended student back to 正常. */
@@ -43,9 +56,31 @@ const INDICATOR_BG: Record<AllocationStatus, string> = {
   suspended: "bg-orange-500 shadow-sm",
 };
 
+/**
+ * Per-segment tooltip copy. The 已核配 variants are load-bearing for the
+ * revoke/suspend e2e spec, which locates the buttons by
+ * `title*="撤銷此學生獎學金"` / `title*="停發此學生獎學金"` — the 未核配
+ * variants deliberately read 「撤銷此學生的…」 so those selectors keep
+ * resolving to an allocated row.
+ */
+const ACTION_TITLES: Record<
+  "revoked" | "suspended",
+  { allocated: string; unallocated: string }
+> = {
+  revoked: {
+    allocated: "撤銷此學生獎學金（違反獎學金要點）",
+    unallocated: "撤銷此學生的獎學金資格（違反獎學金要點），本次分發將略過",
+  },
+  suspended: {
+    allocated: "停發此學生獎學金（休學/退學/畢業）",
+    unallocated: "停發此學生的獎學金（休學/退學/畢業），本次分發將略過",
+  },
+};
+
 export function AllocationStatusControl({
   status,
   reason,
+  hasAllocation = true,
   onRevoke,
   onSuspend,
   onRestore,
@@ -89,7 +124,13 @@ export function AllocationStatusControl({
     <div
       role="group"
       aria-label="分發狀態"
-      title={isTerminal && reason ? `原因：${reason}` : undefined}
+      title={
+        isTerminal && reason
+          ? `原因：${reason}`
+          : !isTerminal && !hasAllocation
+            ? "尚未核配獎學金，仍可預先撤銷／停發以排除於本次分發"
+            : undefined
+      }
       className="relative inline-grid grid-cols-3 w-[120px] rounded-full bg-slate-100 p-0.5 select-none"
     >
       {/* Sliding indicator */}
@@ -111,10 +152,12 @@ export function AllocationStatusControl({
             title={
               actionable
                 ? seg.key === "normal"
-                  ? "恢復為正常分發"
-                  : seg.key === "revoked"
-                    ? "撤銷此學生獎學金（違反獎學金要點）"
-                    : "停發此學生獎學金（休學/退學/畢業）"
+                  ? hasAllocation
+                    ? "恢復為正常分發"
+                    : "恢復為正常，重新納入本次分發"
+                  : ACTION_TITLES[seg.key][
+                      hasAllocation ? "allocated" : "unallocated"
+                    ]
                 : undefined
             }
             className={`relative z-10 py-1 text-[11px] leading-none rounded-full transition-colors ${

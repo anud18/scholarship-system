@@ -28,6 +28,13 @@ export type AllocationMode = "revoke" | "suspend" | "restore";
 export interface AllocationActionTarget {
   applicationId: number;
   studentName: string;
+  /**
+   * Whether the student holds (or held) a quota slot. A 撤銷/停發 executed
+   * BEFORE 確認分發 has no roster to pull the student out of and no award to
+   * take back — it only excludes them from this distribution round — so the
+   * dialog must not promise otherwise.
+   */
+  hasAllocation: boolean;
 }
 
 interface AllocationActionDialogProps {
@@ -136,17 +143,26 @@ export function AllocationActionDialog({
           <DialogDescription>
             {target &&
               (isRestore ? (
-                <>
-                  確定要將 <strong>{target.studentName}</strong>{" "}
-                  恢復為正常分發嗎？申請狀態將改回「核准（已分配）」，並重新佔用配額。
-                  造冊不會自動還原：請重新生成造冊以將該生加回未鎖定名冊；
-                  <strong>已鎖定造冊先前移除的項目無法自動還原</strong>，如需加回須手動處理。
-                </>
+                target.hasAllocation ? (
+                  <>
+                    確定要將 <strong>{target.studentName}</strong>{" "}
+                    恢復為正常分發嗎？申請狀態將改回「核准（已分配）」，並重新佔用配額。
+                    造冊不會自動還原：請重新生成造冊以將該生加回未鎖定名冊；
+                    <strong>已鎖定造冊先前移除的項目無法自動還原</strong>，如需加回須手動處理。
+                  </>
+                ) : (
+                  <>
+                    確定要將 <strong>{target.studentName}</strong>{" "}
+                    恢復為正常嗎？申請狀態將回到撤銷／停發前的狀態，該生會重新成為本次分發的候選人。
+                  </>
+                )
               ) : (
                 <>
                   {isRevoke ? "確定要撤銷 " : "確定要停發 "}
                   <strong>{target.studentName}</strong>
-                  {" 的獎學金分發嗎？此操作將從未鎖定造冊中移除該學生，並標記申請為"}
+                  {target.hasAllocation
+                    ? " 的獎學金分發嗎？此操作將從未鎖定造冊中移除該學生，並標記申請為"
+                    : " 的獎學金資格嗎？該生尚未核配獎學金，此操作會將其排除於本次分發（預設分發不再建議、確認分發會略過），並標記申請為"}
                   {isRevoke ? "已撤銷。" : "已停發。"}
                 </>
               ))}

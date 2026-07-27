@@ -352,6 +352,8 @@ export function ManualDistributionPanel({
     mode: AllocationMode;
     applicationId: number;
     studentName: string;
+    /** Student holds (or held) a quota slot — drives the dialog's copy. */
+    hasAllocation: boolean;
   } | null>(null);
 
   /**
@@ -1669,6 +1671,12 @@ export function ManualDistributionPanel({
                               : (student.quota_allocation_status as
                                   | "revoked"
                                   | "suspended");
+                            // Was this student actually FUNDED (post-確認分發)?
+                            // Derived server-side (see _holds_award) so it can
+                            // mirror restore_allocation exactly — the dialog and
+                            // toast must never promise a roster removal or a
+                            // 「重新佔用配額」 restore that won't happen.
+                            const hasAllocation = student.holds_award;
                             return (
                               <tr
                                 key={student.ranking_item_id}
@@ -1955,43 +1963,45 @@ export function ManualDistributionPanel({
                                   )}
                                 </td>
                                 <td className="px-1.5 py-1.5 border-r border-slate-100 text-center">
-                                  {student.allocated_sub_type || isCancelled ? (
-                                    <AllocationStatusControl
-                                      status={cancelStatus}
-                                      reason={
-                                        cancelStatus === "revoked"
-                                          ? student.revoke_reason
-                                          : cancelStatus === "suspended"
-                                            ? student.suspend_reason
-                                            : null
-                                      }
-                                      onRevoke={() =>
-                                        setAction({
-                                          mode: "revoke",
-                                          applicationId: student.application_id,
-                                          studentName: student.student_name,
-                                        })
-                                      }
-                                      onSuspend={() =>
-                                        setAction({
-                                          mode: "suspend",
-                                          applicationId: student.application_id,
-                                          studentName: student.student_name,
-                                        })
-                                      }
-                                      onRestore={() =>
-                                        setAction({
-                                          mode: "restore",
-                                          applicationId: student.application_id,
-                                          studentName: student.student_name,
-                                        })
-                                      }
-                                    />
-                                  ) : (
-                                    <span className="text-[10px] text-slate-300">
-                                      —
-                                    </span>
-                                  )}
+                                  {/* Rendered for EVERY student, allocated or
+                                      not — a 休學/退學/畢業 student must be
+                                      markable before 確認分發 so the round
+                                      skips them. */}
+                                  <AllocationStatusControl
+                                    status={cancelStatus}
+                                    hasAllocation={hasAllocation}
+                                    reason={
+                                      cancelStatus === "revoked"
+                                        ? student.revoke_reason
+                                        : cancelStatus === "suspended"
+                                          ? student.suspend_reason
+                                          : null
+                                    }
+                                    onRevoke={() =>
+                                      setAction({
+                                        mode: "revoke",
+                                        applicationId: student.application_id,
+                                        studentName: student.student_name,
+                                        hasAllocation,
+                                      })
+                                    }
+                                    onSuspend={() =>
+                                      setAction({
+                                        mode: "suspend",
+                                        applicationId: student.application_id,
+                                        studentName: student.student_name,
+                                        hasAllocation,
+                                      })
+                                    }
+                                    onRestore={() =>
+                                      setAction({
+                                        mode: "restore",
+                                        applicationId: student.application_id,
+                                        studentName: student.student_name,
+                                        hasAllocation,
+                                      })
+                                    }
+                                  />
                                 </td>
                               </tr>
                             );
@@ -2022,6 +2032,11 @@ export function ManualDistributionPanel({
             </li>
             <li>
               核配完成後點擊「儲存目前配置」，確認無誤後再執行「確認分發」。
+            </li>
+            <li>
+              「動作」欄的
+              <span className="font-semibold">正常／撤銷／停發</span>
+              每位學生皆可操作：分發前撤銷／停發代表將該生排除於本次分發（預設分發不再建議、確認分發會略過）；分發後則會一併從未鎖定造冊移除。點「正常」即可復原。
             </li>
           </ul>
         </div>
@@ -2298,7 +2313,11 @@ export function ManualDistributionPanel({
       mode={action?.mode ?? "revoke"}
       target={
         action
-          ? { applicationId: action.applicationId, studentName: action.studentName }
+          ? {
+              applicationId: action.applicationId,
+              studentName: action.studentName,
+              hasAllocation: action.hasAllocation,
+            }
           : null
       }
       onClose={() => setAction(null)}
@@ -2306,6 +2325,7 @@ export function ManualDistributionPanel({
         // Snapshot mode BEFORE setAction(null) — the success text below
         // depends on it, and the reset would otherwise null it out.
         const mode = action?.mode;
+        const hadAllocation = action?.hasAllocation ?? true;
         setAction(null);
         await fetchData();
         // Set success message AFTER fetchData so it isn't cleared by
@@ -2315,8 +2335,12 @@ export function ManualDistributionPanel({
           type: "success",
           text:
             mode === "restore"
-              ? `已恢復 ${studentName} 為正常分發`
-              : `已${mode === "suspend" ? "停發" : "撤銷"} ${studentName} 的獎學金分發`,
+              ? hadAllocation
+                ? `已恢復 ${studentName} 為正常分發`
+                : `已恢復 ${studentName} 為正常，重新納入本次分發`
+              : hadAllocation
+                ? `已${mode === "suspend" ? "停發" : "撤銷"} ${studentName} 的獎學金分發`
+                : `已${mode === "suspend" ? "停發" : "撤銷"} ${studentName}，本次分發將略過此學生`,
         });
       }}
     />

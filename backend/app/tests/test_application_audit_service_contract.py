@@ -212,6 +212,7 @@ class TestApplicationAuditServiceContract:
             app_id="APP-113-1-00011",
             user=audit_user,
             reason="違反獎學金要點",
+            prior_quota_status="allocated",
             affected_unlocked_rosters=[3, 7],
         )
         row = await _last_log_for(db, 1011)
@@ -228,9 +229,13 @@ class TestApplicationAuditServiceContract:
             app_id="APP-113-1-00012",
             user=audit_user,
             reason="休學",
+            prior_quota_status=None,
         )
         row = await _last_log_for(db, 1012)
         assert row.action == AuditAction.suspend.value
+        # A pre-確認分發 停發 records the REAL prior state (NULL), not a
+        # hardcoded "allocated" the application never held.
+        assert row.old_values["quota_allocation_status"] is None
         assert row.new_values["quota_allocation_status"] == "suspended"
         assert row.new_values["reason"] == "休學"
 
@@ -243,6 +248,7 @@ class TestApplicationAuditServiceContract:
             app_id="APP-113-1-00013",
             user=audit_user,
             prior_status="suspended",
+            restored_quota_status="allocated",
             prior_reason="休學",
         )
         row = await _last_log_for(db, 1013)

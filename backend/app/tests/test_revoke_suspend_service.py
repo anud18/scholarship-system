@@ -68,7 +68,8 @@ async def allocated_application(db, admin_db_user):
 
 @pytest_asyncio.fixture
 async def unallocated_application(db, admin_db_user):
-    """An application without quota_allocation_status='allocated'."""
+    """An application without quota_allocation_status='allocated' — still
+    awaiting 確認分發."""
     from app.models.scholarship import SubTypeSelectionMode
     from app.models.enums import ReviewStage
 
@@ -78,7 +79,7 @@ async def unallocated_application(db, admin_db_user):
         scholarship_type_id=1,
         academic_year=114,
         semester="first",
-        status=ApplicationStatus.approved,
+        status=ApplicationStatus.submitted,
         review_stage=ReviewStage.student_draft,
         sub_type_selection_mode=SubTypeSelectionMode.single,
         sub_scholarship_type="nstc",
@@ -226,10 +227,19 @@ async def test_revoke_twice_raises_conflict(db, allocated_application, admin_db_
 
 
 @pytest.mark.asyncio
-async def test_revoke_non_allocated_raises(db, unallocated_application, admin_db_user):
+async def test_revoke_non_allocated_succeeds_and_snapshots_prior_state(db, unallocated_application, admin_db_user):
+    """撤銷/停發 is no longer gated on 'allocated': a student who 休學/退學
+    before 確認分發 must be markable so the round skips them. The pre-cancel
+    state is snapshotted for restore."""
     svc = ManualDistributionService(db)
-    with pytest.raises(ValueError, match="not.*allocated"):
-        await svc.revoke_allocation(unallocated_application.id, admin_db_user.id, "x")
+    result = await svc.revoke_allocation(unallocated_application.id, admin_db_user.id, "x")
+    await db.commit()
+    await db.refresh(unallocated_application)
+
+    assert result["quota_allocation_status"] == "revoked"
+    assert unallocated_application.status == ApplicationStatus.cancelled
+    assert unallocated_application.cancelled_from_status == "submitted"
+    assert unallocated_application.cancelled_from_quota_status is None
 
 
 @pytest.mark.asyncio
