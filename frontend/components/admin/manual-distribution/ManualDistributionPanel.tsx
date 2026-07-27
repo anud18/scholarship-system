@@ -654,7 +654,11 @@ export function ManualDistributionPanel({
     sub_type: string,
     config_id: number
   ) => {
-    const cur = localAllocationsRef.current.get(rankingItemId);
+    // Read the render-scoped state, NOT localAllocationsRef: the ref is written
+    // in an effect (it exists so an await'd handler can see edits made while its
+    // request was in flight) and can therefore trail the committed render that
+    // produced this click.
+    const cur = localAllocations.get(rankingItemId);
     const isUncheck =
       cur?.sub_type === sub_type && cur?.config_id === config_id;
     // Remember a deliberate clear so 預設分發 leaves that row alone.
