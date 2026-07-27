@@ -105,7 +105,7 @@ def _stype():
     return SimpleNamespace(name="某獎學金", code="phd", sub_type_configs=[])
 
 
-async def _run_export(monkeypatch, apps, minio, field_labels=None):
+async def _run_export(monkeypatch, apps, minio, field_labels=None, summary_pdf=None):
     async def _fake_aux(db, *, scholarship_type, applications):
         return ([], {}, {}, {})
 
@@ -118,6 +118,8 @@ async def _run_export(monkeypatch, apps, minio, field_labels=None):
     svc = ExportPackageService(db=None, minio_service=minio)
     monkeypatch.setattr(svc, "_get_scholarship_type", _coro_returning(_stype()))
     monkeypatch.setattr(svc, "_query_applications", _coro_returning(apps))
+    if summary_pdf is not None:
+        monkeypatch.setattr(svc, "_generate_summary_pdf", summary_pdf)
 
     buf, _ = await svc.generate_export_zip(
         scholarship_type_id=1,
@@ -257,6 +259,36 @@ async def test_download_failure_becomes_placeholder_page(monkeypatch):
     # The concrete fetch error surfaces on the placeholder page, matching
     # the per-file error txt, so reviewers see the actual reason
     assert "NoSuchKey" in placeholder_text
+
+
+@pytest.mark.asyncio
+async def test_summary_failure_becomes_a_placeholder_inside_the_merge(monkeypatch):
+    # A reviewer working only from 申請資料合併檔 must not read a missing summary
+    # as "this student submitted no personal data" — the merge lists it as a
+    # placeholder page carrying the real reason.
+    minio = _FakeMinio({"obj/toefl.pdf": _blank_pdf(1)})
+    apps = [_mk_app(1, 11, "001", "甲", [_mk_file("語言檢定證明", "toefl.pdf", "obj/toefl.pdf")])]
+
+    def _boom(*a, **k):
+        raise RuntimeError("彙整爆炸")
+
+    zf = await _run_export(monkeypatch, apps, minio, summary_pdf=_boom)
+    names = zf.namelist()
+
+    assert "1000_A系/001_甲/_錯誤_彙整PDF生成失敗.txt" in names
+    assert not any(n.endswith("_學生資料彙整.pdf") for n in names)
+
+    merged_path = "1000_A系/001_甲/001_甲_申請資料合併檔.pdf"
+    assert merged_path in names
+    reader = PdfReader(io.BytesIO(zf.read(merged_path)))
+    # cover(1) + sep+1 placeholder (summary) + sep+1 page (toefl) = 5
+    assert len(reader.pages) == 5
+    assert "學生資料彙整" in reader.pages[0].extract_text()
+    placeholder = reader.pages[2].extract_text()
+    assert "學生資料彙整 PDF 生成失敗" in placeholder
+    assert "彙整爆炸" in placeholder
+    # Not mislabelled as a download failure — nothing was downloaded.
+    assert "檔案下載失敗" not in placeholder
 
 
 @pytest.mark.asyncio

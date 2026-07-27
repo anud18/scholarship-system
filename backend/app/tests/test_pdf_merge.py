@@ -138,13 +138,21 @@ class TestBuildMergedPdf:
         assert len(reader.pages) == 3
         assert round(reader.pages[2].mediabox.width) == 200
 
-    def test_missing_content_gets_download_failure_placeholder(self):
-        out = _merge([MergeItem(label="證明", filename="lost.pdf", content=None, error="minio 404")])
+    def test_missing_content_renders_the_callers_reason_verbatim(self):
+        # `error` is the ready-to-render reason — the caller knows whether the
+        # document failed to download or failed to be generated.
+        out = _merge([MergeItem(label="證明", filename="lost.pdf", content=None, error="檔案下載失敗：minio 404")])
         reader = PdfReader(io.BytesIO(out))
         assert len(reader.pages) == 3
         text = reader.pages[2].extract_text()
         assert "檔案下載失敗" in text
         assert "minio 404" in text
+
+    def test_missing_content_without_a_reason_still_gets_a_placeholder(self):
+        out = _merge([MergeItem(label="證明", filename="lost.pdf", content=None)])
+        reader = PdfReader(io.BytesIO(out))
+        assert len(reader.pages) == 3
+        assert "此文件無法納入合併檔" in reader.pages[2].extract_text()
 
     def test_bad_document_never_aborts_good_neighbours(self):
         out = _merge(

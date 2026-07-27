@@ -87,7 +87,7 @@ class TestFormFieldSection:
         assert text.count("郵局帳號") == 1
         assert text.count("12341234123412") == 1
 
-    def test_differing_values_under_one_label_both_render(self):
+    def test_differing_account_values_both_render(self):
         # The de-dupe is on (label, value) — a genuine discrepancy between the
         # two account ids must stay visible to the reviewer.
         text = _summary_text(
@@ -101,6 +101,36 @@ class TestFormFieldSection:
         assert text.count("郵局帳號") == 2
         assert "111" in text
         assert "222" in text
+
+    def test_two_distinct_fields_sharing_a_label_and_value_both_render(self):
+        # application_fields has no uniqueness constraint on field_label, so two
+        # real questions can share one label. The de-dupe is scoped to the
+        # account synonyms precisely so neither answer is swallowed here.
+        text = _summary_text(
+            {
+                "guardian_note": _field("guardian_note", "無"),
+                "student_note": _field("student_note", "無"),
+            },
+            {"guardian_note": "備註", "student_note": "備註"},
+        )
+
+        assert text.count("備註") == 2
+        assert text.count("無") == 2
+
+    def test_rows_are_ordered_by_field_id_not_by_label(self):
+        # Pin the ordering key. Sorting on the zh-TW label would order by CJK
+        # codepoint (乙 U+4E59 < 甲 U+7532) — no more meaningful to a reviewer
+        # than the id, and it would reshuffle the PDF whenever a label is
+        # edited. Deliberately unchanged by the label work.
+        text = _summary_text(
+            {
+                "aaa_first_by_id": _field("aaa_first_by_id", "v1"),
+                "zzz_last_by_id": _field("zzz_last_by_id", "v2"),
+            },
+            {"aaa_first_by_id": "乙標籤", "zzz_last_by_id": "甲標籤"},
+        )
+
+        assert text.index("乙標籤") < text.index("甲標籤")
 
     def test_undefined_field_id_falls_back_to_the_raw_id(self):
         # Batch import accepts any custom_<x> column, so an id with no

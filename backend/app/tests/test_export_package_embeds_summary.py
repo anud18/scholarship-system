@@ -3,8 +3,12 @@ table rows match the student folders. Avoids DB / MinIO by monkeypatching
 ensure_cjk_font, _query_applications, _get_scholarship_type,
 _generate_summary_pdf, load_form_field_labels and load_export_aux_data.
 
-The per-student 申請資料合併檔 merge still runs for real (it wraps the stubbed
-summary bytes), so reportlab/pypdf are exercised via pdf_merge.
+The per-student 申請資料合併檔 merge still runs for real, so this file DOES
+depend on the CJK font: `build_merged_pdf` calls `pdf_merge`'s own
+`ensure_cjk_font`, which the patch above (bound in export_package_service's
+namespace) does not cover. The stubbed `b"%PDF-1.4 fake"` summary passes the
+magic-bytes check but fails to parse, so it lands as an unreadable-PDF
+placeholder page inside the merge rather than being embedded.
 """
 
 import io

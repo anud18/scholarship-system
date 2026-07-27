@@ -55,8 +55,10 @@ class ImageTooLargeError(Exception):
 class MergeItem:
     """One document to merge: display label + original filename + raw bytes.
 
-    ``content=None`` means the file could not be downloaded; the merged PDF
-    gets a placeholder page for it (carrying ``error``) so the document list
+    ``content=None`` means the document could not be included — it failed to
+    download, or the export generated it and that generation failed. ``error``
+    carries the ready-to-render zh-TW reason (the caller knows which case it
+    is); the merged PDF shows it on a placeholder page so the document list
     stays complete.
     """
 
@@ -95,7 +97,7 @@ def _render_item(item: MergeItem, heading: str) -> bytes:
     the image path instead of a misleading unreadable-PDF placeholder.
     """
     if item.content is None:
-        return _placeholder_page(heading, f"檔案下載失敗：{item.error or '未知錯誤'}")
+        return _placeholder_page(heading, item.error or "此文件無法納入合併檔（未知錯誤）")
 
     if _looks_like_pdf(item.content):
         try:

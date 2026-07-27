@@ -10,6 +10,7 @@ import pytest
 
 from app.services.application_field_service import ApplicationFieldService
 from app.services.form_field_labels import (
+    ACCOUNT_FIELD_SYNONYMS,
     FIXED_FIELD_LABELS,
     load_form_field_labels,
     resolve_field_label,
@@ -37,24 +38,30 @@ class _FakeDb:
 
 
 class TestFixedFieldLabels:
-    """Pin: the fields ApplicationFieldService injects at runtime have NO
-    application_fields row, so this dict is their only label source."""
+    """Pin: these built-in ids have NO application_fields row, so this dict is
+    their only label source."""
 
-    def test_covers_every_runtime_injected_field(self):
+    def test_covers_every_built_in_field_id(self):
         assert set(FIXED_FIELD_LABELS) == {
             "postal_account",
             "account_number",
+            "bank_account",
             "advisor_name",
             "advisor_email",
             "advisor_nycu_id",
         }
 
+    def test_every_account_synonym_has_a_label(self):
+        # The synonym set drives the summary PDF's de-dupe; an id in it with no
+        # label would de-dupe on a raw English id instead.
+        assert ACCOUNT_FIELD_SYNONYMS <= set(FIXED_FIELD_LABELS)
+
     def test_postal_account_and_account_number_share_one_label(self):
-        # Both ids carry the same 郵局帳號 the student typed (the wizard mints
-        # account_number next to postal_account) — the summary PDF relies on
-        # the identical label to collapse them into one row.
+        # Both ids carry the same 郵局帳號 the student typed — the summary PDF
+        # relies on the identical label to collapse them into one row.
         assert FIXED_FIELD_LABELS["postal_account"] == "郵局帳號"
         assert FIXED_FIELD_LABELS["account_number"] == "郵局帳號"
+        assert set(ACCOUNT_FIELD_SYNONYMS) == {"postal_account", "account_number"}
 
     def test_all_labels_are_non_empty_chinese(self):
         for key, label in FIXED_FIELD_LABELS.items():
