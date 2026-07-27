@@ -200,16 +200,23 @@ async def auto_allocate_preview(
     scholarship_type_id: int = Query(...),
     academic_year: int = Query(...),
     semester: str = Query(...),
+    college_code: Optional[str] = Query(None, description="Restrict suggestions to one college"),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_admin_user),
 ):
-    """Generate auto-allocation suggestions without persisting."""
+    """Generate auto-allocation suggestions without persisting.
+
+    Pass `college_code` to run the distribution for a single college; quotas are
+    still evaluated against the global live remaining, so the result matches what
+    a whole-scholarship run would suggest for that college.
+    """
     try:
         service = ManualDistributionService(db)
         suggestions = await service.auto_allocate_preview(
             scholarship_type_id=scholarship_type_id,
             academic_year=academic_year,
             semester=semester,
+            college_code=college_code,
         )
         return {
             "success": True,
@@ -380,6 +387,8 @@ async def restore_from_history(
         message = f"Restored {restore_result['restored_count']} allocations from history"
         if restore_result.get("skipped_rejected"):
             message += f" ({restore_result['skipped_rejected']} skipped: sub-type rejected in review)"
+        if restore_result.get("skipped_cancelled"):
+            message += f" ({restore_result['skipped_cancelled']} skipped: application revoked/suspended)"
         return {
             "success": True,
             "message": message,

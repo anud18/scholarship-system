@@ -250,6 +250,28 @@ describe("createManualDistributionApi", () => {
     );
   });
 
+  it("getAutoAllocatePreview spreads college_code for a single-college run", async () => {
+    // Pin: the per-college 預設分發 button scopes the preview to one
+    // college. The param must only appear when supplied — an empty
+    // string would narrow the whole-scholarship run to nothing.
+    mockedRaw.GET.mockResolvedValueOnce({});
+    const api = createManualDistributionApi();
+    await api.getAutoAllocatePreview(7, 114, "first", "C");
+    expect(mockedRaw.GET).toHaveBeenCalledWith(
+      "/api/v1/manual-distribution/auto-allocate-preview",
+      {
+        params: {
+          query: {
+            scholarship_type_id: 7,
+            academic_year: 114,
+            semester: "first",
+            college_code: "C",
+          },
+        },
+      }
+    );
+  });
+
   // ─── generateRostersFromDistribution ──────────────────────────────
 
   it("generateRostersFromDistribution POSTs with optional flags", async () => {

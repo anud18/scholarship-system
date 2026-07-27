@@ -210,6 +210,16 @@ export interface RestoreResult {
   restored_count: number;
   /** Snapshot rows NOT restored because the sub-type was rejected (不同意) in review. */
   skipped_rejected: number;
+  /** Snapshot rows NOT restored because the application is now 撤銷/停發. */
+  skipped_cancelled: number;
+}
+
+/** True when the student was pulled out of the distribution (撤銷/停發) and must not be (re)allocated. */
+export function isCancelledAllocation(s: DistributionStudent): boolean {
+  return (
+    s.quota_allocation_status === "revoked" ||
+    s.quota_allocation_status === "suspended"
+  );
 }
 
 export interface RosterSummary {
@@ -544,11 +554,16 @@ export function createManualDistributionApi() {
 
     /**
      * Get auto-allocation preview suggestions.
+     *
+     * Pass `college_code` to run the distribution for a single college — the
+     * backend still evaluates quotas globally, so the suggestions match what a
+     * whole-scholarship run would produce for that college.
      */
     getAutoAllocatePreview: async (
       scholarship_type_id: number,
       academic_year: number,
-      semester: string
+      semester: string,
+      college_code?: string
     ): Promise<ApiResponse<{ suggestions: AllocationSuggestion[] }>> => {
       const response = await typedClient.raw.GET(
         "/api/v1/manual-distribution/auto-allocate-preview",
@@ -558,6 +573,7 @@ export function createManualDistributionApi() {
               scholarship_type_id,
               academic_year,
               semester,
+              ...(college_code ? { college_code } : {}),
             },
           },
         }

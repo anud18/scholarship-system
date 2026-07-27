@@ -23,6 +23,7 @@ import type {
 import {
   buildCollegeNameMap,
   getSavedAllocation,
+  isCancelledAllocation,
   makeColKey,
   resolveCollegeName,
 } from "@/lib/api/modules/manual-distribution";
@@ -71,6 +72,7 @@ import {
   AlertTriangle,
   ArrowRight,
   RefreshCw,
+  Wand2,
 } from "lucide-react";
 
 interface ManualDistributionPanelProps {
@@ -320,6 +322,10 @@ export function ManualDistributionPanel({
     }>;
   } | null>(null);
   const [previewApplied, setPreviewApplied] = useState(false);
+  // college_code currently running the per-college 預設分發 button (null = idle).
+  const [autoAllocatingCollege, setAutoAllocatingCollege] = useState<
+    string | null
+  >(null);
   // Renewal-aware panel state (Phase 8.2): approved renewals occupying slots,
   // remaining quota per (sub_type × allocation_year), and ranked candidates
   // with challenge metadata. Independent of `students` / `quotaStatus` —
@@ -420,12 +426,21 @@ export function ManualDistributionPanel({
           // Preview is optional; proceed without it
         }
 
-        // Apply auto-preview suggestions for unallocated students
+        // Apply auto-preview suggestions for unallocated students. 撤銷/停發
+        // students are excluded on both sides (the backend skips them, and this
+        // guard keeps a stale response from staging one behind the disabled
+        // checkbox, where the admin could not untick it before saving).
+        const cancelledItemIds = new Set(
+          studentsResp.data
+            .filter(isCancelledAllocation)
+            .map(s => s.ranking_item_id)
+        );
         let hasPreview = false;
         for (const suggestion of previewSuggestions) {
           if (
             suggestion.sub_type_code &&
             suggestion.allocation_config_id != null &&
+            !cancelledItemIds.has(suggestion.ranking_item_id) &&
             !allocMap.get(suggestion.ranking_item_id)
           ) {
             allocMap.set(suggestion.ranking_item_id, {
@@ -797,11 +812,18 @@ export function ManualDistributionPanel({
       );
       if (resp.success && resp.data) {
         const skipped = resp.data.skipped_rejected ?? 0;
+        const skippedCancelled = resp.data.skipped_cancelled ?? 0;
+        const notes = [
+          skipped > 0 ? `${skipped} 筆因審核不同意已略過` : "",
+          skippedCancelled > 0
+            ? `${skippedCancelled} 筆因已撤銷／停發已略過`
+            : "",
+        ].filter(Boolean);
         setSaveMessage({
           type: "success",
           text:
             `成功還原 ${resp.data.restored_count} 筆分配紀錄` +
-            (skipped > 0 ? `（${skipped} 筆因審核不同意已略過）` : ""),
+            (notes.length > 0 ? `（${notes.join("，")}）` : ""),
         });
         setShowHistoryDialog(false);
         await reloadServerSnapshot();
@@ -815,6 +837,94 @@ export function ManualDistributionPanel({
       setIsRestoring(false);
     }
   };
+
+  /**
+   * Run the default distribution for ONE college.
+   *
+   * Same algorithm as the on-load auto-preview, scoped server-side to this
+   * college (quotas are still evaluated globally). Staged locally only —
+   * nothing is persisted until the admin presses 儲存 — and it never overwrites
+   * a cell that already carries an allocation (saved or hand-picked), so it is
+   * safe to press repeatedly: it only fills the blanks.
+   */
+  const handleCollegeAutoAllocate = useCallback(
+    async (collegeCode: string, collegeName: string) => {
+      if (!scholarshipTypeId || !selectedAcademicYear || !selectedSemester)
+        return;
+      setAutoAllocatingCollege(collegeCode);
+      setSaveMessage(null);
+      try {
+        const resp =
+          await apiClient.manualDistribution.getAutoAllocatePreview(
+            scholarshipTypeId,
+            selectedAcademicYear,
+            selectedSemester,
+            collegeCode
+          );
+        if (!resp.success || !resp.data) {
+          setSaveMessage({
+            type: "error",
+            text: resp.message || `${collegeName} 預設分發失敗`,
+          });
+          return;
+        }
+        // Guard against a suggestion for a student outside this group — the
+        // button must never touch rows the admin is not looking at — and against
+        // 撤銷/停發 students, who keep their state and stay unallocated.
+        const groupItemIds = new Set(
+          students
+            .filter(
+              s =>
+                (s.college_code || "") === collegeCode &&
+                !isCancelledAllocation(s)
+            )
+            .map(s => s.ranking_item_id)
+        );
+        const next = new Map(localAllocations);
+        let filled = 0;
+        for (const suggestion of resp.data.suggestions) {
+          if (
+            suggestion.sub_type_code &&
+            suggestion.allocation_config_id != null &&
+            groupItemIds.has(suggestion.ranking_item_id) &&
+            !next.get(suggestion.ranking_item_id)
+          ) {
+            next.set(suggestion.ranking_item_id, {
+              sub_type: suggestion.sub_type_code,
+              config_id: suggestion.allocation_config_id,
+            });
+            filled++;
+          }
+        }
+        if (filled > 0) {
+          setLocalAllocations(next);
+          setPreviewApplied(true);
+        }
+        setSaveMessage({
+          type: "success",
+          text:
+            filled > 0
+              ? `${collegeName}：已預設分配 ${filled} 筆，請確認後儲存`
+              : `${collegeName}：無可預設分配的名額（學生已分配完畢或名額已用盡）`,
+        });
+      } catch (error) {
+        logger.error("College auto-allocate error", { error: error });
+        setSaveMessage({
+          type: "error",
+          text: `${collegeName} 預設分發時發生錯誤`,
+        });
+      } finally {
+        setAutoAllocatingCollege(null);
+      }
+    },
+    [
+      scholarshipTypeId,
+      selectedAcademicYear,
+      selectedSemester,
+      students,
+      localAllocations,
+    ]
+  );
 
   // Apply filters
   const filteredStudents = useMemo(() => {
@@ -1429,7 +1539,40 @@ export function ManualDistributionPanel({
                               colSpan={14 + subTypeCols.length}
                               className="px-4 py-1.5 text-xs font-bold text-slate-600 border-y border-slate-300"
                             >
-                              {collegeName}
+                              <div className="flex items-center justify-between gap-3">
+                                <span>{collegeName}</span>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 px-2 text-[11px] font-medium"
+                                  disabled={
+                                    !collegeCode ||
+                                    autoAllocatingCollege !== null ||
+                                    isLoading ||
+                                    isSaving ||
+                                    isFinalizing ||
+                                    isRestoring
+                                  }
+                                  title={
+                                    collegeCode
+                                      ? `依排名與志願序自動預設分配 ${collegeName} 尚未核配的學生（僅填空白，儲存前可修改）`
+                                      : "無學院代碼，無法執行預設分發"
+                                  }
+                                  onClick={() =>
+                                    handleCollegeAutoAllocate(
+                                      collegeCode,
+                                      collegeName
+                                    )
+                                  }
+                                >
+                                  {autoAllocatingCollege === collegeCode ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <Wand2 className="h-3 w-3" />
+                                  )}
+                                  <span className="ml-1">預設分發</span>
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                           {collegeStudents.map(student => {
