@@ -279,3 +279,120 @@ async def test_restore_skips_rejected_subtype(db: AsyncSession):
     )
     assert result["restored_count"] == 0
     assert result["skipped_rejected"] == 1
+
+
+# ---------------------------------------------------------------------------
+# 撤銷／停發 gate (用戶需求): a student the admin pulled out of the distribution
+# keeps that state — no allocation writer may hand the slot back. Cancelling
+# frees the ranking item (is_allocated=False) precisely so the slot can go to
+# someone else, which is what makes the student look allocatable again.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_allocate_blocked_when_application_revoked(db: AsyncSession):
+    service, item_id, sch_id = await _setup(db, suffix="revgate", allocated_sub_type="nstc")
+    item = await db.get(CollegeRankingItem, item_id)
+    app = await db.get(Application, item.application_id)
+    app.quota_allocation_status = "revoked"
+    item.is_allocated = False
+    await db.commit()
+    with pytest.raises(ValueError, match="撤銷"):
+        await service._validate_allocations(sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": "nstc"}])
+
+
+@pytest.mark.asyncio
+async def test_allocate_blocked_when_application_suspended(db: AsyncSession):
+    service, item_id, sch_id = await _setup(db, suffix="suspgate", allocated_sub_type="nstc")
+    item = await db.get(CollegeRankingItem, item_id)
+    app = await db.get(Application, item.application_id)
+    app.quota_allocation_status = "suspended"
+    item.is_allocated = False
+    await db.commit()
+    with pytest.raises(ValueError, match="停發"):
+        await service._validate_allocations(sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": "nstc"}])
+
+
+@pytest.mark.asyncio
+async def test_unallocate_allowed_for_cancelled_application(db: AsyncSession):
+    # sub_type_code=None means unallocate — the gate must not deadlock a
+    # cancelled row that still carries a staged allocation.
+    service, item_id, sch_id = await _setup(db, suffix="cancelunalloc")
+    item = await db.get(CollegeRankingItem, item_id)
+    app = await db.get(Application, item.application_id)
+    app.quota_allocation_status = "revoked"
+    await db.commit()
+    await service._validate_allocations(sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": None}])
+
+
+@pytest.mark.asyncio
+async def test_allocate_allowed_for_normal_allocation_status(db: AsyncSession):
+    # Only revoked/suspended are gated — an ordinary status still allocates.
+    service, item_id, sch_id = await _setup(db, suffix="normalstatus")
+    item = await db.get(CollegeRankingItem, item_id)
+    app = await db.get(Application, item.application_id)
+    app.quota_allocation_status = "waitlisted"
+    await db.commit()
+    await service._validate_allocations(sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": "nstc"}])
+
+
+@pytest.mark.asyncio
+async def test_restore_skips_cancelled_application(db: AsyncSession):
+    # A history snapshot predating the 撤銷 must not resurrect the allocation —
+    # but it must not destroy the slot identity either: _cancel_allocation keeps
+    # allocated_sub_type precisely so 復發 can re-affirm the same slot, and
+    # restore_from_history clears every item before re-applying the snapshot.
+    service, item_id, sch_id = await _setup(db, suffix="cancelrestore", allocated_sub_type="nstc")
+    item = await db.get(CollegeRankingItem, item_id)
+    app = await db.get(Application, item.application_id)
+    cfg_id = item.allocation_config_id
+    # Simulate the post-cancel state: slot freed, sub-type preserved.
+    app.quota_allocation_status = "revoked"
+    item.is_allocated = False
+    await db.commit()
+
+    result = await service.restore_from_history(
+        sch_id,
+        YEAR,
+        SEM,
+        {str(item_id): {"sub_type": "nstc", "allocation_config_id": cfg_id, "status": "allocated"}},
+    )
+    assert result["restored_count"] == 0
+    assert result["skipped_cancelled"] == 1
+
+    refreshed = await db.get(CollegeRankingItem, item_id)
+    await db.refresh(refreshed)
+    # Still cancelled (no quota consumed) …
+    assert refreshed.is_allocated is False
+    # … but 復發 can still re-affirm the exact same slot.
+    assert refreshed.allocated_sub_type == "nstc"
+    assert refreshed.allocation_config_id == cfg_id
+    await service.restore_allocation(app.id, admin_user_id=1)
+    reaffirmed = await db.get(CollegeRankingItem, item_id)
+    await db.refresh(reaffirmed)
+    assert reaffirmed.is_allocated is True
+
+
+@pytest.mark.asyncio
+async def test_save_does_not_wipe_a_cancelled_students_preserved_slot(db: AsyncSession):
+    """The grid posts EVERY visible row, so a 撤銷 row arrives as an unallocate.
+
+    Acting on it would clear allocated_sub_type — the very field
+    _cancel_allocation preserves so 復發 can re-affirm the same slot. allocate()
+    must skip cancelled rows entirely.
+    """
+    service, item_id, sch_id = await _setup(db, suffix="cancelsave", allocated_sub_type="nstc")
+    item = await db.get(CollegeRankingItem, item_id)
+    app = await db.get(Application, item.application_id)
+    cfg_id = item.allocation_config_id
+    app.quota_allocation_status = "revoked"
+    item.is_allocated = False
+    await db.commit()
+
+    await service.allocate(sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": None}], admin_user_id=1)
+
+    refreshed = await db.get(CollegeRankingItem, item_id)
+    await db.refresh(refreshed)
+    assert refreshed.is_allocated is False
+    assert refreshed.allocated_sub_type == "nstc"
+    assert refreshed.allocation_config_id == cfg_id

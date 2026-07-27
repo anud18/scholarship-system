@@ -7435,6 +7435,10 @@ export interface paths {
         /**
          * Auto Allocate Preview
          * @description Generate auto-allocation suggestions without persisting.
+         *
+         *     Pass `college_code` to run the distribution for a single college; quotas are
+         *     still evaluated against the global live remaining, so the result matches what
+         *     a whole-scholarship run would suggest for that college.
          */
         get: operations["auto_allocate_preview_api_v1_manual_distribution_auto_allocate_preview_get"];
         put?: never;
@@ -23039,6 +23043,8 @@ export interface operations {
                 scholarship_type_id: number;
                 academic_year: number;
                 semester: string;
+                /** @description Restrict suggestions to one college */
+                college_code?: string | null;
             };
             header?: never;
             path?: never;
