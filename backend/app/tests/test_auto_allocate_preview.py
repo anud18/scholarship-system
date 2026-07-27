@@ -141,6 +141,15 @@ def _dedupe_preview_items(_service_module):
 # ---------------------------------------------------------------------------
 
 
+def _alloc(result: dict) -> dict:
+    """Just the allocation decision, without the diagnostic `reason`.
+
+    Lets a test about WHO gets WHAT stay silent about why an unplaced student
+    was unplaced — the reason codes have their own tests below.
+    """
+    return {k: result[k] for k in ("ranking_item_id", "sub_type_code", "allocation_config_id")}
+
+
 def _make_app(
     app_id: int,
     college: str = "A",
@@ -225,8 +234,8 @@ class TestNewApplicantsAllocatedToCurrentYearNstcFirst:
         )
 
         assert len(results) == 2
-        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_config_id": 115}
-        assert results[1] == {"ranking_item_id": 102, "sub_type_code": "nstc", "allocation_config_id": 115}
+        assert _alloc(results[0]) == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_config_id": 115}
+        assert _alloc(results[1]) == {"ranking_item_id": 102, "sub_type_code": "nstc", "allocation_config_id": 115}
 
 
 class TestRenewalStudentsSortedBeforeNew:
@@ -299,7 +308,7 @@ class TestRenewalTargetsPreviousAllocationConfig:
         )
 
         assert len(results) == 1
-        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_config_id": 114}
+        assert _alloc(results[0]) == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_config_id": 114}
 
 
 class TestRenewalFallbackToOwnConfigWhenPriorExhausted:
@@ -332,7 +341,7 @@ class TestRenewalFallbackToOwnConfigWhenPriorExhausted:
 
         assert len(results) == 1
         # Falls back to own config since prior (114) is exhausted
-        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_config_id": 115}
+        assert _alloc(results[0]) == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_config_id": 115}
 
 
 class TestQuotaExhaustedFallsToNextPreference:
@@ -363,7 +372,7 @@ class TestQuotaExhaustedFallsToNextPreference:
         )
 
         assert len(results) == 1
-        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "moe_1w", "allocation_config_id": 115}
+        assert _alloc(results[0]) == {"ranking_item_id": 101, "sub_type_code": "moe_1w", "allocation_config_id": 115}
 
 
 class TestAllQuotasExhaustedReturnsNull:
@@ -394,7 +403,7 @@ class TestAllQuotasExhaustedReturnsNull:
         )
 
         assert len(results) == 1
-        assert results[0] == {"ranking_item_id": 101, "sub_type_code": None, "allocation_config_id": None}
+        assert _alloc(results[0]) == {"ranking_item_id": 101, "sub_type_code": None, "allocation_config_id": None}
 
 
 class TestNullPreferencesUsesConfigDefaults:
@@ -426,7 +435,7 @@ class TestNullPreferencesUsesConfigDefaults:
 
         assert len(results) == 1
         # Uses default prefs: nstc exhausted, falls to moe_1w
-        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "moe_1w", "allocation_config_id": 115}
+        assert _alloc(results[0]) == {"ranking_item_id": 101, "sub_type_code": "moe_1w", "allocation_config_id": 115}
 
 
 class TestAlreadyAllocatedStudentsSkipped:
@@ -502,9 +511,9 @@ class TestPerCollegeQuotaRespected:
 
         assert len(results) == 2
         # First student gets nstc (rank 1)
-        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_config_id": 115}
+        assert _alloc(results[0]) == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_config_id": 115}
         # Second student gets nothing (quota exhausted for both sub-types in college A)
-        assert results[1] == {"ranking_item_id": 102, "sub_type_code": None, "allocation_config_id": None}
+        assert _alloc(results[1]) == {"ranking_item_id": 102, "sub_type_code": None, "allocation_config_id": None}
 
 
 class TestRenewalWithPriorConfigNotLinked:
@@ -540,7 +549,7 @@ class TestRenewalWithPriorConfigNotLinked:
 
         assert len(results) == 1
         # Since 112 not in allowed for nstc, falls back to own config (115)
-        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_config_id": 115}
+        assert _alloc(results[0]) == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_config_id": 115}
 
 
 class TestNoDedupInComputeSuggestions:
@@ -620,7 +629,7 @@ class TestRenewalWithNoPreviousApplicationId:
         )
 
         assert len(results) == 1
-        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_config_id": 115}
+        assert _alloc(results[0]) == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_config_id": 115}
 
 
 class TestUnknownCollegeGetsNoAllocation:
@@ -651,7 +660,7 @@ class TestUnknownCollegeGetsNoAllocation:
         )
 
         assert len(results) == 1
-        assert results[0] == {"ranking_item_id": 101, "sub_type_code": None, "allocation_config_id": None}
+        assert _alloc(results[0]) == {"ranking_item_id": 101, "sub_type_code": None, "allocation_config_id": None}
 
 
 class TestCancelledApplicationsNeverSuggested:
@@ -684,7 +693,14 @@ class TestCancelledApplicationsNeverSuggested:
             own_config_id=own_config_id,
         )
 
-        assert results == [{"ranking_item_id": 101, "sub_type_code": None, "allocation_config_id": None}]
+        assert results == [
+            {
+                "ranking_item_id": 101,
+                "sub_type_code": None,
+                "allocation_config_id": None,
+                "reason": "cancelled",
+            }
+        ]
         # The freed slot stays available for someone else.
         assert quota_tracker[(115, "nstc", "A")] == 2
 
@@ -710,7 +726,7 @@ class TestCancelledApplicationsNeverSuggested:
 
         by_item = {r["ranking_item_id"]: r for r in results}
         assert by_item[101]["sub_type_code"] is None
-        assert by_item[102] == {"ranking_item_id": 102, "sub_type_code": "nstc", "allocation_config_id": 115}
+        assert _alloc(by_item[102]) == {"ranking_item_id": 102, "sub_type_code": "nstc", "allocation_config_id": 115}
 
     def test_allocated_status_is_still_suggestible(self, _compute_suggestions):
         """Only revoked/suspended are gated — a normal status must still allocate."""
@@ -749,7 +765,7 @@ class TestPreferenceCodesAreMatchedNormalized:
             own_config_id=115,
         )
         # …and the ALLOCATED code is the config's own spelling, not the student's.
-        assert results[0] == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_config_id": 115}
+        assert _alloc(results[0]) == {"ranking_item_id": 101, "sub_type_code": "nstc", "allocation_config_id": 115}
 
     def test_applied_list_variant_is_matched_too(self, _compute_suggestions):
         app = _make_app(1, college="A", sub_type_preferences=["nstc"], scholarship_subtype_list=[" NSTC "])
@@ -932,3 +948,157 @@ class TestPreferenceOrderRespected:
 
         assert len(results) == 1
         assert results[0]["sub_type_code"] == "moe_1w"
+
+
+# ---------------------------------------------------------------------------
+# The screen, not the database: `undecided_ids` decides who is still a candidate
+# ---------------------------------------------------------------------------
+
+
+class TestUndecidedIdsOverrideThePersistedFlag:
+    """預設分發 must plan against the admin's CURRENT screen.
+
+    `undecided_ids` is that screen's 未決 rows. Without it the algorithm reads
+    `is_allocated` — the saved state — and a slot the admin just unticked stays
+    invisible while a row they just ticked gets re-suggested.
+    """
+
+    def _fixture(self):
+        """Two ranked students in college A, one nstc slot, item 101 saved into it."""
+        app1 = _make_app(1, college="A", sub_type_preferences=["nstc"])
+        app2 = _make_app(2, college="A", sub_type_preferences=["nstc"])
+        return [
+            _make_item(101, rank_position=1, app=app1, is_allocated=True, allocated_sub_type="nstc"),
+            _make_item(102, rank_position=2, app=app2),
+        ]
+
+    def _run(self, _compute_suggestions, items, quota, undecided_ids):
+        return _compute_suggestions(
+            unique_items=items,
+            default_prefs=["nstc"],
+            prev_alloc_configs={},
+            allowed_configs_by_sub_type={"nstc": [115]},
+            quota_tracker=_build_quota_tracker({(115, "nstc", "A"): quota}),
+            own_config_id=115,
+            undecided_ids=undecided_ids,
+        )
+
+    def test_untick_frees_the_slot_for_the_next_ranked_student(self, _compute_suggestions):
+        """Admin unticks the saved winner: the caller reports 101 AND 102 未決.
+
+        The slot it released is charged to nobody, so the tracker the caller
+        seeded has 1 free — and rank order gives it back to 101 first.
+        """
+        results = self._run(_compute_suggestions, self._fixture(), quota=1, undecided_ids={101, 102})
+
+        assert [r["ranking_item_id"] for r in results] == [101, 102]
+        assert results[0]["sub_type_code"] == "nstc"
+        assert results[1]["sub_type_code"] is None
+        assert results[1]["reason"] == "quota_full"
+
+    def test_hand_ticked_row_is_decided_and_never_re_suggested(self, _compute_suggestions):
+        """102 ticked by hand (absent from undecided_ids) — only 101 is planned for."""
+        results = self._run(_compute_suggestions, self._fixture(), quota=1, undecided_ids={101})
+
+        assert [r["ranking_item_id"] for r in results] == [101]
+
+    def test_without_undecided_ids_the_saved_flag_still_rules(self, _compute_suggestions):
+        """No overlay (a fresh screen): fall back to is_allocated, as before."""
+        results = self._run(_compute_suggestions, self._fixture(), quota=1, undecided_ids=None)
+
+        assert [r["ranking_item_id"] for r in results] == [102]
+
+    def test_an_undecided_row_that_is_saved_allocated_is_still_planned_for(self, _compute_suggestions):
+        """A saved row the admin unticked is 未決 even though is_allocated is True."""
+        results = self._run(_compute_suggestions, self._fixture(), quota=1, undecided_ids={101})
+
+        assert [r["ranking_item_id"] for r in results] == [101]
+        assert results[0]["sub_type_code"] == "nstc"
+
+
+class TestUnallocatedReasons:
+    """Every unplaced student says WHY, so the grid never has to guess."""
+
+    def _run(self, _compute_suggestions, item, quota=5, rejected_map=None):
+        return _compute_suggestions(
+            unique_items=[item],
+            default_prefs=["nstc"],
+            prev_alloc_configs={},
+            allowed_configs_by_sub_type={"nstc": [115], "moe_1w": [115]},
+            quota_tracker=_build_quota_tracker({(115, "nstc", "A"): quota}),
+            own_config_id=115,
+            rejected_map=rejected_map,
+        )
+
+    def test_successful_allocation_carries_no_reason(self, _compute_suggestions):
+        app = _make_app(1, college="A", sub_type_preferences=["nstc"])
+        results = self._run(_compute_suggestions, _make_item(101, 1, app))
+
+        assert results[0]["sub_type_code"] == "nstc"
+        assert results[0]["reason"] is None
+
+    def test_quota_full(self, _compute_suggestions):
+        app = _make_app(1, college="A", sub_type_preferences=["nstc"])
+        results = self._run(_compute_suggestions, _make_item(101, 1, app), quota=0)
+
+        assert results[0]["reason"] == "quota_full"
+
+    def test_review_rejected(self, _compute_suggestions):
+        """Applied for nstc, a reviewer said 不同意 — quota is irrelevant."""
+        app = _make_app(1, college="A", sub_type_preferences=["nstc"], scholarship_subtype_list=["nstc"])
+        results = self._run(_compute_suggestions, _make_item(101, 1, app), rejected_map={1: {"nstc"}})
+
+        assert results[0]["reason"] == "review_rejected"
+
+    def test_not_applied(self, _compute_suggestions):
+        """Only applied for moe_2w, which this config has no quota row for."""
+        app = _make_app(1, college="A", sub_type_preferences=["nstc"], scholarship_subtype_list=["moe_2w"])
+        results = self._run(_compute_suggestions, _make_item(101, 1, app))
+
+        assert results[0]["reason"] == "not_applied"
+
+    def test_cancelled(self, _compute_suggestions):
+        app = _make_app(1, college="A", sub_type_preferences=["nstc"], quota_allocation_status="revoked")
+        results = self._run(_compute_suggestions, _make_item(101, 1, app))
+
+        assert results[0]["reason"] == "cancelled"
+
+    def test_college_rejected(self, _compute_suggestions):
+        app = _make_app(1, college="A", sub_type_preferences=["nstc"])
+        item = _make_item(101, 1, app)
+        item.college_rejected = True
+        results = self._run(_compute_suggestions, item)
+
+        assert results[0]["reason"] == "college_rejected"
+
+    def test_review_rejected_beats_quota_full_when_both_apply(self, _compute_suggestions):
+        """A rejected student is never a quota problem — say the actionable thing."""
+        app = _make_app(1, college="A", sub_type_preferences=["nstc"], scholarship_subtype_list=["nstc"])
+        results = self._run(_compute_suggestions, _make_item(101, 1, app), quota=0, rejected_map={1: {"nstc"}})
+
+        assert results[0]["reason"] == "review_rejected"
+
+
+class TestDedupePrefersTheRowTheGridRenders:
+    """With an overlay, the row the caller staged IS the row it renders."""
+
+    def test_staged_duplicate_wins_over_the_allocated_one(self, _dedupe_preview_items):
+        app = _make_app(1, college="A")
+        allocated = _make_item(101, rank_position=1, app=app, is_allocated=True)
+        staged = _make_item(102, rank_position=1, app=app)
+
+        assert [i.id for i in _dedupe_preview_items([allocated, staged], None, {102})] == [102]
+
+    def test_falls_back_to_the_allocated_duplicate_without_an_overlay(self, _dedupe_preview_items):
+        app = _make_app(1, college="A")
+        plain = _make_item(101, rank_position=1, app=app)
+        allocated = _make_item(102, rank_position=1, app=app, is_allocated=True)
+
+        assert [i.id for i in _dedupe_preview_items([plain, allocated], None, set())] == [102]
+
+    def test_an_overlay_that_names_neither_duplicate_keeps_the_old_rule(self, _dedupe_preview_items):
+        app = _make_app(1, college="A")
+        plain = _make_item(101, rank_position=1, app=app)
+        allocated = _make_item(102, rank_position=1, app=app, is_allocated=True)
+
+        assert [i.id for i in _dedupe_preview_items([plain, allocated], None, {999})] == [102]

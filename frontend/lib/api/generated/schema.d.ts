@@ -7432,6 +7432,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        get?: never;
+        put?: never;
         /**
          * Auto Allocate Preview
          * @description Generate auto-allocation suggestions without persisting.
@@ -7439,10 +7441,14 @@ export interface paths {
          *     Pass `college_code` to run the distribution for a single college; quotas are
          *     still evaluated against the global live remaining, so the result matches what
          *     a whole-scholarship run would suggest for that college.
+         *
+         *     Pass `staged` — the caller's on-screen allocations for every row it renders,
+         *     every college — to have the suggestions computed against that state instead
+         *     of the saved one. Unticked rows free their slot immediately; hand-ticked rows
+         *     are treated as decided. POST rather than GET because that state is a body,
+         *     not a query string; nothing is written either way.
          */
-        get: operations["auto_allocate_preview_api_v1_manual_distribution_auto_allocate_preview_get"];
-        put?: never;
-        post?: never;
+        post: operations["auto_allocate_preview_api_v1_manual_distribution_auto_allocate_preview_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8513,6 +8519,19 @@ export interface components {
              * @default false
              */
             overwrite_existing: boolean;
+        };
+        /** AutoAllocatePreviewRequest */
+        AutoAllocatePreviewRequest: {
+            /** Scholarship Type Id */
+            scholarship_type_id: number;
+            /** Academic Year */
+            academic_year: number;
+            /** Semester */
+            semester: string;
+            /** College Code */
+            college_code?: string | null;
+            /** Staged */
+            staged?: components["schemas"]["AllocationItem"][] | null;
         };
         /**
          * BankInfoUpdate
@@ -23045,20 +23064,18 @@ export interface operations {
             };
         };
     };
-    auto_allocate_preview_api_v1_manual_distribution_auto_allocate_preview_get: {
+    auto_allocate_preview_api_v1_manual_distribution_auto_allocate_preview_post: {
         parameters: {
-            query: {
-                scholarship_type_id: number;
-                academic_year: number;
-                semester: string;
-                /** @description Restrict suggestions to one college */
-                college_code?: string | null;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutoAllocatePreviewRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

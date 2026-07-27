@@ -15,13 +15,13 @@
  */
 
 import {
-  buildCollegeBudget,
-  classifyUnallocated,
   createManualDistributionApi,
   isCancelledAllocation,
-  makeColKey,
   mergeSuggestions,
-  summarizeUnallocated,
+  reasonsBySuggestion,
+  summarizeReasons,
+  toStagedItems,
+  UNALLOCATED_REASON_LABEL,
 } from "../manual-distribution";
 import { typedClient } from "../../typed-client";
 
@@ -237,22 +237,19 @@ describe("createManualDistributionApi", () => {
 
   // ─── getAutoAllocatePreview ───────────────────────────────────────
 
-  it("getAutoAllocatePreview GETs /auto-allocate-preview (preview only, no DB writes)", async () => {
-    // Pin: preview endpoint — server returns suggestions WITHOUT
-    // mutating allocations. Pin so refactor doesn't accidentally
-    // change it to a destructive POST.
-    mockedRaw.GET.mockResolvedValueOnce({});
+  it("getAutoAllocatePreview omits college_code and staged when not supplied", async () => {
+    // POST carries the staged overlay in a body, but still writes nothing —
+    // a refactor must not turn it into a destructive call.
+    mockedRaw.POST.mockResolvedValueOnce({});
     const api = createManualDistributionApi();
     await api.getAutoAllocatePreview(7, 114, "first");
-    expect(mockedRaw.GET).toHaveBeenCalledWith(
+    expect(mockedRaw.POST).toHaveBeenCalledWith(
       "/api/v1/manual-distribution/auto-allocate-preview",
       {
-        params: {
-          query: {
-            scholarship_type_id: 7,
-            academic_year: 114,
-            semester: "first",
-          },
+        body: {
+          scholarship_type_id: 7,
+          academic_year: 114,
+          semester: "first",
         },
       }
     );
@@ -260,21 +257,43 @@ describe("createManualDistributionApi", () => {
 
   it("getAutoAllocatePreview spreads college_code for a single-college run", async () => {
     // Pin: the per-college 預設分發 button scopes the preview to one
-    // college. The param must only appear when supplied — an empty
+    // college. The field must only appear when supplied — an empty
     // string would narrow the whole-scholarship run to nothing.
-    mockedRaw.GET.mockResolvedValueOnce({});
+    mockedRaw.POST.mockResolvedValueOnce({});
     const api = createManualDistributionApi();
     await api.getAutoAllocatePreview(7, 114, "first", "C");
-    expect(mockedRaw.GET).toHaveBeenCalledWith(
+    expect(mockedRaw.POST).toHaveBeenCalledWith(
       "/api/v1/manual-distribution/auto-allocate-preview",
       {
-        params: {
-          query: {
-            scholarship_type_id: 7,
-            academic_year: 114,
-            semester: "first",
-            college_code: "C",
-          },
+        body: {
+          scholarship_type_id: 7,
+          academic_year: 114,
+          semester: "first",
+          college_code: "C",
+        },
+      }
+    );
+  });
+
+  it("getAutoAllocatePreview sends the staged overlay so the plan follows the screen", async () => {
+    // Pin: without this the server plans against the SAVED distribution, and a
+    // slot the admin just unticked stays invisible to it.
+    mockedRaw.POST.mockResolvedValueOnce({});
+    const api = createManualDistributionApi();
+    const staged = [
+      { ranking_item_id: 1, sub_type_code: null, allocation_config_id: null },
+      { ranking_item_id: 2, sub_type_code: "nstc", allocation_config_id: 115 },
+    ];
+    await api.getAutoAllocatePreview(7, 114, "first", "C", staged);
+    expect(mockedRaw.POST).toHaveBeenCalledWith(
+      "/api/v1/manual-distribution/auto-allocate-preview",
+      {
+        body: {
+          scholarship_type_id: 7,
+          academic_year: 114,
+          semester: "first",
+          college_code: "C",
+          staged,
         },
       }
     );
@@ -503,12 +522,12 @@ describe("createManualDistributionApi", () => {
   });
 });
 
-// ─── mergeSuggestions / buildCollegeBudget ────────────────────────────
+// ─── mergeSuggestions ─────────────────────────────────────────────────
 //
-// The staging rules shared by the on-load auto-preview and the per-college
-// 預設分發 button. SECURITY-CRITICAL: what these two functions stage is what
-// 儲存 persists, and the save-time server gate only recounts the GLOBAL pool —
-// the per-college matrix cap is enforced here.
+// The staging rules shared by the on-load auto-preview and the 預設分發
+// buttons. What these stage is what 儲存 persists — but the quota cap now
+// lives server-side, where the suggestions are computed against this same
+// staged map (see getAutoAllocatePreview's `staged`).
 
 describe("mergeSuggestions", () => {
   const suggestion = (
@@ -517,7 +536,7 @@ describe("mergeSuggestions", () => {
     allocation_config_id: number | null = 115
   ) => ({ ranking_item_id, sub_type_code, allocation_config_id });
 
-  it("fills only eligible, still-blank rows and never mutates the input map", () => {
+  it("fills only eligible 未決 rows and never mutates the input map", () => {
     const current = new Map([[2, { sub_type: "moe_1w", config_id: 115 }]]);
     const res = mergeSuggestions(
       current,
@@ -542,131 +561,45 @@ describe("mergeSuggestions", () => {
     expect(res.next.size).toBe(0);
   });
 
-  it("stops at the per-college budget and reports the overflow", () => {
-    // College has 2 nstc slots; 3 students suggested for it.
-    const budget = new Map([[makeColKey("nstc", 115), 2]]);
+  it("fills a row that is present-but-null — 未決 is not 'decided'", () => {
+    // An unticked row and a never-touched row are both 未決. The server was
+    // told so and planned for it, so the merge must not second-guess it.
+    const res = mergeSuggestions(
+      new Map([[1, null]]),
+      [suggestion(1)],
+      new Set([1])
+    );
+    expect(res.filled).toBe(1);
+    expect(res.next.get(1)).toEqual({ sub_type: "nstc", config_id: 115 });
+  });
+
+  it("applies every suggestion it is given — no client-side quota cap", () => {
+    // The server allocated these against the staged map it was sent, so a
+    // second cap here could only drop a row it deliberately allocated.
     const res = mergeSuggestions(
       new Map(),
       [suggestion(1), suggestion(2), suggestion(3)],
-      new Set([1, 2, 3]),
-      budget
+      new Set([1, 2, 3])
     );
-    expect(res.filled).toBe(2);
-    expect(res.blocked).toBe(1);
-    expect(res.next.has(3)).toBe(false);
-  });
-
-  it("leaves columns absent from the budget uncapped (non-matrix configs)", () => {
-    const budget = new Map([[makeColKey("moe_1w", 115), 0]]);
-    const res = mergeSuggestions(
-      new Map(),
-      [suggestion(1), suggestion(2)],
-      new Set([1, 2]),
-      budget
-    );
-    expect(res.filled).toBe(2);
-    expect(res.blocked).toBe(0);
+    expect(res.filled).toBe(3);
   });
 });
 
-describe("buildCollegeBudget", () => {
-  const quotaStatus = {
-    nstc: {
-      display_name: "國科會",
-      by_config: [
-        {
-          config_id: 115,
-          config_code: "phd_115",
-          academic_year: 115,
-          is_own: true,
-          total: 10,
-          remaining: 8,
-          by_college: {
-            C: { total: 2, allocated: 1, remaining: 1 },
-            D: { total: 5, allocated: 0, remaining: 5 },
-          },
-        },
-      ],
-    },
-    moe_1w: {
-      display_name: "教育部",
-      by_config: [
-        {
-          config_id: 115,
-          config_code: "phd_115",
-          academic_year: 115,
-          is_own: true,
-          total: 4,
-          remaining: 4,
-          by_college: null, // no per-college matrix
-        },
-      ],
-    },
-  } as unknown as Parameters<typeof buildCollegeBudget>[0];
-
-  // college C: total 2, allocated 1 (globally — may include rows this grid
-  // never shows, e.g. an approved renewal), remaining 1.
-  const student = (
-    ranking_item_id: number,
-    college_code: string,
-    saved?: { sub_type: string; config_id: number }
-  ) =>
-    ({
-      ranking_item_id,
-      college_code,
-      is_allocated: !!saved,
-      allocated_sub_type: saved?.sub_type ?? null,
-      allocation_config_id: saved?.config_id ?? null,
-    }) as never;
-
-  it("starts from live remaining, not total, and charges unsaved staging", () => {
-    // Baseline remaining=1; student 1 is a FRESH tick (no saved allocation), so
-    // it consumes the last slot. A total-based baseline would have said 1 left —
-    // headroom that a consumer outside this grid already took.
-    const budget = buildCollegeBudget(
-      quotaStatus,
-      [student(1, "C"), student(2, "C"), student(3, "D")],
-      new Map([
-        [1, { sub_type: "nstc", config_id: 115 }],
-        [3, { sub_type: "nstc", config_id: 115 }], // college D — must not count
-      ]),
-      "C"
-    );
-    expect(budget.get(makeColKey("nstc", 115))).toBe(0);
-  });
-
-  it("nets a row staged exactly as saved to zero", () => {
-    // The saved row is already inside `remaining`; re-staging it unchanged must
-    // not double-charge the college.
-    const saved = { sub_type: "nstc", config_id: 115 };
-    const budget = buildCollegeBudget(
-      quotaStatus,
-      [student(1, "C", saved)],
-      new Map([[1, saved]]),
-      "C"
-    );
-    expect(budget.get(makeColKey("nstc", 115))).toBe(1);
-  });
-
-  it("frees a slot when a saved allocation is unticked", () => {
-    const saved = { sub_type: "nstc", config_id: 115 };
-    const budget = buildCollegeBudget(
-      quotaStatus,
-      [student(1, "C", saved)],
-      new Map([[1, null]]),
-      "C"
-    );
-    expect(budget.get(makeColKey("nstc", 115))).toBe(2);
-  });
-
-  it("omits columns with no per-college matrix so they stay uncapped", () => {
-    const budget = buildCollegeBudget(quotaStatus, [], new Map(), "C");
-    expect(budget.has(makeColKey("moe_1w", 115))).toBe(false);
-  });
-
-  it("omits colleges the matrix does not list", () => {
-    const budget = buildCollegeBudget(quotaStatus, [], new Map(), "Z");
-    expect(budget.size).toBe(0);
+describe("toStagedItems", () => {
+  it("sends every row, 未決 ones as explicit nulls", () => {
+    // The overlay must be complete: a row it omits falls back to the SAVED
+    // state server-side, which is exactly the bug this replaced.
+    expect(
+      toStagedItems(
+        new Map([
+          [1, { sub_type: "nstc", config_id: 115 }],
+          [2, null],
+        ])
+      )
+    ).toEqual([
+      { ranking_item_id: 1, sub_type_code: "nstc", allocation_config_id: 115 },
+      { ranking_item_id: 2, sub_type_code: null, allocation_config_id: null },
+    ]);
   });
 });
 
@@ -683,88 +616,57 @@ describe("isCancelledAllocation", () => {
   });
 });
 
-describe("classifyUnallocated / summarizeUnallocated", () => {
-  const student = (o: Record<string, unknown>) =>
+describe("reasonsBySuggestion / summarizeReasons", () => {
+  const s = (
+    ranking_item_id: number,
+    sub_type_code: string | null,
+    reason?: string | null
+  ) =>
     ({
-      quota_allocation_status: null,
-      college_rejected: false,
-      applied_sub_types: ["nstc"],
-      rejected_sub_types: [],
-      ...o,
+      ranking_item_id,
+      sub_type_code,
+      allocation_config_id: sub_type_code ? 115 : null,
+      reason,
     }) as never;
 
-  it("reports the college's rejection first, matching the backend's order", () => {
-    // _compute_suggestions short-circuits on college_rejected BEFORE it reads
-    // quota_allocation_status, so that is what actually stopped the allocation.
-    expect(classifyUnallocated(student({ college_rejected: true }))).toBe(
-      "college_rejected"
-    );
-    expect(
-      classifyUnallocated(
-        student({ quota_allocation_status: "revoked", college_rejected: true })
-      )
-    ).toBe("college_rejected");
+  it("keeps only the rows the run could not place", () => {
+    const reasons = reasonsBySuggestion([
+      s(1, "nstc", null),
+      s(2, null, "quota_full"),
+      s(3, null, "review_rejected"),
+    ]);
+    expect(reasons.get(1)).toBeUndefined();
+    expect(reasons.get(2)).toBe("quota_full");
+    expect(reasons.get(3)).toBe("review_rejected");
   });
 
-  it("reports 撤銷/停發 when the college did not reject", () => {
-    expect(
-      classifyUnallocated(student({ quota_allocation_status: "revoked" }))
-    ).toBe("cancelled");
-    expect(
-      classifyUnallocated(student({ quota_allocation_status: "suspended" }))
-    ).toBe("cancelled");
-  });
-
-  it("reports an empty application", () => {
-    expect(classifyUnallocated(student({ applied_sub_types: [] }))).toBe(
-      "not_applied"
-    );
-  });
-
-  it("reports a review reject only when it covers EVERY applied sub-type", () => {
-    // The invisible case: a reject from a role the 教授推薦/學院推薦 columns
-    // don't render still blocks the allocation.
-    expect(
-      classifyUnallocated(
-        student({
-          applied_sub_types: ["nstc", "moe_1w"],
-          rejected_sub_types: ["nstc", "moe_1w"],
-        })
-      )
-    ).toBe("review_rejected");
-    // One sub-type still open ⇒ the blocker was quota, not the review.
-    expect(
-      classifyUnallocated(
-        student({
-          applied_sub_types: ["nstc", "moe_1w"],
-          rejected_sub_types: ["nstc"],
-        })
-      )
-    ).toBe("no_quota");
-  });
-
-  it("compares sub-type codes normalized, like the backend", () => {
-    expect(
-      classifyUnallocated(
-        student({ applied_sub_types: [" NSTC"], rejected_sub_types: ["nstc"] })
-      )
-    ).toBe("review_rejected");
-  });
-
-  it("falls through to 名額不足 for an otherwise allocatable student", () => {
-    expect(classifyUnallocated(student({}))).toBe("no_quota");
+  it("ignores an unplaced row with no reason rather than inventing one", () => {
+    // The frontend must never guess: a reject from a reviewer role the grid
+    // does not render looks identical to an exhausted quota from here.
+    expect(reasonsBySuggestion([s(1, null, null)]).size).toBe(0);
   });
 
   it("tallies reasons, most common first", () => {
-    expect(
-      summarizeUnallocated([
-        student({ applied_sub_types: ["nstc"], rejected_sub_types: ["nstc"] }),
-        student({ applied_sub_types: ["nstc"], rejected_sub_types: ["nstc"] }),
-        student({}),
-      ])
-    ).toEqual([
+    const reasons = reasonsBySuggestion([
+      s(1, null, "review_rejected"),
+      s(2, null, "review_rejected"),
+      s(3, null, "quota_full"),
+    ]);
+    expect(summarizeReasons(reasons)).toEqual([
       { reason: "review_rejected", count: 2 },
-      { reason: "no_quota", count: 1 },
+      { reason: "quota_full", count: 1 },
+    ]);
+  });
+
+  it("labels every reason the backend can emit", () => {
+    // Pin: the union mirrors the UNALLOCATED_* constants in
+    // manual_distribution_service.py — a new code must land in both.
+    expect(Object.keys(UNALLOCATED_REASON_LABEL).sort()).toEqual([
+      "cancelled",
+      "college_rejected",
+      "not_applied",
+      "quota_full",
+      "review_rejected",
     ]);
   });
 });
