@@ -169,11 +169,9 @@ class CollegeRankingItem(Base):
         get_json_type(), nullable=True
     )  # Array of backup allocations: [{sub_type, backup_position, college, allocation_reason}, ...]
 
-    # Received months tracking
-    received_months = Column(Integer, nullable=True)  # Number of months already received
-    # "imported" when admin uploads an Excel; NULL otherwise (system-computed
-    # values are derived on read via received_months_service, not persisted).
-    received_months_source = Column(String(20), nullable=True)
+    # NOTE: received_months / received_months_source used to live here. Admin
+    # overrides now live in student_received_month_records, keyed by 學號 so a
+    # student need not already be in a 排名. See app/models/received_months.py.
 
     # Time tracking
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -62,3 +62,38 @@ _Avoid_: confirm, commit, approve
 An admin decision to pull a student out of the distribution entirely. Frees
 their 名額 but, unlike 未決, never makes them a candidate again.
 _Avoid_: cancelled, removed, excluded
+
+### Received months
+
+**已領月份數 (Received Months)**:
+How many months a student has been paid a given scholarship. Always the sum of
+匯入月份數 and 系統月份數 — never one substituted for the other.
+_Avoid_: received months (unqualified), 領取月數
+
+**匯入月份數 (Imported Months)**:
+The lifetime baseline taken from 國科會's report, derived from the inclusive span
+領獎起始月份 → 目前領獎月份. Keyed by (學號 × scholarship type), so it exists
+whether or not the student has ever applied through this system.
+_Avoid_: override, imported override, manual months
+
+**系統月份數 (System Months)**:
+The half derived live from this system's own payment rosters, by roster cycle
+(monthly 1, semi-yearly 6, yearly 12). Never persisted — recomputed on every read.
+_Avoid_: calculated months, auto months
+
+**匯入批次 (Import Run)**:
+One upload of 國科會's report. Staged on preview, committed on confirm; nothing
+reaches the ledger until an admin confirms.
+_Avoid_: import job, 批次匯入 (that is the offline *application* importer)
+
+### Student identity
+
+**學號 (Student Number)**:
+The student's NYCU number (`std_stdcode`). The canonical key for matching a
+person across applications, rosters and imported records.
+_Avoid_: student id, student_id_number (that column holds the national ID)
+
+**身分證字號 (National ID)**:
+`std_pid`. Carried only for the payment-roster Excel column; never used to match
+identity, since foreign students may not have one.
+_Avoid_: student id

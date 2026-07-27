@@ -663,6 +663,9 @@ async def get_scholarship_types(current_user: User = Depends(require_staff), db:
             latest_config = config_result.scalar_one_or_none()
 
             type_config = {
+                # Callers that key on the scholarship type itself (e.g. the
+                # 匯入已領月份數 dialog) need the id, not just the code.
+                "id": stype.id,
                 "code": stype.code,
                 "name": stype.name,
                 "name_en": stype.name_en or stype.name,

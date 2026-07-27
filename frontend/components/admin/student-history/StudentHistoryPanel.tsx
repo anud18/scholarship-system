@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, Loader2 } from "lucide-react";
+import { Search, Loader2, Upload } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,8 @@ import type { StudentScholarshipHistoryData } from "@/lib/api/modules/student-hi
 import { AcademicInfoCard } from "./AcademicInfoCard";
 import { SummaryCards } from "./SummaryCards";
 import { PaymentHistoryTable } from "./PaymentHistoryTable";
+import { ReceivedMonthsCard } from "./ReceivedMonthsCard";
+import { ImportReceivedMonthsDialog } from "./ImportReceivedMonthsDialog";
 
 const STUDENT_NUMBER_REGEX = /^[A-Za-z0-9]{4,15}$/;
 
@@ -25,6 +27,7 @@ export function StudentHistoryPanel() {
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   useEffect(() => {
     if (submitted === null) return;
@@ -88,8 +91,12 @@ export function StudentHistoryPanel() {
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle>學生領獎紀錄查詢</CardTitle>
+          <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            匯入已領月份數
+          </Button>
         </CardHeader>
         <CardContent>
           <div className="flex items-end gap-3">
@@ -155,9 +162,19 @@ export function StudentHistoryPanel() {
             snapshotName={data.summary.snapshot_name}
           />
           <SummaryCards summary={data.summary} />
+          <ReceivedMonthsCard breakdowns={data.received_months} />
           <PaymentHistoryTable records={data.payment_records} />
         </>
       )}
+
+      <ImportReceivedMonthsDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImported={() => {
+          // Re-run the current lookup so a just-imported baseline shows up.
+          if (submitted !== null) setFetchToken((n) => n + 1);
+        }}
+      />
     </div>
   );
 }
