@@ -112,7 +112,7 @@ class TestFileTypeLabels:
         # bank_book are minted by batch_import's doc_type_map. Every
         # fixed type MUST be listed here or it is misclassified as an
         # admin-configured dynamic document and swept into the merged
-        # 動態文件合併.pdf.
+        # 申請資料合併檔.pdf.
         expected_keys = {
             "transcript",
             "research_proposal",
@@ -173,10 +173,17 @@ class TestDegreeLabels:
         assert set(DEGREE_LABELS.keys()) == {"1", "2", "3"}
 
     def test_degree_labels_are_zh_tw(self):
-        # Pin: zh-TW canonical names — 學士/碩士/博士.
-        assert DEGREE_LABELS["1"] == "學士"
+        # Pin: zh-TW canonical names, DESCENDING — 1 is the highest
+        # degree, not the lowest. This pin previously asserted the
+        # inverted order, which printed 學位 學士 on every PhD
+        # student's export. Three authoritative sources agree on the
+        # order below: the `degrees` reference table the frontend
+        # renders from, the std_degree doc in app/schemas/student.py
+        # ("1:博士, 2:碩士, 3:學士"), and StudentInfo.get_student_type()
+        # mapping "1" -> phd. Do not "restore" the ascending order.
+        assert DEGREE_LABELS["1"] == "博士"
         assert DEGREE_LABELS["2"] == "碩士"
-        assert DEGREE_LABELS["3"] == "博士"
+        assert DEGREE_LABELS["3"] == "學士"
 
     def test_keys_are_strings_not_ints(self):
         # Pin: SIS API returns std_degree as INT but the labels
@@ -213,7 +220,8 @@ class TestLabelForFileType:
 class TestIsDynamicDocumentType:
     """Pin: the merged-PDF selector. Only admin-configured dynamic documents
     (file_type IS the configured document_name) join the per-student
-    動態文件合併.pdf; every fixed type and the 其他文件 bucket stay out."""
+    申請資料合併檔.pdf alongside the generated summary; every fixed type and the
+    其他文件 bucket stay out."""
 
     @pytest.mark.parametrize("fixed_type", sorted(FILE_TYPE_LABELS.keys()))
     def test_every_fixed_type_is_not_dynamic(self, fixed_type):
@@ -230,7 +238,7 @@ class TestIsDynamicDocumentType:
 class TestUniqueZipPath:
     """Pin: duplicate-entry defense. zipfile writes duplicate names without
     error and most extractors keep only the last, silently shadowing a file
-    (e.g. a dynamic document named 動態文件合併 vs the merged artifact)."""
+    (e.g. a dynamic document named 申請資料合併檔 vs the merged artifact)."""
 
     def _zf_with(self, names):
         import io

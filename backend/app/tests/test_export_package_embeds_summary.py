@@ -1,7 +1,14 @@
 """Integration test: generate_export_zip embeds the 申請總表 workbooks and the
-table rows match the student folders. Avoids DB / MinIO / reportlab font by
-monkeypatching ensure_cjk_font, _query_applications, _get_scholarship_type,
-_generate_summary_pdf, and load_export_aux_data.
+table rows match the student folders. Avoids DB / MinIO by monkeypatching
+ensure_cjk_font, _query_applications, _get_scholarship_type,
+_generate_summary_pdf, load_form_field_labels and load_export_aux_data.
+
+The per-student 申請資料合併檔 merge still runs for real, so this file DOES
+depend on the CJK font: `build_merged_pdf` calls `pdf_merge`'s own
+`ensure_cjk_font`, which the patch above (bound in export_package_service's
+namespace) does not cover. The stubbed `b"%PDF-1.4 fake"` summary passes the
+magic-bytes check but fails to parse, so it lands as an unreadable-PDF
+placeholder page inside the merge rather than being embedded.
 """
 
 import io
@@ -48,6 +55,7 @@ async def test_export_zip_contains_summary_tables_matching_folders(monkeypatch):
         return ([], {}, {}, {})
 
     monkeypatch.setattr("app.services.export_summary_tables.load_export_aux_data", _fake_aux)
+    monkeypatch.setattr("app.services.export_package_service.load_form_field_labels", _coro_returning({}))
 
     apps = [
         _mk_app(1, 11, "1000", "A系", "001", "甲"),
@@ -100,6 +108,7 @@ async def test_export_zip_degrades_when_summary_build_fails_wholesale(monkeypatc
     # Wholesale failure of the summary-table builder (e.g. an aux-data DB error
     # before the per-table try/except) must not lose the materials ZIP.
     monkeypatch.setattr("app.services.export_package_service.build_embedded_summary_tables", _boom)
+    monkeypatch.setattr("app.services.export_package_service.load_form_field_labels", _coro_returning({}))
 
     apps = [_mk_app(1, 11, "1000", "A系", "001", "甲")]
     stype = SimpleNamespace(name="某獎學金", code="phd", sub_type_configs=[])

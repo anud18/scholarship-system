@@ -1,8 +1,9 @@
 """
 Export Package Service
 
-Generates ZIP files containing student application materials
-organized by department, with auto-generated summary PDFs.
+Generates ZIP files containing student application materials organized by
+department, with auto-generated summary PDFs and, per student, one merged
+申請資料合併檔 PDF holding that summary plus their dynamic documents.
 """
 
 import asyncio
@@ -32,11 +33,22 @@ from sqlalchemy.orm import selectinload
 from app.models.application import Application
 from app.models.scholarship import ScholarshipType
 from app.services.export_summary_tables import build_embedded_summary_tables
+from app.services.form_field_labels import (
+    ACCOUNT_FIELD_SYNONYMS,
+    load_form_field_labels,
+    resolve_field_label,
+)
 from app.services.minio_service import MinIOService
 from app.services.pdf_fonts import CJK_FONT_NAME, ensure_cjk_font
 from app.services.pdf_merge import MergeItem, build_merged_pdf
 
 logger = logging.getLogger(__name__)
+
+# The per-student summary PDF shipped standalone AND as the first document of
+# the merged PDF, and the merged PDF that stitches it together with the
+# student's admin-configured dynamic documents.
+SUMMARY_PDF_LABEL = "學生資料彙整"
+MERGED_PDF_LABEL = "申請資料合併檔"
 
 # file_type -> Chinese display name
 FILE_TYPE_LABELS: Dict[str, str] = {
@@ -53,10 +65,14 @@ FILE_TYPE_LABELS: Dict[str, str] = {
     "other": "其他文件",
 }
 
+# SIS 攻讀學位 codes. Descending, NOT ascending — 1 is the highest degree.
+# Authoritative sources, all agreeing: the `degrees` reference table the
+# frontend renders from (1=博士, 2=碩士, 3=學士), the std_degree field doc in
+# app/schemas/student.py, and StudentInfo.get_student_type() mapping "1"→phd.
 DEGREE_LABELS: Dict[str, str] = {
-    "1": "學士",
+    "1": "博士",
     "2": "碩士",
-    "3": "博士",
+    "3": "學士",
 }
 
 
@@ -91,7 +107,7 @@ def _unique_zip_path(zf: zipfile.ZipFile, path: str) -> str:
     """Return `path`, suffixed with _2/_3/… if the ZIP already holds an entry
     at that name. zipfile happily writes duplicate names and most extractors
     then keep only the last one, silently shadowing the other file — e.g. an
-    admin-configured dynamic document named exactly 動態文件合併 colliding with
+    admin-configured dynamic document named exactly 申請資料合併檔 colliding with
     the merged PDF, or two same-type download failures sharing one error path."""
 
     def _taken(name: str) -> bool:
@@ -181,6 +197,11 @@ class ExportPackageService:
         if len(applications) > 200:
             raise ValueError(f"申請筆數超過上限 (200)，請縮小篩選範圍（目前 {len(applications)} 筆）")
 
+        # 2.5 zh-TW labels for the submitted form fields. Loaded once, after the
+        # rejection guards above, because _generate_summary_pdf is sync and runs
+        # inside the per-student loop.
+        field_labels = await load_form_field_labels(self.db, scholarship_type.code)
+
         # Derive college name from first application's student_data
         college_name = None
         if college_code:
@@ -216,7 +237,9 @@ class ExportPackageService:
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             for dept_folder, apps in sorted(dept_groups.items()):
                 for app in apps:
-                    await self._add_application_to_zip(zf, dept_folder, app, scholarship_name, academic_year, semester)
+                    await self._add_application_to_zip(
+                        zf, dept_folder, app, scholarship_name, academic_year, semester, field_labels
+                    )
             for inner_path, payload in summary_tables.items():
                 zf.writestr(inner_path, payload)
 
@@ -290,24 +313,44 @@ class ExportPackageService:
         scholarship_name: str,
         academic_year: int,
         semester: Optional[str],
+        field_labels: Dict[str, str],
     ) -> None:
-        """Add one application's files + summary PDF to the ZIP."""
+        """Add one application's files + summary PDF + merged PDF to the ZIP."""
         student = app.student_data or {}
         std_code = _sanitize_filename(student.get("std_stdcode", "unknown"))
         std_name = _sanitize_filename(student.get("std_cname", "未知"))
-        student_folder = f"{std_code}_{std_name}"
-        base_path = f"{dept_folder}/{student_folder}"
-
-        # Generate summary PDF
         student_prefix = f"{std_code}_{std_name}"
+        base_path = f"{dept_folder}/{student_prefix}"
+
+        # Generate summary PDF. Kept in memory as well: it leads the merged PDF
+        # below, so reviewers open one file and start at the student's data.
         try:
-            pdf_bytes = self._generate_summary_pdf(app, scholarship_name, academic_year, semester)
-            zf.writestr(f"{base_path}/{student_prefix}_學生資料彙整.pdf", pdf_bytes)
+            pdf_bytes = self._generate_summary_pdf(app, scholarship_name, academic_year, semester, field_labels)
+            # _unique_zip_path here too: two applications can share one
+            # base_path (same student code + name in one department, e.g. a
+            # rejected and a resubmitted application), and a duplicate ZIP
+            # entry would silently drop one of the two summaries.
+            summary_path = _unique_zip_path(zf, f"{base_path}/{student_prefix}_{SUMMARY_PDF_LABEL}.pdf")
+            zf.writestr(summary_path, pdf_bytes)
+            summary_item = MergeItem(
+                label=SUMMARY_PDF_LABEL,
+                filename=summary_path.rsplit("/", 1)[-1],
+                content=pdf_bytes,
+            )
         except Exception as e:
             logger.exception(f"Failed to generate summary PDF for app {app.id}")
             zf.writestr(
-                f"{base_path}/_錯誤_彙整PDF生成失敗.txt",
+                _unique_zip_path(zf, f"{base_path}/_錯誤_彙整PDF生成失敗.txt"),
                 f"PDF 生成失敗：{str(e)}",
+            )
+            # Still list it in the merge as a placeholder page: a reviewer
+            # working only from the merged PDF must not read a missing summary
+            # as "this student submitted no personal data".
+            summary_item = MergeItem(
+                label=SUMMARY_PDF_LABEL,
+                filename=f"{student_prefix}_{SUMMARY_PDF_LABEL}.pdf",
+                content=None,
+                error=f"{SUMMARY_PDF_LABEL} PDF 生成失敗：{str(e)}",
             )
 
         # Add uploaded files from ApplicationFile records; keep the bytes of
@@ -351,35 +394,37 @@ class ExportPackageService:
                         label=item_label,
                         filename=af.original_filename or af.object_name or "",
                         content=file_bytes,
-                        error=fetch_error,
+                        error=f"檔案下載失敗：{fetch_error}" if fetch_error else None,
                     )
                 )
 
-        # Extra per-student PDF stitching all dynamic documents together
-        if dynamic_items:
-            semester_map = {"first": "第一學期", "second": "第二學期"}
-            semester_label = semester_map.get(semester, "全學年") if semester else "全學年"
-            try:
-                # to_thread: pypdf/Pillow/reportlab do seconds of pure CPU per
-                # student — inline they would stall the whole event loop.
-                merged_bytes = await asyncio.to_thread(
-                    build_merged_pdf,
-                    title="學生動態文件合併",
-                    subtitle_lines=[
-                        f"{scholarship_name} {academic_year}學年度 {semester_label}",
-                        # Display surface: raw SIS values (sanitization is for
-                        # ZIP paths), with the same fallbacks as folder naming.
-                        f"{student.get('std_stdcode', 'unknown')} {student.get('std_cname', '未知')}",
-                    ],
-                    items=dynamic_items,
-                )
-                zf.writestr(_unique_zip_path(zf, f"{base_path}/{student_prefix}_動態文件合併.pdf"), merged_bytes)
-            except Exception as e:
-                logger.exception(f"Failed to build merged dynamic-documents PDF for app {app.id}")
-                zf.writestr(
-                    _unique_zip_path(zf, f"{base_path}/_錯誤_動態文件合併PDF生成失敗.txt"),
-                    f"動態文件合併 PDF 生成失敗：{str(e)}",
-                )
+        # Extra per-student PDF stitching the summary and all dynamic documents
+        # together. Built for every student — summary_item is always present, so
+        # a student who uploaded no dynamic documents still gets one holding
+        # just their summary and reviewers work from the same file throughout.
+        semester_map = {"first": "第一學期", "second": "第二學期"}
+        semester_label = semester_map.get(semester, "全學年") if semester else "全學年"
+        try:
+            # to_thread: pypdf/Pillow/reportlab do seconds of pure CPU per
+            # student — inline they would stall the whole event loop.
+            merged_bytes = await asyncio.to_thread(
+                build_merged_pdf,
+                title=MERGED_PDF_LABEL,
+                subtitle_lines=[
+                    f"{scholarship_name} {academic_year}學年度 {semester_label}",
+                    # Display surface: raw SIS values (sanitization is for
+                    # ZIP paths), with the same fallbacks as folder naming.
+                    f"{student.get('std_stdcode', 'unknown')} {student.get('std_cname', '未知')}",
+                ],
+                items=[summary_item] + dynamic_items,
+            )
+            zf.writestr(_unique_zip_path(zf, f"{base_path}/{student_prefix}_{MERGED_PDF_LABEL}.pdf"), merged_bytes)
+        except Exception as e:
+            logger.exception(f"Failed to build merged application PDF for app {app.id}")
+            zf.writestr(
+                _unique_zip_path(zf, f"{base_path}/_錯誤_{MERGED_PDF_LABEL}PDF生成失敗.txt"),
+                f"{MERGED_PDF_LABEL} PDF 生成失敗：{str(e)}",
+            )
 
     def _generate_summary_pdf(
         self,
@@ -387,6 +432,7 @@ class ExportPackageService:
         scholarship_name: str,
         academic_year: int,
         semester: Optional[str],
+        field_labels: Dict[str, str],
     ) -> bytes:
         """Generate a student summary PDF using reportlab."""
         student = app.student_data or {}
@@ -439,7 +485,7 @@ class ExportPackageService:
         # Header + Title
         elements.append(Paragraph(f"{scholarship_name} {academic_year}學年度 {semester_label}", s_header))
         elements.append(Spacer(1, 3 * mm))
-        elements.append(Paragraph("學生資料彙整", s_title))
+        elements.append(Paragraph(SUMMARY_PDF_LABEL, s_title))
         elements.append(Spacer(1, 6 * mm))
 
         # Section 1: Basic Info
@@ -484,11 +530,24 @@ class ExportPackageService:
             elements.append(Paragraph("三、表單填寫資料", s_section))
             elements.append(Spacer(1, 2 * mm))
             form_rows = []
+            seen_account_rows = set()
             for field_id in sorted(fields_data.keys()):
                 field = fields_data[field_id]
-                label = field.get("label", field.get("field_id", field_id))
+                label = resolve_field_label(field_id, field_labels)
                 value = str(field.get("value", "—") or "—")
+                # postal_account and account_number are two ids for the one
+                # 郵局帳號 the student typed, so once translated they print the
+                # identical row twice. Scoped to that pair: two genuinely
+                # distinct fields that happen to share a label both stay
+                # visible, and differing account values stay visible too.
+                if field_id in ACCOUNT_FIELD_SYNONYMS:
+                    if (label, value) in seen_account_rows:
+                        continue
+                    seen_account_rows.add((label, value))
                 form_rows.append((label, value))
+            # Row order stays keyed on field_id: sorting on the zh-TW label
+            # would order by CJK codepoint, no more meaningful to a reviewer
+            # than the id and needlessly unstable when a label is edited.
             elements.append(self._build_table(form_rows, s_normal, table_style))
             elements.append(Spacer(1, 4 * mm))
 
