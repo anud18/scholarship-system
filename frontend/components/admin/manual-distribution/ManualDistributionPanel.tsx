@@ -448,6 +448,14 @@ export function ManualDistributionPanel({
         // student behind a disabled checkbox) would be saved without the admin
         // ever being able to see or untick it. No budget: this runs against a
         // fresh server snapshot, so the backend's own quota counts are exact.
+        //
+        // Quota status is the same kind of prerequisite: the 核配 columns are
+        // derived from it, so if it failed to load the grid renders NO columns
+        // and staged suggestions would be invisible yet still saved.
+        const hasQuota =
+          quotaResp.success &&
+          !!quotaResp.data &&
+          Object.keys(quotaResp.data).length > 0;
         const eligibleItemIds = new Set(
           studentsResp.data
             .filter(s => !isCancelledAllocation(s))
@@ -455,7 +463,7 @@ export function ManualDistributionPanel({
         );
         const merged = mergeSuggestions(
           allocMap,
-          previewSuggestions,
+          hasQuota ? previewSuggestions : [],
           eligibleItemIds
         );
         // Commit students together with their seeded allocations so no render
@@ -879,6 +887,17 @@ export function ManualDistributionPanel({
     async (collegeCode: string, collegeName: string) => {
       if (!scholarshipTypeId || !selectedAcademicYear || !selectedSemester)
         return;
+      // No columns means quota status never loaded (or carries no allocatable
+      // slot). Without it there is no per-college cap to enforce AND nothing on
+      // screen to show what was staged — refuse rather than stage invisible,
+      // uncapped allocations that 儲存 would happily persist.
+      if (subTypeCols.length === 0) {
+        setSaveMessage({
+          type: "error",
+          text: "名額資料尚未載入，無法執行預設分發，請重新整理後再試",
+        });
+        return;
+      }
       setAutoAllocatingCollege(collegeCode);
       setSaveMessage(null);
       try {
@@ -959,6 +978,7 @@ export function ManualDistributionPanel({
       selectedSemester,
       students,
       quotaStatus,
+      subTypeCols,
       clearedItemIds,
     ]
   );
@@ -1591,6 +1611,7 @@ export function ManualDistributionPanel({
                                   className="h-6 px-2 text-[11px] font-medium"
                                   disabled={
                                     !collegeCode ||
+                                    subTypeCols.length === 0 ||
                                     autoAllocatingCollege !== null ||
                                     isLoading ||
                                     isSaving ||
@@ -1598,9 +1619,11 @@ export function ManualDistributionPanel({
                                     isRestoring
                                   }
                                   title={
-                                    collegeCode
-                                      ? `依排名與志願序自動預設分配 ${collegeName} 尚未核配的學生（僅填空白，儲存前可修改）`
-                                      : "無學院代碼，無法執行預設分發"
+                                    !collegeCode
+                                      ? "無學院代碼，無法執行預設分發"
+                                      : subTypeCols.length === 0
+                                        ? "名額資料尚未載入，無法執行預設分發"
+                                        : `依排名與志願序自動預設分配 ${collegeName} 尚未核配的學生（僅填空白，儲存前可修改）`
                                   }
                                   onClick={() =>
                                     handleCollegeAutoAllocate(
