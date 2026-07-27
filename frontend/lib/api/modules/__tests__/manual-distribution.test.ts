@@ -693,18 +693,26 @@ describe("classifyUnallocated / summarizeUnallocated", () => {
       ...o,
     }) as never;
 
-  it("reports 撤銷/停發 before anything else", () => {
+  it("reports the college's rejection first, matching the backend's order", () => {
+    // _compute_suggestions short-circuits on college_rejected BEFORE it reads
+    // quota_allocation_status, so that is what actually stopped the allocation.
+    expect(classifyUnallocated(student({ college_rejected: true }))).toBe(
+      "college_rejected"
+    );
     expect(
       classifyUnallocated(
         student({ quota_allocation_status: "revoked", college_rejected: true })
       )
-    ).toBe("cancelled");
+    ).toBe("college_rejected");
   });
 
-  it("reports the college's own rejection", () => {
-    expect(classifyUnallocated(student({ college_rejected: true }))).toBe(
-      "college_rejected"
-    );
+  it("reports 撤銷/停發 when the college did not reject", () => {
+    expect(
+      classifyUnallocated(student({ quota_allocation_status: "revoked" }))
+    ).toBe("cancelled");
+    expect(
+      classifyUnallocated(student({ quota_allocation_status: "suspended" }))
+    ).toBe("cancelled");
   });
 
   it("reports an empty application", () => {

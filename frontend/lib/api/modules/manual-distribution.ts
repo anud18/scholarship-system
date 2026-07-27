@@ -357,8 +357,12 @@ export const UNALLOCATED_REASON_LABEL: Record<UnallocatedReason, string> = {
  * the 教授推薦/學院推薦 columns do not render, leaving no visible explanation.
  */
 export function classifyUnallocated(s: DistributionStudent): UnallocatedReason {
-  if (isCancelledAllocation(s)) return "cancelled";
+  // college_rejected FIRST — _compute_suggestions short-circuits on it before
+  // it ever reads quota_allocation_status, so for a row that is both, the
+  // college's rejection is what actually stopped the allocation. (The 撤銷/停發
+  // state is not hidden by this: the row renders its own status control.)
   if (s.college_rejected) return "college_rejected";
+  if (isCancelledAllocation(s)) return "cancelled";
   const applied = s.applied_sub_types ?? [];
   if (applied.length === 0) return "not_applied";
   const rejected = new Set((s.rejected_sub_types ?? []).map(normSubType));
