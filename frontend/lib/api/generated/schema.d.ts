@@ -7755,7 +7755,9 @@ export interface components {
             /** Message */
             message: string;
             /** Data */
-            data?: Record<string, never>[] | null;
+            data?: {
+                [key: string]: unknown;
+            }[] | null;
             /** Errors */
             errors?: string[] | null;
             /** Trace Id */
@@ -7771,7 +7773,9 @@ export interface components {
             /** Message */
             message: string;
             /** Data */
-            data?: Record<string, never> | null;
+            data?: {
+                [key: string]: unknown;
+            } | null;
             /** Errors */
             errors?: string[] | null;
             /** Trace Id */
@@ -7967,7 +7971,9 @@ export interface components {
              * Validation Rules
              * @description Validation rules
              */
-            validation_rules?: Record<string, never> | null;
+            validation_rules?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * ApplicationDocumentUpdate
@@ -8005,7 +8011,9 @@ export interface components {
             /** Example File Url */
             example_file_url?: string | null;
             /** Validation Rules */
-            validation_rules?: Record<string, never> | null;
+            validation_rules?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * ApplicationFieldCreate
@@ -8078,7 +8086,9 @@ export interface components {
              * Field Options
              * @description Field options
              */
-            field_options?: Record<string, never>[] | null;
+            field_options?: {
+                [key: string]: unknown;
+            }[] | null;
             /**
              * Display Order
              * @description Display order
@@ -8105,12 +8115,16 @@ export interface components {
              * Validation Rules
              * @description Validation rules
              */
-            validation_rules?: Record<string, never> | null;
+            validation_rules?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Conditional Rules
              * @description Conditional rules
              */
-            conditional_rules?: Record<string, never> | null;
+            conditional_rules?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Include In College Export
              * @description Whether this field appears in the college Excel export
@@ -8149,7 +8163,9 @@ export interface components {
             /** Step Value */
             step_value?: number | null;
             /** Field Options */
-            field_options?: Record<string, never>[] | null;
+            field_options?: {
+                [key: string]: unknown;
+            }[] | null;
             /** Display Order */
             display_order?: number | null;
             /** Is Active */
@@ -8159,9 +8175,13 @@ export interface components {
             /** Help Text En */
             help_text_en?: string | null;
             /** Validation Rules */
-            validation_rules?: Record<string, never> | null;
+            validation_rules?: {
+                [key: string]: unknown;
+            } | null;
             /** Conditional Rules */
-            conditional_rules?: Record<string, never> | null;
+            conditional_rules?: {
+                [key: string]: unknown;
+            } | null;
             /** Include In College Export */
             include_in_college_export?: boolean | null;
             /** Export Column Label */
@@ -8345,9 +8365,13 @@ export interface components {
             /** Semester */
             semester?: string | null;
             /** Student Data */
-            student_data: Record<string, never>;
+            student_data: {
+                [key: string]: unknown;
+            };
             /** Submitted Form Data */
-            submitted_form_data: Record<string, never>;
+            submitted_form_data: {
+                [key: string]: unknown;
+            };
             /**
              * Agree Terms
              * @default false
@@ -8376,7 +8400,9 @@ export interface components {
              */
             updated_at: string;
             /** Meta Data */
-            meta_data?: Record<string, never> | null;
+            meta_data?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Reviews
              * @default []
@@ -8587,7 +8613,9 @@ export interface components {
              * Updates
              * @description 要更新的欄位
              */
-            updates: Record<string, never>;
+            updates: {
+                [key: string]: unknown;
+            };
         };
         /** Body_create_ranking_api_v1_college_review_rankings_post */
         Body_create_ranking_api_v1_college_review_rankings_post: {
@@ -8625,10 +8653,7 @@ export interface components {
         };
         /** Body_create_supplementary_doc_api_v1_system_settings_supplementary_docs_post */
         Body_create_supplementary_doc_api_v1_system_settings_supplementary_docs_post: {
-            /**
-             * File
-             * Format: binary
-             */
+            /** File */
             file: string;
             /** Title */
             title: string;
@@ -8648,35 +8673,25 @@ export interface components {
         };
         /** Body_extract_bank_info_from_passbook_api_v1_user_profiles_bank_passbook_ocr_post */
         Body_extract_bank_info_from_passbook_api_v1_user_profiles_bank_passbook_ocr_post: {
-            /**
-             * File
-             * Format: binary
-             */
+            /** File */
             file: string;
         };
         /** Body_extract_text_from_document_api_v1_user_profiles_document_ocr_post */
         Body_extract_text_from_document_api_v1_user_profiles_document_ocr_post: {
-            /**
-             * File
-             * Format: binary
-             */
+            /** File */
             file: string;
         };
         /** Body_import_received_months_api_v1_manual_distribution_import_received_months_post */
         Body_import_received_months_api_v1_manual_distribution_import_received_months_post: {
             /**
              * File
-             * Format: binary
              * @description Excel file with columns: 學號, 已領月份數
              */
             file: string;
         };
         /** Body_import_whitelist_excel_api_v1_scholarship_configurations__id__whitelist_import_post */
         Body_import_whitelist_excel_api_v1_scholarship_configurations__id__whitelist_import_post: {
-            /**
-             * File
-             * Format: binary
-             */
+            /** File */
             file: string;
         };
         /** Body_portal_sso_verify_api_v1_auth_portal_sso_verify_post */
@@ -8715,10 +8730,7 @@ export interface components {
         };
         /** Body_supplementary_import_api_v1_college_review_rankings__ranking_id__supplementary_import_post */
         Body_supplementary_import_api_v1_college_review_rankings__ranking_id__supplementary_import_post: {
-            /**
-             * File
-             * Format: binary
-             */
+            /** File */
             file: string;
         };
         /** Body_update_matrix_quota_api_v1_scholarship_configurations_matrix_quota_put */
@@ -8734,17 +8746,13 @@ export interface components {
         };
         /** Body_upload_bank_document_file_api_v1_user_profiles_me_bank_document_file_post */
         Body_upload_bank_document_file_api_v1_user_profiles_me_bank_document_file_post: {
-            /**
-             * File
-             * Format: binary
-             */
+            /** File */
             file: string;
         };
         /** Body_upload_batch_documents_api_v1_college_review_batch_import__batch_id__documents_post */
         Body_upload_batch_documents_api_v1_college_review_batch_import__batch_id__documents_post: {
             /**
              * File
-             * Format: binary
              * @description 包含所有文件的 ZIP 檔案
              */
             file: string;
@@ -8753,58 +8761,41 @@ export interface components {
         Body_upload_batch_import_data_api_v1_college_review_batch_import_upload_data_post: {
             /**
              * File
-             * Format: binary
              * @description Excel或CSV檔案
              */
             file: string;
         };
         /** Body_upload_document_example_api_v1_application_fields_documents__document_id__upload_example_post */
         Body_upload_document_example_api_v1_application_fields_documents__document_id__upload_example_post: {
-            /**
-             * File
-             * Format: binary
-             */
+            /** File */
             file: string;
         };
         /** Body_upload_file_alias_api_v1_applications__id__files_post */
         Body_upload_file_alias_api_v1_applications__id__files_post: {
-            /**
-             * File
-             * Format: binary
-             */
+            /** File */
             file: string;
         };
         /** Body_upload_file_api_v1_applications__id__files_upload_post */
         Body_upload_file_api_v1_applications__id__files_upload_post: {
-            /**
-             * File
-             * Format: binary
-             */
+            /** File */
             file: string;
         };
         /** Body_upload_renewal_import_api_v1_college_review_renewal_import_upload_post */
         Body_upload_renewal_import_api_v1_college_review_renewal_import_upload_post: {
             /**
              * File
-             * Format: binary
              * @description 續領生 Excel 或 CSV 檔案
              */
             file: string;
         };
         /** Body_upload_system_doc_api_v1_system_settings_upload__doc_key__post */
         Body_upload_system_doc_api_v1_system_settings_upload__doc_key__post: {
-            /**
-             * File
-             * Format: binary
-             */
+            /** File */
             file: string;
         };
         /** Body_upload_terms_document_api_v1_scholarships__scholarship_type__upload_terms_post */
         Body_upload_terms_document_api_v1_scholarships__scholarship_type__upload_terms_post: {
-            /**
-             * File
-             * Format: binary
-             */
+            /** File */
             file: string;
         };
         /**
@@ -8848,7 +8839,9 @@ export interface components {
              * Parameters
              * @description Operation-specific parameters
              */
-            parameters?: Record<string, never> | null;
+            parameters?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * BulkScholarshipAssignRequest
@@ -9058,7 +9051,9 @@ export interface components {
              */
             email_domain: string | null;
             /** Custom Attributes */
-            custom_attributes?: Record<string, never> | null;
+            custom_attributes?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * DocumentData
@@ -9187,7 +9182,9 @@ export interface components {
              * Validation Rules
              * @description 驗證規則
              */
-            validation_rules?: Record<string, never> | null;
+            validation_rules?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** EligibleScholarshipResponse */
         EligibleScholarshipResponse: {
@@ -9397,9 +9394,13 @@ export interface components {
          */
         FormConfigSaveRequest: {
             /** Fields */
-            fields: Record<string, never>[];
+            fields: {
+                [key: string]: unknown;
+            }[];
             /** Documents */
-            documents: Record<string, never>[];
+            documents: {
+                [key: string]: unknown;
+            }[];
             /** Application Document Note */
             application_document_note?: string | null;
             /** Application Document Note En */
@@ -9526,7 +9527,9 @@ export interface components {
              * Metadata
              * @description 額外資料
              */
-            metadata?: Record<string, never> | null;
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * NotificationUpdate
@@ -9550,7 +9553,9 @@ export interface components {
             /** Expires At */
             expires_at?: string | null;
             /** Metadata */
-            metadata?: Record<string, never> | null;
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Is Dismissed
              * @description 是否已關閉
@@ -9966,7 +9971,9 @@ export interface components {
              * Notification Settings
              * @description 通知設定
              */
-            notification_settings?: Record<string, never> | null;
+            notification_settings?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * RosterScheduleStatus
@@ -9979,7 +9986,6 @@ export interface components {
          * @description 更新排程狀態模型
          */
         RosterScheduleStatusUpdate: {
-            /** @description 排程狀態 */
             status: components["schemas"]["RosterScheduleStatus"];
         };
         /**
@@ -10028,7 +10034,9 @@ export interface components {
              * Notification Settings
              * @description 通知設定
              */
-            notification_settings?: Record<string, never> | null;
+            notification_settings?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * RosterStatus
@@ -10810,9 +10818,13 @@ export interface components {
              */
             preferred_language: string;
             /** Privacy Settings */
-            privacy_settings?: Record<string, never> | null;
+            privacy_settings?: {
+                [key: string]: unknown;
+            } | null;
             /** Custom Fields */
-            custom_fields?: Record<string, never> | null;
+            custom_fields?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * UserProfileUpdate
@@ -10830,9 +10842,13 @@ export interface components {
             /** Preferred Language */
             preferred_language?: string | null;
             /** Privacy Settings */
-            privacy_settings?: Record<string, never> | null;
+            privacy_settings?: {
+                [key: string]: unknown;
+            } | null;
             /** Custom Fields */
-            custom_fields?: Record<string, never> | null;
+            custom_fields?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * UserRole
@@ -10889,7 +10905,9 @@ export interface components {
              * Students
              * @description 學生列表 [{'nycu_id': '0856001', 'sub_type': 'nstc'}, ...]
              */
-            students: Record<string, never>[];
+            students: {
+                [key: string]: unknown;
+            }[];
         };
         /**
          * WhitelistBatchRemoveRequest
@@ -11577,7 +11595,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -13739,7 +13759,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -13794,7 +13816,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -16717,7 +16741,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -16783,7 +16809,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -16919,7 +16947,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -19397,7 +19427,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -19428,7 +19460,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -19459,7 +19493,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -19490,7 +19526,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -19521,7 +19559,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
