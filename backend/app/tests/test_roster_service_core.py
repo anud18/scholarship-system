@@ -228,9 +228,8 @@ def test_create_roster_item_included_when_bank_account_present(service: RosterSe
 def test_create_roster_item_included_when_bank_account_missing(service: RosterService) -> None:
     """No bank account anywhere in submitted_form_data ⇒ the student is STILL
     included in the roster (is_included=True, no exclusion_reason) — a missing
-    account is a fixable補件 issue, not an eligibility problem. Payment
-    readiness is gated separately by `is_qualified`, which stays False until
-    the account is filled in."""
+    account is a fixable補件 issue, not an eligibility problem, so it must not
+    shrink 造冊人數/總金額 either. The only trace is the Excel 說明欄 reminder."""
     roster = _make_roster()
     application = _make_application(bank_account=None)
 
@@ -245,14 +244,14 @@ def test_create_roster_item_included_when_bank_account_missing(service: RosterSe
     assert item.is_included is True
     assert item.exclusion_reason is None
     assert item.bank_account == ""
-    assert not item.is_qualified  # 撥款仍被擋，直到補齊帳戶
 
 
 def test_create_roster_item_excluded_when_verification_failed(service: RosterService) -> None:
     """A non-VERIFIED status (graduated, suspended, withdrawn, api_error,
     not_found) excludes the student regardless of bank account presence.
-    Pin: the exclusion_reason explicitly includes the failed status's
-    .value so operators can see which kind of failure occurred."""
+    Pin: the exclusion_reason names the failed status in 繁體中文 so
+    operators can see which kind of failure occurred — the raw enum value
+    (`graduated`) must never reach the UI/Excel."""
     roster = _make_roster()
     application = _make_application(bank_account="00012345678")
 
@@ -265,7 +264,8 @@ def test_create_roster_item_excluded_when_verification_failed(service: RosterSer
     )
 
     assert item.is_included is False
-    assert "graduated" in item.exclusion_reason
+    assert item.exclusion_reason == "學籍驗證未通過：已畢業"
+    assert "graduated" not in item.exclusion_reason
     assert item.verification_status == StudentVerificationStatus.GRADUATED
 
 

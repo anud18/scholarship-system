@@ -19,6 +19,7 @@ from app.core.config import settings
 from app.core.exceptions import FileStorageError
 from app.models.payment_roster import (
     MANUAL_REMOVAL_PREFIXES,
+    STUDENT_VERIFICATION_STATUS_LABELS,
     PaymentRoster,
     PaymentRosterItem,
     StudentVerificationStatus,
@@ -356,7 +357,7 @@ class ExcelExportService:
                     logger.error(f"Failed to upload Excel file to MinIO: {minio_error}", exc_info=True)
                     logger.warning(f"Excel file remains available locally at: {file_path}")
 
-            qualified_count = sum(1 for item in roster_items if item.is_qualified and item.is_included)
+            qualified_count = sum(1 for item in roster_items if item.is_included)
             disqualified_count = len(roster_items) - qualified_count
 
             logger.info(f"Excel export completed: {file_name} ({file_size} bytes)")
@@ -904,8 +905,8 @@ class ExcelExportService:
                 roster.completed_at.strftime("%Y-%m-%d %H:%M:%S") if roster.completed_at else "",
             ],
             ["總申請數", roster.total_applications or 0],
-            ["合格人數", roster.qualified_count or 0],
-            ["不合格人數", roster.disqualified_count or 0],
+            ["納入造冊人數", roster.qualified_count or 0],
+            ["排除人數", roster.disqualified_count or 0],
             ["總金額", float(roster.total_amount) if roster.total_amount else 0],
             ["學籍驗證啟用", "是" if roster.student_verification_enabled else "否"],
             ["API失敗次數", roster.verification_api_failures or 0],
@@ -993,16 +994,13 @@ class ExcelExportService:
         return "; ".join(remarks)
 
     def _get_verification_status_label(self, status) -> str:
-        """取得驗證狀態標籤"""
-        labels = {
-            "verified": "已驗證",
-            "graduated": "已畢業",
-            "suspended": "休學中",
-            "withdrawn": "已退學",
-            "api_error": "驗證錯誤",
-            "not_found": "查無此人",
-        }
-        return labels.get(status.value if hasattr(status, "value") else str(status), str(status))
+        """取得驗證狀態標籤。文案取自 STUDENT_VERIFICATION_STATUS_LABELS
+        （單一真相來源），此處僅負責 enum/字串兩種輸入的正規化。"""
+        raw = status.value if hasattr(status, "value") else str(status)
+        for member, label in STUDENT_VERIFICATION_STATUS_LABELS.items():
+            if member.value == raw:
+                return label
+        return str(status)
 
     def _calculate_file_hash(self, file_path: str) -> str:
         """計算檔案SHA256雜湊值"""

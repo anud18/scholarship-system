@@ -1392,7 +1392,7 @@ export function ManualDistributionPanel({
                     </span>
                   )}
                   <span className="text-blue-600">
-                    合格 {r.qualified_count} 人，${r.total_amount}
+                    納入造冊 {r.qualified_count} 人，${r.total_amount}
                   </span>
                 </div>
               ))}

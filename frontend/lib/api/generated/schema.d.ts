@@ -21458,7 +21458,7 @@ export interface operations {
                 skip?: number;
                 limit?: number;
                 verification_status?: components["schemas"]["StudentVerificationStatus"] | null;
-                is_qualified?: boolean | null;
+                is_included?: boolean | null;
             };
             header?: never;
             path: {

@@ -32,6 +32,7 @@ from app.models.payment_roster import (
     RosterStatus,
     RosterTriggerType,
     StudentVerificationStatus,
+    verification_status_label,
 )
 from app.models.roster_audit import RosterAuditAction, RosterAuditLevel, RosterAuditLog
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
@@ -367,7 +368,9 @@ class RosterService:
                         roster, application, verification_result, verification_status, eligibility_result
                     )
 
-                    if roster_item.is_qualified:
+                    # 統計以「納入造冊」為準，與 Excel 的「納入造冊」欄、
+                    # 造冊詳情的「納入造冊人數」及 _recompute_roster_totals_sync 同源
+                    if roster_item.is_included:
                         qualified_count += 1
                         total_amount += roster_item.scholarship_amount
                     else:
@@ -416,7 +419,7 @@ class RosterService:
             audit_service.log_roster_operation(
                 roster_id=roster.id,
                 action=RosterAuditAction.CREATE,
-                title=f"造冊資料產生: 合格{qualified_count}人, 不合格{disqualified_count}人",
+                title=f"造冊資料產生: 納入造冊{qualified_count}人, 排除{disqualified_count}人",
                 user_id=created_by_user_id,
                 user_name=user_name,
                 description=f"造冊資料產生完成，總金額: ${total_amount}，API失敗: {verification_failures}次",
@@ -482,7 +485,7 @@ class RosterService:
             actual_total = sum(
                 item.scholarship_amount
                 for item in roster.items
-                if item.is_included and item.is_qualified and item.scholarship_amount is not None
+                if item.is_included and item.scholarship_amount is not None
             )
             if abs(float(actual_total) - float(roster.total_amount)) > 0.01:
                 errors.append(f"總金額不一致: 計算值={actual_total}, 儲存值={roster.total_amount}")
@@ -809,7 +812,7 @@ class RosterService:
 
         # 1. 檢查學籍驗證狀態
         if verification_status != StudentVerificationStatus.VERIFIED:
-            exclusion_reasons.append(f"學籍驗證未通過: {verification_status.value}")
+            exclusion_reasons.append(f"學籍驗證未通過：{verification_status_label(verification_status)}")
         # 2. 檢查獎學金規則符合性
         elif eligibility_result and not eligibility_result.get("is_eligible", True):
             failed_rules = eligibility_result.get("failed_rules", [])
@@ -817,8 +820,9 @@ class RosterService:
                 exclusion_reasons.append(f"不符合獎學金規則: {'; '.join(failed_rules)}")
             else:
                 exclusion_reasons.append("不符合獎學金資格條件")
-        # 3. 擷取銀行帳戶資訊（僅作快照與提醒用，「缺少銀行帳戶」不構成排除原因：
-        #    學生補件後即可撥款；撥款合格與否由 is_qualified 屬性另行把關）
+        # 3. 擷取銀行帳戶資訊（僅作快照與提醒用，「缺少銀行帳戶」不構成排除原因，
+        #    也不影響造冊人數／總金額：學生補件後即可撥款。缺帳號僅在 Excel
+        #    說明欄提示「缺少郵局帳號資訊」，供承辦人催補件）
         # IMPORTANT: Support both nested (schema-compliant) and flat (legacy) data structures
         form_data = application.submitted_form_data or {}
         form_fields = form_data.get("fields", {})
@@ -1844,7 +1848,8 @@ class RosterService:
                     roster, application, verification_result, verification_status, eligibility_result
                 )
 
-                if roster_item.is_qualified:
+                # 同 generate_roster：統計以「納入造冊」為準
+                if roster_item.is_included:
                     qualified_count += 1
                     total_amount += roster_item.scholarship_amount
                 else:
@@ -1893,7 +1898,7 @@ class RosterService:
         audit_service.log_roster_operation(
             roster_id=roster.id,
             action=RosterAuditAction.CREATE,
-            title=f"批次造冊產生: {sub_type} {allocation_year}年度 合格{qualified_count}人",
+            title=f"批次造冊產生: {sub_type} {allocation_year}年度 納入造冊{qualified_count}人",
             user_id=created_by_user_id,
             user_name=user_name,
             description=f"計畫編號: {project_number or '未設定'}，總金額: ${total_amount}",

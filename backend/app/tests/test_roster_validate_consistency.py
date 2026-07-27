@@ -36,14 +36,14 @@ def service():
 def _make_item(
     *,
     is_included=True,
-    is_qualified=True,
+    bank_account="0001234567",
     scholarship_amount=1000,
     student_id_number="A123456789",
     student_name="王小明",
 ):
     return SimpleNamespace(
         is_included=is_included,
-        is_qualified=is_qualified,
+        bank_account=bank_account,
         scholarship_amount=scholarship_amount,
         student_id_number=student_id_number,
         student_name=student_name,
@@ -160,14 +160,15 @@ def test_excluded_items_not_summed(service):
     assert not any("總金額不一致" in e for e in result["errors"])
 
 
-def test_unqualified_items_not_summed(service):
-    """Pin: is_qualified=False items NOT summed (even if is_included=True).
-    The two flags are AND-gated for inclusion in the financial total."""
+def test_missing_bank_account_still_summed(service):
+    """Pin: 缺郵局帳號的學生仍計入總金額 — is_included 是唯一判準。
+    造冊詳情「納入造冊人數/總金額」、Excel「納入造冊」欄與此驗證同源，
+    任何額外的 AND-gate 都會讓三者再度對不起來。"""
     items = [
-        _make_item(is_included=True, is_qualified=True, scholarship_amount=1000),
-        _make_item(is_included=True, is_qualified=False, scholarship_amount=99999),
+        _make_item(is_included=True, scholarship_amount=1000),
+        _make_item(is_included=True, bank_account=None, scholarship_amount=1000),
     ]
-    roster = _make_roster(items=items, qualified_count=1, disqualified_count=1, total_amount=1000)
+    roster = _make_roster(items=items, qualified_count=2, disqualified_count=0, total_amount=2000)
     result = service.validate_roster_consistency(roster)
     assert not any("總金額不一致" in e for e in result["errors"])
 

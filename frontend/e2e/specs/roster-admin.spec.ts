@@ -117,7 +117,7 @@ test.describe("Admin roster management flows @nightly", () => {
 
     const res = await apiAs<{
       success: boolean;
-      data: Array<{ id: number; is_qualified: boolean | null }>;
+      data: Array<{ id: number; is_included: boolean }>;
     }>(login.token, "GET", `/payment-rosters/${rosterId}/items`);
     pushTrace(runState, res.traceId);
 
@@ -129,11 +129,11 @@ test.describe("Admin roster management flows @nightly", () => {
     expect(Array.isArray(res.body.data)).toBe(true);
 
     if (res.body.data.length > 0) {
-      // Every item must expose the is_qualified flag (may be null when
-      // student_verification_enabled=false and GPA rules don't apply).
+      // Every item must expose is_included — it is the single flag that
+      // decides 造冊人數/總金額 in both the list and the detail dialog.
       for (const item of res.body.data) {
         expect(typeof item.id).toBe("number");
-        expect("is_qualified" in item).toBe(true);
+        expect(typeof item.is_included).toBe("boolean");
       }
       // Stash for the exclude test.
       excludedItemId = res.body.data[0].id;

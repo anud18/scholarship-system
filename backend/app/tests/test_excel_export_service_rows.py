@@ -356,7 +356,7 @@ def test_is_manual_removal_detects_lock_and_reconcile_prefixes(service):
         is True
     )
     assert (
-        service._is_manual_removal(_mk_scope_item("c", is_included=False, exclusion_reason="學籍驗證未通過: graduated"))
+        service._is_manual_removal(_mk_scope_item("c", is_included=False, exclusion_reason="學籍驗證未通過：已畢業"))
         is False
     )
     assert service._is_manual_removal(_mk_scope_item("d", is_included=True, exclusion_reason=None)) is False
@@ -364,7 +364,7 @@ def test_is_manual_removal_detects_lock_and_reconcile_prefixes(service):
 
 def test_get_roster_items_default_keeps_auto_excluded_hides_manual(service):
     included = _mk_scope_item("納入", is_included=True)
-    auto_excluded = _mk_scope_item("自動排除", is_included=False, exclusion_reason="學籍驗證未通過: graduated")
+    auto_excluded = _mk_scope_item("自動排除", is_included=False, exclusion_reason="學籍驗證未通過：已畢業")
     manual = _mk_scope_item("手動移除", is_included=False, exclusion_reason="鎖定後移除[停發]：x")
     roster = SimpleNamespace(items=[included, auto_excluded, manual])
 
@@ -490,7 +490,7 @@ def test_unverified_and_excluded_and_missing_bank_fills_red(service):
     item = _make_item(student_name="乙", bank_account=None, is_included=False)
     item.verification_status = "graduated"
     item.is_eligible = False
-    item.exclusion_reason = "學籍驗證未通過: graduated"
+    item.exclusion_reason = "學籍驗證未通過：已畢業"
 
     rows, fills = service._prepare_excel_data(roster, [item], [])
 
@@ -498,7 +498,7 @@ def test_unverified_and_excluded_and_missing_bank_fills_red(service):
     assert r["學籍驗證"] == "已畢業"
     assert r["規則資格"] == "不符合"
     assert r["納入造冊"] == "否"
-    assert r["排除原因"] == "學籍驗證未通過: graduated"
+    assert r["排除原因"] == "學籍驗證未通過：已畢業"
     assert f["學籍驗證"] == "red"
     assert f["規則資格"] == "red"
     assert f["帳號"] == "red"
@@ -560,7 +560,7 @@ def test_create_excel_file_writes_headers_and_fills(service, tmp_path):
     item = _make_item(student_name="甲", bank_account=None, is_included=False)
     item.verification_status = "withdrawn"
     item.is_eligible = False
-    item.exclusion_reason = "學籍驗證未通過: withdrawn"
+    item.exclusion_reason = "學籍驗證未通過：已退學"
     item.rule_validation_result = {
         "is_eligible": False,
         "details": {"rule_3": {"passed": False, "rule_name": "GPA", "is_hard_rule": True}},

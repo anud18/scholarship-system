@@ -218,7 +218,7 @@ export function createPaymentRostersApi() {
       params?: {
         skip?: number;
         limit?: number;
-        is_qualified?: boolean | null;
+        is_included?: boolean | null;
       }
     ): Promise<ApiResponse<unknown>> => {
       const response = await typedClient.raw.GET(
