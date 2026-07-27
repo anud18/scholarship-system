@@ -371,3 +371,28 @@ async def test_restore_skips_cancelled_application(db: AsyncSession):
     reaffirmed = await db.get(CollegeRankingItem, item_id)
     await db.refresh(reaffirmed)
     assert reaffirmed.is_allocated is True
+
+
+@pytest.mark.asyncio
+async def test_save_does_not_wipe_a_cancelled_students_preserved_slot(db: AsyncSession):
+    """The grid posts EVERY visible row, so a 撤銷 row arrives as an unallocate.
+
+    Acting on it would clear allocated_sub_type — the very field
+    _cancel_allocation preserves so 復發 can re-affirm the same slot. allocate()
+    must skip cancelled rows entirely.
+    """
+    service, item_id, sch_id = await _setup(db, suffix="cancelsave", allocated_sub_type="nstc")
+    item = await db.get(CollegeRankingItem, item_id)
+    app = await db.get(Application, item.application_id)
+    cfg_id = item.allocation_config_id
+    app.quota_allocation_status = "revoked"
+    item.is_allocated = False
+    await db.commit()
+
+    await service.allocate(sch_id, YEAR, SEM, [{"ranking_item_id": item_id, "sub_type_code": None}], admin_user_id=1)
+
+    refreshed = await db.get(CollegeRankingItem, item_id)
+    await db.refresh(refreshed)
+    assert refreshed.is_allocated is False
+    assert refreshed.allocated_sub_type == "nstc"
+    assert refreshed.allocation_config_id == cfg_id

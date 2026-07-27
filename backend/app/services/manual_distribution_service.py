@@ -847,9 +847,17 @@ class ManualDistributionService:
             "allocation_config_id": int|None  (None → defaults to the requesting config)
         }
         sub_type_code=None means unallocate.
+
+        Rows whose application is 撤銷/停發 are skipped entirely: the grid sends
+        every visible row, and a cancelled row arrives as an unallocate, which
+        would clear the allocated_sub_type that _cancel_allocation deliberately
+        preserved for 復發 (restore_allocation re-affirms the slot from it).
+        Their slot state belongs to revoke/suspend/restore, not to a grid save.
         """
         # Validate quota limits first
         await self._validate_allocations(scholarship_type_id, academic_year, semester, allocations)
+
+        cancelled_item_ids = await self._cancelled_ranking_item_ids([a["ranking_item_id"] for a in allocations])
 
         updated_count = 0
         requesting_config = await self._load_config(scholarship_type_id, academic_year, semester)
@@ -858,6 +866,8 @@ class ManualDistributionService:
 
         for alloc in allocations:
             item_id = alloc["ranking_item_id"]
+            if item_id in cancelled_item_ids:
+                continue
             sub_type = alloc.get("sub_type_code")
             alloc_config_id = alloc.get("allocation_config_id") or (requesting_config.id if sub_type else None)
 
@@ -1405,6 +1415,20 @@ class ManualDistributionService:
         )
         if rejected_violations:
             raise ValueError("以下分發之子類型審核不同意，無法分發：" + "、".join(rejected_violations))
+
+    async def _cancelled_ranking_item_ids(self, item_ids: list[int]) -> set[int]:
+        """Ranking items whose application is 撤銷 (revoked) / 停發 (suspended)."""
+        if not item_ids:
+            return set()
+        stmt = (
+            select(CollegeRankingItem.id)
+            .join(Application, CollegeRankingItem.application_id == Application.id)
+            .where(
+                CollegeRankingItem.id.in_(item_ids),
+                Application.quota_allocation_status.in_(CANCELLED_ALLOCATION_STATUSES),
+            )
+        )
+        return set((await self.db.execute(stmt)).scalars().all())
 
     def _assert_no_cancelled_applications(self, resolved: list[tuple[dict[str, Any], Application]]) -> None:
         """Block any allocation onto a 撤銷 (revoked) / 停發 (suspended) application.

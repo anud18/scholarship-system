@@ -1549,7 +1549,11 @@ export function ManualDistributionPanel({
                               colSpan={14 + subTypeCols.length}
                               className="px-4 py-1.5 text-xs font-bold text-slate-600 border-y border-slate-300"
                             >
-                              <div className="flex items-center justify-between gap-3">
+                              {/* Left-aligned next to the college name: the row
+                                  spans 14+N columns, so a right-aligned button
+                                  would sit off-screen until the admin scrolls
+                                  the table horizontally. */}
+                              <div className="flex items-center gap-3">
                                 <span>{collegeName}</span>
                                 <Button
                                   size="sm"
