@@ -92,6 +92,11 @@ async def _new_app(db, *, user, sch_id):
         review_stage=ReviewStage.college_ranked,
         is_renewal=False,
         agree_terms=True,
+        # College "A" is the only cell in `base`'s quota matrix. Without it the
+        # snapshot has no std_academyno, the student lands in the "" bucket
+        # (quota 0) and the per-college half of the §10 gate rejects the round —
+        # which is not what either test here is about.
+        student_data={"std_academyno": "A"},
     )
     db.add(a)
     await db.commit()
