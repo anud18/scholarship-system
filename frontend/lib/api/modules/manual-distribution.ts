@@ -63,7 +63,8 @@ export interface DistributionStudent {
 export interface CollegeQuota {
   total: number;
   allocated: number;
-  /** total − allocated; NOT clamped — negative means over-allocated (advisory). */
+  /** total − allocated; NOT clamped — negative means the college is over its
+   * cell of quotas[sub_type], which the server rejects on allocate/finalize. */
   remaining: number;
 }
 
