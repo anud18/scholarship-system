@@ -126,12 +126,12 @@ export function CollegeQuotaMatrix({
         </span>
       </div>
       <div className="p-3 overflow-x-auto">
-        <table className="w-full text-xs">
+        <table className="w-full text-xs border-collapse border border-slate-300">
           <thead>
-            <tr className="text-slate-500">
+            <tr className="text-slate-500 bg-slate-50">
               <th
                 scope="col"
-                className="text-left font-medium py-1.5 pr-3 whitespace-nowrap"
+                className="text-left font-medium py-1.5 px-2 whitespace-nowrap border border-slate-300"
               >
                 學院
               </th>
@@ -139,7 +139,7 @@ export function CollegeQuotaMatrix({
                 <th
                   key={col.key}
                   scope="col"
-                  className="text-center font-medium py-1.5 px-2 whitespace-nowrap"
+                  className="text-center font-medium py-1.5 px-2 whitespace-nowrap border border-slate-300"
                 >
                   {col.display_name}
                   {!col.is_own && (
@@ -149,53 +149,88 @@ export function CollegeQuotaMatrix({
                   )}
                 </th>
               ))}
+              <th
+                scope="col"
+                className="text-center font-medium py-1.5 px-2 whitespace-nowrap border border-slate-300 bg-slate-100 text-slate-600"
+              >
+                總名額
+              </th>
             </tr>
           </thead>
           <tbody>
-            {collegeRows.map(code => (
-              <tr key={code || "__unknown__"} className="border-t border-slate-100">
-                <th
-                  scope="row"
-                  className="text-left py-1.5 pr-3 font-medium text-slate-700 whitespace-nowrap"
-                >
-                  {resolveCollegeName(collegeNames, code)}
-                </th>
-                {cols.map(col => {
-                  const colColleges = byColKey[col.key];
-                  const delta = localDelta[cellKey(code, col.key)] ?? 0;
-                  // Synthesize a 0/0 cell when a matrix column only has
-                  // staged allocations for this college (no server entry).
-                  const entry =
-                    colColleges?.[code] ??
-                    (colColleges != null && delta !== 0
-                      ? ZERO_QUOTA_CELL
-                      : undefined);
-                  if (!entry) {
+            {collegeRows.map(code => {
+              const rowCells = cols.map(col => {
+                const colColleges = byColKey[col.key];
+                const delta = localDelta[cellKey(code, col.key)] ?? 0;
+                // Synthesize a 0/0 cell when a matrix column only has
+                // staged allocations for this college (no server entry).
+                const entry =
+                  colColleges?.[code] ??
+                  (colColleges != null && delta !== 0
+                    ? ZERO_QUOTA_CELL
+                    : undefined);
+                return { col, entry, delta };
+              });
+              const rowTotal = rowCells.reduce(
+                (acc, { entry }) => acc + (entry?.total ?? 0),
+                0
+              );
+              const rowRemaining = rowCells.reduce(
+                (acc, { entry, delta }) =>
+                  acc + (entry ? entry.remaining - delta : 0),
+                0
+              );
+              return (
+                <tr key={code || "__unknown__"}>
+                  <th
+                    scope="row"
+                    className="text-left py-1.5 px-2 font-medium text-slate-700 whitespace-nowrap border border-slate-300"
+                  >
+                    {resolveCollegeName(collegeNames, code)}
+                  </th>
+                  {rowCells.map(({ col, entry, delta }) => {
+                    if (!entry) {
+                      return (
+                        <td
+                          key={col.key}
+                          className="py-1.5 px-2 text-center text-slate-300 border border-slate-300"
+                        >
+                          —
+                        </td>
+                      );
+                    }
+                    const liveRemaining = entry.remaining - delta;
+                    const tone =
+                      liveRemaining < 0
+                        ? "text-red-600 font-bold"
+                        : liveRemaining === 0
+                          ? "text-slate-400"
+                          : "text-[#003d7a] font-semibold";
                     return (
-                      <td key={col.key} className="py-1.5 px-2 text-center text-slate-300">
-                        —
+                      <td
+                        key={col.key}
+                        className={`py-1.5 px-2 text-center font-mono tabular-nums border border-slate-300 ${tone}`}
+                        title={`總額 ${entry.total}・已儲存核配 ${entry.allocated}`}
+                      >
+                        {liveRemaining}/{entry.total}
                       </td>
                     );
-                  }
-                  const liveRemaining = entry.remaining - delta;
-                  const tone =
-                    liveRemaining < 0
-                      ? "text-red-600 font-bold"
-                      : liveRemaining === 0
-                        ? "text-slate-400"
-                        : "text-[#003d7a] font-semibold";
-                  return (
-                    <td
-                      key={col.key}
-                      className={`py-1.5 px-2 text-center font-mono tabular-nums ${tone}`}
-                      title={`總額 ${entry.total}・已儲存核配 ${entry.allocated}`}
-                    >
-                      {liveRemaining}/{entry.total}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
+                  })}
+                  <td
+                    className={`py-1.5 px-2 text-center font-mono tabular-nums border border-slate-300 bg-slate-50 ${
+                      rowRemaining < 0
+                        ? "text-red-600 font-bold"
+                        : rowRemaining === 0
+                          ? "text-slate-400"
+                          : "text-[#003d7a] font-bold"
+                    }`}
+                    title={`本學院各欄位加總：剩餘 ${rowRemaining}・總額 ${rowTotal}`}
+                  >
+                    {rowRemaining}/{rowTotal}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
