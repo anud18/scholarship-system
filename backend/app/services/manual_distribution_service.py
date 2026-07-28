@@ -22,6 +22,7 @@ from app.models.enums import ApplicationStatus, ReviewStage
 from app.models.review import ApplicationReview, ApplicationReviewItem
 from app.models.payment_roster import PaymentRoster, PaymentRosterItem, RosterStatus
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipSubTypeConfig
+from app.models.student import Academy
 from app.models.user import User, UserRole
 from app.services.received_months_service import (
     calculate_received_months_bulk_async,
@@ -941,13 +942,14 @@ class ManualDistributionService:
         cfg: ScholarshipConfiguration | None,
         sub_type: str,
     ) -> dict[str, dict[str, int]] | None:
-        """Per-college quota grid for one (config, sub_type) column (advisory).
+        """Per-college quota grid for one (config, sub_type) column.
 
         None for non-matrix configs (no per-college split exists). Colleges
         appear when they have quota > 0 in the matrix OR live consumers;
-        remaining is NOT clamped — negative flags over-allocation in the UI.
-        The enforced gate stays the global per-(config, sub_type) recount in
-        _assert_round_not_oversubscribed.
+        remaining is NOT clamped — a negative value means the college is
+        already over its cell, which _assert_round_not_oversubscribed rejects
+        on the next allocate/finalize/restore (per-college quota is a hard cap,
+        not a display hint).
         """
         if cfg is None or not cfg.has_college_quota:
             return None
@@ -1519,7 +1521,8 @@ class ManualDistributionService:
         # Server-side quota enforcement is net-new (spec §10): the lock gate in
         # allocate/finalize (_assert_round_not_oversubscribed) recounts remaining
         # under SELECT FOR UPDATE on the consumed config rows and rejects
-        # oversubscription. The frontend remaining counts are advisory.
+        # oversubscription — both the global pool AND each college's own cell of
+        # quotas[sub_type]. The frontend counts only mirror it; the gate decides.
 
     async def _resolve_allocating_apps(
         self, allocations: list[dict[str, Any]]
@@ -2413,6 +2416,12 @@ class ManualDistributionService:
         round (own + every linked source across every sub_type), recount remaining
         via §6.2, and reject if any consumed config is oversubscribed.
 
+        Two caps are enforced, both hard:
+          1. the GLOBAL per-(config, sub_type) pool, and
+          2. for matrix configs (has_college_quota), the PER-COLLEGE cell of that
+             sub_type — 每個學院的子類別名額 is its own ceiling, so a college may
+             not be over-filled even while the global pool still has slots left.
+
         Flushes pending allocation writes FIRST so the recount sees them (autoflush
         is off on this session, so the just-written items would otherwise be
         invisible to the count queries)."""
@@ -2438,8 +2447,62 @@ class ManualDistributionService:
 
         for cfg in locked_rows:
             for sub_type in (cfg.quotas or {}).keys():
-                if await self.remaining(cfg, sub_type) < 0:
+                if not cfg.has_college_quota:
+                    # No per-college split exists — the global pool is the only cap.
+                    if await self.remaining(cfg, sub_type) < 0:
+                        raise ValueError(f"配額超額：{cfg.config_code} / {sub_type} 的核配數已超過總配額，請調整分發")
+                    continue
+                # One pass for BOTH caps. sum(by_college) == consumers_count is a
+                # tripwire-tested invariant (the two share _winner_filters /
+                # _renewal_filters), so the global recount is derivable from the
+                # per-college split — no second pair of count queries on the hot
+                # 儲存 path just to ask the same question at a coarser grain.
+                consumers = await self.consumers_by_college(cfg.id, sub_type)
+                if self.pool_total(cfg, sub_type) - sum(consumers.values()) < 0:
                     raise ValueError(f"配額超額：{cfg.config_code} / {sub_type} 的核配數已超過總配額，請調整分發")
+                await self._assert_college_quotas_not_exceeded(cfg, sub_type, consumers)
+
+    async def _assert_college_quotas_not_exceeded(
+        self, cfg: ScholarshipConfiguration, sub_type: str, consumers: dict[str, int]
+    ) -> None:
+        """Per-college half of the §10 gate: no college may exceed its own cell of
+        `quotas[sub_type]` — the same numbers the 各學院剩餘名額 grid renders.
+
+        `consumers` is the caller's consumers_by_college result (the SAME two-half
+        partition as the global recount, so the two gates can never disagree about
+        who consumes what). A college that is absent from the matrix — an unmapped
+        學院代碼, or a student whose snapshot carries no std_academyno — has a cell
+        of 0, so allocating into it is over-allocation too; that is the allocation
+        auto-分發 already refuses to make (UNALLOCATED_NO_COLLEGE_QUOTA).
+        """
+        matrix = self._matrix_row(cfg, sub_type)
+        over = [
+            (code, count, matrix.get(code, 0))
+            for code, count in sorted(consumers.items())
+            if count > matrix.get(code, 0)
+        ]
+        if not over:
+            return
+
+        names = await self._college_display_names([code for code, _, _ in over])
+        detail = "；".join(
+            f"{names.get(code) or code or '未知學院（學生資料缺少學院代碼）'} 已核配 {count} 人，"
+            f"超過該學院名額 {total}"
+            for code, count, total in over
+        )
+        raise ValueError(
+            f"學院名額超額：{cfg.config_code} / {sub_type} — {detail}。"
+            f"請取消該學院的部分核配，或於名額設定調整該學院的名額"
+        )
+
+    async def _college_display_names(self, codes: Sequence[str]) -> dict[str, str]:
+        """學院代碼 → 學院名稱, for error messages only. Codes with no academies row
+        are simply absent, and the caller falls back to the raw code."""
+        real = [code for code in codes if code]
+        if not real:
+            return {}
+        rows = await self.db.execute(select(Academy.code, Academy.name).where(Academy.code.in_(real)))
+        return {code: name for code, name in rows.all()}
 
     async def execute_general_distribution(
         self,

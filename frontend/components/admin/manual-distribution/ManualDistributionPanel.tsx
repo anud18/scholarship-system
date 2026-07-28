@@ -33,6 +33,7 @@ import {
   unallocatedReasonLabel,
   type UnallocatedReason,
 } from "@/lib/api/modules/manual-distribution";
+import { buildCollegeQuotaGrid } from "@/lib/api/modules/college-quota-grid";
 import { User } from "@/types/user";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -90,6 +91,12 @@ const ALL_ACADEMIES_SYSTEM = "__all__";
 
 /** In-flight marker for the whole-page 預設分發 run; no college_code collides. */
 const ALL_COLLEGES = "__all_colleges__";
+
+/** Refusals when a college is over its own cell of quotas[sub_type] — the
+ * offending cells are listed in the banner, so these only say why nothing ran. */
+const OVERFLOW_BLOCKED_SAVE = "有學院超過名額上限，無法儲存（詳見上方紅色提示）";
+const OVERFLOW_BLOCKED_FINALIZE =
+  "有學院超過名額上限，無法確認分發（詳見上方紅色提示）";
 
 /** Seed local allocation state from the server snapshot (null = 未決). */
 function seedAllocations(
@@ -411,6 +418,71 @@ export function ManualDistributionPanel({
     return counts;
   }, [localAllocations, subTypeCols]);
 
+  // Academies-first code→name map, shared with the quota matrix so every
+  // college label on this screen resolves identically (see buildCollegeNameMap).
+  const collegeNames = useMemo(
+    () => buildCollegeNameMap(academies, students),
+    [academies, students]
+  );
+
+  const studentByItemId = useMemo(
+    () => new Map(students.map(s => [s.ranking_item_id, s])),
+    [students]
+  );
+
+  // Each college's cell of quotas[sub_type] is a HARD cap, enforced server-side
+  // in _assert_round_not_oversubscribed. This is the SAME live grid the
+  // 各學院剩餘名額 matrix renders, so a tick that would overfill a college is
+  // refused on the spot (see collegeQuotaRefusal) and 儲存/確認分發 have a
+  // backstop for states the ticks can't produce (auto-preview, stale snapshot).
+  const collegeQuotaGrid = useMemo(
+    () =>
+      buildCollegeQuotaGrid({
+        cols: subTypeCols,
+        quotaStatus,
+        students,
+        localAllocations,
+      }),
+    [subTypeCols, quotaStatus, students, localAllocations]
+  );
+
+  /**
+   * Why assigning `rankingItemId` to `col` must be refused, or null when it fits.
+   *
+   * Renewal rows are exempt: the backend counts a renewal's consumption via its
+   * approved Application, not its ranking item, so it never moves this grid.
+   */
+  const collegeQuotaRefusal = useCallback(
+    (rankingItemId: number, col: SubTypeConfigCol): string | null => {
+      const student = studentByItemId.get(rankingItemId);
+      if (!student || student.is_renewal) return null;
+      // A non-matrix column has no per-college split at all — only the global
+      // pool caps it, and that is the `atCapacity` disable on the checkbox.
+      if (!collegeQuotaGrid.hasCollegeSplit(col.key)) return null;
+      const code = student.college_code || "";
+      const cell = collegeQuotaGrid.cell(code, col.key);
+      if (!cell || cell.remaining > 0) return null;
+      const college = resolveCollegeName(collegeNames, code, student.college_name);
+      if (cell.total <= 0) {
+        return `${college} 在「${col.display_name}」沒有名額，無法核配`;
+      }
+      return `${college}「${col.display_name}」名額已用完（${cell.total - cell.remaining}/${cell.total}），無法再核配`;
+    },
+    [studentByItemId, collegeQuotaGrid, collegeNames]
+  );
+
+  const collegeOverflowMessage = useMemo(() => {
+    const { overflows } = collegeQuotaGrid;
+    if (overflows.length === 0) return null;
+    const detail = overflows
+      .map(
+        o =>
+          `${resolveCollegeName(collegeNames, o.collegeCode)}／${o.col.display_name} ${o.used}/${o.total}`
+      )
+      .join("；");
+    return `超過各學院名額（已核配/該學院名額）：${detail}。請調整分發後再儲存。`;
+  }, [collegeQuotaGrid, collegeNames]);
+
   const fetchData = useCallback(async () => {
     if (!scholarshipTypeId || !selectedAcademicYear || !selectedSemester)
       return;
@@ -664,11 +736,24 @@ export function ManualDistributionPanel({
     hasStagedChallenge,
   ]);
 
-  const handleCheckbox = (
-    rankingItemId: number,
-    sub_type: string,
-    config_id: number
-  ) => {
+  const handleCheckbox = (rankingItemId: number, col: SubTypeConfigCol) => {
+    const { sub_type, config_id } = col;
+    const current = localAllocations.get(rankingItemId);
+    const isUncheck =
+      current?.sub_type === sub_type && current?.config_id === config_id;
+
+    // A tick that would push this student's college past its own cell of
+    // quotas[sub_type] is a no-op: the controlled checkbox snaps back to its
+    // previous state and the reason surfaces as a toast. Unticking is always
+    // allowed — it can only free a slot.
+    if (!isUncheck) {
+      const refusal = collegeQuotaRefusal(rankingItemId, col);
+      if (refusal) {
+        toast.error(refusal);
+        return;
+      }
+    }
+
     // Unticking returns the row to 未決 — nothing else is remembered about it.
     // A 未決 row is open to 預設分發 again and its slot is free for someone
     // else; to keep a student out of the round entirely, use 撤銷/停發.
@@ -697,6 +782,12 @@ export function ManualDistributionPanel({
   const handleSave = async () => {
     if (!scholarshipTypeId || !selectedAcademicYear || !selectedSemester)
       return;
+    if (collegeOverflowMessage) {
+      // The offending cells are already named in the banner above — don't repeat
+      // the whole list here, just say why the click did nothing.
+      setSaveMessage({ type: "error", text: OVERFLOW_BLOCKED_SAVE });
+      return;
+    }
     setIsSaving(true);
     setSaveMessage(null);
     try {
@@ -727,7 +818,12 @@ export function ManualDistributionPanel({
       }
     } catch (error) {
       logger.error("Save error", { error: error });
-      setSaveMessage({ type: "error", text: "儲存時發生錯誤" });
+      // The quota gates (global pool / per-college cell) come back as a 400 whose
+      // detail names the offending config or college — echo it, never bury it.
+      setSaveMessage({
+        type: "error",
+        text: (error as Error)?.message || "儲存時發生錯誤",
+      });
     } finally {
       setIsSaving(false);
     }
@@ -736,6 +832,10 @@ export function ManualDistributionPanel({
   const handleFinalize = async () => {
     if (!scholarshipTypeId || !selectedAcademicYear || !selectedSemester)
       return;
+    if (collegeOverflowMessage) {
+      setSaveMessage({ type: "error", text: OVERFLOW_BLOCKED_FINALIZE });
+      return;
+    }
     setIsFinalizing(true);
     setSaveMessage(null);
     try {
@@ -755,7 +855,10 @@ export function ManualDistributionPanel({
       }
     } catch (error) {
       logger.error("Finalize error", { error: error });
-      setSaveMessage({ type: "error", text: "確認分發時發生錯誤" });
+      setSaveMessage({
+        type: "error",
+        text: (error as Error)?.message || "確認分發時發生錯誤",
+      });
     } finally {
       setIsFinalizing(false);
     }
@@ -1025,13 +1128,6 @@ export function ManualDistributionPanel({
       return true;
     });
   }, [students, collegeFilter, searchQuery]);
-
-  // Academies-first code→name map, shared with the quota matrix so every
-  // college label on this screen resolves identically (see buildCollegeNameMap).
-  const collegeNames = useMemo(
-    () => buildCollegeNameMap(academies, students),
-    [academies, students]
-  );
 
   // Group students by college
   const studentsByCollege = useMemo(() => {
@@ -1359,6 +1455,14 @@ export function ManualDistributionPanel({
             </div>
           </div>
         </div>
+
+        {/* Per-college quota overflow — 儲存/確認分發 stay blocked until it clears */}
+        {collegeOverflowMessage && (
+          <div className="px-4 py-2 rounded text-sm bg-red-50 text-red-700 border border-red-200 flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>{collegeOverflowMessage}</span>
+          </div>
+        )}
 
         {/* Save message */}
         {saveMessage && (
@@ -1828,6 +1932,20 @@ export function ManualDistributionPanel({
                                     col.total > 0 &&
                                     localUsed >= col.total &&
                                     !isChecked;
+                                  // Per-college cell full (hard cap) — tooltip
+                                  // only. The cell is NOT tinted: "exactly
+                                  // consumed" is the healthy end state of a
+                                  // finished college, and painting it red would
+                                  // be indistinguishable from real overflow.
+                                  // Kept clickable on purpose too: the click is
+                                  // a no-op that toasts the reason, which reads
+                                  // better than a silently greyed-out box.
+                                  const collegeFull = isChecked
+                                    ? null
+                                    : collegeQuotaRefusal(
+                                        student.ranking_item_id,
+                                        col
+                                      );
                                   // Phase 8.2: for a challenge candidate the
                                   // sub_type they already hold a renewal in is
                                   // their "safety net" — they must not be
@@ -1845,9 +1963,9 @@ export function ManualDistributionPanel({
                                   // up and merges the reply back into it, so a
                                   // tick landing in between is both lost AND
                                   // uncounted — the server would hand out a slot
-                                  // it does not know was just taken, and nothing
-                                  // downstream re-checks the per-college matrix
-                                  // (the save gate only recounts the global pool).
+                                  // it does not know was just taken. The save
+                                  // gate would reject the result rather than
+                                  // over-allocate, but only after the fact.
                                   const isMutating =
                                     isSaving ||
                                     isFinalizing ||
@@ -1899,15 +2017,16 @@ export function ManualDistributionPanel({
                                                   : `審核不同意（不推薦）${col.display_name}`
                                                 : atCapacity
                                                   ? `${col.display_name} 名額已滿`
-                                                  : isChecked
-                                                    ? "點擊取消分配"
-                                                    : `分配至 ${col.display_name}`
+                                                  : collegeFull
+                                                    ? collegeFull
+                                                    : isChecked
+                                                      ? "點擊取消分配"
+                                                      : `分配至 ${col.display_name}`
                                         }
                                         onChange={() =>
                                           handleCheckbox(
                                             student.ranking_item_id,
-                                            col.sub_type,
-                                            col.config_id
+                                            col
                                           )
                                         }
                                       />
