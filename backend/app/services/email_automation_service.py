@@ -3,18 +3,62 @@ Email automation service for handling automated email triggers
 """
 
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.sql_read_only_guard import UnsafeConditionQueryError, assert_read_only_select, mask_literals
 from app.models.email_management import EmailAutomationRule, EmailCategory, TriggerEvent
 from app.services.email_service import EmailService
 from app.services.frontend_email_renderer import render_email_via_frontend
 from app.services.system_setting_service import EmailTemplateService
 
 logger = logging.getLogger(__name__)
+
+# ``{placeholder}`` -> ``:placeholder`` rewriting for admin-authored recipient queries.
+_PLACEHOLDER_RE = re.compile(r"\{(\w+)\}")
+
+# Hard ceiling for a single recipient query (PostgreSQL only).
+RECIPIENT_QUERY_TIMEOUT_MS = 5000
+
+
+def _dialect_name(db: AsyncSession) -> str:
+    """Dialect of the session's bind, or '' when it cannot be determined (test stubs)."""
+    get_bind = getattr(db, "get_bind", None)
+    if get_bind is None:
+        return ""
+    try:
+        return getattr(getattr(get_bind(), "dialect", None), "name", "") or ""
+    except Exception:  # pragma: no cover - stub sessions without a real bind
+        return ""
+
+
+def bind_placeholders(sql: str, context: Dict[str, Any]) -> str:
+    """Rewrite ``{key}`` to ``:key`` so values bind as parameters, never as SQL text.
+
+    Occurrences are located on the MASKED copy, so a ``{...}`` sitting inside a
+    string literal or a comment is left alone — rewriting it would corrupt the
+    literal. The substitution itself is applied to the ORIGINAL by offset, which
+    is why the mask must be the same length.
+
+    A placeholder with no matching context key raises: silently leaving a literal
+    ``{key}`` in the SQL would send a malformed statement to the database.
+    """
+    masked = mask_literals(sql)
+    result: list[str] = []
+    cursor = 0
+    for match in _PLACEHOLDER_RE.finditer(masked):
+        key = match.group(1)
+        if key not in context:
+            raise UnsafeConditionQueryError(f"references unknown context key: {{{key}}}")
+        result.append(sql[cursor : match.start()])
+        result.append(f":{key}")
+        cursor = match.end()
+    result.append(sql[cursor:])
+    return "".join(result)
 
 
 class EmailAutomationService:
@@ -119,48 +163,78 @@ class EmailAutomationService:
         self, db: AsyncSession, rule: EmailAutomationRule, context: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
         """
-        Get email recipients based on the rule's condition query.
+        Resolve email recipients from the rule's admin-configured condition query.
 
-        SECURITY: Uses parameterized queries to prevent SQL injection.
-        Context values are passed as bound parameters, not string-formatted into SQL.
+        SECURITY (#1223 A): ``condition_query`` is free-form SQL stored in the
+        database and previously executed verbatim. It is now re-validated HERE, not
+        only when an admin saves it — seeds, Alembic migrations, direct DB writes and
+        the ``PATCH /{id}/toggle`` endpoint all bypass the write-time validator — and
+        executed inside a SAVEPOINT that is always rolled back with
+        ``transaction_read_only`` set. A rule therefore cannot write, and a broken
+        rule cannot poison the caller's transaction.
+
+        Failures RAISE rather than returning []: ``process_trigger`` already isolates
+        each rule in its own try/except, so raising surfaces the misconfiguration in
+        the logs without stopping the other rules or the surrounding business
+        transaction. Returning [] silently turned a broken rule into "nobody was
+        supposed to be notified".
         """
         if not rule.condition_query:
             logger.warning(f"⚠️  No condition_query defined for rule {rule.template_key}")
             return []
 
+        # Validate BEFORE any database work, so an unsafe rule never reaches the DB.
         try:
-            # SECURITY FIX: Use parameterized query instead of string formatting
-            # Convert condition_query placeholders from {key} to :key format for bindparams
-            parameterized_query = rule.condition_query
+            assert_read_only_select(rule.condition_query)
+            parameterized_query = bind_placeholders(rule.condition_query, context)
+        except UnsafeConditionQueryError:
+            logger.exception(
+                f"❌ Refusing to run unsafe condition_query for rule {rule.template_key}",
+            )
+            raise
 
-            # Replace {placeholder} with :placeholder for SQLAlchemy bindparams
-            import re
+        logger.info(f"📧 Executing recipient query for {rule.template_key}")
+        logger.debug(f"   Query template: {parameterized_query[:200]}")
 
-            placeholders = re.findall(r"\{(\w+)\}", rule.condition_query)
-            for placeholder in placeholders:
-                parameterized_query = parameterized_query.replace(f"{{{placeholder}}}", f":{placeholder}")
+        rows = await self._execute_read_only(db, parameterized_query, context)
 
-            logger.info(f"📧 Executing recipient query for {rule.template_key}:")
-            logger.info(f"   Query template: {parameterized_query[:200]}...")
-            logger.info(f"   Parameters: {context}")
+        recipients = [{"email": row[0]} for row in rows if row]
+        logger.info(f"✓ Found {len(recipients)} recipients for rule {rule.template_key}")
+        return recipients
 
-            # Execute with bound parameters (prevents SQL injection)
-            result = await db.execute(text(parameterized_query), context)
+    async def _execute_read_only(self, db: AsyncSession, sql: str, params: Dict[str, Any]) -> List[Any]:
+        """Run *sql* inside a SAVEPOINT that is ALWAYS rolled back.
 
-            recipients = []
-            for row in result:
-                # Convert row to dict - assuming first column is email
-                if row:
-                    recipients.append({"email": row[0]})
+        Two reasons the savepoint is rolled back rather than released:
+        ``RELEASE SAVEPOINT`` does not revert ``SET LOCAL``, so releasing would leave
+        the whole outer transaction read-only and the caller's later
+        ``scheduled_emails`` INSERT would fail; and rolling back guarantees a
+        misbehaving query leaves no trace in the caller's transaction.
 
-            logger.info(f"✓ Found {len(recipients)} recipients: {[r['email'] for r in recipients]}")
-            return recipients
+        A savepoint (rather than a separate connection) keeps read-your-own-writes
+        semantics, so a future caller that triggers before committing still resolves
+        the rows it just wrote.
 
-        except Exception:
-            logger.exception(f"❌ Failed to execute condition query for rule {rule.template_key}")
-            logger.error(f"   Context: {context}")
-            logger.error(f"   Query: {rule.condition_query}")
-            return []
+        ``nested`` is initialised to None and checked in ``finally`` because
+        ``begin_nested()`` performs an implicit flush that can itself raise — without
+        the null guard that failure would skip the rollback and leave the session in
+        PendingRollbackError, which is exactly the transaction-abort bug this method
+        exists to fix.
+        """
+        nested = None
+        try:
+            nested = await db.begin_nested()
+            if _dialect_name(db) == "postgresql":
+                # statement_timeout caps a pathological query; transaction_read_only
+                # blocks writes. Neither stops pg_read_file — that is what the
+                # identifier deny-list in sql_read_only_guard is for.
+                await db.execute(text(f"SET LOCAL statement_timeout = '{RECIPIENT_QUERY_TIMEOUT_MS}ms'"))
+                await db.execute(text("SET LOCAL transaction_read_only = ON"))
+            result = await db.execute(text(sql), params)
+            return list(result.fetchall())
+        finally:
+            if nested is not None:
+                await nested.rollback()
 
     async def _send_automated_email(
         self,

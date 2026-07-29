@@ -162,10 +162,20 @@ class TestValidateConditionQueryReDoSFix:
         """Test that dangerous SQL keywords are rejected."""
         dangerous_keywords_queries = [
             "SELECT * FROM applications; DROP TABLE users",
-            "SELECT * FROM applications WHERE id = {id} UNION SELECT password FROM users",
             "SELECT * FROM applications WHERE id = EXEC('malicious')",
             "SELECT * FROM applications WHERE WAITFOR DELAY '00:00:05'",
             "SELECT LOAD_FILE('/etc/passwd')",
+            # UNION is no longer blocked (it is a read-only set operator and the
+            # shipped 申請提交確認郵件 rule uses it). These are the payloads that
+            # actually matter, and `SET LOCAL transaction_read_only` does NOT stop
+            # them — the app's DB role is a superuser (#1223 A).
+            "SELECT pg_read_file('/etc/passwd')",
+            "SELECT pg_ls_dir('/')",
+            "SELECT dblink_exec('dbname=x', 'DROP TABLE users')",
+            "SELECT query_to_xml('DELETE FROM users', true, true, '')",
+            # Previously slipped through: the old multi-statement test only fired
+            # when the query did NOT end in a semicolon.
+            "SELECT 1; LOCK TABLE users;",
         ]
 
         for query in dangerous_keywords_queries:
