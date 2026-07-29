@@ -41,9 +41,14 @@
  * BARE token `self`, NOT CSP's quoted `'self'`. `clipboard-write=('self')` is
  * invalid and the whole entry is silently dropped.
  *
- * Deliberately NOT listed: `interest-cohort` (FLoC was removed from Chrome; the
- * token is now unrecognised and only produces console noise). Its successor
- * `browsing-topics` IS listed and denied.
+ * Deliberately NOT listed, both for the same reason — Chromium does not
+ * recognise the token, so it grants no protection and only logs
+ * "Unrecognized feature" on every page load:
+ *   - `interest-cohort` (FLoC was removed from Chrome; its successor
+ *     `browsing-topics` IS listed and denied)
+ *   - `bluetooth` (verified empirically against this exact header: of the 24
+ *     tokens below Chromium accepts all of them, and rejected `bluetooth`)
+ * Nothing in the app uses Web Bluetooth, so dropping it costs no coverage.
  *
  * Legacy `Feature-Policy` is deliberately NOT emitted: Chrome renamed the header
  * in v88 and no longer honours it, and Firefox/Safari never shipped it at all.
@@ -52,7 +57,6 @@
 export const PERMISSIONS_POLICY = [
   "accelerometer=()",
   "autoplay=()",
-  "bluetooth=()",
   "browsing-topics=()",
   "camera=()",
   "clipboard-read=()",
