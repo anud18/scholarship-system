@@ -37,7 +37,9 @@ describe("middleware Content-Security-Policy", () => {
     const csp = res.headers.get("Content-Security-Policy") ?? "";
     expect(csp).toContain("frame-src 'self' blob:");
     // blob: images must still be allowed (the preview dialog renders images via <img>)
-    expect(csp).toContain("img-src 'self' data: blob: https:");
+    expect(csp).toContain("img-src 'self' data: blob:");
+    // ...but NOT via a wildcard scheme (issue #1223 finding B)
+    expect(csp).not.toContain("img-src 'self' data: blob: https:");
   });
 
   it("prod CSP allows frame-src 'self' blob: and keeps clickjacking protections", () => {
@@ -133,5 +135,47 @@ describe("middleware framing for same-origin preview proxies", () => {
       expect(csp).toContain("frame-ancestors 'none'");
       expect(csp).not.toContain("frame-ancestors 'self'");
     }
+  });
+
+  // -------------------------------------------------------------------------
+  // img-src wildcard (issue #1223 finding B). `toContain` is not enough here —
+  // it still passes if someone appends ` https:` back on, which is exactly the
+  // regression being guarded. Assert on the PARSED directive instead.
+  // -------------------------------------------------------------------------
+
+  function imgSrcOf(url: string): string {
+    const csp = middleware(mockRequest(url)).headers.get("Content-Security-Policy") ?? "";
+    return csp.split("; ").find((d) => d.startsWith("img-src ")) ?? "";
+  }
+
+  it("prod CSP img-src allows no wildcard scheme or host", () => {
+    setNodeEnv("production");
+    expect(imgSrcOf("https://ss.test.nycu.edu.tw/student/apply")).toBe("img-src 'self' data: blob:");
+  });
+
+  it("dev CSP img-src is byte-identical to prod img-src", () => {
+    setNodeEnv("development");
+    const dev = imgSrcOf("http://localhost:3000/student/apply");
+    setNodeEnv("production");
+    const prod = imgSrcOf("https://ss.test.nycu.edu.tw/student/apply");
+    // A looser dev policy is what lets a remote <img> pass locally and break
+    // only after deploy.
+    expect(dev).toBe(prod);
+  });
+
+  it("img-src still permits blob: and data: so local file preview keeps working", () => {
+    setNodeEnv("production");
+    const imgSrc = imgSrcOf("https://ss.test.nycu.edu.tw/student/apply");
+    // URL.createObjectURL previews (lib/file-preview.ts) and inline SVG.
+    expect(imgSrc).toContain("blob:");
+    expect(imgSrc).toContain("data:");
+  });
+
+  it("the framable-preview branch does not fork a stale img-src", () => {
+    setNodeEnv("production");
+    const res = middleware(mockRequest("https://ss.test.nycu.edu.tw/api/v1/preview?fileId=1&type=pdf"));
+    const csp = res.headers.get("Content-Security-Policy") ?? "";
+    expect(csp.split("; ").find((d) => d.startsWith("img-src "))).toBe("img-src 'self' data: blob:");
+    expect(csp).toContain("frame-ancestors 'self'");
   });
 });

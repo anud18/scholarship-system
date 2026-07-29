@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import {
+  CROSS_ORIGIN_OPENER_POLICY,
+  CROSS_ORIGIN_RESOURCE_POLICY,
+  PERMISSIONS_POLICY,
+} from "@/lib/security-headers";
 
 /**
  * Next.js Middleware for Content Security Policy (CSP)
@@ -61,7 +66,11 @@ export function middleware(request: NextRequest) {
       "default-src 'self'",
       "script-src 'self' 'unsafe-eval' 'unsafe-inline'", // HMR requires unsafe-eval
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https:",
+      // Kept byte-identical to the production directive on purpose: a looser dev
+      // img-src lets an accidental remote <img> pass locally and break only in
+      // production. Turbopack HMR needs no image source — its channel is the
+      // ws:/wss: connect-src below, its overlay is inline data:/same-origin.
+      "img-src 'self' data: blob:",
       "frame-src 'self' blob:", // inline file preview: same-origin /api proxy + just-selected blob: PDFs
       "font-src 'self'",
       "connect-src 'self' ws: wss:", // WebSocket for HMR
@@ -82,7 +91,15 @@ export function middleware(request: NextRequest) {
       "default-src 'self'",
       `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`, // strict-dynamic for bundled scripts
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https:",
+      // NO bare `https:` — that allowed images from ANY HTTPS origin (issue #1223
+      // finding B, flagged by ZAP) and nothing in the app needs it. Every <img>
+      // render site uses a same-origin or blob: source:
+      //   - file-preview-dialog.tsx             -> /api/v1/preview… or createObjectURL
+      //   - bank-verification-review-dialog.tsx -> /api/v1/preview…
+      // There is no next/image (images.unoptimized) and no remotePatterns, so any
+      // future remote image MUST be added here by explicit origin, never as a scheme.
+      // data: covers inline SVG; blob: covers just-selected local files.
+      "img-src 'self' data: blob:",
       "frame-src 'self' blob:", // inline file preview: same-origin /api proxy + just-selected blob: PDFs
       "font-src 'self'",
       "connect-src 'self' https://*.nycu.edu.tw",
@@ -103,6 +120,19 @@ export function middleware(request: NextRequest) {
   response.headers.set("X-Frame-Options", isFramablePreview ? "SAMEORIGIN" : "DENY");
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+
+  // Issue #1223 section B. These three are mirrored VERBATIM at the server level
+  // and in every re-declaring location block of nginx.prod.conf /
+  // nginx.staging.conf — see lib/security-headers.ts for why the layers must not
+  // drift, and __tests__/security-headers-nginx-parity.test.ts which pins it.
+  response.headers.set("Permissions-Policy", PERMISSIONS_POLICY);
+  response.headers.set("Cross-Origin-Opener-Policy", CROSS_ORIGIN_OPENER_POLICY);
+  response.headers.set("Cross-Origin-Resource-Policy", CROSS_ORIGIN_RESOURCE_POLICY);
+  // Cross-Origin-Embedder-Policy is DELIBERATELY NOT SET. `require-corp` would
+  // demand a CORP header on every subresource the same-origin /api/v1/preview
+  // iframes pull, breaking file preview — the exact caveat raised in #1223 — and
+  // it buys nothing: nothing in this app uses SharedArrayBuffer or needs
+  // `crossOriginIsolated`. Do not add it without re-testing every preview route.
 
   // Expose nonce to response headers for Nginx to read (if needed)
   response.headers.set("X-CSP-Nonce", nonce);
