@@ -7172,6 +7172,121 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/footer-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Footer Links
+         * @description List footer links ordered by sort_order then id.
+         *
+         *     Any authenticated user may read. ``include_inactive`` is honoured for
+         *     admins only — a non-admin always gets the active (publicly shown) set,
+         *     so a hidden link cannot leak through the query parameter.
+         */
+        get: operations["list_footer_links_api_v1_footer_links_get"];
+        put?: never;
+        /**
+         * Create Footer Link
+         * @description Create an external-URL footer link. Admin only.
+         */
+        post: operations["create_footer_link_api_v1_footer_links_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/footer-links/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Footer Link File
+         * @description Create a file-backed footer link by uploading a document. Admin only.
+         */
+        post: operations["upload_footer_link_file_api_v1_footer_links_upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/footer-links/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Reorder Footer Links
+         * @description Persist a new display order. Admin only.
+         */
+        patch: operations["reorder_footer_links_api_v1_footer_links_reorder_patch"];
+        trace?: never;
+    };
+    "/api/v1/footer-links/{link_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Footer Link
+         * @description Delete a footer link, removing its stored file when present. Admin only.
+         */
+        delete: operations["delete_footer_link_api_v1_footer_links__link_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Footer Link
+         * @description Update a footer link's titles, URL, or visibility. Admin only.
+         */
+        patch: operations["update_footer_link_api_v1_footer_links__link_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/footer-links/{link_id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream Footer Link File
+         * @description Stream a file-backed footer link's document. Any authenticated user.
+         *
+         *     Inactive links stay readable for admins only so a hidden document isn't
+         *     still fetchable by a student holding a stale URL.
+         */
+        get: operations["stream_footer_link_file_api_v1_footer_links__link_id__file_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/student-bank-accounts/my-verified-account": {
         parameters: {
             query?: never;
@@ -8886,6 +9001,15 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Body_upload_footer_link_file_api_v1_footer_links_upload_post */
+        Body_upload_footer_link_file_api_v1_footer_links_upload_post: {
+            /** File */
+            file: string;
+            /** Title Zh */
+            title_zh: string;
+            /** Title En */
+            title_en?: string | null;
+        };
         /** Body_upload_renewal_import_api_v1_college_review_renewal_import_upload_post */
         Body_upload_renewal_import_api_v1_college_review_renewal_import_upload_post: {
             /**
@@ -9493,6 +9617,50 @@ export interface components {
             academic_year: number;
             /** Semester */
             semester: string;
+        };
+        /**
+         * FooterLinkCreate
+         * @description Create an external-URL footer link (file links use the upload endpoint).
+         */
+        FooterLinkCreate: {
+            /** Title Zh */
+            title_zh: string;
+            /** Title En */
+            title_en?: string | null;
+            /** Url */
+            url: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+        };
+        /** FooterLinkReorderItem */
+        FooterLinkReorderItem: {
+            /** Id */
+            id: number;
+            /** Sort Order */
+            sort_order: number;
+        };
+        /** FooterLinkReorderRequest */
+        FooterLinkReorderRequest: {
+            /** Items */
+            items: components["schemas"]["FooterLinkReorderItem"][];
+        };
+        /**
+         * FooterLinkUpdate
+         * @description Partial update. ``url`` is only accepted for link_type == url rows,
+         *     which the endpoint enforces against the persisted row.
+         */
+        FooterLinkUpdate: {
+            /** Title Zh */
+            title_zh?: string | null;
+            /** Title En */
+            title_en?: string | null;
+            /** Url */
+            url?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
         };
         /**
          * FormConfigSaveRequest
@@ -22876,6 +23044,233 @@ export interface operations {
             header?: never;
             path: {
                 config_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_footer_links_api_v1_footer_links_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_footer_link_api_v1_footer_links_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FooterLinkCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_footer_link_file_api_v1_footer_links_upload_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_footer_link_file_api_v1_footer_links_upload_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reorder_footer_links_api_v1_footer_links_reorder_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FooterLinkReorderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_footer_link_api_v1_footer_links__link_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                link_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_footer_link_api_v1_footer_links__link_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                link_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FooterLinkUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_footer_link_file_api_v1_footer_links__link_id__file_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                link_id: number;
             };
             cookie?: never;
         };
