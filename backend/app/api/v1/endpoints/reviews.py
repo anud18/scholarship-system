@@ -26,6 +26,7 @@ from app.schemas.response import ApiResponse
 from app.schemas.review import ReviewCreate, ReviewItemResponse, ReviewResponse, ReviewSubmitRequest
 from app.services.application_audit_service import ApplicationAuditService
 from app.services.review_service import ReviewService
+from app.utils.college_scope import college_user_may_access
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -213,6 +214,12 @@ async def get_review(
         application = await db.get(Application, review.application_id)
         if not application or application.professor_id != current_user.id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="您無權讀取此審查記錄")
+    # SECURITY (#1223 A): 學院 was previously grouped with admin and read ANY
+    # college's review comments. Scope it to its own college.
+    if current_user.is_college():
+        application = await db.get(Application, review.application_id)
+        if not application or not college_user_may_access(current_user, application):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="您無權讀取此審查記錄")
 
     return {
         "success": True,
@@ -261,6 +268,9 @@ async def get_application_reviews(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="學生無權讀取審查記錄")
     if current_user.is_professor() and application.professor_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="您不是此申請的指導教授，無權讀取審查記錄")
+    # SECURITY (#1223 A): scope 學院 to its own college's applications.
+    if current_user.is_college() and not college_user_may_access(current_user, application):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="您無權讀取此申請的審查記錄")
 
     # 查詢所有審查記錄
     stmt = (

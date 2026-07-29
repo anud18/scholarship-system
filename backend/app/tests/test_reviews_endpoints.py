@@ -146,7 +146,13 @@ async def review_application(db, review_users, review_scholarship) -> Applicatio
         academic_year=114,
         semester="first",
         scholarship_subtype_list=["nstc", "moe_1w"],
-        student_data={"std_stdcode": "310460031", "std_cname": "Review Student"},
+        # std_academyno must match review_users["college"].college_code — 學院 staff
+        # are scoped to their own college's applicants (#1223 A).
+        student_data={
+            "std_stdcode": "310460031",
+            "std_cname": "Review Student",
+            "std_academyno": "ENG",
+        },
         submitted_form_data={},
         agree_terms=True,
     )

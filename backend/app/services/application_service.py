@@ -39,6 +39,12 @@ from app.services.email_automation_service import email_automation_service
 from app.services.email_service import EmailService
 from app.services.minio_service import minio_service
 from app.services.student_service import StudentService
+from app.utils.college_scope import (
+    college_scope_for_user,
+    college_user_may_access,
+    get_application_college_code,
+    get_user_college_code,
+)
 from app.utils.phone_validation import (
     TAIWAN_MOBILE_MESSAGE,
     extract_contact_phone,
@@ -872,8 +878,27 @@ class ApplicationService:
         elif current_user.role == UserRole.professor:
             if application.professor_id != current_user.id:
                 return None
+        elif current_user.role == UserRole.college:
+            # SECURITY (#1223 A): 學院 staff are scoped to their own college's
+            # applicants. This branch previously fell through to an unconditional
+            # `pass` alongside admin, so College-A staff could read — and through
+            # update_application / update_student_data, WRITE — any other college's
+            # application by walking ids. Same rule PR #1222 applied to the file
+            # proxy (endpoints/files.py).
+            if not college_user_may_access(current_user, application):
+                logger.warning(
+                    "SECURITY: college user attempted cross-college application access",
+                    extra={
+                        "user_id": current_user.id,
+                        "user_college": get_user_college_code(current_user),
+                        "owner_college": get_application_college_code(application),
+                        "application_id": application.id,
+                    },
+                )
+                # None (endpoints turn this into 404) rather than 403: do not
+                # confirm that a hidden application id exists.
+                return None
         elif current_user.role in [
-            UserRole.college,
             UserRole.admin,
             UserRole.super_admin,
         ]:
@@ -1411,12 +1436,24 @@ class ApplicationService:
             else:
                 # No accessible students, return empty result
                 return []
+        elif current_user.role == UserRole.college:
+            # SECURITY (#1223 A): 學院 reviewers only see their own college's
+            # applicants — the same rule the college review list already applies in
+            # SQL (college_review_service.py) and that _get_application_model now
+            # applies by id. An unbound college account sees nothing, not everything.
+            scope = college_scope_for_user(current_user)
+            if scope is None:
+                logger.warning(
+                    "College user has no college_code binding; returning empty review queue",
+                    extra={"user_id": current_user.id},
+                )
+                return []
+            query = query.where(scope)
         elif current_user.role in [
-            UserRole.college,
             UserRole.admin,
             UserRole.super_admin,
         ]:
-            # College, Admin, and Super Admin can see all applications
+            # Admin and Super Admin can see all applications
             pass
         else:
             # Other roles cannot review applications
@@ -1568,6 +1605,21 @@ class ApplicationService:
 
         if not application:
             raise NotFoundError("Application", str(application_id))
+
+        # SECURITY (#1223 A): the role gate above only asks "is this staff?". A
+        # 學院 user must additionally own the application's college — approving or
+        # rejecting another college's application is strictly worse than reading it.
+        if user.role == UserRole.college and not college_user_may_access(user, application):
+            logger.warning(
+                "SECURITY: college user attempted cross-college status update",
+                extra={
+                    "user_id": user.id,
+                    "user_college": get_user_college_code(user),
+                    "owner_college": get_application_college_code(application),
+                    "application_id": application.id,
+                },
+            )
+            raise AuthorizationError("Cannot change the status of another college's application")
 
         # ── G16 transition gate ──────────────────────────────────────────
         old_status = application.status.value if hasattr(application.status, "value") else str(application.status)
@@ -1724,8 +1776,22 @@ class ApplicationService:
             # Professors can upload files to their students' applications
             if not user.can_access_student_data(application.user_id, "upload_documents"):
                 raise AuthorizationError("Cannot upload files - no access to this student's data")
-        elif user.role in [UserRole.college, UserRole.admin, UserRole.super_admin]:
-            # College, Admin, and Super Admin can upload to any application
+        elif user.role == UserRole.college:
+            # SECURITY (#1223 A): 學院 staff may only attach files to their own
+            # college's applications — previously they could upload to any.
+            if not college_user_may_access(user, application):
+                logger.warning(
+                    "SECURITY: college user attempted cross-college file upload",
+                    extra={
+                        "user_id": user.id,
+                        "user_college": get_user_college_code(user),
+                        "owner_college": get_application_college_code(application),
+                        "application_id": application.id,
+                    },
+                )
+                raise AuthorizationError("Cannot upload files to another college's application")
+        elif user.role in [UserRole.admin, UserRole.super_admin]:
+            # Admin and Super Admin can upload to any application
             pass
         else:
             # Other roles are not allowed to upload
@@ -1849,12 +1915,22 @@ class ApplicationService:
             else:
                 # No accessible students, return empty result
                 return []
+        elif current_user.role == UserRole.college:
+            # SECURITY (#1223 A): scope 學院 staff to their own college. Mirrors
+            # get_applications_for_review and _get_application_model.
+            scope = college_scope_for_user(current_user)
+            if scope is None:
+                logger.warning(
+                    "College user has no college_code binding; returning empty application list",
+                    extra={"user_id": current_user.id},
+                )
+                return []
+            query = query.where(scope)
         elif current_user.role in [
-            UserRole.college,
             UserRole.admin,
             UserRole.super_admin,
         ]:
-            # College, Admin, and Super Admin can see all applications
+            # Admin and Super Admin can see all applications
             pass
         else:
             # Other roles cannot see any applications
@@ -1963,6 +2039,20 @@ class ApplicationService:
             if application.status != ApplicationStatus.draft:
                 raise ValidationError("Only draft applications can be deleted by students")
         elif current_user.role in [UserRole.professor, UserRole.college, UserRole.admin, UserRole.super_admin]:
+            # SECURITY (#1223 A): 學院 staff are scoped to their own college. Gated
+            # INSIDE the staff branch (rather than split into its own elif) so the
+            # mandatory-reason rule below still applies to them.
+            if current_user.role == UserRole.college and not college_user_may_access(current_user, application):
+                logger.warning(
+                    "SECURITY: college user attempted cross-college application delete",
+                    extra={
+                        "user_id": current_user.id,
+                        "user_college": get_user_college_code(current_user),
+                        "owner_college": get_application_college_code(application),
+                        "application_id": application.id,
+                    },
+                )
+                raise AuthorizationError("Cannot delete another college's application")
             # Staff can delete any application but must provide a reason
             if not reason:
                 raise ValidationError("Deletion reason is required for staff users")
@@ -2079,7 +2169,21 @@ class ApplicationService:
             if application.user_id != current_user.id:
                 raise AuthorizationError("You can only restore your own applications")
         elif current_user.role not in [UserRole.professor, UserRole.college, UserRole.admin, UserRole.super_admin]:
+            # Deny-by-default catch-all — keep this branch, do not restructure the
+            # chain into positive role branches or new roles silently gain access.
             raise AuthorizationError("You don't have permission to restore applications")
+        elif current_user.role == UserRole.college and not college_user_may_access(current_user, application):
+            # SECURITY (#1223 A): 學院 staff are scoped to their own college.
+            logger.warning(
+                "SECURITY: college user attempted cross-college application restore",
+                extra={
+                    "user_id": current_user.id,
+                    "user_college": get_user_college_code(current_user),
+                    "owner_college": get_application_college_code(application),
+                    "application_id": application.id,
+                },
+            )
+            raise AuthorizationError("Cannot restore another college's application")
 
         # Restore application to appropriate status based on submission history
         # If the application was previously submitted, restore it to under_review status
@@ -2836,6 +2940,20 @@ class ApplicationService:
             if assigned_by.role == UserRole.student:
                 if application.user_id != assigned_by.id:
                     raise ValidationError("Access denied")
+            # SECURITY (#1223 A): the dept_code check further down compares the
+            # ASSIGNER to the PROFESSOR; nothing checked the application's college.
+            # A 學院 user may only assign reviewers for their own college's applicants.
+            elif assigned_by.role == UserRole.college and not college_user_may_access(assigned_by, application):
+                logger.warning(
+                    "SECURITY: college user attempted cross-college professor assignment",
+                    extra={
+                        "user_id": assigned_by.id,
+                        "user_college": get_user_college_code(assigned_by),
+                        "owner_college": get_application_college_code(application),
+                        "application_id": application.id,
+                    },
+                )
+                raise ValidationError("Access denied")
 
             # Get professor
             stmt = select(User).where(User.nycu_id == professor_nycu_id, User.role == UserRole.professor)
