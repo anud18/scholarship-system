@@ -29,6 +29,7 @@ import { toast } from "sonner";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { SupplementaryDocsList } from "./SupplementaryDocsList";
 import { ApplicationNoticesPanel } from "./ApplicationNoticesPanel";
+import { FooterLinksPanel } from "../footer-links/FooterLinksPanel";
 
 interface DocSlot {
   key: DocKey;
@@ -453,6 +454,8 @@ export function SystemDocsPanel() {
       <SupplementaryDocsList />
 
       <ApplicationNoticesPanel />
+
+      <FooterLinksPanel />
 
       <FilePreviewDialog
         isOpen={preview !== null}

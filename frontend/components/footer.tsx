@@ -1,7 +1,19 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Separator } from "@/components/ui/separator";
-import { ExternalLink, GraduationCap, ChevronDown } from "lucide-react";
+import {
+  ExternalLink,
+  FileText,
+  GraduationCap,
+  ChevronDown,
+} from "lucide-react";
+import apiClient from "@/lib/api";
+import {
+  footerLinkHref,
+  footerLinkLabel,
+  type FooterLink,
+} from "@/lib/api/modules/footer-links";
+import { logger } from "@/lib/utils/logger";
 
 interface FooterProps {
   locale?: "zh" | "en";
@@ -9,6 +21,24 @@ interface FooterProps {
 
 export function Footer({ locale = "zh" }: FooterProps) {
   const currentYear = new Date().getFullYear();
+
+  // 相關連結 are admin-managed (系統管理 → 系統文件). A fetch failure must not
+  // break the rest of the footer, so the list just stays empty.
+  const [links, setLinks] = useState<FooterLink[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    apiClient.footerLinks
+      .list()
+      .then((res) => {
+        if (!cancelled && res.success && res.data) setLinks(res.data);
+      })
+      .catch((error) => {
+        logger.error("Failed to load footer links", error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   // Render the "Last updated" date only after mount to avoid SSR/CSR
   // hydration mismatches caused by the server and client rendering with
   // different locale-formatted strings (or different system clocks crossing
@@ -79,59 +109,25 @@ export function Footer({ locale = "zh" }: FooterProps) {
               />
             </summary>
             <div className="space-y-3 mt-4">
-              <a
-                href="https://www.nycu.edu.tw"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 text-sm text-nycu-navy-700 hover:text-nycu-blue-600 transition-colors group"
-              >
-                <ExternalLink className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                {locale === "zh" ? "陽明交大首頁" : "NYCU Homepage"}
-              </a>
-
-              <a
-                href="https://aa.nycu.edu.tw/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 text-sm text-nycu-navy-700 hover:text-nycu-blue-600 transition-colors group"
-              >
-                <ExternalLink className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                {locale === "zh" ? "教務處" : "Academic Affairs"}
-              </a>
-
-              <a
-                href="https://portal.nycu.edu.tw"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 text-sm text-nycu-navy-700 hover:text-nycu-blue-600 transition-colors group"
-              >
-                <ExternalLink className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                {locale === "zh" ? "NYCU Portal" : "NYCU Portal"}
-              </a>
-
-              <a
-                href="#"
-                className="flex items-center gap-2 text-sm text-nycu-navy-700 hover:text-nycu-blue-600 transition-colors group"
-              >
-                <ExternalLink className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                {locale === "zh" ? "獎學金申請指南" : "Scholarship Guide"}
-              </a>
-
-              <a
-                href="#"
-                className="flex items-center gap-2 text-sm text-nycu-navy-700 hover:text-nycu-blue-600 transition-colors group"
-              >
-                <ExternalLink className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                {locale === "zh" ? "常見問題" : "FAQ"}
-              </a>
-
-              <a
-                href="#"
-                className="flex items-center gap-2 text-sm text-nycu-navy-700 hover:text-nycu-blue-600 transition-colors group"
-              >
-                <ExternalLink className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                {locale === "zh" ? "系統操作手冊" : "User Manual"}
-              </a>
+              {links.map((link) => {
+                const isFile = link.link_type === "file";
+                const Icon = isFile ? FileText : ExternalLink;
+                return (
+                  <a
+                    key={link.id}
+                    href={footerLinkHref(link)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={isFile ? link.original_filename ?? undefined : undefined}
+                    className="flex items-center gap-2 text-sm text-nycu-navy-700 hover:text-nycu-blue-600 transition-colors group"
+                  >
+                    <Icon className="h-4 w-4 flex-shrink-0 group-hover:scale-110 transition-transform" />
+                    <span className="truncate">
+                      {footerLinkLabel(link, locale)}
+                    </span>
+                  </a>
+                );
+              })}
             </div>
           </details>
         </div>

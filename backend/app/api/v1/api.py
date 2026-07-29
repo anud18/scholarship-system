@@ -16,6 +16,7 @@ from app.api.v1.endpoints import (
     email_automation,
     email_management,
     files,
+    footer_links,
     notifications,
     nycu_employee,
     payment_rosters,
@@ -77,6 +78,7 @@ api_router.include_router(nycu_employee.router, prefix="/nycu-employee", tags=["
 api_router.include_router(payment_rosters.router, prefix="/payment-rosters", tags=["Payment Rosters"])
 api_router.include_router(roster_schedules.router, prefix="/roster-schedules", tags=["Roster Schedules"])
 api_router.include_router(system_settings.router, prefix="/system-settings", tags=["System Settings"])
+api_router.include_router(footer_links.router, prefix="/footer-links", tags=["Footer Links"])
 api_router.include_router(student_bank_accounts.router, prefix="/student-bank-accounts", tags=["Student Bank Accounts"])
 api_router.include_router(student_history.router, prefix="/student-history", tags=["Student History"])
 api_router.include_router(csp_report.router, prefix="", tags=["Security"])
