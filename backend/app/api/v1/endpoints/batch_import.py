@@ -1815,6 +1815,14 @@ async def download_batch_import_template(
         sub_type_column_labels = {sub_type_labels.get(code, code) for code in (scholarship.sub_type_list or [])}
 
         worksheet = writer.sheets["批次匯入範例"]
+
+        # SECURITY (#1081 G / #1223 A): df.to_excel assigns through openpyxl, so an
+        # admin-authored field_label / option label beginning with =/+/-/@ would be
+        # written as a LIVE formula. Sweep the sheet pandas just produced.
+        from app.utils.excel_safety import neutralise_worksheet
+
+        neutralise_worksheet(worksheet)
+
         for idx, col in enumerate(df.columns, 1):
             # Calculate max length for this column. Use positional access so a
             # duplicate column label can never turn df[col] into a DataFrame

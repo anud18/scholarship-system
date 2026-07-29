@@ -4,7 +4,14 @@ import datetime
 
 import pytest
 
-from app.utils.excel_safety import sanitize_excel_cell
+from openpyxl import Workbook
+
+from app.utils.excel_safety import (
+    is_formula_injection_risk,
+    neutralise_worksheet,
+    sanitize_csv_row,
+    sanitize_excel_cell,
+)
 
 
 @pytest.mark.parametrize("lead", ["=", "+", "-", "@", "\t", "\r", "\n"])
@@ -50,3 +57,78 @@ def test_negative_number_as_string_is_prefixed_but_as_number_is_not():
     # neutralized.
     assert sanitize_excel_cell(-5) == -5
     assert sanitize_excel_cell("-5") == "'-5"
+
+
+# ---------------------------------------------------------------------------
+# CSV rows (issue #1223 A) — a CSV field has no cell type, so the apostrophe is
+# the only portable text marker Excel/LibreOffice honour on import.
+# ---------------------------------------------------------------------------
+
+
+def test_sanitize_csv_row_neutralizes_values_only():
+    row = {"name": '=HYPERLINK("http://evil","click")', "count": 3, "note": "ok"}
+    out = sanitize_csv_row(row)
+    assert out["name"] == "'" + row["name"]
+    assert out["count"] == 3
+    assert out["note"] == "ok"
+    # Keys are never rewritten — DictWriter matches them against fieldnames.
+    assert set(out) == set(row)
+
+
+def test_sanitize_csv_row_does_not_mutate_the_caller_dict():
+    row = {"name": "=1+1"}
+    sanitize_csv_row(row)
+    assert row["name"] == "=1+1"
+
+
+# ---------------------------------------------------------------------------
+# Worksheet sweep (issue #1223 A) — for sheets written by DataFrame.to_excel,
+# which assigns through openpyxl without passing through our writers.
+# ---------------------------------------------------------------------------
+
+
+def test_neutralise_worksheet_rewrites_only_risky_cells():
+    wb = Workbook()
+    ws = wb.active
+    ws.append(['=WEBSERVICE("http://evil")', "王小明", 114])
+    ws.append(["+886912345678", None, 12.5])
+
+    count = neutralise_worksheet(ws)
+
+    assert count == 2
+    assert ws.cell(row=1, column=1).value == '\'=WEBSERVICE("http://evil")'
+    assert ws.cell(row=1, column=2).value == "王小明"
+    assert ws.cell(row=1, column=3).value == 114
+    assert ws.cell(row=2, column=1).value == "'+886912345678"
+    assert ws.cell(row=2, column=2).value is None
+    assert ws.cell(row=2, column=3).value == 12.5
+
+
+def test_neutralise_worksheet_is_idempotent():
+    """A second sweep must not stack apostrophes."""
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["=1+1"])
+
+    assert neutralise_worksheet(ws) == 1
+    assert neutralise_worksheet(ws) == 0
+    assert ws.cell(row=1, column=1).value == "'=1+1"
+
+
+def test_neutralise_worksheet_clean_sheet_returns_zero():
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["學號", "姓名", 114])
+    assert neutralise_worksheet(ws) == 0
+
+
+@pytest.mark.parametrize("lead", ["=", "+", "-", "@", "\t", "\r", "\n"])
+def test_is_formula_injection_risk_matches_every_trigger(lead):
+    assert is_formula_injection_risk(f"{lead}x") is True
+
+
+def test_is_formula_injection_risk_false_for_safe_and_non_string():
+    assert is_formula_injection_risk("王小明") is False
+    assert is_formula_injection_risk("") is False
+    assert is_formula_injection_risk(None) is False
+    assert is_formula_injection_risk(114) is False

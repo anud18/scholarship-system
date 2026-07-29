@@ -356,9 +356,14 @@ async def export_quota_data(
         if export_data:
             import csv
 
+            from app.utils.excel_safety import sanitize_csv_row
+
             writer = csv.DictWriter(output, fieldnames=export_data[0].keys())
             writer.writeheader()
-            writer.writerows(export_data)
+            # SECURITY (#1081 G / #1223 A): scholarship_name, sub_type (a free-form
+            # key from scholarship_configurations.quotas) and exported_by are all
+            # free text. Excel evaluates a CSV field leading with =/+/-/@ on import.
+            writer.writerows([sanitize_csv_row(record) for record in export_data])
 
         from fastapi.responses import Response
 
