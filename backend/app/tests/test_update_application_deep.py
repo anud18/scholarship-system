@@ -34,13 +34,16 @@ from app.schemas.application import ApplicationFormData, ApplicationUpdate
 from app.services.application_service import ApplicationService
 
 
-async def _seed_user(db: AsyncSession, *, role: UserRole, nycu_id: str) -> User:
+async def _seed_user(db: AsyncSession, *, role: UserRole, nycu_id: str, college_code: str | None = None) -> User:
     u = User(
         nycu_id=nycu_id,
         name=f"User {nycu_id}",
         email=f"{nycu_id}@u.edu",
         user_type=UserType.employee if role != UserRole.student else UserType.student,
         role=role,
+        # 學院 users are scoped to their own college (#1223 A); an unbound college
+        # account can reach nothing, so the fixture must bind one.
+        college_code=college_code if college_code is not None else ("C" if role == UserRole.college else None),
     )
     db.add(u)
     await db.commit()
@@ -88,6 +91,8 @@ async def _seed_app(
         scholarship_configuration_id=config.id,
         academic_year=114,
         sub_type_selection_mode="single",
+        # College scoping (#1223 A) reads the academy code out of the SIS snapshot.
+        student_data={"std_academyno": "C"},
         status=status,
         professor_id=professor_id,
         scholarship_subtype_list=scholarship_subtype_list or [],

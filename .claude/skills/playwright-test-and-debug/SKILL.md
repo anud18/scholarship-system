@@ -74,7 +74,11 @@ The token is a JWT. Use it with `curl -H "Authorization: Bearer $TOKEN" ...` for
 Available seeded users (from `backend/app/seed.py`):
 - **Students**: `stuunder1` (undergrad), `stuphd001` (PhD), `stumaster`, `studirect`, `stuchina1`, `stuleave1`
 - **Professor**: `professor`, `cs_professor`
-- **College reviewer**: `college`, `cs_college`
+- **College reviewer**: `college` / `cs_college` (資訊學院, `college_code=C`), `ee_college` (電機學院, `college_code=E`)
+  - College access is scoped to the reviewer's own college (#1223). The demo
+    students above (`stuunder1`/`stuphd001`/`stumaster`/`studirect`) are 電機學院,
+    so use **`ee_college`** to review them — `cs_college` will get 404/403.
+    Pairing the two accounts is also how to exercise a cross-college denial.
 - **Admin**: `admin`
 - **Super admin**: `super_admin`
 

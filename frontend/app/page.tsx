@@ -11,7 +11,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { UserRole } from "@/lib/enums";
 import {
   BookOpen,
   Users,
@@ -48,7 +47,7 @@ import { DevLoginPage } from "@/components/dev-login-page";
 import { SSOLoginPage } from "@/components/sso-login-page";
 import { useAdminDashboard } from "@/hooks/use-admin";
 import { User } from "@/types/user";
-import { decodeJWT } from "@/lib/utils/jwt";
+import { verifySsoToken } from "@/lib/auth/verify-sso-token";
 import { logger } from "@/lib/utils/logger";
 
 export default function ScholarshipManagementSystem() {
@@ -75,37 +74,21 @@ export default function ScholarshipManagementSystem() {
     }
   }, []);
 
+  // NOTE: this duplicates app/auth/sso-callback/page.tsx. It exists because of a
+  // Next.js routing issue (commit 2274d122, "handle SSO callback in main page")
+  // and it is NOT known which of the two actually renders on the deployed host.
+  // Both therefore go through the same server-authoritative verification — a fix
+  // applied to only one of them would be a fix applied to neither.
   const handleSSOCallbackInMainPage = async (token: string) => {
     try {
-      // Decode JWT using utility module (eliminates inline script for CSP compliance)
-      const tokenData = decodeJWT(token);
-
-      // Validate and cast role to UserRole enum
-      const validRoles: Array<UserRole> = [
-        UserRole.STUDENT,
-        UserRole.PROFESSOR,
-        UserRole.COLLEGE,
-        UserRole.ADMIN,
-        UserRole.SUPER_ADMIN,
-      ];
-      const userRole = validRoles.includes(tokenData.role as UserRole)
-        ? (tokenData.role as UserRole)
-        : UserRole.STUDENT; // Fallback to student if invalid
-
-      // Create user object from token data
-      const userData = {
-        id: tokenData.sub,
-        nycu_id: tokenData.nycu_id,
-        role: userRole,
-        name: tokenData.nycu_id,
-        email: `${tokenData.nycu_id}@nycu.edu.tw`,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
+      // SECURITY (#1223 A): the token comes from the URL, so it is attacker-
+      // supplyable. The backend decides who it belongs to — not a client-side
+      // decode of an unverified payload.
+      const userData = await verifySsoToken(token);
 
       login(token, userData);
 
-      // Redirect based on user role
+      // Redirect based on the SERVER-supplied role.
       let redirectPath = "/";
 
       if (userData.role === "admin" || userData.role === "super_admin") {
@@ -120,7 +103,9 @@ export default function ScholarshipManagementSystem() {
         window.location.href = redirectPath;
       }, 1000);
     } catch (error) {
-      logger.error("SSO callback processing failed in main page", { error });
+      // No fabricated user is ever installed — a failed verification simply
+      // leaves the visitor unauthenticated on the landing page.
+      logger.error("SSO callback verification failed in main page", { error });
     }
   };
 

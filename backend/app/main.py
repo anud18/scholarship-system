@@ -45,6 +45,13 @@ logging.getLogger("sqlalchemy.dialects").setLevel(logging.WARNING)
 
 
 # Create JSON formatter for structured logging
+# Attributes the logging module puts on EVERY LogRecord. Anything outside this set
+# was supplied by a caller's `extra={...}`.
+_RESERVED_LOGRECORD_KEYS = frozenset(
+    logging.LogRecord(name="", level=0, pathname="", lineno=0, msg="", args=(), exc_info=None).__dict__
+) | {"message", "asctime", "taskName"}
+
+
 class JsonFormatter(logging.Formatter):
     def format(self, record):
         log_record = {
@@ -53,9 +60,21 @@ class JsonFormatter(logging.Formatter):
             "name": record.name,
             "message": record.getMessage(),
         }
+        # Surface `extra={...}` fields. Without this the formatter silently dropped
+        # them, so ~105 structured-log call sites emitted a bare message — including
+        # the SECURITY audit warnings for cross-college access (#1223 A) and the
+        # file-proxy one from #1222, which lost the user_id / college / application_id
+        # that make them actionable.
+        # Nested under "extra" rather than merged flat so a caller key can never
+        # overwrite timestamp/level/name/message.
+        extras = {key: value for key, value in record.__dict__.items() if key not in _RESERVED_LOGRECORD_KEYS}
+        if extras:
+            log_record["extra"] = extras
         if record.exc_info:
             log_record["exception"] = self.formatException(record.exc_info)
-        return json.dumps(log_record)
+        # default=str so a non-serialisable value degrades to its repr instead of
+        # raising inside the logging path and losing the record entirely.
+        return json.dumps(log_record, default=str)
 
 
 # Configure root logger

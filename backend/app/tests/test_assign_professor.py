@@ -45,6 +45,7 @@ async def _seed_user(
     nycu_id: str,
     dept_code: str | None = None,
     email: str | None = None,
+    college_code: str | None = None,
 ) -> User:
     u = User(
         nycu_id=nycu_id,
@@ -53,6 +54,10 @@ async def _seed_user(
         user_type=UserType.employee if role != UserRole.student else UserType.student,
         role=role,
         dept_code=dept_code,
+        # 學院 users are scoped to their own college (#1223 A). Bind one by
+        # default so that gate PASSES and the assertion under test is the one
+        # the test is actually named after.
+        college_code=college_code if college_code is not None else ("C" if role == UserRole.college else None),
     )
     db.add(u)
     await db.commit()
@@ -103,7 +108,7 @@ async def _seed_app(
         academic_year=114,
         sub_type_selection_mode="single",
         status=ApplicationStatus.submitted.value,
-        student_data={"std_cname": student.name},
+        student_data={"std_cname": student.name, "std_academyno": "C"},
     )
     db.add(app)
     await db.commit()
@@ -216,6 +221,37 @@ async def test_validation_error_when_config_does_not_require_professor(db: Async
             application_id=app.id,
             professor_nycu_id=professor.nycu_id,
             assigned_by=admin,
+        )
+
+
+@pytest.mark.asyncio
+async def test_college_cannot_assign_a_professor_to_another_colleges_application(
+    db: AsyncSession, silence_side_effects
+):
+    """#1223 A: the dept_code rule compares the ASSIGNER to the PROFESSOR and says
+    nothing about which college the APPLICATION belongs to.
+
+    Pinned separately from the dept_code test so the two gates cannot mask each
+    other — an earlier revision had the college gate firing first on an unbound
+    fixture, which made the dept_code test pass for the wrong reason.
+    """
+    college = await _seed_user(
+        db, role=UserRole.college, name="CS Admin", nycu_id="col_c_only", dept_code="CS", college_code="C"
+    )
+    student = await _seed_user(db, role=UserRole.student, name="S", nycu_id="s_other_college")
+    # Same dept as the assigner, so the dept_code rule would ALLOW this.
+    cs_professor = await _seed_user(db, role=UserRole.professor, name="CS Prof", nycu_id="p_cs_ok", dept_code="CS")
+    cfg = await _seed_config(db, requires_prof=True, suffix="xcollege")
+    app = await _seed_app(db, student=student, config=cfg, suffix="xcollege")
+    app.student_data = {"std_cname": student.name, "std_academyno": "E"}  # another college
+    await db.commit()
+    service = ApplicationService(db)
+
+    with pytest.raises(NotFoundError):
+        await service.assign_professor(
+            application_id=app.id,
+            professor_nycu_id=cs_professor.nycu_id,
+            assigned_by=college,
         )
 
 

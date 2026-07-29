@@ -5,6 +5,7 @@ import pytest
 
 from app.models.email_management import EmailCategory
 from app.services import email_automation_service as email_automation_module
+from app.core.sql_read_only_guard import UnsafeConditionQueryError
 from app.services.email_automation_service import EmailAutomationRule, EmailAutomationService
 
 
@@ -15,9 +16,22 @@ class FakeResult:
     def __iter__(self):
         return iter(self._rows)
 
+    def fetchall(self):
+        return list(self._rows)
+
     def scalar_one_or_none(self):
         rows = list(self._rows)
         return rows[0] if rows else None
+
+
+class StubSavepoint:
+    """Stands in for the SAVEPOINT `_execute_read_only` always rolls back."""
+
+    def __init__(self, session):
+        self._session = session
+
+    async def rollback(self):
+        self._session.savepoint_rollbacks += 1
 
 
 class StubAsyncSession:
@@ -27,6 +41,10 @@ class StubAsyncSession:
         self.executed = []
         self.committed = 0
         self.rolled_back = 0
+        self.savepoint_rollbacks = 0
+
+    async def begin_nested(self):
+        return StubSavepoint(self)
 
     async def execute(self, query, params=None):
         self.executed.append((query, params))
@@ -64,31 +82,100 @@ async def test_get_recipients_returns_email_list(monkeypatch):
         id=1,
         template_key="application_submitted_student",
         trigger_event="submit",
-        condition_query="SELECT '{student_email}'",
+        # Shaped like the real seeded rules: the placeholder sits in SQL position,
+        # not inside a string literal.
+        condition_query="SELECT email FROM users WHERE id = {application_id}",
     )
 
     db = StubAsyncSession(results=[("person@example.com",)])
 
-    recipients = await service._get_recipients(db, rule, {"student_email": "person@example.com"})
+    recipients = await service._get_recipients(db, rule, {"application_id": 1})
 
     assert recipients == [{"email": "person@example.com"}]
+    # {application_id} was rewritten to a BOUND parameter, never interpolated.
+    executed_sql = str(db.executed[-1][0])
+    assert ":application_id" in executed_sql
+    assert "{application_id}" not in executed_sql
+    # The savepoint is always rolled back, so a rule can never leave writes behind
+    # nor leave the caller's transaction read-only.
+    assert db.savepoint_rollbacks == 1
 
 
 @pytest.mark.asyncio
-async def test_get_recipients_handles_failures():
+async def test_placeholder_inside_a_string_literal_is_not_rewritten():
+    """A `{...}` inside a literal is data, not a placeholder.
+
+    The old naive str.replace rewrote it anyway, corrupting the literal.
+    """
+    from app.services.email_automation_service import bind_placeholders
+
+    sql = "SELECT '{not_a_placeholder}' , x FROM t WHERE id = {application_id}"
+    out = bind_placeholders(sql, {"application_id": 1, "not_a_placeholder": "x"})
+
+    assert "'{not_a_placeholder}'" in out
+    assert "id = :application_id" in out
+
+
+@pytest.mark.asyncio
+async def test_savepoint_is_rolled_back_even_when_the_query_raises():
+    service = EmailAutomationService()
+    rule = EmailAutomationRule(
+        id=4,
+        template_key="application_submitted_student",
+        trigger_event="submit",
+        condition_query="SELECT email FROM users WHERE id = {application_id}",
+    )
+
+    db = StubAsyncSession(side_effect=RuntimeError("boom"))
+
+    with pytest.raises(RuntimeError):
+        await service._get_recipients(db, rule, {"application_id": 1})
+
+    # Without the rollback the caller's transaction stays aborted and its later
+    # scheduled_emails INSERT fails — the live bug this fix also closes.
+    assert db.savepoint_rollbacks == 1
+
+
+@pytest.mark.asyncio
+async def test_get_recipients_raises_on_missing_context_key():
+    """A placeholder with no context key now RAISES instead of returning [].
+
+    #1223 A: swallowing turned a misconfigured rule into "nobody was supposed to
+    be notified", and left the caller's transaction aborted. process_trigger
+    already isolates each rule, so raising is contained.
+    """
     service = EmailAutomationService()
     rule = EmailAutomationRule(
         id=2,
         template_key="application_submitted_student",
         trigger_event="submit",
-        condition_query="SELECT '{missing_key}'",
+        condition_query="SELECT {missing_key}",
     )
 
     db = StubAsyncSession()
 
-    recipients = await service._get_recipients(db, rule, {})
+    with pytest.raises(UnsafeConditionQueryError, match="missing_key"):
+        await service._get_recipients(db, rule, {})
 
-    assert recipients == []
+    assert db.executed == []  # never reached the database
+
+
+@pytest.mark.asyncio
+async def test_get_recipients_refuses_unsafe_query_without_executing():
+    service = EmailAutomationService()
+    rule = EmailAutomationRule(
+        id=3,
+        template_key="application_submitted_student",
+        trigger_event="submit",
+        condition_query="SELECT 1; DROP TABLE users",
+    )
+
+    db = StubAsyncSession()
+
+    with pytest.raises(UnsafeConditionQueryError):
+        await service._get_recipients(db, rule, {})
+
+    assert db.executed == []
 
 
 def test_get_email_category_from_template_key():

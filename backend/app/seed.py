@@ -213,6 +213,23 @@ async def seed_test_users(session: AsyncSession):
             "role": UserRole.college,
         },
         {
+            # 電機學院 reviewer. College access is scoped to the reviewer's own
+            # college (#1223 A), and the primary demo cohort (stuunder1 /
+            # stuphd001 / stumaster / studirect) sits in 電機學院 ("E") — without
+            # this account none of them is reviewable by any seeded college user.
+            # Having BOTH a "C" and an "E" reviewer is also what makes the
+            # cross-college DENIAL exercisable in the dev environment.
+            "nycu_id": "ee_college",
+            "name": "電機學院審核員",
+            "email": "ee_college@nycu.edu.tw",
+            "user_type": UserType.employee,
+            "status": EmployeeStatus.active,
+            "dept_code": "EE",
+            "dept_name": "電機工程學系",
+            "college_code": "E",
+            "role": UserRole.college,
+        },
+        {
             "nycu_id": "csphd0001",
             "name": "王博士研究生",
             "email": "csphd0001@nycu.edu.tw",
