@@ -7195,6 +7195,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/student-history/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Batch Student Scholarship History
+         * @description Multi-student history lookup. Failures are strictly per-student
+         *     (not found, out of college scope, lookup error) inside data.results —
+         *     one bad 學號 or one failed lookup never sinks the rest of the batch.
+         */
+        post: operations["batch_student_scholarship_history_api_v1_student_history_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/student-history/me/months": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get My Received Months
+         * @description A student's own 總領月份數 (匯入 + 系統, summed across every scholarship
+         *     type). DB-only — no SIS round trip — and an empty history is a valid
+         *     0-month state, not an error.
+         */
+        get: operations["get_my_received_months_api_v1_student_history_me_months_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/csp-report": {
         parameters: {
             query?: never;
@@ -8662,6 +8706,17 @@ export interface components {
             updates: {
                 [key: string]: unknown;
             };
+        };
+        /**
+         * BatchStudentHistoryRequest
+         * @description Multi-student lookup request body for POST /student-history/batch.
+         *
+         *     Size and per-number format limits are enforced in the endpoint (uniform
+         *     400s with zh-TW messages) rather than as Field constraints (422s).
+         */
+        BatchStudentHistoryRequest: {
+            /** Student Numbers */
+            student_numbers: string[];
         };
         /** Body_create_ranking_api_v1_college_review_rankings_post */
         Body_create_ranking_api_v1_college_review_rankings_post: {
@@ -22847,6 +22902,59 @@ export interface operations {
         };
     };
     get_my_verified_account_api_v1_student_bank_accounts_my_verified_account_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    batch_student_scholarship_history_api_v1_student_history_batch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchStudentHistoryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_received_months_api_v1_student_history_me_months_get: {
         parameters: {
             query?: never;
             header?: never;

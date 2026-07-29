@@ -27,6 +27,7 @@ import {
   FileSpreadsheet,
   Upload,
   UserCheck,
+  History,
 } from "lucide-react";
 import { EnhancedStudentPortal } from "@/components/enhanced-student-portal";
 import { AdminScholarshipDashboard } from "@/components/admin-scholarship-dashboard";
@@ -36,6 +37,7 @@ import { CollegeDashboard } from "@/components/college/CollegeManagementShell";
 import { AdminDashboard } from "@/components/admin-dashboard";
 import { RosterManagementDashboard } from "@/components/roster-management-dashboard";
 import { BatchImportPanel } from "@/components/batch-import-panel";
+import { StudentHistoryPanel } from "@/components/admin/student-history/StudentHistoryPanel";
 import { RenewalImportPanel } from "@/components/renewal-import-panel";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
@@ -272,7 +274,7 @@ export default function ScholarshipManagementSystem() {
 
     if (user.role === "college") {
       return (
-        <TabsList className="grid w-full grid-cols-2 bg-nycu-blue-50 border border-nycu-blue-200">
+        <TabsList className="grid w-full grid-cols-3 bg-nycu-blue-50 border border-nycu-blue-200">
           <TabsTrigger
             value="main"
             className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
@@ -286,6 +288,13 @@ export default function ScholarshipManagementSystem() {
           >
             <Upload className="h-4 w-4" />
             批次匯入
+          </TabsTrigger>
+          <TabsTrigger
+            value="student-history"
+            className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
+          >
+            <History className="h-4 w-4" />
+            領獎紀錄查詢
           </TabsTrigger>
         </TabsList>
       );
@@ -562,6 +571,13 @@ export default function ScholarshipManagementSystem() {
           {(user.role === "college" || user.role === "admin" || user.role === "super_admin") && (
             <TabsContent value="batch-import" className="space-y-4">
               <BatchImportPanel locale={locale} />
+            </TabsContent>
+          )}
+
+          {/* 領獎紀錄查詢 - college 角色；查詢範圍由後端限制在本學院學生 */}
+          {user.role === "college" && (
+            <TabsContent value="student-history" className="space-y-4">
+              <StudentHistoryPanel variant="college" />
             </TabsContent>
           )}
 

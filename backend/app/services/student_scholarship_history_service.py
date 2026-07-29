@@ -12,6 +12,7 @@ from app.core.exceptions import ScholarshipException
 from app.models.application import Application
 from app.models.payment_roster import PaymentRoster, PaymentRosterItem, RosterStatus
 from app.models.scholarship import ScholarshipConfiguration
+from app.models.user import User
 from app.schemas.student_scholarship_history import (
     AcademicBasicInfo,
     AcademicInfo,
@@ -206,40 +207,106 @@ class StudentScholarshipHistoryService:
             total_received_months=sum(b.total_months for b in received_months),
         )
 
+    async def fetch_sis_lookups(
+        self,
+        student_numbers: List[str],
+        concurrency: int = 10,
+    ) -> Dict[str, Tuple[Optional[Dict[str, Any]], Optional[str]]]:
+        """Concurrent SIS lookups for a batch, capped by ``concurrency``.
+
+        Returns {student_number: (sis_data, error_message)}. Failures never
+        raise — a degraded SIS costs at most one timeout window per wave
+        instead of one per student, and each student degrades independently
+        to the SIS-unavailable display state.
+        """
+        semaphore = asyncio.Semaphore(concurrency)
+        service = StudentService()
+
+        async def lookup(number: str) -> Tuple[str, Tuple[Optional[Dict[str, Any]], Optional[str]]]:
+            async with semaphore:
+                try:
+                    return number, (await service.get_student_basic_info(number), None)
+                except Exception as exc:
+                    logger.warning("SIS lookup failed for student %s", number, exc_info=True)
+                    return number, (None, str(exc))
+
+        pairs = await asyncio.gather(*(lookup(number) for number in student_numbers))
+        return dict(pairs)
+
+    async def get_total_received_months(self, db: AsyncSession, student_number: str) -> int:
+        """總領月份數 (匯入 + 系統) from DB records only — no SIS round trip.
+
+        An unknown student simply has no records and totals 0; there is no
+        404 concept here (student self-service treats empty history as a
+        valid zero-month state)."""
+        records, _ = await self._fetch_paid_payments(db, student_number)
+        imported_records = await get_student_imported_records(db, student_number)
+        breakdowns = self._build_received_months(records, imported_records)
+        return sum(b.total_months for b in breakdowns)
+
+    async def get_snapshot_academy_codes(self, db: AsyncSession, student_number: str) -> set:
+        """College codes (std_academyno) frozen in the student's application
+        snapshots, for college-scope checks that must not depend on live SIS.
+
+        Applications are matched through User.nycu_id (== 學號 for student
+        accounts, including batch-imported ones). JSON is parsed in Python,
+        not SQL — SQLite (tests) lacks json_extract_path_text."""
+        stmt = (
+            select(Application.student_data)
+            .join(User, Application.user_id == User.id)
+            .where(User.nycu_id == student_number, Application.deleted_at.is_(None))
+        )
+        result = await db.execute(stmt)
+        codes = set()
+        for student_data in result.scalars():
+            if not isinstance(student_data, dict):
+                continue
+            code = student_data.get("std_academyno")
+            if code is not None and str(code).strip():
+                codes.add(str(code).strip())
+        return codes
+
     async def get_history(
         self,
         db: AsyncSession,
         student_number: str,
+        prefetched_sis: Optional[Tuple[Optional[Dict[str, Any]], Optional[str]]] = None,
     ) -> StudentScholarshipHistoryData:
         """Orchestrate SIS lookup + paid-payment retrieval. Raises
         ScholarshipException(404) when both sources are empty.
 
-        SIS and DB are queried concurrently: SIS calls can take up to
-        ``student_api_timeout`` seconds, while the DB query is local — running
-        them in parallel keeps the worst-case latency at max(sis, db) rather
-        than sis + db."""
-        sis_task = asyncio.create_task(StudentService().get_student_basic_info(student_number))
-        db_task = asyncio.create_task(self._fetch_paid_payments(db, student_number))
+        Without ``prefetched_sis``, SIS and DB are queried concurrently: SIS
+        calls can take up to ``student_api_timeout`` seconds, while the DB
+        query is local — running them in parallel keeps the worst-case latency
+        at max(sis, db) rather than sis + db. Batch callers pass
+        ``prefetched_sis`` (from :meth:`fetch_sis_lookups`) so N students cost
+        one concurrent SIS wave, not N serialized calls."""
+        sis_error: Optional[str] = None
+        sis_data: Optional[Dict[str, Any]] = None
+        if prefetched_sis is None:
+            sis_task = asyncio.create_task(StudentService().get_student_basic_info(student_number))
+            db_task = asyncio.create_task(self._fetch_paid_payments(db, student_number))
 
-        sis_result, db_result = await asyncio.gather(sis_task, db_task, return_exceptions=True)
+            sis_result, db_result = await asyncio.gather(sis_task, db_task, return_exceptions=True)
+
+            if isinstance(sis_result, BaseException):
+                logger.warning("SIS lookup failed for student %s: %s", student_number, sis_result)
+                sis_error = str(sis_result)
+            else:
+                sis_data = sis_result
+
+            if isinstance(db_result, BaseException):
+                # DB failures are not user-recoverable — re-raise so the global
+                # handler can produce a 500 with trace_id.
+                raise db_result
+            records, snapshot_name = db_result
+        else:
+            sis_data, sis_error = prefetched_sis
+            records, snapshot_name = await self._fetch_paid_payments(db, student_number)
 
         # Sequential, not gathered with the above: both use `db`, and an
         # AsyncSession does not support concurrent statements on one connection.
         imported_records = await get_student_imported_records(db, student_number)
-
-        sis_error: Optional[str] = None
-        sis_data: Optional[Dict[str, Any]] = None
-        if isinstance(sis_result, BaseException):
-            logger.warning("SIS lookup failed for student %s: %s", student_number, sis_result)
-            sis_error = str(sis_result)
-        else:
-            sis_data = sis_result
-
-        if isinstance(db_result, BaseException):
-            # DB failures are not user-recoverable — re-raise so the global
-            # handler can produce a 500 with trace_id.
-            raise db_result
-        records, snapshot_name = db_result
 
         academic_info = self._build_academic_info(sis_data, error_message=sis_error)
 
