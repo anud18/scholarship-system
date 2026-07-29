@@ -120,7 +120,11 @@ class FooterLinkUpdate(BaseModel):
 
     @model_validator(mode="after")
     def _require_at_least_one_field(self) -> "FooterLinkUpdate":
-        if all(getattr(self, name) is None for name in ("title_zh", "title_en", "url", "is_active")):
+        # Test which fields the caller actually SENT, not which ones ended up
+        # non-None. `{"title_en": ""}` normalizes to None but is a legitimate
+        # "clear the English label" request; a value-based check would reject
+        # it as an empty payload and make clearing impossible.
+        if not self.model_fields_set:
             raise ValueError("at least one field must be provided")
         return self
 

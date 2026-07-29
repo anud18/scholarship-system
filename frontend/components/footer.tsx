@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Separator } from "@/components/ui/separator";
 import {
   ExternalLink,
@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import apiClient from "@/lib/api";
 import {
+  FOOTER_LINKS_CHANGED_EVENT,
   footerLinkHref,
   footerLinkLabel,
   type FooterLink,
@@ -25,20 +26,29 @@ export function Footer({ locale = "zh" }: FooterProps) {
   // 相關連結 are admin-managed (系統管理 → 系統文件). A fetch failure must not
   // break the rest of the footer, so the list just stays empty.
   const [links, setLinks] = useState<FooterLink[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    apiClient.footerLinks
-      .list()
-      .then((res) => {
-        if (!cancelled && res.success && res.data) setLinks(res.data);
-      })
-      .catch((error) => {
-        logger.error("Failed to load footer links", error);
-      });
-    return () => {
-      cancelled = true;
-    };
+
+  const loadLinks = useCallback(async (signal?: { cancelled: boolean }) => {
+    try {
+      const res = await apiClient.footerLinks.list();
+      if (!signal?.cancelled && res.success && res.data) setLinks(res.data);
+    } catch (error) {
+      logger.error("Failed to load footer links", error);
+    }
   }, []);
+
+  useEffect(() => {
+    const signal = { cancelled: false };
+    void loadLinks(signal);
+
+    // The admin panel edits this same list on this same page; refetch when it
+    // reports a change so the footer never shows a stale mount-time snapshot.
+    const onChanged = () => void loadLinks();
+    window.addEventListener(FOOTER_LINKS_CHANGED_EVENT, onChanged);
+    return () => {
+      signal.cancelled = true;
+      window.removeEventListener(FOOTER_LINKS_CHANGED_EVENT, onChanged);
+    };
+  }, [loadLinks]);
   // Render the "Last updated" date only after mount to avoid SSR/CSR
   // hydration mismatches caused by the server and client rendering with
   // different locale-formatted strings (or different system clocks crossing
@@ -97,7 +107,12 @@ export function Footer({ locale = "zh" }: FooterProps) {
           {/* Related Links — expanded by default (native <details open>) on
               every breakpoint. Below md the summary stays interactive so
               users can collapse it; the disclosure chevron is hidden at
-              md+ where the toggle affordance isn't needed. */}
+              md+ where the toggle affordance isn't needed.
+
+              Hidden entirely when there are no links (all hidden by the
+              admin, or the fetch failed) — otherwise the heading and its
+              interactive chevron sit over an empty box. */}
+          {links.length > 0 && (
           <details className="group [&_summary::-webkit-details-marker]:hidden md:col-span-2" open>
             <summary className="flex items-center justify-between cursor-pointer md:cursor-default list-none">
               <h4 className="font-bold text-nycu-navy-800 text-lg">
@@ -130,6 +145,7 @@ export function Footer({ locale = "zh" }: FooterProps) {
               })}
             </div>
           </details>
+          )}
         </div>
 
         <Separator className="my-8 bg-nycu-blue-200" />

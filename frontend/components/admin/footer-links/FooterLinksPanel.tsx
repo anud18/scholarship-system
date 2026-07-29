@@ -43,6 +43,7 @@ import {
 import apiClient from "@/lib/api";
 import {
   buildFooterLinkFileProxyUrl,
+  notifyFooterLinksChanged,
   type FooterLink,
 } from "@/lib/api/modules/footer-links";
 import { previewMimeType } from "@/lib/utils";
@@ -229,6 +230,7 @@ export function FooterLinksPanel() {
         toast.error(res.message || "排序失敗");
       } else {
         setLinks(next.map((l, idx) => ({ ...l, sort_order: idx })));
+        notifyFooterLinksChanged();
       }
     } catch {
       setLinks(previous);
@@ -291,6 +293,7 @@ export function FooterLinksPanel() {
           prev.map((l) => (l.id === editingLink.id ? res.data! : l))
         );
         setEditingLink(null);
+        notifyFooterLinksChanged();
         toast.success("已更新");
       } else {
         toast.error(res.message || "更新失敗");
@@ -314,6 +317,7 @@ export function FooterLinksPanel() {
         setLinks(previous);
         toast.error(res.message || "更新失敗");
       } else {
+        notifyFooterLinksChanged();
         toast.success(nextActive ? "已顯示" : "已隱藏");
       }
     } catch {
@@ -334,6 +338,7 @@ export function FooterLinksPanel() {
         setLinks(previous);
         toast.error(res.message || "刪除失敗");
       } else {
+        notifyFooterLinksChanged();
         toast.success("已刪除");
       }
     } catch {
@@ -394,7 +399,10 @@ export function FooterLinksPanel() {
       <AddFooterLinkDialog
         open={addOpen}
         onOpenChange={setAddOpen}
-        onCreated={(link) => setLinks((prev) => [...prev, link])}
+        onCreated={(link) => {
+          setLinks((prev) => [...prev, link]);
+          notifyFooterLinksChanged();
+        }}
       />
 
       {editingLink && (

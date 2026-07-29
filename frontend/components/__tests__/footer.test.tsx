@@ -1,6 +1,7 @@
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { Footer } from "../footer";
+import { FOOTER_LINKS_CHANGED_EVENT } from "../../lib/api/modules/footer-links";
 
 jest.mock("../../lib/api", () => {
   const list = jest.fn();
@@ -97,9 +98,42 @@ test("a failed links fetch leaves the rest of the footer intact", async () => {
 
   render(<Footer locale="zh" />);
 
-  // The static footer content still renders.
-  expect(await screen.findByText("相關連結")).toBeInTheDocument();
-  await waitFor(() =>
-    expect(screen.queryByRole("link", { name: "陽明交大首頁" })).toBeNull()
-  );
+  // The static footer content still renders...
+  expect(await screen.findByText("國立陽明交通大學")).toBeInTheDocument();
+  // ...but the 相關連結 section is hidden rather than shown empty, so the
+  // heading and its chevron never sit over an empty box.
+  await waitFor(() => expect(screen.queryByText("相關連結")).toBeNull());
+  expect(screen.queryByRole("link", { name: "陽明交大首頁" })).toBeNull();
+});
+
+test("the 相關連結 section is hidden when every link is hidden", async () => {
+  listMock.mockResolvedValue({ success: true, message: "OK", data: [] });
+
+  render(<Footer locale="zh" />);
+
+  expect(await screen.findByText("國立陽明交通大學")).toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByText("相關連結")).toBeNull());
+});
+
+test("refetches when the admin panel reports a change", async () => {
+  listMock.mockResolvedValueOnce({
+    success: true,
+    message: "OK",
+    data: [makeLink({ title_zh: "舊連結" })],
+  });
+
+  render(<Footer locale="zh" />);
+  expect(await screen.findByRole("link", { name: "舊連結" })).toBeInTheDocument();
+
+  listMock.mockResolvedValueOnce({
+    success: true,
+    message: "OK",
+    data: [makeLink({ id: 9, title_zh: "新連結" })],
+  });
+  await act(async () => {
+    window.dispatchEvent(new CustomEvent(FOOTER_LINKS_CHANGED_EVENT));
+  });
+
+  expect(await screen.findByRole("link", { name: "新連結" })).toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "舊連結" })).toBeNull();
 });

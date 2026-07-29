@@ -87,7 +87,13 @@ def upgrade() -> None:
             ),
             sa.CheckConstraint(_CHECK_SQL, name=_CHECK_NAME),
         )
-        op.create_index("idx_footer_links_sort", "footer_links", ["sort_order"])
+        # Use the names SQLAlchemy's own ``index=True`` would generate, so a
+        # migration-built DB and a create_all-built DB agree. Otherwise
+        # `alembic revision --autogenerate` later emits spurious drop/create
+        # index pairs, and a follow-up migration written against one name
+        # fails on databases built via the other path.
+        op.create_index("ix_footer_links_id", "footer_links", ["id"])
+        op.create_index("ix_footer_links_sort_order", "footer_links", ["sort_order"])
         inspector = sa.inspect(bind)
 
     # --- 2. CHECK constraint (for DBs predating the model constraint) ------
@@ -119,7 +125,8 @@ def downgrade() -> None:
     inspector = sa.inspect(bind)
 
     if "footer_links" in inspector.get_table_names():
-        op.drop_index("idx_footer_links_sort", table_name="footer_links", if_exists=True)
+        op.drop_index("ix_footer_links_sort_order", table_name="footer_links", if_exists=True)
+        op.drop_index("ix_footer_links_id", table_name="footer_links", if_exists=True)
         op.drop_table("footer_links")
 
     sa.Enum(name="footerlinktype").drop(bind, checkfirst=True)

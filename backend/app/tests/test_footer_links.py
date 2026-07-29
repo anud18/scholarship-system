@@ -349,6 +349,115 @@ async def test_stream_file_returns_content_length(admin_client: AsyncClient, fak
 
 
 @pytest.mark.asyncio
+async def test_title_en_can_be_cleared(admin_client: AsyncClient):
+    """A blank title_en normalizes to None but is a legitimate 'clear the
+    English label' request — it must not be rejected as an empty payload."""
+    created = await admin_client.post(
+        "/api/v1/footer-links",
+        json={"title_zh": "校務系統", "title_en": "Campus", "url": "https://x.nycu.edu.tw"},
+    )
+    link_id = created.json()["data"]["id"]
+
+    res = await admin_client.patch(f"/api/v1/footer-links/{link_id}", json={"title_en": ""})
+    assert res.status_code == 200, res.text
+    assert res.json()["data"]["title_en"] is None
+
+
+@pytest.mark.asyncio
+async def test_update_with_no_fields_is_rejected(admin_client: AsyncClient):
+    created = await admin_client.post("/api/v1/footer-links", json={"title_zh": "X", "url": "https://x.nycu.edu.tw"})
+    link_id = created.json()["data"]["id"]
+
+    res = await admin_client.patch(f"/api/v1/footer-links/{link_id}", json={})
+    assert res.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_stored_content_type_ignores_client_declared_value(admin_client: AsyncClient, fake_minio):
+    """The multipart Content-Type is attacker-controlled and this document is
+    later streamed back inline from our own origin, so a .pdf declared
+    text/html must not be persisted or echoed."""
+    created = await admin_client.post(
+        "/api/v1/footer-links/upload",
+        files={"file": ("guide.pdf", BytesIO(b"<html><body>spoof</body></html>"), "text/html")},
+        data={"title_zh": "偽裝檔案"},
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["data"]["content_type"] == "application/pdf"
+
+    link_id = created.json()["data"]["id"]
+    minio_response = MagicMock()
+    minio_response.read.return_value = b"<html><body>spoof</body></html>"
+    fake_minio.client.get_object.return_value = minio_response
+
+    streamed = await admin_client.get(f"/api/v1/footer-links/{link_id}/file")
+    assert streamed.headers["content-type"].startswith("application/pdf")
+
+
+# ─── Negative authorization: every mutation is admin-only ────────────────
+
+
+@pytest.mark.asyncio
+async def test_student_cannot_create_link(student_client: AsyncClient):
+    res = await student_client.post(
+        "/api/v1/footer-links", json={"title_zh": "駭客連結", "url": "https://evil.example.com"}
+    )
+    assert res.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_student_cannot_upload_file(student_client: AsyncClient):
+    res = await student_client.post(
+        "/api/v1/footer-links/upload",
+        files={"file": ("x.pdf", BytesIO(b"%PDF-1.4"), "application/pdf")},
+        data={"title_zh": "x"},
+    )
+    assert res.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_student_cannot_update_link(db: AsyncSession, student_client: AsyncClient, admin_user: User):
+    link = FooterLink(
+        title_zh="原標題",
+        link_type=FooterLinkType.url,
+        url="https://ok.nycu.edu.tw",
+        sort_order=0,
+        is_active=True,
+        created_by=admin_user.id,
+    )
+    db.add(link)
+    await db.commit()
+    await db.refresh(link)
+
+    res = await student_client.patch(f"/api/v1/footer-links/{link.id}", json={"title_zh": "被竄改"})
+    assert res.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_student_cannot_delete_link(db: AsyncSession, student_client: AsyncClient, admin_user: User):
+    link = FooterLink(
+        title_zh="待刪",
+        link_type=FooterLinkType.url,
+        url="https://ok.nycu.edu.tw",
+        sort_order=0,
+        is_active=True,
+        created_by=admin_user.id,
+    )
+    db.add(link)
+    await db.commit()
+    await db.refresh(link)
+
+    res = await student_client.delete(f"/api/v1/footer-links/{link.id}")
+    assert res.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_student_cannot_reorder_links(student_client: AsyncClient):
+    res = await student_client.patch("/api/v1/footer-links/reorder", json={"items": [{"id": 1, "sort_order": 0}]})
+    assert res.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_stream_rejects_url_link(admin_client: AsyncClient):
     created = await admin_client.post("/api/v1/footer-links", json={"title_zh": "外部", "url": "https://x.nycu.edu.tw"})
     link_id = created.json()["data"]["id"]

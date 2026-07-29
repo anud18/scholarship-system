@@ -41,6 +41,23 @@ export type FooterLinkUpdatePayload = {
   is_active?: boolean;
 };
 
+/**
+ * Broadcast name for "the footer link list changed".
+ *
+ * The admin panel and the <Footer> render on the SAME page (the panel lives
+ * inside the 系統管理 tab; the footer is mounted outside <Tabs> and stays
+ * mounted for the whole session), but they hold independent copies of the
+ * list. Without this signal an admin who adds or hides a link and scrolls
+ * down sees the mount-time snapshot and concludes the save failed.
+ */
+export const FOOTER_LINKS_CHANGED_EVENT = "footer-links:changed";
+
+/** Tell any mounted <Footer> to refetch. No-op during SSR. */
+export function notifyFooterLinksChanged(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(FOOTER_LINKS_CHANGED_EVENT));
+}
+
 function authToken(): string {
   return typeof window !== 'undefined'
     ? localStorage.getItem('auth_token') || ''

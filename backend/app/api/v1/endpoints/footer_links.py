@@ -15,7 +15,11 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.document_formats import REFERENCE_DOC_EXTENSIONS, extension_for_filename
+from app.core.document_formats import (
+    REFERENCE_DOC_EXTENSIONS,
+    content_type_for_extension,
+    extension_for_filename,
+)
 from app.core.path_security import validate_upload_file
 from app.core.security import get_current_user, require_admin
 from app.db.deps import get_db
@@ -35,16 +39,18 @@ logger = logging.getLogger(__name__)
 
 MAX_UPLOAD_SIZE_MB = 10
 
-_ADMIN_ROLES = {"admin", "super_admin"}
-
 
 def _serialize(link: FooterLink) -> dict:
     return FooterLinkResponse.model_validate(link).model_dump(mode="json")
 
 
 def _is_admin(user: User) -> bool:
-    role = user.role.value if hasattr(user.role, "value") else str(user.role)
-    return role in _ADMIN_ROLES
+    """Same predicate `require_admin` enforces on the write endpoints.
+
+    Reuses the model helpers rather than string-matching roles so the read
+    gates below can never drift from the write gates.
+    """
+    return user.is_admin() or user.is_super_admin()
 
 
 async def _get_link_or_404(db: AsyncSession, link_id: int) -> FooterLink:
@@ -146,7 +152,11 @@ async def upload_footer_link_file(
 
     ext = extension_for_filename(file.filename or "")
     object_name = f"footer-links/link_{uuid.uuid4().hex}{ext}"
-    content_type = file.content_type or "application/octet-stream"
+    # Derive from the validated extension — never persist file.content_type.
+    # That header is client-supplied, and this document is later streamed back
+    # with `Content-Disposition: inline` from our own origin, so a .pdf
+    # declared text/html would render as an attacker-controlled page.
+    content_type = content_type_for_extension(ext)
 
     minio_service.client.put_object(
         bucket_name=minio_service.default_bucket,
