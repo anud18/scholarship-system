@@ -275,35 +275,6 @@ describe("createApplicationsApi", () => {
     );
   });
 
-  // ─── submitRecommendation ─────────────────────────────────────────
-
-  it("submitRecommendation POSTs /{id}/review with conditional selected_awards", async () => {
-    // Pin: selected_awards spread-conditionally — omitted entirely
-    // when undefined (NOT included as undefined). Pin so refactor
-    // doesn't send selected_awards: undefined which backend
-    // Pydantic may reject.
-    mockedRaw.POST.mockResolvedValueOnce({});
-    const api = createApplicationsApi();
-    await api.submitRecommendation(42, "professor", "approve");
-    const body = mockedRaw.POST.mock.calls[0][1].body;
-    expect(body).toEqual({
-      id: 42,
-      review_stage: "professor",
-      recommendation: "approve",
-    });
-    expect("selected_awards" in body).toBe(false);
-  });
-
-  it("submitRecommendation includes selected_awards when provided", async () => {
-    mockedRaw.POST.mockResolvedValueOnce({});
-    const api = createApplicationsApi();
-    await api.submitRecommendation(42, "college", "approve", ["nstc", "moe_1w"]);
-    expect(mockedRaw.POST.mock.calls[0][1].body.selected_awards).toEqual([
-      "nstc",
-      "moe_1w",
-    ]);
-  });
-
   // ─── getAuditTrail defaults ───────────────────────────────────────
 
   it("getAuditTrail defaults limit=50 offset=0 with conditional action_filter", async () => {
@@ -362,57 +333,6 @@ describe("createApplicationsApi", () => {
     const api = createApplicationsApi();
     await api.listDocumentRequests(42);
     expect(mockedRaw.GET.mock.calls[0][1].params.query).toBeUndefined();
-  });
-
-  // ─── uploadApplicationDocument / deleteApplicationDocument (raw) ──
-
-  it("uploadApplicationDocument uses raw fetch + Bearer from localStorage.auth_token", async () => {
-    // Pin: bypasses typedClient because uses upload-proxy. Token
-    // pulled from localStorage.auth_token (NOT typedClient.getToken
-    // — different storage key from the rest of the module).
-    Object.defineProperty(global, "localStorage", {
-      value: { getItem: jest.fn(() => "abc-token") },
-      writable: true,
-    });
-    const fetchMock = jest.fn().mockResolvedValue({
-      ok: true,
-      json: jest
-        .fn()
-        .mockResolvedValue({
-          success: true,
-          data: { application_document_url: "/u/xx.pdf" },
-        }),
-    });
-    global.fetch = fetchMock as any;
-
-    const api = createApplicationsApi();
-    await api.uploadApplicationDocument(42, new File(["x"], "x.pdf"));
-    const [url, opts] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/v1/application-document-upload-proxy?id=42");
-    expect(opts.method).toBe("POST");
-    expect(opts.headers.Authorization).toBe("Bearer abc-token");
-  });
-
-  it("deleteApplicationDocument uses raw fetch DELETE on SAME proxy URL", async () => {
-    // Pin: DELETE on the proxy — same URL + Authorization header
-    // contract as upload. Pin so refactor doesn't split into
-    // separate proxy endpoints.
-    Object.defineProperty(global, "localStorage", {
-      value: { getItem: jest.fn(() => "abc-token") },
-      writable: true,
-    });
-    const fetchMock = jest.fn().mockResolvedValue({
-      ok: true,
-      json: jest.fn().mockResolvedValue({ success: true, data: null }),
-    });
-    global.fetch = fetchMock as any;
-
-    const api = createApplicationsApi();
-    await api.deleteApplicationDocument(42);
-    const [url, opts] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/v1/application-document-upload-proxy?id=42");
-    expect(opts.method).toBe("DELETE");
-    expect(opts.headers.Authorization).toBe("Bearer abc-token");
   });
 
   // ─── saveApplicationDraft normalization ───────────────────────────

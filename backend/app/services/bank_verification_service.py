@@ -154,24 +154,28 @@ class BankVerificationService:
         for doc in documents:
             # Support both English and Chinese document IDs
             if doc.get("document_id") in ["bank_account_cover", "存摺封面"]:
-                # Prefer using file_id for accurate lookup
+                # Prefer file_id for accurate lookup, but a persisted file_id
+                # can dangle (the row was replaced by a re-upload or removed by
+                # the dedupe migration) — fall back to the filename so a
+                # surviving row is still found.
                 file_id = doc.get("file_id")
                 if file_id:
                     stmt = select(ApplicationFile).where(
                         ApplicationFile.application_id == application.id, ApplicationFile.id == file_id
                     )
-                else:
-                    # Fallback: use filename field
-                    filename = doc.get("filename") or doc.get("original_filename")
-                    if filename:
-                        stmt = select(ApplicationFile).where(
-                            ApplicationFile.application_id == application.id, ApplicationFile.filename == filename
-                        )
-                    else:
-                        continue
+                    result = await self.db.execute(stmt)
+                    passbook_file = result.scalar_one_or_none()
+                    if passbook_file:
+                        return passbook_file
 
+                filename = doc.get("filename") or doc.get("original_filename")
+                if not filename:
+                    continue
+                stmt = select(ApplicationFile).where(
+                    ApplicationFile.application_id == application.id, ApplicationFile.filename == filename
+                )
                 result = await self.db.execute(stmt)
-                passbook_file = result.scalar_one_or_none()
+                passbook_file = result.scalars().first()
                 if passbook_file:
                     return passbook_file
 

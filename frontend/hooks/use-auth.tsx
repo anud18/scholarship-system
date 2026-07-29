@@ -25,11 +25,58 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+// Single source of truth for shaping a user object, wherever it came from
+// (JWT stub, /auth/me, stored JSON): backend sends numeric id and may leave
+// name null; the app contract is string id and non-empty name.
+function normalizeUser(raw: User): User {
+  return {
+    ...raw,
+    id: String(raw.id),
+    name: raw.full_name || raw.name || raw.nycu_id,
+    role: raw.role?.toLowerCase() as User["role"],
+  };
+}
+
+function persistUser(normalizedUser: User): void {
+  const json = JSON.stringify(normalizedUser);
+  localStorage.setItem("user", json);
+  localStorage.setItem("dev_user", json);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // SSO logins only carry JWT claims (nycu_id/role) — server-only fields like
+  // college_code stay undefined until this /auth/me refresh lands, and the
+  // college UI (e.g. 系所匯出總表 dropdown) filters on college_code.
+  const refreshUserFromServer = useCallback(async () => {
+    try {
+      const response = await apiClient.auth.getCurrentUser();
+      // The user may have logged out while /me was in flight — applying the
+      // response would resurrect the session.
+      if (!localStorage.getItem("auth_token")) return;
+      if (response?.success && response.data) {
+        const normalizedUser = normalizeUser(response.data as User);
+        // Skip the state write when nothing changed — setUser here re-renders
+        // the whole provider tree on every page load otherwise.
+        if (JSON.stringify(normalizedUser) === localStorage.getItem("user")) {
+          return;
+        }
+        persistUser(normalizedUser);
+        setUser(normalizedUser);
+        logger.debug("User profile refreshed from server", {
+          role: normalizedUser.role,
+          hasCollegeCode: !!normalizedUser.college_code,
+        });
+      }
+    } catch (err) {
+      // Keep the locally stored user — a transient /me failure must not log the user out.
+      logger.warn("Failed to refresh user profile from server", { err });
+    }
+  }, []);
 
   // Check for existing authentication on mount
   useEffect(() => {
@@ -48,16 +95,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const userData = JSON.parse(userJson);
           apiClient.setToken(token);
-          // Convert role to lowercase for frontend consistency
-          const normalizedUser = {
-            ...userData,
-            name: userData.full_name || userData.name,
-            role: userData.role?.toLowerCase(),
-          };
+          const normalizedUser = normalizeUser(userData);
           setUser(normalizedUser);
           logger.debug("Authentication restored from localStorage", {
             role: normalizedUser.role,
           });
+          // Stored user may be a stale JWT-derived stub — re-sync from the server.
+          void refreshUserFromServer();
         } catch (err) {
           logger.error("Failed to parse stored user data", { err });
           localStorage.removeItem("auth_token");
@@ -71,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     checkExistingAuth();
-  }, []);
+  }, [refreshUserFromServer]);
 
   const login = useCallback((token: string, userData: User) => {
     logger.debug("useAuth.login() called", {
@@ -82,35 +126,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       apiClient.setToken(token);
       localStorage.setItem("auth_token", token);
-      localStorage.setItem("user", JSON.stringify(userData));
-
-      // Also store as dev_user for backwards compatibility
-      const devUser = {
-        ...userData,
-        name: userData.full_name || userData.name,
-        role: userData.role?.toLowerCase(),
-      };
-      localStorage.setItem("dev_user", JSON.stringify(devUser));
-      const finalUser = {
-        ...userData,
-        name: userData.full_name || userData.name,
-        role: userData.role?.toLowerCase() as
-          | "student"
-          | "professor"
-          | "college"
-          | "admin"
-          | "super_admin",
-      };
+      const finalUser = normalizeUser(userData);
+      persistUser(finalUser);
       setUser(finalUser);
       setError(null);
       logger.debug("useAuth.login() completed", {
         role: finalUser.role,
       });
+      // SSO callbacks pass a JWT-derived stub; replace it with the full server profile.
+      void refreshUserFromServer();
     } catch (err) {
       logger.error("Error in login", { err });
       setError(err instanceof Error ? err.message : "Login failed");
     }
-  }, []);
+  }, [refreshUserFromServer]);
 
   const logout = useCallback(() => {
     logger.debug("Logging out");
@@ -153,11 +182,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await apiClient.users.updateProfile(userData);
 
       if (response.success && response.data) {
-        // Map full_name to name for component compatibility
-        const updatedUser = {
-          ...response.data,
-          name: response.data.full_name ?? response.data.name,
-        };
+        const updatedUser = normalizeUser(response.data);
+        persistUser(updatedUser);
         setUser(updatedUser);
       } else {
         throw new Error(response.message || "Update failed");

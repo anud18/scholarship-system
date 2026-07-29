@@ -69,7 +69,16 @@ async def _seed_scholarship_and_config(db: AsyncSession, *, requires_college_rev
     return config
 
 
-async def _seed_app(db: AsyncSession, *, student: User, config: ScholarshipConfiguration) -> Application:
+async def _seed_app(
+    db: AsyncSession,
+    *,
+    student: User,
+    config: ScholarshipConfiguration,
+    subtypes: list[str] | None = None,
+) -> Application:
+    """Seed an application. ``subtypes`` is the configured sub-type list; leaving
+    it None keeps the column at its default ``[]``, which the service treats as
+    the single implicit "default" sub-type."""
     app = Application(
         app_id=f"APP-GATING-{config.id}",
         user_id=student.id,
@@ -78,6 +87,7 @@ async def _seed_app(db: AsyncSession, *, student: User, config: ScholarshipConfi
         academic_year=114,
         sub_type_selection_mode="single",
         status=ApplicationStatus.submitted.value,
+        scholarship_subtype_list=subtypes if subtypes is not None else [],
     )
     db.add(app)
     await db.commit()
@@ -109,6 +119,42 @@ async def _seed_review(
         recommendation=recommendation,
     )
     db.add(item)
+    await db.commit()
+
+
+async def _seed_multi_item_review(
+    db: AsyncSession,
+    *,
+    application: Application,
+    reviewer: User,
+    items: list[tuple[str, str]],
+    overall_recommendation: str,
+) -> None:
+    """Seed ONE review carrying several sub-type items.
+
+    ``application_reviews`` is uniquely constrained on (application_id,
+    reviewer_id), so a reviewer's verdicts across sub-types all hang off a
+    single review row — this is the shape a split verdict actually has in the
+    database. ``items`` is a list of (sub_type_code, recommendation) pairs.
+    """
+    review = ApplicationReview(
+        application_id=application.id,
+        reviewer_id=reviewer.id,
+        recommendation=overall_recommendation,
+        reviewed_at=datetime.now(timezone.utc),
+    )
+    db.add(review)
+    await db.commit()
+    await db.refresh(review)
+
+    for sub_type_code, recommendation in items:
+        db.add(
+            ApplicationReviewItem(
+                review_id=review.id,
+                sub_type_code=sub_type_code,
+                recommendation=recommendation,
+            )
+        )
     await db.commit()
 
 
@@ -220,3 +266,146 @@ async def test_full_reject_is_terminal_regardless_of_pipeline(db: AsyncSession):
     final_status = await service.update_application_status(app.id)
 
     assert _val(final_status) == ApplicationStatus.rejected.value
+
+
+# ---------------------------------------------------------------------------
+# Multi-sub-type coverage — a verdict is only final once EVERY configured
+# sub-type has been decided.
+#
+# Two defects lived in the same expression. `get_subtype_cumulative_status`
+# only returns sub-types somebody actually reviewed, and the professor branch
+# judged all_approved/all_rejected over that partial set while having no
+# `else` for a mixed verdict. So:
+#   * approve + reject in one submission -> neither branch fired, status was
+#     left at whatever it was (`submitted`), which is what surfaced in the
+#     college queue as 已提交 next to an otherwise identical 審核中 row.
+#   * reject on 1 of 2 sub-types -> read as "all rejected", terminally
+#     rejecting the application (and locking the professor out per the
+#     professor-reject-is-terminal policy) before sub-type 2 was ever seen.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_professor_split_verdict_advances_to_under_review(db: AsyncSession):
+    """approve on one sub-type + reject on the other must not leave status untouched.
+
+    This is the reported scenario: an application configured for [nstc, moe_1w]
+    whose professor recommended nstc and rejected moe_1w sat at ``submitted``
+    (已提交) while a single-sub-type application at the very same stage showed
+    ``under_review`` (審核中).
+    """
+    student = _user(UserRole.student, "s5")
+    professor = _user(UserRole.professor, "p5")
+    db.add_all([student, professor])
+    await db.commit()
+    await db.refresh(student)
+    await db.refresh(professor)
+
+    config = await _seed_scholarship_and_config(db, requires_college_review=True)
+    app = await _seed_app(db, student=student, config=config, subtypes=["nstc", "moe_1w"])
+    await _seed_multi_item_review(
+        db,
+        application=app,
+        reviewer=professor,
+        items=[("nstc", "approve"), ("moe_1w", "reject")],
+        overall_recommendation="partial_approve",
+    )
+
+    service = ReviewService(db)
+    final_status = await service.update_application_status(app.id)
+
+    assert _val(final_status) == ApplicationStatus.under_review.value, (
+        "a split professor verdict must advance the application, not leave it at "
+        f"the pre-review status; got {final_status}"
+    )
+    assert _val(app.status) == ApplicationStatus.under_review.value
+    assert _val(app.review_stage) == ReviewStage.professor_reviewed.value
+
+
+@pytest.mark.asyncio
+async def test_reject_on_one_of_two_subtypes_is_not_terminal(db: AsyncSession):
+    """Rejecting 1 of 2 sub-types must NOT terminally reject the application.
+
+    The UI lets a professor decide sub-types one at a time ("審核進度 X / N"),
+    so an un-decided sub-type is simply absent from the cumulative status. Read
+    naively that lone reject looks like a unanimous rejection, which would set
+    status=rejected and lock the professor out of ever reviewing sub-type 2.
+    """
+    student = _user(UserRole.student, "s6")
+    professor = _user(UserRole.professor, "p6")
+    db.add_all([student, professor])
+    await db.commit()
+    await db.refresh(student)
+    await db.refresh(professor)
+
+    config = await _seed_scholarship_and_config(db, requires_college_review=True)
+    app = await _seed_app(db, student=student, config=config, subtypes=["nstc", "moe_1w"])
+    # Only nstc is decided; moe_1w is left untouched for a later submission.
+    await _seed_review(db, application=app, reviewer=professor, sub_type_code="nstc", recommendation="reject")
+
+    service = ReviewService(db)
+    final_status = await service.update_application_status(app.id)
+
+    assert _val(final_status) != ApplicationStatus.rejected.value, (
+        "a reject covering only some sub-types must not be treated as a full "
+        "rejection — that permanently locks the professor out of the rest"
+    )
+    assert _val(final_status) == ApplicationStatus.under_review.value
+
+
+@pytest.mark.asyncio
+async def test_approve_on_one_of_two_subtypes_does_not_finalize(db: AsyncSession):
+    """Approving 1 of 2 sub-types must not finalize, even with no college step.
+
+    ``requires_college_review=False`` removes the college gate, so this isolates
+    the coverage check: the only thing keeping the app off ``approved`` is that
+    moe_1w has not been decided by anyone yet.
+    """
+    student = _user(UserRole.student, "s7")
+    professor = _user(UserRole.professor, "p7")
+    db.add_all([student, professor])
+    await db.commit()
+    await db.refresh(student)
+    await db.refresh(professor)
+
+    config = await _seed_scholarship_and_config(db, requires_college_review=False)
+    app = await _seed_app(db, student=student, config=config, subtypes=["nstc", "moe_1w"])
+    await _seed_review(db, application=app, reviewer=professor, sub_type_code="nstc", recommendation="approve")
+
+    service = ReviewService(db)
+    final_status = await service.update_application_status(app.id)
+
+    assert (
+        _val(final_status) == ApplicationStatus.under_review.value
+    ), f"moe_1w is still undecided, so the application is not approved; got {final_status}"
+
+
+@pytest.mark.asyncio
+async def test_verdict_finalizes_once_every_subtype_is_decided(db: AsyncSession):
+    """The counterpart to the coverage gate: full coverage still resolves.
+
+    Same config as above (no college step). With every sub-type decided, the
+    mixed verdict resolves to ``partial_approved`` rather than sitting at
+    ``under_review`` forever.
+    """
+    student = _user(UserRole.student, "s8")
+    professor = _user(UserRole.professor, "p8")
+    db.add_all([student, professor])
+    await db.commit()
+    await db.refresh(student)
+    await db.refresh(professor)
+
+    config = await _seed_scholarship_and_config(db, requires_college_review=False)
+    app = await _seed_app(db, student=student, config=config, subtypes=["nstc", "moe_1w"])
+    await _seed_multi_item_review(
+        db,
+        application=app,
+        reviewer=professor,
+        items=[("nstc", "approve"), ("moe_1w", "reject")],
+        overall_recommendation="partial_approve",
+    )
+
+    service = ReviewService(db)
+    final_status = await service.update_application_status(app.id)
+
+    assert _val(final_status) == ApplicationStatus.partial_approved.value

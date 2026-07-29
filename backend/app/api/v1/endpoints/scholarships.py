@@ -141,6 +141,8 @@ async def get_all_scholarships(
                     "renewal_college_review_end": (
                         config.renewal_college_review_end.isoformat() if config.renewal_college_review_end else None
                     ),
+                    "renewal_requires_professor_review": config.renewal_requires_professor_review,
+                    "renewal_requires_college_review": config.renewal_requires_college_review,
                     "requires_professor_recommendation": config.requires_professor_recommendation,
                     "professor_review_start": (
                         config.professor_review_start.isoformat() if config.professor_review_start else None
@@ -171,6 +173,8 @@ async def get_all_scholarships(
                     "renewal_professor_review_end": None,
                     "renewal_college_review_start": None,
                     "renewal_college_review_end": None,
+                    "renewal_requires_professor_review": False,
+                    "renewal_requires_college_review": False,
                     "requires_professor_recommendation": False,
                     "professor_review_start": None,
                     "professor_review_end": None,

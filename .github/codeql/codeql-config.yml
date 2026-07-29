@@ -13,9 +13,10 @@ packs:
 
 # SUPPRESSED ALERTS
 #
-# CodeQL does NOT support inline comment suppressions (e.g., `# codeql[...]`).
-# File-specific query exclusions are handled via the filter-sarif GitHub Action
-# in .github/workflows/codeql.yml (lines 111-119).
+# CodeQL does NOT support inline comment suppressions (e.g., `# lgtm[...]`,
+# `# codeql[...]`). File-specific query exclusions are handled via the
+# filter-sarif GitHub Action steps ("Filter ... SARIF") in
+# .github/workflows/codeql.yml.
 #
 # Current suppressions (via filter-sarif):
 #
@@ -29,9 +30,9 @@ packs:
 #   - Pattern length check (max 200 chars)
 #   - Dangerous ReDoS pattern detection (6 patterns checked)
 #   - Regex syntax compilation test with timeout
-#   - Signal-based timeout protection (1 second max)
+#   - SIGALRM-based timeout protection (1 second max; Unix-only)
 #   - JSON round-trip sanitization to break taint flow
-#   - Comprehensive test coverage (22 test cases)
+#   - Comprehensive test coverage in backend/app/tests/test_regex_validator.py
 #
 # This is a legitimate use case where administrators define regex patterns
 # for configuration validation (emails, API keys, etc.). Using re.escape()

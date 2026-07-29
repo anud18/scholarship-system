@@ -162,12 +162,14 @@ def test_agree_terms_defaults_false():
 
 def test_workflow_flags_default_false():
     # Pin: requires_professor_recommendation +
-    # requires_college_review default False. These are set on
-    # the underlying scholarship config — the response surfaces
-    # them for the frontend, but default is "no extra workflow".
+    # requires_college_review + allow_college_view_distribution
+    # default False. These are set on the underlying scholarship
+    # config — the response surfaces them for the frontend, but
+    # default is "no extra workflow / distribution not opened".
     r = ApplicationListResponse(**_kwargs())
     assert r.requires_professor_recommendation is False
     assert r.requires_college_review is False
+    assert r.allow_college_view_distribution is False
 
 
 def test_scholarship_subtype_list_defaults_empty():

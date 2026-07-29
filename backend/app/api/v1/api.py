@@ -24,6 +24,7 @@ from app.api.v1.endpoints import (
     quota_dashboard,
     reference_data,
     renewal,
+    renewal_import,
     reviews,
     roster_schedules,
     scholarship_configurations,
@@ -68,6 +69,7 @@ api_router.include_router(professor_student.router, prefix="/professor-student",
 api_router.include_router(college_review.router, prefix="/college-review", tags=["College Review"])
 api_router.include_router(reviews.router, prefix="/reviews", tags=["Reviews"])
 api_router.include_router(batch_import.router, prefix="/college-review/batch-import", tags=["Batch Import"])
+api_router.include_router(renewal_import.router, prefix="/college-review/renewal-import", tags=["Renewal Import"])
 api_router.include_router(email_management.router, prefix="/email-management", tags=["Email Management"])
 api_router.include_router(email_automation.router, prefix="/email-automation", tags=["Email Automation"])
 api_router.include_router(nycu_employee.router, prefix="/nycu-employee", tags=["NYCU Employee"])

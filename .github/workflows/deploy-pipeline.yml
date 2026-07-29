@@ -326,9 +326,16 @@ jobs:
         run: |
           echo "Running smoke tests..."
 
-          # Test API endpoints
+          # Test API endpoints.
+          #
+          # Do NOT smoke-test /api/v1/docs here: staging runs with
+          # ENVIRONMENT=production (see docker-compose.staging.yml), and
+          # backend/app/main.py deliberately serves docs_url/redoc_url/openapi_url
+          # as None in that case, so Swagger UI 404s by design. Hit a real mounted
+          # API route instead — that proves the v1 router is wired up, which is
+          # what the docs check was standing in for.
           curl -f http://localhost:8000/health || exit 1
-          curl -f http://localhost:8000/api/v1/docs || exit 1
+          curl -f http://localhost:8000/api/v1/scholarships || exit 1
 
           echo "✅ Smoke tests passed"
 

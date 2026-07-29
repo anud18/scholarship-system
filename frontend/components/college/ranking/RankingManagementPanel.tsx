@@ -357,12 +357,28 @@ export function RankingManagementPanel({
               department_name?: string;
               department_code?: string;
               scholarship_type?: string;
-              eligible_subtypes?: string[];
+              // Objects (not plain codes): backend returns per-subtype review
+              // status, consumed as-is by CollegeRankingTable.
+              eligible_subtypes?: Array<{
+                code: string;
+                is_rejected: boolean;
+                rejected_by?: {
+                  role: string;
+                  name: string;
+                  reviewed_at: string;
+                };
+                rejection_reason?: string;
+              }>;
               is_renewal?: boolean;
               renewal_year?: number | null;
               status?: string;
               review_status?: string;
               student_info?: { display_name?: string; student_id?: string };
+              // #68: nationality/identity snapshot keys for the 國籍/身分 column
+              student_data?: {
+                std_nation?: string | null;
+                std_identity?: number | string | null;
+              };
             };
           }
           const rankingPayload = response.data as {
@@ -398,6 +414,7 @@ export function RankingManagementPanel({
               department_name: item.application?.department_name,
               department_code: item.application?.department_code,
               scholarship_type: item.application?.scholarship_type,
+              student_data: item.application?.student_data,
               sub_type: item.sub_type,
               eligible_subtypes: item.application?.eligible_subtypes || [],
               rank_position: item.rank_position,

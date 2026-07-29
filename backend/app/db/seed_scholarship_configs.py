@@ -223,14 +223,21 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             },
             "amount": 40000,
             "currency": "TWD",
-            "renewal_application_start_date": now - timedelta(days=90),
-            "renewal_application_end_date": now - timedelta(days=60),
+            # The renewal cycle runs alongside the general cycle (續領 and 新申請
+            # open together in the real PhD process). Keeping it OPEN is what
+            # makes the admin 匯入續領生 surface usable on a freshly seeded DB —
+            # `renewal_import` rejects the upload with HTTP 400
+            # "此獎學金配置目前不在續領期間" whenever this window has closed.
+            "renewal_application_start_date": now - timedelta(days=45),
+            "renewal_application_end_date": now + timedelta(days=15),
             "application_start_date": now - timedelta(days=45),
             "application_end_date": now + timedelta(days=15),
-            "renewal_professor_review_start": now - timedelta(days=55),
-            "renewal_professor_review_end": now - timedelta(days=40),
-            "renewal_college_review_start": now - timedelta(days=35),
-            "renewal_college_review_end": now - timedelta(days=20),
+            "renewal_requires_professor_review": True,
+            "renewal_professor_review_start": now - timedelta(days=5),
+            "renewal_professor_review_end": now + timedelta(days=30),
+            "renewal_requires_college_review": True,
+            "renewal_college_review_start": now - timedelta(days=5),
+            "renewal_college_review_end": now + timedelta(days=60),
             "requires_professor_recommendation": True,
             "professor_review_start": now - timedelta(days=5),
             "professor_review_end": now + timedelta(days=30),
@@ -364,7 +371,9 @@ async def seed_scholarship_rules(session: AsyncSession) -> None:
             "expected_value": "1,2,3",
             "message": "博士生獎學金需要在學生身分 1: 在學 2: 應畢 3: 延畢",
             "message_en": "PhD scholarship requires active student status",
-            "is_hard_rule": False,
+            # 硬性規則（#1139）：休學/退學（4/5）必須在匯入預檢與造冊資格
+            # 檢查中被標記，不可静默通過
+            "is_hard_rule": True,
             "is_warning": False,
             "priority": 2,
             "is_active": True,
@@ -558,7 +567,9 @@ async def seed_scholarship_rules(session: AsyncSession) -> None:
             "expected_value": "1,2,3",
             "message": "逕讀博士獎學金需要在學生身分 1: 在學 2: 應畢 3: 延畢",
             "message_en": "Direct PhD scholarship requires active student status",
-            "is_hard_rule": False,
+            # 硬性規則（#1139）：休學/退學（4/5）必須在匯入預檢與造冊資格
+            # 檢查中被標記，不可静默通過
+            "is_hard_rule": True,
             "is_warning": False,
             "priority": 2,
             "is_active": True,

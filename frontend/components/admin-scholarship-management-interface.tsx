@@ -1539,7 +1539,7 @@ export function AdminScholarshipManagementInterface({
                 申請文件說明文字
               </CardTitle>
               <CardDescription className="text-gray-600">
-                顯示在學生申請步驟3「申請文件」區塊下方的說明文字，留空則不顯示
+                顯示在學生申請表單文件上傳區塊下方的說明文字，留空則不顯示
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

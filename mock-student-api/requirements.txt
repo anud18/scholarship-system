@@ -1,4 +1,5 @@
-fastapi==0.129.0
+fastapi==0.139.2  # Drops starlette<1.0 pin, required for starlette security fixes
+starlette==1.3.1  # Security: PYSEC-2026-161/248/249/2280/2281 (Host/path URL reconstruction, urlencoded form limits, StaticFiles UNC SSRF, HTTPEndpoint method dispatch)
 uvicorn[standard]==0.38.0
-pydantic==2.10.0
+pydantic==2.13.4  # Match backend pin; required by fastapi 0.139.x
 requests==2.33.0

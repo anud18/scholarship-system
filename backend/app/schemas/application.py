@@ -237,7 +237,11 @@ class ApplicationUpdate(BaseModel):
 
     scholarship_subtype_list: Optional[List[str]] = Field(None, description="獎學金子類型列表")
     form_data: Optional[ApplicationFormData] = Field(None, description="表單資料")
-    status: Optional[str] = Field(None, description="申請狀態")
+    # SECURITY: `status` is deliberately NOT accepted here. It used to be assigned
+    # straight onto the model in ApplicationService.update_application, letting a
+    # student PUT {"status": "approved"} onto their own editable draft and skip
+    # professor review, college ranking and quota allocation entirely. Workflow
+    # transitions belong to the guarded PUT /applications/{id}/status path.
     agree_terms: Optional[bool] = Field(None, description="同意條款")
     is_renewal: Optional[bool] = Field(None, description="是否為續領申請")
     sub_type_preferences: Optional[List[str]] = Field(None, description="Ordered sub-type preference list")
@@ -346,8 +350,6 @@ class ApplicationResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     meta_data: Optional[Dict[str, Any]] = None
-    application_document_url: Optional[str] = None
-    application_document_original_filename: Optional[str] = None
 
     reviews: List[ApplicationReviewResponse] = []
     professor_review_items: List[Dict[str, Any]] = []  # Per sub-type professor recommendations with comments
@@ -359,6 +361,14 @@ class ApplicationResponse(BaseModel):
     student_pid: Optional[str] = None  # std_pid
     student_email: Optional[str] = None  # com_email
     student_phone: Optional[str] = None  # com_cellphone
+    postal_account: Optional[str] = Field(
+        None, description="郵局帳號（來自學生 UserProfile.account_number，非 submitted_form_data）"
+    )
+    # 指導教授資訊與郵局帳號一樣存放在 UserProfile（申請精靈的固定欄位區塊），
+    # 表單設定卻把它們列為 advisor_* 固定欄位，因此表單資料頁需要從這裡取值。
+    advisor_name: Optional[str] = Field(None, description="指導教授姓名（來自學生 UserProfile）")
+    advisor_email: Optional[str] = Field(None, description="指導教授Email（來自學生 UserProfile）")
+    advisor_nycu_id: Optional[str] = Field(None, description="指導教授本校人事編號（來自學生 UserProfile）")
 
     # === Academic Organization ===
     academy_code: Optional[str] = None  # std_academyno / trm_academyno
@@ -391,6 +401,9 @@ class ApplicationResponse(BaseModel):
     # Workflow configuration flags
     requires_professor_recommendation: bool = False
     requires_college_review: bool = False
+    # Admin toggle (ScholarshipConfiguration.allow_college_view_distribution):
+    # the student timeline's final step is only checked once this is opened
+    allow_college_view_distribution: bool = False
 
     @property
     def is_editable(self) -> bool:
@@ -485,8 +498,6 @@ class ApplicationStatusUpdateResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     meta_data: Optional[Dict[str, Any]] = None
-    application_document_url: Optional[str] = None
-    application_document_original_filename: Optional[str] = None
     reviews: List[ApplicationReviewResponse] = []
 
     # Additional display fields
@@ -591,8 +602,6 @@ class ApplicationListResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     meta_data: Optional[Dict[str, Any]] = None
-    application_document_url: Optional[str] = None
-    application_document_original_filename: Optional[str] = None
 
     # Additional display fields
     student_name: Optional[str] = None
@@ -641,6 +650,13 @@ class ApplicationListResponse(BaseModel):
     # Workflow configuration flags
     requires_professor_recommendation: bool = False
     requires_college_review: bool = False
+    # Admin toggle (ScholarshipConfiguration.allow_college_view_distribution):
+    # the student timeline's final step is only checked once this is opened
+    allow_college_view_distribution: bool = False
+    # Professor-centric review status for the professor queue: True once the
+    # viewing professor has an ApplicationReview row for this application.
+    # None for endpoints/roles where "the professor" is not defined.
+    has_professor_reviewed: Optional[bool] = None
 
     @property
     def is_editable(self) -> bool:

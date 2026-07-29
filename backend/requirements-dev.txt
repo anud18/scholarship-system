@@ -31,4 +31,5 @@ watchdog==5.0.3  # Updated for Python 3.13 compatibility
 
 # API documentation
 mkdocs==1.6.0  # Updated for Python 3.13 compatibility
-mkdocs-material==9.6.0  # Updated for Python 3.13 compatibility
+mkdocs-material==9.7.7  # 9.6.0 caps pymdown-extensions at ~=10.2, blocking the 11.x security fix below
+pymdown-extensions==11.0.1  # Security: CVE-2026-61632 (b64 extension path traversal / arbitrary image-file disclosure, <11.0.0)

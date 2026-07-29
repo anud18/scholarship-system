@@ -50,6 +50,10 @@ class BatchImport(Base):
         index=True,
     )
 
+    # Discriminates the general application importer ("application") from the
+    # renewal-students importer ("renewal"); lets both reuse this table.
+    import_type = Column(String(20), nullable=False, default="application", index=True)
+
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

@@ -70,9 +70,9 @@ Even if attacker manipulates `localStorage.setItem('auth_token', 'http://evil.co
 - Pattern length check (max 200 chars)
 - Dangerous ReDoS pattern detection (6 patterns checked)
 - Regex syntax compilation test with timeout
-- Signal-based timeout protection (1 second max)
+- SIGALRM-based timeout protection (1 second max; Unix-only — skipped on platforms without `signal.SIGALRM`)
 - JSON round-trip sanitization to break taint flow
-- Comprehensive test coverage (22 test cases)
+- Comprehensive test coverage in `backend/app/tests/test_regex_validator.py`
 
 This is a legitimate use case where administrators define regex patterns for configuration validation (emails, API keys, etc.). Using `re.escape()` would break functionality by converting patterns to literal strings.
 
@@ -94,7 +94,7 @@ No stack trace information can reach the API response due to these comprehensive
 
 To suppress a new false positive alert:
 
-1. **Add pattern to workflow:** Edit `.github/workflows/codeql.yml` line 116
+1. **Add pattern to workflow:** Edit the `patterns:` block of the matching language's "Filter ... SARIF" step in `.github/workflows/codeql.yml` (add a new conditional filter-sarif step if that language has none)
 2. **Document justification:** Add explanation to `codeql-config.yml`
 3. **Test thoroughly:** Verify the alert is truly a false positive
 4. **Commit changes:** Push to trigger new CodeQL scan
@@ -115,26 +115,26 @@ These suppressions were reviewed and approved based on:
 
 - ✅ Comprehensive input validation
 - ✅ Multiple sanitization layers
-- ✅ Extensive test coverage (61 tests total: 27 URL + 22 regex + 12 sanitization)
+- ✅ Extensive test coverage (see Test Coverage below)
 - ✅ Industry-standard security practices
 - ✅ Defense-in-depth architecture
 
 ## Test Coverage
 
-- **URL Validation:** 27 tests in `frontend/lib/utils/url-validation.test.ts`
+- **URL Validation:** `frontend/lib/utils/url-validation.test.ts`
   - Same-origin validation tests
   - External URL rejection tests
   - Endpoint allowlist enforcement
   - Parameter encoding and injection prevention
   - Integration tests (storage → builder → validation)
 
-- **Regex Validator:** 22 tests in `test_regex_validator.py`
+- **Regex Validator:** `backend/app/tests/test_regex_validator.py`
   - Valid pattern tests
   - ReDoS pattern rejection
   - Timeout protection
   - Security scenarios
 
-- **Sanitization:** 12 tests in `test_bank_verification_sanitization.py`
+- **Sanitization:** `backend/app/tests/test_bank_verification_stack_trace_scrub.py`
   - Stack trace detection
   - Pattern removal
   - Nested structure handling

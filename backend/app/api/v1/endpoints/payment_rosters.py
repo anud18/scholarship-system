@@ -27,6 +27,7 @@ from app.models.payment_roster import (
     RosterStatus,
     RosterTriggerType,
     StudentVerificationStatus,
+    verification_status_label,
 )
 from app.models.user import User, UserRole
 from app.schemas.response import ApiResponse
@@ -455,6 +456,10 @@ async def list_payment_rosters(
     取得造冊清單
     Get payment roster list
     """
+    # SECURITY: roster rows embed recipient 身分證字號 and 郵局帳號. Every mutating
+    # handler in this router already role-checks; the read/export handlers did not,
+    # so any authenticated user (including a student) could read every roster.
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
     from app.models.scholarship import ScholarshipConfiguration
 
     try:
@@ -678,8 +683,9 @@ async def preview_roster_students(
                 "missing_data": 0,
                 "verification_failed": 0,
                 "rules_failed": 0,
-                "no_bank_account": 0,
             },
+            # 缺少銀行帳戶不排除造冊，僅提醒補件（撥款前仍會擋）
+            "missing_bank_account_count": 0,
             "total_amount": 0.0,
             "verification_stats": {
                 "verified": 0,
@@ -777,7 +783,7 @@ async def preview_roster_students(
                 logger.warning(f"Eligibility validation failed for application {application.id}", exc_info=True)
                 student_info["is_eligible"] = True  # Don't exclude on validation error
 
-            # Validation Step 4: Bank account check
+            # Validation Step 4: Bank account check（僅提醒，不影響納入與否）
             bank_account, field_name = extract_bank_account(application)
             student_info["has_bank_account"] = bool(bank_account)
             student_info["bank_account_field"] = field_name
@@ -789,7 +795,7 @@ async def preview_roster_students(
             # Check verification status
             if verification_status != StudentVerificationStatus.VERIFIED:
                 is_included = False
-                exclusion_reason = f"學籍驗證未通過: {verification_status.value}"
+                exclusion_reason = f"學籍驗證未通過：{verification_status_label(verification_status)}"
                 summary["exclusion_breakdown"]["verification_failed"] += 1
 
             # Check eligibility rules
@@ -799,14 +805,13 @@ async def preview_roster_students(
                 exclusion_reason = f"不符合獎學金規則: {'; '.join(failed_rules)}"
                 summary["exclusion_breakdown"]["rules_failed"] += 1
 
-            # Check bank account
-            elif not bank_account:
-                is_included = False
-                exclusion_reason = "缺少銀行帳戶資訊"
-                summary["exclusion_breakdown"]["no_bank_account"] += 1
-
             student_info["is_included"] = is_included
             student_info["exclusion_reason"] = exclusion_reason
+
+            # 只統計「仍列入造冊」但缺帳戶的學生 — 這個數字驅動前端的補件提醒，
+            # 被其他原因排除者不需補件，不應計入
+            if is_included and not bank_account:
+                summary["missing_bank_account_count"] += 1
 
             if is_included:
                 summary["included_count"] += 1
@@ -1284,6 +1289,7 @@ async def get_payment_roster(
     取得特定造冊詳細資訊
     Get specific payment roster details
     """
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
     try:
         # 使用 eager loading 避免 MissingGreenlet 錯誤
         stmt = (
@@ -1326,7 +1332,7 @@ async def get_roster_items(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     verification_status: Optional[StudentVerificationStatus] = Query(None),
-    is_qualified: Optional[bool] = Query(None),
+    is_included: Optional[bool] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -1334,6 +1340,7 @@ async def get_roster_items(
     取得造冊明細項目
     Get roster items
     """
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
     try:
         # 檢查造冊是否存在
         roster_stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)
@@ -1352,8 +1359,8 @@ async def get_roster_items(
         # 套用篩選條件
         if verification_status:
             stmt = stmt.where(PaymentRosterItem.verification_status == verification_status)
-        if is_qualified is not None:
-            stmt = stmt.where(PaymentRosterItem.is_qualified == is_qualified)
+        if is_included is not None:
+            stmt = stmt.where(PaymentRosterItem.is_included.is_(is_included))
 
         # 分頁查詢
         stmt = stmt.order_by(PaymentRosterItem.created_at).offset(skip).limit(limit)
@@ -1494,6 +1501,7 @@ def preview_roster_export(
     預覽造冊Excel匯出內容
     Preview roster Excel export content
     """
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
     try:
         roster = db.query(PaymentRoster).filter(PaymentRoster.id == roster_id).first()
 
@@ -1596,6 +1604,7 @@ def export_roster_to_excel(
     匯出造冊至Excel (STD_UP_MIXLISTA格式)
     Export roster to Excel (STD_UP_MIXLISTA format)
     """
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
     try:
         roster = db.query(PaymentRoster).filter(PaymentRoster.id == roster_id).first()
 
@@ -1688,6 +1697,7 @@ async def download_roster_excel(
     下載造冊Excel檔案 (支援MinIO和本地檔案)
     Download roster Excel file (supports MinIO and local files)
     """
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
     # trace_id is injected by add_trace_id_middleware (see backend/app/main.py).
     # We thread it into every download-path log line so the e2e diagnose helper
     # (frontend/e2e/helpers/logs.ts) can correlate failures via grep — without
@@ -1861,6 +1871,7 @@ async def get_roster_statistics(
     取得造冊統計資訊
     Get roster statistics
     """
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
     try:
         stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)
 
@@ -1885,11 +1896,11 @@ async def get_roster_statistics(
             ).scalar()
             verification_stats[status_val.value] = item_count
 
-        # 統計合格/不合格人數
+        # 統計納入造冊/排除人數（與造冊詳情、Excel「納入造冊」欄同源）
         qualified_stmt = (
             select(count())
             .select_from(PaymentRosterItem)
-            .where(PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.is_qualified.is_(True))
+            .where(PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.is_included.is_(True))
         )
         qualified_result = await db.execute(qualified_stmt)
         qualified_count = qualified_result.scalar() or 0
@@ -1897,7 +1908,7 @@ async def get_roster_statistics(
         disqualified_stmt = (
             select(count())
             .select_from(PaymentRosterItem)
-            .where(PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.is_qualified.is_(False))
+            .where(PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.is_included.is_(False))
         )
         disqualified_result = await db.execute(disqualified_stmt)
         disqualified_count = disqualified_result.scalar() or 0
@@ -2131,6 +2142,7 @@ async def get_roster_audit_logs(
     取得造冊稽核日誌
     Get roster audit logs
     """
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
     try:
         stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)
 

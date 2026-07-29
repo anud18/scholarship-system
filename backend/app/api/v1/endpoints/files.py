@@ -3,6 +3,7 @@ File proxy endpoints for secure file access
 """
 
 import logging
+import os
 import urllib.parse
 from typing import Optional
 
@@ -15,12 +16,62 @@ from sqlalchemy.orm import selectinload
 from app.core.security import verify_token
 from app.db.deps import get_db
 from app.models.application import Application, ApplicationFile
-from app.models.user import UserRole
+from app.models.user import User, UserRole
 from app.services.auth_service import AuthService
 from app.services.minio_service import minio_service
+from app.utils.application_helpers import get_college_code_from_data
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# SECURITY: never echo the client-supplied MIME type back on our own origin.
+# ApplicationFile.mime_type / .content_type are persisted verbatim from the
+# uploader's multipart part header (application_service.py), and upload
+# validation only checks the file *extension*. Serving an attacker-chosen
+# "text/html" or "image/svg+xml" with Content-Disposition: inline would execute
+# script same-origin against a reviewer's session — and this FastAPI response
+# bypasses the Next.js middleware CSP entirely. Derive the type from the
+# already-validated extension instead, and fall back to a non-renderable type.
+_SAFE_CONTENT_TYPES = {
+    ".pdf": "application/pdf",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+_FALLBACK_CONTENT_TYPE = "application/octet-stream"
+
+
+def _safe_content_type(filename: Optional[str]) -> str:
+    """Map a stored filename to a safe, non-scriptable Content-Type."""
+    _, ext = os.path.splitext((filename or "").strip().rstrip(". ").lower())
+    return _SAFE_CONTENT_TYPES.get(ext, _FALLBACK_CONTENT_TYPE)
+
+
+def _assert_college_may_access(current_user: User, application: Application, file_id: int) -> None:
+    """Restrict a 學院 reviewer to applications from their own college.
+
+    The project's access model scopes college staff by ``std_academyno`` (see
+    college_review_service). This branch previously fell through to an
+    unconditional ``pass`` for UserRole.college, letting College-A staff stream
+    any other college's transcripts and bank passbooks by walking file ids.
+    """
+    user_college = (current_user.college_code or "").strip()
+    owner_college = (get_college_code_from_data(application.student_data or {}) or "").strip()
+    if not user_college or user_college != owner_college:
+        logger.warning(
+            "SECURITY: college user attempted cross-college file access",
+            extra={
+                "user_id": current_user.id,
+                "user_college": user_college,
+                "owner_college": owner_college,
+                "file_id": file_id,
+                "application_id": application.id,
+            },
+        )
+        # 404 rather than 403 so the response does not confirm the file exists.
+        raise HTTPException(status_code=404, detail="File not found")
 
 
 @router.get("/applications/{application_id}/files/{file_id}")
@@ -98,12 +149,11 @@ async def get_file_proxy(
                     },
                 )
                 raise HTTPException(status_code=403, detail="Access denied - no relationship with student")
-        elif current_user.role in [
-            UserRole.college,
-            UserRole.admin,
-            UserRole.super_admin,
-        ]:
-            # College, Admin, and Super Admin can access any file
+        elif current_user.role == UserRole.college:
+            # College staff are scoped to their own college's applicants.
+            _assert_college_may_access(current_user, application, file_id)
+        elif current_user.role in (UserRole.admin, UserRole.super_admin):
+            # Admin and Super Admin can access any file
             pass
         else:
             # Other roles are not allowed
@@ -123,8 +173,9 @@ async def get_file_proxy(
 
         file_stream = minio_service.get_file_stream(file_record.object_name)
 
-        # Determine content type
-        content_type = file_record.mime_type or file_record.content_type or "application/octet-stream"
+        # Determine content type from the validated extension, never from the
+        # client-supplied MIME stored at upload time (see _safe_content_type).
+        content_type = _safe_content_type(file_record.filename)
 
         # Create streaming response
         def generate():
@@ -138,9 +189,14 @@ async def get_file_proxy(
         # Handle filename encoding for non-ASCII characters (e.g., Chinese)
         encoded_filename = urllib.parse.quote(file_record.filename, safe="")
 
+        # Only render inline for types we recognise as safe; anything unknown is
+        # forced to download so the browser never renders it in our origin.
+        disposition = "inline" if content_type != _FALLBACK_CONTENT_TYPE else "attachment"
+
         headers = {
-            "Content-Disposition": f"inline; filename*=UTF-8''{encoded_filename}",
+            "Content-Disposition": f"{disposition}; filename*=UTF-8''{encoded_filename}",
             "Cache-Control": "private, max-age=3600",  # Cache for 1 hour
+            "X-Content-Type-Options": "nosniff",
         }
 
         return StreamingResponse(generate(), media_type=content_type, headers=headers)
@@ -227,12 +283,11 @@ async def download_file_proxy(
                     },
                 )
                 raise HTTPException(status_code=403, detail="Access denied - no relationship with student")
-        elif current_user.role in [
-            UserRole.college,
-            UserRole.admin,
-            UserRole.super_admin,
-        ]:
-            # College, Admin, and Super Admin can access any file
+        elif current_user.role == UserRole.college:
+            # College staff are scoped to their own college's applicants.
+            _assert_college_may_access(current_user, application, file_id)
+        elif current_user.role in (UserRole.admin, UserRole.super_admin):
+            # Admin and Super Admin can access any file
             pass
         else:
             # Other roles are not allowed
@@ -252,8 +307,9 @@ async def download_file_proxy(
 
         file_stream = minio_service.get_file_stream(file_record.object_name)
 
-        # Determine content type
-        content_type = file_record.mime_type or file_record.content_type or "application/octet-stream"
+        # Determine content type from the validated extension, never from the
+        # client-supplied MIME stored at upload time (see _safe_content_type).
+        content_type = _safe_content_type(file_record.filename)
 
         # Create streaming response with download headers
         def generate():
@@ -270,6 +326,7 @@ async def download_file_proxy(
         headers = {
             "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
             "Cache-Control": "no-cache",
+            "X-Content-Type-Options": "nosniff",
         }
 
         return StreamingResponse(generate(), media_type=content_type, headers=headers)

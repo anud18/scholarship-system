@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import require_admin
 from app.db.deps import get_db
-from app.models.system_setting import EmailTemplate
+from app.models.system_setting import EmailTemplate, SendingType
 from app.models.audit_log import AuditAction, AuditLog
 from app.models.user import User
 from app.schemas.common import EmailTemplateSchema, EmailTemplateUpdateSchema
@@ -38,8 +38,17 @@ async def get_email_template(
     """Get email template by key (admin only)"""
     template = await EmailTemplateService.get_template(db, key)
     if not template:
+        # Empty scaffold so the admin UI can author a not-yet-existing template.
+        # `sending_type` is required by the schema and was omitted here, which made
+        # pydantic raise and turned every unknown key into a 500 (issue #1225).
         template_data = EmailTemplateSchema(
-            key=key, subject_template="", body_template="", cc=None, bcc=None, updated_at=None
+            key=key,
+            subject_template="",
+            body_template="",
+            cc=None,
+            bcc=None,
+            sending_type=SendingType.single,
+            updated_at=None,
         )
     else:
         template_data = EmailTemplateSchema.model_validate(template)

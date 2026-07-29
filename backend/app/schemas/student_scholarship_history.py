@@ -50,6 +50,9 @@ class PaymentRecord(BaseModel):
     scholarship_name: str
     scholarship_amount: Decimal
     scholarship_subtype: Optional[str] = None
+    # Resolved via the roster's configuration; groups payments under the same
+    # scholarship type as the imported received-months records.
+    scholarship_type_id: Optional[int] = None
     allocation_year: Optional[int] = None
     locked_at: Optional[datetime] = None
 
@@ -70,10 +73,47 @@ class HistorySummary(BaseModel):
     total_records: int
     total_amount: Decimal
     scholarship_type_count: int = Field(..., description="Number of distinct scholarship_name values")
+    total_received_months: int = Field(
+        0,
+        description=(
+            "總領月份數 — 匯入 + 系統 summed across every scholarship type. "
+            "Caps such as the 36-month PhD limit apply per scholarship type, "
+            "not to this total; the per-type split is in received_months."
+        ),
+    )
     snapshot_name: Optional[str] = Field(
         None,
         description="Student name from the most recent roster item; used when SIS fails",
     )
+
+
+class ReceivedMonthsBreakdown(BaseModel):
+    """已領月份數 for one scholarship type, split into its two halves.
+
+    ``total = imported_months + system_months``. The halves never cover the same
+    month — the imported file records payments made before this system took over
+    roster generation. See docs/adr/0001-received-months-are-additive.md.
+
+    On this page the system half is counted over the student's whole payment
+    history (the page has no academic-year context), unlike the 手動分發 panel
+    which counts only the year being distributed.
+    """
+
+    scholarship_type_id: Optional[int] = None
+    scholarship_name: str
+    total_months: int
+    imported_months: int
+    system_months: int
+
+    # Present only when an import exists for this (學號, scholarship type).
+    award_start_month: Optional[str] = Field(None, description="領獎起始月份, e.g. 113年9月")
+    award_current_month: Optional[str] = Field(None, description="目前領獎月份, e.g. 115年8月")
+    raw_row: Optional[dict] = Field(
+        None,
+        description="Verbatim source row keyed by the imported file's own header text",
+    )
+    file_name: Optional[str] = None
+    imported_at: Optional[str] = None
 
 
 class StudentScholarshipHistoryData(BaseModel):
@@ -83,3 +123,7 @@ class StudentScholarshipHistoryData(BaseModel):
     academic_info: AcademicInfo
     summary: HistorySummary
     payment_records: List[PaymentRecord]
+    received_months: List[ReceivedMonthsBreakdown] = Field(
+        default_factory=list,
+        description="已領月份數 per scholarship type (匯入 + 系統)",
+    )

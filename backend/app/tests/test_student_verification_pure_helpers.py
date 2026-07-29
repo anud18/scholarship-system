@@ -7,13 +7,16 @@ wrong label rendering, surfaces to college reviewers as 'verified'
 when the student is actually graduated / withdrawn — a real
 compliance issue (paying out scholarships to ineligible students).
 
-3 helpers covered (16 cases):
-- `_mock_verification`              : dev mode — last-digit-driven branching
+Helpers covered:
+- `_mock_verification`              : dev mode — SIS-mock-first, heuristic fallback (#1141)
+- `_mock_sis_verification`          : std_studingstatus / mgd_title → status mapping
+- `_last_digit_mock_verification`   : offline fallback — last-digit-driven branching
 - `_parse_api_response`             : 5 status strings + unknown + exception
 - `get_verification_status_label`   : zh/en label mapping for each status
 """
 
 import pytest
+import requests
 
 from app.models.payment_roster import StudentVerificationStatus
 from app.services.student_verification_service import StudentVerificationService
@@ -25,43 +28,134 @@ def service():
     return StudentVerificationService()
 
 
-# ─── _mock_verification (dev mode) ───────────────────────────────────
+# ─── _mock_verification (dev mode, SIS-mock-first — #1141) ───────────
 
 
-def test_mock_verification_last_digit_0_to_6_is_verified(service):
+def test_mock_verification_prefers_sis_result(service, monkeypatch):
+    """When the SIS mock answers, its status wins — the last-digit heuristic
+    must NOT override it (digit 3 would be VERIFIED under the heuristic)."""
+    sis_result = {
+        "status": StudentVerificationStatus.SUSPENDED,
+        "message": "學生目前休學中（SIS mock：休學）",
+        "student_info": {},
+        "verified_at": None,
+        "api_response": {"mock": True, "source": "mock-student-api"},
+    }
+    monkeypatch.setattr(service, "_mock_sis_verification", lambda *a: sis_result)
+    assert service._mock_verification("A123456783", "Test") is sis_result
+
+
+def test_mock_verification_falls_back_to_last_digit_when_sis_unavailable(service, monkeypatch):
+    """SIS mock unreachable (None) ⇒ the offline last-digit heuristic runs."""
+    monkeypatch.setattr(service, "_mock_sis_verification", lambda *a: None)
+    result = service._mock_verification("A123456787", "Test")
+    assert result["status"] == StudentVerificationStatus.GRADUATED
+
+
+# ─── _mock_sis_verification (std_studingstatus mapping) ──────────────
+
+
+class _FakeResponse:
+    def __init__(self, payload):
+        self._payload = payload
+        self.status_code = 200
+
+    def json(self):
+        return self._payload
+
+
+def _sis_payload(status, title=""):
+    return {
+        "code": 200,
+        "data": [
+            {
+                "std_stdcode": "T00",
+                "std_cname": "測試生",
+                "std_studingstatus": status,
+                "mgd_title": title,
+            }
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    ("sis_status", "expected"),
+    [
+        (1, StudentVerificationStatus.VERIFIED),
+        (2, StudentVerificationStatus.VERIFIED),
+        (3, StudentVerificationStatus.VERIFIED),
+        (4, StudentVerificationStatus.SUSPENDED),
+        (5, StudentVerificationStatus.WITHDRAWN),
+        (11, StudentVerificationStatus.GRADUATED),
+    ],
+)
+def test_sis_verification_status_mapping(service, monkeypatch, sis_status, expected):
+    monkeypatch.setattr(service.session, "post", lambda *a, **k: _FakeResponse(_sis_payload(sis_status)))
+    result = service._mock_sis_verification("T00", "測試生")
+    assert result["status"] == expected
+
+
+def test_sis_verification_unknown_status_uses_title(service, monkeypatch):
+    """Numeric status outside the map falls back to the Chinese title."""
+    monkeypatch.setattr(service.session, "post", lambda *a, **k: _FakeResponse(_sis_payload(99, "退學")))
+    result = service._mock_sis_verification("T00", "測試生")
+    assert result["status"] == StudentVerificationStatus.WITHDRAWN
+
+
+def test_sis_verification_missing_student_is_not_found(service, monkeypatch):
+    """SIS answering 'no such student' is definitive — NOT_FOUND, not fallback."""
+    monkeypatch.setattr(service.session, "post", lambda *a, **k: _FakeResponse({"code": 404, "data": []}))
+    result = service._mock_sis_verification("T00", "測試生")
+    assert result["status"] == StudentVerificationStatus.NOT_FOUND
+
+
+def test_sis_verification_unreachable_returns_none(service, monkeypatch):
+    """Connection error ⇒ None so the caller falls back to the heuristic."""
+
+    def _boom(*a, **k):
+        raise requests.ConnectionError("simulated outage")
+
+    monkeypatch.setattr(service.session, "post", _boom)
+    assert service._mock_sis_verification("T00", "測試生") is None
+
+
+# ─── _last_digit_mock_verification (offline fallback) ────────────────
+
+
+def test_last_digit_0_to_6_is_verified(service):
     """Last digit 0–6 ⇒ VERIFIED — most common path for happy-path tests."""
     for digit in range(7):
-        result = service._mock_verification(f"A12345678{digit}", "Test")
+        result = service._last_digit_mock_verification(f"A12345678{digit}", "Test")
         assert result["status"] == StudentVerificationStatus.VERIFIED, f"digit={digit}"
 
 
-def test_mock_verification_digit_7_is_graduated(service):
-    result = service._mock_verification("A123456787", "Test")
+def test_last_digit_7_is_graduated(service):
+    result = service._last_digit_mock_verification("A123456787", "Test")
     assert result["status"] == StudentVerificationStatus.GRADUATED
     assert "graduation_date" in result["student_info"]
 
 
-def test_mock_verification_digit_8_is_suspended(service):
-    result = service._mock_verification("A123456788", "Test")
+def test_last_digit_8_is_suspended(service):
+    result = service._last_digit_mock_verification("A123456788", "Test")
     assert result["status"] == StudentVerificationStatus.SUSPENDED
 
 
-def test_mock_verification_digit_9_is_withdrawn(service):
-    result = service._mock_verification("A123456789", "Test")
+def test_last_digit_9_is_withdrawn(service):
+    result = service._last_digit_mock_verification("A123456789", "Test")
     assert result["status"] == StudentVerificationStatus.WITHDRAWN
 
 
-def test_mock_verification_non_digit_treated_as_zero(service):
+def test_last_digit_non_digit_treated_as_zero(service):
     """If last char isn't a digit (corrupted ID), treat as 0 ⇒ VERIFIED.
     Defensive — don't crash if SIS hands us an ID ending in a letter."""
-    result = service._mock_verification("A12345678X", "Test")
+    result = service._last_digit_mock_verification("A12345678X", "Test")
     assert result["status"] == StudentVerificationStatus.VERIFIED
 
 
-def test_mock_verification_metadata_includes_last_digit(service):
+def test_last_digit_metadata_includes_last_digit(service):
     """The api_response dict carries the last_digit for debugging — pin
     the structure so future log analysis can rely on it."""
-    result = service._mock_verification("A123456783", "Test")
+    result = service._last_digit_mock_verification("A123456783", "Test")
     assert result["api_response"]["mock"] is True
     assert result["api_response"]["last_digit"] == 3
 

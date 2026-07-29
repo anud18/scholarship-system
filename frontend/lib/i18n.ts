@@ -333,6 +333,19 @@ export const translations = {
       },
     },
 
+    // 匯入續領生
+    renewal_import: {
+      field_labels: {
+        student_id: "學號",
+        student_name: "姓名",
+        sub_type: "獎學金類別",
+        postal_account: "郵局帳號",
+        advisor_nycu_id: "指導教授本校人事編號",
+        advisor_name: "指導教授姓名",
+        row_number: "行號",
+      },
+    },
+
     // 通用訊息
     messages: {
       no_eligible_scholarships: "目前沒有符合資格的獎學金",
@@ -846,6 +859,19 @@ export const translations = {
         advisor_nycu_id: "Advisor NYCU ID",
         sub_types: "Sub Types",
         custom_fields: "Custom Fields",
+        row_number: "Row Number",
+      },
+    },
+
+    // Renewal Import
+    renewal_import: {
+      field_labels: {
+        student_id: "Student ID",
+        student_name: "Name",
+        sub_type: "Scholarship Category",
+        postal_account: "Postal Account",
+        advisor_nycu_id: "Advisor NYCU ID",
+        advisor_name: "Advisor Name",
         row_number: "Row Number",
       },
     },

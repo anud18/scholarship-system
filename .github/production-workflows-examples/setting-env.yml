@@ -1367,13 +1367,40 @@ jobs:
           echo "📁 Creating $DEPLOY_DIR and its volume directories..."
           mkdir -p "$DEPLOY_DIR/backend/uploads" \
                    "$DEPLOY_DIR/logs/backend" \
-                   "$DEPLOY_DIR/logs/nginx"
+                   "$DEPLOY_DIR/logs/nginx" \
+                   "$DEPLOY_DIR/nginx/ssl/prod"
           # The backend + nginx containers run as NON-root users and must be
           # able to write uploads/logs into these bind mounts. u+rwX only would
           # leave them unwritable by the container uid; 777 on the mount dirs is
           # the pragmatic choice for a single-tenant VM (the parent dir is owned
           # by the deploy user, and these hold no secrets).
           chmod 777 "$DEPLOY_DIR/backend/uploads" "$DEPLOY_DIR/logs/backend" "$DEPLOY_DIR/logs/nginx"
+
+          # docker-compose.prod.yml declares redis_prod_data as a bind-backed
+          # named volume on /opt/scholarship/app/redis/data. Docker does NOT
+          # create the device path for `type: none, o: bind` — it errors with
+          # "failed to mount local volume: ... no such file or directory", so
+          # `docker compose up -d` dies on a fresh AP VM unless this exists
+          # first. redis:7-alpine runs as uid/gid 999.
+          echo "📁 Creating redis volume device path..."
+          sudo mkdir -p /opt/scholarship/app/redis/data
+          sudo chown -R 999:999 /opt/scholarship/app/redis
+          echo "   ✅ /opt/scholarship/app/redis/data ($(stat -c '%U:%G' /opt/scholarship/app/redis/data))"
+
+          # deploy.yml hard-fails if these are absent, rather than letting
+          # nginx crash-loop on a missing certificate. The repo ships nginx
+          # configs but no keys — drop the certificate here, or set the
+          # SSL_CERT_DIR repository variable to a path outside the deploy dir.
+          echo ""
+          echo "🔐 TLS certificate directory: $DEPLOY_DIR/nginx/ssl/prod"
+          for f in fullchain.pem privkey.pem chain.pem; do
+            if [ -f "$DEPLOY_DIR/nginx/ssl/prod/$f" ]; then
+              echo "   ✅ $f"
+            else
+              echo "   ⚠️  missing $f — deployment will fail until it is placed here"
+            fi
+          done
+
           echo "   ✅ Created:"
           find "$DEPLOY_DIR" -maxdepth 2 -type d | sed 's/^/      /'
           echo ""

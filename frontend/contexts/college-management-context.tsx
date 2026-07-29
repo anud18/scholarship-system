@@ -188,8 +188,8 @@ export function CollegeManagementProvider({
     fetchCollegeApplications,
   } = useCollegeApplications();
 
-  // View state
-  const [viewMode, setViewMode] = useState<"card" | "table">("card");
+  // View state — 預設維持表格檢視（欄位最完整），卡片檢視為使用者主動切換
+  const [viewMode, setViewMode] = useState<"card" | "table">("table");
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
 
   // Tab management

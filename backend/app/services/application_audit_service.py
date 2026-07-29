@@ -295,17 +295,24 @@ class ApplicationAuditService:
         app_id: str,
         user: User,
         reason: str,
+        prior_quota_status: Optional[str],
         affected_unlocked_rosters: Optional[list] = None,
         request: Optional[Request] = None,
     ) -> Optional[AuditLog]:
-        """記錄撤銷獎學金分發 (issue #980 / G18)"""
+        """記錄撤銷獎學金分發 (issue #980 / G18)
+
+        ``prior_quota_status`` is the application's real quota_allocation_status
+        before the cancel. 撤銷 is legal before 確認分發 too, where that value is
+        NULL or "rejected" — recording a hardcoded "allocated" would put an
+        award in the audit trail that the application never held.
+        """
         return await self.log_application_operation(
             application_id=application_id,
             action=AuditAction.revoke,
             user=user,
             request=request,
             description=f"撤銷申請 {app_id} 的獎學金分發，原因: {reason}",
-            old_values={"quota_allocation_status": "allocated"},
+            old_values={"quota_allocation_status": prior_quota_status},
             new_values={
                 "quota_allocation_status": "revoked",
                 "reason": reason,
@@ -320,17 +327,22 @@ class ApplicationAuditService:
         app_id: str,
         user: User,
         reason: str,
+        prior_quota_status: Optional[str],
         affected_unlocked_rosters: Optional[list] = None,
         request: Optional[Request] = None,
     ) -> Optional[AuditLog]:
-        """記錄停發獎學金分發 (issue #980 / G18)"""
+        """記錄停發獎學金分發 (issue #980 / G18)
+
+        ``prior_quota_status``: see the revoke twin above — 停發 before
+        確認分發 is legal, so the prior state must be recorded, not assumed.
+        """
         return await self.log_application_operation(
             application_id=application_id,
             action=AuditAction.suspend,
             user=user,
             request=request,
             description=f"停發申請 {app_id} 的獎學金分發，原因: {reason}",
-            old_values={"quota_allocation_status": "allocated"},
+            old_values={"quota_allocation_status": prior_quota_status},
             new_values={
                 "quota_allocation_status": "suspended",
                 "reason": reason,
@@ -345,6 +357,7 @@ class ApplicationAuditService:
         app_id: str,
         user: User,
         prior_status: str,
+        restored_quota_status: Optional[str],
         prior_reason: Optional[str] = None,
         original_cancellation_log_id: Optional[int] = None,
         request: Optional[Request] = None,
@@ -354,6 +367,10 @@ class ApplicationAuditService:
         ``prior_reason`` preserves the original revoke/suspend reason that the
         restore operation clears from the application row — without it the
         original cancellation context would survive only in earlier log rows.
+
+        ``restored_quota_status`` is the quota_allocation_status the restore
+        actually replayed from the cancel-time snapshot. A student cancelled
+        before 確認分發 goes back to NULL, not "allocated".
         """
         return await self.log_application_operation(
             application_id=application_id,
@@ -362,7 +379,7 @@ class ApplicationAuditService:
             request=request,
             description=f"回復申請 {app_id} 的獎學金分發（原狀態: {prior_status}）",
             old_values={"quota_allocation_status": prior_status, "reason": prior_reason},
-            new_values={"quota_allocation_status": "allocated"},
+            new_values={"quota_allocation_status": restored_quota_status},
             # G9 (#971): link back to the revoke/suspend log row so the
             # decision chain (撤銷 → 回復) is traversable without heuristics.
             meta_data={"app_id": app_id, "original_cancellation_log_id": original_cancellation_log_id},

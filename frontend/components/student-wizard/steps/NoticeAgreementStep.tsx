@@ -493,10 +493,14 @@ export function NoticeAgreementStep({
                 "regulations_url",
                 publicDocs.regulations_url,
               )!}
-              // 200px = DialogHeader + DialogContent padding + footer row + border.
-              className="h-[min(700px,calc(90vh-200px))]"
+              // 200px = DialogHeader + DialogContent padding + footer row +
+              // border. The viewer's toolbar sizes itself inside this budget.
+              className="h-[min(745px,calc(90vh-200px))]"
               locale={locale}
               onReachedBottom={handleReachedBottom}
+              downloadFilename={
+                publicDocs.regulations_url_filename || "scholarship-regulations.pdf"
+              }
             />
           )}
           <div className="flex items-center justify-between pt-3 border-t mt-2">

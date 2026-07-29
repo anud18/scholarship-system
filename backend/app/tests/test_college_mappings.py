@@ -57,10 +57,11 @@ class TestMappingInvariants:
             assert name, f"Empty en name for college code {code!r}"
 
     def test_all_known_college_codes_present(self) -> None:
-        """Pin the current 13 college codes so a typo / accidental deletion
+        """Pin the current 16 college codes so a typo / accidental deletion
         fails fast. If a real college is added in the future, this test gets
-        updated as part of that change."""
-        expected = {"E", "C", "I", "S", "B", "O", "D", "1", "6", "7", "M", "A", "K"}
+        updated as part of that change. Numeric codes are the SIS 陽明-campus
+        academy codes ("4" is deliberately absent — see college_mappings.py)."""
+        expected = {"E", "C", "I", "S", "B", "O", "D", "1", "2", "3", "5", "6", "7", "M", "A", "K"}
         assert set(COLLEGE_MAPPINGS.keys()) == expected
 
 
@@ -102,9 +103,9 @@ class TestGetCollegeName:
 
 
 class TestGetAllColleges:
-    def test_returns_all_13_colleges(self) -> None:
+    def test_returns_all_16_colleges(self) -> None:
         colleges = get_all_colleges()
-        assert len(colleges) == 13
+        assert len(colleges) == 16
 
     def test_each_entry_has_code_name_name_en(self) -> None:
         """Each list item must have the documented shape."""
@@ -158,7 +159,7 @@ class TestValidationHelpers:
 
     def test_get_college_codes_returns_sorted_list(self) -> None:
         codes = get_college_codes()
-        assert len(codes) == 13
+        assert len(codes) == 16
         assert codes == sorted(codes)
         assert "E" in codes
         assert "XX" not in codes

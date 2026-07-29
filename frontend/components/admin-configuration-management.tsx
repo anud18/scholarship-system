@@ -575,12 +575,15 @@ export function AdminConfigurationManagement({
         config.application_start_date
       ),
       application_end_date: formatDateTimeLocal(config.application_end_date),
+      renewal_requires_professor_review:
+        config.renewal_requires_professor_review,
       renewal_professor_review_start: formatDateTimeLocal(
         config.renewal_professor_review_start
       ),
       renewal_professor_review_end: formatDateTimeLocal(
         config.renewal_professor_review_end
       ),
+      renewal_requires_college_review: config.renewal_requires_college_review,
       renewal_college_review_start: formatDateTimeLocal(
         config.renewal_college_review_start
       ),
@@ -1170,68 +1173,106 @@ export function AdminConfigurationManagement({
                       續領審查期間
                     </h4>
                     <div className="space-y-2 text-sm">
-                      <div>
-                        <span className="text-muted-foreground font-medium">
-                          教授審查：
+                      <div className="flex items-center space-x-2">
+                        <span className="text-muted-foreground">
+                          需要教授審查：
                         </span>
-                        <div className="ml-4 space-y-1">
-                          <div>
-                            <span className="text-muted-foreground">
-                              開始：
-                            </span>
-                            <span className="ml-2">
-                              {selectedConfig?.renewal_professor_review_start
-                                ? formatDateTime(
-                                    selectedConfig.renewal_professor_review_start
-                                  )
-                                : "未設定"}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">
-                              截止：
-                            </span>
-                            <span className="ml-2">
-                              {selectedConfig?.renewal_professor_review_end
-                                ? formatDateTime(
-                                    selectedConfig.renewal_professor_review_end
-                                  )
-                                : "未設定"}
-                            </span>
+                        <Badge
+                          variant={
+                            selectedConfig?.renewal_requires_professor_review
+                              ? "default"
+                              : "secondary"
+                          }
+                          className="text-xs"
+                        >
+                          {selectedConfig?.renewal_requires_professor_review
+                            ? "是"
+                            : "否"}
+                        </Badge>
+                      </div>
+                      {selectedConfig?.renewal_requires_professor_review && (
+                        <div>
+                          <span className="text-muted-foreground font-medium">
+                            教授審查：
+                          </span>
+                          <div className="ml-4 space-y-1">
+                            <div>
+                              <span className="text-muted-foreground">
+                                開始：
+                              </span>
+                              <span className="ml-2">
+                                {selectedConfig?.renewal_professor_review_start
+                                  ? formatDateTime(
+                                      selectedConfig.renewal_professor_review_start
+                                    )
+                                  : "未設定"}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">
+                                截止：
+                              </span>
+                              <span className="ml-2">
+                                {selectedConfig?.renewal_professor_review_end
+                                  ? formatDateTime(
+                                      selectedConfig.renewal_professor_review_end
+                                    )
+                                  : "未設定"}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground font-medium">
-                          學院審查：
+                      )}
+                      <div className="flex items-center space-x-2">
+                        <span className="text-muted-foreground">
+                          需要學院審查：
                         </span>
-                        <div className="ml-4 space-y-1">
-                          <div>
-                            <span className="text-muted-foreground">
-                              開始：
-                            </span>
-                            <span className="ml-2">
-                              {selectedConfig?.renewal_college_review_start
-                                ? formatDateTime(
-                                    selectedConfig.renewal_college_review_start
-                                  )
-                                : "未設定"}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">
-                              截止：
-                            </span>
-                            <span className="ml-2">
-                              {selectedConfig?.renewal_college_review_end
-                                ? formatDateTime(
-                                    selectedConfig.renewal_college_review_end
-                                  )
-                                : "未設定"}
-                            </span>
+                        <Badge
+                          variant={
+                            selectedConfig?.renewal_requires_college_review
+                              ? "default"
+                              : "secondary"
+                          }
+                          className="text-xs"
+                        >
+                          {selectedConfig?.renewal_requires_college_review
+                            ? "是"
+                            : "否"}
+                        </Badge>
+                      </div>
+                      {selectedConfig?.renewal_requires_college_review && (
+                        <div>
+                          <span className="text-muted-foreground font-medium">
+                            學院審查：
+                          </span>
+                          <div className="ml-4 space-y-1">
+                            <div>
+                              <span className="text-muted-foreground">
+                                開始：
+                              </span>
+                              <span className="ml-2">
+                                {selectedConfig?.renewal_college_review_start
+                                  ? formatDateTime(
+                                      selectedConfig.renewal_college_review_start
+                                    )
+                                  : "未設定"}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">
+                                截止：
+                              </span>
+                              <span className="ml-2">
+                                {selectedConfig?.renewal_college_review_end
+                                  ? formatDateTime(
+                                      selectedConfig.renewal_college_review_end
+                                    )
+                                  : "未設定"}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   </div>
 
@@ -2556,75 +2597,136 @@ export function AdminConfigurationManagement({
                   {/* 續領審查期間 */}
                   <div>
                     <h5 className="text-sm font-medium mb-2">續領審查期間</h5>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="edit_renewal_professor_review_start">
-                          續領教授審查開始
-                        </Label>
-                        <Input
-                          id="edit_renewal_professor_review_start"
-                          type="datetime-local"
-                          value={formData.renewal_professor_review_start || ""}
-                          onChange={e =>
-                            setFormData(prev => ({
-                              ...prev,
-                              renewal_professor_review_start: e.target.value,
-                            }))
-                          }
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="edit_renewal_professor_review_end">
-                          續領教授審查截止
-                        </Label>
-                        <Input
-                          id="edit_renewal_professor_review_end"
-                          type="datetime-local"
-                          value={formData.renewal_professor_review_end || ""}
-                          onChange={e =>
-                            setFormData(prev => ({
-                              ...prev,
-                              renewal_professor_review_end: e.target.value,
-                            }))
-                          }
-                        />
-                      </div>
+
+                    <div className="flex items-center space-x-2 mb-2">
+                      <input
+                        type="checkbox"
+                        id="edit_renewal_requires_professor_review"
+                        checked={
+                          formData.renewal_requires_professor_review || false
+                        }
+                        onChange={e =>
+                          setFormData(prev => ({
+                            ...prev,
+                            renewal_requires_professor_review: e.target.checked,
+                            // 取消時一併清除審查時間，避免留下無效設定
+                            ...(e.target.checked
+                              ? {}
+                              : {
+                                  renewal_professor_review_start: "",
+                                  renewal_professor_review_end: "",
+                                }),
+                          }))
+                        }
+                        className="h-4 w-4"
+                      />
+                      <Label htmlFor="edit_renewal_requires_professor_review">
+                        續領需要教授審查
+                      </Label>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 mt-2">
-                      <div>
-                        <Label htmlFor="edit_renewal_college_review_start">
-                          續領學院審查開始
-                        </Label>
-                        <Input
-                          id="edit_renewal_college_review_start"
-                          type="datetime-local"
-                          value={formData.renewal_college_review_start || ""}
-                          onChange={e =>
-                            setFormData(prev => ({
-                              ...prev,
-                              renewal_college_review_start: e.target.value,
-                            }))
-                          }
-                        />
+                    {formData.renewal_requires_professor_review && (
+                      <div className="grid grid-cols-2 gap-4 mb-2">
+                        <div>
+                          <Label htmlFor="edit_renewal_professor_review_start">
+                            續領教授審查開始
+                          </Label>
+                          <Input
+                            id="edit_renewal_professor_review_start"
+                            type="datetime-local"
+                            value={
+                              formData.renewal_professor_review_start || ""
+                            }
+                            onChange={e =>
+                              setFormData(prev => ({
+                                ...prev,
+                                renewal_professor_review_start: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="edit_renewal_professor_review_end">
+                            續領教授審查截止
+                          </Label>
+                          <Input
+                            id="edit_renewal_professor_review_end"
+                            type="datetime-local"
+                            value={formData.renewal_professor_review_end || ""}
+                            onChange={e =>
+                              setFormData(prev => ({
+                                ...prev,
+                                renewal_professor_review_end: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <Label htmlFor="edit_renewal_college_review_end">
-                          續領學院審查截止
-                        </Label>
-                        <Input
-                          id="edit_renewal_college_review_end"
-                          type="datetime-local"
-                          value={formData.renewal_college_review_end || ""}
-                          onChange={e =>
-                            setFormData(prev => ({
-                              ...prev,
-                              renewal_college_review_end: e.target.value,
-                            }))
-                          }
-                        />
-                      </div>
+                    )}
+
+                    <div className="flex items-center space-x-2 mb-2">
+                      <input
+                        type="checkbox"
+                        id="edit_renewal_requires_college_review"
+                        checked={
+                          formData.renewal_requires_college_review || false
+                        }
+                        onChange={e =>
+                          setFormData(prev => ({
+                            ...prev,
+                            renewal_requires_college_review: e.target.checked,
+                            // 取消時一併清除審查時間，避免留下無效設定
+                            ...(e.target.checked
+                              ? {}
+                              : {
+                                  renewal_college_review_start: "",
+                                  renewal_college_review_end: "",
+                                }),
+                          }))
+                        }
+                        className="h-4 w-4"
+                      />
+                      <Label htmlFor="edit_renewal_requires_college_review">
+                        續領需要學院審查
+                      </Label>
                     </div>
+
+                    {formData.renewal_requires_college_review && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="edit_renewal_college_review_start">
+                            續領學院審查開始
+                          </Label>
+                          <Input
+                            id="edit_renewal_college_review_start"
+                            type="datetime-local"
+                            value={formData.renewal_college_review_start || ""}
+                            onChange={e =>
+                              setFormData(prev => ({
+                                ...prev,
+                                renewal_college_review_start: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="edit_renewal_college_review_end">
+                            續領學院審查截止
+                          </Label>
+                          <Input
+                            id="edit_renewal_college_review_end"
+                            type="datetime-local"
+                            value={formData.renewal_college_review_end || ""}
+                            onChange={e =>
+                              setFormData(prev => ({
+                                ...prev,
+                                renewal_college_review_end: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* 一般申請審查期間 */}

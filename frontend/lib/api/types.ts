@@ -43,6 +43,8 @@ export interface User {
   status?: "在學" | "畢業" | "在職" | "退休";
   dept_code?: string;
   dept_name?: string;
+  college_code?: string;
+  college_name?: string;
   comment?: string;
   last_login_at?: string;
   created_at: string;
@@ -143,8 +145,17 @@ export interface Application {
    *  (top-level flag from the college review listing; distinct from the
    *  nested scholarship_configuration.requires_professor_recommendation). */
   requires_professor_recommendation?: boolean;
+  /** Whether this scholarship requires a college review step (top-level flag
+   *  surfaced on application list/detail responses). */
+  requires_college_review?: boolean;
+  /** Admin toggle「開放學院查看分發結果」— the student timeline's final
+   *  已核定(請洽院辦) step is only checked once this is opened. */
+  allow_college_view_distribution?: boolean;
   professor_review_completed?: boolean;
   college_review_completed?: boolean;
+  /** 教授端佇列專用：檢視的教授是否已對本申請留下審核紀錄。
+   *  非教授端點回傳 undefined。 */
+  has_professor_reviewed?: boolean;
   form_data?: Record<string, any>;
   submitted_form_data?: Record<string, any>;
   meta_data?: Record<string, any>;
@@ -157,6 +168,12 @@ export interface Application {
   status_zh?: string;
   student_name?: string;
   student_no?: string;
+  /** 郵局帳號 (from the student's UserProfile.account_number, not submitted_form_data) */
+  postal_account?: string | null;
+  /** 指導教授資訊 (from the student's UserProfile, not submitted_form_data) */
+  advisor_name?: string | null;
+  advisor_email?: string | null;
+  advisor_nycu_id?: string | null;
   student_termcount?: number;
   gpa?: number;
   department?: string;
@@ -343,8 +360,10 @@ export interface ScholarshipConfiguration {
   renewal_application_end_date?: string;
   application_start_date?: string;
   application_end_date?: string;
+  renewal_requires_professor_review: boolean;
   renewal_professor_review_start?: string;
   renewal_professor_review_end?: string;
+  renewal_requires_college_review: boolean;
   renewal_college_review_start?: string;
   renewal_college_review_end?: string;
   requires_professor_recommendation: boolean;
@@ -1206,8 +1225,10 @@ export interface ScholarshipConfigurationFormData {
   renewal_application_end_date?: string;
   application_start_date?: string;
   application_end_date?: string;
+  renewal_requires_professor_review?: boolean;
   renewal_professor_review_start?: string;
   renewal_professor_review_end?: string;
+  renewal_requires_college_review?: boolean;
   renewal_college_review_start?: string;
   renewal_college_review_end?: string;
   requires_professor_recommendation?: boolean;

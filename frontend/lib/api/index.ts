@@ -28,6 +28,7 @@ import { createBankVerificationApi } from './modules/bank-verification';
 import { createProfessorStudentApi } from './modules/professor-student';
 import { createEmailAutomationApi } from './modules/email-automation';
 import { createBatchImportApi } from './modules/batch-import';
+import { createRenewalImportApi } from './modules/renewal-import';
 import { createReferenceDataApi } from './modules/reference-data';
 import { createApplicationFieldsApi } from './modules/application-fields';
 import { createUserProfilesApi } from './modules/user-profiles';
@@ -41,6 +42,7 @@ import { createStudentsApi } from './modules/students';
 import { createManualDistributionApi } from './modules/manual-distribution';
 import { createRenewalApi } from './modules/renewal';
 import { createStudentHistoryApi } from './modules/student-history';
+import { createReceivedMonthsApi } from './modules/received-months';
 // import { createReviewApi } from './modules/reviews'; // Not used - professor reviews use professor endpoints with adapter
 
 // Re-export ALL types from modular types file
@@ -119,6 +121,7 @@ export type {
 
 // Re-export Students module types
 export type {
+  AppliedScholarship,
   Student,
   StudentStats,
   StudentSISBasicInfo,
@@ -155,6 +158,7 @@ class ExtendedApiClient extends ApiClient {
   private _professorStudent?: ReturnType<typeof createProfessorStudentApi>;
   private _emailAutomation?: ReturnType<typeof createEmailAutomationApi>;
   private _batchImport?: ReturnType<typeof createBatchImportApi>;
+  private _renewalImport?: ReturnType<typeof createRenewalImportApi>;
   private _referenceData?: ReturnType<typeof createReferenceDataApi>;
   private _applicationFields?: ReturnType<typeof createApplicationFieldsApi>;
   private _userProfiles?: ReturnType<typeof createUserProfilesApi>;
@@ -168,6 +172,7 @@ class ExtendedApiClient extends ApiClient {
   private _manualDistribution?: ReturnType<typeof createManualDistributionApi>;
   private _renewal?: ReturnType<typeof createRenewalApi>;
   private _studentHistory?: ReturnType<typeof createStudentHistoryApi>;
+  private _receivedMonths?: ReturnType<typeof createReceivedMonthsApi>;
 
   // Lazy-loaded getters
   get auth(): ReturnType<typeof createAuthApi> {
@@ -240,6 +245,11 @@ class ExtendedApiClient extends ApiClient {
     return this._batchImport;
   }
 
+  get renewalImport(): ReturnType<typeof createRenewalImportApi> {
+    if (!this._renewalImport) this._renewalImport = createRenewalImportApi();
+    return this._renewalImport;
+  }
+
   get referenceData(): ReturnType<typeof createReferenceDataApi> {
     if (!this._referenceData) this._referenceData = createReferenceDataApi();
     return this._referenceData;
@@ -303,6 +313,11 @@ class ExtendedApiClient extends ApiClient {
   get studentHistory(): ReturnType<typeof createStudentHistoryApi> {
     if (!this._studentHistory) this._studentHistory = createStudentHistoryApi();
     return this._studentHistory;
+  }
+
+  get receivedMonths(): ReturnType<typeof createReceivedMonthsApi> {
+    if (!this._receivedMonths) this._receivedMonths = createReceivedMonthsApi();
+    return this._receivedMonths;
   }
 
   // Backward compatibility alias

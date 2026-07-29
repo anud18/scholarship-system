@@ -103,6 +103,13 @@ export function toApiResponse<T>(
     } else if (response.error.message) {
       // Handle message field - ensure it's a string
       errorMessage = safeStringify(response.error.message);
+      // The backend's validation handler puts the generic text in `message`
+      // ("Validation failed") and the actual per-field reasons in `errors` —
+      // without them the user sees no reason at all.
+      const errorList = (response.error as { errors?: unknown }).errors;
+      if (Array.isArray(errorList) && errorList.length > 0) {
+        errorMessage += `: ${errorList.map((e) => safeStringify(e)).join('; ')}`;
+      }
     } else {
       errorMessage = `Request failed with status ${response.response.status}`;
     }

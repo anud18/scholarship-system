@@ -1,5 +1,6 @@
 """
-Pure-function tests for `ApplicationEnricherService._is_student_data_missing`.
+Pure-function tests for `ApplicationEnricherService._is_student_data_missing`
+and `_format_applications`.
 
 The enricher service decides whether to re-fetch student data from the
 external SIS API when displaying applications to reviewers. If
@@ -15,7 +16,11 @@ across multiple schema migrations:
 Pinning the OR-chain so a future schema cleanup doesn't accidentally
 drop one of the aliases used in old applications.
 
-1 helper covered (10 cases).
+`_format_applications` tests pin #68: the college review list shows
+國籍/身分 from the snapshot — the formatter must surface `std_nation`
+and `std_identity` under `student_data`, or the frontend renders "-".
+
+2 helpers covered.
 """
 
 import pytest
@@ -88,3 +93,49 @@ def test_unrelated_field_only_returns_missing(service):
     ⇒ treat as missing (force re-fetch)."""
     data = {"trm_year": 113, "trm_term": 1}
     assert service._is_student_data_missing(data) is True
+
+
+# ─── _format_applications: 國籍/身分 surfacing (#68) ─────────────────
+
+
+def _make_app(student_data):
+    return {
+        "id": 1,
+        "app_id": "APP-113-1-00001",
+        "status": "submitted",
+        "academic_year": 113,
+        "semester": "first",
+        "student_data": student_data,
+    }
+
+
+def test_format_surfaces_nationality_and_identity(service):
+    """The college review list reads app.student_data.std_nation /
+    std_identity — the formatter must pass them through."""
+    apps = [_make_app({"std_stdcode": "S1", "std_cname": "張三", "std_nation": "馬來西亞", "std_identity": 2})]
+    out = service._format_applications(apps, {})
+    assert out[0]["student_data"] == {"std_nation": "馬來西亞", "std_identity": 2}
+
+
+def test_format_nationality_identity_legacy_aliases(service):
+    """Old snapshots may use `nationality` / `identity` (same aliases the
+    admin history endpoint accepts) — must still surface."""
+    apps = [_make_app({"nationality": "中華民國", "identity": 1})]
+    out = service._format_applications(apps, {})
+    assert out[0]["student_data"] == {"std_nation": "中華民國", "std_identity": 1}
+
+
+def test_format_nationality_identity_absent_yields_none(service):
+    """Missing snapshot fields → explicit None (frontend renders '-'),
+    never a KeyError."""
+    apps = [_make_app({"std_stdcode": "S1", "std_cname": "張三"})]
+    out = service._format_applications(apps, {})
+    assert out[0]["student_data"] == {"std_nation": None, "std_identity": None}
+
+
+def test_format_identity_zero_not_dropped(service):
+    """std_identity uses an explicit None-check, not `or`, so a falsy 0
+    passes through instead of falling back to the legacy alias."""
+    apps = [_make_app({"std_identity": 0, "identity": 3})]
+    out = service._format_applications(apps, {})
+    assert out[0]["student_data"]["std_identity"] == 0

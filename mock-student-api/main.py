@@ -5066,6 +5066,18 @@ SAMPLE_STUDENTS.update({c: _mk_summary_demo_student(c, e) for c, e in _SUMMARY_E
 SAMPLE_TERMS.update({c: _mk_summary_demo_terms(c, e) for c, e in _SUMMARY_EXPORT_DEMO.items()})
 # --- end demo students ------------------------------------------------------
 
+# --- optional local dataset (git-ignored) ------------------------------------
+# Merges extra students/terms from students_local.py when present, so datasets
+# with real-looking student IDs stay out of version control (see .gitignore).
+try:
+    from students_local import STUDENTS_LOCAL, TERMS_LOCAL
+
+    SAMPLE_STUDENTS.update(STUDENTS_LOCAL)
+    SAMPLE_TERMS.update(TERMS_LOCAL)
+except ImportError:
+    pass
+# --- end local dataset --------------------------------------------------------
+
 
 @app.get("/")
 async def root():

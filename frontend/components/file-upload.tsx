@@ -147,7 +147,10 @@ export function FileUpload({
       return true;
     });
 
-    const updatedFiles = [...files, ...validFiles].slice(0, maxFiles);
+    // Keep the NEWEST maxFiles: picking a file into a full slot replaces the
+    // oldest one instead of silently discarding the new pick (which used to
+    // play the upload animation for a file that was never kept).
+    const updatedFiles = [...files, ...validFiles].slice(-maxFiles);
     setFiles(updatedFiles);
     onFilesChange(updatedFiles);
 

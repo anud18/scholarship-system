@@ -34,6 +34,24 @@ def test_root_endpoint():
     assert "version" in data
 
 
+def test_root_endpoint_never_advertises_disabled_docs():
+    """Root must not link to docs that are turned off.
+
+    `_expose_api_docs` in app.main drops docs_url/redoc_url in production, so a
+    hardcoded link there would point at a 404. Assert the payload tracks whatever
+    the app actually routes, in either direction.
+    """
+    client = TestClient(app)
+    data = client.get("/").json()
+
+    for key, url in (("docs_url", app.docs_url), ("redoc_url", app.redoc_url)):
+        if url is None:
+            assert key not in data, f"{key} advertised while the docs route is disabled"
+        else:
+            assert data[key] == url
+            assert client.get(url).status_code == 200
+
+
 @pytest.mark.asyncio
 async def test_health_endpoint_async():
     """Test health check endpoint async"""

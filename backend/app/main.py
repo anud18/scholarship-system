@@ -109,13 +109,22 @@ async def lifespan(_app: FastAPI):
                 LOGGER.exception("Error during scheduler shutdown: %s", exc)
 
 
+# Interactive API docs and the OpenAPI schema enumerate every route, parameter
+# and model for an anonymous caller — nginx forwards all of /api/ to this app, so
+# in production they are internet-reachable and reliably flagged by vulnerability
+# scanners as information disclosure. Keep them on everywhere EXCEPT a real
+# production deployment; `settings.testing` keeps CI's `bun run api:generate`
+# working (that job sets CI/TESTING but leaves ENVIRONMENT at its "production"
+# default).
+_expose_api_docs = settings.environment != "production" or settings.testing
+
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description="A comprehensive scholarship application and approval management system",
-    openapi_url="/api/v1/openapi.json",
-    docs_url="/api/v1/docs",
-    redoc_url="/api/v1/redoc",
+    openapi_url="/api/v1/openapi.json" if _expose_api_docs else None,
+    docs_url="/api/v1/docs" if _expose_api_docs else None,
+    redoc_url="/api/v1/redoc" if _expose_api_docs else None,
     lifespan=lifespan,
     redirect_slashes=False,  # Disable automatic slash redirects to prevent 307 in both dev and staging
 )
@@ -343,12 +352,15 @@ async def get_pool_status(current_user: User = Depends(require_admin)):
 @app.get("/")
 async def root():
     """Root endpoint with API information"""
+    # Read the URLs back off the app rather than repeating the literals: they are
+    # None whenever the docs are disabled (production — see _expose_api_docs), and
+    # advertising a link that 404s is worse than not advertising it at all.
     return {
         "success": True,
         "message": f"Welcome to {settings.app_name}",
         "version": settings.app_version,
-        "docs_url": "/api/v1/docs",
-        "redoc_url": "/api/v1/redoc",
+        **({"docs_url": app.docs_url} if app.docs_url else {}),
+        **({"redoc_url": app.redoc_url} if app.redoc_url else {}),
     }
 
 

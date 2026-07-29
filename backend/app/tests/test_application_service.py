@@ -352,8 +352,6 @@ class TestApplicationService:
         mock_application.created_at = datetime.now(timezone.utc)
         mock_application.updated_at = datetime.now(timezone.utc)
         mock_application.meta_data = None
-        mock_application.application_document_url = None
-        mock_application.application_document_original_filename = None
         mock_application.amount = None
         mock_application.scholarship_configuration = None
         mock_application.scholarship = None
@@ -426,8 +424,6 @@ class TestApplicationService:
         mock_application.created_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
         mock_application.updated_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
         mock_application.meta_data = None
-        mock_application.application_document_url = None
-        mock_application.application_document_original_filename = None
         mock_application.amount = None
         mock_application.files = []
         mock_application.reviews = []
@@ -469,12 +465,19 @@ class TestApplicationService:
         mock_application.files = []
         mock_application.scholarship_subtype_list = []
         mock_application.app_id = "APP-2024-001"
+        mock_application.status = ApplicationStatus.draft
 
+        # SECURITY regression: a client may still POST a "status" key, but
+        # ApplicationUpdate no longer declares the field, so pydantic drops it
+        # and update_application must never write it. Previously this let a
+        # student PUT {"status": "approved"} onto their own draft and skip the
+        # entire review workflow.
         update_data = ApplicationUpdate(
             form_data=ApplicationFormData(fields={}, documents=[]),
-            status=ApplicationStatus.draft.value,
+            status=ApplicationStatus.approved.value,
             is_renewal=True,
         )
+        assert not hasattr(update_data, "status")
 
         with (
             patch.object(service, "_get_application_model", new_callable=AsyncMock, return_value=mock_application),
@@ -485,7 +488,8 @@ class TestApplicationService:
             result = await service.update_application(application_id, update_data, mock_user)
 
             assert result == mock_application
-            assert mock_application.status == ApplicationStatus.draft.value
+            # Status is untouched by the generic update path.
+            assert mock_application.status == ApplicationStatus.draft
             assert mock_application.is_renewal
             mock_commit.assert_called_once()
             mock_refresh.assert_called_once()

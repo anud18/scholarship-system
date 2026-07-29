@@ -18,7 +18,7 @@ Two helpers tested here:
     cross-college data when it should be scoped, or (b) hide all
     data from super_admin when filter falsely fires.
 
-12 cases.
+14 cases.
 """
 
 from datetime import datetime
@@ -57,7 +57,7 @@ def _user(**overrides):
 
 
 def test_convert_returns_all_documented_keys():
-    # Pin: 13 keys in the response dict. If a column gets added
+    # Pin: 15 keys in the response dict. If a column gets added
     # to User the admin endpoint needs to add it here AND update
     # this test — the explicit count catches silent omissions.
     out = convert_student_to_dict(_user())
@@ -73,11 +73,33 @@ def test_convert_returns_all_documented_keys():
         "college_code",
         "role",
         "comment",
+        "applied_scholarships",
         "created_at",
         "updated_at",
         "last_login_at",
     }
     assert set(out.keys()) == expected_keys
+
+
+def test_convert_applied_scholarships_defaults_to_empty_list():
+    # Pin: omitted applied_scholarships → [] (not None). The admin
+    # student list frontend maps over this field unconditionally.
+    out = convert_student_to_dict(_user())
+    assert out["applied_scholarships"] == []
+
+
+def test_convert_applied_scholarships_passes_through():
+    # Pin: provided aggregation list is embedded verbatim.
+    applied = [
+        {
+            "scholarship_configuration_id": 1,
+            "config_code": "phd_114",
+            "name": "博士生獎學金 114學年",
+            "application_count": 2,
+        }
+    ]
+    out = convert_student_to_dict(_user(), applied_scholarships=applied)
+    assert out["applied_scholarships"] == applied
 
 
 def test_convert_enums_emit_value_not_name():

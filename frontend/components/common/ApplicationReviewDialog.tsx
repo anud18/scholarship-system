@@ -1238,27 +1238,35 @@ export function ApplicationReviewDialog({
     setError(null);
 
     try {
-      // Filter out pending items - only send approve/reject items to API
-      const filteredItems = reviewItems
-        .filter(item => item.recommendation === 'approve' || item.recommendation === 'reject')
-        .map(item => ({
-          sub_type_code: item.sub_type_code,
-          recommendation: item.recommendation as 'approve' | 'reject',
-          comments: item.comments || "",
-        }));
+      // Every reviewable sub-type must be decided. Items are replaced wholesale
+      // on each submit, so a partial payload would drop the ones left out — the
+      // backend now rejects it (422). Gate here to give a clear message instead.
+      const undecidedItems = reviewItems.filter(
+        item => item.recommendation !== 'approve' && item.recommendation !== 'reject'
+      );
 
-      if (filteredItems.length === 0) {
+      if (undecidedItems.length > 0) {
         toast.error(
           locale === "zh" ? "錯誤" : "Error",
           {
             description: locale === "zh"
-              ? "請至少對一個子項目做出審核決定"
-              : "Please make a decision for at least one sub-type",
+              ? `請對所有子項目做出審核決定，尚未審核：${undecidedItems
+                  .map(item => getSubTypeLabel(item.sub_type_code))
+                  .join("、")}`
+              : `Please make a decision for every sub-type. Still pending: ${undecidedItems
+                  .map(item => getSubTypeLabel(item.sub_type_code))
+                  .join(", ")}`,
           }
         );
         setIsSubmitting(false);
         return;
       }
+
+      const filteredItems = reviewItems.map(item => ({
+        sub_type_code: item.sub_type_code,
+        recommendation: item.recommendation as 'approve' | 'reject',
+        comments: item.comments || "",
+      }));
 
       // Validate that all rejected items have comments
       const rejectedWithoutComments = filteredItems.filter(
@@ -2098,13 +2106,19 @@ export function ApplicationReviewDialog({
                               </span>
                             </div>
 
-                            {reviewItems.filter(item => item.recommendation !== 'pending').length === 0 && (
+                            {reviewItems.some(item => item.recommendation !== 'approve' && item.recommendation !== 'reject') && (
                               <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-md p-3">
                                 <AlertCircle className="h-4 w-4 shrink-0" />
                                 <span>
                                   {locale === "zh"
-                                    ? "請至少對一個子項目做出審核決定"
-                                    : "Please make a decision for at least one sub-type"}
+                                    ? `請對所有子項目做出審核決定，尚未審核：${reviewItems
+                                        .filter(item => item.recommendation !== 'approve' && item.recommendation !== 'reject')
+                                        .map(item => getSubTypeLabel(item.sub_type_code))
+                                        .join("、")}`
+                                    : `Please make a decision for every sub-type. Still pending: ${reviewItems
+                                        .filter(item => item.recommendation !== 'approve' && item.recommendation !== 'reject')
+                                        .map(item => getSubTypeLabel(item.sub_type_code))
+                                        .join(", ")}`}
                                 </span>
                               </div>
                             )}
@@ -2127,7 +2141,10 @@ export function ApplicationReviewDialog({
                               className="w-full h-11"
                               disabled={
                                 isSubmitting ||
-                                reviewItems.filter(item => item.recommendation !== 'pending').length === 0 ||
+                                reviewItems.length === 0 ||
+                                // Every sub-type must be decided — a partial submission
+                                // would drop the ones left out (items are replaced wholesale).
+                                reviewItems.some(item => item.recommendation !== 'approve' && item.recommendation !== 'reject') ||
                                 reviewItems.some(item => item.recommendation === 'reject' && (!item.comments || item.comments.trim() === ''))
                               }
                               size="lg"

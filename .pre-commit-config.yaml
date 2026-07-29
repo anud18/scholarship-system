@@ -115,7 +115,7 @@ repos:
         args: [--baseline, .secrets.baseline]
         exclude: |
           (?x)^(
-            package-lock\.json|
+            frontend/bun\.lock|
             pnpm-lock\.yaml|
             \.env\.example|
             \.env\.prod\.example|
@@ -199,7 +199,7 @@ repos:
       # Frontend tests on commit
       - id: frontend-tests
         name: Frontend Tests
-        entry: bash -c 'cd frontend && npm run test:ci || echo "Some tests failed but continuing..."'
+        entry: bash -c 'cd frontend && bun run test:ci || echo "Some tests failed but continuing..."'
         language: system
         files: ^frontend/
         pass_filenames: false
@@ -208,7 +208,7 @@ repos:
       # Type checking
       - id: typescript-check
         name: TypeScript Check
-        entry: bash -c 'cd frontend && npx tsc --noEmit || echo "Type errors found but continuing..."'
+        entry: bash -c 'cd frontend && bunx tsc --noEmit || echo "Type errors found but continuing..."'
         language: system
         files: ^frontend/.*\.(ts|tsx)$
         pass_filenames: false
@@ -216,7 +216,7 @@ repos:
       # OpenAPI Type Generation Check
       - id: api-types-check
         name: Check API Types are up-to-date
-        entry: bash -c 'cd frontend && npm run api:generate && git diff --exit-code lib/api/generated/schema.d.ts || (echo "⚠️  API types changed! Please commit the updated schema.d.ts file."; exit 1)'
+        entry: bash -c 'cd frontend && bun run api:generate && git diff --exit-code lib/api/generated/schema.d.ts || (echo "⚠️  API types changed! Please commit the updated schema.d.ts file."; exit 1)'
         language: system
         pass_filenames: false
         files: ^backend/app/(api|models|schemas)/.*\.py$

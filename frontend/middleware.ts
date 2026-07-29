@@ -29,7 +29,7 @@ export function middleware(request: NextRequest) {
   // ALL same-origin file-preview proxies live under the single `/api/v1/preview`
   // namespace (the multiplexer at `/api/v1/preview` plus `/api/v1/preview/terms`,
   // `/api/v1/preview/examples`, `/api/v1/preview/system-docs`,
-  // `/api/v1/preview/supp-docs`, `/api/v1/preview/application-document`). They are
+  // `/api/v1/preview/supp-docs`). They are
   // rendered INSIDE an <iframe> by the app (file-preview-dialog,
   // application-detail-dialog, review dialogs, the student wizard, …). The global
   // clickjacking posture (`frame-ancestors 'none'` + `X-Frame-Options: DENY`)
@@ -119,8 +119,7 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - public folder files
-     * - api/email/preview/ (serves email HTML with its own CSP; middleware nonce would block inline styles)
      */
-    "/((?!_next/static|_next/image|favicon.ico|api/email/preview/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|eot)).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|eot)).*)",
   ],
 };

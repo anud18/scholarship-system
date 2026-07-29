@@ -10,8 +10,10 @@ Wave 6a143 pins the pure helpers without invoking the reportlab
 font registration / MinIO / DB paths:
 - _sanitize_filename: 9 invalid-char sanitization + SECURITY
   path-traversal prevention
-- FILE_TYPE_LABELS: zh-TW labels for the 8 known file types
+- FILE_TYPE_LABELS: zh-TW labels for the known fixed file types
 - DEGREE_LABELS: zh-TW labels for degrees 1/2/3
+- _is_dynamic_document_type / _unique_zip_path: merged-PDF selector
+  and duplicate-entry defense
 
 Skips _build_table / _generate_summary_pdf because they depend
 on reportlab Paragraph + CJK font registration that runs at
@@ -22,8 +24,9 @@ import pytest
 
 from app.services.export_package_service import (
     _sanitize_filename,
-    _ext_for_application_document,
-    _application_document_entry,
+    _label_for_file_type,
+    _is_dynamic_document_type,
+    _unique_zip_path,
     _fetch_and_write,
     FILE_TYPE_LABELS,
     DEGREE_LABELS,
@@ -98,14 +101,18 @@ class TestSanitizeFilename:
 
 
 class TestFileTypeLabels:
-    """Pin: FILE_TYPE_LABELS — zh-TW labels for 8 file types.
-    Used by the export PDF and ZIP folder naming."""
+    """Pin: FILE_TYPE_LABELS — zh-TW labels for the fixed file types.
+    Used by the export PDF and ZIP folder naming, AND as the negative
+    membership test for the dynamic-documents merge selector."""
 
-    def test_all_9_known_file_types_present(self):
-        # Pin: exactly 9 file types. bank_account_proof is the
+    def test_all_11_known_file_types_present(self):
+        # Pin: exactly 11 file types. bank_account_proof is the
         # value actually stored on the cloned passbook
-        # ApplicationFile (application_service.py:2118); it must
-        # have a label or it falls through to the 其他文件 default.
+        # ApplicationFile (application_service.py:2118); id_card and
+        # bank_book are minted by batch_import's doc_type_map. Every
+        # fixed type MUST be listed here or it is misclassified as an
+        # admin-configured dynamic document and swept into the merged
+        # 申請資料合併檔.pdf.
         expected_keys = {
             "transcript",
             "research_proposal",
@@ -115,9 +122,20 @@ class TestFileTypeLabels:
             "agreement",
             "bank_account_cover",
             "bank_account_proof",
+            "id_card",
+            "bank_book",
             "other",
         }
         assert set(FILE_TYPE_LABELS.keys()) == expected_keys
+
+    def test_batch_import_types_are_fixed_not_dynamic(self):
+        # Pin: batch_import mints these internal type strings
+        # (batch_import.py doc_type_map); they carry sensitive PII and
+        # must never join the reviewer-facing merged dynamic PDF.
+        assert FILE_TYPE_LABELS["id_card"] == "身份證"
+        assert FILE_TYPE_LABELS["bank_book"] == "存摺封面"
+        assert _is_dynamic_document_type("id_card") is False
+        assert _is_dynamic_document_type("bank_book") is False
 
     def test_transcript_label_is_zh_tw(self):
         # Pin: zh-TW is the system default per CLAUDE.md.
@@ -155,10 +173,17 @@ class TestDegreeLabels:
         assert set(DEGREE_LABELS.keys()) == {"1", "2", "3"}
 
     def test_degree_labels_are_zh_tw(self):
-        # Pin: zh-TW canonical names — 學士/碩士/博士.
-        assert DEGREE_LABELS["1"] == "學士"
+        # Pin: zh-TW canonical names, DESCENDING — 1 is the highest
+        # degree, not the lowest. This pin previously asserted the
+        # inverted order, which printed 學位 學士 on every PhD
+        # student's export. Three authoritative sources agree on the
+        # order below: the `degrees` reference table the frontend
+        # renders from, the std_degree doc in app/schemas/student.py
+        # ("1:博士, 2:碩士, 3:學士"), and StudentInfo.get_student_type()
+        # mapping "1" -> phd. Do not "restore" the ascending order.
+        assert DEGREE_LABELS["1"] == "博士"
         assert DEGREE_LABELS["2"] == "碩士"
-        assert DEGREE_LABELS["3"] == "博士"
+        assert DEGREE_LABELS["3"] == "學士"
 
     def test_keys_are_strings_not_ints(self):
         # Pin: SIS API returns std_degree as INT but the labels
@@ -169,72 +194,98 @@ class TestDegreeLabels:
             assert isinstance(key, str), f"DEGREE_LABELS key {key!r} is not str"
 
 
-class TestExtForApplicationDocument:
-    """Pin: extension derivation for the student-uploaded 申請文件.
-    Prefers the original filename's extension, falls back to the
-    stored MinIO object name's suffix."""
+class TestLabelForFileType:
+    """Pin: ZIP filename labels. Fixed types map through
+    FILE_TYPE_LABELS; admin-configured dynamic document types keep
+    their configured name (the ApplicationFile file_type IS the
+    configured document_name) so each configured document stays
+    identifiable in the export."""
 
-    def test_uses_original_filename_extension(self):
-        assert _ext_for_application_document("申請文件.pdf", "application-documents/12_x.pdf") == ".pdf"
+    def test_fixed_type_maps_to_zh_label(self):
+        assert _label_for_file_type("transcript") == "成績單"
 
-    def test_original_filename_extension_wins_over_object_name(self):
-        assert _ext_for_application_document("draft.docx", "application-documents/12_x.pdf") == ".docx"
+    def test_dynamic_custom_type_keeps_its_configured_name(self):
+        # An admin-defined dynamic document (e.g. 語言檢定證明) is not in
+        # FILE_TYPE_LABELS — the export must keep the configured name,
+        # NOT collapse it into 其他文件.
+        assert _label_for_file_type("語言檢定證明") == "語言檢定證明"
 
-    def test_falls_back_to_object_name_when_no_original(self):
-        assert _ext_for_application_document(None, "application-documents/12_x.pdf") == ".pdf"
+    def test_other_maps_to_generic_label(self):
+        assert _label_for_file_type("other") == "其他文件"
 
-    def test_empty_original_falls_back_to_object_name(self):
-        assert _ext_for_application_document("", "application-documents/12_x.pdf") == ".pdf"
-
-    def test_returns_empty_when_no_extension_anywhere(self):
-        assert _ext_for_application_document("noext", "application-documents/12_x") == ""
-
-    def test_directory_dot_not_mistaken_for_extension(self):
-        # A dot in a directory segment must not be treated as the
-        # file extension — only the last path segment counts.
-        assert _ext_for_application_document(None, "v1.2/objectname") == ""
+    def test_empty_type_maps_to_generic_label(self):
+        assert _label_for_file_type("") == "其他文件"
 
 
-class TestApplicationDocumentEntry:
-    """Pin: descriptor for placing the student-uploaded 申請文件 into
-    the ZIP. Returns None when the application has no 申請文件."""
+class TestIsDynamicDocumentType:
+    """Pin: the merged-PDF selector. Only admin-configured dynamic documents
+    (file_type IS the configured document_name) join the per-student
+    申請資料合併檔.pdf alongside the generated summary; every fixed type and the
+    其他文件 bucket stay out."""
 
-    def test_returns_none_when_no_object_name(self):
-        assert _application_document_entry(None, "x.pdf", "117_資工系", "310_王小明") is None
+    @pytest.mark.parametrize("fixed_type", sorted(FILE_TYPE_LABELS.keys()))
+    def test_every_fixed_type_is_not_dynamic(self, fixed_type):
+        assert _is_dynamic_document_type(fixed_type) is False
 
-    def test_returns_none_when_object_name_empty(self):
-        assert _application_document_entry("", "x.pdf", "117_資工系", "310_王小明") is None
+    def test_configured_document_name_is_dynamic(self):
+        assert _is_dynamic_document_type("語言檢定證明") is True
 
-    def test_builds_entry_with_expected_paths(self):
-        entry = _application_document_entry(
-            "application-documents/12_x.pdf",
-            "申請文件.pdf",
-            "117_資工系",
-            "310_王小明",
-        )
-        assert entry == {
-            "object_name": "application-documents/12_x.pdf",
-            "zip_path": "117_資工系/310_王小明_申請文件.pdf",
-            "error_path": "117_資工系/_錯誤_找不到檔案_申請文件.txt",
-            "error_label": "申請文件.pdf",
-        }
+    def test_empty_and_none_are_not_dynamic(self):
+        assert _is_dynamic_document_type("") is False
+        assert _is_dynamic_document_type(None) is False
 
-    def test_error_label_falls_back_to_object_name(self):
-        entry = _application_document_entry("application-documents/12_x.pdf", None, "117_資工系", "310_王小明")
-        assert entry["error_label"] == "application-documents/12_x.pdf"
 
-    def test_zip_filename_is_sanitized(self):
-        # A student name containing a path separator must not escape
-        # the student folder (ZIP path-traversal guard).
-        entry = _application_document_entry("application-documents/12_x.pdf", "x.pdf", "117_資工系", "310_a/b")
-        assert "/" not in entry["zip_path"].rsplit("/", 1)[-1]
+class TestUniqueZipPath:
+    """Pin: duplicate-entry defense. zipfile writes duplicate names without
+    error and most extractors keep only the last, silently shadowing a file
+    (e.g. a dynamic document named 申請資料合併檔 vs the merged artifact)."""
+
+    def _zf_with(self, names):
+        import io
+        import zipfile
+
+        buf = io.BytesIO()
+        zf = zipfile.ZipFile(buf, "w")
+        for n in names:
+            zf.writestr(n, b"x")
+        return zf
+
+    def test_free_path_returned_unchanged(self):
+        zf = self._zf_with(["a/b.pdf"])
+        assert _unique_zip_path(zf, "a/c.pdf") == "a/c.pdf"
+
+    def test_collision_gets_counter_before_extension(self):
+        zf = self._zf_with(["a/b.pdf"])
+        assert _unique_zip_path(zf, "a/b.pdf") == "a/b_2.pdf"
+
+    def test_counter_skips_taken_names(self):
+        zf = self._zf_with(["a/b.pdf", "a/b_2.pdf"])
+        assert _unique_zip_path(zf, "a/b.pdf") == "a/b_3.pdf"
+
+    def test_extensionless_path_gets_plain_suffix(self):
+        zf = self._zf_with(["a/readme"])
+        assert _unique_zip_path(zf, "a/readme") == "a/readme_2"
+
+    def test_trailing_dot_never_yields_trailing_dot_candidate(self):
+        # "abc." must not become "abc_2." — Windows strips trailing dots,
+        # which would re-collide the very names this helper de-dupes.
+        zf = self._zf_with(["a/scan."])
+        assert _unique_zip_path(zf, "a/scan.") == "a/scan._2"
+
+    def test_dot_only_in_parent_dir_is_not_an_extension(self):
+        zf = self._zf_with(["a.b/file"])
+        assert _unique_zip_path(zf, "a.b/file") == "a.b/file_2"
+
+    def test_leading_dot_basename_is_not_an_extension(self):
+        zf = self._zf_with(["a/.config"])
+        assert _unique_zip_path(zf, "a/.config") == "a/.config_2"
 
 
 class TestFetchAndWrite:
-    """Pin: the shared MinIO fetch-and-write used by both the
-    app.files loop and the 申請文件. On success the bytes land at
-    zip_path; on any MinIO error a placeholder .txt lands at
-    error_path instead (the ZIP build never aborts)."""
+    """Pin: the shared MinIO fetch-and-write used by the app.files
+    loop. On success the bytes land at zip_path; on any MinIO error
+    a placeholder .txt lands at error_path instead (the ZIP build
+    never aborts)."""
 
     def test_success_writes_bytes_and_releases_connection(self):
         import asyncio
@@ -249,7 +300,7 @@ class TestFetchAndWrite:
 
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as zf:
-            asyncio.run(
+            returned = asyncio.run(
                 _fetch_and_write(
                     zf,
                     minio,
@@ -260,6 +311,9 @@ class TestFetchAndWrite:
                 )
             )
 
+        # Pin: success returns (bytes, None) — the bytes are reused for the
+        # merged dynamic-documents PDF without a second MinIO round-trip.
+        assert returned == (b"PDF-BYTES", None)
         buf.seek(0)
         with zipfile.ZipFile(buf) as zf:
             assert zf.read("dept/stu/stu_申請文件.pdf") == b"PDF-BYTES"
@@ -278,7 +332,7 @@ class TestFetchAndWrite:
 
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as zf:
-            asyncio.run(
+            returned = asyncio.run(
                 _fetch_and_write(
                     zf,
                     minio,
@@ -289,6 +343,10 @@ class TestFetchAndWrite:
                 )
             )
 
+        # Pin: failure returns (None, error message) — the caller renders a
+        # download-failure placeholder page in the merged PDF carrying the
+        # same concrete reason as the per-file error txt.
+        assert returned == (None, "object missing")
         buf.seek(0)
         with zipfile.ZipFile(buf) as zf:
             names = zf.namelist()

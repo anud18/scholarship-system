@@ -14,7 +14,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.user_profile import UserProfile, UserProfileHistory
 from app.schemas.user_profile import (
     BankDocumentPhotoUpload,
@@ -574,7 +574,11 @@ class UserProfileService:
 
     async def get_users_with_incomplete_profiles(self) -> List[Dict[str, Any]]:
         """Get users with incomplete profiles for admin dashboard"""
-        stmt = select(User, UserProfile).outerjoin(UserProfile).where(User.role == "STUDENT")
+        # Enum members are lowercase to match the PostgreSQL `userrole` enum
+        # (see CLAUDE.md enum consistency rules). The literal "STUDENT" made
+        # asyncpg raise InvalidTextRepresentationError, so this endpoint returned
+        # 500 unconditionally.
+        stmt = select(User, UserProfile).outerjoin(UserProfile).where(User.role == UserRole.student)
 
         result = await self.db.execute(stmt)
         users_profiles = result.all()
@@ -588,14 +592,14 @@ class UserProfileService:
                 completion_percentage = profile.profile_completion_percentage
                 missing_info = []
 
+                # Keep this list in step with UserProfile.profile_completion_percentage,
+                # which scores exactly two sections. The previous code also tested
+                # `preferred_email` and `phone_number`; neither attribute exists on
+                # UserProfile, so this raised AttributeError on every profile row.
                 if not profile.has_complete_bank_info:
                     missing_info.append("銀行帳戶資訊")
                 if not profile.has_advisor_info:
                     missing_info.append("指導教授資訊")
-                if not profile.preferred_email:
-                    missing_info.append("聯絡Email")
-                if not profile.phone_number:
-                    missing_info.append("聯絡電話")
 
             if completion_percentage < 80:  # Consider <80% as incomplete
                 incomplete_users.append(

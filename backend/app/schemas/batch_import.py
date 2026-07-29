@@ -108,6 +108,11 @@ class ApplicationDataRow(BaseModel):
     # 郵局帳戶資訊
     postal_account: Optional[str] = Field(None, description="郵局帳號", max_length=20)
 
+    # 指導教授資訊（用於 UserProfile 回寫與教授自動指派）
+    advisor_name: Optional[str] = Field(None, description="指導教授姓名", max_length=100)
+    advisor_email: Optional[str] = Field(None, description="指導教授Email", max_length=200)
+    advisor_nycu_id: Optional[str] = Field(None, description="指導教授本校人事編號", max_length=50)
+
     # 續領
     is_renewal: bool = Field(default=False, description="是否為續領申請")
     renewal_year: Optional[int] = Field(default=None, description="續領年份，例如 113")
@@ -124,10 +129,12 @@ class ApplicationDataRow(BaseModel):
             raise ValueError("學號僅能包含英文字母和數字")
         return v
 
-    @field_validator("student_name")
+    @field_validator("student_name", "advisor_name")
     @classmethod
-    def validate_name_fields(cls, v: str) -> str:
+    def validate_name_fields(cls, v: Optional[str]) -> Optional[str]:
         """Validate name fields - no HTML/script tags for XSS prevention"""
+        if v is None:
+            return v
         v = v.strip()
         # Check for common XSS patterns
         if re.search(r"<[^>]*script|<[^>]*iframe|javascript:", v, re.IGNORECASE):

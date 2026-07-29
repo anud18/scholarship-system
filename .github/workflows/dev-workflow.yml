@@ -18,6 +18,7 @@ permissions:
 
 env:
   NODE_VERSION: '22'
+  BUN_VERSION: '1.3.11'
   PYTHON_VERSION: '3.13'
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
@@ -184,23 +185,31 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('frontend/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
 
       - name: Install dependencies
         working-directory: ./frontend
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Build for production
         working-directory: ./frontend
-        run: npm run build
+        run: bun run build
 
       - name: Analyze bundle size
         working-directory: ./frontend
         run: |
-          # Install bundle analyzer
-          npm install -g @next/bundle-analyzer
-
           # Create bundle analysis report
           echo "## 📦 Bundle Size Analysis" > bundle-report.md
           echo "" >> bundle-report.md

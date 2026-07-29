@@ -22,7 +22,7 @@ const srcBytes = readFileSync(src);
 
 // Skip the write when an identical copy already exists. A prior `docker compose
 // up --build` (running as root) can leave a root-owned worker file in the
-// bind-mounted public/ dir; a later host-side `npm install` postinstall runs as
+// bind-mounted public/ dir; a later host-side `bun install` postinstall runs as
 // a non-root user and cannot overwrite it -> EACCES. The file it would write is
 // byte-identical (same pdfjs-dist), so treat "already correct" as success.
 if (existsSync(dest) && readFileSync(dest).equals(srcBytes)) {

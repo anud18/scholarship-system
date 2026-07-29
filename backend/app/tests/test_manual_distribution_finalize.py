@@ -142,3 +142,106 @@ async def test_finalize_keeps_status_for_non_allocated_apps(db: AsyncSession):
     await db.refresh(ranking)
     assert ranking.distribution_executed is True
     assert ranking.distribution_date is not None
+
+
+@pytest.mark.asyncio
+async def test_finalize_skips_unallocated_renewals(db: AsyncSession):
+    """The fix in #1171: a funded renewal sitting unallocated in a ranking
+    must keep quota_allocation_status='allocated' (owned by renewal import),
+    not be downgraded to 'rejected' by matrix finalize."""
+    user_renewal = _make_user("renewal")
+    user_winner = _make_user("winner")
+    db.add_all([user_renewal, user_winner])
+    await db.commit()
+    await db.refresh(user_renewal)
+    await db.refresh(user_winner)
+
+    sch = ScholarshipType(
+        code="finalize_renewal_sch",
+        name="Finalize Renewal Test Scholarship",
+        description="Fixture for #1171 regression test",
+    )
+    db.add(sch)
+    await db.commit()
+    await db.refresh(sch)
+
+    common_kwargs = dict(
+        scholarship_type_id=sch.id,
+        sub_type_selection_mode="single",
+        academic_year=114,
+        semester=Semester.first.value,
+        review_stage=ReviewStage.college_ranked.value,
+        status=ApplicationStatus.approved.value,
+        scholarship_subtype_list=["general"],
+        agree_terms=True,
+    )
+    # Renewal import leaves the renewal approved + allocated (#1132)
+    app_renewal = Application(
+        app_id="APP-114-1-FA003R",
+        user_id=user_renewal.id,
+        is_renewal=True,
+        quota_allocation_status="allocated",
+        **common_kwargs,
+    )
+    app_winner = Application(
+        app_id="APP-114-1-FA004",
+        user_id=user_winner.id,
+        is_renewal=False,
+        **common_kwargs,
+    )
+    db.add_all([app_renewal, app_winner])
+    await db.commit()
+    await db.refresh(app_renewal)
+    await db.refresh(app_winner)
+
+    ranking = CollegeRanking(
+        scholarship_type_id=sch.id,
+        sub_type_code="general",
+        academic_year=114,
+        semester=Semester.first.value,
+        total_applications=2,
+        total_quota=1,
+        allocated_count=1,
+        is_finalized=True,
+        ranking_status="finalized",
+    )
+    db.add(ranking)
+    await db.commit()
+    await db.refresh(ranking)
+
+    # Renewals auto-rank first (#71) but stay unallocated in the matrix
+    item_renewal = CollegeRankingItem(
+        ranking_id=ranking.id,
+        application_id=app_renewal.id,
+        rank_position=1,
+        is_allocated=False,
+    )
+    item_winner = CollegeRankingItem(
+        ranking_id=ranking.id,
+        application_id=app_winner.id,
+        rank_position=2,
+        is_allocated=True,
+        allocated_sub_type="general",
+    )
+    db.add_all([item_renewal, item_winner])
+    await db.commit()
+
+    service = ManualDistributionService(db)
+    result = await service.finalize(sch.id, 114, Semester.first.value)
+
+    # The renewal must be untouched: still approved + allocated
+    await db.refresh(app_renewal)
+    status_value = getattr(app_renewal.status, "value", app_renewal.status)
+    assert status_value == ApplicationStatus.approved.value
+    assert app_renewal.quota_allocation_status == "allocated", (
+        "#1171 regression: finalize downgraded a funded renewal's "
+        f"quota_allocation_status to '{app_renewal.quota_allocation_status}'"
+    )
+
+    # Its ranking item must not be marked rejected either
+    await db.refresh(item_renewal)
+    assert item_renewal.status != "rejected"
+
+    # And it must not inflate the rejected tally
+    assert result["rejected_count"] == 0
+    assert result["approved_count"] == 1

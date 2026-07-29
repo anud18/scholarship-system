@@ -160,6 +160,12 @@ class Application(Base):
     suspended_at = Column(DateTime(timezone=True), nullable=True)
     suspended_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     suspend_reason = Column(Text, nullable=True)
+    # 撤銷/停發當下的狀態快照。撤銷/停發可以在「確認分發」之前執行（學生休學/
+    # 退學讓他必須被排除於本次分發），此時把申請恢復成 approved/allocated 是錯的
+    # ——復原必須把 status / quota_allocation_status 放回取消前的值。
+    # NULL = 尚未被撤銷/停發（或已復原）。
+    cancelled_from_status = Column(String(30), nullable=True)
+    cancelled_from_quota_status = Column(String(20), nullable=True)
 
     # 時間戳記
     submitted_at = Column(DateTime(timezone=True))
@@ -178,8 +184,6 @@ class Application(Base):
     batch_import_id = Column(Integer, ForeignKey("batch_imports.id"), nullable=True)  # 批次匯入紀錄
     import_source = Column(String(20), nullable=True, default="online")  # 'online' | 'batch_import'
     document_status = Column(String(30), nullable=True, default="complete")  # 'complete' | 'pending_documents'
-    application_document_url = Column(String(500), nullable=True)  # 申請文件
-    application_document_original_filename = Column(String(255), nullable=True)
 
     # 其他資訊
     meta_data = Column(JSON)  # 額外的元資料
@@ -256,6 +260,14 @@ class Application(Base):
         Index(
             "ix_applications_scholarship_configuration_id",
             "scholarship_configuration_id",
+        ),
+        # Plain index on the user FK — the partial unique indexes above lead
+        # with user_id but their WHERE predicates make them unusable for
+        # arbitrary per-user lookups (student application list, admin student
+        # list applied-scholarships aggregation).
+        Index(
+            "ix_applications_user_id",
+            "user_id",
         ),
     )
 
@@ -342,6 +354,12 @@ class ApplicationFile(Base):
     """Application file attachment model"""
 
     __tablename__ = "application_files"
+    __table_args__ = (
+        # Hot path: every upload runs the stale-duplicate SELECT and every
+        # selectinload(Application.files) filters on application_id — Postgres
+        # does not auto-index FK columns.
+        Index("ix_application_files_app_type", "application_id", "file_type"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     application_id = Column(Integer, ForeignKey("applications.id"), nullable=False)

@@ -7,7 +7,7 @@ Provides endpoints for admin to manually allocate scholarships to students.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,6 +43,17 @@ class AllocateRequest(BaseModel):
     academic_year: int
     semester: str
     allocations: list[AllocationItem]
+
+
+class AutoAllocatePreviewRequest(BaseModel):
+    scholarship_type_id: int
+    academic_year: int
+    semester: str
+    college_code: Optional[str] = None  # Restrict suggestions to one college
+    # The caller's on-screen allocations for every row it renders, all colleges
+    # — same shape as AllocateRequest.allocations, a null sub_type_code meaning
+    # 未決. None (the field omitted) falls back to the saved state.
+    staged: Optional[list[AllocationItem]] = None
 
 
 class FinalizeRequest(BaseModel):
@@ -195,27 +206,42 @@ async def get_distribution_state(
     }
 
 
-@router.get("/auto-allocate-preview")
+@router.post("/auto-allocate-preview")
 async def auto_allocate_preview(
-    scholarship_type_id: int = Query(...),
-    academic_year: int = Query(...),
-    semester: str = Query(...),
+    request: AutoAllocatePreviewRequest,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_admin_user),
 ):
-    """Generate auto-allocation suggestions without persisting."""
+    """Generate auto-allocation suggestions without persisting.
+
+    Pass `college_code` to run the distribution for a single college; quotas are
+    still evaluated against the global live remaining, so the result matches what
+    a whole-scholarship run would suggest for that college.
+
+    Pass `staged` — the caller's on-screen allocations for every row it renders,
+    every college — to have the suggestions computed against that state instead
+    of the saved one. Unticked rows free their slot immediately; hand-ticked rows
+    are treated as decided. POST rather than GET because that state is a body,
+    not a query string; nothing is written either way.
+    """
     try:
         service = ManualDistributionService(db)
         suggestions = await service.auto_allocate_preview(
-            scholarship_type_id=scholarship_type_id,
-            academic_year=academic_year,
-            semester=semester,
+            scholarship_type_id=request.scholarship_type_id,
+            academic_year=request.academic_year,
+            semester=request.semester,
+            college_code=request.college_code,
+            staged=[item.model_dump() for item in request.staged] if request.staged is not None else None,
         )
         return {
             "success": True,
             "message": "Auto-allocation preview generated",
             "data": {"suggestions": suggestions},
         }
+    except ValueError as e:
+        # A malformed overlay (e.g. the same ranking item staged twice) — same
+        # 400 `allocate` gives for the same wire shape.
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except Exception as e:
         logger.error("Error generating auto-allocation preview: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to generate auto-allocation preview") from e
@@ -377,9 +403,14 @@ async def restore_from_history(
         )
 
         await db.commit()
+        message = f"Restored {restore_result['restored_count']} allocations from history"
+        if restore_result.get("skipped_rejected"):
+            message += f" ({restore_result['skipped_rejected']} skipped: sub-type rejected in review)"
+        if restore_result.get("skipped_cancelled"):
+            message += f" ({restore_result['skipped_cancelled']} skipped: application revoked/suspended)"
         return {
             "success": True,
-            "message": f"Restored {restore_result['restored_count']} allocations from history",
+            "message": message,
             "data": restore_result,
         }
     except ValueError as e:
@@ -608,130 +639,6 @@ async def generate_rosters_from_distribution(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="造冊產生失敗") from e
 
 
-@router.post("/import-received-months")
-async def import_received_months(
-    scholarship_type_id: int = Query(..., description="Scholarship type ID"),
-    academic_year: int = Query(..., description="Academic year"),
-    semester: str = Query(..., description="Semester"),
-    file: UploadFile = File(..., description="Excel file with columns: 學號, 已領月份數"),
-    current_user=Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Import received months from Excel for students in a distribution."""
-    import openpyxl
-    from io import BytesIO
-
-    # Validate file type
-    if not file.filename or not file.filename.endswith(".xlsx"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="請上傳 Excel 檔案 (.xlsx)",
-        )
-
-    # Read Excel with size limit
-    content = await file.read()
-    if len(content) > 5 * 1024 * 1024:
-        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="檔案過大 (上限 5MB)")
-
-    try:
-        wb = openpyxl.load_workbook(BytesIO(content), read_only=True)
-        ws = wb.active
-        # Parse rows: expect header row then data rows
-        rows = list(ws.iter_rows(min_row=2, values_only=True))
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"無法解析 Excel 檔案，請確認格式正確: {type(e).__name__}",
-        ) from e
-
-    if not rows:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Excel 檔案沒有資料列")
-
-    # Build student_id -> months mapping
-    import_data: dict[str, int] = {}
-    for row in rows:
-        if len(row) < 2 or row[0] is None or row[1] is None:
-            continue
-        student_id = str(row[0]).strip()
-        try:
-            months = int(row[1])
-        except (ValueError, TypeError):
-            continue
-        if months < 0:
-            continue
-        import_data[student_id] = months
-
-    if not import_data:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="無法解析任何有效資料")
-
-    # Find rankings matching the scholarship/year/semester combination
-    if semester == "yearly":
-        sem_condition = or_(
-            CollegeRanking.semester.is_(None),
-            CollegeRanking.semester == "annual",
-            CollegeRanking.semester == "yearly",
-        )
-    else:
-        sem_condition = CollegeRanking.semester == semester
-    ranking_stmt = select(CollegeRanking.id).where(
-        and_(
-            CollegeRanking.scholarship_type_id == scholarship_type_id,
-            CollegeRanking.academic_year == academic_year,
-            sem_condition,
-        )
-    )
-    ranking_result = await db.execute(ranking_stmt)
-    ranking_ids = [r[0] for r in ranking_result.all()]
-
-    if not ranking_ids:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到對應的排名資料")
-
-    # Get ranking items with their applications for student ID matching
-    # Exclude soft-deleted applications
-    stmt = (
-        select(CollegeRankingItem, Application)
-        .join(Application, CollegeRankingItem.application_id == Application.id)
-        .where(
-            and_(
-                CollegeRankingItem.ranking_id.in_(ranking_ids),
-                Application.deleted_at.is_(None),
-            )
-        )
-    )
-    result = await db.execute(stmt)
-    item_pairs = result.all()
-
-    # matched = unique students from the Excel that had a ranking item.
-    # updated = number of ranking rows actually touched (same student can have
-    # multiple items, e.g. different sub_types, and all of them are updated).
-    matched_sids: set[str] = set()
-    updated = 0
-
-    for item, app in item_pairs:
-        student_data = app.student_data or {}
-        sid = student_data.get("std_stdcode", "")
-        if sid in import_data:
-            item.received_months = import_data[sid]
-            item.received_months_source = "imported"
-            updated += 1
-            matched_sids.add(sid)
-
-    not_found = [sid for sid in import_data if sid not in matched_sids]
-    matched = len(matched_sids)
-
-    await db.commit()
-
-    return {
-        "success": True,
-        "message": f"成功匯入 {matched} 位學生（{updated} 筆紀錄）",
-        "data": {
-            "matched": matched,
-            "not_found": not_found,
-            "updated": updated,
-        },
-    }
-
-
 async def _send_cancellation_email(
     to: str,
     subject: str,
@@ -838,7 +745,10 @@ async def revoke_application_allocation(
     current_user=Depends(get_current_admin_user),
     http_request: Request = None,
 ):
-    """撤銷已分發學生：從未鎖定造冊移除 + 標記 application 為 cancelled/revoked。"""
+    """撤銷學生獎學金：從未鎖定造冊移除 + 標記 application 為 cancelled/revoked。
+
+    分發前後皆可執行——分發前撤銷等同把該生排除於本次分發（預設分發不再建議、
+    確認分發會略過）。復原時會回到撤銷當下的狀態。"""
     service = ManualDistributionService(db)
     try:
         result = await service.revoke_allocation(
@@ -852,6 +762,7 @@ async def revoke_application_allocation(
             app_id=result.get("app_id", f"APP-{application_id}"),
             user=current_user,
             reason=request.reason,
+            prior_quota_status=result.get("prior_quota_allocation_status"),
             affected_unlocked_rosters=result.get("affected_unlocked_rosters"),
             request=http_request,
         )
@@ -873,7 +784,10 @@ async def suspend_application_allocation(
     current_user=Depends(get_current_admin_user),
     http_request: Request = None,
 ):
-    """停發已分發學生：從未鎖定造冊移除 + 標記 application 為 cancelled/suspended。"""
+    """停發學生獎學金：從未鎖定造冊移除 + 標記 application 為 cancelled/suspended。
+
+    分發前後皆可執行——分發前停發（休學/退學/畢業）等同把該生排除於本次分發。
+    復原時會回到停發當下的狀態。"""
     service = ManualDistributionService(db)
     try:
         result = await service.suspend_allocation(
@@ -887,6 +801,7 @@ async def suspend_application_allocation(
             app_id=result.get("app_id", f"APP-{application_id}"),
             user=current_user,
             reason=request.reason,
+            prior_quota_status=result.get("prior_quota_allocation_status"),
             affected_unlocked_rosters=result.get("affected_unlocked_rosters"),
             request=http_request,
         )
@@ -906,8 +821,10 @@ async def restore_application_allocation(
     current_user=Depends(get_current_admin_user),
     http_request: Request = None,
 ):
-    """恢復已撤銷/停發學生為正常分發（quota_allocation_status -> allocated）。
-    不會自動還原造冊項目，需重新生成造冊。"""
+    """恢復已撤銷/停發學生：回到撤銷/停發當下的狀態。
+
+    分發後撤銷者回到 approved/allocated 並重新佔用名額；分發前撤銷者回到當時的
+    申請狀態，重新成為可分發的候選人。不會自動還原造冊項目，需重新生成造冊。"""
     service = ManualDistributionService(db)
     try:
         result = await service.restore_allocation(
@@ -932,6 +849,7 @@ async def restore_application_allocation(
             app_id=result.get("app_id", f"APP-{application_id}"),
             user=current_user,
             prior_status=result.get("restored_from", "unknown"),
+            restored_quota_status=result.get("quota_allocation_status"),
             prior_reason=result.get("restored_reason"),
             original_cancellation_log_id=original_log_id,
             request=http_request,

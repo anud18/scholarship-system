@@ -670,9 +670,9 @@ For the live /metrics check, use:
 
 - [ ] **Step 1: Dispatch Branch D**
 
-`Agent(subagent_type=backend-engineer-postgres-minio, description="Audit backend metrics interface", prompt=<filled template>)`
+`Agent(subagent_type=general-purpose, description="Audit backend metrics interface", prompt=<filled template>)`
 
-(Use backend specialist here; this branch reads backend Python code in depth.)
+(This branch reads backend Python code in depth. The former `backend-engineer-postgres-minio` specialist agent was removed in #1184.)
 
 - [ ] **Step 2: Verify deliverable**
 

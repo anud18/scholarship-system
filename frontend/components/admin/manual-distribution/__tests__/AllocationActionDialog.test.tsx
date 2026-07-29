@@ -70,7 +70,9 @@ jest.mock("@/components/ui/select", () => ({
   }) => <option value={value}>{children}</option>,
 }));
 
-const target = { applicationId: 7, studentName: "王小明" };
+const target = { applicationId: 7, studentName: "王小明", hasAllocation: true };
+/** Same student, cancelled BEFORE 確認分發 — no roster, no award to take back. */
+const unallocatedTarget = { ...target, hasAllocation: false };
 
 describe("AllocationActionDialog", () => {
   beforeEach(() => {
@@ -195,6 +197,55 @@ describe("AllocationActionDialog", () => {
       fireEvent.click(confirm);
     });
     await waitFor(() => expect(mockRestoreAllocation).toHaveBeenCalledWith(7));
+    expect(onConfirmed).toHaveBeenCalledWith("王小明");
+  });
+
+  // hasAllocation=false — 撤銷/停發 before 確認分發. Same API calls, but the
+  // copy must not promise a roster removal that can't happen.
+  it("unallocated target: revoke copy describes exclusion, not roster removal", () => {
+    render(
+      <AllocationActionDialog
+        mode="revoke"
+        target={unallocatedTarget}
+        onClose={() => {}}
+        onConfirmed={() => {}}
+      />
+    );
+    expect(screen.getByText(/排除於本次分發/)).toBeInTheDocument();
+    expect(screen.queryByText(/從未鎖定造冊中移除/)).not.toBeInTheDocument();
+    // Reason is still required — the action itself is unchanged.
+    expect(screen.getByRole("button", { name: "確認撤銷" })).toBeDisabled();
+  });
+
+  it("unallocated target: restore copy promises the prior state, not 核准（已分配）", () => {
+    render(
+      <AllocationActionDialog
+        mode="restore"
+        target={unallocatedTarget}
+        onClose={() => {}}
+        onConfirmed={() => {}}
+      />
+    );
+    expect(screen.getByText(/回到撤銷／停發前的狀態/)).toBeInTheDocument();
+    expect(screen.queryByText(/核准（已分配）/)).not.toBeInTheDocument();
+  });
+
+  it("unallocated target: suspend still calls suspendAllocation with the composed reason", async () => {
+    const onConfirmed = jest.fn();
+    render(
+      <AllocationActionDialog
+        mode="suspend"
+        target={unallocatedTarget}
+        onClose={() => {}}
+        onConfirmed={onConfirmed}
+      />
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "確認停發" }));
+    });
+    await waitFor(() =>
+      expect(mockSuspendAllocation).toHaveBeenCalledWith(7, "休學")
+    );
     expect(onConfirmed).toHaveBeenCalledWith("王小明");
   });
 });

@@ -32,6 +32,7 @@ from app.models.payment_roster import (
     RosterStatus,
     RosterTriggerType,
     StudentVerificationStatus,
+    verification_status_label,
 )
 from app.models.roster_audit import RosterAuditAction, RosterAuditLevel, RosterAuditLog
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
@@ -367,7 +368,9 @@ class RosterService:
                         roster, application, verification_result, verification_status, eligibility_result
                     )
 
-                    if roster_item.is_qualified:
+                    # 統計以「納入造冊」為準，與 Excel 的「納入造冊」欄、
+                    # 造冊詳情的「納入造冊人數」及 _recompute_roster_totals_sync 同源
+                    if roster_item.is_included:
                         qualified_count += 1
                         total_amount += roster_item.scholarship_amount
                     else:
@@ -416,7 +419,7 @@ class RosterService:
             audit_service.log_roster_operation(
                 roster_id=roster.id,
                 action=RosterAuditAction.CREATE,
-                title=f"造冊資料產生: 合格{qualified_count}人, 不合格{disqualified_count}人",
+                title=f"造冊資料產生: 納入造冊{qualified_count}人, 排除{disqualified_count}人",
                 user_id=created_by_user_id,
                 user_name=user_name,
                 description=f"造冊資料產生完成，總金額: ${total_amount}，API失敗: {verification_failures}次",
@@ -482,7 +485,7 @@ class RosterService:
             actual_total = sum(
                 item.scholarship_amount
                 for item in roster.items
-                if item.is_included and item.is_qualified and item.scholarship_amount is not None
+                if item.is_included and item.scholarship_amount is not None
             )
             if abs(float(actual_total) - float(roster.total_amount)) > 0.01:
                 errors.append(f"總金額不一致: 計算值={actual_total}, 儲存值={roster.total_amount}")
@@ -804,23 +807,22 @@ class RosterService:
         # 從申請中取得學生資料
         student_data = application.student_data or {}
 
-        # 判斷是否納入造冊
-        is_included = True
-        exclusion_reason = None
+        # 判斷是否納入造冊 — 收集「所有」排除原因，不得互相覆蓋 (#1142)
+        exclusion_reasons: list[str] = []
 
         # 1. 檢查學籍驗證狀態
         if verification_status != StudentVerificationStatus.VERIFIED:
-            is_included = False
-            exclusion_reason = f"學籍驗證未通過: {verification_status.value}"
+            exclusion_reasons.append(f"學籍驗證未通過：{verification_status_label(verification_status)}")
         # 2. 檢查獎學金規則符合性
         elif eligibility_result and not eligibility_result.get("is_eligible", True):
-            is_included = False
             failed_rules = eligibility_result.get("failed_rules", [])
             if failed_rules:
-                exclusion_reason = f"不符合獎學金規則: {'; '.join(failed_rules)}"
+                exclusion_reasons.append(f"不符合獎學金規則: {'; '.join(failed_rules)}")
             else:
-                exclusion_reason = "不符合獎學金資格條件"
-        # 3. 檢查銀行帳戶資訊
+                exclusion_reasons.append("不符合獎學金資格條件")
+        # 3. 擷取銀行帳戶資訊（僅作快照與提醒用，「缺少銀行帳戶」不構成排除原因，
+        #    也不影響造冊人數／總金額：學生補件後即可撥款。缺帳號僅在 Excel
+        #    說明欄提示「缺少郵局帳號資訊」，供承辦人催補件）
         # IMPORTANT: Support both nested (schema-compliant) and flat (legacy) data structures
         form_data = application.submitted_form_data or {}
         form_fields = form_data.get("fields", {})
@@ -840,12 +842,13 @@ class RosterService:
                 break
 
         if not bank_account:
-            is_included = False
-            exclusion_reason = "缺少銀行帳戶資訊"
             logger.warning(
                 f"Application {application.id} missing bank account. "
                 f"Checked nested and flat structures. submitted_form_data keys: {list(form_data.keys())}"
             )
+
+        is_included = not exclusion_reasons
+        exclusion_reason = "；".join(exclusion_reasons) if exclusion_reasons else None
 
         # 查詢 CollegeRankingItem 以取得備取資訊與分發子類型
         backup_info = None
@@ -891,6 +894,10 @@ class RosterService:
             if alloc_item:
                 allocated_sub_type = alloc_item.allocated_sub_type
 
+        # 續領申請沒有 CollegeRankingItem；子類型直接取自申請本身。
+        if not allocated_sub_type and application.is_renewal:
+            allocated_sub_type = application.sub_scholarship_type
+
         # 載入消耗配置 (consumed config) — 借用前年度配額時不同於發放配置。
         # allocation_config_id NULL ⇒ 全期 sentinel，退回造冊自身的發放配置。
         consumed_config = None
@@ -903,7 +910,7 @@ class RosterService:
 
         # 計算申請身分別
         application_identity = None
-        if application.is_renewal and application.previous_application_id:
+        if application.is_renewal:
             application_identity = f"{application.academic_year}續領"
         else:
             application_identity = f"{application.academic_year}新申請"
@@ -1063,16 +1070,23 @@ class RosterService:
             scholarship_config = application.scholarship_configuration
 
             if not scholarship_config or not student:
-                if not student and not scholarship_config:
-                    missing_reason = "缺少學生資訊/獎學金配置"
-                elif not student:
-                    missing_reason = "缺少學生資訊"
-                else:
-                    missing_reason = "缺少獎學金配置"
+                # 具體說明缺的是哪個關聯、為什麼會缺，讓管理員能直接修資料，
+                # 而不是只看到「缺少獎學金配置」卻不知道原因。
+                app_ref = getattr(application, "app_id", None) or f"#{application.id}"
+                missing_reasons: List[str] = []
+                if not student:
+                    missing_reasons.append(
+                        f"申請 {app_ref} 找不到對應的學生帳號（applications.user_id 無對應使用者，帳號可能已被刪除）"
+                    )
+                if not scholarship_config:
+                    missing_reasons.append(
+                        f"申請 {app_ref} 未關聯獎學金配置（applications.scholarship_configuration_id 為空，"
+                        f"常見於資料匯入或舊資料未建立配置關聯），無法載入該期驗證規則"
+                    )
 
                 return {
                     "is_eligible": False,
-                    "failed_rules": [missing_reason],
+                    "failed_rules": missing_reasons,
                     "warning_rules": [],
                     "details": {},
                 }
@@ -1102,7 +1116,9 @@ class RosterService:
                 if not rule_result["passed"]:
                     if rule.is_hard_rule:
                         failed_rules.append(rule_result["message"])
-                    elif rule.is_warning:
+                    else:
+                        # 軟性規則失敗不影響 is_eligible，但必須留下紀錄，
+                        # 讓造冊 Excel 的資格欄位看得到（#1139）
                         warning_rules.append(rule_result["message"])
 
                 details[f"rule_{rule.id}"] = rule_result
@@ -1475,6 +1491,22 @@ class RosterService:
             )
         return CollegeRanking.semester == semester
 
+    def _build_application_semester_filter(self, semester: Optional[str]):
+        """Semester predicate on Application.semester.
+        None / "annual" / "yearly" / "" all map to the yearly bucket
+        (semester IS NULL OR "yearly"); otherwise exact match.
+
+        Unlike CollegeRanking.semester (String(20)), Application.semester is a
+        native Postgres enum {first, second, yearly} — emitting "annual" here
+        aborts the whole query with `invalid input value for enum semester`.
+        Mirror _config_semester_condition, not the String-column helpers."""
+        if semester in (None, "", "annual", "yearly"):
+            return or_(
+                Application.semester.is_(None),
+                Application.semester == "yearly",
+            )
+        return Application.semester == semester
+
     def generate_rosters_from_distribution(
         self,
         scholarship_type_id: int,
@@ -1526,13 +1558,6 @@ class RosterService:
             .all()
         )
 
-        if not rankings:
-            raise ValueError(
-                f"找不到已完成分發的排名：scholarship_type_id={scholarship_type_id}, "
-                f"academic_year={academic_year}, semester={semester}。"
-                "請先完成排名並執行矩陣分發後再產生造冊。"
-            )
-
         ranking_ids = [r.id for r in rankings]
 
         # 2. 取得對應的獎學金配置
@@ -1552,7 +1577,26 @@ class RosterService:
                 f"找不到對應的獎學金配置：scholarship_type_id={scholarship_type_id}, " f"academic_year={academic_year}"
             )
 
-        # 3. 取得所有已分配的 ranking items，並按 (allocation_config_id, allocated_sub_type) 分組
+        # 3a. 取得已核准的續領申請。續領申請永遠不會贏得 CollegeRankingItem
+        # （它們被排除在配額分發之外），所以矩陣分發造冊路徑看不到它們。此處直接撈出，
+        # 並以 (allocation_config_id, sub_scholarship_type) 為 key 併入分組 —— 與
+        # ManualDistributionService 消耗配額所用的 key 一致。
+        renewal_apps = (
+            self.db.query(Application)
+            .filter(
+                and_(
+                    Application.scholarship_type_id == scholarship_type_id,
+                    Application.academic_year == academic_year,
+                    Application.is_renewal.is_(True),
+                    Application.status == "approved",
+                    Application.deleted_at.is_(None),
+                    self._build_application_semester_filter(semester),
+                )
+            )
+            .all()
+        )
+
+        # 3b. 取得所有已分配的 ranking items，並按 (allocation_config_id, allocated_sub_type) 分組
         allocated_items = (
             self.db.query(CollegeRankingItem)
             .filter(
@@ -1562,10 +1606,15 @@ class RosterService:
                 )
             )
             .all()
+            if ranking_ids
+            else []
         )
 
-        if not allocated_items:
-            raise ValueError(f"排名 {ranking_ids} 沒有已分配的學生。請確認已完成手動分發並確認分發。")
+        if not allocated_items and not renewal_apps:
+            raise ValueError(
+                "沒有可造冊的資料：找不到已分配的排名學生，也沒有已核准的續領。"
+                "請先完成矩陣分發，或先匯入續領通過名單。"
+            )
 
         # 分組：{(allocation_config_id, sub_type): [ranking_item, ...]}
         # allocation_config_id NULL ⇒ 消耗本配置（requesting config）的配額。
@@ -1575,6 +1624,13 @@ class RosterService:
             sub_type = item.allocated_sub_type or "general"
             key = (alloc_config_id, sub_type)
             groups.setdefault(key, []).append(item)
+
+        # 將已核准的續領併入（可能是全新的）分組；記錄每個 key 的續領 application id。
+        renewal_ids_by_key: Dict[tuple, set] = {}
+        for app in renewal_apps:
+            key = (app.allocation_config_id or scholarship_config.id, app.sub_scholarship_type or "general")
+            renewal_ids_by_key.setdefault(key, set()).add(app.id)
+            groups.setdefault(key, [])
 
         # 預先載入每個分組的「消耗配置」(consumed config) — 借用配額時是前年度的同代碼配置
         consumed_configs: Dict[int, ScholarshipConfiguration] = {scholarship_config.id: scholarship_config}
@@ -1597,6 +1653,7 @@ class RosterService:
 
         for (alloc_config_id, sub_type), group_items in groups.items():
             application_ids_in_group = {item.application_id for item in group_items}
+            application_ids_in_group |= renewal_ids_by_key.get((alloc_config_id, sub_type), set())
             consumed_config = consumed_configs[alloc_config_id]
 
             try:
@@ -1791,7 +1848,8 @@ class RosterService:
                     roster, application, verification_result, verification_status, eligibility_result
                 )
 
-                if roster_item.is_qualified:
+                # 同 generate_roster：統計以「納入造冊」為準
+                if roster_item.is_included:
                     qualified_count += 1
                     total_amount += roster_item.scholarship_amount
                 else:
@@ -1840,7 +1898,7 @@ class RosterService:
         audit_service.log_roster_operation(
             roster_id=roster.id,
             action=RosterAuditAction.CREATE,
-            title=f"批次造冊產生: {sub_type} {allocation_year}年度 合格{qualified_count}人",
+            title=f"批次造冊產生: {sub_type} {allocation_year}年度 納入造冊{qualified_count}人",
             user_id=created_by_user_id,
             user_name=user_name,
             description=f"計畫編號: {project_number or '未設定'}，總金額: ${total_amount}",

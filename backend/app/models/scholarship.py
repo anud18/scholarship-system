@@ -575,8 +575,11 @@ class ScholarshipConfiguration(Base):
     application_end_date = Column(DateTime(timezone=True), nullable=True)
 
     # 續領審查期間 (從 ScholarshipType 移至此處)
+    # 管理員決定續領是否需要教授/學院審查（與一般申請的 requires_* 各自獨立）
+    renewal_requires_professor_review = Column(Boolean, default=False, nullable=False, server_default="false")
     renewal_professor_review_start = Column(DateTime(timezone=True), nullable=True)
     renewal_professor_review_end = Column(DateTime(timezone=True), nullable=True)
+    renewal_requires_college_review = Column(Boolean, default=False, nullable=False, server_default="false")
     renewal_college_review_start = Column(DateTime(timezone=True), nullable=True)
     renewal_college_review_end = Column(DateTime(timezone=True), nullable=True)
 
@@ -631,6 +634,20 @@ class ScholarshipConfiguration(Base):
 
     def __repr__(self):
         return f"<ScholarshipConfiguration(id={self.id}, config_code={self.config_code}, name={self.config_name})>"
+
+    # Review-requirement resolvers — renewal applications carry their own
+    # admin-configured flags, independent of the general-application ones.
+    def requires_professor_review_for(self, is_renewal: bool) -> bool:
+        """Whether an application of the given kind needs professor review."""
+        if is_renewal:
+            return bool(self.renewal_requires_professor_review)
+        return bool(self.requires_professor_recommendation)
+
+    def requires_college_review_for(self, is_renewal: bool) -> bool:
+        """Whether an application of the given kind needs college review."""
+        if is_renewal:
+            return bool(self.renewal_requires_college_review)
+        return bool(self.requires_college_review)
 
     @property
     def cycle(self) -> str:
@@ -778,13 +795,13 @@ class ScholarshipConfiguration(Base):
                 errors.append(f"學院配額總和 ({college_total}) 超過總配額 ({self.total_quota})")
 
         # Validate renewal review dates
-        if not self.requires_professor_recommendation:
+        if not self.renewal_requires_professor_review:
             if self.renewal_professor_review_start or self.renewal_professor_review_end:
-                errors.append("續領教授審查時間不應設定當不需要教授推薦時")
+                errors.append("續領教授審查時間不應設定當續領不需要教授審查時")
 
-        if not self.requires_college_review:
+        if not self.renewal_requires_college_review:
             if self.renewal_college_review_start or self.renewal_college_review_end:
-                errors.append("續領學院審查時間不應設定當不需要學院審查時")
+                errors.append("續領學院審查時間不應設定當續領不需要學院審查時")
 
         return errors
 

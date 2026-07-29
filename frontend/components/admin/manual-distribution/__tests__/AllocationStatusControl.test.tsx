@@ -69,4 +69,51 @@ describe("AllocationStatusControl", () => {
     fireEvent.click(screen.getByRole("button", { name: "正常" }));
     expect(h.onRestore).toHaveBeenCalledTimes(1);
   });
+
+  // A student with no allocation yet (pre-確認分發) is just as actionable —
+  // that is the whole point of showing the control on every row.
+  it("hasAllocation=false: 撤銷/停發 still fire; copy says 本次分發將略過", () => {
+    const h = handlers();
+    render(
+      <AllocationStatusControl status="normal" hasAllocation={false} {...h} />
+    );
+
+    const revoke = screen.getByRole("button", { name: "撤銷" });
+    const suspend = screen.getByRole("button", { name: "停發" });
+    expect(revoke).toBeEnabled();
+    expect(suspend).toBeEnabled();
+    expect(revoke).toHaveAttribute(
+      "title",
+      expect.stringContaining("本次分發將略過")
+    );
+    expect(suspend).toHaveAttribute(
+      "title",
+      expect.stringContaining("本次分發將略過")
+    );
+    expect(screen.getByRole("group", { name: "分發狀態" })).toHaveAttribute(
+      "title",
+      "尚未核配獎學金，仍可預先撤銷／停發以排除於本次分發"
+    );
+
+    fireEvent.click(revoke);
+    expect(h.onRevoke).toHaveBeenCalledTimes(1);
+    fireEvent.click(suspend);
+    expect(h.onSuspend).toHaveBeenCalledTimes(1);
+  });
+
+  it("hasAllocation defaults to true: allocated-row tooltips are unchanged", () => {
+    const h = handlers();
+    render(<AllocationStatusControl status="normal" {...h} />);
+    expect(screen.getByRole("button", { name: "撤銷" })).toHaveAttribute(
+      "title",
+      "撤銷此學生獎學金（違反獎學金要點）"
+    );
+    expect(screen.getByRole("button", { name: "停發" })).toHaveAttribute(
+      "title",
+      "停發此學生獎學金（休學/退學/畢業）"
+    );
+    expect(screen.getByRole("group", { name: "分發狀態" })).not.toHaveAttribute(
+      "title"
+    );
+  });
 });

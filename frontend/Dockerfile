@@ -16,7 +16,9 @@ WORKDIR /app
 # Install dependencies using bun
 # scripts/ must be present before install because the postinstall hook runs
 # scripts/copy-pdf-worker.mjs (copies pdfjs-dist worker into public/).
-COPY package.json bun.lock* ./
+# bun.lock is copied explicitly (no glob): a missing lockfile must fail the
+# build loudly instead of silently re-resolving from package.json ranges.
+COPY package.json bun.lock ./
 COPY scripts ./scripts
 RUN bun install --frozen-lockfile
 

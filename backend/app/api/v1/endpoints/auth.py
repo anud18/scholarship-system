@@ -53,11 +53,40 @@ async def populate_college_info(user_data: UserResponse, db: AsyncSession, user:
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 @rate_limit(requests=10, window_seconds=600)  # 10 registrations / 10 min per IP
-async def register(request: Request, user_data: UserCreate, db: AsyncSession = Depends(get_db)):
-    """Register a new user"""
-    if not settings.enable_mock_sso:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+async def register(
+    request: Request,
+    user_data: UserCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a user account. Admin-only — `UserCreate.role` is caller-supplied.
+
+    SECURITY: this endpoint used to be anonymous while `UserCreate` accepts a
+    `role` field, so anyone could POST {"nycu_id": <their own id>, "role":
+    "super_admin"} to plant a privileged row. That row survives a *legitimate*
+    Portal SSO login, because `_find_or_create_user` deliberately preserves
+    pre-authorized super_admin/admin/college roles
+    (portal_sso_service.py:285-290) — turning self-registration into a full
+    privilege escalation. Account creation must therefore stay behind the same
+    role-assignment permission as POST /pre-authorize/user.
+    """
     client_ip = _client_ip(request)
+
+    if not current_user.can_assign_roles():
+        logger.warning(
+            "SECURITY: non-admin attempted user creation via /auth/register",
+            extra={
+                "user_id": current_user.id,
+                "role": current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
+                "attempted_nycu_id": getattr(user_data, "nycu_id", None),
+                "attempted_role": getattr(getattr(user_data, "role", None), "value", None),
+                "ip": client_ip,
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions to create users",
+        )
     try:
         auth_service = AuthService(db)
         user = await auth_service.register_user(user_data)
@@ -105,9 +134,20 @@ async def register(request: Request, user_data: UserCreate, db: AsyncSession = D
 @router.post("/login")
 @rate_limit(requests=20, window_seconds=300)  # 20 attempts / 5 min per IP — slows brute force
 async def login(request: Request, login_data: UserLogin, db: AsyncSession = Depends(get_db)):
-    """Login user and return access token"""
+    """Development-only login: exchanges a known nycu_id/email for a token.
+
+    SECURITY: `AuthService.authenticate_user` performs NO credential check —
+    `UserLogin` carries only `username`, and the User model has no password
+    column at all (real authentication is NYCU Portal SSO). Left ungated, a
+    single anonymous POST with a guessable identifier such as
+    "admin@nycu.edu.tw" mints a valid admin JWT. It is therefore hard-gated
+    behind `enable_mock_sso`, exactly like /mock-sso/login and /dev-profiles/*
+    below, so it 404s wherever ENABLE_MOCK_SSO=false (production and staging)
+    while dev/E2E/pytest keep working.
+    """
     if not settings.enable_mock_sso:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
+
     client_ip = _client_ip(request)
     try:
         auth_service = AuthService(db)

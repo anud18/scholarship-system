@@ -279,14 +279,39 @@ class TestBankVerificationService:
         mock_document = ApplicationFile()
         mock_document.filename = "passbook.pdf"
 
+        # The filename lookup tolerates duplicate rows, so it reads scalars().first()
         mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = mock_document
+        mock_result.scalars.return_value.first.return_value = mock_document
         mock_db.execute.return_value = mock_result
 
         result = await verification_service.get_bank_passbook_document(application)
 
         assert result == mock_document
         mock_db.execute.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_bank_passbook_document_falls_back_to_filename(self, verification_service, mock_db):
+        """A dangling file_id (row replaced by re-upload) still resolves via filename"""
+        application = Application()
+        application.id = 1
+        application.submitted_form_data = {
+            "documents": [{"document_id": "bank_account_cover", "file_id": 999, "filename": "passbook.pdf"}]
+        }
+
+        mock_document = ApplicationFile()
+        mock_document.filename = "passbook.pdf"
+
+        # First execute (file_id lookup) misses, second (filename lookup) hits
+        missing_result = MagicMock()
+        missing_result.scalar_one_or_none.return_value = None
+        found_result = MagicMock()
+        found_result.scalars.return_value.first.return_value = mock_document
+        mock_db.execute.side_effect = [missing_result, found_result]
+
+        result = await verification_service.get_bank_passbook_document(application)
+
+        assert result == mock_document
+        assert mock_db.execute.await_count == 2
 
     @pytest.mark.asyncio
     async def test_get_bank_passbook_document_not_found(self, verification_service, mock_db):

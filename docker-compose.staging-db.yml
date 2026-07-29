@@ -21,29 +21,35 @@ services:
       timeout: 5s
       retries: 5
 
-  # MinIO Object Storage
+  # RustFS Object Storage (S3-compatible MinIO replacement; service keeps the
+  # `minio` name so the network alias — and the backend's MINIO_ENDPOINT —
+  # stays unchanged).
+  #
+  # CUTOVER (docs/deployment/rustfs-migration-runbook.md): RustFS cannot read
+  # MinIO's on-disk erasure format. Before this block goes live, mirror the
+  # data into /opt/scholarship/rustfs/data with
+  # scripts/migrate_storage_to_rustfs.sh (backend stopped for the final delta
+  # run). Do NOT carry old bucket policies over — RustFS enforces explicit
+  # Deny against the owner too; buckets are private by default.
   minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
-    container_name: scholarship_minio_staging
+    image: rustfs/rustfs:1.0.0-beta.8
+    container_name: scholarship_rustfs_staging
     ports:
       - "9000:9000"
-      - "9001:9001"
+      - "9001:9001"  # RustFS web console (same port MinIO's console used)
     environment:
-      # SECURITY: never hardcode MinIO root credentials. Must be supplied via
-      # the environment (GitHub Actions secret / .env on the DB host).
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must be set}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set}
-      # Allow Prometheus to scrape /minio/v2/metrics/cluster without a
-      # bearer token. Newer MinIO images default to "jwt"; we want
-      # "public" so Alloy → Prometheus pipeline works out of the box.
-      MINIO_PROMETHEUS_AUTH_TYPE: public
+      # SECURITY: never hardcode credentials. Same host-side .env values as
+      # before — only the variable names the image reads changed. The backend
+      # keeps its MINIO_* secrets untouched.
+      RUSTFS_ACCESS_KEY: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must be set}
+      RUSTFS_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set}
+      RUSTFS_VOLUMES: /data
     volumes:
-      - minio_staging_data:/data
+      - rustfs_staging_data:/data
     networks:
       - scholarship_staging_db_network
-    command: server /data --console-address ":9001"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
       interval: 30s
       timeout: 20s
       retries: 3
@@ -57,6 +63,22 @@ services:
 volumes:
   postgres_staging_data:
     driver: local
+  # Bind-backed named volume so the migration script can pre-populate the
+  # directory before compose ever creates the volume (avoids compose's
+  # "not created by compose" ownership check on pre-made named volumes).
+  # BEFORE first `up`: mkdir -p + chown -R 10001:10001 (RustFS uid) — the
+  # migration script does both.
+  rustfs_staging_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/scholarship/rustfs/data
+  # Rollback escape hatch: the pre-RustFS MinIO data, left untouched. Also the
+  # retention archive if bucket versioning was in use (mc mirror copies latest
+  # versions only). To roll back, restore the old minio/minio block and point
+  # it at this volume. Remove only after the compliance-retention decision is
+  # recorded (runbook "Versioning audit").
   minio_staging_data:
     driver: local
 

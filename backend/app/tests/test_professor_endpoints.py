@@ -140,6 +140,36 @@ class TestProfessorApplicationsEndpoint:
             )
 
     @pytest.mark.asyncio
+    async def test_get_professor_applications_default_returns_all(
+        self, mock_professor, mock_db_session, mock_request, sample_applications
+    ):
+        """size omitted (None) → no pagination cap; response size reflects the full set"""
+        with patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class:
+            mock_service = mock_service_class.return_value
+            mock_service.get_professor_applications_paginated = AsyncMock(return_value=(sample_applications * 25, 25))
+
+            result = await get_professor_applications(
+                request=mock_request,
+                status_filter=None,
+                page=1,
+                size=None,
+                current_user=mock_professor,
+                db=mock_db_session,
+            )
+
+            assert result["success"] is True
+            data = result["data"]
+            assert data["total"] == 25
+            assert data["size"] == 25
+            assert data["pages"] == 1
+            assert len(data["items"]) == 25
+
+            # size=None must be forwarded so the service skips LIMIT/OFFSET
+            mock_service.get_professor_applications_paginated.assert_called_once_with(
+                professor_id=mock_professor.id, status_filter=None, page=1, size=None
+            )
+
+    @pytest.mark.asyncio
     async def test_get_professor_applications_with_filters(
         self, mock_professor, mock_db_session, mock_request, sample_applications
     ):
@@ -317,6 +347,11 @@ class TestProfessorReviewEndpoints:
 
             mock_review_service = mock_review_service_class.return_value
             mock_review_service.assert_professor_review_unlocked = AsyncMock(return_value=None)
+            # Returns the normalised codes for the submitted items; the endpoint
+            # zips them back onto review_data.items.
+            mock_review_service.validate_review_submission = AsyncMock(
+                return_value=[item.sub_type_code for item in sample_review_create.items]
+            )
             mock_review_service.create_review = AsyncMock(return_value=mock_review)
 
             result = await submit_professor_review(

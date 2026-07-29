@@ -146,6 +146,57 @@ class TestScholarshipConfigurationServiceCRUD:
         assert updated_config.description == "Updated description"
         assert updated_config.updated_by == test_user.id
 
+    async def test_create_drops_renewal_review_dates_when_flag_disabled(
+        self, service, test_scholarship_type, test_user, valid_config_data
+    ):
+        """Renewal review dates sent without (or with a null) renewal_requires_*
+        flag must not be persisted — otherwise they linger as silently-ignored
+        windows the runtime never reads."""
+        data = dict(valid_config_data)
+        data["renewal_requires_professor_review"] = None  # explicit null from a raw client
+        data["renewal_professor_review_start"] = datetime(2024, 8, 1, 9, 0)
+        data["renewal_professor_review_end"] = datetime(2024, 8, 15, 23, 59)
+        data["renewal_college_review_start"] = datetime(2024, 8, 16, 9, 0)
+
+        config = await service.create_configuration(
+            scholarship_type_id=test_scholarship_type.id,
+            config_data=data,
+            created_by_user_id=test_user.id,
+        )
+
+        assert config.renewal_requires_professor_review is False
+        assert config.renewal_requires_college_review is False
+        assert config.renewal_professor_review_start is None
+        assert config.renewal_professor_review_end is None
+        assert config.renewal_college_review_start is None
+
+    async def test_update_clears_renewal_review_dates_when_flag_turned_off(
+        self, service, test_scholarship_type, test_user, valid_config_data
+    ):
+        """Disabling a renewal review flag clears its dates even when the
+        client does not send the date keys (partial update)."""
+        data = dict(valid_config_data)
+        data["renewal_requires_professor_review"] = True
+        data["renewal_professor_review_start"] = datetime(2024, 8, 1, 9, 0)
+        data["renewal_professor_review_end"] = datetime(2024, 8, 15, 23, 59)
+
+        config = await service.create_configuration(
+            scholarship_type_id=test_scholarship_type.id,
+            config_data=data,
+            created_by_user_id=test_user.id,
+        )
+        assert config.renewal_professor_review_start is not None
+
+        updated = await service.update_configuration(
+            config_id=config.id,
+            config_data={"renewal_requires_professor_review": False},
+            updated_by_user_id=test_user.id,
+        )
+
+        assert updated.renewal_requires_professor_review is False
+        assert updated.renewal_professor_review_start is None
+        assert updated.renewal_professor_review_end is None
+
     async def test_update_nonexistent_configuration_fails(self, service, test_user):
         """Test that updating non-existent configuration fails"""
         with pytest.raises(ValueError, match="Configuration not found"):

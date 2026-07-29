@@ -68,6 +68,12 @@ import {
   exportDepartmentSummary,
   exportDepartmentSummaryBulk,
 } from "@/lib/api/modules/college";
+import { ApplicationCardView } from "./ApplicationCardView";
+import {
+  NationalityIdentity,
+  ProfessorRecommendation,
+  formatAppliedDate,
+} from "./application-summary-fields";
 
 interface ApplicationReviewPanelProps {
   user: User;
@@ -751,6 +757,14 @@ export function ApplicationReviewPanel({
               <SelectValue placeholder="選擇系所匯出總表" />
             </SelectTrigger>
             <SelectContent>
+              {departmentGroups.length === 0 &&
+                !user.college_code &&
+                user.role !== "admin" &&
+                user.role !== "super_admin" && (
+                  <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                    無可選系所（帳號未設定所屬學院，請聯絡管理員）
+                  </div>
+                )}
               {departmentGroups.map(group => {
                 const value = group.codes.join(",");
                 const label = ambiguousGroupNames.has(group.name)
@@ -788,6 +802,9 @@ export function ApplicationReviewPanel({
               variant={viewMode === "card" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("card")}
+              title={locale === "zh" ? "卡片檢視" : "Card view"}
+              aria-label={locale === "zh" ? "卡片檢視" : "Card view"}
+              aria-pressed={viewMode === "card"}
             >
               <Grid className="h-4 w-4" />
             </Button>
@@ -795,6 +812,9 @@ export function ApplicationReviewPanel({
               variant={viewMode === "table" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("table")}
+              title={locale === "zh" ? "表格檢視" : "Table view"}
+              aria-label={locale === "zh" ? "表格檢視" : "Table view"}
+              aria-pressed={viewMode === "table"}
             >
               <List className="h-4 w-4" />
             </Button>
@@ -990,6 +1010,14 @@ export function ApplicationReviewPanel({
               </CardTitle>
             </CardHeader>
             <CardContent>
+              {viewMode === "card" ? (
+                <ApplicationCardView
+                  applications={filteredApplications}
+                  locale={locale}
+                  getSubTypeName={getSubTypeName}
+                  onView={setSelectedApplication}
+                />
+              ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1058,39 +1086,7 @@ export function ApplicationReviewPanel({
 
                       {/* 3. 國籍/身分 — #68 */}
                       <TableCell>
-                        {(() => {
-                          const sd =
-                            ((app as unknown) as {
-                              student_data?: {
-                                std_nation?: string | null;
-                                std_identity?: number | string | null;
-                              };
-                            })?.student_data ?? null;
-                          const idMap: Record<number | string, string> = {
-                            1: "本國生",
-                            2: "僑生",
-                            3: "外籍生",
-                            4: "陸生",
-                            5: "港澳生",
-                            6: "外籍交換生",
-                          };
-                          const idCode = sd?.std_identity;
-                          const idLabel =
-                            idCode != null && idCode !== ""
-                              ? idMap[idCode as keyof typeof idMap] ||
-                                `${locale === "zh" ? "身分別" : "Identity"} ${idCode}`
-                              : null;
-                          return (
-                            <div className="flex flex-col gap-0.5">
-                              <span className="text-sm">
-                                {sd?.std_nation || "-"}
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                {idLabel || "-"}
-                              </span>
-                            </div>
-                          );
-                        })()}
+                        <NationalityIdentity app={app} locale={locale} />
                       </TableCell>
 
                       {/* 4. 在學學期數 */}
@@ -1123,56 +1119,11 @@ export function ApplicationReviewPanel({
 
                       {/* 6.5 教授推薦 */}
                       <TableCell>
-                        {app.professor_review_items && app.professor_review_items.length > 0 ? (
-                          <div className="flex flex-col gap-0.5">
-                            {app.professor_review_items.map(
-                              (
-                                item: {
-                                  sub_type_code: string;
-                                  recommendation: string;
-                                  comments?: string;
-                                },
-                                idx: number
-                              ) => (
-                              <TooltipProvider key={`${item.sub_type_code}-${idx}`}>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Badge
-                                      variant={item.recommendation === "approve" ? "outline" : "destructive"}
-                                      className={`text-xs cursor-default ${item.recommendation === "approve" ? "border-emerald-500 text-emerald-700 bg-emerald-50" : ""}`}
-                                    >
-                                      {getSubTypeName(item.sub_type_code, locale)}: {item.recommendation === "approve"
-                                        ? (locale === "zh" ? "推薦" : "Approve")
-                                        : (locale === "zh" ? "不推薦" : "Reject")}
-                                    </Badge>
-                                  </TooltipTrigger>
-                                  {item.comments && (
-                                    <TooltipContent>
-                                      {item.recommendation === "reject" && (
-                                        <p className="font-medium text-xs mb-1">
-                                          {locale === "zh" ? "不同意理由" : "Reason for Reject"}
-                                        </p>
-                                      )}
-                                      <p className="max-w-xs whitespace-pre-wrap">{item.comments}</p>
-                                    </TooltipContent>
-                                  )}
-                                </Tooltip>
-                              </TooltipProvider>
-                            ))}
-                          </div>
-                        ) : app.requires_professor_recommendation ? (
-                          // Professor step required but no recommendation yet —
-                          // show "教授審核中" instead of a blank cell so college
-                          // reviewers know the app is still awaiting the professor.
-                          <Badge
-                            variant="outline"
-                            className="text-xs cursor-default border-amber-500 text-amber-700 bg-amber-50"
-                          >
-                            {locale === "zh" ? "教授審核中" : "Under prof. review"}
-                          </Badge>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">—</span>
-                        )}
+                        <ProfessorRecommendation
+                          app={app}
+                          locale={locale}
+                          getSubTypeName={getSubTypeName}
+                        />
                       </TableCell>
 
                       {/* 7. 狀態 */}
@@ -1191,18 +1142,7 @@ export function ApplicationReviewPanel({
                       </TableCell>
 
                       {/* 8. 申請時間 */}
-                      <TableCell>
-                        {app.created_at
-                          ? new Date(app.created_at).toLocaleDateString(
-                              "zh-TW",
-                              {
-                                year: "numeric",
-                                month: "2-digit",
-                                day: "2-digit",
-                              }
-                            )
-                          : "-"}
-                      </TableCell>
+                      <TableCell>{formatAppliedDate(app.created_at)}</TableCell>
 
                       {/* 9. 操作 */}
                       <TableCell>
@@ -1218,6 +1158,7 @@ export function ApplicationReviewPanel({
                   ))}
                 </TableBody>
               </Table>
+              )}
             </CardContent>
           </Card>
         </>

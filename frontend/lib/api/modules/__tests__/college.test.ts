@@ -21,6 +21,7 @@ import {
   exportDepartmentSummary,
   exportDepartmentSummaryBulk,
   downloadRankingTemplate,
+  exportDistributionResults,
 } from "../college";
 import { typedClient } from "../../typed-client";
 
@@ -553,5 +554,58 @@ describe("module-level export helpers", () => {
     expect(url).toContain("/rankings/42/export-excel");
     expect(url).toContain("template=true");
     expect(result.filename).toBe("學生資料彙整表_42_範本.xlsx");
+  });
+});
+
+describe("exportDistributionResults", () => {
+  it("omits the format param for xlsx so the default URL is unchanged", async () => {
+    const fetchMock = jest.fn().mockResolvedValue(
+      new Response(new Blob(["x"]), {
+        status: 200,
+        headers: {
+          "content-disposition":
+            "attachment; filename*=UTF-8''114%E5%AD%B8%E5%B9%B4%E5%BA%A6.xlsx",
+        },
+      })
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await exportDistributionResults({
+      scholarshipTypeId: 7,
+      academicYear: 114,
+      semester: "first",
+    });
+
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain("/api/v1/college-review/distribution-results/export");
+    expect(url).toContain("scholarship_type_id=7");
+    expect(url).toContain("academic_year=114");
+    expect(url).toContain("semester=first");
+    expect(url).not.toContain("format=");
+  });
+
+  it("appends format=pdf when pdf is requested", async () => {
+    const fetchMock = jest.fn().mockResolvedValue(
+      new Response(new Blob(["x"]), { status: 200, headers: {} })
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await exportDistributionResults({
+      scholarshipTypeId: 7,
+      academicYear: 114,
+      format: "pdf",
+    });
+
+    expect(fetchMock.mock.calls[0][0]).toContain("format=pdf");
+  });
+
+  it("surfaces the backend error detail", async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      new Response(JSON.stringify({ detail: "分發結果尚未開放查看" }), { status: 403 })
+    ) as unknown as typeof fetch;
+
+    await expect(
+      exportDistributionResults({ scholarshipTypeId: 7, academicYear: 114 })
+    ).rejects.toThrow("分發結果尚未開放查看");
   });
 });

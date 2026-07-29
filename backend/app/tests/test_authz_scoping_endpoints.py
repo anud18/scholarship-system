@@ -1,19 +1,16 @@
 """
-HTTP-layer authorization-scoping tests for issue #1081 findings E and F.
+HTTP-layer authorization-scoping tests for issue #1081 finding E.
 
 E — GET /college-review/students/{student_id}/preview must be college-scoped:
     a college reviewer may only preview students with at least one application
     managed by their college. Unrelated/nonexistent students both return 404 so
     the endpoint is not a student-existence oracle. Admins bypass.
 
-F — GET /applications/{id}/application-document must not grant any professor
-    blanket access: professors need an active view_applications relationship
-    with the applicant (mirrors the files.py proxy gate). Owner, college and
-    admin access is unchanged.
-
 Authentication is simulated by overriding `get_current_user` with real
 DB-backed User rows so the actual role gates and scoping logic run unmodified.
-(Findings C/D are covered in test_ranking_management_endpoints.py.)
+(Findings C/D are covered in test_ranking_management_endpoints.py. Finding F
+covered the row-level 申請文件 endpoint, removed with the generic application
+document feature.)
 """
 
 from unittest.mock import AsyncMock, patch
@@ -22,12 +19,10 @@ import pytest
 import pytest_asyncio
 
 from app.models.application import Application, ApplicationStatus
-from app.models.professor_student import ProfessorStudentRelationship
 from app.models.scholarship import ScholarshipType, SubTypeSelectionMode
 from app.models.user import User, UserRole, UserType
 
 PREVIEW_URL = "/api/v1/college-review/students/{student_id}/preview"
-DOCUMENT_URL = "/api/v1/applications/{application_id}/application-document"
 
 
 @pytest_asyncio.fixture
@@ -135,7 +130,7 @@ async def scope_scholarship(db) -> ScholarshipType:
 
 @pytest_asyncio.fixture
 async def eng_application(db, scope_users, scope_scholarship) -> Application:
-    """Application of student_eng, managed by ENG college, with a document."""
+    """Application of student_eng, managed by ENG college."""
     application = Application(
         app_id="APP-114-1-08001",
         user_id=scope_users["student_eng"].id,
@@ -148,28 +143,11 @@ async def eng_application(db, scope_users, scope_scholarship) -> Application:
         student_data={"std_stdcode": "S881001", "std_cname": "ENG Student", "std_academyno": "ENG"},
         submitted_form_data={},
         agree_terms=True,
-        application_document_url="application-documents/8001_test.pdf",
-        application_document_original_filename="申請文件.pdf",
     )
     db.add(application)
     await db.commit()
     await db.refresh(application)
     return application
-
-
-@pytest_asyncio.fixture
-async def related_professor_relationship(db, scope_users) -> ProfessorStudentRelationship:
-    rel = ProfessorStudentRelationship(
-        professor_id=scope_users["professor_related"].id,
-        student_id=scope_users["student_eng"].id,
-        relationship_type="advisor",
-        is_active=True,
-        can_view_applications=True,
-    )
-    db.add(rel)
-    await db.commit()
-    await db.refresh(rel)
-    return rel
 
 
 _STUDENT_BASIC = {
@@ -257,125 +235,3 @@ class TestStudentPreviewScoping:
             assert response.json()["success"] is True
         finally:
             patcher.stop()
-
-
-def _mock_minio():
-    """Patch the minio_service singleton used by the document endpoint."""
-    patcher = patch("app.services.minio_service.minio_service")
-    fake = patcher.start()
-    fake.default_bucket = "test-bucket"
-    fake.client.get_object.return_value.read.return_value = b"%PDF-1.4 test-bytes"
-    return patcher, fake
-
-
-@pytest.mark.api
-class TestApplicationDocumentAccess:
-    """Issue #1081 finding F: per-student relationship check for professors."""
-
-    async def test_unauthenticated_401(self, client, eng_application):
-        response = await client.get(DOCUMENT_URL.format(application_id=eng_application.id))
-        assert response.status_code == 401
-
-    async def test_unrelated_professor_403(self, client, login, scope_users, eng_application):
-        patcher, fake = _mock_minio()
-        try:
-            login(scope_users["professor_unrelated"])
-            response = await client.get(DOCUMENT_URL.format(application_id=eng_application.id))
-            assert response.status_code == 403
-            fake.client.get_object.assert_not_called()
-        finally:
-            patcher.stop()
-
-    async def test_inactive_relationship_professor_403(self, client, login, db, scope_users, eng_application):
-        rel = ProfessorStudentRelationship(
-            professor_id=scope_users["professor_unrelated"].id,
-            student_id=scope_users["student_eng"].id,
-            relationship_type="advisor",
-            is_active=False,
-            can_view_applications=True,
-        )
-        db.add(rel)
-        await db.commit()
-
-        login(scope_users["professor_unrelated"])
-        response = await client.get(DOCUMENT_URL.format(application_id=eng_application.id))
-        assert response.status_code == 403
-
-    async def test_relationship_without_view_permission_403(self, client, login, db, scope_users, eng_application):
-        rel = ProfessorStudentRelationship(
-            professor_id=scope_users["professor_unrelated"].id,
-            student_id=scope_users["student_eng"].id,
-            relationship_type="committee_member",
-            is_active=True,
-            can_view_applications=False,
-        )
-        db.add(rel)
-        await db.commit()
-
-        login(scope_users["professor_unrelated"])
-        response = await client.get(DOCUMENT_URL.format(application_id=eng_application.id))
-        assert response.status_code == 403
-
-    async def test_other_student_403(self, client, login, scope_users, eng_application):
-        login(scope_users["student_other"])
-        response = await client.get(DOCUMENT_URL.format(application_id=eng_application.id))
-        assert response.status_code == 403
-
-    async def test_related_professor_200(
-        self, client, login, scope_users, eng_application, related_professor_relationship
-    ):
-        patcher, _ = _mock_minio()
-        try:
-            login(scope_users["professor_related"])
-            response = await client.get(DOCUMENT_URL.format(application_id=eng_application.id))
-            assert response.status_code == 200
-            assert response.headers["content-type"] == "application/pdf"
-            assert response.content == b"%PDF-1.4 test-bytes"
-        finally:
-            patcher.stop()
-
-    async def test_assigned_reviewer_professor_200(self, client, login, db, scope_users, eng_application):
-        """The professor an application is routed to (Application.professor_id)
-        keeps document access even without a relationship-table row."""
-        eng_application.professor_id = scope_users["professor_unrelated"].id
-        await db.commit()
-
-        patcher, _ = _mock_minio()
-        try:
-            login(scope_users["professor_unrelated"])
-            response = await client.get(DOCUMENT_URL.format(application_id=eng_application.id))
-            assert response.status_code == 200
-        finally:
-            patcher.stop()
-
-    async def test_owner_student_200(self, client, login, scope_users, eng_application):
-        patcher, _ = _mock_minio()
-        try:
-            login(scope_users["student_eng"])
-            response = await client.get(DOCUMENT_URL.format(application_id=eng_application.id))
-            assert response.status_code == 200
-        finally:
-            patcher.stop()
-
-    async def test_college_user_200(self, client, login, scope_users, eng_application):
-        patcher, _ = _mock_minio()
-        try:
-            login(scope_users["college_eng"])
-            response = await client.get(DOCUMENT_URL.format(application_id=eng_application.id))
-            assert response.status_code == 200
-        finally:
-            patcher.stop()
-
-    async def test_admin_200(self, client, login, scope_users, eng_application):
-        patcher, _ = _mock_minio()
-        try:
-            login(scope_users["admin"])
-            response = await client.get(DOCUMENT_URL.format(application_id=eng_application.id))
-            assert response.status_code == 200
-        finally:
-            patcher.stop()
-
-    async def test_missing_application_404(self, client, login, scope_users):
-        login(scope_users["admin"])
-        response = await client.get(DOCUMENT_URL.format(application_id=999999))
-        assert response.status_code == 404

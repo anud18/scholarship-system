@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { logger } from "@/lib/utils/logger";
+import { formatAllocatedSubType } from "@/lib/allocation-display";
 import { maskIdNumber } from "@/lib/utils/mask";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -15,7 +16,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Users, DollarSign, Building2, InfoIcon } from "lucide-react";
+import {
+  Users,
+  DollarSign,
+  Building2,
+  InfoIcon,
+  AlertTriangle,
+} from "lucide-react";
 import { apiClient } from "@/lib/api";
 import {
   useReferenceData,
@@ -67,8 +74,9 @@ interface PreviewData {
       missing_data: number;
       verification_failed: number;
       rules_failed: number;
-      no_bank_account: number;
     };
+    // 缺少銀行帳戶不排除造冊，僅提醒補件
+    missing_bank_account_count: number;
     total_amount: number;
     verification_stats: {
       verified: number;
@@ -236,13 +244,7 @@ export function StudentRosterPreview({
                         {student.allocation_year}年{" "}
                       </span>
                     )}
-                    {student.allocated_sub_type === "nstc"
-                      ? "國科會"
-                      : student.allocated_sub_type === "moe_1w"
-                        ? "教育部(1萬)"
-                        : student.allocated_sub_type === "moe_2w"
-                          ? "教育部(2萬)"
-                          : student.allocated_sub_type}
+                    {formatAllocatedSubType(student.allocated_sub_type)}
                   </span>
                 ) : (
                   <span className="text-muted-foreground">-</span>
@@ -410,6 +412,17 @@ export function StudentRosterPreview({
         </Card>
       </div>
 
+      {/* Missing bank account warning — 不排除造冊，但需提醒補件 */}
+      {data.summary.missing_bank_account_count > 0 && (
+        <Alert className="border-orange-300 bg-orange-50 text-orange-800">
+          <AlertTriangle className="h-4 w-4 !text-orange-600" />
+          <AlertDescription>
+            有 {data.summary.missing_bank_account_count}{" "}
+            位學生尚未填寫銀行帳戶資訊，仍會列入造冊，但撥款前需補齊帳戶資料。
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Student List */}
       <Card>
         <CardHeader>
@@ -418,12 +431,10 @@ export function StudentRosterPreview({
         <CardContent>
           {data.has_matrix_distribution ? (
             <Tabs value={selectedCollege} onValueChange={setSelectedCollege}>
-              <TabsList
-                className="grid w-full"
-                style={{
-                  gridTemplateColumns: `repeat(${Object.keys(data.summary.by_college).length + 1}, 1fr)`,
-                }}
-              >
+              {/* flex-wrap（多列換行）：學院多時單列 grid 會把每欄壓到比
+                  min-content 還窄而水平溢出卡片（#1145）；h-auto 蓋掉基底
+                  TabsList 的固定 h-10 讓列高隨換行長高 */}
+              <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
                 {Object.entries(data.summary.by_college).map(
                   ([college, stats]) => (
                     <TabsTrigger
@@ -489,7 +500,7 @@ export function StudentRosterPreview({
                     <p className="text-sm text-muted-foreground mb-3">
                       共 {data.summary.excluded_count} 位學生被排除
                     </p>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                       <div className="p-2 bg-gray-50 rounded border">
                         <div className="text-xs text-gray-600">缺少資料</div>
                         <div className="text-lg font-semibold">
@@ -506,12 +517,6 @@ export function StudentRosterPreview({
                         <div className="text-xs text-gray-600">規則失敗</div>
                         <div className="text-lg font-semibold">
                           {data.summary.exclusion_breakdown.rules_failed}
-                        </div>
-                      </div>
-                      <div className="p-2 bg-gray-50 rounded border">
-                        <div className="text-xs text-gray-600">無銀行帳戶</div>
-                        <div className="text-lg font-semibold">
-                          {data.summary.exclusion_breakdown.no_bank_account}
                         </div>
                       </div>
                     </div>

@@ -65,6 +65,7 @@ def _make_config_in_renewal_phase(
     )
     if role == "professor":
         kwargs.update(
+            renewal_requires_professor_review=True,
             renewal_professor_review_start=open_start,
             renewal_professor_review_end=open_end,
             professor_review_start=closed_start,
@@ -72,6 +73,7 @@ def _make_config_in_renewal_phase(
         )
     elif role == "college":
         kwargs.update(
+            renewal_requires_college_review=True,
             renewal_college_review_start=open_start,
             renewal_college_review_end=open_end,
             college_review_start=closed_start,
@@ -111,6 +113,7 @@ def _make_config_in_general_phase(
     )
     if role == "professor":
         kwargs.update(
+            renewal_requires_professor_review=True,
             renewal_professor_review_start=closed_start,
             renewal_professor_review_end=closed_end,
             professor_review_start=open_start,
@@ -118,6 +121,7 @@ def _make_config_in_general_phase(
         )
     elif role == "college":
         kwargs.update(
+            renewal_requires_college_review=True,
             renewal_college_review_start=closed_start,
             renewal_college_review_end=closed_end,
             college_review_start=open_start,
@@ -206,6 +210,42 @@ async def test_professor_sees_only_renewal_during_renewal_period(
 
     assert renewal_app.id in visible_ids, "renewal application should be visible during renewal phase"
     assert general_app.id not in visible_ids, "general application should NOT be visible during renewal phase"
+
+
+@pytest.mark.asyncio
+async def test_renewal_hidden_when_admin_disabled_renewal_professor_review(
+    db: AsyncSession,
+    test_user: User,
+    test_scholarship: ScholarshipType,
+):
+    """Renewal window is open NOW, but the admin turned OFF
+    renewal_requires_professor_review — the renewal application must be
+    hidden from the professor's pending list despite the open window.
+    """
+    config = _make_config_in_renewal_phase(test_scholarship.id, role="professor", config_code="PROF-RENEW-OFF")
+    config.renewal_requires_professor_review = False
+    db.add(config)
+    await db.commit()
+    await db.refresh(config)
+
+    renewal_app = await _make_pending_application(
+        db,
+        user=test_user,
+        scholarship_type=test_scholarship,
+        configuration_id=config.id,
+        is_renewal=True,
+        app_id_suffix="00021",
+    )
+
+    stmt = select(Application).where(Application.status == ApplicationStatus.under_review.value)
+    stmt = apply_renewal_phase_filter(stmt, role="professor")
+
+    result = await db.execute(stmt)
+    visible_ids = {row.id for row in result.scalars().all()}
+
+    assert (
+        renewal_app.id not in visible_ids
+    ), "renewal application must be hidden when the admin disabled renewal professor review"
 
 
 @pytest.mark.asyncio
@@ -343,29 +383,40 @@ async def test_college_sees_only_general_during_general_period(
 
 
 @pytest.mark.asyncio
-async def test_application_service_pending_list_filters_by_renewal_phase(
+async def test_application_service_pending_list_splits_by_professor_review_existence(
     db: AsyncSession,
     test_user: User,
     test_scholarship: ScholarshipType,
     test_professor: User,
 ):
     """End-to-end check that ApplicationService.get_professor_applications_paginated
-    with status_filter='pending' applies the renewal-phase filter.
+    buckets applications by whether THIS professor has already reviewed them,
+    not by Application.status or the renewal review phase.
 
-    Setup: config currently in its renewal_professor_review window.
-    Expectation: the renewal app is returned; the general app is hidden.
+    The professor listing no longer applies apply_renewal_phase_filter: a
+    professor "approve" on a requires-college scholarship keeps status at
+    under_review (issue #182), so status-based bucketing kept already-reviewed
+    apps in 待審核. The sound signal is the existence of an ApplicationReview
+    row authored by the professor.
+
+    Expectation:
+      - pending   → only apps with NO review by this professor
+      - completed → only apps the professor has already reviewed
+      - all/None  → 全部 = pending + completed (every assigned app)
     """
+    from app.models.review import ApplicationReview
     from app.services.application_service import ApplicationService
 
+    # Config sits in its renewal window (general window in the future). Under the
+    # old phase gate the general app would have been hidden from pending — it must
+    # now surface because phase gating is gone.
     config = _make_config_in_renewal_phase(test_scholarship.id, role="professor", config_code="SVC-PROF-RENEW")
-    # Mark the configuration as requiring professor recommendation so the
-    # existing service filter doesn't drop these rows for an unrelated reason.
     config.requires_professor_recommendation = True
     db.add(config)
     await db.commit()
     await db.refresh(config)
 
-    renewal_app = await _make_pending_application(
+    reviewed_app = await _make_pending_application(
         db,
         user=test_user,
         scholarship_type=test_scholarship,
@@ -373,7 +424,7 @@ async def test_application_service_pending_list_filters_by_renewal_phase(
         is_renewal=True,
         app_id_suffix="00051",
     )
-    general_app = await _make_pending_application(
+    unreviewed_app = await _make_pending_application(
         db,
         user=test_user,
         scholarship_type=test_scholarship,
@@ -381,24 +432,45 @@ async def test_application_service_pending_list_filters_by_renewal_phase(
         is_renewal=False,
         app_id_suffix="00052",
     )
-    # Both applications must be assigned to the professor so they pass the
-    # existing professor_id filter.
-    renewal_app.professor_id = test_professor.id
-    general_app.professor_id = test_professor.id
+    reviewed_app.professor_id = test_professor.id
+    unreviewed_app.professor_id = test_professor.id
+
+    # Record a professor review for one app only. Its status stays under_review
+    # (mirrors the issue #182 behaviour) yet it must count as 已完成.
+    db.add(
+        ApplicationReview(
+            application_id=reviewed_app.id,
+            reviewer_id=test_professor.id,
+            recommendation="approve",
+            reviewed_at=datetime.now(timezone.utc),
+        )
+    )
     await db.commit()
 
     service = ApplicationService(db)
-    applications, total_count = await service.get_professor_applications_paginated(
-        professor_id=test_professor.id,
-        status_filter="pending",
-        page=1,
-        size=20,
-    )
 
-    returned_ids = {a.id for a in applications}
-    assert renewal_app.id in returned_ids, "renewal app should be visible during renewal phase"
-    assert general_app.id not in returned_ids, "general app should be filtered out during renewal phase"
-    assert total_count == 1
+    pending, pending_total = await service.get_professor_applications_paginated(
+        professor_id=test_professor.id, status_filter="pending", page=1, size=20
+    )
+    pending_ids = {a.id for a in pending}
+    assert unreviewed_app.id in pending_ids, "un-reviewed app must be in 待審核"
+    assert reviewed_app.id not in pending_ids, "reviewed app must NOT be in 待審核 despite under_review status"
+    assert pending_total == 1
+
+    completed, completed_total = await service.get_professor_applications_paginated(
+        professor_id=test_professor.id, status_filter="completed", page=1, size=20
+    )
+    completed_ids = {a.id for a in completed}
+    assert reviewed_app.id in completed_ids, "reviewed app must be in 已完成"
+    assert unreviewed_app.id not in completed_ids, "un-reviewed app must NOT be in 已完成"
+    assert completed_total == 1
+
+    all_apps, all_total = await service.get_professor_applications_paginated(
+        professor_id=test_professor.id, status_filter="all", page=1, size=20
+    )
+    all_ids = {a.id for a in all_apps}
+    assert all_ids == {reviewed_app.id, unreviewed_app.id}, "全部 must equal 待審核 + 已完成"
+    assert all_total == pending_total + completed_total
 
 
 @pytest.mark.asyncio
@@ -415,8 +487,8 @@ async def test_college_service_pending_list_shows_all_regardless_of_phase(
     「學院端應該要可以看到隸屬於該學院的所有申請，即使還卡在教授審核的階段」.
     The college listing is no longer time-gated, so both the renewal and the
     general pending apps surface even while only the renewal_college_review
-    window is open. The professor listing keeps its own phase filter (see the
-    professor test above), which is unchanged.
+    window is open. The professor listing likewise no longer phase-gates — it
+    buckets by professor-review existence (see the service test above).
     """
     from app.services.college_review_service import CollegeReviewService
 

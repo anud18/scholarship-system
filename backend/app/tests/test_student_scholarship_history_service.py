@@ -39,7 +39,7 @@ def _record(name: str, amount: str, period: str = "114-10") -> PaymentRecord:
 class TestBuildSummary:
     def test_empty_records_yields_zero_summary(self):
         svc = StudentScholarshipHistoryService()
-        result = svc._build_summary([], snapshot_name=None)
+        result = svc._build_summary([], snapshot_name=None, received_months=[])
         assert result.total_records == 0
         assert result.total_amount == Decimal("0")
         assert result.scholarship_type_count == 0
@@ -48,7 +48,7 @@ class TestBuildSummary:
     def test_counts_records_and_sums_amounts(self):
         svc = StudentScholarshipHistoryService()
         records = [_record("A", "1000"), _record("A", "2000"), _record("B", "500")]
-        result = svc._build_summary(records, snapshot_name="王小明")
+        result = svc._build_summary(records, snapshot_name="王小明", received_months=[])
         assert result.total_records == 3
         assert result.total_amount == Decimal("3500")
         assert result.scholarship_type_count == 2  # A and B
@@ -57,7 +57,7 @@ class TestBuildSummary:
     def test_scholarship_type_count_dedupes_by_name(self):
         svc = StudentScholarshipHistoryService()
         records = [_record("國科會", "100"), _record("國科會", "100"), _record("國科會", "100")]
-        result = svc._build_summary(records, snapshot_name=None)
+        result = svc._build_summary(records, snapshot_name=None, received_months=[])
         assert result.scholarship_type_count == 1
 
 
@@ -332,3 +332,65 @@ class TestGetHistory:
         assert result.academic_info.basic_info.std_cname == "王小明"
         assert result.payment_records[0].scholarship_name == "A"
         assert result.student_number == "S001"
+
+
+class TestTotalReceivedMonths:
+    """總領月份數 on the summary: 匯入 + 系統, summed across scholarship types."""
+
+    def _svc(self):
+        return StudentScholarshipHistoryService()
+
+    def _record(self, type_id, name, cycle="monthly"):
+        return PaymentRecord(
+            roster_id=1,
+            roster_code="R",
+            period_label="114-10",
+            academic_year=114,
+            roster_cycle=cycle,
+            scholarship_name=name,
+            scholarship_amount=Decimal("1000"),
+            scholarship_type_id=type_id,
+        )
+
+    def _imported(self, type_id, name, months):
+        return {
+            "scholarship_type_id": type_id,
+            "scholarship_name": name,
+            "months": months,
+            "award_start_month": "113年9月",
+            "award_current_month": "115年8月",
+            "raw_row": {"學號": "S001"},
+            "file_name": "nstc.xlsx",
+            "imported_at": None,
+        }
+
+    def _summary_for(self, records, imported):
+        svc = self._svc()
+        breakdowns = svc._build_received_months(records, imported)
+        return svc._build_summary(records, snapshot_name=None, received_months=breakdowns), breakdowns
+
+    def test_adds_imported_and_system_halves(self):
+        # The reported case: 匯入 24 + one monthly roster = 25.
+        summary, breakdowns = self._summary_for(
+            [self._record(2, "博士生獎學金")],
+            [self._imported(2, "博士生獎學金", 24)],
+        )
+        assert breakdowns[0].total_months == 25
+        assert summary.total_received_months == 25
+
+    def test_sums_across_scholarship_types(self):
+        summary, _ = self._summary_for(
+            [self._record(2, "博士生獎學金"), self._record(3, "教育部獎學金", cycle="yearly")],
+            [self._imported(2, "博士生獎學金", 24)],
+        )
+        # 博士生 24+1, 教育部 0+12
+        assert summary.total_received_months == 37
+
+    def test_is_zero_when_the_student_has_nothing(self):
+        summary, breakdowns = self._summary_for([], [])
+        assert breakdowns == []
+        assert summary.total_received_months == 0
+
+    def test_counts_an_import_with_no_payments_at_all(self):
+        summary, _ = self._summary_for([], [self._imported(2, "博士生獎學金", 24)])
+        assert summary.total_received_months == 24

@@ -6,6 +6,7 @@ MinIO文件儲存服務
 import hashlib
 import io
 import logging
+import os
 import uuid
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple
@@ -193,24 +194,31 @@ class MinIOService:
             if not file.filename:
                 raise HTTPException(status_code=400, detail="No filename provided")
 
-            # Sanitize the filename first (strips path components / unsafe chars)
-            # so a payload like "evil.pdf.exe" or "../../etc/passwd" cannot survive.
-            safe_filename = secure_filename(file.filename)
-
-            # Validate the extension on the *sanitized* name, taking the final
-            # extension only (defends against double-extension bypass).
-            file_extension = safe_filename.rsplit(".", 1)[-1].lower() if "." in safe_filename else ""
+            # Validate the final extension of the ORIGINAL filename — the
+            # sanitizer strips a fully non-ASCII name like 勞保證明.pdf down
+            # to "pdf" (no dot), which made valid uploads fail with 415.
+            # Trailing spaces/dots are trimmed so "report.pdf " still passes;
+            # splitext keeps only the final extension (double-extension defense).
+            stem, ext = os.path.splitext(file.filename.strip().rstrip(". "))
+            file_extension = ext[1:].lower()
             if file_extension not in settings.allowed_file_types_list:
                 raise HTTPException(status_code=415, detail="Invalid file type")
 
-            # 生成object名稱
+            # Sanitize the stem (a fully non-ASCII stem falls back to
+            # "unnamed_file") and re-attach the validated extension.
+            safe_filename = f"{secure_filename(stem)}.{file_extension}"
+
+            # 生成object名稱 — the uuid suffix keeps same-second uploads of
+            # identically-sanitized names (e.g. two Chinese filenames that
+            # both collapse to "unnamed_file") from overwriting each other.
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            unique_suffix = uuid.uuid4().hex[:8]
             # 標準化 file_type 為複數形式
             if file_type == "doc":
                 folder_name = "documents"
             else:
                 folder_name = f"{file_type}s"
-            object_name = f"applications/{application_id}/{folder_name}/{timestamp}_{safe_filename}"
+            object_name = f"applications/{application_id}/{folder_name}/{timestamp}_{unique_suffix}_{safe_filename}"
 
             # 上傳到MinIO
             self.client.put_object(

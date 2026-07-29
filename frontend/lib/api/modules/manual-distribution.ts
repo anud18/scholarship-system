@@ -9,12 +9,27 @@ import { typedClient } from "../typed-client";
 import { toApiResponse } from "../compat";
 import type { ApiResponse } from "../types";
 
+/** One reviewer verdict for one sub-type, shown in the 教授推薦/學院推薦 columns. */
+export interface ReviewItemSummary {
+  /** Normalized (lowercase/stripped) sub-type code, matching rejected_sub_types. */
+  sub_type_code: string;
+  /** "approve" | "reject" */
+  recommendation: string;
+  comments: string | null;
+}
+
 export interface DistributionStudent {
   ranking_item_id: number;
   application_id: number;
   rank_position: number;
   applied_sub_types: string[];
   rejected_sub_types: string[];
+  /** Per-sub-type professor verdicts (教授推薦 column). */
+  professor_review_items: ReviewItemSummary[];
+  /** Per-sub-type college review verdicts supplementing the ranking verdict (學院推薦 column); admin reviews excluded. The college's PRIMARY verdict is the finalized ranking: college_rejected below. */
+  college_review_items: ReviewItemSummary[];
+  /** Config requires a professor recommendation step (renewal-aware) — distinguishes 未推薦 chips (step required, no verdict yet) from "—" (no professor step). */
+  requires_professor_recommendation: boolean;
   allocated_sub_type: string | null;
   /** Config whose quota this student's slot consumes. Seed the checked column from (allocated_sub_type, allocation_config_id). */
   allocation_config_id: number | null;
@@ -23,6 +38,8 @@ export interface DistributionStudent {
   status: string;
   /** Application-level allocation status: "allocated" | "revoked" | "suspended" | "rejected" | null. Drives the row status control + checkbox disabling. */
   quota_allocation_status: string | null;
+  /** Holds a funded award — or, once 撤銷/停發'd, gets one back on 復原. Derived server-side so it mirrors restore_allocation (legacy fallback included); drives the status control + dialog copy. NOT the same as is_allocated, which is the ranking item's live funding flag. */
+  holds_award: boolean;
   revoke_reason: string | null;
   suspend_reason: string | null;
   college_rejected: boolean;
@@ -46,7 +63,8 @@ export interface DistributionStudent {
 export interface CollegeQuota {
   total: number;
   allocated: number;
-  /** total − allocated; NOT clamped — negative means over-allocated (advisory). */
+  /** total − allocated; NOT clamped — negative means the college is over its
+   * cell of quotas[sub_type], which the server rejects on allocate/finalize. */
   remaining: number;
 }
 
@@ -93,6 +111,42 @@ export function getSavedAllocation(s: DistributionStudent): LocalAlloc | null {
     : null;
 }
 
+export const UNKNOWN_COLLEGE_LABEL = "未知";
+
+/**
+ * college_code → display name, academies (reference data) first, then each
+ * student's snapshot college_name for codes the reference table doesn't know.
+ * Single source of truth for the distribution panel: the 所屬學院 filter,
+ * group headers, per-student cells and the quota matrix must all resolve a
+ * code to the SAME name — two codes labelled from different sources is how
+ * "two 藥物科學院 options" and "wrong college's quota row moved" happened.
+ */
+export function buildCollegeNameMap(
+  academies: Array<{ code: string; name: string }>,
+  students: DistributionStudent[]
+): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const academy of academies) {
+    names.set(academy.code, academy.name);
+  }
+  for (const s of students) {
+    if (s.college_code && s.college_name && !names.has(s.college_code)) {
+      names.set(s.college_code, s.college_name);
+    }
+  }
+  return names;
+}
+
+/** Resolved name, falling back to the raw code; empty code → fallback (未知). */
+export function resolveCollegeName(
+  names: Map<string, string>,
+  code: string,
+  emptyCodeFallback?: string
+): string {
+  if (code) return names.get(code) ?? code;
+  return emptyCodeFallback || UNKNOWN_COLLEGE_LABEL;
+}
+
 /** A flattened (sub_type × source-config) column descriptor for the distribution table */
 export interface SubTypeConfigCol {
   sub_type: string;
@@ -117,6 +171,59 @@ export interface AllocationSuggestion {
   ranking_item_id: number;
   sub_type_code: string | null;
   allocation_config_id: number | null;
+  /** Why nothing could be allocated. Null on a successful suggestion. */
+  reason?: UnallocatedReason | null;
+}
+
+export interface MergeSuggestionsResult {
+  /** A NEW map — callers must not mutate `current`. */
+  next: Map<number, LocalAlloc | null>;
+  /** How many 未決 rows the suggestions filled. */
+  filled: number;
+}
+
+/**
+ * Merge auto-allocation suggestions into the staged allocation map.
+ *
+ * Single implementation for the on-load preview and the 預設分發 buttons, so
+ * both apply the same rules: only rows in `eligibleItemIds` (in the grid, right
+ * college, not 撤銷/停發), and only 未決 rows — a row already carrying an
+ * allocation is decided, and is never overwritten.
+ *
+ * No quota cap here. The suggestions were computed against the same staged map
+ * this merges into (see getAutoAllocatePreview's `staged`), so the server has
+ * already spent exactly the headroom the screen has left; a second cap applied
+ * here could only wrongly drop a row the server deliberately allocated.
+ */
+export function mergeSuggestions(
+  current: Map<number, LocalAlloc | null>,
+  suggestions: AllocationSuggestion[],
+  eligibleItemIds: Set<number>
+): MergeSuggestionsResult {
+  const next = new Map(current);
+  let filled = 0;
+  for (const s of suggestions) {
+    if (!s.sub_type_code || s.allocation_config_id == null) continue;
+    if (!eligibleItemIds.has(s.ranking_item_id)) continue;
+    if (next.get(s.ranking_item_id)) continue;
+    next.set(s.ranking_item_id, {
+      sub_type: s.sub_type_code,
+      config_id: s.allocation_config_id,
+    });
+    filled++;
+  }
+  return { next, filled };
+}
+
+/** The staged map on the wire — every row the grid renders, 未決 rows included. */
+export function toStagedItems(
+  allocations: Map<number, LocalAlloc | null>
+): AllocationItem[] {
+  return Array.from(allocations.entries()).map(([ranking_item_id, alloc]) => ({
+    ranking_item_id,
+    sub_type_code: alloc?.sub_type ?? null,
+    allocation_config_id: alloc?.config_id ?? null,
+  }));
 }
 
 export interface AllocateRequest {
@@ -157,6 +264,84 @@ export interface RestoreRequest {
 
 export interface RestoreResult {
   restored_count: number;
+  /** Snapshot rows NOT restored because the sub-type was rejected (不同意) in review. */
+  skipped_rejected: number;
+  /** Snapshot rows NOT restored because the application is now 撤銷/停發. */
+  skipped_cancelled: number;
+}
+
+/** True when the student was pulled out of the distribution (撤銷/停發) and must not be (re)allocated. */
+export function isCancelledAllocation(s: DistributionStudent): boolean {
+  return (
+    s.quota_allocation_status === "revoked" ||
+    s.quota_allocation_status === "suspended"
+  );
+}
+
+/**
+ * Why 預設分發 could not place a student. Decided by the backend, which is the
+ * only place that knows — a reject from a reviewer role the grid does not
+ * render is invisible here, and "the quota ran out" cannot be told apart from
+ * "they were never a candidate" by looking at the row.
+ *
+ * Mirrors the UNALLOCATED_* constants in manual_distribution_service.py.
+ */
+export type UnallocatedReason =
+  | "cancelled"
+  | "college_rejected"
+  | "not_applied"
+  | "review_rejected"
+  | "quota_full"
+  | "no_college_quota";
+
+export const UNALLOCATED_REASON_LABEL: Record<UnallocatedReason, string> = {
+  cancelled: "已撤銷／停發",
+  college_rejected: "學院不予推薦",
+  not_applied: "未申請可分配的子類型",
+  review_rejected: "審核不同意",
+  quota_full: "名額不足",
+  no_college_quota: "該學院無此類別名額",
+};
+
+/**
+ * Label for a reason code, surviving one the backend added and this build has
+ * not learnt yet. The union is a hand-kept mirror of the UNALLOCATED_*
+ * constants and the response is untyped, so an unknown code reaches here with
+ * no type error — showing the raw code beats 「未分配: undefined」.
+ */
+export function unallocatedReasonLabel(reason: UnallocatedReason): string {
+  return UNALLOCATED_REASON_LABEL[reason] ?? reason;
+}
+
+/**
+ * ranking_item_id → why it was left 未決, for the rows the run could not place.
+ *
+ * 撤銷/停發 rows are dropped: they were never candidates, and the grid already
+ * states their status on the row itself. Counting them would report a dozen
+ * "failures" for a college where nothing actually went wrong.
+ */
+export function reasonsBySuggestion(
+  suggestions: AllocationSuggestion[]
+): Map<number, UnallocatedReason> {
+  const reasons = new Map<number, UnallocatedReason>();
+  for (const s of suggestions) {
+    if (s.sub_type_code || !s.reason || s.reason === "cancelled") continue;
+    reasons.set(s.ranking_item_id, s.reason);
+  }
+  return reasons;
+}
+
+/** Reason → count, most common first; zero counts omitted. */
+export function summarizeReasons(
+  reasons: Map<number, UnallocatedReason>
+): Array<{ reason: UnallocatedReason; count: number }> {
+  const tally = new Map<UnallocatedReason, number>();
+  for (const reason of reasons.values()) {
+    tally.set(reason, (tally.get(reason) ?? 0) + 1);
+  }
+  return [...tally.entries()]
+    .map(([reason, count]) => ({ reason, count }))
+    .sort((a, b) => b.count - a.count);
 }
 
 export interface RosterSummary {
@@ -490,23 +675,37 @@ export function createManualDistributionApi() {
     },
 
     /**
-     * Get auto-allocation preview suggestions.
+     * Get auto-allocation preview suggestions. Writes nothing.
+     *
+     * Pass `college_code` to run the distribution for a single college — the
+     * backend still evaluates quotas globally, so the suggestions match what a
+     * whole-scholarship run would produce for that college.
+     *
+     * Pass `staged` — the grid's CURRENT allocations for every row it renders,
+     * every college — to have the plan computed against the screen instead of
+     * the saved distribution. Omit it only on a screen that has staged nothing.
      */
     getAutoAllocatePreview: async (
       scholarship_type_id: number,
       academic_year: number,
-      semester: string
+      semester: string,
+      college_code?: string,
+      staged?: AllocationItem[]
     ): Promise<ApiResponse<{ suggestions: AllocationSuggestion[] }>> => {
-      const response = await typedClient.raw.GET(
+      const response = await typedClient.raw.POST(
         "/api/v1/manual-distribution/auto-allocate-preview",
         {
-          params: {
-            query: {
-              scholarship_type_id,
-              academic_year,
-              semester,
-            },
-          },
+          body: {
+            scholarship_type_id,
+            academic_year,
+            semester,
+            ...(college_code ? { college_code } : {}),
+            // `staged !== undefined`, not a truthiness test: an EMPTY overlay is
+            // a real answer ("this screen renders no rows") and JS and Python
+            // disagree about `[]`, so a truthiness test here would ship one
+            // meaning and have the server read another.
+            ...(staged !== undefined ? { staged } : {}),
+          } as never,
         }
       );
       return toApiResponse(response) as ApiResponse<{
@@ -526,72 +725,6 @@ export function createManualDistributionApi() {
         { body: request as never }
       );
       return toApiResponse(response) as ApiResponse<GenerateRostersResult>;
-    },
-
-    /**
-     * Import received months from Excel file.
-     */
-    importReceivedMonths: async (
-      scholarshipTypeId: number,
-      academicYear: number,
-      semester: string,
-      file: File
-    ): Promise<
-      ApiResponse<{ matched: number; not_found: string[]; updated: number }>
-    > => {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const params = new URLSearchParams({
-        scholarship_type_id: String(scholarshipTypeId),
-        academic_year: String(academicYear),
-        semester,
-      });
-
-      const token = typedClient.getToken();
-      const response = await fetch(
-        `/api/v1/manual-distribution/import-received-months?${params}`,
-        {
-          method: "POST",
-          body: formData,
-          headers: {
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        }
-      );
-
-      let body: unknown = null;
-      try {
-        body = await response.json();
-      } catch {
-        // Non-JSON response — keep body null and fall through to error shape
-      }
-
-      if (!response.ok) {
-        const bodyObj =
-          body && typeof body === "object"
-            ? (body as { message?: unknown; detail?: unknown })
-            : null;
-        const message =
-          (typeof bodyObj?.message === "string" && bodyObj.message) ||
-          (typeof bodyObj?.detail === "string" && bodyObj.detail) ||
-          `Upload failed (HTTP ${response.status})`;
-        return {
-          success: false,
-          message,
-          data: undefined,
-        } as ApiResponse<{
-          matched: number;
-          not_found: string[];
-          updated: number;
-        }>;
-      }
-
-      return body as ApiResponse<{
-        matched: number;
-        not_found: string[];
-        updated: number;
-      }>;
     },
 
     /**

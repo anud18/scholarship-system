@@ -4,7 +4,9 @@ Educators (professors and college reviewers) should only see applications
 appropriate for the *current* review phase:
 
 - During a configuration's **renewal_{role}_review** window: only renewal
-  applications (``is_renewal=True``) for that configuration.
+  applications (``is_renewal=True``) for that configuration, and only when
+  the administrator enabled that renewal review step
+  (``renewal_requires_{role}_review=True``).
 - During the general **{role}_review** window: only non-renewal applications
   (``is_renewal=False``) for that configuration.
 
@@ -38,12 +40,13 @@ def _now_utc() -> datetime:
 
 
 def _config_fields_for_role(cfg, role: ReviewRole):
-    """Return (renewal_start, renewal_end, general_start, general_end)
-    columns on the supplied :class:`ScholarshipConfiguration` (or alias)
-    matching ``role``.
+    """Return (renewal_required_flag, renewal_start, renewal_end,
+    general_start, general_end) columns on the supplied
+    :class:`ScholarshipConfiguration` (or alias) matching ``role``.
     """
     if role == "professor":
         return (
+            cfg.renewal_requires_professor_review,
             cfg.renewal_professor_review_start,
             cfg.renewal_professor_review_end,
             cfg.professor_review_start,
@@ -51,6 +54,7 @@ def _config_fields_for_role(cfg, role: ReviewRole):
         )
     if role == "college":
         return (
+            cfg.renewal_requires_college_review,
             cfg.renewal_college_review_start,
             cfg.renewal_college_review_end,
             cfg.college_review_start,
@@ -102,7 +106,7 @@ def apply_renewal_phase_filter(
         now = now.replace(tzinfo=timezone.utc)
 
     cfg = aliased(ScholarshipConfiguration, name=alias_name)
-    renewal_start, renewal_end, general_start, general_end = _config_fields_for_role(cfg, role)
+    renewal_required, renewal_start, renewal_end, general_start, general_end = _config_fields_for_role(cfg, role)
 
     stmt = stmt.join(
         cfg,
@@ -116,6 +120,9 @@ def apply_renewal_phase_filter(
         or_(
             and_(
                 Application.is_renewal.is_(True),
+                # Admin decides per configuration whether renewals need this
+                # review step at all (renewal_requires_*_review).
+                renewal_required.is_(True),
                 renewal_start.isnot(None),
                 renewal_end.isnot(None),
                 renewal_start <= now,

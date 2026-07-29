@@ -38,8 +38,6 @@ import { Search, Eye, CheckCircle, AlertCircle, Clock, X, FileText } from "lucid
 import apiClient, { Application, ApiResponse } from "@/lib/api";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { User } from "@/types/user";
-import { getDisplayStatusInfo } from "@/lib/utils/application-helpers";
-import { Locale } from "@/lib/validators";
 
 interface ProfessorReviewComponentProps {
   user: User;
@@ -251,28 +249,19 @@ function ProfessorReviewComponentInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reviewModalOpen, subTypes, reviewData.items.length]);
 
-  // Get status badge variant
-  const getStatusVariant = (status: string) => {
-    switch (status) {
-      case "under_review":
-        return "default";
-      case "submitted":
-        return "secondary";
-      default:
-        return "outline";
-    }
-  };
-
-  // Get status display text
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case "under_review":
-        return "審核中";
-      case "submitted":
-        return "已提交";
-      default:
-        return status;
-    }
+  // Render the professor-centric 狀態 badge for a queue row.
+  //
+  // The queue is bucketed by whether THIS professor has reviewed (待審核 vs
+  // 已完成), so the status column shows only that same signal — 待審核 / 已審核.
+  // Downstream stages (學院/管理員/配額分發…) are intentionally NOT shown here:
+  // the professor only cares about their own step.
+  const renderReviewStatusBadge = (app: Application) => {
+    const reviewed = app.has_professor_reviewed === true;
+    return (
+      <Badge variant={reviewed ? "default" : "secondary"}>
+        {reviewed ? "已審核" : "待審核"}
+      </Badge>
+    );
   };
 
   // Open review modal
@@ -381,23 +370,29 @@ function ProfessorReviewComponentInner({
     try {
       let response: ProfessorReviewResponse;
 
-      // Filter out pending items - only send approve/reject items to API
-      const filteredItems = reviewData.items
-        .filter(
-          item => item.recommendation === 'approve' || item.recommendation === 'reject'
-        )
-        .map(item => ({
-          sub_type_code: item.sub_type_code,
-          recommendation: item.recommendation as 'approve' | 'reject',
-          comments: item.comments
-        }));
+      // Every applied sub-type must be decided. A review is stored as one row
+      // per reviewer whose items are replaced wholesale on each submit, so a
+      // partial payload would drop the sub-types left out — the backend now
+      // rejects it (422). Gate here to give a clear message instead.
+      const undecidedItems = reviewData.items.filter(
+        item => item.recommendation !== 'approve' && item.recommendation !== 'reject'
+      );
 
-      // Validate that at least one item has been evaluated
-      if (filteredItems.length === 0) {
-        setError('請至少對一個獎學金申請項目進行評估（選擇同意或不同意）');
+      if (undecidedItems.length > 0) {
+        setError(
+          `請對所有獎學金申請項目進行評估（選擇同意或不同意），尚未評估：${undecidedItems
+            .map(item => getSubTypeLabel(item.sub_type_code))
+            .join('、')}`
+        );
         setLoading(false);
         return;
       }
+
+      const filteredItems = reviewData.items.map(item => ({
+        sub_type_code: item.sub_type_code,
+        recommendation: item.recommendation as 'approve' | 'reject',
+        comments: item.comments
+      }));
 
       // Validate that all rejected items have comments
       const rejectedWithoutComments = filteredItems.filter(
@@ -664,21 +659,7 @@ function ProfessorReviewComponentInner({
                             </TableCell>
                             <TableCell>
                               <div className="flex gap-2">
-                                {(() => {
-                                  const statusInfo = getDisplayStatusInfo(app, "zh");
-                                  return (
-                                    <>
-                                      <Badge variant={statusInfo.statusVariant}>
-                                        {statusInfo.statusLabel}
-                                      </Badge>
-                                      {statusInfo.showStage && statusInfo.stageLabel && (
-                                        <Badge variant={statusInfo.stageVariant}>
-                                          {statusInfo.stageLabel}
-                                        </Badge>
-                                      )}
-                                    </>
-                                  );
-                                })()}
+                                {renderReviewStatusBadge(app)}
                               </div>
                             </TableCell>
                             <TableCell>
@@ -704,7 +685,6 @@ function ProfessorReviewComponentInner({
                       offscreen as it was in the table layout (P1 audit). */}
                   <div className="md:hidden divide-y">
                     {filteredApplications.map(app => {
-                      const statusInfo = getDisplayStatusInfo(app, "zh");
                       return (
                         <div key={app.id} className="p-4 space-y-3">
                           {/* Header: name + status */}
@@ -718,14 +698,7 @@ function ProfessorReviewComponentInner({
                               </p>
                             </div>
                             <div className="flex flex-wrap items-start gap-1 justify-end">
-                              <Badge variant={statusInfo.statusVariant}>
-                                {statusInfo.statusLabel}
-                              </Badge>
-                              {statusInfo.showStage && statusInfo.stageLabel && (
-                                <Badge variant={statusInfo.stageVariant}>
-                                  {statusInfo.stageLabel}
-                                </Badge>
-                              )}
+                              {renderReviewStatusBadge(app)}
                             </div>
                           </div>
 
@@ -976,6 +949,22 @@ function ProfessorReviewComponentInner({
                 </Card>
               )}
 
+              {/* Every sub-type must be decided before submitting. Without this
+                  the submit button just sits disabled with no stated reason. */}
+              {!isLocked && reviewData.items.some(
+                item => item.recommendation !== "approve" && item.recommendation !== "reject"
+              ) && (
+                <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-md p-3 mb-3">
+                  <span>
+                    請對所有獎學金申請項目進行評估（選擇同意或不同意），尚未評估：
+                    {reviewData.items
+                      .filter(item => item.recommendation !== "approve" && item.recommendation !== "reject")
+                      .map(item => getSubTypeLabel(item.sub_type_code))
+                      .join("、")}
+                  </span>
+                </div>
+              )}
+
               {/* Actions */}
               <div className="flex justify-end gap-2">
                 <Button
@@ -990,8 +979,11 @@ function ProfessorReviewComponentInner({
                   disabled={
                     isLocked ||
                     loading ||
-                    !reviewData.items.some(
-                      item => item.recommendation === "approve" || item.recommendation === "reject"
+                    reviewData.items.length === 0 ||
+                    // Every sub-type must be decided — a partial submission would
+                    // drop the ones left out (items are replaced wholesale).
+                    reviewData.items.some(
+                      item => item.recommendation !== "approve" && item.recommendation !== "reject"
                     ) ||
                     reviewData.items.some(
                       item => item.recommendation === "reject" && (!item.comments || item.comments.trim() === "")

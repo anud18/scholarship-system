@@ -254,6 +254,16 @@ class ApplicationEnricherService:
                 # 只返回 codes（前端 SWR 會查名稱）
                 "department_code": department_code,
                 "academy_code": academy_code,
+                # #68: 國籍/身分 — expose only the snapshot keys the college
+                # review list reads, not the full SIS snapshot.
+                "student_data": {
+                    "std_nation": student_data.get("std_nation") or student_data.get("nationality"),
+                    "std_identity": (
+                        student_data.get("std_identity")
+                        if student_data.get("std_identity") is not None
+                        else student_data.get("identity")
+                    ),
+                },
                 # 審查狀態
                 "review_status": {
                     "has_review": len(app.get("reviews", [])) > 0,

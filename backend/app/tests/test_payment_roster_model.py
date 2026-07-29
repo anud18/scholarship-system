@@ -2,22 +2,22 @@
 Pure-property tests for `PaymentRoster` and `PaymentRosterItem` models.
 
 These drive the payment workflow — the LAST gate before money moves.
-A `is_qualified` regression would either:
-- Pay students with un-verified accounts → bank kicks the file back,
-  delay
-- Block qualified students → finance team support ticket flood
+`is_included` is the single judgement that decides who is on the roster,
+how many people it reports and how much money it totals; a regression
+would either drop qualified students off the payment file or inflate the
+declared total.
 
 The lock-state transitions are immutability invariants: a locked
 roster MUST NOT be re-locked (would overwrite the `locked_by`
 attribution → audit-trail forgery).
 
-8 helpers / properties covered:
+7 helpers / properties covered:
 - `PaymentRoster.is_locked / can_be_modified / is_completed`
 - `PaymentRoster.lock()`
 - `PaymentRoster.generate_excel_filename()`
-- `PaymentRosterItem.is_qualified`
 - `PaymentRosterItem.is_eligible`
 - `PaymentRosterItem.generate_excel_remarks()`
+- `verification_status_label()`
 """
 
 import re
@@ -26,10 +26,12 @@ from datetime import datetime, timezone
 import pytest
 
 from app.models.payment_roster import (
+    STUDENT_VERIFICATION_STATUS_LABELS,
     PaymentRoster,
     PaymentRosterItem,
     RosterStatus,
     StudentVerificationStatus,
+    verification_status_label,
 )
 
 
@@ -130,28 +132,22 @@ def test_excel_filename_format():
     assert re.search(r"_\d{8}_\d{6}\.xlsx$", fn)
 
 
-# ─── PaymentRosterItem.is_qualified ────────────────────────────────
+# ─── verification_status_label ─────────────────────────────────────
 
 
-def test_is_qualified_all_conditions():
-    """All three must hold: VERIFIED + is_included + bank_account."""
-    assert _item().is_qualified
+def test_verification_status_labels_are_traditional_chinese():
+    """exclusion_reason / Excel 欄位直接顯示這些標籤，不得外洩英文列舉值
+    (e.g. `學籍驗證未通過: suspended`)。"""
+    for status in StudentVerificationStatus:
+        label = verification_status_label(status)
+        assert label != status.value
+        assert not re.search(r"[A-Za-z_]", label)
 
 
-def test_is_qualified_false_when_not_verified():
-    assert not _item(verification_status=StudentVerificationStatus.GRADUATED).is_qualified
-    assert not _item(verification_status=StudentVerificationStatus.WITHDRAWN).is_qualified
-
-
-def test_is_qualified_false_when_not_included():
-    """Explicit exclusion blocks payment."""
-    assert not _item(is_included=False).is_qualified
-
-
-def test_is_qualified_false_when_no_bank_account():
-    """Missing bank account blocks payment (can't wire money to nowhere)."""
-    assert not _item(bank_account=None).is_qualified
-    assert not _item(bank_account="").is_qualified
+def test_verification_status_label_covers_every_member():
+    """A new StudentVerificationStatus member without a label would leak
+    its raw value into the UI — pin the map's completeness."""
+    assert set(STUDENT_VERIFICATION_STATUS_LABELS) == set(StudentVerificationStatus)
 
 
 # ─── PaymentRosterItem.is_eligible ─────────────────────────────────
@@ -171,12 +167,14 @@ def test_is_eligible_reflects_snapshot_verdict():
     assert _item(rule_validation_result={"is_eligible": False, "failed_rules": []}).is_eligible is False
 
 
-def test_is_eligible_distinct_from_is_qualified():
-    """規則資格 (is_eligible) vs 撥款合格 (is_qualified): a student can
-    pass the scholarship rules yet be unpayable (no bank account)."""
+def test_missing_bank_account_stays_included():
+    """規則資格 (is_eligible) 與納入造冊 (is_included) 都不受郵局帳號影響：
+    缺帳號是可補件的行政缺漏，不得把學生踢出造冊名單/人數/總金額。
+    提醒僅出現在 Excel 說明欄。"""
     item = _item(bank_account=None, rule_validation_result={"is_eligible": True})
     assert item.is_eligible is True
-    assert not item.is_qualified
+    assert item.is_included is True
+    assert "缺少郵局帳號資訊" in item.generate_excel_remarks("2024-09", "PHD")
 
 
 # ─── PaymentRosterItem.generate_excel_remarks ──────────────────────
@@ -202,10 +200,11 @@ def test_excel_remarks_excluded_shows_reason():
 
 
 def test_excel_remarks_unverified_shows_verification_status():
-    """Verification failure → status value (e.g. 'graduated') in remarks."""
+    """Verification failure → 繁體中文 status label in remarks (never the
+    raw enum value — the 說明欄 is承辦人-facing)."""
     item = _item(verification_status=StudentVerificationStatus.GRADUATED)
     remarks = item.generate_excel_remarks("2024-09", "PHD")
-    assert "學籍狀態: graduated" in remarks
+    assert "學籍狀態: 已畢業" in remarks
 
 
 def test_excel_remarks_missing_bank_account_flagged():

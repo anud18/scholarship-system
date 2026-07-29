@@ -2,6 +2,7 @@
 Application service for scholarship application management
 """
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -15,7 +16,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.cache import invalidate as cache_invalidate
 from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFoundError, ValidationError
-from app.core.metrics import scholarship_applications_total, scholarship_reviews_total
+from app.core.metrics import scholarship_applications_total
 from app.core.schema_validation import serialize_value
 from app.models.audit_log import AuditAction, AuditLog
 from app.models.application import Application, ApplicationStatus
@@ -37,7 +38,6 @@ from app.services.eligibility_service import EligibilityService
 from app.services.email_automation_service import email_automation_service
 from app.services.email_service import EmailService
 from app.services.minio_service import minio_service
-from app.services.review_phase_filter import apply_renewal_phase_filter
 from app.services.student_service import StudentService
 from app.utils.phone_validation import (
     TAIWAN_MOBILE_MESSAGE,
@@ -256,10 +256,29 @@ class ApplicationService:
             created_at=application.created_at,
             updated_at=application.updated_at,
             meta_data=application.meta_data,
-            application_document_url=application.application_document_url,
-            application_document_original_filename=application.application_document_original_filename,
             **student_fields,  # Spread extracted student fields
         )
+
+    async def _load_profile_owned_fields(self, user_id: int) -> Dict[str, Optional[str]]:
+        """讀取存放在 UserProfile 的固定欄位（郵局帳號、指導教授資訊）。
+
+        申請精靈把這幾個欄位存進 UserProfile 而非 submitted_form_data，但表單設定
+        (ApplicationFieldService.inject_fixed_fields) 仍會把它們列為 postal_account /
+        advisor_* 固定欄位。前端表單資料頁若只看 submitted_form_data，這些欄位一律
+        顯示「未填寫」，所以由這裡把權威值一併帶進 ApplicationResponse。
+
+        No profile row yet (student has never saved the section) → all None.
+        """
+        from app.models.user_profile import UserProfile
+
+        result = await self.db.execute(select(UserProfile).where(UserProfile.user_id == user_id))
+        profile = result.scalar_one_or_none()
+        return {
+            "postal_account": profile.account_number if profile else None,
+            "advisor_name": profile.advisor_name if profile else None,
+            "advisor_email": profile.advisor_email if profile else None,
+            "advisor_nycu_id": profile.advisor_nycu_id if profile else None,
+        }
 
     def _convert_semester_to_string(self, semester) -> Optional[str]:
         """
@@ -280,66 +299,10 @@ class ApplicationService:
         return str(semester)
 
     async def _generate_app_id(self, academic_year: int, semester: Optional[str]) -> str:
-        """
-        Generate sequential application ID with database locking
+        """Generate sequential application ID (delegates to application_builder)."""
+        from app.services.application_builder import generate_app_id
 
-        Args:
-            academic_year: Academic year (e.g., 113 for 民國113年)
-            semester: Semester enum value ('first', 'second', 'yearly' or None)
-
-        Returns:
-            str: Sequential application ID (e.g., 'APP-113-1-00001')
-
-        Format: APP-{academic_year}-{semester_code}-{sequence:05d}
-        - semester_code: '1' for first, '2' for second, '0' for yearly/None
-        """
-        from app.models.application_sequence import ApplicationSequence
-
-        # Handle None semester (for yearly scholarships)
-        if semester is None:
-            semester = "yearly"
-        # Normalise Semester enum to its string value so SQLite (String column) can bind it
-        if hasattr(semester, "value"):
-            semester = semester.value
-
-        # Use database lock to ensure thread-safe sequence generation
-        from sqlalchemy import and_, select
-
-        stmt = (
-            select(ApplicationSequence)
-            .where(
-                and_(
-                    ApplicationSequence.academic_year == academic_year,
-                    ApplicationSequence.semester == semester,
-                )
-            )
-            .with_for_update()
-        )
-
-        result = await self.db.execute(stmt)
-        seq_record = result.scalar_one_or_none()
-
-        # Create sequence record if it doesn't exist
-        if not seq_record:
-            seq_record = ApplicationSequence(academic_year=academic_year, semester=semester, last_sequence=0)
-            self.db.add(seq_record)
-            await self.db.flush()  # Flush to get the record in the session
-
-        # Increment sequence
-        seq_record.last_sequence += 1
-        sequence_num = seq_record.last_sequence
-
-        # Commit the sequence increment immediately to release the lock
-        await self.db.commit()
-
-        # Format and return app_id
-        app_id = ApplicationSequence.format_app_id(academic_year, semester, sequence_num)
-        logger.debug(
-            f"Generated app_id: {app_id} (academic_year={academic_year}, "
-            f"semester={semester}, sequence={sequence_num})"
-        )
-
-        return app_id
+        return await generate_app_id(self.db, academic_year, semester)
 
     async def _validate_student_eligibility(
         self,
@@ -451,45 +414,17 @@ class ApplicationService:
 
     @staticmethod
     def _derive_sub_scholarship_type(scholarship_subtype_list: Optional[List[str]]) -> str:
-        """Derive the denormalized scalar `sub_scholarship_type` from the selected
-        sub-type list: first entry wins, normalized to lowercase; empty → "general".
+        """Delegates to application_builder (shared with batch import)."""
+        from app.services.application_builder import derive_sub_scholarship_type
 
-        Shared by create and update so the scalar never drifts from the list
-        (a drift is what let a "general" scalar survive an edit that picked a
-        real sub-type — see _validate_sub_type_for_submission).
-        """
-        if scholarship_subtype_list:
-            return scholarship_subtype_list[0].lower()
-        return "general"
+        return derive_sub_scholarship_type(scholarship_subtype_list)
 
     @staticmethod
     def _validate_sub_type_for_submission(scholarship: ScholarshipType, sub_scholarship_type: Optional[str]) -> None:
-        """Reject the synthetic "general" category on submission for scholarships
-        that define real sub-types.
+        """Delegates to application_builder (shared with batch import)."""
+        from app.services.application_builder import validate_sub_type_for_submission
 
-        "general" is only a valid category for scholarships with no sub-types.
-        For a scholarship that defines real ones (e.g. PhD: nstc / moe_1w), a
-        "general" application matches no quota slot during distribution, so it
-        must carry a concrete sub-type before it can be submitted.
-
-        Sub-types are stored lowercase (CLAUDE.md convention), but admin-entered
-        `sub_type_list` may not be — compare case-insensitively so a correct
-        submission is never falsely rejected over casing.
-
-        When the scholarship defines no real sub-types, only the synthetic
-        "general" (or empty) is valid — an arbitrary sub-type string would be
-        stored verbatim and break downstream quota/distribution lookups, so it
-        is rejected too.
-        """
-        if scholarship is None:
-            return
-        real_sub_types = [st.lower() for st in (scholarship.sub_type_list or []) if st and st.lower() != "general"]
-        normalized = (sub_scholarship_type or "general").lower()
-        if real_sub_types:
-            if normalized not in real_sub_types:
-                raise ValidationError("此獎學金需選擇申請類別（" + "、".join(real_sub_types) + "），不可使用通用類別")
-        elif normalized != "general":
-            raise ValidationError("此獎學金不提供申請類別選擇，不可指定子類別")
+        validate_sub_type_for_submission(scholarship, sub_scholarship_type)
 
     async def _create_application_instance(
         self,
@@ -523,12 +458,18 @@ class ApplicationService:
         if not is_draft:
             self._validate_sub_type_for_submission(scholarship, sub_scholarship_type)
 
-        # Determine status based on is_draft flag
         from app.models.enums import ApplicationStatus
+        from app.services.application_builder import build_submitted_application_values
         from app.utils.i18n import ScholarshipI18n
 
-        status = ApplicationStatus.draft.value if is_draft else ApplicationStatus.submitted.value
-        status_name = ScholarshipI18n.get_application_status_text(status)
+        submitted_values = build_submitted_application_values(scholarship, config)
+
+        if is_draft:
+            status = ApplicationStatus.draft.value
+            status_name = ScholarshipI18n.get_application_status_text(status)
+        else:
+            status = submitted_values["status"]
+            status_name = submitted_values["status_name"]
 
         # Create application
         application = Application(
@@ -536,8 +477,8 @@ class ApplicationService:
             user_id=user.id,
             scholarship_type_id=scholarship.id,
             scholarship_configuration_id=config.id,
-            scholarship_name=config.config_name or scholarship.name,
-            amount=config.amount,
+            scholarship_name=submitted_values["scholarship_name"],
+            amount=submitted_values["amount"],
             scholarship_subtype_list=scholarship_subtype_list,
             # Ordered sub-type preference list (志願序). The distribution service
             # reads this first; without it, allocation falls back to selection
@@ -556,9 +497,8 @@ class ApplicationService:
         )
 
         if not is_draft:
-            application.submitted_at = datetime.now(timezone.utc)
-            # Keep review_stage consistent with the submitted status (mirrors submit_application).
-            application.review_stage = ReviewStage.student_submitted.value
+            application.submitted_at = submitted_values["submitted_at"]
+            application.review_stage = submitted_values["review_stage"]
 
         return application
 
@@ -770,14 +710,17 @@ class ApplicationService:
             created_at=application.created_at,
             updated_at=application.updated_at,
             meta_data=application.meta_data,
-            application_document_url=application.application_document_url,
-            application_document_original_filename=application.application_document_original_filename,
             requires_professor_recommendation=bool(
                 application.scholarship_configuration
-                and application.scholarship_configuration.requires_professor_recommendation
+                and application.scholarship_configuration.requires_professor_review_for(bool(application.is_renewal))
             ),
             requires_college_review=bool(
-                application.scholarship_configuration and application.scholarship_configuration.requires_college_review
+                application.scholarship_configuration
+                and application.scholarship_configuration.requires_college_review_for(bool(application.is_renewal))
+            ),
+            allow_college_view_distribution=bool(
+                application.scholarship_configuration
+                and application.scholarship_configuration.allow_college_view_distribution
             ),
         )
 
@@ -884,8 +827,6 @@ class ApplicationService:
                 created_at=application.created_at,
                 updated_at=application.updated_at,
                 meta_data=application.meta_data,
-                application_document_url=application.application_document_url,
-                application_document_original_filename=application.application_document_original_filename,
             )
 
             recent_applications_response.append(app_data)
@@ -986,6 +927,11 @@ class ApplicationService:
         if not student_fields.get("student_no") and application.student:
             student_fields["student_no"] = application.student.nycu_id
 
+        # 郵局帳號 and 指導教授資訊 live on the student's UserProfile (the wizard's
+        # fixed-field section and batch import both write them there — never into
+        # submitted_form_data), so every form-data view has to read them from here.
+        profile_owned_fields = await self._load_profile_owned_fields(application.user_id)
+
         # Build sub_type labels from scholarship.sub_type_configs
         sub_type_labels = {}
         if application.scholarship and hasattr(application.scholarship, "sub_type_configs"):
@@ -1029,8 +975,6 @@ class ApplicationService:
             "created_at": application.created_at,
             "updated_at": application.updated_at,
             "meta_data": application.meta_data,
-            "application_document_url": application.application_document_url,
-            "application_document_original_filename": application.application_document_original_filename,
             "reviews": (
                 []
                 if current_user.role == UserRole.student
@@ -1071,14 +1015,20 @@ class ApplicationService:
             "scholarship_name": scholarship_name,
             "amount": amount,
             "currency": currency,
+            **profile_owned_fields,  # 郵局帳號 + 指導教授資訊 (UserProfile-owned)
             **student_fields,  # Spread extracted student fields
             # Workflow configuration flags
             "requires_professor_recommendation": bool(
                 application.scholarship_configuration
-                and application.scholarship_configuration.requires_professor_recommendation
+                and application.scholarship_configuration.requires_professor_review_for(bool(application.is_renewal))
             ),
             "requires_college_review": bool(
-                application.scholarship_configuration and application.scholarship_configuration.requires_college_review
+                application.scholarship_configuration
+                and application.scholarship_configuration.requires_college_review_for(bool(application.is_renewal))
+            ),
+            "allow_college_view_distribution": bool(
+                application.scholarship_configuration
+                and application.scholarship_configuration.allow_college_view_distribution
             ),
         }
 
@@ -1106,9 +1056,7 @@ class ApplicationService:
             # Serialize form data to handle datetime objects properly
             application.submitted_form_data = self._serialize_for_json(update_data.form_data.dict())
 
-        # 更新狀態
-        if update_data.status:
-            application.status = update_data.status
+        # NOTE: status is intentionally not updatable here — see ApplicationUpdate.
 
         # 更新續領申請標識
         if update_data.is_renewal is not None:
@@ -1130,8 +1078,6 @@ class ApplicationService:
 
         await self.db.commit()
         await self.db.refresh(application)
-        if update_data.status:
-            await self._invalidate_app_caches()
 
         # Clone bank account proof document when saving draft or updating application
         # This ensures the document is available in the application
@@ -1316,21 +1262,9 @@ class ApplicationService:
         advisor_profile = user_profile_result.scalar_one_or_none()
 
         # 自動分配指導教授：根據 UserProfile 的 advisor_nycu_id 查找教授帳號
-        if not application.professor_id and advisor_profile:
+        from app.services.application_builder import assign_professor_from_profile
 
-            if advisor_profile and advisor_profile.advisor_nycu_id:
-                professor_stmt = select(User).where(
-                    User.nycu_id == advisor_profile.advisor_nycu_id,
-                    User.role == UserRole.professor,
-                )
-                professor_result = await self.db.execute(professor_stmt)
-                professor = professor_result.scalar_one_or_none()
-                if professor:
-                    application.professor_id = professor.id
-                    logger.info(
-                        f"Auto-assigned professor {professor.id} ({professor.name}) "
-                        f"to application {application.app_id}"
-                    )
+        await assign_professor_from_profile(self.db, application, application.user_id, profile=advisor_profile)
 
         await self.db.commit()
         await self._invalidate_app_caches()
@@ -1418,8 +1352,6 @@ class ApplicationService:
             "created_at": application.created_at,
             "updated_at": application.updated_at,
             "meta_data": application.meta_data,
-            "application_document_url": application.application_document_url,
-            "application_document_original_filename": application.application_document_original_filename,
             # 移除獨立的 files 欄位
             "reviews": [
                 {
@@ -1439,6 +1371,22 @@ class ApplicationService:
 
         return ApplicationResponse(**response_data)
 
+    async def _get_accessible_student_ids(self, professor: User, permission: str = "view_applications") -> List[int]:
+        """Student IDs this professor may access, queried async-safely.
+
+        The former User.get_accessible_student_ids traversed the lazy
+        professor_relationships collection, which raises MissingGreenlet
+        under an AsyncSession (issue #1130) — query the rows explicitly.
+        """
+        from app.models.professor_student import ProfessorStudentRelationship
+
+        stmt = select(ProfessorStudentRelationship).where(
+            ProfessorStudentRelationship.professor_id == professor.id,
+            ProfessorStudentRelationship.is_active.is_(True),
+        )
+        result = await self.db.execute(stmt)
+        return [rel.student_id for rel in result.scalars().all() if rel.has_permission(permission)]
+
     async def get_applications_for_review(
         self,
         current_user: User,
@@ -1457,7 +1405,7 @@ class ApplicationService:
 
         if current_user.role == UserRole.professor:
             # Filter applications to only those from accessible students
-            accessible_student_ids = current_user.get_accessible_student_ids("view_applications")
+            accessible_student_ids = await self._get_accessible_student_ids(current_user)
             if accessible_student_ids:
                 query = query.where(Application.user_id.in_(accessible_student_ids))
             else:
@@ -1482,8 +1430,14 @@ class ApplicationService:
             stmt = select(ScholarshipType).where(ScholarshipType.code == scholarship_type)
             result = await self.db.execute(stmt)
             scholarship = result.scalar_one_or_none()
-            if scholarship:
-                query = query.where(Application.scholarship_type_id == scholarship.id)
+            if not scholarship:
+                # Fail closed. Previously an unrecognised code left the predicate
+                # off entirely, so a garbage filter value returned *everything* the
+                # caller may see rather than nothing — and because the parameter
+                # then never changed the result set, ZAP's boolean-comparison probe
+                # read that as a SQL-injection signal (issue #1225).
+                return []
+            query = query.where(Application.scholarship_type_id == scholarship.id)
 
         # Apply pagination
         query = query.offset(skip).limit(limit)
@@ -1534,8 +1488,6 @@ class ApplicationService:
                 created_at=application.created_at,
                 updated_at=application.updated_at,
                 meta_data=application.meta_data,
-                application_document_url=application.application_document_url,
-                application_document_original_filename=application.application_document_original_filename,
             )
 
             response_applications.append(app_data)
@@ -1726,128 +1678,37 @@ class ApplicationService:
             "filename": getattr(file, "filename", "unknown"),
         }
 
-    async def create_professor_review(self, application_id: int, user: User, review_data) -> ApplicationResponse:
-        """Create a professor review record and notify college reviewers"""
-        from app.models.enums import ReviewStage
+    async def _get_document_max_file_count(self, application: Application, file_type: str) -> Optional[int]:
+        """Configured file-count limit of the document slot an upload targets.
 
-        stmt = select(Application).where(Application.id == application_id)
+        Dynamic documents use the admin-configured 文件名稱 as their file_type,
+        so the slot is the ApplicationDocument row matching the application's
+        scholarship code + that name. Returns None when no configuration
+        exists (fixed types like bank_account_proof, or legacy data)."""
+        from app.models.application_field import ApplicationDocument
+
+        stmt = (
+            select(ApplicationDocument.max_file_count)
+            .join(ScholarshipType, ScholarshipType.code == ApplicationDocument.scholarship_type)
+            .where(
+                ScholarshipType.id == application.scholarship_type_id,
+                ApplicationDocument.document_name == file_type,
+                ApplicationDocument.is_active.is_(True),
+            )
+        )
         result = await self.db.execute(stmt)
-        application = result.scalar_one_or_none()
-        if not application:
-            raise NotFoundError("Application", str(application_id))
-        # Only the assigned professor can submit
-        if application.professor_id != user.id:
-            raise AuthorizationError("You are not the assigned professor for this application")
-
-        # Calculate overall recommendation from items
-        # all approve → 'approve', all reject → 'reject', mixed → 'partial_approve'
-        item_recommendations = [item.recommendation for item in review_data.items]
-        if all(r == "approve" for r in item_recommendations):
-            overall_recommendation = "approve"
-        elif all(r == "reject" for r in item_recommendations):
-            overall_recommendation = "reject"
-        else:
-            overall_recommendation = "partial_approve"
-
-        # Build combined comments from items
-        combined_comments = (
-            "\n".join(f"[{item.sub_type_code}] {item.comments}" for item in review_data.items if item.comments) or None
-        )
-
-        reviewed_at = datetime.now(timezone.utc)
-
-        # Upsert: update existing review if professor already submitted one
-        stmt_existing = select(ApplicationReview).where(
-            ApplicationReview.application_id == application_id,
-            ApplicationReview.reviewer_id == user.id,
-        )
-        result_existing = await self.db.execute(stmt_existing)
-        review = result_existing.scalar_one_or_none()
-
-        if review:
-            review.recommendation = overall_recommendation
-            review.comments = combined_comments
-            review.reviewed_at = reviewed_at
-            # Delete existing items and re-create
-            from sqlalchemy import delete as sa_delete
-
-            await self.db.execute(sa_delete(ApplicationReviewItem).where(ApplicationReviewItem.review_id == review.id))
-            await self.db.flush()
-        else:
-            review = ApplicationReview(
-                application_id=application_id,
-                reviewer_id=user.id,
-                recommendation=overall_recommendation,
-                comments=combined_comments,
-                reviewed_at=reviewed_at,
-            )
-            self.db.add(review)
-            await self.db.flush()  # Get the review ID
-
-        # Create per-sub-type review items
-        for item_data in review_data.items:
-            review_item = ApplicationReviewItem(
-                review_id=review.id,
-                sub_type_code=item_data.sub_type_code,
-                recommendation=item_data.recommendation,
-                comments=item_data.comments,
-            )
-            self.db.add(review_item)
-
-        # Advance review_stage to professor_reviewed
-        application.review_stage = ReviewStage.professor_reviewed.value
-        application.updated_at = datetime.now(timezone.utc)
-
-        await self.db.commit()
-
-        # Business metric: count professor review actions for the
-        # Scholarship System Overview dashboard. Action is derived from
-        # the overall recommendation so dashboards can split approve vs
-        # reject (issue #159).
-        scholarship_reviews_total.labels(
-            reviewer_type="professor",
-            action=str(overall_recommendation) if overall_recommendation else "unknown",
-        ).inc()
-
-        # 觸發教授審查提交事件（會觸發自動化郵件規則）
-        try:
-            stmt_student = select(User).where(User.id == application.user_id)
-            result_student = await self.db.execute(stmt_student)
-            student = result_student.scalar_one_or_none()
-
-            stmt_scholarship = select(ScholarshipType).where(ScholarshipType.id == application.scholarship_type_id)
-            result_scholarship = await self.db.execute(stmt_scholarship)
-            scholarship = result_scholarship.scalar_one_or_none()
-
-            await email_automation_service.trigger_professor_review_submitted(
-                db=self.db,
-                application_id=application.id,
-                review_data={
-                    "app_id": application.app_id,
-                    "student_name": student.name if student else "Unknown",
-                    "professor_name": user.name,
-                    "professor_email": user.email,
-                    "scholarship_type": scholarship.name if scholarship else "Unknown",
-                    "scholarship_type_id": application.scholarship_type_id,
-                    "review_result": overall_recommendation,
-                    "review_date": reviewed_at.strftime("%Y-%m-%d"),
-                    "professor_recommendation": overall_recommendation,
-                    "college_name": "",
-                    "review_deadline": "",
-                },
-            )
-        except Exception:
-            logger.exception("Failed to trigger professor review automation")
-
-        # Return fresh copy with all relationships loaded
-        return await self.get_application_by_id(application_id, user)
+        return result.scalars().first()
 
     async def upload_application_file_minio(
         self, application_id: int, user: User, file, file_type: str
     ) -> Dict[str, Any]:
         """Upload application file using MinIO"""
-        # Verify application exists and user has access
-        stmt = select(Application).where(Application.id == application_id)
+        # Verify application exists and user has access. FOR UPDATE serializes
+        # concurrent uploads to the same application (double-click, second tab,
+        # the admin dialog's parallel uploads): the replace-stale-rows logic
+        # below is SELECT→DELETE→INSERT and two interleaved requests would
+        # otherwise both miss each other's rows and re-create duplicates.
+        stmt = select(Application).where(Application.id == application_id).with_for_update()
         result = await self.db.execute(stmt)
         application = result.scalar_one_or_none()
 
@@ -1876,6 +1737,35 @@ class ApplicationService:
         # Import ApplicationFile here to avoid circular imports
         from app.models.application import ApplicationFile
 
+        # When the APPLICANT re-uploads a document it must REPLACE the previous
+        # records, not append: repeated draft saves used to send the same file
+        # once per save, and the stale rows surfaced in the college export as
+        # 「成績 1..N」copies of one file. A single-file slot (max_file_count
+        # <= 1, the admin default) replaces every row of its type — swapping to
+        # a differently-named file must not leave the old one behind, since no
+        # per-file delete endpoint exists. Multi-file slots can only match on
+        # the original filename. Staff (professor/college/admin) uploads keep
+        # append semantics: they attach supplements and must never silently
+        # destroy the student's possibly-verified documents.
+        stale_object_names = []
+        is_applicant_upload = user.role == UserRole.student and application.user_id == user.id
+        if is_applicant_upload:
+            max_file_count = await self._get_document_max_file_count(application, file_type)
+            stale_stmt = select(ApplicationFile).where(
+                ApplicationFile.application_id == application_id,
+                ApplicationFile.file_type == file_type,
+            )
+            if max_file_count is None or max_file_count > 1:
+                stale_stmt = stale_stmt.where(ApplicationFile.original_filename == file.filename)
+            stale_result = await self.db.execute(stale_stmt)
+            for stale_file in stale_result.scalars().all():
+                if stale_file.object_name and stale_file.object_name != object_name:
+                    # Deleted from MinIO only AFTER the commit below succeeds — a
+                    # failed commit must not leave surviving DB rows pointing at
+                    # already-deleted objects.
+                    stale_object_names.append(stale_file.object_name)
+                await self.db.delete(stale_file)
+
         # Save file metadata to database
         file_record = ApplicationFile(
             application_id=application_id,
@@ -1892,6 +1782,12 @@ class ApplicationService:
         self.db.add(file_record)
         await self.db.commit()
         await self.db.refresh(file_record)
+
+        # Replaced rows are durably gone; now drop their objects. to_thread
+        # because the MinIO client is synchronous network I/O; delete_file
+        # logs and returns False on failure (an orphaned object is harmless).
+        for stale_object_name in stale_object_names:
+            await asyncio.to_thread(minio_service.delete_file, stale_object_name)
 
         return {
             "success": True,
@@ -1947,7 +1843,7 @@ class ApplicationService:
             query = query.where(Application.user_id == current_user.id)
         elif current_user.role == UserRole.professor:
             # Filter applications to only those from accessible students
-            accessible_student_ids = current_user.get_accessible_student_ids("view_applications")
+            accessible_student_ids = await self._get_accessible_student_ids(current_user)
             if accessible_student_ids:
                 query = query.where(Application.user_id.in_(accessible_student_ids))
             else:
@@ -2019,8 +1915,6 @@ class ApplicationService:
                 created_at=application.created_at,
                 updated_at=application.updated_at,
                 meta_data=application.meta_data,
-                application_document_url=application.application_document_url,
-                application_document_original_filename=application.application_document_original_filename,
             )
 
             response_applications.append(app_data)
@@ -2432,14 +2326,28 @@ class ApplicationService:
         return document_type_names.get(file_type, file_type)
 
     # Professor Review Methods
+    @staticmethod
+    def _professor_reviewed(professor_id: int):
+        """Correlated predicate: this professor authored an ApplicationReview for the row.
+
+        Shared by the professor queue (:meth:`get_professor_applications_paginated`)
+        and the dashboard badge (:meth:`get_professor_review_stats`) so the
+        "has this professor reviewed?" split cannot drift between the two.
+        """
+        return Application.reviews.any(ApplicationReview.reviewer_id == professor_id)
+
     async def get_professor_applications_paginated(
         self,
         professor_id: int,
         status_filter: Optional[str] = None,
         page: int = 1,
-        size: int = 20,
+        size: Optional[int] = None,
     ) -> tuple[List[ApplicationListResponse], int]:
-        """Get paginated applications assigned to professor with total count"""
+        """Get applications assigned to professor with total count.
+
+        ``size=None`` (default) returns ALL matching applications;
+        pass ``page``/``size`` for explicit pagination.
+        """
         try:
             # Build base query with ALL required filters (consistent with what will be returned)
             base_query = (
@@ -2449,12 +2357,24 @@ class ApplicationService:
                         ScholarshipConfiguration.scholarship_type
                     ),
                     selectinload(Application.student),
+                    selectinload(Application.reviews),
                 )
                 .join(Application.scholarship_configuration)
                 .where(
-                    # Only applications that require professor recommendation
-                    Application.scholarship_configuration.has(
-                        ScholarshipConfiguration.requires_professor_recommendation.is_(True)
+                    # Only applications that require professor review — general
+                    # applications follow requires_professor_recommendation,
+                    # renewals follow the renewal-specific admin flag. The
+                    # configuration is already joined above, so filter its
+                    # columns directly instead of EXISTS subqueries.
+                    or_(
+                        and_(
+                            Application.is_renewal.is_(False),
+                            ScholarshipConfiguration.requires_professor_recommendation.is_(True),
+                        ),
+                        and_(
+                            Application.is_renewal.is_(True),
+                            ScholarshipConfiguration.renewal_requires_professor_review.is_(True),
+                        ),
                     ),
                     # Only applications assigned to this specific professor
                     Application.professor_id == professor_id,
@@ -2463,41 +2383,34 @@ class ApplicationService:
                 )
             )
 
-            # Apply status filter to base query
+            # Discriminate pending vs completed by whether THIS professor has
+            # already recorded a review, NOT by Application.status.
+            #
+            # Status is unreliable here: a professor "approve" on a scholarship
+            # that requires college review deliberately keeps status at
+            # under_review (issue #182), so a status-based "pending" filter kept
+            # showing applications the professor had already reviewed. The only
+            # sound signal that the professor is done is the existence of an
+            # ApplicationReview row authored by them.
+            reviewed_by_me = self._professor_reviewed(professor_id)
+
             if status_filter == "pending":
-                base_query = base_query.where(
-                    Application.status.in_(
-                        [
-                            ApplicationStatus.submitted.value,
-                            ApplicationStatus.under_review.value,  # Include under_review in pending
-                        ]
-                    )
-                )
-                # Phase 4 (renewal routing): pending professor lists must only
-                # include applications matching the *current* review phase —
-                # renewal apps during the renewal_professor_review window,
-                # non-renewal apps during the general professor_review window.
-                base_query = apply_renewal_phase_filter(base_query, role="professor", alias_name="prof_phase_cfg")
+                # 待審核 — assigned to me but I have not reviewed yet.
+                base_query = base_query.where(~reviewed_by_me)
             elif status_filter == "completed":
-                base_query = base_query.where(
-                    Application.status.in_(
-                        [
-                            ApplicationStatus.approved.value,
-                            ApplicationStatus.partial_approved.value,
-                            ApplicationStatus.rejected.value,
-                        ]
-                    )
-                )
-            # "all" or None shows all applications (no additional status filter)
+                # 已完成 — assigned to me and I have already reviewed.
+                base_query = base_query.where(reviewed_by_me)
+            # "all" or None → 全部 = 待審核 + 已完成 (no review-existence filter)
 
             # Get total count with same filters
             count_query = select(func.count()).select_from(base_query.subquery())
             count_result = await self.db.execute(count_query)
             total_count = count_result.scalar()
 
-            # Apply pagination and get results
-            offset = (page - 1) * size
-            paginated_query = base_query.offset(offset).limit(size).order_by(desc(Application.created_at))
+            # Apply ordering, then pagination only when explicitly requested
+            paginated_query = base_query.order_by(desc(Application.created_at))
+            if size is not None:
+                paginated_query = paginated_query.offset((page - 1) * size).limit(size)
 
             result = await self.db.execute(paginated_query)
             applications = result.unique().scalars().all()
@@ -2542,8 +2455,6 @@ class ApplicationService:
                         created_at=app.created_at,
                         updated_at=app.updated_at,
                         meta_data=app.meta_data,
-                        application_document_url=app.application_document_url,
-                        application_document_original_filename=app.application_document_original_filename,
                         review_stage=serialize_value(app.review_stage),
                         # Display fields
                         student_name=app.student_data.get("std_cname", "") if app.student_data else "",
@@ -2553,12 +2464,12 @@ class ApplicationService:
                         scholarship_configuration=(
                             {
                                 "requires_professor_recommendation": (
-                                    app.scholarship_configuration.requires_professor_recommendation
+                                    app.scholarship_configuration.requires_professor_review_for(bool(app.is_renewal))
                                     if app.scholarship_configuration
                                     else False
                                 ),
                                 "requires_college_review": (
-                                    app.scholarship_configuration.requires_college_review
+                                    app.scholarship_configuration.requires_college_review_for(bool(app.is_renewal))
                                     if app.scholarship_configuration
                                     else False
                                 ),
@@ -2569,6 +2480,9 @@ class ApplicationService:
                             if app.scholarship_configuration
                             else None
                         ),
+                        # Professor-centric review status: has THIS professor
+                        # recorded a review? Mirrors the pending/completed split.
+                        has_professor_reviewed=any(review.reviewer_id == professor_id for review in app.reviews),
                     )
                 )
 
@@ -2593,8 +2507,9 @@ class ApplicationService:
             if not application or not application.scholarship_configuration:
                 return False
 
-            # Check if scholarship requires professor recommendation
-            if not application.scholarship_configuration.requires_professor_recommendation:
+            # Check if this application kind requires professor review
+            # (renewals carry their own admin-configured flag)
+            if not application.scholarship_configuration.requires_professor_review_for(bool(application.is_renewal)):
                 return False
 
             # Check if application is assigned to this specific professor
@@ -2658,6 +2573,14 @@ class ApplicationService:
             # Check professor review period for SUBMISSION (this is where time restriction applies)
             # Skip time restrictions if review periods are not configured (e.g., in test environment)
             if application.is_renewal:
+                # Renewal professor review must be enabled by the admin at all
+                if not config.requires_professor_review_for(True):
+                    logger.warning(
+                        f"Professor review submission blocked: renewal professor review "
+                        f"not required for config {config.id}"
+                    )
+                    return False
+
                 # Check renewal review period
                 renewal_start = config.renewal_professor_review_start
                 renewal_end = config.renewal_professor_review_end
@@ -2715,8 +2638,6 @@ class ApplicationService:
           surfacing it here would require a join on
           ScholarshipConfiguration.professor_review_end_date)
         """
-        already_reviewed = select(ApplicationReview.application_id).where(ApplicationReview.reviewer_id == professor_id)
-
         pending_query = select(sa_func.count(Application.id)).where(
             Application.professor_id == professor_id,
             Application.status.in_(
@@ -2725,7 +2646,7 @@ class ApplicationService:
                     ApplicationStatus.under_review.value,
                 ]
             ),
-            Application.id.not_in(already_reviewed),
+            ~self._professor_reviewed(professor_id),
         )
 
         completed_query = select(sa_func.count(ApplicationReview.id)).where(
@@ -2924,9 +2845,10 @@ class ApplicationService:
             if not professor:
                 raise NotFoundError(f"Professor with NYCU ID {professor_nycu_id} not found")
 
-            # Check if scholarship requires professor review
+            # Check if this application kind requires professor review
+            # (renewals carry their own admin-configured flag)
             config = application.scholarship_configuration
-            if not config or not config.requires_professor_recommendation:
+            if not config or not config.requires_professor_review_for(bool(application.is_renewal)):
                 raise ValidationError("This scholarship does not require professor review")
 
             # Check permission for college admins

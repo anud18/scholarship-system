@@ -4,7 +4,7 @@
   "private": true,
   "engines": {
     "node": ">=22",
-    "npm": ">=10"
+    "bun": ">=1.2"
   },
   "scripts": {
     "copy-pdf-worker": "node scripts/copy-pdf-worker.mjs",
@@ -22,7 +22,7 @@
     "test:watch": "jest --watch",
     "test:debug": "node --inspect-brk node_modules/.bin/jest --runInBand",
     "test:api": "node test-api-connection.js",
-    "dev:safe": "npm run test:api && npm run dev",
+    "dev:safe": "bun run test:api && bun run dev",
     "type-check": "tsc --noEmit --skipLibCheck",
     "api:generate": "openapi-typescript http://localhost:8000/api/v1/openapi.json -o ./lib/api/generated/schema.d.ts",
     "api:watch": "openapi-typescript http://localhost:8000/api/v1/openapi.json -o ./lib/api/generated/schema.d.ts --watch",
@@ -75,7 +75,7 @@
     "embla-carousel-react": "8.5.1",
     "input-otp": "1.4.1",
     "lucide-react": "^0.454.0",
-    "next": "^15.5.18",
+    "next": "^15.5.21",
     "next-themes": "^0.4.6",
     "openapi-fetch": "^0.14.1",
     "react": "^18.3.1",
@@ -120,7 +120,7 @@
     "jest-junit": "^17.0.0",
     "openapi-typescript": "^7.9.1",
     "pg": "^8.13.1",
-    "postcss": "^8.5.10",
+    "postcss": "^8.5.23",
     "prettier": "^3.3.3",
     "tailwindcss": "^3.4.17",
     "ts-jest": "^29.1.0",
@@ -128,13 +128,13 @@
     "whatwg-fetch": "^3.6.20"
   },
   "overrides": {
-    "@react-email/preview-server": {
-      "next": "15.5.18",
-      "postcss": "$postcss"
-    },
-    "next": {
-      "postcss": "$postcss"
-    },
+    "next": "15.5.21",
+    "@babel/core": ">=7.29.1",
+    "esbuild": ">=0.28.1",
+    "fast-uri": "^3.1.4",
+    "brace-expansion": ">=5.0.8",
+    "sharp": ">=0.35.0",
+    "postcss": "^8.5.23",
     "@isaacs/brace-expansion": ">=5.0.1",
     "glob": ">=13.0.2",
     "test-exclude": "^8.0.0",

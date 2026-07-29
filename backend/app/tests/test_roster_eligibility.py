@@ -320,40 +320,63 @@ def test_and_semantics_all_pass_returns_eligible(service, monkeypatch):
 
 
 def test_missing_student_returns_ineligible_with_reason(service):
-    """Pin: application with no `.student` relationship → ineligible,
-    `failed_rules=['缺少學生資訊']`. Data-integrity hole that must
-    surface in the Excel exclusion reason, not silently pass."""
+    """Pin: application with no `.student` relationship → ineligible, and
+    the reason names the application AND explains the technical cause
+    (dangling `user_id`) so operators can fix the data instead of guessing.
+    Data-integrity hole that must surface in the Excel exclusion reason,
+    not silently pass."""
     application = _make_application(student=None, scholarship_config=_make_scholarship_config())
     application.student = None  # explicit
     result = service._validate_student_eligibility(application, academic_year=113, period_label="113-01")
 
     assert result["is_eligible"] is False
-    assert result["failed_rules"] == ["缺少學生資訊"]
+    assert len(result["failed_rules"]) == 1
+    reason = result["failed_rules"][0]
+    assert "#42" in reason  # names the application (falls back to id when app_id is absent)
+    assert "user_id 無對應使用者" in reason
     assert result["warning_rules"] == []
 
 
 def test_missing_scholarship_config_returns_ineligible_with_reason(service):
     """Pin: application with no `.scholarship_configuration` relationship
-    → ineligible, `failed_rules=['缺少獎學金配置']`."""
+    → ineligible, and the reason explains the actual cause (NULL
+    `scholarship_configuration_id`, typically imported/legacy data) rather
+    than the old opaque '缺少獎學金配置'."""
     application = _make_application(scholarship_config=None)
     application.scholarship_configuration = None  # explicit
     result = service._validate_student_eligibility(application, academic_year=113, period_label="113-01")
 
     assert result["is_eligible"] is False
-    assert result["failed_rules"] == ["缺少獎學金配置"]
+    assert len(result["failed_rules"]) == 1
+    reason = result["failed_rules"][0]
+    assert "#42" in reason
+    assert "scholarship_configuration_id 為空" in reason
+    assert "未關聯獎學金配置" in reason
 
 
-def test_missing_both_student_and_config_combines_reason(service):
+def test_missing_both_student_and_config_lists_both_reasons(service):
     """Pin: when BOTH student and scholarship_configuration are missing,
-    the reason combines both ('缺少學生資訊/獎學金配置'). The order matters
-    because the operator's Excel cell parses by exact string match."""
+    each problem is reported as its own entry (student first) so the
+    operator UI's failed-rules list shows two concrete, fixable items."""
     application = _make_application()
     application.student = None
     application.scholarship_configuration = None
     result = service._validate_student_eligibility(application, academic_year=113, period_label="113-01")
 
     assert result["is_eligible"] is False
-    assert result["failed_rules"] == ["缺少學生資訊/獎學金配置"]
+    assert len(result["failed_rules"]) == 2
+    assert "user_id 無對應使用者" in result["failed_rules"][0]
+    assert "scholarship_configuration_id 為空" in result["failed_rules"][1]
+
+
+def test_missing_config_reason_uses_app_id_when_available(service):
+    """Pin: the reason prefers the human-facing `app_id` (e.g.
+    APP-113-1-00001) over the raw primary key when the application has one."""
+    application = _make_application(scholarship_config=None, app_id="APP-113-1-00001")
+    application.scholarship_configuration = None
+    result = service._validate_student_eligibility(application, academic_year=113, period_label="113-01")
+
+    assert "APP-113-1-00001" in result["failed_rules"][0]
 
 
 # ---------------------------------------------------------------------------

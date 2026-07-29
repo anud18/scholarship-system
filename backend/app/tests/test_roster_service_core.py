@@ -225,11 +225,11 @@ def test_create_roster_item_included_when_bank_account_present(service: RosterSe
     assert item.bank_account == "00012345678"
 
 
-def test_create_roster_item_excluded_when_bank_account_missing(service: RosterService) -> None:
-    """No bank account anywhere in submitted_form_data ⇒ is_included=False
-    with the 缺少銀行帳戶資訊 reason. Critical because we cannot pay a
-    student with no account number — and the exclusion_reason is what the
-    operator sees in the UI to know WHY they were dropped."""
+def test_create_roster_item_included_when_bank_account_missing(service: RosterService) -> None:
+    """No bank account anywhere in submitted_form_data ⇒ the student is STILL
+    included in the roster (is_included=True, no exclusion_reason) — a missing
+    account is a fixable補件 issue, not an eligibility problem, so it must not
+    shrink 造冊人數/總金額 either. The only trace is the Excel 說明欄 reminder."""
     roster = _make_roster()
     application = _make_application(bank_account=None)
 
@@ -241,16 +241,17 @@ def test_create_roster_item_excluded_when_bank_account_missing(service: RosterSe
         eligibility_result={"is_eligible": True, "failed_rules": [], "warning_rules": []},
     )
 
-    assert item.is_included is False
-    assert item.exclusion_reason == "缺少銀行帳戶資訊"
+    assert item.is_included is True
+    assert item.exclusion_reason is None
     assert item.bank_account == ""
 
 
 def test_create_roster_item_excluded_when_verification_failed(service: RosterService) -> None:
     """A non-VERIFIED status (graduated, suspended, withdrawn, api_error,
     not_found) excludes the student regardless of bank account presence.
-    Pin: the exclusion_reason explicitly includes the failed status's
-    .value so operators can see which kind of failure occurred."""
+    Pin: the exclusion_reason names the failed status in 繁體中文 so
+    operators can see which kind of failure occurred — the raw enum value
+    (`graduated`) must never reach the UI/Excel."""
     roster = _make_roster()
     application = _make_application(bank_account="00012345678")
 
@@ -263,7 +264,8 @@ def test_create_roster_item_excluded_when_verification_failed(service: RosterSer
     )
 
     assert item.is_included is False
-    assert "graduated" in item.exclusion_reason
+    assert item.exclusion_reason == "學籍驗證未通過：已畢業"
+    assert "graduated" not in item.exclusion_reason
     assert item.verification_status == StudentVerificationStatus.GRADUATED
 
 
@@ -323,10 +325,7 @@ def test_create_roster_item_application_identity_new(service: RosterService) -> 
 
 
 def test_create_roster_item_application_identity_renewal(service: RosterService) -> None:
-    """A renewal (is_renewal=True AND previous_application_id set) gets
-    the "{academic_year}續領" tag. Both flags must be true — a stray
-    is_renewal=True with no previous_application_id falls back to 新申請
-    rather than mislabeling."""
+    """A renewal (is_renewal=True) gets the "{academic_year}續領" tag."""
     roster = _make_roster(academic_year=114)
     application = _make_application(
         academic_year=114,
@@ -345,10 +344,11 @@ def test_create_roster_item_application_identity_renewal(service: RosterService)
     assert item.application_identity == "114續領"
 
 
-def test_create_roster_item_renewal_flag_without_previous_id_is_new(service: RosterService) -> None:
-    """Defensive: is_renewal=True but previous_application_id=None means
-    the renewal data is incomplete. Fall back to 新申請 rather than emitting
-    a misleading 續領 label. Pins the AND-of-both-conditions branch."""
+def test_create_roster_item_renewal_flag_without_previous_id_is_still_renewal(service: RosterService) -> None:
+    """is_renewal drives the 續領 label on its own — imported renewals
+    (匯入續領通過名單) carry is_renewal=True but NO previous_application_id
+    (they are standalone rows, not linked to a prior application), and MUST
+    still be labelled 續領, not 新申請. Pins the is_renewal-only branch."""
     roster = _make_roster(academic_year=114)
     application = _make_application(
         academic_year=114,
@@ -364,7 +364,7 @@ def test_create_roster_item_renewal_flag_without_previous_id_is_new(service: Ros
         eligibility_result=None,
     )
 
-    assert item.application_identity == "114新申請"
+    assert item.application_identity == "114續領"
 
 
 # ---------------------------------------------------------------------------

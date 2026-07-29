@@ -25,8 +25,6 @@ def _item(item_id, rank, *, app, is_allocated, allocated_sub_type=None):
         status="allocated" if is_allocated else "ranked",
         college_rejected=False,
         is_supplementary=False,
-        received_months=None,
-        received_months_source=None,
         application=app,
     )
 
@@ -41,10 +39,13 @@ async def test_dedup_prefers_allocated_item_over_unallocated_duplicate():
         student_data={"std_academyno": "C", "std_cname": "王某"},
         scholarship_subtype_list=["nstc"],
         quota_allocation_status="allocated",
+        cancelled_from_status=None,
+        cancelled_from_quota_status=None,
         revoke_reason=None,
         suspend_reason=None,
         is_renewal=False,
         renewal_year=None,
+        scholarship_configuration=None,
     )
     unallocated = _item(11, 1, app=app, is_allocated=False)
     allocated = _item(12, 2, app=app, is_allocated=True, allocated_sub_type="nstc")
@@ -68,7 +69,9 @@ async def test_dedup_prefers_allocated_item_over_unallocated_duplicate():
     svc = ManualDistributionService(db)
     # Isolate the dedup: stub the per-student/bulk helpers.
     svc._batch_load_rejected_map = AsyncMock(return_value={})
+    svc._batch_load_review_items = AsyncMock(return_value={})
     svc._bulk_system_received_months = AsyncMock(return_value={})
+    svc._bulk_imported_received_months = AsyncMock(return_value={})
     svc._compute_application_identity = MagicMock(return_value="114新申請")
     svc._compute_term_count = MagicMock(return_value=1)
     svc._format_enrollment_date = MagicMock(return_value="")
@@ -92,10 +95,13 @@ async def test_dedup_keeps_single_row_when_no_allocation():
         student_data={"std_academyno": "E"},
         scholarship_subtype_list=[],
         quota_allocation_status=None,
+        cancelled_from_status=None,
+        cancelled_from_quota_status=None,
         revoke_reason=None,
         suspend_reason=None,
         is_renewal=False,
         renewal_year=None,
+        scholarship_configuration=None,
     )
     i1 = _item(21, 1, app=app, is_allocated=False)
     i2 = _item(22, 2, app=app, is_allocated=False)
@@ -115,7 +121,9 @@ async def test_dedup_keeps_single_row_when_no_allocation():
     db.execute = AsyncMock(side_effect=_execute)
     svc = ManualDistributionService(db)
     svc._batch_load_rejected_map = AsyncMock(return_value={})
+    svc._batch_load_review_items = AsyncMock(return_value={})
     svc._bulk_system_received_months = AsyncMock(return_value={})
+    svc._bulk_imported_received_months = AsyncMock(return_value={})
     svc._compute_application_identity = MagicMock(return_value="114新申請")
     svc._compute_term_count = MagicMock(return_value=1)
     svc._format_enrollment_date = MagicMock(return_value="")
@@ -146,7 +154,9 @@ async def test_items_query_orders_by_rank_then_id_for_determinism():
     db.execute = AsyncMock(side_effect=_execute)
     svc = ManualDistributionService(db)
     svc._batch_load_rejected_map = AsyncMock(return_value={})
+    svc._batch_load_review_items = AsyncMock(return_value={})
     svc._bulk_system_received_months = AsyncMock(return_value={})
+    svc._bulk_imported_received_months = AsyncMock(return_value={})
 
     await svc.get_students_for_distribution(2, 114, "yearly")
 
@@ -169,10 +179,13 @@ async def test_dedup_both_allocated_collapses_to_single_deterministic_row():
         student_data={"std_academyno": "C"},
         scholarship_subtype_list=["nstc", "moe_1w"],
         quota_allocation_status="allocated",
+        cancelled_from_status=None,
+        cancelled_from_quota_status=None,
         revoke_reason=None,
         suspend_reason=None,
         is_renewal=False,
         renewal_year=None,
+        scholarship_configuration=None,
     )
     a1 = _item(31, 1, app=app, is_allocated=True, allocated_sub_type="nstc")
     a2 = _item(32, 2, app=app, is_allocated=True, allocated_sub_type="moe_1w")
@@ -192,7 +205,9 @@ async def test_dedup_both_allocated_collapses_to_single_deterministic_row():
     db.execute = AsyncMock(side_effect=_execute)
     svc = ManualDistributionService(db)
     svc._batch_load_rejected_map = AsyncMock(return_value={})
+    svc._batch_load_review_items = AsyncMock(return_value={})
     svc._bulk_system_received_months = AsyncMock(return_value={})
+    svc._bulk_imported_received_months = AsyncMock(return_value={})
     svc._compute_application_identity = MagicMock(return_value="114新申請")
     svc._compute_term_count = MagicMock(return_value=1)
     svc._format_enrollment_date = MagicMock(return_value="")
