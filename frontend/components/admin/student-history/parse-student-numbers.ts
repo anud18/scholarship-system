@@ -7,7 +7,7 @@
  */
 
 export const STUDENT_NUMBER_REGEX = /^[A-Za-z0-9]{4,15}$/;
-export const MAX_BATCH_SIZE = 50;
+export const MAX_BATCH_SIZE = 20;
 
 export interface ParsedStudentNumbers {
   valid: string[];
@@ -15,13 +15,11 @@ export interface ParsedStudentNumbers {
 }
 
 export function parseStudentNumbers(input: string): ParsedStudentNumbers {
-  const tokens = input
-    .split(/[\s,，、;；]+/)
-    .map((token) => token.trim())
-    .filter(Boolean);
-  const deduped = [...new Set(tokens)];
-  return {
-    valid: deduped.filter((token) => STUDENT_NUMBER_REGEX.test(token)),
-    invalid: deduped.filter((token) => !STUDENT_NUMBER_REGEX.test(token)),
-  };
+  const tokens = input.split(/[\s,，、;；]+/).filter(Boolean);
+  const valid: string[] = [];
+  const invalid: string[] = [];
+  for (const token of new Set(tokens)) {
+    (STUDENT_NUMBER_REGEX.test(token) ? valid : invalid).push(token);
+  }
+  return { valid, invalid };
 }

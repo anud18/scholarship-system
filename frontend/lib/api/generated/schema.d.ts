@@ -7206,9 +7206,9 @@ export interface paths {
         put?: never;
         /**
          * Batch Student Scholarship History
-         * @description Multi-student history lookup. Per-student failures (not found, out of
-         *     college scope) are reported inside data.results, not as an HTTP error, so
-         *     one bad 學號 doesn't sink the rest of the batch.
+         * @description Multi-student history lookup. Failures are strictly per-student
+         *     (not found, out of college scope, lookup error) inside data.results —
+         *     one bad 學號 or one failed lookup never sinks the rest of the batch.
          */
         post: operations["batch_student_scholarship_history_api_v1_student_history_batch_post"];
         delete?: never;
@@ -7227,8 +7227,8 @@ export interface paths {
         /**
          * Get My Received Months
          * @description A student's own 總領月份數 (匯入 + 系統, summed across every scholarship
-         *     type). No SIS data and no payment records is a valid "0 months" state for a
-         *     student viewing their own history, not a 404.
+         *     type). DB-only — no SIS round trip — and an empty history is a valid
+         *     0-month state, not an error.
          */
         get: operations["get_my_received_months_api_v1_student_history_me_months_get"];
         put?: never;

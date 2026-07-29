@@ -1,10 +1,15 @@
 """Response schemas for admin student scholarship history endpoint."""
 
+import re
 from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
+
+# Shared by the admin single-lookup and the batch endpoints; mirrored client-side
+# in frontend/components/admin/student-history/parse-student-numbers.ts.
+STUDENT_NUMBER_PATTERN = re.compile(r"^[A-Za-z0-9]{4,15}$")
 
 
 class AcademicBasicInfo(BaseModel):

@@ -1166,9 +1166,8 @@ export function EnhancedStudentPortal({
 
       {/* Conditional rendering based on activeTab */}
       {activeTab === "applications" && (
+        <>
         <TotalReceivedMonthsCard locale={locale} />
-      )}
-      {activeTab === "applications" && (
         <Card>
           <CardHeader>
             <CardTitle>{t("portal.application_records")}</CardTitle>
@@ -1345,6 +1344,7 @@ export function EnhancedStudentPortal({
             )}
           </CardContent>
         </Card>
+        </>
       )}
 
       {activeTab === "new-application" &&

@@ -114,9 +114,13 @@ export function StudentHistoryPanel({ variant = "admin" }: StudentHistoryPanelPr
     if (validationError) {
       setInputError(validationError);
       // Clear previous result so it doesn't render under the validation error.
+      // loading must be reset here too: setting `submitted` to null makes the
+      // effect early-return, so an in-flight request's .finally (cancelled)
+      // would otherwise leave the spinner stranded on.
       setSubmitted(null);
       setResults(null);
       setError(null);
+      setLoading(false);
       return;
     }
     setInputError(null);
@@ -145,7 +149,8 @@ export function StudentHistoryPanel({ variant = "admin" }: StudentHistoryPanelPr
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") handleSubmit();
+                  // Same gate as the 查詢 button's disabled={loading}.
+                  if (e.key === "Enter" && !loading) handleSubmit();
                 }}
                 placeholder="例: 310460031, 310460032 (可一次查詢多位，以逗號或空白分隔)"
                 autoFocus

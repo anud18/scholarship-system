@@ -26,7 +26,8 @@ jest.mock("../student-wizard/StudentApplicationWizard", () => ({
   ),
 }));
 
-// Mock the API client
+// Mock the API client. TotalReceivedMonthsCard imports the NAMED `apiClient`
+// export, so the factory must provide it alongside the default export.
 jest.mock("../../lib/api", () => ({
   __esModule: true,
   default: {
@@ -42,6 +43,14 @@ jest.mock("../../lib/api", () => ({
     documentRequests: {
       getMyDocumentRequests: jest.fn(),
       fulfillDocumentRequest: jest.fn(),
+    },
+  },
+  apiClient: {
+    studentHistory: {
+      getMyMonths: jest.fn().mockResolvedValue({
+        success: true,
+        data: { student_number: "test", total_received_months: 0 },
+      }),
     },
   },
 }));

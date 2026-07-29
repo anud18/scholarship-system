@@ -1,10 +1,10 @@
 /**
  * Student Scholarship History API Module
  *
- * - Admin single-student lookup by 學號 (academic info + paid-roster payment
- *   records; rosters in COMPLETED or LOCKED state).
- * - Batch lookup for admin/college (college is server-scoped to its own
- *   college via SIS std_academyno).
+ * - Batch lookup by 學號 for admin/college (academic info + paid-roster
+ *   payment records; rosters in COMPLETED or LOCKED state). College users are
+ *   server-scoped to their own college and receive a projected payload
+ *   without admin-only fields.
  * - Student self-service 總領月份數 (months total only).
  */
 
@@ -118,18 +118,6 @@ export interface MyReceivedMonthsData {
 
 export function createStudentHistoryApi() {
   return {
-    async getByNumber(
-      studentNumber: string,
-    ): Promise<ApiResponse<StudentScholarshipHistoryData>> {
-      const response = await typedClient.raw.GET(
-        "/api/v1/admin/student-history/{student_number}",
-        {
-          params: { path: { student_number: studentNumber } },
-        },
-      );
-      return toApiResponse<StudentScholarshipHistoryData>(response);
-    },
-
     async getBatch(
       studentNumbers: string[],
     ): Promise<ApiResponse<StudentHistoryBatchData>> {
