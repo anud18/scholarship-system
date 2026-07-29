@@ -1619,7 +1619,11 @@ class ApplicationService:
                     "application_id": application.id,
                 },
             )
-            raise AuthorizationError("Cannot change the status of another college's application")
+            # NotFoundError, not AuthorizationError: these methods already raise
+            # NotFoundError for a nonexistent id, so a distinct 403 here would let a
+            # college user enumerate which application ids exist in OTHER colleges.
+            # Matches _get_application_model / files.py, which 404 for the same reason.
+            raise NotFoundError("Application", str(application_id))
 
         # ── G16 transition gate ──────────────────────────────────────────
         old_status = application.status.value if hasattr(application.status, "value") else str(application.status)
@@ -1789,7 +1793,11 @@ class ApplicationService:
                         "application_id": application.id,
                     },
                 )
-                raise AuthorizationError("Cannot upload files to another college's application")
+                # NotFoundError, not AuthorizationError: these methods already raise
+            # NotFoundError for a nonexistent id, so a distinct 403 here would let a
+            # college user enumerate which application ids exist in OTHER colleges.
+            # Matches _get_application_model / files.py, which 404 for the same reason.
+            raise NotFoundError("Application", str(application_id))
         elif user.role in [UserRole.admin, UserRole.super_admin]:
             # Admin and Super Admin can upload to any application
             pass
@@ -2052,7 +2060,11 @@ class ApplicationService:
                         "application_id": application.id,
                     },
                 )
-                raise AuthorizationError("Cannot delete another college's application")
+                # NotFoundError, not AuthorizationError: these methods already raise
+                # NotFoundError for a nonexistent id, so a distinct 403 here would let a
+                # college user enumerate which application ids exist in OTHER colleges.
+                # Matches _get_application_model / files.py, which 404 for the same reason.
+                raise NotFoundError("Application", application_id)
             # Staff can delete any application but must provide a reason
             if not reason:
                 raise ValidationError("Deletion reason is required for staff users")
@@ -2183,7 +2195,11 @@ class ApplicationService:
                     "application_id": application.id,
                 },
             )
-            raise AuthorizationError("Cannot restore another college's application")
+            # NotFoundError, not AuthorizationError: these methods already raise
+            # NotFoundError for a nonexistent id, so a distinct 403 here would let a
+            # college user enumerate which application ids exist in OTHER colleges.
+            # Matches _get_application_model / files.py, which 404 for the same reason.
+            raise NotFoundError("Application", application_id)
 
         # Restore application to appropriate status based on submission history
         # If the application was previously submitted, restore it to under_review status
@@ -2807,6 +2823,22 @@ class ApplicationService:
         if application is None:
             raise NotFoundError(f"Application {application_id} not found")
 
+        # SECURITY (#1223 A): this bypasses _get_application_model, so it needs its
+        # own college gate — otherwise a 學院 user learns which sub-types another
+        # college's applicant applied for. NotFoundError (not Authorization) so the
+        # response matches the nonexistent-id case and confirms nothing.
+        if current_user.role == UserRole.college and not college_user_may_access(current_user, application):
+            logger.warning(
+                "SECURITY: college user attempted cross-college sub-type read",
+                extra={
+                    "user_id": current_user.id,
+                    "user_college": get_user_college_code(current_user),
+                    "owner_college": get_application_college_code(application),
+                    "application_id": application.id,
+                },
+            )
+            raise NotFoundError(f"Application {application_id} not found")
+
         # Empty scholarship or no configured sub-types -> empty list.
         # The frontend already falls back to a synthetic "default" sub-type
         # in that case (FALLBACK_SUB_TYPE), so we don't need to return one.
@@ -2953,7 +2985,9 @@ class ApplicationService:
                         "application_id": application.id,
                     },
                 )
-                raise ValidationError("Access denied")
+                # NotFoundError (this method raises it for a nonexistent id too) so
+                # the response does not confirm which ids exist in other colleges.
+                raise NotFoundError(f"Application {application_id} not found")
 
             # Get professor
             stmt = select(User).where(User.nycu_id == professor_nycu_id, User.role == UserRole.professor)

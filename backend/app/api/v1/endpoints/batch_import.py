@@ -1816,12 +1816,19 @@ async def download_batch_import_template(
 
         worksheet = writer.sheets["批次匯入範例"]
 
-        # SECURITY (#1081 G / #1223 A): df.to_excel assigns through openpyxl, so an
-        # admin-authored field_label / option label beginning with =/+/-/@ would be
-        # written as a LIVE formula. Sweep the sheet pandas just produced.
+        # SECURITY (#1081 G / #1223 A): df.to_excel assigns through openpyxl, so a
+        # value beginning with =/+/-/@ would be written as a LIVE formula. Sweep the
+        # sheet pandas just produced.
+        #
+        # min_row=2 skips the HEADER row deliberately: this template is downloaded,
+        # filled in and re-uploaded, and _build_submitted_form_data matches columns
+        # by exact header string (custom_field_mapping). An apostrophe-prefixed
+        # header would match nothing on re-upload and every value in that column
+        # would be silently dropped. The headers are admin-authored field labels
+        # (dynamic form configuration), not applicant free-text.
         from app.utils.excel_safety import neutralise_worksheet
 
-        neutralise_worksheet(worksheet)
+        neutralise_worksheet(worksheet, min_row=2)
 
         for idx, col in enumerate(df.columns, 1):
             # Calculate max length for this column. Use positional access so a

@@ -39,15 +39,11 @@ def validate_condition_query(query: Optional[str]) -> None:
     if not query:
         return
 
-    # SECURITY LAYER 1: Pre-validation checks to prevent obvious ReDoS attacks
-    MAX_QUERY_LENGTH = 5000
+    # SECURITY LAYER 1: Pre-validation checks to prevent obvious ReDoS attacks.
+    # The LENGTH check lives in sql_read_only_guard (layer 2) and is not repeated
+    # here — a second local MAX_QUERY_LENGTH constant is exactly how the old
+    # inline blacklist drifted away from the executor's own rules.
     MAX_CONSECUTIVE_BRACES = 50
-
-    if len(query) > MAX_QUERY_LENGTH:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"condition_query exceeds maximum length of {MAX_QUERY_LENGTH} characters",
-        )
 
     # Check for excessive consecutive braces (potential ReDoS attack pattern)
     consecutive_open_braces = re.search(r"\{{50,}", query)

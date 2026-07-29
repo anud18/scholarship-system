@@ -128,12 +128,19 @@ class UnsafeConditionQueryError(ValueError):
     """
 
 
-def mask_literals(sql: str) -> str:
-    """Return a SAME-LENGTH copy of *sql* with literals and comments blanked to spaces.
+def _mask(sql: str, *, mask_quoted_identifiers: bool) -> str:
+    """Shared same-length masker. See :func:`mask_literals` for the contract.
 
-    Same length is the point: the caller rewrites ``{placeholder}`` occurrences by
-    offset in the ORIGINAL string, and must not rewrite one that sits inside a
-    string literal. A collapsing mask would misalign those offsets.
+    ``mask_quoted_identifiers`` selects between the two views the guard needs:
+
+    * ``True``  — double-quoted identifiers are blanked too. Used for STRUCTURAL
+      checks (statement shape, ``;`` counting) and for placeholder offsets, where
+      a ``;`` or ``{`` inside ``"an identifier"`` must not be misread.
+    * ``False`` — double-quoted identifier CONTENT is preserved (only the quote
+      characters become spaces). Used for the forbidden-name scan, because
+      PostgreSQL resolves ``"pg_read_file"`` to exactly the same function as
+      ``pg_read_file``. Blanking those would let every entry in
+      FORBIDDEN_IDENTIFIERS be bypassed by simply quoting the name.
     """
     out: list[str] = []
     i, n = 0, len(sql)
@@ -156,7 +163,12 @@ def mask_literals(sql: str) -> str:
                     i += 1
                     break
                 i += 1
-            out.append(" " * (i - start))
+            if quote == '"' and not mask_quoted_identifiers:
+                # Keep the identifier text, blank only the surrounding quotes, so
+                # \b word boundaries still match and the length is preserved.
+                out.append(" " + sql[start + 1 : i - 1] + " ")
+            else:
+                out.append(" " * (i - start))
             continue
         if sql.startswith("--", i):
             newline = sql.find("\n", i)
@@ -181,9 +193,23 @@ def mask_literals(sql: str) -> str:
         out.append(ch)
         i += 1
     masked = "".join(out)
-    # Invariant the placeholder rewriter depends on.
-    assert len(masked) == len(sql), "mask_literals must preserve length"
+    # Invariant the placeholder rewriter depends on. NOT an `assert`: asserts are
+    # compiled out under python -O, and a collapsed mask would make
+    # bind_placeholders splice ":key" into the middle of a string literal.
+    if len(masked) != len(sql):  # pragma: no cover - defensive
+        raise UnsafeConditionQueryError("could not be safely parsed")
     return masked
+
+
+def mask_literals(sql: str) -> str:
+    """Return a SAME-LENGTH copy of *sql* with literals, identifiers and comments blanked.
+
+    Same length is the point: :func:`~app.services.email_automation_service.bind_placeholders`
+    rewrites ``{placeholder}`` occurrences by offset in the ORIGINAL string, and
+    must not rewrite one that sits inside a string literal. A collapsing mask
+    would misalign those offsets.
+    """
+    return _mask(sql, mask_quoted_identifiers=True)
 
 
 def assert_read_only_select(sql: str) -> None:
@@ -195,22 +221,30 @@ def assert_read_only_select(sql: str) -> None:
     if len(sql) > MAX_QUERY_LENGTH:
         raise UnsafeConditionQueryError(f"exceeds maximum length of {MAX_QUERY_LENGTH} characters")
 
-    masked = mask_literals(sql).strip()
-    if masked.endswith(";"):
-        masked = masked[:-1].rstrip()
+    # Structural view: quoted identifiers blanked, so a ';' inside "an identifier"
+    # is not miscounted as a statement separator.
+    structural = mask_literals(sql).strip()
+    if structural.endswith(";"):
+        structural = structural[:-1].rstrip()
 
-    if not _STATEMENT_START_RE.match(masked):
+    if not _STATEMENT_START_RE.match(structural):
         raise UnsafeConditionQueryError("must be a SELECT statement (a single read-only query)")
 
-    if ";" in masked:
+    if ";" in structural:
         raise UnsafeConditionQueryError("cannot contain multiple SQL statements")
 
-    forbidden = _FORBIDDEN_RE.search(masked)
+    # Name view: quoted identifier CONTENT preserved. PostgreSQL resolves
+    # "pg_read_file" to the same function as pg_read_file, so scanning the
+    # structural view here would let every forbidden name be bypassed by quoting
+    # it. A column legitimately named "select" is rejected as a result — that is
+    # the fail-closed direction, and no shipped query does it.
+    names = _mask(sql, mask_quoted_identifiers=False)
+    forbidden = _FORBIDDEN_RE.search(names)
     if forbidden:
         keyword = forbidden.group(0).upper()
-        raise UnsafeConditionQueryError(
-            f"contains forbidden keyword: {keyword} " f'(if this is a column or alias name, quote it: "{keyword}")'
-        )
+        # Deliberately NO "quote it instead" hint: quoting does not make the name
+        # safe, it only used to hide it from this scan.
+        raise UnsafeConditionQueryError(f"contains forbidden keyword: {keyword}")
 
 
 def describe_if_unsafe(sql: str) -> Optional[str]:

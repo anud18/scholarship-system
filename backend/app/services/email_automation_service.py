@@ -26,14 +26,24 @@ RECIPIENT_QUERY_TIMEOUT_MS = 5000
 
 
 def _dialect_name(db: AsyncSession) -> str:
-    """Dialect of the session's bind, or '' when it cannot be determined (test stubs)."""
+    """Dialect of the session's bind.
+
+    FAILS CLOSED. An earlier revision wrapped this in ``except Exception: return
+    ""``, which meant a bind-resolution failure silently skipped BOTH
+    ``statement_timeout`` and ``transaction_read_only`` — the admin-authored query
+    then ran unbounded and write-enabled with no log line saying the control had
+    been skipped. A security control must not degrade quietly.
+
+    The only tolerated case is a session object with no ``get_bind`` at all (unit
+    test stubs), where there is no real database to protect.
+    """
     get_bind = getattr(db, "get_bind", None)
     if get_bind is None:
         return ""
-    try:
-        return getattr(getattr(get_bind(), "dialect", None), "name", "") or ""
-    except Exception:  # pragma: no cover - stub sessions without a real bind
-        return ""
+    name = getattr(getattr(get_bind(), "dialect", None), "name", None)
+    if not name:
+        raise UnsafeConditionQueryError("could not determine the database dialect to apply read-only guards")
+    return name
 
 
 def bind_placeholders(sql: str, context: Dict[str, Any]) -> str:

@@ -73,10 +73,33 @@ describe("nginx <-> middleware security-header parity (issue #1223 B)", () => {
       const sameOriginBlocks = conf.split("add_header X-Frame-Options SAMEORIGIN").length - 1;
       expect(sameOriginBlocks).toBeGreaterThan(0);
 
-      for (const [header] of HEADERS) {
+      for (const [header] of ["Permissions-Policy", "Cross-Origin-Opener-Policy"].map(
+        (h) => [h] as const
+      )) {
         // one server-level declaration + one per SAMEORIGIN block
         expect(declaredValues(conf, header)).toHaveLength(sameOriginBlocks + 1);
       }
+    });
+
+    /**
+     * Static-asset blocks declare their own Cache-Control, which drops every
+     * inherited add_header — and frontend/middleware.ts's matcher EXCLUDES those
+     * same paths (`_next/static`, `.js`/`.css`/image extensions). Without an
+     * explicit re-declaration they are covered by NEITHER layer.
+     *
+     * Only CORP is required there: it is the header that governs no-cors
+     * SUBRESOURCE embedding. Permissions-Policy and COOP are document-scoped and
+     * inert on a JS/CSS response, so they are deliberately not repeated onto
+     * every cached asset.
+     */
+    it("re-declares CORP in every block that declares its own Cache-Control", () => {
+      const cacheControlBlocks = conf.split('add_header Cache-Control "public, immutable"').length - 1;
+      expect(cacheControlBlocks).toBeGreaterThan(0);
+
+      const sameOriginBlocks = conf.split("add_header X-Frame-Options SAMEORIGIN").length - 1;
+      expect(declaredValues(conf, "Cross-Origin-Resource-Policy")).toHaveLength(
+        1 + sameOriginBlocks + cacheControlBlocks
+      );
     });
 
     it("does NOT set Cross-Origin-Embedder-Policy", () => {

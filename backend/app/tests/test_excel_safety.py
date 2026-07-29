@@ -115,6 +115,21 @@ def test_neutralise_worksheet_is_idempotent():
     assert ws.cell(row=1, column=1).value == "'=1+1"
 
 
+def test_neutralise_worksheet_min_row_leaves_the_header_byte_identical():
+    """Round-tripped templates match columns by exact header string, so a
+    prefixed header would silently drop the whole column on re-upload."""
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["+886聯絡電話", "姓名"])  # admin-authored field labels
+    ws.append(["=cmd|'/c calc'!A1", "王小明"])  # sample/data row
+
+    count = neutralise_worksheet(ws, min_row=2)
+
+    assert count == 1
+    assert ws.cell(row=1, column=1).value == "+886聯絡電話"  # untouched
+    assert ws.cell(row=2, column=1).value == "'=cmd|'/c calc'!A1"  # neutralised
+
+
 def test_neutralise_worksheet_clean_sheet_returns_zero():
     wb = Workbook()
     ws = wb.active

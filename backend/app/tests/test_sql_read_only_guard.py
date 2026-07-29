@@ -73,7 +73,6 @@ def test_union_is_allowed():
         "SELECT updated_at FROM applications",  # UPDATE ⊂ updated_at
         "SELECT email FROM users LIMIT 10 OFFSET 5",  # SET ⊂ OFFSET
         "SELECT id FROM t WHERE name = 'insert into'",  # keyword inside a literal
-        'SELECT "select" FROM t',  # keyword as a quoted identifier
         "SELECT a FROM t -- drop table users",  # keyword in a line comment
         "SELECT a FROM t /* delete from users */",  # keyword in a block comment
         "SELECT a FROM t WHERE x = ';'",  # semicolon inside a literal
@@ -177,9 +176,58 @@ def test_unterminated_constructs_refused(query, message):
         assert_read_only_select(query)
 
 
-def test_error_message_suggests_quoting_for_a_column_named_like_a_keyword():
-    with pytest.raises(UnsafeConditionQueryError, match='quote it: "SET"'):
-        assert_read_only_select("SELECT set FROM t")
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT \"pg_read_file\"('/etc/passwd')",
+        "SELECT \"PG_READ_FILE\"('/etc/passwd')",
+        "SELECT pg_catalog.\"pg_read_file\"('/etc/passwd')",
+        "SELECT \"lo_import\"('/etc/passwd')",
+        "SELECT \"dblink_exec\"('dbname=x', 'DROP TABLE users')",
+        "SELECT \"query_to_xml\"('DELETE FROM users', true, true, '')",
+        "SELECT \"pg_ls_dir\"('/')",
+    ],
+)
+def test_quoting_a_forbidden_name_does_not_bypass_the_deny_list(query):
+    """PostgreSQL resolves "pg_read_file" to the SAME function as pg_read_file.
+
+    An earlier revision masked double-quoted identifiers along with string
+    literals before scanning, so every entry in FORBIDDEN_IDENTIFIERS could be
+    bypassed by quoting it — and the rejection message helpfully suggested doing
+    exactly that. The name scan now preserves quoted-identifier content.
+    """
+    with pytest.raises(UnsafeConditionQueryError, match="forbidden keyword"):
+        assert_read_only_select(query)
+
+
+def test_rejection_message_does_not_suggest_quoting():
+    """Quoting does not make the name safe; it only used to hide it from the scan."""
+    with pytest.raises(UnsafeConditionQueryError) as exc_info:
+        assert_read_only_select("SELECT pg_read_file('/etc/passwd')")
+    assert "quote it" not in str(exc_info.value)
+
+
+def test_a_quoted_forbidden_keyword_identifier_is_rejected_fail_closed():
+    """`SELECT "delete" FROM t` is legal SQL but is refused.
+
+    That is the deliberate cost of scanning quoted-identifier content: the
+    alternative is a total bypass of the function deny-list. No shipped query
+    uses a quoted forbidden keyword as an identifier.
+    """
+    with pytest.raises(UnsafeConditionQueryError, match="forbidden keyword"):
+        assert_read_only_select('SELECT "delete" FROM t')
+
+
+def test_a_quoted_non_forbidden_identifier_still_works():
+    """Only names on the deny-list are affected — ordinary quoted identifiers,
+    including mixed-case column names, keep working."""
+    assert_read_only_select('SELECT "Email", "std_academyno" FROM users')
+
+
+def test_a_semicolon_inside_a_quoted_identifier_is_not_a_statement_separator():
+    """The STRUCTURAL view still masks quoted identifiers, so the two views do
+    not interfere with each other."""
+    assert_read_only_select('SELECT "weird;name" FROM t')
 
 
 # ---------------------------------------------------------------------------

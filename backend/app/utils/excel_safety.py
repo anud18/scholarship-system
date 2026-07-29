@@ -54,7 +54,7 @@ def sanitize_csv_row(row: Dict[str, Any]) -> Dict[str, Any]:
     return {key: sanitize_excel_cell(value) for key, value in row.items()}
 
 
-def neutralise_worksheet(ws) -> int:
+def neutralise_worksheet(ws, *, min_row: int = 1) -> int:
     """Neutralise every formula-triggering cell already written to ``ws``.
 
     For sheets this codebase does not write cell-by-cell — notably
@@ -62,11 +62,20 @@ def neutralise_worksheet(ws) -> int:
     emit an admin-authored column label beginning with ``=`` as a live formula.
     Returns the number of cells neutralised.
 
-    Safe as a blanket sweep: no export in this codebase writes an intentional
-    formula, so there is nothing legitimate to clobber.
+    ``min_row`` exists for ROUND-TRIPPED sheets. Some templates this system
+    generates are filled in by staff and re-uploaded, and the importer matches
+    columns by exact header string (see
+    ``batch_import_service._build_submitted_form_data``'s ``custom_field_mapping``).
+    Prefixing an apostrophe onto such a header makes it match nothing on
+    re-upload and every value in that column is silently dropped — so pass
+    ``min_row=2`` to leave the header row byte-identical. Only do that where the
+    header is admin-authored configuration rather than applicant free-text.
+
+    No export in this codebase writes an intentional formula, so within the swept
+    range there is nothing legitimate to clobber.
     """
     neutralised = 0
-    for row in ws.iter_rows():
+    for row in ws.iter_rows(min_row=min_row):
         for cell in row:
             if is_formula_injection_risk(cell.value):
                 cell.value = "'" + cell.value

@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import AuthorizationError
+from app.core.exceptions import AuthorizationError, NotFoundError
 from app.models.application import Application, ApplicationStatus
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole, UserType
@@ -164,6 +164,34 @@ async def scoped(db: AsyncSession):
 
 
 @pytest.mark.asyncio
+async def test_list_and_detail_agree_when_a_fallback_key_disagrees(db: AsyncSession, scoped):
+    """The list SQL and the by-id check must resolve the SAME college.
+
+    get_college_code_from_data returns the FIRST non-empty key, so
+    {"std_academyno": "E", "college_code": "C"} resolves to "E". An earlier
+    revision OR'd equality across all four keys, so this row matched College-C in
+    the LIST while being denied by id — the divergence college_scope.py exists to
+    prevent.
+    """
+    cfg = scoped["cfg"]
+    student = await _seed_user(db, role=UserRole.student, nycu_id="cs_ambig_stu")
+    ambiguous = await _seed_app(db, student=student, config=cfg, college_code=None, suffix="ambig")
+    ambiguous.student_data = {"std_academyno": OTHER_COLLEGE, "college_code": OWN_COLLEGE}
+    await db.commit()
+
+    service = ApplicationService(db)
+    college_c = scoped["college"]
+
+    # by id: denied (Python resolves "E")
+    assert await service._get_application_model(ambiguous.id, college_c) is None
+    # in the list: also absent — the two views agree
+    listed = {r.id for r in await service.get_applications_for_review(current_user=college_c)}
+    assert ambiguous.id not in listed
+    review_listed = {r.id for r in await service.get_applications(current_user=college_c)}
+    assert ambiguous.id not in review_listed
+
+
+@pytest.mark.asyncio
 async def test_college_can_read_own_college_application(db: AsyncSession, scoped):
     service = ApplicationService(db)
     result = await service._get_application_model(scoped["own_app"].id, scoped["college"])
@@ -222,7 +250,7 @@ async def test_application_list_excludes_other_colleges(db: AsyncSession, scoped
 @pytest.mark.asyncio
 async def test_college_cannot_delete_other_college_application(db: AsyncSession, scoped):
     service = ApplicationService(db)
-    with pytest.raises(AuthorizationError):
+    with pytest.raises(NotFoundError):
         await service.delete_application(scoped["other_app"].id, scoped["college"], reason="nope")
 
 
@@ -243,8 +271,25 @@ async def test_college_cannot_restore_other_college_application(db: AsyncSession
     await db.commit()
 
     service = ApplicationService(db)
-    with pytest.raises(AuthorizationError):
+    with pytest.raises(NotFoundError):
         await service.restore_application(scoped["other_app"].id, scoped["college"])
+
+
+@pytest.mark.asyncio
+async def test_write_paths_do_not_leak_an_application_id_oracle(db: AsyncSession, scoped):
+    """A cross-college id and a nonexistent id must raise the SAME error type.
+
+    Otherwise a college user distinguishes them by status code and enumerates
+    which application ids exist in every other college.
+    """
+    service = ApplicationService(db)
+    college = scoped["college"]
+    nonexistent_id = 10_000_000
+
+    with pytest.raises(NotFoundError):
+        await service.delete_application(scoped["other_app"].id, college, reason="x")
+    with pytest.raises(NotFoundError):
+        await service.delete_application(nonexistent_id, college, reason="x")
 
 
 @pytest.mark.asyncio
