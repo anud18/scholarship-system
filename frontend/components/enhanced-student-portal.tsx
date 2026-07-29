@@ -31,6 +31,7 @@ import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { StudentApplicationWizard } from "@/components/student-wizard/StudentApplicationWizard";
 import { DocumentRequestAlert } from "@/components/document-request-alert";
 import { RenewalApplicationCard } from "@/components/student/RenewalApplicationCard";
+import { TotalReceivedMonthsCard } from "@/components/student/TotalReceivedMonthsCard";
 import { ChallengeApplicationCard } from "@/components/student/ChallengeApplicationCard";
 import type { StudentDocumentRequest } from "@/lib/api/modules/document-requests";
 import {
@@ -1164,6 +1165,9 @@ export function EnhancedStudentPortal({
       })}
 
       {/* Conditional rendering based on activeTab */}
+      {activeTab === "applications" && (
+        <TotalReceivedMonthsCard locale={locale} />
+      )}
       {activeTab === "applications" && (
         <Card>
           <CardHeader>

@@ -40,6 +40,20 @@ test.describe("Admin student scholarship history", () => {
     await context.close();
   });
 
+  test("multi-student query renders a block per 學號", async ({ browser }) => {
+    const { context } = await loginAs(browser, "admin");
+    const page = await context.newPage();
+    await page.goto("/");
+    await page.getByRole("tab", { name: "系統管理" }).click();
+    await page.getByRole("tab", { name: "學生領獎紀錄查詢" }).click();
+    await page.getByLabel("學號").fill("GHOST00001 GHOST00002");
+    await page.getByRole("button", { name: "查詢" }).click();
+    await expect(page.getByText("查無此學生資料")).toHaveCount(2, {
+      timeout: 15000,
+    });
+    await context.close();
+  });
+
   // NOTE: This test uses seeded `stuphd001` (see backend/app/seed.py). The
   // dev DB may or may not have paid (COMPLETED or LOCKED) rosters for them
   // by default. If not, the table will show the "尚無領取記錄" empty state —

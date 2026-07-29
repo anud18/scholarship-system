@@ -1,8 +1,11 @@
 /**
- * Admin Student Scholarship History API Module
+ * Student Scholarship History API Module
  *
- * Single-student lookup by 學號 — returns academic info + paid-roster payment
- * records (rosters in COMPLETED or LOCKED state).
+ * - Admin single-student lookup by 學號 (academic info + paid-roster payment
+ *   records; rosters in COMPLETED or LOCKED state).
+ * - Batch lookup for admin/college (college is server-scoped to its own
+ *   college via SIS std_academyno).
+ * - Student self-service 總領月份數 (months total only).
  */
 
 import { typedClient } from "../typed-client";
@@ -91,6 +94,28 @@ export interface StudentScholarshipHistoryData {
   received_months: ReceivedMonthsBreakdown[];
 }
 
+/**
+ * One entry of POST /student-history/batch. Per-student failures (查無資料,
+ * out-of-college scope) arrive here with success=false — the HTTP call itself
+ * still succeeds.
+ */
+export interface StudentHistoryBatchResult {
+  student_number: string;
+  success: boolean;
+  error: string | null;
+  data: StudentScholarshipHistoryData | null;
+}
+
+export interface StudentHistoryBatchData {
+  results: StudentHistoryBatchResult[];
+}
+
+/** Student self-service payload — 總月數 only, no amounts or payment details. */
+export interface MyReceivedMonthsData {
+  student_number: string;
+  total_received_months: number;
+}
+
 export function createStudentHistoryApi() {
   return {
     async getByNumber(
@@ -103,6 +128,26 @@ export function createStudentHistoryApi() {
         },
       );
       return toApiResponse<StudentScholarshipHistoryData>(response);
+    },
+
+    async getBatch(
+      studentNumbers: string[],
+    ): Promise<ApiResponse<StudentHistoryBatchData>> {
+      const response = await typedClient.raw.POST(
+        "/api/v1/student-history/batch",
+        {
+          body: { student_numbers: studentNumbers },
+        },
+      );
+      return toApiResponse<StudentHistoryBatchData>(response);
+    },
+
+    async getMyMonths(): Promise<ApiResponse<MyReceivedMonthsData>> {
+      const response = await typedClient.raw.GET(
+        "/api/v1/student-history/me/months",
+        {},
+      );
+      return toApiResponse<MyReceivedMonthsData>(response);
     },
   };
 }

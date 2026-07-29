@@ -127,3 +127,13 @@ class StudentScholarshipHistoryData(BaseModel):
         default_factory=list,
         description="已領月份數 per scholarship type (匯入 + 系統)",
     )
+
+
+class BatchStudentHistoryRequest(BaseModel):
+    """Multi-student lookup request body for POST /student-history/batch.
+
+    Size and per-number format limits are enforced in the endpoint (uniform
+    400s with zh-TW messages) rather than as Field constraints (422s).
+    """
+
+    student_numbers: List[str]
