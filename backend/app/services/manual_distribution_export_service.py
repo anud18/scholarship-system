@@ -58,13 +58,13 @@ from reportlab.platypus import PageBreak, SimpleDocTemplate, Spacer, Table, Tabl
 
 from app.core.college_mappings import COLLEGE_MAPPINGS
 from app.services.export_table_chassis import (
-    PDF_HEADER_RESERVE_PT,
     PDF_MARGIN_PT,
     apply_xlsx_borders,
     apply_xlsx_column_widths,
     base_pdf_table_style,
     make_pdf_styles,
     pdf_cell,
+    pdf_cell_max_height,
     pdf_col_widths,
     pdf_paragraph,
     safe_str,
@@ -73,6 +73,12 @@ from app.services.export_table_chassis import (
 )
 from app.services.pdf_fonts import CJK_FONT_NAME, ensure_cjk_font
 from app.utils.excel_safety import sanitize_excel_cell
+
+# Snapshot coercion/rendering lives in a LEAF util so ManualDistributionService can
+# share it without dragging reportlab/openpyxl into the core service import graph.
+from app.utils.student_snapshot_fields import as_int as _as_int
+from app.utils.student_snapshot_fields import as_text as _as_text
+from app.utils.student_snapshot_fields import format_enrollment_date_roc
 
 # -------- Column model (single source of truth for BOTH formats) --------
 
@@ -126,34 +132,6 @@ _STUDY_STATUS_FLAGGED = frozenset({4, 9, 10})  # studying_statuses: 休學 / 保
 _CROSS_STRAIT_KEYWORDS = ("中國", "中華人民共和國", "大陸", "香港", "澳門")
 
 
-def _as_int(value: Any) -> Optional[int]:
-    """SIS snapshot codes arrive as int, float or numeric string; coerce or give up.
-
-    Goes via ``float`` so a JSON number that arrived as ``1.0`` (or ``"1.0"``)
-    still reads as code 1 — ``int("1.0")`` raises, which would silently downgrade
-    a real verdict to 無法檢核.
-    """
-    if value is None or isinstance(value, bool):
-        return None
-    try:
-        return int(float(str(value).strip()))
-    except (TypeError, ValueError):
-        return None
-
-
-def _as_text(value: Any) -> str:
-    """Trimmed text for any SIS snapshot value.
-
-    ``student_data`` is raw API JSON, so a field the schema documents as a
-    string can arrive as a number (e.g. a numeric 系所代碼). Calling ``.strip()``
-    on that raises AttributeError and 500s the WHOLE export, while the JSON panel
-    — which never strips — renders it fine.
-    """
-    if value is None:
-        return ""
-    return value.strip() if isinstance(value, str) else str(value)
-
-
 def derive_employment_check(student_data: dict) -> str:
     """試辦方案第三點第一款: 從事專職全時有給職工作「或以在職生身分報考」.
 
@@ -200,28 +178,6 @@ def derive_study_status_check(student_data: dict) -> str:
 
 
 # -------- Snapshot field rendering --------
-
-
-def format_enrollment_date_roc(student_data: dict) -> str:
-    """Format enrollment date as ROC calendar (民國年.月.日).
-
-    Single source of truth shared with the manual-distribution grid
-    (``ManualDistributionService._format_enrollment_date`` delegates here), so
-    the export can never disagree with the panel.
-
-    Both codes go through ``_as_int`` like every other SIS field in this module:
-    the snapshot is raw API JSON, so a numeric STRING ``"1"`` is possible, and a
-    bare ``== 1`` would silently print February for a September enrolment.
-    Semantics otherwise unchanged and pinned by the existing tests: only term 1
-    is September (a missing term defaults to 1, anything else — including an
-    uncoercible value — falls to February), and a missing/zero year renders "".
-    """
-    enroll_year = _as_int(student_data.get("std_enrollyear"))
-    raw_term = student_data.get("std_enrollterm")
-    enroll_term = 1 if raw_term is None else _as_int(raw_term)
-    # Approximate: term 1 = September, term 2 = February
-    month = "09" if enroll_term == 1 else "02"
-    return f"{enroll_year}.{month}.01" if enroll_year else ""
 
 
 def _gender_label(student_data: dict) -> str:
@@ -420,9 +376,19 @@ class ManualDistributionExportService:
         page_width, page_height = landscape(A4)
         usable_width = page_width - (PDF_MARGIN_PT * 2)
         col_widths = pdf_col_widths(_COL_WEIGHTS, usable_width)
-        cell_max_height = page_height - (PDF_MARGIN_PT * 2) - PDF_HEADER_RESERVE_PT
 
         title_style, header_style, cell_style = make_pdf_styles("RecipientRoster")
+
+        # Cap body cells against the MEASURED 2-row header, not a fixed reserve:
+        # this table's repeated header is ~twice the single-row one the chassis
+        # constant was sized for, and a cap even slightly too generous makes
+        # reportlab raise LayoutError on free text as short as 700 characters.
+        cell_max_height = pdf_cell_max_height(
+            page_height,
+            header_height=self._measure_header_height(
+                col_widths=col_widths, header_style=header_style, page_height=page_height
+            ),
+        )
         section_style = ParagraphStyle(
             "RecipientRosterPdfSection",
             fontName=CJK_FONT_NAME,
@@ -461,15 +427,12 @@ class ManualDistributionExportService:
 
     # -------- PDF table assembly --------
 
-    def _group_table(
-        self,
-        group: RecipientExportGroup,
-        *,
-        col_widths: List[float],
-        cell_max_height: float,
-        header_style: ParagraphStyle,
-        cell_style: ParagraphStyle,
-    ) -> Table:
+    def _header_rows(self, header_style: ParagraphStyle) -> Tuple[List[Any], List[Any], List[tuple]]:
+        """The two grouped header rows + the SPAN commands that shape them.
+
+        Shared by the real table and the measurement probe so the height the cap
+        is derived from is the height actually rendered.
+        """
         group_row: List[Any] = [""] * len(_COLUMNS)
         label_row: List[Any] = [""] * len(_COLUMNS)
         span_commands: List[tuple] = []
@@ -483,6 +446,33 @@ class ManualDistributionExportService:
                     span_commands.append(("SPAN", (first, 0), (last, 0)))
                 for col in range(first, last + 1):
                     label_row[col] = pdf_paragraph(_COLUMNS[col][1], header_style)
+        return group_row, label_row, span_commands
+
+    def _measure_header_height(
+        self, *, col_widths: List[float], header_style: ParagraphStyle, page_height: float
+    ) -> float:
+        """Rendered height of the repeated 2-row header, in points.
+
+        Measured rather than assumed: the headers are long CJK strings whose wrap
+        depends on the column widths, and a guessed reserve that is even slightly
+        too small makes ``build_pdf`` raise ``LayoutError`` on ordinary free text.
+        """
+        group_row, label_row, span_commands = self._header_rows(header_style)
+        probe = Table([group_row, label_row], colWidths=col_widths)
+        probe.setStyle(TableStyle(base_pdf_table_style(header_rows=2) + span_commands))
+        _, height = probe.wrap(sum(col_widths), page_height)
+        return height
+
+    def _group_table(
+        self,
+        group: RecipientExportGroup,
+        *,
+        col_widths: List[float],
+        cell_max_height: float,
+        header_style: ParagraphStyle,
+        cell_style: ParagraphStyle,
+    ) -> Table:
+        group_row, label_row, span_commands = self._header_rows(header_style)
 
         data: List[list] = [group_row, label_row]
         for row in group.rows:

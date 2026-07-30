@@ -38,8 +38,14 @@ from app.services.pdf_fonts import CJK_FONT_NAME
 from app.utils.excel_safety import sanitize_excel_cell
 
 PDF_MARGIN_PT = 10 * mm
-# Vertical space reserved (per page) for the title + spacer + repeated header rows.
+# Vertical space reserved (per page) for the title + spacer + ONE repeated header
+# row. Renderers with a taller repeated header (e.g. two header rows) must NOT
+# reuse this — measure instead, via `pdf_cell_max_height(..., header_height=...)`.
 PDF_HEADER_RESERVE_PT = 60
+
+# reportlab's SimpleDocTemplate gives its Frame 6pt of padding top and bottom,
+# which is not part of the page margins and so has to come off the usable height.
+PDF_FRAME_PADDING_PT = 12
 
 # Excel width per unit of PDF column weight, plus a fixed padding allowance.
 XLSX_WIDTH_PER_WEIGHT = 8
@@ -90,6 +96,29 @@ def pdf_col_widths(weights: Sequence[float], usable_width: float) -> List[float]
     """Normalise relative column weights to the usable page width."""
     total = sum(weights) or 1.0
     return [usable_width * w / total for w in weights]
+
+
+# Slack left over the measured header so rounding and a slightly taller wrap
+# (fonts metrics differ per platform) still can't push a capped row over.
+PDF_CELL_SAFETY_PT = 10
+
+
+def pdf_cell_max_height(page_height: float, *, header_height: float) -> float:
+    """Tallest a single body cell may be and still fit a CONTINUATION page.
+
+    A reportlab ``Table`` cannot split one row across pages, so an overlong cell
+    raises ``LayoutError`` and fails the WHOLE export. The binding constraint is a
+    continuation page, which carries the repeated header rows but not the title —
+    so the cap is the frame height minus the REAL header height.
+
+    Pass the measured header height (``table.wrap(...)`` on a header-only table)
+    rather than a guessed constant: a renderer with two header rows needs roughly
+    twice the reserve of one, and guessing 60pt for a ~61pt header silently
+    produced a cap ~13pt too generous, which raised LayoutError on free text as
+    short as 700 characters.
+    """
+    usable = page_height - (PDF_MARGIN_PT * 2) - PDF_FRAME_PADDING_PT
+    return max(usable - header_height - PDF_CELL_SAFETY_PT, 1.0)
 
 
 def pdf_paragraph(text: Any, style: ParagraphStyle) -> Paragraph:

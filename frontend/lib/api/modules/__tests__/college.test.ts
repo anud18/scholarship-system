@@ -10,7 +10,7 @@
  * shapes, default-value preservation (force_new ?? false),
  * legacy-vs-unified review path distinction, and the binary-
  * export Content-Disposition filename extraction + error
- * fallback chain in _fetchBinaryExport.
+ * fallback chain in fetchBinaryExport (lib/api/modules/binary-export.ts).
  *
  * 24 cases.
  */
@@ -413,7 +413,7 @@ describe("createCollegeApi", () => {
   });
 });
 
-// ─── Module-level export helpers (use shared _fetchBinaryExport) ────
+// ─── Module-level export helpers (use shared fetchBinaryExport) ─────
 
 describe("module-level export helpers", () => {
   it("exportRankingExcel uses Bearer header + extracts filename* UTF-8 encoded", async () => {
@@ -518,7 +518,7 @@ describe("module-level export helpers", () => {
     expect(result.filename).toBe("申請總表.zip");
   });
 
-  it("_fetchBinaryExport (via exportRankingExcel) propagates backend detail on non-OK", async () => {
+  it("fetchBinaryExport (via exportRankingExcel) propagates backend detail on non-OK", async () => {
     // Pin: error fallback chain — body.detail → body.message →
     // body.error → fallback "無法匯出排名資料".
     const fetchMock = jest.fn().mockResolvedValue({
@@ -530,7 +530,7 @@ describe("module-level export helpers", () => {
     await expect(exportRankingExcel(42)).rejects.toThrow("no permission");
   });
 
-  it("_fetchBinaryExport falls back to zh-TW when backend body unparseable", async () => {
+  it("fetchBinaryExport falls back to zh-TW when backend body unparseable", async () => {
     const fetchMock = jest.fn().mockResolvedValue({
       ok: false,
       json: jest.fn().mockRejectedValue(new Error("no JSON")),

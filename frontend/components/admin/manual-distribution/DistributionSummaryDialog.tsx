@@ -144,7 +144,17 @@ export function DistributionSummaryDialog({
                     </thead>
                     <tbody>
                       {[...group.students]
-                        .sort((a, b) => a.rank_position - b.rank_position)
+                        // Same order the export numbers 序號 by: 學院 then 名次.
+                        // rank_position is scoped to ONE college's ranking, so
+                        // sorting on it alone interleaves colleges and 序號 N in
+                        // the file would point at a different row than the Nth
+                        // row here.
+                        .sort(
+                          (a, b) =>
+                            (a.college_code || "").localeCompare(
+                              b.college_code || ""
+                            ) || a.rank_position - b.rank_position
+                        )
                         .map(student => (
                           <tr
                             key={student.ranking_item_id}

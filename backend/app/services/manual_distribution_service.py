@@ -24,11 +24,11 @@ from app.models.payment_roster import PaymentRoster, PaymentRosterItem, RosterSt
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipSubTypeConfig
 from app.models.student import Academy
 from app.models.user import User, UserRole
-from app.services.manual_distribution_export_service import format_enrollment_date_roc
 from app.services.received_months_service import (
     calculate_received_months_bulk_async,
     get_imported_months_bulk_async,
 )
+from app.utils.student_snapshot_fields import format_enrollment_date_roc
 
 logger = logging.getLogger(__name__)
 

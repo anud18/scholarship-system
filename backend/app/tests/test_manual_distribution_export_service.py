@@ -446,8 +446,49 @@ class TestBuildPdf:
         assert svc.build_pdf(groups=[_group([row])], title="T & <U>").startswith(b"%PDF")
 
     def test_overlong_cell_shrinks_instead_of_raising_layout_error(self):
-        """A reportlab Table cannot split one row across pages — KeepInFrame must
-        absorb a pathological 4000-char free-text value."""
+        """A reportlab Table cannot split one row across pages, so an uncapped
+        overlong cell raises LayoutError and fails the WHOLE export.
+
+        Swept across lengths on purpose: a single magic length is not a test of
+        the cap. The original 4000-char value happened to shrink just under a
+        too-generous cap while 700, 2000 and 5000 all raised — so the assertion
+        passed while the guard was broken.
+        """
         svc = ManualDistributionExportService()
-        row = _sample_row(std_cname="超長姓名" * 1000)
-        assert svc.build_pdf(groups=[_group([row])], title="T").startswith(b"%PDF")
+        for length in (100, 500, 700, 1000, 2000, 4000, 5000, 20000):
+            for field in ("std_cname", "trm_depname", "std_nation"):
+                row = _sample_row(**{field: "超" * length})
+                payload = svc.build_pdf(groups=[_group([row])], title="T")
+                assert payload.startswith(b"%PDF"), f"{field} x{length}"
+
+    def test_cell_cap_leaves_room_for_the_real_two_row_header(self):
+        """The cap must come from the MEASURED header, not a single-header-row
+        constant: this table repeats two header rows on every continuation page.
+        """
+        from reportlab.lib.pagesizes import A4, landscape
+
+        from app.services.export_table_chassis import (
+            PDF_FRAME_PADDING_PT,
+            PDF_MARGIN_PT,
+            make_pdf_styles,
+            pdf_cell_max_height,
+            pdf_col_widths,
+        )
+        from app.services.manual_distribution_export_service import _COL_WEIGHTS
+        from app.services.pdf_fonts import ensure_cjk_font
+
+        ensure_cjk_font()
+        page_width, page_height = landscape(A4)
+        col_widths = pdf_col_widths(_COL_WEIGHTS, page_width - (PDF_MARGIN_PT * 2))
+        _, header_style, _unused = make_pdf_styles("RecipientRoster")
+
+        svc = ManualDistributionExportService()
+        header_height = svc._measure_header_height(
+            col_widths=col_widths, header_style=header_style, page_height=page_height
+        )
+        cap = pdf_cell_max_height(page_height, header_height=header_height)
+
+        # What a continuation page actually offers a single body row.
+        available = page_height - (PDF_MARGIN_PT * 2) - PDF_FRAME_PADDING_PT - header_height
+        assert 0 < cap <= available, f"cap {cap} must fit {available}"
+        assert header_height > 40, "a 2-row CJK header should measure well over one row"
