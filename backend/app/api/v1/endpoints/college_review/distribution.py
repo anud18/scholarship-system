@@ -33,7 +33,7 @@ from app.services.college_review_service import (
 )
 
 from ._helpers import assert_can_manage_ranking, load_college_distribution_results, normalize_semester_value
-from .application_summary_export import XLSX_MEDIA_TYPE
+from app.utils.export_download import XLSX_MEDIA_TYPE
 
 logger = logging.getLogger(__name__)
 

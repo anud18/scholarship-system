@@ -7693,6 +7693,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/manual-distribution/distribution-summary/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Distribution Summary
+         * @description Export the 分發結果名單 as Excel (default) or PDF — 受獎名冊 layout.
+         *
+         *     Reads through the SAME ``_load_allocated_groups`` loader as the JSON
+         *     endpoint, so the file can never show a student the panel would not.
+         *
+         *     Carries no 身分證字號 and no 匯款帳號, but it is NOT the PII-free case the
+         *     college 分發結果 export is: on top of 學號/姓名/系所 it emits 國籍, 性別,
+         *     碩士畢業院/校/系所 and 首次註冊入學日期, plus three derived flags that label a
+         *     student as 在職生 / 陸港澳生 / 休學. That is personal data about identified
+         *     students leaving the system in bulk, so it writes a ``pii_access`` AuditLog
+         *     like the 學生資料彙整表 export does.
+         */
+        get: operations["export_distribution_summary_api_v1_manual_distribution_distribution_summary_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/manual-distribution/generate-rosters-from-distribution": {
         parameters: {
             query?: never;
@@ -23509,6 +23539,41 @@ export interface operations {
                 scholarship_type_id: number;
                 academic_year: number;
                 semester: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_distribution_summary_api_v1_manual_distribution_distribution_summary_export_get: {
+        parameters: {
+            query: {
+                scholarship_type_id: number;
+                academic_year: number;
+                semester: string;
+                /** @description Output format: xlsx (default) or pdf */
+                format?: "xlsx" | "pdf";
             };
             header?: never;
             path?: never;

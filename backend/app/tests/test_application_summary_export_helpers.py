@@ -10,10 +10,11 @@ constants are critical:
     Wrong MIME → browser downloads with wrong extension/icon,
     Excel may refuse to open.
 
-  - **_sanitise_filename_part(value)**: strips Windows-illegal
+  - **sanitise_filename_part(value)**: strips Windows-illegal
     characters from filename components. Department name → ZIP
     entry filename. A regression allowing `\\/:*?"<>|` would
-    break ZIP creation on Windows extraction.
+    break ZIP creation on Windows extraction. Defined in
+    app.utils.export_download and re-exported here.
 
   - **_sort_key(a)**: sorts applications with renewal applications
     first, then by std_stdcode, with missing/blank student codes
@@ -28,8 +29,8 @@ from types import SimpleNamespace
 from app.api.v1.endpoints.college_review.application_summary_export import (
     XLSX_MEDIA_TYPE,
     ZIP_MEDIA_TYPE,
-    _sanitise_filename_part,
     _sort_key,
+    sanitise_filename_part,
 )
 
 # ─── MIME type constants ─────────────────────────────────────────────
@@ -48,47 +49,47 @@ def test_zip_media_type_is_application_zip():
     assert ZIP_MEDIA_TYPE == "application/zip"
 
 
-# ─── _sanitise_filename_part ─────────────────────────────────────────
+# ─── sanitise_filename_part ─────────────────────────────────────────
 
 
 def test_sanitise_strips_backslash():
-    assert _sanitise_filename_part(r"foo\bar") == "foo_bar"
+    assert sanitise_filename_part(r"foo\bar") == "foo_bar"
 
 
 def test_sanitise_strips_forward_slash():
-    assert _sanitise_filename_part("foo/bar") == "foo_bar"
+    assert sanitise_filename_part("foo/bar") == "foo_bar"
 
 
 def test_sanitise_strips_all_windows_illegal_chars():
     # Pin: all 9 documented unsafe chars (\/:*?"<>|) replaced
     # with _. Critical — even ONE unsafe char in a ZIP entry
     # name breaks Windows extraction.
-    assert _sanitise_filename_part(r'a\b/c:d*e?f"g<h>i|j') == "a_b_c_d_e_f_g_h_i_j"
+    assert sanitise_filename_part(r'a\b/c:d*e?f"g<h>i|j') == "a_b_c_d_e_f_g_h_i_j"
 
 
 def test_sanitise_preserves_safe_characters():
     # Pin: alphanumerics, CJK, spaces, dashes pass through.
-    assert _sanitise_filename_part("人社院 - 2025") == "人社院 - 2025"
+    assert sanitise_filename_part("人社院 - 2025") == "人社院 - 2025"
 
 
 def test_sanitise_strips_trailing_whitespace():
     # Pin: .strip() applied at end. Common bug source — trailing
     # spaces in ZIP entry names confuse extractors.
-    assert _sanitise_filename_part("  hello  ") == "hello"
+    assert sanitise_filename_part("  hello  ") == "hello"
 
 
 def test_sanitise_empty_string_returns_untitled():
     # Pin: empty input → "untitled" fallback. Pin so a refactor
     # returning empty string doesn't produce a ZIP entry with
     # empty name (which most tools reject).
-    assert _sanitise_filename_part("") == "untitled"
+    assert sanitise_filename_part("") == "untitled"
 
 
 def test_sanitise_whitespace_only_returns_untitled():
     # Pin: whitespace-only input → "untitled" after .strip() →
     # empty → fallback. Defensive against department names that
     # are accidentally just spaces.
-    assert _sanitise_filename_part("   ") == "untitled"
+    assert sanitise_filename_part("   ") == "untitled"
 
 
 # ─── _sort_key ──────────────────────────────────────────────────────

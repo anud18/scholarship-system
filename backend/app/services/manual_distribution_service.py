@@ -24,6 +24,7 @@ from app.models.payment_roster import PaymentRoster, PaymentRosterItem, RosterSt
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipSubTypeConfig
 from app.models.student import Academy
 from app.models.user import User, UserRole
+from app.services.manual_distribution_export_service import format_enrollment_date_roc
 from app.services.received_months_service import (
     calculate_received_months_bulk_async,
     get_imported_months_bulk_async,
@@ -1654,12 +1655,12 @@ class ManualDistributionService:
         return mapping.get(sub_type, sub_type)
 
     def _format_enrollment_date(self, student_data: dict) -> str:
-        """Format enrollment date as ROC calendar (民國年.月.日)."""
-        enroll_year = student_data.get("std_enrollyear", 0)
-        enroll_term = student_data.get("std_enrollterm", 1)
-        # Approximate: term 1 = September, term 2 = February
-        month = "09" if enroll_term == 1 else "02"
-        return f"{enroll_year}.{month}.01" if enroll_year else ""
+        """Format enrollment date as ROC calendar (民國年.月.日).
+
+        Delegates to the export module so the grid and the 分發名單 export can
+        never render the same student's date differently.
+        """
+        return format_enrollment_date_roc(student_data)
 
     async def _get_default_preferences(self, scholarship_type_id: int) -> list[str]:
         """

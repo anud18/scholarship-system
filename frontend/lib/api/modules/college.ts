@@ -15,6 +15,7 @@ import { typedClient } from "../typed-client";
 import { toApiResponse } from "../compat";
 import type { ApiResponse } from "../types";
 import type { components as SchemaComponents } from "../generated/schema";
+import { fetchBinaryExport } from "./binary-export";
 
 // Shared PATCH for the per-config admin toggles (supplementary-import, college-view-distribution):
 // both flip one boolean on a ScholarshipConfiguration via the same auth + error-unwrap path.
@@ -699,49 +700,8 @@ export function createCollegeApi() {
   };
 }
 
-async function _fetchBinaryExport(
-  path: string,
-  params: URLSearchParams,
-  fallbackFilename: string,
-  errorFallback: string
-): Promise<{ blob: Blob; filename: string }> {
-  const token = typedClient.getToken();
-  const baseURL =
-    typeof window !== "undefined"
-      ? ""
-      : process.env.INTERNAL_API_URL || "http://localhost:8000";
-
-  const query = params.toString();
-  const url = `${baseURL}${path}${query ? `?${query}` : ""}`;
-
-  const response = await fetch(url, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  });
-
-  if (!response.ok) {
-    let message = errorFallback;
-    try {
-      const errorData = await response.json();
-      message = errorData?.detail || errorData?.message || errorData?.error || message;
-    } catch {
-      // Non-JSON error body — keep default.
-    }
-    throw new Error(message);
-  }
-
-  const disposition = response.headers.get("content-disposition") || "";
-  const filenameMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
-  const filename = filenameMatch
-    ? decodeURIComponent(filenameMatch[1].trim())
-    : fallbackFilename;
-
-  const blob = await response.blob();
-  return { blob, filename };
-}
+// The shared authed binary fetcher lives in binary-export.ts (also used by the
+// manual-distribution 分發名單 export).
 
 /**
  * Download the 學生資料彙整表 for a college ranking, as Excel (default) or PDF.
@@ -760,7 +720,7 @@ export async function exportRankingExcel(
 ): Promise<{ blob: Blob; filename: string }> {
   const params = new URLSearchParams();
   if (format !== "xlsx") params.set("format", format);
-  return _fetchBinaryExport(
+  return fetchBinaryExport(
     `/api/v1/college-review/rankings/${rankingId}/export-excel`,
     params,
     `學生資料彙整表_${rankingId}.${format}`,
@@ -780,7 +740,7 @@ export async function downloadRankingTemplate(
 ): Promise<{ blob: Blob; filename: string }> {
   const params = new URLSearchParams();
   params.set("template", "true");
-  return _fetchBinaryExport(
+  return fetchBinaryExport(
     `/api/v1/college-review/rankings/${rankingId}/export-excel`,
     params,
     `學生資料彙整表_${rankingId}_範本.xlsx`,
@@ -807,7 +767,7 @@ export async function exportDistributionResults(params: {
   search.set("academic_year", String(params.academicYear));
   if (params.semester) search.set("semester", params.semester);
   if (format !== "xlsx") search.set("format", format);
-  return _fetchBinaryExport(
+  return fetchBinaryExport(
     "/api/v1/college-review/distribution-results/export",
     search,
     `分發結果_${params.academicYear}.${format}`,
@@ -835,7 +795,7 @@ export async function exportDepartmentSummary(
   if (args.semester) params.set("semester", args.semester);
   params.set("department_code", args.department_code);
 
-  return _fetchBinaryExport(
+  return fetchBinaryExport(
     "/api/v1/college-review/applications/department-summary-export",
     params,
     "申請總表.xlsx",
@@ -863,7 +823,7 @@ export async function exportDepartmentSummaryBulk(
   params.set("scope", args.scope);
   if (args.academy_code) params.set("academy_code", args.academy_code);
 
-  return _fetchBinaryExport(
+  return fetchBinaryExport(
     "/api/v1/college-review/applications/department-summary-export-bulk",
     params,
     "申請總表.zip",

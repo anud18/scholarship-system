@@ -15,11 +15,11 @@ import type {
   DistributionHistoryRecord,
   RestoreRequest,
   DistributionSummaryResult,
-  DistributionSummaryGroup,
   AllocationSuggestion,
   DistributionState,
   ReleaseChainItem,
 } from "@/lib/api/modules/manual-distribution";
+import { DistributionSummaryDialog } from "./DistributionSummaryDialog";
 import {
   buildCollegeNameMap,
   getSavedAllocation,
@@ -1218,10 +1218,8 @@ export function ManualDistributionPanel({
                 <Download className="h-4 w-4 mr-1" />
                 匯出申請總表
               </Button>
-              <Button variant="outline" size="sm" disabled>
-                <Download className="h-4 w-4 mr-1" />
-                匯出 Excel
-              </Button>
+              {/* 分發名單 (受獎名冊) 的 Excel/PDF 匯出在「查看分發名單」對話框內
+                  ——與畫面上的名單同一份資料來源，見 DistributionSummaryDialog。 */}
               <Button
                 variant="outline"
                 size="sm"
@@ -2255,123 +2253,18 @@ export function ManualDistributionPanel({
         </div>
       </div>
 
-      {/* History Dialog */}
       {/* Distribution Summary Dialog */}
       {showDistributionSummary && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full max-h-[85vh] flex flex-col">
-            <div className="p-4 border-b border-slate-200 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <Eye className="h-5 w-5" />
-                分發結果名單
-              </h2>
-              <button
-                onClick={() => setShowDistributionSummary(false)}
-                className="text-slate-400 hover:text-slate-600 text-2xl leading-none"
-              >
-                ×
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4">
-              {isLoadingSummary ? (
-                <div className="flex justify-center py-12">
-                  <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-                </div>
-              ) : !distributionSummary ||
-                distributionSummary.groups.length === 0 ? (
-                <p className="text-center text-slate-500 py-8">
-                  尚未完成分發，或無已分配的學生
-                </p>
-              ) : (
-                <div className="space-y-6">
-                  <div className="text-sm text-slate-600">
-                    共 {distributionSummary.total_allocated} 位學生已分發到{" "}
-                    {distributionSummary.groups.length} 個獎學金類別
-                  </div>
-                  {distributionSummary.groups.map(group => (
-                    <div
-                      key={`${group.sub_type}-${group.allocation_year}`}
-                      className="border border-slate-200 rounded-lg overflow-hidden"
-                    >
-                      <div className="bg-slate-50 px-4 py-2 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-sm text-slate-800">
-                            {getSubTypeShortName(
-                              group.sub_type,
-                              group.sub_type
-                            )}
-                          </span>
-                          <span className="text-xs text-slate-500 font-mono">
-                            ({group.sub_type})
-                          </span>
-                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
-                            {group.allocation_year} 年度配額
-                          </span>
-                        </div>
-                        <span className="text-sm font-medium text-slate-700">
-                          {group.count} 人
-                        </span>
-                      </div>
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-slate-100 text-xs text-slate-500">
-                            <th className="text-left px-4 py-2">排名</th>
-                            <th className="text-left px-4 py-2">學號</th>
-                            <th className="text-left px-4 py-2">姓名</th>
-                            <th className="text-left px-4 py-2">學院</th>
-                            <th className="text-left px-4 py-2">系所</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {group.students
-                            .sort((a, b) => a.rank_position - b.rank_position)
-                            .map(student => (
-                              <tr
-                                key={student.ranking_item_id}
-                                className="border-b border-slate-50 hover:bg-slate-50"
-                              >
-                                <td className="px-4 py-1.5 text-slate-400">
-                                  {student.college_rejected ? (
-                                    <span className="text-red-600">N</span>
-                                  ) : (
-                                    student.rank_position
-                                  )}
-                                </td>
-                                <td className="px-4 py-1.5 font-mono text-xs">
-                                  {student.student_id}
-                                </td>
-                                <td className="px-4 py-1.5 font-medium">
-                                  {student.student_name}
-                                </td>
-                                <td className="px-4 py-1.5">
-                                  {resolveCollegeName(
-                                    collegeNames,
-                                    student.college_code,
-                                    student.college_name
-                                  )}
-                                </td>
-                                <td className="px-4 py-1.5 text-slate-600">
-                                  {student.department_name}
-                                </td>
-                              </tr>
-                            ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="p-4 border-t border-slate-200 flex justify-end">
-              <Button
-                variant="outline"
-                onClick={() => setShowDistributionSummary(false)}
-              >
-                關閉
-              </Button>
-            </div>
-          </div>
-        </div>
+        <DistributionSummaryDialog
+          summary={distributionSummary}
+          isLoading={isLoadingSummary}
+          collegeNames={collegeNames}
+          getSubTypeLabel={code => getSubTypeShortName(code, code)}
+          scholarshipTypeId={scholarshipTypeId}
+          academicYear={selectedAcademicYear}
+          semester={selectedSemester}
+          onClose={() => setShowDistributionSummary(false)}
+        />
       )}
 
       {showHistoryDialog && (
