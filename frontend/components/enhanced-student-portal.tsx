@@ -81,15 +81,8 @@ import api, {
   ApplicationField,
   ApplicationDocument,
 } from "@/lib/api";
-import {
-  ApplicationStatus,
-  getApplicationStatusLabel,
-  getApplicationStatusBadgeVariant,
-} from "@/lib/enums";
-import {
-  getApplicationTimeline,
-  getDisplayStatusInfo,
-} from "@/lib/utils/application-helpers";
+import { ApplicationStatus } from "@/lib/enums";
+import { getApplicationTimeline } from "@/lib/utils/application-helpers";
 import { clsx } from "@/lib/utils";
 import { User } from "@/types/user";
 
@@ -1054,25 +1047,9 @@ export function EnhancedStudentPortal({
   const renderApplicationCard = (application: Application) => (
     <Card key={application.id} className="mb-4">
       <CardHeader>
+        {/* 狀態/階段 badge 不對學生顯示 — 核定結果請洽院辦，進度看時間軸。 */}
         <CardTitle className="flex items-center justify-between">
           <span>{application.scholarship_type}</span>
-          <div className="flex gap-2">
-            {(() => {
-              const statusInfo = getDisplayStatusInfo(application, locale);
-              return (
-                <>
-                  <Badge variant={statusInfo.statusVariant}>
-                    {statusInfo.statusLabel}
-                  </Badge>
-                  {statusInfo.showStage && statusInfo.stageLabel && (
-                    <Badge variant={statusInfo.stageVariant}>
-                      {statusInfo.stageLabel}
-                    </Badge>
-                  )}
-                </>
-              );
-            })()}
-          </div>
         </CardTitle>
         <CardDescription>
           {t("applications.submitted_at")}:{" "}
@@ -1271,17 +1248,9 @@ export function EnhancedStudentPortal({
                           </p>
                         )}
                       </div>
+                      {/* 不顯示申請狀態 badge：核定結果一律由院辦告知
+                          (見時間軸的「已核定(請洽院辦)」)，學生端只看審核進度。 */}
                       <div className="flex flex-col items-end gap-1">
-                        <Badge
-                          variant={getApplicationStatusBadgeVariant(
-                            app.status as ApplicationStatus
-                          )}
-                        >
-                          {getApplicationStatusLabel(
-                            app.status as ApplicationStatus,
-                            locale
-                          )}
-                        </Badge>
                         {app.status ===
                           ApplicationStatus.CANCELLED_BY_CHALLENGE && (
                           <Badge

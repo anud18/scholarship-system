@@ -34,11 +34,7 @@ import { Application, User as UserType } from "@/lib/api";
 import api from "@/lib/api";
 import { ApplicationFormDataDisplay } from "@/components/application-form-data-display";
 import { ProfessorAssignmentDropdown } from "@/components/professor-assignment-dropdown";
-import {
-  ApplicationStatus,
-  getApplicationStatusLabel,
-  getApplicationStatusBadgeVariant,
-} from "@/lib/enums";
+import { ApplicationStatus } from "@/lib/enums";
 import {
   getApplicationTimeline,
   getDocumentLabel,
@@ -655,23 +651,8 @@ export function ApplicationDetailDialog({
                     </Label>
                     <p className="text-sm">{application.scholarship_type_zh}</p>
                   </div>
-                  <div>
-                    <Label className="font-medium">
-                      {t("dialogs.application_detail.status")}
-                    </Label>
-                    <p>
-                      <Badge
-                        variant={getApplicationStatusBadgeVariant(
-                          application.status as ApplicationStatus
-                        )}
-                      >
-                        {getApplicationStatusLabel(
-                          application.status as ApplicationStatus,
-                          locale
-                        )}
-                      </Badge>
-                    </p>
-                  </div>
+                  {/* 申請狀態不對學生顯示：核定結果一律由院辦告知，
+                      學生端只看下方「審核進度」時間軸。 */}
                   <div>
                     <Label className="font-medium">
                       {t("dialogs.application_detail.created_at")}
