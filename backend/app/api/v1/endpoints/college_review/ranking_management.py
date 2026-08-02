@@ -56,6 +56,10 @@ from ._helpers import (
 
 logger = logging.getLogger(__name__)
 
+# Appended to rank-sequence errors so the message states the rule that was
+# broken, not just the symptom. Mirrors the frontend (parse-ranking-sheet.ts).
+RANK_SEQUENCE_RULE = "，排名數字不可重複、不可跳號"
+
 router = APIRouter()
 
 
@@ -1108,7 +1112,7 @@ async def import_ranking_from_excel(
             rank_counts[r] = rank_counts.get(r, 0) + 1
         duplicates = [str(r) for r, count in sorted(rank_counts.items()) if count > 1]
         if duplicates:
-            errors.append(f"排名重複：{', '.join(duplicates)}")
+            errors.append(f"排名重複：{', '.join(duplicates)}{RANK_SEQUENCE_RULE}")
 
         # Check consecutive from 1
         if integer_ranks and not duplicates:
@@ -1116,7 +1120,9 @@ async def import_ranking_from_excel(
             actual = set(integer_ranks)
             missing_ranks = expected - actual
             if missing_ranks:
-                errors.append(f"排名不連續：缺少第 {', '.join(str(r) for r in sorted(missing_ranks))} 名")
+                errors.append(
+                    f"排名不連續：缺少第 {', '.join(str(r) for r in sorted(missing_ranks))} 名{RANK_SEQUENCE_RULE}"
+                )
 
         if errors:
             raise HTTPException(
