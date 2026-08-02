@@ -708,6 +708,7 @@ export function ApplicationDetailDialog({
               <CardContent>
                 <ProgressTimeline
                   steps={getApplicationTimeline(application, locale)}
+                  showProgress={false}
                 />
               </CardContent>
             </Card>

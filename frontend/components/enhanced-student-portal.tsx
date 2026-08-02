@@ -1082,7 +1082,10 @@ export function EnhancedStudentPortal({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <ProgressTimeline steps={getApplicationTimeline(application, locale)} />
+        <ProgressTimeline
+          steps={getApplicationTimeline(application, locale)}
+          showProgress={false}
+        />
         {application.status === "draft" && (
           <div className="mt-4 flex justify-end space-x-2">
             <Button
@@ -1300,9 +1303,14 @@ export function EnhancedStudentPortal({
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
+                        {/* showProgress={false}: the card header is already
+                            「審核進度」and the steps themselves show where the
+                            application stands — the extra n/N (%) bar was a
+                            duplicate label students don't need. */}
                         <ProgressTimeline
                           steps={getApplicationTimeline(app, locale)}
                           orientation="horizontal"
+                          showProgress={false}
                         />
                       </CardContent>
                     </Card>
