@@ -7381,6 +7381,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/student-history/visibility": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Visibility
+         * @description Read both switches. Open to any authenticated user on purpose: the
+         *     student card and the college tab hide themselves when their switch is off,
+         *     which needs the flag BEFORE the gated request is attempted. The payload is
+         *     two booleans about the system, never about a person.
+         */
+        get: operations["get_visibility_api_v1_student_history_visibility_get"];
+        /**
+         * Update Visibility
+         * @description Admin-only. Each audience is decided separately — an omitted field keeps
+         *     its current value rather than being reset.
+         */
+        put: operations["update_visibility_api_v1_student_history_visibility_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/csp-report": {
         parameters: {
             query?: never;
@@ -10905,6 +10933,24 @@ export interface components {
              * @description 帳戶戶名
              */
             account_holder_name?: string | null;
+        };
+        /**
+         * StudentHistoryVisibilityUpdate
+         * @description Admin toggle body for PUT /student-history/visibility.
+         *
+         *     Both fields are optional and applied independently: omitting one leaves
+         *     that audience's setting untouched, so the two switches never clobber each
+         *     other. Sending neither is a 422 (nothing to do).
+         *
+         *     The response shape (both switches) is produced by
+         *     ``StudentHistoryVisibility.to_dict()`` in the service layer; endpoints in
+         *     this project return plain ApiResponse dicts, never a ``response_model``.
+         */
+        StudentHistoryVisibilityUpdate: {
+            /** Student Enabled */
+            student_enabled?: boolean | null;
+            /** College Enabled */
+            college_enabled?: boolean | null;
         };
         /**
          * StudentVerificationStatus
@@ -23468,6 +23514,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_visibility_api_v1_student_history_visibility_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    update_visibility_api_v1_student_history_visibility_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudentHistoryVisibilityUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

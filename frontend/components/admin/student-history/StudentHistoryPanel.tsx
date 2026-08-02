@@ -15,6 +15,7 @@ import { SummaryCards } from "./SummaryCards";
 import { PaymentHistoryTable } from "./PaymentHistoryTable";
 import { ReceivedMonthsCard } from "./ReceivedMonthsCard";
 import { ImportReceivedMonthsDialog } from "./ImportReceivedMonthsDialog";
+import { HistoryVisibilityCard } from "./HistoryVisibilityCard";
 import { MAX_BATCH_SIZE, parseStudentNumbers } from "./parse-student-numbers";
 
 interface StudentHistoryPanelProps {
@@ -130,6 +131,8 @@ export function StudentHistoryPanel({ variant = "admin" }: StudentHistoryPanelPr
 
   return (
     <div className="space-y-4">
+      {variant === "admin" && <HistoryVisibilityCard />}
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle>學生領獎紀錄查詢</CardTitle>

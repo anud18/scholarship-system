@@ -116,6 +116,22 @@ export interface MyReceivedMonthsData {
   total_received_months: number;
 }
 
+/**
+ * The two admin switches deciding who 領獎紀錄查詢 is open to. Readable by any
+ * authenticated user so the student card and the college tab can hide
+ * themselves instead of rendering an entry point that 403s.
+ */
+export interface StudentHistoryVisibility {
+  student_enabled: boolean;
+  college_enabled: boolean;
+}
+
+/** Admin toggle payload — omit a field to leave that audience untouched. */
+export interface StudentHistoryVisibilityUpdate {
+  student_enabled?: boolean;
+  college_enabled?: boolean;
+}
+
 export function createStudentHistoryApi() {
   return {
     async getBatch(
@@ -136,6 +152,24 @@ export function createStudentHistoryApi() {
         {},
       );
       return toApiResponse<MyReceivedMonthsData>(response);
+    },
+
+    async getVisibility(): Promise<ApiResponse<StudentHistoryVisibility>> {
+      const response = await typedClient.raw.GET(
+        "/api/v1/student-history/visibility",
+        {},
+      );
+      return toApiResponse<StudentHistoryVisibility>(response);
+    },
+
+    async updateVisibility(
+      update: StudentHistoryVisibilityUpdate,
+    ): Promise<ApiResponse<StudentHistoryVisibility>> {
+      const response = await typedClient.raw.PUT(
+        "/api/v1/student-history/visibility",
+        { body: update },
+      );
+      return toApiResponse<StudentHistoryVisibility>(response);
     },
   };
 }

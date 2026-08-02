@@ -5,6 +5,7 @@ import { CalendarClock } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { apiClient } from "@/lib/api";
+import { useStudentHistoryVisibility } from "@/hooks/use-student-history-visibility";
 import { logger } from "@/lib/utils/logger";
 
 interface TotalReceivedMonthsCardProps {
@@ -16,11 +17,22 @@ interface TotalReceivedMonthsCardProps {
  * scholarship types combined). Students see the months total only — never
  * amounts or per-roster payment details. Renders nothing while loading or
  * when the lookup fails, so it can't block the surrounding page.
+ *
+ * The whole card is admin-gated: when 開放學生查詢 is off the months request is
+ * never made (the endpoint would 403 anyway) and nothing renders.
  */
 export function TotalReceivedMonthsCard({ locale = "zh" }: TotalReceivedMonthsCardProps) {
   const [totalMonths, setTotalMonths] = useState<number | null>(null);
+  const { visibility } = useStudentHistoryVisibility();
+  const isEnabled = visibility.student_enabled;
 
   useEffect(() => {
+    if (!isEnabled) {
+      // Drop a previously fetched total if the admin closes the feature.
+      setTotalMonths(null);
+      return;
+    }
+
     let cancelled = false;
     apiClient.studentHistory
       .getMyMonths()
@@ -42,9 +54,9 @@ export function TotalReceivedMonthsCard({ locale = "zh" }: TotalReceivedMonthsCa
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isEnabled]);
 
-  if (totalMonths === null) return null;
+  if (!isEnabled || totalMonths === null) return null;
 
   return (
     <Card data-testid="total-received-months-card">
