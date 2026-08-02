@@ -1425,7 +1425,7 @@ async def lock_roster(
     Lock roster
     """
     # 檢查權限：只有管理員可以鎖定造冊
-    check_user_roles([UserRole.admin], current_user)
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
 
     try:
         stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)
@@ -1471,7 +1471,7 @@ async def unlock_roster(
     Unlock roster
     """
     # 檢查權限：只有管理員可以解鎖造冊
-    check_user_roles([UserRole.admin], current_user)
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
 
     try:
         stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)
@@ -1975,14 +1975,14 @@ async def exclude_roster_item(
     metadata, rather than being hard-deleted (#66).
 
     Notes:
-      - Only admins may exclude items. Roster must NOT be LOCKED.
+      - Only admins / super admins may exclude items. Roster must NOT be LOCKED.
       - This does NOT decrement the student's cumulative received_months;
         if the funds are actually being returned, the admin should adjust
         received_months separately (it lives on CollegeRankingItem and the
         update path is intentionally manual).
       - A RosterAuditLog row is created with action=ITEM_REMOVE.
     """
-    check_user_roles([UserRole.admin], current_user)
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
 
     if reason_category not in MANUAL_EXCLUSION_CATEGORY_LABELS:
         raise HTTPException(
@@ -2114,7 +2114,7 @@ async def delete_roster(
     Delete roster (only unlocked rosters)
     """
     # 檢查權限：只有管理員可以刪除造冊
-    check_user_roles([UserRole.admin], current_user)
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
 
     try:
         stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)

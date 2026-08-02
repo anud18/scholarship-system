@@ -137,17 +137,27 @@ class TestNotifyRosterGeneratedDefaults:
 
 
 class TestNotifyRosterErrorDefaults:
-    """Pin: notify_roster_error defaults to admin-ONLY (NOT processor).
+    """Pin: notify_roster_error defaults to the admin tier (NOT processor).
 
-    SECURITY: error notifications go to admin alone because they
-    require human intervention. Processors handling roster ops
+    SECURITY: error notifications go to the admin tier alone because
+    they require human intervention. Processors handling roster ops
     shouldn't get spammed with errors from outside their scope.
+
+    super_admin is part of that tier: anything a plain admin can do or
+    be notified about, a super_admin can too — matching the other three
+    notify_* methods, which already default to both roles.
+
+    NOTE: this is a consistency fix, not a live bug fix.
+    `RosterNotificationService` currently has no production caller (only
+    this test file), so no notification is being missed today. It is
+    aligned here so the default is already correct whenever the service
+    does get wired up.
     """
 
     @pytest.mark.asyncio
-    async def test_error_default_role_is_admin_only(self):
-        # Pin SECURITY: error notifications go to admin ONLY (NOT
-        # admin + processor). Pin so refactor adding processor
+    async def test_error_default_role_is_admin_tier_only(self):
+        # Pin SECURITY: error notifications go to admin + super_admin
+        # ONLY (NOT processor). Pin so refactor adding processor
         # silently spams the team with errors they can't act on.
         service = RosterNotificationService(db=MagicMock())
         service._get_users_by_roles = MagicMock(return_value=[_stub_user(1)])
@@ -157,7 +167,7 @@ class TestNotifyRosterErrorDefaults:
         await service.notify_roster_error(error_data={"config_name": "nstc-114-1", "error": "missing quota"})
 
         called_roles = service._get_users_by_roles.call_args.args[0]
-        assert called_roles == [UserRole.admin]
+        assert called_roles == [UserRole.admin, UserRole.super_admin]
         # Per CLAUDE.md §4: UserRole has admin/student/professor/college/super_admin.
         # No `processor` exists.
         assert not any(r.value == "processor" for r in called_roles if hasattr(r, "value"))
