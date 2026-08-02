@@ -51,6 +51,12 @@ jest.mock("../../lib/api", () => ({
         success: true,
         data: { student_number: "test", total_received_months: 0 },
       }),
+      // The card is admin-gated; without this the visibility hook errors and
+      // the card silently hides.
+      getVisibility: jest.fn().mockResolvedValue({
+        success: true,
+        data: { student_enabled: true, college_enabled: true },
+      }),
     },
   },
 }));

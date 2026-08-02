@@ -5,7 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # Shared by the admin single-lookup and the batch endpoints; mirrored client-side
 # in frontend/components/admin/student-history/parse-student-numbers.ts.
@@ -142,3 +142,29 @@ class BatchStudentHistoryRequest(BaseModel):
     """
 
     student_numbers: List[str]
+
+
+class StudentHistoryVisibilityResponse(BaseModel):
+    """Who the admin has opened 領獎紀錄查詢 to. Readable by any logged-in user
+    so the UI can hide an entry point instead of letting it 403."""
+
+    student_enabled: bool = Field(..., description="學生可否查詢自己的領獎紀錄")
+    college_enabled: bool = Field(..., description="學院可否查詢本學院學生的領獎紀錄")
+
+
+class StudentHistoryVisibilityUpdate(BaseModel):
+    """Admin toggle body for PUT /student-history/visibility.
+
+    Both fields are optional and applied independently: omitting one leaves
+    that audience's setting untouched, so the two switches never clobber each
+    other. Sending neither is a 400 (nothing to do).
+    """
+
+    student_enabled: Optional[bool] = None
+    college_enabled: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def at_least_one_field(self) -> "StudentHistoryVisibilityUpdate":
+        if self.student_enabled is None and self.college_enabled is None:
+            raise ValueError("請至少指定一項開放設定")
+        return self

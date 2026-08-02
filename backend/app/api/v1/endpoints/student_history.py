@@ -7,6 +7,8 @@
   own students' records.
 - GET /student-history/me/months — a student's own 總領月份數. Students get the
   total months only, never amounts or payment details.
+- GET/PUT /student-history/visibility — the two admin switches that decide
+  whether the student and college views above are open at all.
 
 The admin single-student lookup lives at /admin/student-history/{student_number}.
 """
@@ -18,14 +20,21 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ScholarshipException
-from app.core.security import require_scholarship_manager, require_student
+from app.core.security import get_current_user, require_admin, require_scholarship_manager, require_student
 from app.db.deps import get_db
 from app.models.audit_log import AuditAction, AuditLog
 from app.models.user import User
 from app.schemas.student_scholarship_history import (
     STUDENT_NUMBER_PATTERN,
     BatchStudentHistoryRequest,
+    StudentHistoryVisibilityUpdate,
     StudentScholarshipHistoryData,
+)
+from app.services.student_history_visibility import (
+    COLLEGE_DISABLED_MESSAGE,
+    STUDENT_DISABLED_MESSAGE,
+    get_student_history_visibility,
+    set_student_history_visibility,
 )
 from app.services.student_scholarship_history_service import (
     StudentScholarshipHistoryService,
@@ -115,11 +124,17 @@ async def batch_student_scholarship_history(
             detail=f"學號格式不正確: {', '.join(invalid)}",
         )
     is_college = current_user.is_college()
-    if is_college and not (current_user.college_code or "").strip():
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="帳號未設定學院代碼，無法查詢學生領獎紀錄",
-        )
+    if is_college:
+        # Admin switch, checked before any lookup work: when 學院查詢 is closed
+        # a college account has no access at all, not a narrower one.
+        visibility = await get_student_history_visibility(db)
+        if not visibility.college_enabled:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=COLLEGE_DISABLED_MESSAGE)
+        if not (current_user.college_code or "").strip():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="帳號未設定學院代碼，無法查詢學生領獎紀錄",
+            )
 
     service = StudentScholarshipHistoryService()
     # SIS lookups run as one concurrent wave up front; the per-student loop
@@ -185,6 +200,10 @@ async def get_my_received_months(
     """A student's own 總領月份數 (匯入 + 系統, summed across every scholarship
     type). DB-only — no SIS round trip — and an empty history is a valid
     0-month state, not an error."""
+    visibility = await get_student_history_visibility(db)
+    if not visibility.student_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=STUDENT_DISABLED_MESSAGE)
+
     student_number = current_user.nycu_id
     service = StudentScholarshipHistoryService()
     total_received_months = await service.get_total_received_months(db, student_number)
@@ -196,4 +215,42 @@ async def get_my_received_months(
             "student_number": student_number,
             "total_received_months": total_received_months,
         },
+    }
+
+
+@router.get("/visibility")
+async def get_visibility(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Read both switches. Open to any authenticated user on purpose: the
+    student card and the college tab hide themselves when their switch is off,
+    which needs the flag BEFORE the gated request is attempted. The payload is
+    two booleans about the system, never about a person."""
+    visibility = await get_student_history_visibility(db)
+    return {
+        "success": True,
+        "message": "Student history visibility retrieved",
+        "data": visibility.to_dict(),
+    }
+
+
+@router.put("/visibility")
+async def update_visibility(
+    request: StudentHistoryVisibilityUpdate,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin-only. Each audience is decided separately — an omitted field keeps
+    its current value rather than being reset."""
+    visibility = await set_student_history_visibility(
+        db,
+        user_id=current_user.id,
+        student_enabled=request.student_enabled,
+        college_enabled=request.college_enabled,
+    )
+    return {
+        "success": True,
+        "message": "Student history visibility updated",
+        "data": visibility.to_dict(),
     }
