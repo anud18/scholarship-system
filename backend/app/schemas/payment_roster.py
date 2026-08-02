@@ -418,3 +418,32 @@ class ReconcileResult(BaseModel):
     total_applications: int
     total_amount: float
     excel_stale: bool
+
+
+class RegenerateRosterRequest(BaseModel):
+    """Body for POST /payment-rosters/{roster_id}/regenerate."""
+
+    student_verification_enabled: Optional[bool] = Field(
+        None,
+        description="本次是否重新驗證學籍（單次覆寫，不會寫回造冊設定）；未提供則沿用造冊原本的設定",
+    )
+
+
+class RegenerateRosterResult(BaseModel):
+    """Response for POST /payment-rosters/{roster_id}/regenerate."""
+
+    roster_id: int
+    roster_code: str
+    status: str
+    project_number: Optional[str] = None
+    rebuilt_items: int  # 重建成功的明細數
+    failed_items: int  # 重建失敗（資料不全）的申請數
+    preserved_exclusions: int  # 跨重建保留的人為排除數
+    newly_excluded: int  # 先前納入、依當下資料重新被排除的明細數
+    dropped_members: int  # 先前納入、如今整筆不在名單中的學生數
+    qualified_count: int
+    disqualified_count: int
+    total_applications: int
+    total_amount: float
+    excel_exported: bool
+    excel_stale: bool
