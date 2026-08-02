@@ -235,7 +235,9 @@ describe("EnhancedStudentPortal", () => {
     await waitFor(() => {
       expect(screen.getByText(/Application ID:/)).toBeInTheDocument();
     });
-    expect(screen.getByText("Submitted")).toBeInTheDocument();
+    // 申請狀態 badge is deliberately absent on the student side — the outcome
+    // is disclosed by the college office, not by the portal.
+    expect(screen.queryByText("Submitted")).not.toBeInTheDocument();
   });
 
   it("keeps 我的申請 visible when no eligible scholarships (application period ended)", async () => {
@@ -373,7 +375,7 @@ describe("EnhancedStudentPortal", () => {
     ).toBeInTheDocument();
   });
 
-  it("should handle different application statuses", async () => {
+  it("never discloses the approval outcome to the student", async () => {
     const approvedApplication = {
       ...mockApplication,
       status: "approved" as const,
@@ -385,9 +387,14 @@ describe("EnhancedStudentPortal", () => {
 
     render(<EnhancedStudentPortal user={mockUser} locale="en" initialTab="applications" />);
 
-    // Wait for data to load
     await waitFor(() => {
-      expect(screen.getByText("Approved")).toBeInTheDocument();
+      expect(screen.getByText(/Application ID:/)).toBeInTheDocument();
     });
+    // Whether the student was funded is the college office's to tell — the
+    // timeline's final step is the only signal the portal gives.
+    expect(screen.queryByText("Approved")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Finalized (Contact College Office)")
+    ).toBeInTheDocument();
   });
 });
