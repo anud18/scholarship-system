@@ -20,6 +20,41 @@ from app.models.system_setting import EmailTemplate, SendingType
 
 logger = logging.getLogger(__name__)
 
+# --- 學院送出排名通知 -------------------------------------------------------
+# The third and last automatic trigger point in the system: a college finalizes
+# ("送出") its ranking and its own reviewers get a confirmation. Recipients are
+# resolved by college_code, so the rule is ranking-scoped, not application-scoped.
+COLLEGE_RANKING_SUBMITTED_TEMPLATE_KEY = "college_ranking_submitted"
+
+COLLEGE_RANKING_SUBMITTED_SUBJECT = "排名已送出 - {scholarship_name} {ranking_name}"
+
+COLLEGE_RANKING_SUBMITTED_BODY = """{college_name} 您好：
+
+貴學院的 {scholarship_name} 推薦排名已完成送出並鎖定，後續將由承辦單位進行配額分發。
+
+排名資訊：
+- 排名名稱：{ranking_name}
+- 申請類別：{sub_type_code}
+- 學年度學期：{academic_year} 學年度 {semester}
+- 排名人數：{total_applications}
+- 送出時間：{finalized_at}（操作人：{finalized_by}）
+
+排名送出後即無法修改。若需調整，請聯繫承辦單位解除鎖定。
+
+請至系統查看：{system_url}/college/rankings
+
+國立陽明交通大學
+獎學金管理系統"""
+
+COLLEGE_RANKING_SUBMITTED_CONDITION_QUERY = """
+                SELECT u.email
+                FROM users u
+                WHERE u.role = 'college'
+                AND u.college_code = {college_code}
+                AND u.email IS NOT NULL
+                AND u.email != ''
+            """
+
 
 async def seed_scholarship_configurations(session: AsyncSession) -> None:
     """Initialize scholarship configurations with quota and workflow settings"""
@@ -967,6 +1002,13 @@ async def seed_email_templates(session: AsyncSession) -> None:
             "sending_type": SendingType.single,
             "recipient_options": [{"label": "學院承辦人", "value": "college"}],
         },
+        {
+            "key": COLLEGE_RANKING_SUBMITTED_TEMPLATE_KEY,
+            "subject_template": COLLEGE_RANKING_SUBMITTED_SUBJECT,
+            "body_template": COLLEGE_RANKING_SUBMITTED_BODY,
+            "sending_type": SendingType.single,
+            "recipient_options": [{"label": "學院承辦人", "value": "college"}],
+        },
         # Bulk sending type templates
         {
             "key": "scholarship_announcement",
@@ -1039,7 +1081,8 @@ async def seed_email_automation_rules(session: AsyncSession) -> None:
         print(f"  ✓ Email automation rules already initialized ({len(existing_rules)} found)")
         return
 
-    # Define initial automation rules (disabled by default, admin must activate)
+    # Define initial automation rules — these are the three trigger points the
+    # system actually sends mail for (see docs: 送出申請 / 草稿截止前三天 / 送出排名).
     initial_rules = [
         {
             "name": "申請提交確認郵件",
@@ -1086,12 +1129,13 @@ async def seed_email_automation_rules(session: AsyncSession) -> None:
             """,
         },
         {
-            "name": "學院審核通知",
-            "description": "當教授審核完成後，通知學院有新案件待審核",
-            "trigger_event": TriggerEvent.professor_review_submitted,
-            "template_key": "college_review_notification",
+            "name": "學院排名送出通知",
+            "description": "當學院送出（確認）排名後，通知該學院承辦人排名已送出",
+            "trigger_event": TriggerEvent.college_review_submitted,
+            "template_key": COLLEGE_RANKING_SUBMITTED_TEMPLATE_KEY,
             "delay_hours": 0,
-            "is_active": False,
+            "is_active": True,
+            "condition_query": COLLEGE_RANKING_SUBMITTED_CONDITION_QUERY,
         },
     ]
 
@@ -1101,7 +1145,7 @@ async def seed_email_automation_rules(session: AsyncSession) -> None:
 
     await session.commit()
     logger.info("Email automation rules initialized successfully!")
-    print(f"  📊 Inserted: {len(initial_rules)} email automation rules (disabled by default)")
+    print(f"  📊 Inserted: {len(initial_rules)} email automation rules")
 
 
 async def init_all_scholarship_configs() -> None:
@@ -1126,7 +1170,7 @@ async def init_all_scholarship_configs() -> None:
     print("- 3 scholarship configurations (114 academic year)")
     print("- 18 scholarship rules (114 academic year)")
     print("- 3 sub-type configurations (NSTC, MOE_1W, MOE_2W)")
-    print("- 6 email templates (single + bulk sending)")
+    print("- 7 email templates (single + bulk sending)")
 
 
 if __name__ == "__main__":
