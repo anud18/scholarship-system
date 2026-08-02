@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import io
 import logging
-import re
 import zipfile
 from typing import Literal, Optional
 from urllib.parse import quote as _url_quote
@@ -39,6 +38,14 @@ from app.services.college_ranking_export_service import (
 # module; the single definition now lives in the service layer.
 from app.services.export_summary_tables import _sort_key
 
+# Re-exported for the sibling college_review export endpoints that import these
+# from here; the single definition lives in the shared util.
+from app.utils.export_download import (
+    XLSX_MEDIA_TYPE,
+    ZIP_MEDIA_TYPE,
+    sanitise_filename_part,
+)
+
 from ._helpers import (
     _check_academic_year_permission,
     _check_scholarship_permission,
@@ -49,16 +56,6 @@ from ._helpers import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-ZIP_MEDIA_TYPE = "application/zip"
-
-# Characters not allowed in cross-platform filenames
-_UNSAFE_FILENAME_RE = re.compile(r'[\\/:*?"<>|]')
-
-
-def _sanitise_filename_part(value: str) -> str:
-    return _UNSAFE_FILENAME_RE.sub("_", value).strip() or "untitled"
 
 
 @router.get("/applications/department-summary-export")
@@ -181,7 +178,7 @@ async def export_department_summary_single(
     title = f"{academic_year}學年度{scholarship_name}學生資料彙整表 - {dept_name}"
     sheet_name = f"{academic_year}學年"
     base_filename = (
-        f"{academic_year}學年度{scholarship_name}學生資料彙整表" f"_{_sanitise_filename_part(dept_name)}.xlsx"
+        f"{academic_year}學年度{scholarship_name}學生資料彙整表" f"_{sanitise_filename_part(dept_name)}.xlsx"
     )
     encoded = _url_quote(base_filename, safe="")
 
@@ -388,7 +385,7 @@ async def export_department_summary_bulk(
             )
             inner_name = (
                 f"{academic_year}學年度{scholarship_name}學生資料彙整表"
-                f"_{_sanitise_filename_part(dept_name)}_{_sanitise_filename_part(dept_code)}.xlsx"
+                f"_{sanitise_filename_part(dept_name)}_{sanitise_filename_part(dept_code)}.xlsx"
             )
             zf.writestr(inner_name, xlsx_bytes)
 
@@ -396,8 +393,7 @@ async def export_department_summary_bulk(
 
     scope_label = resolved_college_code if scope == "college" else "全部"
     base_filename = (
-        f"{academic_year}學年度{scholarship_name}學生資料彙整表"
-        f"_{_sanitise_filename_part(scope_label or '全部')}.zip"
+        f"{academic_year}學年度{scholarship_name}學生資料彙整表" f"_{sanitise_filename_part(scope_label or '全部')}.zip"
     )
     encoded = _url_quote(base_filename, safe="")
 

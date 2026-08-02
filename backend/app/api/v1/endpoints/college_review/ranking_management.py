@@ -45,7 +45,7 @@ from app.services.review_service import ReviewService
 from app.utils.application_helpers import get_college_code_from_data
 from app.services.supplementary_import_service import SupplementaryImportService
 
-from .application_summary_export import XLSX_MEDIA_TYPE
+from app.utils.export_download import XLSX_MEDIA_TYPE
 from ._helpers import (
     _check_academic_year_permission,
     _check_scholarship_permission,
