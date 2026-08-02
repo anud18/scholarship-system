@@ -6590,7 +6590,7 @@ export interface paths {
          *     metadata, rather than being hard-deleted (#66).
          *
          *     Notes:
-         *       - Only admins may exclude items. Roster must NOT be LOCKED.
+         *       - Only admins / super admins may exclude items. Roster must NOT be LOCKED.
          *       - This does NOT decrement the student's cumulative received_months;
          *         if the funds are actually being returned, the admin should adjust
          *         received_months separately (it lives on CollegeRankingItem and the

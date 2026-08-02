@@ -77,6 +77,20 @@ def _make_mock_admin() -> Mock:
     return u
 
 
+def _make_mock_super_admin() -> Mock:
+    """Mock super_admin. Anything a plain admin can do, a super_admin can do
+    too — these endpoints must not gate on `[UserRole.admin]` alone."""
+    u = Mock(spec=User)
+    u.id = 2
+    u.role = UserRole.super_admin
+    u.name = "Super Admin EP"
+    u.email = "super_admin_pr@nycu.edu.tw"
+    u.has_role.side_effect = lambda role: u.role == role
+    u.is_admin.side_effect = lambda: u.role == UserRole.admin
+    u.is_super_admin.side_effect = lambda: u.role == UserRole.super_admin
+    return u
+
+
 def _make_mock_student() -> Mock:
     """Mock student. `has_role` must return False for admin/super_admin so
     `check_user_roles([admin, super_admin], ...)` raises 403."""
@@ -122,6 +136,30 @@ async def client_admin(client: AsyncClient, sync_db_for_rosters):
 
     def override_user():
         return admin
+
+    def override_sync_db():
+        yield sync_db_for_rosters
+
+    app.dependency_overrides[get_current_user] = override_user
+    app.dependency_overrides[get_sync_db] = override_sync_db
+    yield client
+    app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(get_sync_db, None)
+
+
+@pytest_asyncio.fixture
+async def client_super_admin(client: AsyncClient, sync_db_for_rosters):
+    """Same wiring as `client_admin` but with a super_admin
+    `get_current_user`, so the admin-tier handlers can be asserted to admit
+    super_admin as well."""
+    from app.core.deps import get_current_user
+    from app.db.deps import get_sync_db
+    from app.main import app
+
+    super_admin = _make_mock_super_admin()
+
+    def override_user():
+        return super_admin
 
     def override_sync_db():
         yield sync_db_for_rosters
@@ -789,3 +827,60 @@ async def test_list_filters_by_scholarship_type_id(client_admin: AsyncClient, ro
     assert resp2.status_code == 200, resp2.text
     codes2 = {it["roster_code"] for it in resp2.json()["data"]["items"]}
     assert "ROSTER-PR-CFG" not in codes2
+
+
+# ===========================================================================
+# super_admin parity with admin
+#
+# lock / unlock / exclude / DELETE used to gate on `[UserRole.admin]` alone
+# while every other roster endpoint accepted `[admin, super_admin]`. A
+# super_admin therefore got a 403 on the four most destructive operations.
+# These pin the parity so the narrower list can't come back.
+#
+# NOTE: `User.has_permission`'s map declares `roster_delete` as super_admin
+# ONLY, which these gates do NOT match (they also admit plain admin). That
+# map is currently aspirational — `User.has_permission` has no production
+# caller, the roster handlers gate via `check_user_roles` instead — and the
+# divergence predates this change (the old `[admin]` gate contradicted the
+# map in BOTH directions). Narrowing the gate to super_admin would remove a
+# capability admins have today, so it is left alone deliberately; reconciling
+# the two is a separate product decision.
+# ===========================================================================
+
+
+@pytest.mark.asyncio
+async def test_lock_allows_super_admin(client_super_admin: AsyncClient, completed_roster: PaymentRoster):
+    resp = await client_super_admin.post(f"/api/v1/payment-rosters/{completed_roster.id}/lock")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    _assert_api_response_envelope(body)
+    assert body["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_unlock_allows_super_admin(client_super_admin: AsyncClient, locked_roster_with_item: PaymentRoster):
+    resp = await client_super_admin.post(f"/api/v1/payment-rosters/{locked_roster_with_item.id}/unlock")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    _assert_api_response_envelope(body)
+    assert body["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_exclude_allows_super_admin(client_super_admin: AsyncClient, draft_roster_with_item: PaymentRoster):
+    item_id = draft_roster_with_item._test_item_id
+    resp = await client_super_admin.post(
+        f"/api/v1/payment-rosters/{draft_roster_with_item.id}/items/{item_id}/exclude",
+        json={"reason_category": "returned", "reason_note": "退回"},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    _assert_api_response_envelope(body)
+    assert body["data"]["is_included"] is False
+
+
+@pytest.mark.asyncio
+async def test_delete_allows_super_admin(client_super_admin: AsyncClient, draft_roster: PaymentRoster):
+    resp = await client_super_admin.delete(f"/api/v1/payment-rosters/{draft_roster.id}")
+    assert resp.status_code == 200, resp.text
+    _assert_api_response_envelope(resp.json())
