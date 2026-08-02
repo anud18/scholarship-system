@@ -23,9 +23,10 @@ test.describe("Admin student scholarship history", () => {
     await page.getByRole("tab", { name: "學生領獎紀錄查詢" }).click();
     // Read-only assertion on purpose: flipping a system-wide switch here would
     // leak into every other spec sharing the seeded database.
-    await expect(page.getByText("查詢開放設定")).toBeVisible();
-    const studentSwitch = page.getByLabel("開放學生查詢");
-    const collegeSwitch = page.getByLabel("開放學院查詢");
+    const card = page.getByTestId("history-visibility-card");
+    await expect(card).toBeVisible();
+    const studentSwitch = card.getByLabel("開放學生查詢");
+    const collegeSwitch = card.getByLabel("開放學院查詢");
     await expect(studentSwitch).toBeVisible();
     await expect(collegeSwitch).toBeVisible();
     // Seeded default: both audiences open, and the switches are enabled once
