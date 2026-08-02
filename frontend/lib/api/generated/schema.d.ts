@@ -10872,7 +10872,11 @@ export interface components {
          *
          *     Both fields are optional and applied independently: omitting one leaves
          *     that audience's setting untouched, so the two switches never clobber each
-         *     other. Sending neither is a 400 (nothing to do).
+         *     other. Sending neither is a 422 (nothing to do).
+         *
+         *     The response shape (both switches) is produced by
+         *     ``StudentHistoryVisibility.to_dict()`` in the service layer; endpoints in
+         *     this project return plain ApiResponse dicts, never a ``response_model``.
          */
         StudentHistoryVisibilityUpdate: {
             /** Student Enabled */

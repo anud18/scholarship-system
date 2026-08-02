@@ -119,6 +119,66 @@ async def test_updates_are_audited(db):
 
 
 @pytest.mark.asyncio
+async def test_mangled_value_fails_closed_with_a_warning(db, caplog):
+    """A value that is neither truthy nor a recognised falsy token (e.g. a
+    Fernet ciphertext left by flipping is_sensitive in the generic 系統設定
+    editor) must not close the feature silently."""
+    from app.models.system_setting import ConfigCategory, ConfigDataType, SystemSetting
+
+    db.add(
+        SystemSetting(
+            key=COLLEGE_VISIBILITY_KEY,
+            value="gAAAAABm-not-a-boolean",
+            category=ConfigCategory.features,
+            data_type=ConfigDataType.boolean,
+            is_sensitive=False,
+            is_readonly=False,
+            allow_empty=False,
+        )
+    )
+    await db.commit()
+
+    with caplog.at_level("WARNING"):
+        visibility = await get_student_history_visibility(db)
+
+    assert visibility.college_enabled is False
+    assert visibility.student_enabled is True, "the other switch is unaffected"
+    assert any("Unrecognised student history visibility value" in r.message for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_readonly_row_rejected_before_any_write(db):
+    """A two-switch update must not half-apply: the readonly row is detected
+    up front, so the other switch is left untouched."""
+    from sqlalchemy import select
+
+    from app.models.system_setting import ConfigCategory, ConfigDataType, SystemSetting
+
+    db.add(
+        SystemSetting(
+            key=COLLEGE_VISIBILITY_KEY,
+            value="true",
+            category=ConfigCategory.features,
+            data_type=ConfigDataType.boolean,
+            is_sensitive=False,
+            is_readonly=True,
+            allow_empty=False,
+        )
+    )
+    await db.commit()
+
+    with pytest.raises(ValueError):
+        await set_student_history_visibility(db, user_id=1, student_enabled=False, college_enabled=False)
+
+    assert (
+        await db.execute(select(SystemSetting).where(SystemSetting.key == STUDENT_VISIBILITY_KEY))
+    ).scalar_one_or_none() is None
+    visibility = await get_student_history_visibility(db)
+    assert visibility.student_enabled is True
+    assert visibility.college_enabled is True
+
+
+@pytest.mark.asyncio
 async def test_stored_values_are_boolean_typed(db):
     """Stored as a real boolean setting so the generic 系統設定 editor renders
     and round-trips it correctly."""
@@ -190,6 +250,31 @@ async def test_update_visibility_requires_a_field(client, client_as):
     authed = client_as(client, _mock_user(UserRole.admin))
     response = await authed.put("/api/v1/student-history/visibility", json={})
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_update_visibility_readonly_row_is_a_400(client, client_as, db):
+    """Not an opaque 500 from the catch-all handler."""
+    from app.models.system_setting import ConfigCategory, ConfigDataType, SystemSetting
+
+    db.add(
+        SystemSetting(
+            key=STUDENT_VISIBILITY_KEY,
+            value="true",
+            category=ConfigCategory.features,
+            data_type=ConfigDataType.boolean,
+            is_sensitive=False,
+            is_readonly=True,
+            allow_empty=False,
+        )
+    )
+    await db.commit()
+
+    authed = client_as(client, _mock_user(UserRole.admin))
+    response = await authed.put("/api/v1/student-history/visibility", json={"student_enabled": False})
+    assert response.status_code == 400
+    # The global handler renders HTTPException.detail as ApiResponse.message.
+    assert "唯讀" in response.json()["message"]
 
 
 # ---------------------------------------------------------------------------

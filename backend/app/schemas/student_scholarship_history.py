@@ -144,20 +144,16 @@ class BatchStudentHistoryRequest(BaseModel):
     student_numbers: List[str]
 
 
-class StudentHistoryVisibilityResponse(BaseModel):
-    """Who the admin has opened 領獎紀錄查詢 to. Readable by any logged-in user
-    so the UI can hide an entry point instead of letting it 403."""
-
-    student_enabled: bool = Field(..., description="學生可否查詢自己的領獎紀錄")
-    college_enabled: bool = Field(..., description="學院可否查詢本學院學生的領獎紀錄")
-
-
 class StudentHistoryVisibilityUpdate(BaseModel):
     """Admin toggle body for PUT /student-history/visibility.
 
     Both fields are optional and applied independently: omitting one leaves
     that audience's setting untouched, so the two switches never clobber each
-    other. Sending neither is a 400 (nothing to do).
+    other. Sending neither is a 422 (nothing to do).
+
+    The response shape (both switches) is produced by
+    ``StudentHistoryVisibility.to_dict()`` in the service layer; endpoints in
+    this project return plain ApiResponse dicts, never a ``response_model``.
     """
 
     student_enabled: Optional[bool] = None

@@ -39,6 +39,9 @@ DEFAULT_ENABLED = True
 # Same truthy set ConfigurationService.get_decrypted_value uses, so a value
 # written through the generic 系統設定 editor reads back identically here.
 _TRUTHY_VALUES = frozenset({"true", "1", "yes", "on"})
+# Not the complement of the above — only these read as a deliberate "closed";
+# anything else is a mangled row and gets logged (see _to_bool).
+_FALSY_VALUES = frozenset({"false", "0", "no", "off", ""})
 
 STUDENT_DISABLED_MESSAGE = "管理者已關閉學生查詢領獎紀錄功能"
 COLLEGE_DISABLED_MESSAGE = "管理者已關閉學院查詢學生領獎紀錄功能"
@@ -58,10 +61,22 @@ class StudentHistoryVisibility:
         }
 
 
-def _to_bool(raw: Optional[str]) -> bool:
+def _to_bool(key: str, raw: Optional[str]) -> bool:
     if raw is None:
         return DEFAULT_ENABLED
-    return raw.strip().lower() in _TRUTHY_VALUES
+    normalized = raw.strip().lower()
+    if normalized in _TRUTHY_VALUES:
+        return True
+    if normalized not in _FALSY_VALUES:
+        # Anything else means the row was mangled outside this service — most
+        # plausibly by flipping is_sensitive in the generic 系統設定 editor,
+        # which leaves a Fernet ciphertext in `value`. We still fail closed,
+        # but the feature must not go dark without a diagnosable reason.
+        logger.warning(
+            "Unrecognised student history visibility value; treating the switch as closed",
+            extra={"config_key": key},
+        )
+    return False
 
 
 async def get_student_history_visibility(db: AsyncSession) -> StudentHistoryVisibility:
@@ -72,8 +87,8 @@ async def get_student_history_visibility(db: AsyncSession) -> StudentHistoryVisi
     rows = (await db.execute(stmt)).all()
     values = {key: value for key, value in rows}
     return StudentHistoryVisibility(
-        student_enabled=_to_bool(values.get(STUDENT_VISIBILITY_KEY)),
-        college_enabled=_to_bool(values.get(COLLEGE_VISIBILITY_KEY)),
+        student_enabled=_to_bool(STUDENT_VISIBILITY_KEY, values.get(STUDENT_VISIBILITY_KEY)),
+        college_enabled=_to_bool(COLLEGE_VISIBILITY_KEY, values.get(COLLEGE_VISIBILITY_KEY)),
     )
 
 
@@ -88,12 +103,25 @@ async def set_student_history_visibility(
     ``None`` means "leave this one alone" — the two audiences are decided
     separately, so toggling 學生 must never overwrite a concurrent 學院 change.
     Rows are created on first write (the seed may predate this feature).
+
+    Raises ``ValueError`` (mapped to 400 by the endpoint) when a target row is
+    readonly.
     """
     config_service = ConfigurationService(db)
     updates = (
         (STUDENT_VISIBILITY_KEY, student_enabled, STUDENT_VISIBILITY_DESCRIPTION),
         (COLLEGE_VISIBILITY_KEY, college_enabled, COLLEGE_VISIBILITY_DESCRIPTION),
     )
+
+    # Pre-flight both keys before writing either. set_configuration commits per
+    # key, so a readonly row discovered mid-loop would leave a two-switch update
+    # half applied — with the caller told only that it failed.
+    for key, value, _ in updates:
+        if value is None:
+            continue
+        existing = await config_service.get_configuration(key)
+        if existing is not None and existing.is_readonly:
+            raise ValueError(f"設定 {key} 為唯讀，無法變更")
 
     for key, value, description in updates:
         if value is None:

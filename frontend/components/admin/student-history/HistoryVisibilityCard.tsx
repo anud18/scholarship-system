@@ -65,10 +65,15 @@ export function HistoryVisibilityCard() {
         toast.success(checked ? "已開放查詢" : "已關閉查詢");
       } else {
         toast.error(response.message || "更新開放設定失敗");
+        await mutate();
       }
     } catch (err) {
       logger.error("Failed to update student history visibility", { err });
       toast.error(err instanceof Error ? err.message : "更新開放設定失敗");
+      // Refetch rather than assume nothing changed: the switches are written
+      // one row at a time server-side, so a failure leaves the real state
+      // uncertain.
+      await mutate();
     } finally {
       setPendingAudience(null);
     }

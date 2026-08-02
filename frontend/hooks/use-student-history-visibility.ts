@@ -7,13 +7,24 @@ import type { StudentHistoryVisibility } from "@/lib/api/modules/student-history
 const VISIBILITY_KEY = "/student-history/visibility";
 
 /**
- * Closed until proven open: while the request is in flight (or if it fails) no
- * gated entry point renders, so a 領獎紀錄 tab/card can never flash into view
- * for an audience the admin has shut out.
+ * Closed while the request is in flight, so a 領獎紀錄 tab/card never flashes
+ * into view for an audience the admin has shut out.
  */
 const CLOSED: StudentHistoryVisibility = {
   student_enabled: false,
   college_enabled: false,
+};
+
+/**
+ * ...but OPEN if the request itself failed. This mirrors the backend, which
+ * reads an unknown setting as open, and keeps a network blip from silently
+ * removing a college's tab. The entry point only leads to endpoints that
+ * enforce the same switches server-side, so a wrong guess here costs an error
+ * message, never access.
+ */
+const OPEN_ON_ERROR: StudentHistoryVisibility = {
+  student_enabled: true,
+  college_enabled: true,
 };
 
 /**
@@ -35,7 +46,9 @@ export function useStudentHistoryVisibility(isEnabled: boolean = true) {
   );
 
   return {
-    visibility: data ?? CLOSED,
+    // SWR keeps the last good `data` across a failed revalidation, so the
+    // error fallback only applies when nothing was ever fetched.
+    visibility: data ?? (error ? OPEN_ON_ERROR : CLOSED),
     /** True only once a real answer has arrived. */
     isLoaded: !!data,
     isLoading,

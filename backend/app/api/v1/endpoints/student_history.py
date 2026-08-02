@@ -243,12 +243,17 @@ async def update_visibility(
 ):
     """Admin-only. Each audience is decided separately — an omitted field keeps
     its current value rather than being reset."""
-    visibility = await set_student_history_visibility(
-        db,
-        user_id=current_user.id,
-        student_enabled=request.student_enabled,
-        college_enabled=request.college_enabled,
-    )
+    try:
+        visibility = await set_student_history_visibility(
+            db,
+            user_id=current_user.id,
+            student_enabled=request.student_enabled,
+            college_enabled=request.college_enabled,
+        )
+    except ValueError as exc:
+        # Rejected before anything was written (readonly row) — a 400 with the
+        # reason, not an opaque 500 from the catch-all handler.
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return {
         "success": True,
         "message": "Student history visibility updated",
