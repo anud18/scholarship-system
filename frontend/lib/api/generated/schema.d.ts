@@ -6734,6 +6734,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/payment-rosters/{roster_id}/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Regenerate Roster Endpoint
+         * @description 重新生成造冊：依當下的分發名單、學生資料、獎學金規則與配置重建全部明細。
+         *
+         *     不需要人員有異動即可執行——「比對分發名單」(reconcile) 只在名單有差異時
+         *     才有動作可做，本端點則刷新每一筆明細的內容（金額、計畫編號、學籍驗證、
+         *     規則判定、郵局帳號…）並重新匯出 Excel。
+         *
+         *     管理員的人為排除／移除與人工銀行覆核狀態會跨重建保留。已鎖定的造冊不可
+         *     重新生成（400），請先解鎖。
+         */
+        post: operations["regenerate_roster_endpoint_api_v1_payment_rosters__roster_id__regenerate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/roster-schedules": {
         parameters: {
             query?: never;
@@ -10019,6 +10046,17 @@ export interface components {
              * @description Roster code (if roster exists)
              */
             roster_code?: string | null;
+        };
+        /**
+         * RegenerateRosterRequest
+         * @description Body for POST /payment-rosters/{roster_id}/regenerate.
+         */
+        RegenerateRosterRequest: {
+            /**
+             * Student Verification Enabled
+             * @description 本次是否重新驗證學籍（單次覆寫，不會寫回造冊設定）；未提供則沿用造冊原本的設定
+             */
+            student_verification_enabled?: boolean | null;
         };
         /**
          * RemoveLockedItemRequest
@@ -22194,6 +22232,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ReconcileRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    regenerate_roster_endpoint_api_v1_payment_rosters__roster_id__regenerate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roster_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RegenerateRosterRequest"] | null;
             };
         };
         responses: {

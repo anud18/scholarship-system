@@ -864,7 +864,11 @@ export function ManualDistributionPanel({
     }
   };
 
-  const handleGenerateRosters = async () => {
+  /**
+   * 產生造冊。`forceRegenerate` 為 true 時會重建「已存在」的造冊——不需要人員有
+   * 異動也能以最新的分發／學生資料重新生成（已鎖定的造冊仍會被後端擋下）。
+   */
+  const handleGenerateRosters = async (forceRegenerate = false) => {
     if (!scholarshipTypeId || !selectedAcademicYear || !selectedSemester)
       return;
     setIsGeneratingRosters(true);
@@ -877,12 +881,15 @@ export function ManualDistributionPanel({
           academic_year: selectedAcademicYear,
           semester: selectedSemester,
           student_verification_enabled: false,
+          force_regenerate: forceRegenerate,
         });
       if (resp.success && resp.data) {
         setRosterResult(resp.data);
+        // 後端回傳的 message 會誠實交代「已存在未重新產生 / 已鎖定」的份數；
+        // 只印 rosters_created 會讓「0 個」看起來像失敗。
         setSaveMessage({
           type: "success",
-          text: `已產生 ${resp.data.rosters_created} 個造冊`,
+          text: resp.message || `已產生 ${resp.data.rosters_created} 個造冊`,
         });
       } else {
         setSaveMessage({ type: "error", text: resp.message || "造冊產生失敗" });
@@ -1359,12 +1366,49 @@ export function ManualDistributionPanel({
                     <AlertDialogDescription>
                       系統將依據已完成分發的結果，針對每個（子類型 ×
                       配額年度）組合各產生一份造冊。此操作需要分發已完成（已確認分發）。
+                      已存在的造冊會被略過——如需以最新的分發／學生資料重建，請改按「重新生成造冊」。
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>取消</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleGenerateRosters}>
+                    <AlertDialogAction onClick={() => handleGenerateRosters()}>
                       確認產生
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isGeneratingRosters || isLoading}
+                    title="重建已存在的造冊名單（不需人員有異動）"
+                  >
+                    {isGeneratingRosters ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4 mr-1" />
+                    )}
+                    重新生成造冊
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>確認重新生成造冊？</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      系統會依<strong>當下</strong>
+                      的分發名單與學生資料，重建每個（子類型 ×
+                      配額年度）組合的造冊名單——即使人員沒有異動也可以執行，並重新匯出
+                      Excel。您先前的人為排除／移除會保留；已鎖定的造冊不會被重建，需先解鎖。
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>取消</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => handleGenerateRosters(true)}
+                    >
+                      確認重新生成
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>

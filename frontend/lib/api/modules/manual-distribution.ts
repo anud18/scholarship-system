@@ -372,6 +372,12 @@ export interface GenerateRostersRequest {
 export interface GenerateRostersResult {
   rosters_created: number;
   rosters: RosterSummary[];
+  /** 已存在、未重新產生（force_regenerate=false 時）的造冊 */
+  rosters_skipped?: number;
+  skipped_rosters?: RosterSummary[];
+  /** 已鎖定、force_regenerate 也無法重建的造冊 */
+  rosters_locked?: number;
+  locked_rosters?: RosterSummary[];
 }
 
 export interface DistributionSummaryStudent {

@@ -14,8 +14,11 @@
  *    false (conservative — don't overwrite existing)
  *  - Defaults applied via `??` so explicit false/false-y values
  *    pass through correctly
+ *  - regenerateRoster targets the roster-id-scoped path (a
+ *    period_label-keyed rebuild would hit the wrong roster when
+ *    one period holds several sub_type × 配額年度 rosters)
  *
- * 11 cases.
+ * 13 cases.
  */
 
 import { createPaymentRostersApi } from "../payment-rosters";
@@ -251,6 +254,38 @@ describe("reconcileRoster", () => {
       }
     );
     expect(res.success).toBe(true);
+  });
+});
+
+describe("regenerateRoster", () => {
+  it("POSTs to the roster-id-scoped regenerate path", async () => {
+    mockedRaw.POST.mockResolvedValueOnce(
+      _ok({ roster_id: 7, rebuilt_items: 3, preserved_exclusions: 1 })
+    );
+    const api = createPaymentRostersApi();
+
+    const res = await api.regenerateRoster(7);
+
+    expect(mockedRaw.POST).toHaveBeenCalledWith(
+      "/api/v1/payment-rosters/{roster_id}/regenerate",
+      {
+        params: { path: { roster_id: 7 } },
+        body: { student_verification_enabled: null },
+      }
+    );
+    expect(res.success).toBe(true);
+    expect(res.data?.preserved_exclusions).toBe(1);
+  });
+
+  it("forwards the 學籍驗證 override when supplied", async () => {
+    mockedRaw.POST.mockResolvedValueOnce(_ok({ roster_id: 7 }));
+    const api = createPaymentRostersApi();
+
+    await api.regenerateRoster(7, { student_verification_enabled: true });
+
+    expect(mockedRaw.POST.mock.calls[0][1].body).toEqual({
+      student_verification_enabled: true,
+    });
   });
 });
 
