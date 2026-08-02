@@ -1682,7 +1682,7 @@ export function ManualDistributionPanel({
                     <tr>
                       <td
                         colSpan={14 + subTypeCols.length}
-                        className="px-4 py-10 text-center text-slate-500"
+                        className="px-4 py-10 border border-slate-200 text-center text-slate-500"
                       >
                         {students.length === 0
                           ? "尚無已確認排名的學生資料"
@@ -1704,7 +1704,7 @@ export function ManualDistributionPanel({
                           >
                             <td
                               colSpan={14 + subTypeCols.length}
-                              className="px-4 py-1.5 text-xs font-bold text-slate-600 border-y border-slate-300"
+                              className="px-4 py-1.5 text-xs font-bold text-slate-600 border border-slate-300"
                             >
                               {/* Left-aligned next to the college name: the row
                                   spans 14+N columns, so a right-aligned button
@@ -1784,7 +1784,7 @@ export function ManualDistributionPanel({
                             return (
                               <tr
                                 key={student.ranking_item_id}
-                                className={`border-b border-slate-100 transition-colors ${
+                                className={`transition-colors ${
                                   cancelStatus === "revoked"
                                     ? "bg-red-50/60 hover:bg-red-50"
                                     : cancelStatus === "suspended"
@@ -1794,14 +1794,14 @@ export function ManualDistributionPanel({
                                         : "hover:bg-slate-50"
                                 }`}
                               >
-                                <td className="px-1.5 py-1.5 border-r border-slate-100 text-center font-bold text-slate-700 text-[11px]">
+                                <td className="px-1.5 py-1.5 border border-slate-200 text-center font-bold text-slate-700 text-[11px]">
                                   {student.college_rejected ? (
                                     <span className="text-red-600">N</span>
                                   ) : (
                                     student.rank_position
                                   )}
                                 </td>
-                                <td className="px-1.5 py-1.5 border-r border-slate-100 leading-snug text-[10px]">
+                                <td className="px-1.5 py-1.5 border border-slate-200 leading-snug text-[10px]">
                                   {student.applied_sub_types.length > 0 ? (
                                     student.applied_sub_types.map((t, i) => {
                                       const displayName = getSubTypeShortName(
@@ -1823,7 +1823,7 @@ export function ManualDistributionPanel({
                                     </span>
                                   )}
                                 </td>
-                                <td className="px-1.5 py-1.5 border-r border-slate-100 leading-snug">
+                                <td className="px-1.5 py-1.5 border border-slate-200 leading-snug">
                                   {(student.professor_review_items || [])
                                     .length > 0 ||
                                   (student.requires_professor_recommendation &&
@@ -1863,7 +1863,7 @@ export function ManualDistributionPanel({
                                     </span>
                                   )}
                                 </td>
-                                <td className="px-1.5 py-1.5 border-r border-slate-100 leading-snug">
+                                <td className="px-1.5 py-1.5 border border-slate-200 leading-snug">
                                   <div className="flex flex-col gap-0.5">
                                     {/* The ranking IS the college's primary
                                         verdict: rows only exist once the
@@ -1985,7 +1985,7 @@ export function ManualDistributionPanel({
                                   return (
                                     <td
                                       key={col.key}
-                                      className={`px-0.5 py-1.5 border-r border-slate-100 text-center ${
+                                      className={`px-0.5 py-1.5 border border-slate-200 text-center ${
                                         isCancelled
                                           ? "opacity-40"
                                           : isRejected
@@ -2031,39 +2031,39 @@ export function ManualDistributionPanel({
                                     </td>
                                   );
                                 })}
-                                <td className="px-3 py-2.5 border-r border-slate-100 whitespace-nowrap">
+                                <td className="px-3 py-2.5 border border-slate-200 whitespace-nowrap">
                                   {resolveCollegeName(
                                     collegeNames,
                                     student.college_code,
                                     student.college_name
                                   )}
                                 </td>
-                                <td className="px-3 py-2.5 border-r border-slate-100 whitespace-nowrap">
+                                <td className="px-3 py-2.5 border border-slate-200 whitespace-nowrap">
                                   {student.department_name}
                                 </td>
-                                <td className="px-3 py-2.5 border-r border-slate-100 text-center whitespace-nowrap">
+                                <td className="px-3 py-2.5 border border-slate-200 text-center whitespace-nowrap">
                                   {student.term_count ?? "-"}
                                 </td>
-                                <td className="px-3 py-2.5 border-r border-slate-100 text-center whitespace-nowrap">
+                                <td className="px-3 py-2.5 border border-slate-200 text-center whitespace-nowrap">
                                   {/* 已領月份數 = 匯入 + 系統. The 匯 marker means an
                                       imported 國科會 baseline contributed to the total;
                                       see docs/received-months-calculation.md. */}
                                   <span className={student.received_months_source?.includes("imported") ? "text-blue-600 font-medium" : ""}>{student.received_months ?? "-"}</span>
                                   {student.received_months_source?.includes("imported") && <span className="ml-0.5 text-[9px] text-blue-400" title="含匯入的國科會已領月份數">匯</span>}
                                 </td>
-                                <td className="px-3 py-2.5 border-r border-slate-100 font-medium whitespace-nowrap">
+                                <td className="px-3 py-2.5 border border-slate-200 font-medium whitespace-nowrap">
                                   {student.student_name}
                                 </td>
-                                <td className="px-3 py-2.5 border-r border-slate-100 text-slate-500 whitespace-nowrap">
+                                <td className="px-3 py-2.5 border border-slate-200 text-slate-500 whitespace-nowrap">
                                   {student.nationality}
                                 </td>
-                                <td className="px-3 py-2.5 border-r border-slate-100 text-center tabular-nums whitespace-nowrap">
+                                <td className="px-3 py-2.5 border border-slate-200 text-center tabular-nums whitespace-nowrap">
                                   {student.enrollment_date}
                                 </td>
-                                <td className="px-3 py-2.5 border-r border-slate-100 font-mono text-xs whitespace-nowrap">
+                                <td className="px-3 py-2.5 border border-slate-200 font-mono text-xs whitespace-nowrap">
                                   {student.student_id}
                                 </td>
-                                <td className="px-3 py-2.5 text-xs font-semibold whitespace-nowrap">
+                                <td className="px-3 py-2.5 border border-slate-200 text-xs font-semibold whitespace-nowrap">
                                   {student.is_renewal ? (
                                     <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-300">
                                       {student.renewal_year || ""} 續領
@@ -2110,7 +2110,7 @@ export function ManualDistributionPanel({
                                     </div>
                                   )}
                                 </td>
-                                <td className="px-1.5 py-1.5 border-r border-slate-100 text-center">
+                                <td className="px-1.5 py-1.5 border border-slate-200 text-center">
                                   {/* Rendered for EVERY student, allocated or
                                       not — a 休學/退學/畢業 student must be
                                       markable before 確認分發 so the round
