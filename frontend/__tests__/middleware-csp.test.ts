@@ -10,6 +10,7 @@
  * clickjacking protections were not loosened in the process.
  */
 import { middleware } from "@/middleware";
+import { SONNER_EMPTY_STYLE_HASH, SONNER_STYLE_HASH } from "@/lib/security-headers";
 
 // The middleware only reads request.headers and request.nextUrl.hostname, so a
 // minimal stand-in is enough (NextResponse is the real one from next/server).
@@ -55,6 +56,63 @@ describe("middleware Content-Security-Policy", () => {
     expect(csp).toContain("frame-ancestors 'none'");
     expect(csp).toContain("object-src 'none'");
     expect(res.headers.get("X-Frame-Options")).toBe("DENY");
+  });
+
+  // ---------------------------------------------------------------------------
+  // Issue #1273 (ZAP 10055 "CSP: style-src unsafe-inline", Medium).
+  // `style-src 'self' 'unsafe-inline'` was commit bc2019f0's blunt fix for
+  // shadcn/ui. The narrow form keeps `'unsafe-inline'` for style ATTRIBUTES only
+  // (Radix/floating-ui positioning) while ELEMENT styles stay nonce-gated.
+  // `toContain` would not catch a regression that appends ' unsafe-inline' back
+  // onto style-src, so assert on the PARSED directive.
+  // ---------------------------------------------------------------------------
+
+  function directiveOf(csp: string, name: string): string {
+    return csp.split("; ").find((d) => d === name || d.startsWith(`${name} `)) ?? "";
+  }
+
+  it("prod style-src is nonce-gated with NO unsafe-inline", () => {
+    setNodeEnv("production");
+    const res = middleware(mockRequest("https://ss.test.nycu.edu.tw/student/apply"));
+    const csp = res.headers.get("Content-Security-Policy") ?? "";
+    const nonce = res.headers.get("X-CSP-Nonce");
+
+    expect(directiveOf(csp, "style-src")).toBe(
+      `style-src 'self' 'nonce-${nonce}' ${SONNER_STYLE_HASH} ${SONNER_EMPTY_STYLE_HASH}`,
+    );
+    // the regression this test exists for
+    expect(directiveOf(csp, "style-src")).not.toContain("unsafe-inline");
+    // and no unsafe-* survives anywhere in the production policy
+    expect(csp).not.toContain("'unsafe-eval'");
+  });
+
+  it("prod keeps style-src-attr 'unsafe-inline' so Radix inline positioning still works", () => {
+    setNodeEnv("production");
+    const res = middleware(mockRequest("https://ss.test.nycu.edu.tw/student/apply"));
+    const csp = res.headers.get("Content-Security-Policy") ?? "";
+    // Dropping this re-breaks every Popover/Dropdown/Dialog (bc2019f0's symptom).
+    expect(directiveOf(csp, "style-src-attr")).toBe("style-src-attr 'unsafe-inline'");
+  });
+
+  it("the framable-preview branch does not fork a stale style-src", () => {
+    setNodeEnv("production");
+    const res = middleware(mockRequest("https://ss.test.nycu.edu.tw/api/v1/preview?fileId=1&type=pdf"));
+    const csp = res.headers.get("Content-Security-Policy") ?? "";
+    const nonce = res.headers.get("X-CSP-Nonce");
+    expect(directiveOf(csp, "style-src")).toBe(
+      `style-src 'self' 'nonce-${nonce}' ${SONNER_STYLE_HASH} ${SONNER_EMPTY_STYLE_HASH}`,
+    );
+    expect(directiveOf(csp, "style-src-attr")).toBe("style-src-attr 'unsafe-inline'");
+  });
+
+  it("dev style-src stays relaxed (React Fast Refresh injects unnonced styles)", () => {
+    setNodeEnv("development");
+    const csp = middleware(mockRequest("http://localhost:3000/student/apply")).headers.get(
+      "Content-Security-Policy",
+    ) ?? "";
+    // Deliberate dev/prod split: nonce-gating styles locally buys nothing and
+    // fights HMR. The prod branch is the one under test above.
+    expect(directiveOf(csp, "style-src")).toBe("style-src 'self' 'unsafe-inline'");
   });
 
   it("emits a per-request nonce and exposes it for nginx", () => {

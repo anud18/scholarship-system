@@ -113,3 +113,30 @@ export const CROSS_ORIGIN_OPENER_POLICY = "same-origin-allow-popups";
  * uses no SharedArrayBuffer and never needs `crossOriginIsolated`.
  */
 export const CROSS_ORIGIN_RESOURCE_POLICY = "same-origin";
+
+/**
+ * CSP hashes for the two `<style>` elements sonner (the `<Toaster />` in
+ * app/layout.tsx) injects into `<head>` at module-import time. Issue #1273.
+ *
+ * WHY THIS EXISTS: the production `style-src` is nonce-gated (no
+ * `'unsafe-inline'`). sonner 1.7.4 injects its stylesheet imperatively —
+ *
+ *   let a = document.createElement("style");
+ *   t.appendChild(a);                        // (1) EMPTY element -> hash of ""
+ *   a.appendChild(document.createTextNode(n)) // (2) fills it -> hash of the CSS
+ *
+ * — with no nonce, no element id, and no opt-out, so a nonce cannot reach it and
+ * both steps are separately hash-checked by the browser. Without these two
+ * hashes every page logs two `style-src-elem` violations and ALL toast styling
+ * is dropped (unstyled toasts, verified in a production build).
+ *
+ * WHY NOT UPGRADE: sonner 2.0.7 (latest as of 2026-08-03) has no `nonce`
+ * support either — `grep -c nonce dist/index.mjs` is 0 in both versions.
+ *
+ * DRIFT GUARD: `__tests__/csp-sonner-hash.test.ts` recomputes the CSS hash from
+ * the INSTALLED sonner bundle and fails if it differs from the constant below.
+ * A sonner upgrade therefore breaks CI loudly instead of silently un-styling
+ * every toast in production. When that test fails, copy the hash it prints here.
+ */
+export const SONNER_EMPTY_STYLE_HASH = "'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='";
+export const SONNER_STYLE_HASH = "'sha256-Od9mHMH7x2G6QuoV3hsPkDCwIyqbg2DX3F5nLeCYQBc='";
