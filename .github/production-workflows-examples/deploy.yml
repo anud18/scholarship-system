@@ -245,9 +245,34 @@ jobs:
           # ~/scholarship-production/nginx/ssl/prod by the operator must
           # survive, since the repo ships nginx configs but no keys.
           if [ -d nginx ]; then cp -r nginx ~/scholarship-production/; fi
+          # Everything below is copied as the runner user and therefore owned by
+          # it, so a plain rm is enough to replace it. sudo -n is only a fallback
+          # for hosts that ran an earlier, broken version of this workflow and
+          # were left with root-owned leftovers; -n so a VM WITHOUT passwordless
+          # sudo fails immediately with the message below instead of blocking on
+          # a password prompt no one can answer.
+          replace_dir() {
+            rm -rf "$HOME/scholarship-production/$1" 2>/dev/null && return 0
+            sudo -n rm -rf "$HOME/scholarship-production/$1" 2>/dev/null && return 0
+            echo "::error::Cannot replace ~/scholarship-production/$1 — it is owned by root"
+            echo "::error::from an earlier deploy and this runner has no passwordless sudo."
+            echo "::error::Clear it once on the AP VM: sudo rm -rf ~/scholarship-production/$1"
+            return 1
+          }
           if [ -d monitoring ]; then
-            sudo rm -rf ~/scholarship-production/monitoring
+            replace_dir monitoring
             cp -r monitoring ~/scholarship-production/
+          fi
+          # scripts/logrotate.conf is bind-mounted as the logrotate service's
+          # config. This copy was missing, so Docker materialised the mount
+          # source as a root-owned DIRECTORY and logrotate rotated nothing
+          # ("Handling 0 logs", exit 0) while the container stayed Up — the
+          # nginx access log grew unbounded with no signal anything was wrong.
+          # No chown here: logrotate ignores configs it does not own, so the
+          # container makes its own root-owned copy (docker-compose.prod.yml).
+          if [ -d scripts ]; then
+            replace_dir scripts
+            cp -r scripts ~/scholarship-production/
           fi
 
       # Two supported ways to configure the stack, chosen by the ENV_FILE
@@ -442,6 +467,21 @@ jobs:
           # --env-file is the single source of interpolation values; TAG and
           # IMAGE_OWNER come from the job env and intentionally take precedence.
           docker compose --env-file "${ENV_FILE}" down || true
+
+          # scholarship_prod_network is declared external so it keeps a stable,
+          # unprefixed name the monitoring stack can join — compose never
+          # creates an external network, so it has to exist before `up`.
+          #
+          # Order matters: this runs AFTER `down`. Revisions before the external
+          # switch declared the network inline, so it exists under the compose
+          # project prefix holding this very subnet, and creating the new one
+          # first fails with "Pool overlaps with other one on this address
+          # space". `down` detaches the containers; removing the legacy network
+          # then frees the address space. Both lines are no-ops once migrated.
+          docker network rm scholarship-production_scholarship_prod_network 2>/dev/null || true
+          docker network inspect scholarship_prod_network >/dev/null 2>&1 || \
+            docker network create --subnet 172.24.0.0/16 scholarship_prod_network
+
           docker compose --env-file "${ENV_FILE}" up -d
 
       - name: Validate and reload nginx config
