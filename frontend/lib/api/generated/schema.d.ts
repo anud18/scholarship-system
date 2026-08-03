@@ -9128,12 +9128,6 @@ export interface components {
              * @description Optional approval notes
              */
             comments?: string | null;
-            /**
-             * Send Notifications
-             * @description Whether to notify applicants
-             * @default true
-             */
-            send_notifications: boolean;
         };
         /**
          * BulkRuleOperation

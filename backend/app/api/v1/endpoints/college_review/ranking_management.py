@@ -19,6 +19,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.college_mappings import get_college_name
 from app.core.exceptions import AuthorizationError, NotFoundError
 from app.core.security import require_college, require_scholarship_manager
 from app.db.deps import get_db
@@ -26,7 +27,7 @@ from app.models.audit_log import AuditAction, AuditLog
 from app.models.college_review import CollegeRanking, CollegeRankingItem
 from app.models.enums import Semester
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
-from app.models.student import Department
+from app.models.student import Academy, Department
 from app.models.user import User, UserRole
 from app.schemas.college_review import RankingImportItem, RankingOrderUpdate, RankingUpdate
 from app.schemas.response import ApiResponse
@@ -41,6 +42,7 @@ from app.services.college_review_service import (
     RankingModificationError,
     RankingNotFoundError,
 )
+from app.services.email_automation_service import email_automation_service
 from app.services.review_service import ReviewService
 from app.utils.application_helpers import get_college_code_from_data
 from app.services.supplementary_import_service import SupplementaryImportService
@@ -749,6 +751,49 @@ async def update_ranking_order(
         ) from e
 
 
+async def _resolve_college_name(db: AsyncSession, college_code: Optional[str]) -> str:
+    """Resolve a college code to its display name, academies table first.
+
+    The static COLLEGE_MAPPINGS table lagged the real academy names for a long
+    time, so the DB is the authority and the static map is only a fallback.
+    """
+    if not college_code:
+        return ""
+
+    result = await db.execute(select(Academy.name).where(Academy.code == college_code))
+    name = result.scalar_one_or_none()
+    if name:
+        return name
+
+    return get_college_name(college_code) or college_code
+
+
+async def _notify_college_ranking_submitted(db: AsyncSession, ranking: CollegeRanking, finalizer: User) -> None:
+    """Emit the college_review_submitted trigger for a just-finalized ranking."""
+    scholarship_name = ""
+    if ranking.scholarship_type_id:
+        result = await db.execute(select(ScholarshipType.name).where(ScholarshipType.id == ranking.scholarship_type_id))
+        scholarship_name = result.scalar_one_or_none() or ""
+
+    await email_automation_service.trigger_college_ranking_submitted(
+        db=db,
+        ranking_data={
+            "ranking_id": ranking.id,
+            "college_code": ranking.college_code,
+            "college_name": await _resolve_college_name(db, ranking.college_code),
+            "ranking_name": ranking.ranking_name or f"排名 #{ranking.id}",
+            "scholarship_type": scholarship_name,
+            "scholarship_type_id": ranking.scholarship_type_id,
+            "sub_type_code": ranking.sub_type_code or "",
+            "academic_year": str(ranking.academic_year or ""),
+            "semester": normalize_semester_value(ranking.semester) or "全學年",
+            "total_applications": str(ranking.total_applications or 0),
+            "finalized_by": finalizer.name or finalizer.email or "",
+            "finalized_at": (ranking.finalized_at.strftime("%Y-%m-%d %H:%M") if ranking.finalized_at else ""),
+        },
+    )
+
+
 @router.post("/rankings/{ranking_id}/finalize")
 async def finalize_ranking(
     ranking_id: int,
@@ -808,6 +853,13 @@ async def finalize_ranking(
         )
         db.add(audit_log)
         await db.commit()
+
+        # Notify the owning college that its ranking has been sent. Wrapped so a
+        # mail failure can never turn a successful finalize into a 500.
+        try:
+            await _notify_college_ranking_submitted(db, ranking, current_user)
+        except Exception:
+            logger.exception("Failed to trigger college ranking submitted email for ranking %s", ranking.id)
 
         return ApiResponse(
             success=True,

@@ -13,11 +13,11 @@
  *   stuphd001 (student) → POST /applications?is_draft=false
  *                          → DB applications.status = 'submitted'
  *   admin               → POST /admin/applications/bulk-approve
- *                          { application_ids: [appDbId], send_notifications: false }
+ *                          { application_ids: [appDbId] }
  *                          → HTTP 200, data.successful_approvals.length = 1
  *                          → DB applications.status = 'approved'
  *   admin               → POST /admin/applications/bulk-approve  (second call)
- *                          { application_ids: [appDbId], send_notifications: false }
+ *                          { application_ids: [appDbId] }
  *                          → HTTP 200 (bulk-approve never returns 4xx for individual failures)
  *                          → data.failed_approvals contains the application
  *                            (status 'approved' is not in allowed set)
@@ -135,7 +135,8 @@ test.describe("Admin bulk-approves a submitted application", () => {
     // 2. Admin bulk-approves the application.
     //    POST /admin/applications/bulk-approve requires require_admin.
     //    The service checks status ∈ {submitted, under_review} before approving.
-    //    send_notifications=false avoids triggering email side-effects in test.
+    //    Bulk approve/reject no longer emails the student at all — the only
+    //    student mail is submission confirmation + the 3-day draft reminder.
     const adminLogin = await loginAs(browser, "admin");
     pushTrace(runState, adminLogin.traceId);
 
@@ -145,12 +146,9 @@ test.describe("Admin bulk-approves a submitted application", () => {
         total_requested: number;
         successful_approvals: Array<{ application_id: number; app_id: string }>;
         failed_approvals: Array<{ application_id: number; reason: string }>;
-        notifications_sent: number;
-        notifications_failed: number;
       };
     }>(adminLogin.token, "POST", "/admin/applications/bulk-approve", {
       application_ids: [appDbId],
-      send_notifications: false,
     });
     pushTrace(runState, bulkApproveRes.traceId);
     expect(
@@ -182,7 +180,6 @@ test.describe("Admin bulk-approves a submitted application", () => {
       };
     }>(adminLogin.token, "POST", "/admin/applications/bulk-approve", {
       application_ids: [appDbId],
-      send_notifications: false,
     });
     pushTrace(runState, secondBulkRes.traceId);
     expect(

@@ -22,6 +22,7 @@ const VALID_TEMPLATES: EmailTemplate[] = [
   'application-submitted',
   'professor-review-request',
   'college-review-request',
+  'college-ranking-submitted',
   'deadline-reminder',
   'document-request',
   'result-notification',

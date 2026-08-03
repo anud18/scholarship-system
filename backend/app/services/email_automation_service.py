@@ -413,6 +413,7 @@ class EmailAutomationService:
             "whitelist_notification": EmailCategory.application_whitelist,
             "deadline_reminder_draft": EmailCategory.application_student,
             "college_review_notification": EmailCategory.review_college,
+            "college_ranking_submitted": EmailCategory.review_college,
             "supplement_request": EmailCategory.supplement_student,
             "result_notification_student": EmailCategory.result_student,
             "result_notification_professor": EmailCategory.result_professor,
@@ -428,6 +429,7 @@ class EmailAutomationService:
             "application_submitted_student": "application-submitted",
             "professor_review_notification": "professor-review-request",
             "college_review_notification": "college-review-request",
+            "college_ranking_submitted": "college-ranking-submitted",
             "application_deadline_reminder": "deadline-reminder",
             "document_request_notification": "document-request",
             "result_notification_student": "result-notification",
@@ -495,107 +497,42 @@ class EmailAutomationService:
         await self.process_trigger(db, "application_submitted", context)
         logger.info(f"✓ Email automation trigger completed for application {application_id}")
 
-    async def trigger_professor_review_submitted(
-        self, db: AsyncSession, application_id: int, review_data: Dict[str, Any]
-    ):
-        """Trigger emails when professor submits review"""
+    async def trigger_college_ranking_submitted(self, db: AsyncSession, ranking_data: Dict[str, Any]):
+        """Trigger emails when a college submits (finalizes) its ranking.
+
+        Unlike the other triggers this one is ranking-scoped, not
+        application-scoped: one mail per finalized ranking, addressed to the
+        reviewers of the college that owns it. ``college_code`` is therefore the
+        key the rule's condition_query binds against — it is passed through even
+        when None so that a global (admin) ranking resolves to no recipients
+        rather than raising on an unknown placeholder.
+        """
         from app.core.config import settings
 
-        scholarship_type_value = review_data.get("scholarship_type", "")
+        scholarship_type_value = ranking_data.get("scholarship_type", "")
         context = {
-            "application_id": application_id,
-            "app_id": review_data.get("app_id", ""),
-            "student_name": review_data.get("student_name", ""),
-            "professor_name": review_data.get("professor_name", ""),
-            "professor_email": review_data.get("professor_email", ""),
+            "ranking_id": ranking_data.get("ranking_id"),
+            "college_code": ranking_data.get("college_code"),
+            "college_name": ranking_data.get("college_name", ""),
+            "ranking_name": ranking_data.get("ranking_name", ""),
             "scholarship_type": scholarship_type_value,
-            "scholarship_name": scholarship_type_value,  # Alias for backward compatibility with templates
-            "scholarship_type_id": review_data.get("scholarship_type_id"),
-            "review_result": review_data.get("review_result", ""),
-            "review_date": review_data.get("review_date", datetime.now().strftime("%Y-%m-%d")),
-            "professor_recommendation": review_data.get("professor_recommendation", ""),
-            "college_name": review_data.get("college_name", ""),
-            "review_deadline": review_data.get("review_deadline", ""),
+            "scholarship_name": scholarship_type_value,  # Alias for templates
+            "scholarship_type_id": ranking_data.get("scholarship_type_id"),
+            "sub_type_code": ranking_data.get("sub_type_code", ""),
+            "academic_year": ranking_data.get("academic_year", ""),
+            "semester": ranking_data.get("semester", ""),
+            "total_applications": ranking_data.get("total_applications", ""),
+            "finalized_by": ranking_data.get("finalized_by", ""),
+            "finalized_at": ranking_data.get("finalized_at", datetime.now().strftime("%Y-%m-%d %H:%M")),
             "system_url": settings.frontend_url,
         }
 
-        await self.process_trigger(db, "professor_review_submitted", context)
-
-    async def trigger_final_result_decided(self, db: AsyncSession, application_id: int, result_data: Dict[str, Any]):
-        """Trigger emails when final result is decided"""
-        from app.core.config import settings
-
-        scholarship_type_value = result_data.get("scholarship_type", "")
-        context = {
-            "application_id": application_id,
-            "app_id": result_data.get("app_id", ""),
-            "student_name": result_data.get("student_name", ""),
-            "student_email": result_data.get("student_email", ""),
-            "professor_name": result_data.get("professor_name", ""),
-            "professor_email": result_data.get("professor_email", ""),
-            "college_name": result_data.get("college_name", ""),
-            "scholarship_type": scholarship_type_value,
-            "scholarship_name": scholarship_type_value,  # Alias for backward compatibility with templates
-            "scholarship_type_id": result_data.get("scholarship_type_id"),
-            "result_status": result_data.get("result_status", ""),
-            "approved_amount": result_data.get("approved_amount", ""),
-            "result_message": result_data.get("result_message", ""),
-            "next_steps": result_data.get("next_steps", ""),
-            "system_url": settings.frontend_url,
-        }
-
-        await self.process_trigger(db, "final_result_decided", context)
-
-    async def trigger_college_review_submitted(
-        self, db: AsyncSession, application_id: int, review_data: Dict[str, Any]
-    ):
-        """Trigger emails when college submits review"""
-        from app.core.config import settings
-
-        scholarship_type_value = review_data.get("scholarship_type", "")
-        context = {
-            "application_id": application_id,
-            "app_id": review_data.get("app_id", ""),
-            "student_name": review_data.get("student_name", ""),
-            "student_email": review_data.get("student_email", ""),
-            "college_name": review_data.get("college_name", ""),
-            # Note: college_ranking_score removed - use final_rank instead
-            "college_final_rank": review_data.get("final_rank"),
-            "college_recommendation": review_data.get("recommendation", ""),
-            "college_comments": review_data.get("comments", ""),
-            "reviewer_name": review_data.get("reviewer_name", ""),
-            "scholarship_type": scholarship_type_value,
-            "scholarship_name": scholarship_type_value,  # Alias for backward compatibility with templates
-            "scholarship_type_id": review_data.get("scholarship_type_id"),
-            "review_date": review_data.get("review_date", datetime.now().strftime("%Y-%m-%d")),
-            "system_url": settings.frontend_url,
-        }
-
+        logger.info(
+            "🚀 EMAIL AUTOMATION TRIGGERED: college_review_submitted (ranking %s, college %s)",
+            context["ranking_id"],
+            context["college_code"],
+        )
         await self.process_trigger(db, "college_review_submitted", context)
-
-    async def trigger_supplement_requested(self, db: AsyncSession, application_id: int, request_data: Dict[str, Any]):
-        """Trigger emails when supplement documents are requested"""
-        from app.core.config import settings
-
-        scholarship_type_value = request_data.get("scholarship_type", "")
-        context = {
-            "application_id": application_id,
-            "app_id": request_data.get("app_id", ""),
-            "student_name": request_data.get("student_name", ""),
-            "student_email": request_data.get("student_email", ""),
-            "requested_documents": ", ".join(request_data.get("requested_documents", [])),
-            "reason": request_data.get("reason", ""),
-            "notes": request_data.get("notes", ""),
-            "requester_name": request_data.get("requester_name", ""),
-            "deadline": request_data.get("deadline", ""),
-            "scholarship_type": scholarship_type_value,
-            "scholarship_name": scholarship_type_value,  # Alias for backward compatibility with templates
-            "scholarship_type_id": request_data.get("scholarship_type_id"),
-            "request_date": request_data.get("request_date", datetime.now().strftime("%Y-%m-%d")),
-            "system_url": settings.frontend_url,
-        }
-
-        await self.process_trigger(db, "supplement_requested", context)
 
     async def trigger_deadline_approaching(self, db: AsyncSession, application_id: int, deadline_data: Dict[str, Any]):
         """Trigger emails when deadline is approaching"""

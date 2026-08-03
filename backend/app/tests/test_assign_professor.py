@@ -118,33 +118,36 @@ async def _seed_app(
 
 @pytest.fixture
 def silence_side_effects(monkeypatch):
-    """Stop EmailService.schedule_email + NotificationService.create_notification
-    from doing real work. The production code wraps both calls in try/except so
-    failures don't bubble — these tests assert the DB write happens regardless.
+    """Stop NotificationService.create_notification from doing real work.
+
+    EmailService.schedule_email is patched too, but only as a tripwire: assignment
+    must NOT send mail any more (professors are mailed on student submission only),
+    so a call here means the removed email path came back.
     """
 
     async def _noop(*args: Any, **kwargs: Any) -> Any:
         return None
 
+    async def _must_not_send(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("assign_professor must not schedule an email")
+
     from app.services.email_service import EmailService
     from app.services.notification_service import NotificationService
 
-    monkeypatch.setattr(EmailService, "schedule_email", _noop)
+    monkeypatch.setattr(EmailService, "schedule_email", _must_not_send)
     monkeypatch.setattr(NotificationService, "create_notification", _noop)
 
 
 @pytest.fixture
 def raise_side_effects(monkeypatch):
-    """Force both collaborators to raise — pins that assign_professor's
+    """Force the notification collaborator to raise — pins that assign_professor's
     try/except boundary keeps the DB write committed."""
 
     async def _boom(*args: Any, **kwargs: Any) -> Any:
         raise RuntimeError("collaborator down — must not bubble")
 
-    from app.services.email_service import EmailService
     from app.services.notification_service import NotificationService
 
-    monkeypatch.setattr(EmailService, "schedule_email", _boom)
     monkeypatch.setattr(NotificationService, "create_notification", _boom)
 
 
@@ -295,9 +298,8 @@ async def test_happy_path_admin_assigns_and_application_updated(db: AsyncSession
 
 @pytest.mark.asyncio
 async def test_collaborator_failures_do_not_block_db_write(db: AsyncSession, raise_side_effects):
-    """If EmailService / NotificationService both raise, the assignment must
-    still be persisted — they're best-effort side effects per the production
-    try/except boundaries.
+    """If NotificationService raises, the assignment must still be persisted —
+    it's a best-effort side effect per the production try/except boundary.
     """
     admin = await _seed_user(db, role=UserRole.admin, name="Admin", nycu_id="a_collab_fail")
     student = await _seed_user(db, role=UserRole.student, name="S", nycu_id="s_collab_fail")
