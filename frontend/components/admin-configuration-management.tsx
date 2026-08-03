@@ -873,8 +873,8 @@ export function AdminConfigurationManagement({
                                     ariaLabel="開放/關閉學院補充匯入"
                                     successOn="已開放補充匯入"
                                     successOff="已關閉補充匯入"
-                                    tooltipOn="學院可於分發後上傳新申請學生 Excel；排名接續於現有名單之後"
-                                    tooltipOff="點擊以開放學院上傳補充申請名單（Excel）"
+                                    tooltipOn="學院可上傳新申請學生 Excel；學生以一般申請身分進入審查與排名流程"
+                                    tooltipOff="點擊以開放學院匯入新的申請學生（Excel）"
                                     onToggle={next =>
                                       api.college.toggleConfigSupplementaryImport(
                                         config.id,
