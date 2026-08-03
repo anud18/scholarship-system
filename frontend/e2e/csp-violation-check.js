@@ -22,6 +22,13 @@ const OUT_DIR = process.argv[4] || "test-results/screenshots";
 
 const violations = [];
 const consoleErrors = [];
+/**
+ * Hard failures raised from inside a `visit()` interaction. `visit` deliberately
+ * swallows interaction errors (a missing button must not abort the sweep), so an
+ * assertion thrown in there would otherwise be downgraded to a log line and the
+ * run would still exit 0. Push here instead; the exit code reads this.
+ */
+const assertionFailures = [];
 
 async function mockSsoLogin(nycuId) {
   const r = await fetch(`${BACKEND}/api/v1/auth/mock-sso/login`, {
@@ -213,7 +220,11 @@ async function visit(page, label, urlPath, interact) {
       return false;
     });
     console.log(`  sonner CSS rules live in document.styleSheets: ${sheetApplied}`);
-    if (!sheetApplied) throw new Error("sonner stylesheet was NOT applied");
+    if (!sheetApplied) {
+      assertionFailures.push(
+        "sonner stylesheet was NOT applied — SONNER_STYLE_HASH is stale (toasts render unstyled)"
+      );
+    }
   });
   await drain("toast");
 
@@ -232,5 +243,7 @@ async function visit(page, label, urlPath, interact) {
 
   const styleViolations = violations.filter((v) => (v.directive || "").startsWith("style-src"));
   console.log(`\nstyle-src violations: ${styleViolations.length}`);
-  process.exit(styleViolations.length > 0 ? 1 : 0);
+  console.log(`assertion failures: ${assertionFailures.length}`);
+  assertionFailures.forEach((f) => console.log(`  FAIL: ${f}`));
+  process.exit(styleViolations.length > 0 || assertionFailures.length > 0 ? 1 : 0);
 })();

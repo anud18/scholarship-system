@@ -69,13 +69,34 @@ describe("CSP nonce wiring", () => {
     expect(styleNonces()).toContain(NONCE);
   });
 
+  it("JsonDiffViewer nonces the stylesheets @emotion/css injects", async () => {
+    // react-diff-viewer-continued styles itself with @emotion/css, whose default
+    // cache carries no nonce — the audit-trail diff would render unstyled in
+    // production. Assert on emotion's own tags (data-emotion), not just any
+    // <style>, so the test cannot pass on some other component's element.
+    const { JsonDiffViewer } = await import("@/components/audit-trail/JsonDiffViewer");
+    render(
+      <CspNonceProvider nonce={NONCE}>
+        <JsonDiffViewer oldValue={{ a: 1 }} newValue={{ a: 2 }} />
+      </CspNonceProvider>
+    );
+    const emotionTags = [...document.querySelectorAll("style[data-emotion]")];
+    expect(emotionTags.length).toBeGreaterThan(0);
+    expect(emotionTags.every((t) => t.getAttribute("nonce") === NONCE)).toBe(true);
+  });
+
   it("renders without a nonce outside the provider (dev CSP path)", () => {
+    // Scope to the styles THIS render adds: emotion leaves its <head> tags
+    // behind after the earlier test (testing-library only unmounts containers).
+    const before = new Set(document.querySelectorAll("style"));
     render(
       <ScrollArea>
         <div>content</div>
       </ScrollArea>
     );
+    const added = [...document.querySelectorAll("style")].filter((s) => !before.has(s));
     // No provider -> undefined nonce -> no crash, no nonce attribute.
-    expect(styleNonces().filter((n) => n === NONCE)).toHaveLength(0);
+    expect(added.length).toBeGreaterThan(0);
+    expect(added.filter((s) => s.getAttribute("nonce") === NONCE)).toHaveLength(0);
   });
 });

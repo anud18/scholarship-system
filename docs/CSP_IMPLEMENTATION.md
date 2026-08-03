@@ -116,6 +116,15 @@ CSP Level 3 separates the two targets, so only the half the UI needs is allowed:
 attribute. Removing that would require replacing Radix's positioning engine, which
 is disproportionate to the risk. Injected `<style>` blocks are blocked by the browser.
 
+**Browser-support caveat**: `style-src-attr` is CSP Level 3 — Chrome/Edge 75+,
+Firefox 74+, Safari 15.4+ (iOS 15.4+, March 2022). A browser that does **not**
+implement it ignores the directive and falls back to `style-src`, which no longer
+carries `'unsafe-inline'`, so every runtime `style="…"` attribute Radix writes is
+blocked and floating content (Popover/Dropdown/Select/Dialog) renders unpositioned.
+This is a deliberate trade: the affected cohort is iOS ≤ 15.3 / Safari ≤ 15.3, which
+NYCU's supported-browser baseline does not cover. Revisit if analytics show real
+traffic from it.
+
 Pinned by `frontend/__tests__/middleware-csp.test.ts` — both that `style-src` carries
 no `'unsafe-inline'` and that `style-src-attr` still does (dropping it re-breaks every
 Popover/Dropdown/Dialog, which is exactly what `bc2019f0` was reacting to).
@@ -132,6 +141,9 @@ the outermost provider in `app/layout.tsx`:
 | `react-remove-scroll` → `react-style-singleton` (used by every Radix scroll-locking primitive: Select, DropdownMenu, Dialog, Popover) | `__webpack_nonce__`, read by the `get-nonce` package — the only hook these packages expose |
 | `Select.Viewport`, `ScrollArea.Viewport` (render their own `<style>` in JSX) | `useCspNonce()` passed as the `nonce` prop in `components/ui/select.tsx` / `scroll-area.tsx` |
 | `sonner` (the `<Toaster />`) | Neither — it has no nonce hook in 1.7.4 *or* 2.0.7, so its stylesheet is allowed by **content hash** (`SONNER_STYLE_HASH` in `lib/security-headers.ts`) |
+| `react-diff-viewer-continued` (audit-trail JSON diff) — its own `@emotion/css` instance | its `nonce` prop, threaded straight into that emotion instance — `components/audit-trail/JsonDiffViewer.tsx` |
+| `Select.Viewport` / `ScrollArea.Viewport` / `ChartStyle` (`components/ui/chart.tsx`) | `nonce` prop from `useCspNonce()` |
+| The 查看源碼 popup in `react-email-template-viewer.tsx` | writes `<style nonce="…">` — an `about:blank` window inherits the opener's CSP |
 
 The `__webpack_nonce__` assignment is wrapped in try/catch on purpose: outside a
 webpack bundle (jest, Turbopack `next dev`) the identifier is undeclared and the
@@ -139,7 +151,17 @@ strict-mode assignment would throw and take down the whole React tree.
 
 Missing any one of these is a **silent visual break** — the browser drops the
 stylesheet and only logs a `style-src-elem` violation. Dev never reproduces it,
-because the dev CSP still carries `'unsafe-inline'`. Guarded by
+because the dev CSP still carries `'unsafe-inline'`.
+
+> **Known gap — no violation reporting.** The policy carries no `report-to` /
+> `report-uri`, so in production the only detection path for a missed injector is
+> a user noticing broken styling. Adding a reporting group (backed by a backend
+> endpoint that just logs) would turn these into diagnosable signals and would
+> allow a `Content-Security-Policy-Report-Only` soak before future tightening.
+> Not done here to keep this change scoped; **when adding a new dependency that
+> injects styles, check it against the table above.**
+
+Guarded by
 `__tests__/csp-nonce-wiring.test.tsx` (prop plumbing) and
 `__tests__/csp-sonner-hash.test.ts` (hash freshness). For an end-to-end check
 against a real production build, run `frontend/e2e/csp-violation-check.js`.
