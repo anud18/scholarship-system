@@ -79,6 +79,7 @@ Content-Security-Policy:
   default-src 'self';
   script-src 'self' 'nonce-{RANDOM}' 'strict-dynamic';
   style-src 'self' 'nonce-{RANDOM}';
+  style-src-attr 'unsafe-inline';                   /* Radix inline positioning — see below */
   img-src 'self' data: blob:;
   font-src 'self';
   connect-src 'self' https://*.nycu.edu.tw;
@@ -92,8 +93,56 @@ Content-Security-Policy:
 **Key Security Features:**
 - **Nonce-based loading**: Unique cryptographic nonce per request
 - **`'strict-dynamic'`**: Allows webpack-bundled scripts without explicit whitelisting
-- **No `'unsafe-*'` directives**: Eliminates inline script/eval risks
+- **No `'unsafe-*'` for scripts**: Eliminates inline script/eval risks
 - **NYCU domain whitelist**: Only allows connections to `*.nycu.edu.tw` (SSO, SIS API)
+
+**Why `style-src` and `style-src-attr` are split (issue #1273)**
+
+The original policy was `style-src 'self' 'nonce-{RANDOM}'`, which commit `bc2019f0`
+widened to `style-src 'self' 'unsafe-inline'` because shadcn/ui broke: Radix +
+floating-ui write inline style **attributes** at runtime (Popover/Dropdown/Dialog
+positioning, animation variables), and a nonce cannot be attached to a `style=`
+attribute. That single keyword also re-permitted injected `<style>` **elements**,
+which nothing in this app needs — and ZAP flags it as Medium (rule 10055).
+
+CSP Level 3 separates the two targets, so only the half the UI needs is allowed:
+
+| Directive | Covers | Policy |
+|---|---|---|
+| `style-src` | `<style>` elements, `<link rel=stylesheet>` | nonce-gated |
+| `style-src-attr` | `style="…"` attributes | `'unsafe-inline'` (Radix requirement) |
+
+**Accepted residual risk**: an HTML-injection point can still set a `style=`
+attribute. Removing that would require replacing Radix's positioning engine, which
+is disproportionate to the risk. Injected `<style>` blocks are blocked by the browser.
+
+Pinned by `frontend/__tests__/middleware-csp.test.ts` — both that `style-src` carries
+no `'unsafe-inline'` and that `style-src-attr` still does (dropping it re-breaks every
+Popover/Dropdown/Dialog, which is exactly what `bc2019f0` was reacting to).
+
+**Getting the nonce to every `<style>` that needs it**
+
+Nonce-gating `style-src` is only half the work: three separate mechanisms inject
+`<style>` elements at runtime, and each takes the nonce from a different place.
+All three are wired in `frontend/components/providers/csp-nonce.tsx`, rendered as
+the outermost provider in `app/layout.tsx`:
+
+| Injector | How it gets the nonce |
+|---|---|
+| `react-remove-scroll` → `react-style-singleton` (used by every Radix scroll-locking primitive: Select, DropdownMenu, Dialog, Popover) | `__webpack_nonce__`, read by the `get-nonce` package — the only hook these packages expose |
+| `Select.Viewport`, `ScrollArea.Viewport` (render their own `<style>` in JSX) | `useCspNonce()` passed as the `nonce` prop in `components/ui/select.tsx` / `scroll-area.tsx` |
+| `sonner` (the `<Toaster />`) | Neither — it has no nonce hook in 1.7.4 *or* 2.0.7, so its stylesheet is allowed by **content hash** (`SONNER_STYLE_HASH` in `lib/security-headers.ts`) |
+
+The `__webpack_nonce__` assignment is wrapped in try/catch on purpose: outside a
+webpack bundle (jest, Turbopack `next dev`) the identifier is undeclared and the
+strict-mode assignment would throw and take down the whole React tree.
+
+Missing any one of these is a **silent visual break** — the browser drops the
+stylesheet and only logs a `style-src-elem` violation. Dev never reproduces it,
+because the dev CSP still carries `'unsafe-inline'`. Guarded by
+`__tests__/csp-nonce-wiring.test.tsx` (prop plumbing) and
+`__tests__/csp-sonner-hash.test.ts` (hash freshness). For an end-to-end check
+against a real production build, run `frontend/e2e/csp-violation-check.js`.
 
 ## Files Modified
 
