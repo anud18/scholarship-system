@@ -213,7 +213,15 @@ services:
       sh -c '
         apk add --no-cache logrotate
         while true; do
-          logrotate /etc/logrotate.conf
+          # logrotate silently ignores any config file it does not own (uid 0)
+          # or that is group/world-writable. The bind-mounted file belongs to
+          # the deploy user on the host, so re-materialise it as a root-owned
+          # copy in here — this container already runs as root — instead of
+          # making the deploy depend on passwordless sudo on the AP VM.
+          cp /etc/logrotate.conf /run/logrotate.conf
+          chown root:root /run/logrotate.conf
+          chmod 644 /run/logrotate.conf
+          logrotate /run/logrotate.conf
           sleep 3600
         done
       '
