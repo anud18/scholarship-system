@@ -894,13 +894,12 @@ async def seed_email_templates(session: AsyncSession) -> None:
     logger.info("Initializing email templates...")
     print("  📧 Initializing email templates...")
 
-    # Check if templates already exist
-    result = await session.execute(select(EmailTemplate))
-    existing_templates = result.scalars().all()
-
-    if existing_templates:
-        print(f"  ✓ Email templates already initialized ({len(existing_templates)} found)")
-        return
+    # Seed per key, NOT "skip if the table has any row". Migrations may legitimately
+    # insert a single template before this runs (alembic upgrade precedes seeding in
+    # scripts/reset_database.sh), and a table-level skip would then silently drop
+    # every other template — including the ones the submission emails depend on.
+    result = await session.execute(select(EmailTemplate.key).where(EmailTemplate.scholarship_type_id.is_(None)))
+    existing_keys = set(result.scalars().all())
 
     # Define default email templates
     default_templates = [
@@ -1057,13 +1056,14 @@ async def seed_email_templates(session: AsyncSession) -> None:
         },
     ]
 
-    for template_data in default_templates:
+    missing = [t for t in default_templates if t["key"] not in existing_keys]
+    for template_data in missing:
         template = EmailTemplate(**template_data)
         session.add(template)
 
     await session.commit()
     logger.info("Email templates initialized successfully!")
-    print(f"  📊 Inserted: {len(default_templates)} email templates")
+    print(f"  📊 Inserted: {len(missing)} email templates ({len(existing_keys)} already present)")
 
 
 async def seed_email_automation_rules(session: AsyncSession) -> None:
@@ -1073,13 +1073,12 @@ async def seed_email_automation_rules(session: AsyncSession) -> None:
     logger.info("Initializing email automation rules...")
     print("  🤖 Initializing email automation rules...")
 
-    # Check if automation rules already exist
-    result = await session.execute(select(EmailAutomationRule))
-    existing_rules = result.scalars().all()
-
-    if existing_rules:
-        print(f"  ✓ Email automation rules already initialized ({len(existing_rules)} found)")
-        return
+    # Seed per rule name, NOT "skip if the table has any row" — see the same note in
+    # seed_email_templates. email_timing_three_triggers_001 inserts 學院排名送出通知
+    # on a fresh DB, and a table-level skip would then drop the two submission rules,
+    # leaving trigger point 1 (student + professor) with no active rule at all.
+    result = await session.execute(select(EmailAutomationRule.name))
+    existing_names = set(result.scalars().all())
 
     # Define initial automation rules — these are the three trigger points the
     # system actually sends mail for (see docs: 送出申請 / 草稿截止前三天 / 送出排名).
@@ -1139,13 +1138,14 @@ async def seed_email_automation_rules(session: AsyncSession) -> None:
         },
     ]
 
-    for rule_data in initial_rules:
+    missing = [r for r in initial_rules if r["name"] not in existing_names]
+    for rule_data in missing:
         rule = EmailAutomationRule(**rule_data)
         session.add(rule)
 
     await session.commit()
     logger.info("Email automation rules initialized successfully!")
-    print(f"  📊 Inserted: {len(initial_rules)} email automation rules")
+    print(f"  📊 Inserted: {len(missing)} email automation rules ({len(existing_names)} already present)")
 
 
 async def init_all_scholarship_configs() -> None:

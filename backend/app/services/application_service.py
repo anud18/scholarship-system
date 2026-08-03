@@ -3039,7 +3039,12 @@ class ApplicationService:
                     },
                     href=f"/professor/applications/{application.id}",
                     priority=NotificationPriority.high,
-                    channels=[NotificationChannel.in_app, NotificationChannel.email],
+                    # in_app ONLY. NotificationChannel.email here reaches
+                    # _send_email_notification -> FastMail directly, which bypasses the
+                    # scheduled_emails queue, the templates, email_history AND the
+                    # test-mode redirect — so it would both re-add assignment mail and
+                    # leak to real users while test mode is on.
+                    channels=[NotificationChannel.in_app],
                 )
                 logger.info(f"In-app notification created for professor {professor.nycu_id}")
             except Exception:

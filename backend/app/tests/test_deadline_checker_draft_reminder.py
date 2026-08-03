@@ -26,7 +26,17 @@ from app.models.user import User, UserRole, UserType
 from app.services.email_automation_service import email_automation_service
 from app.tasks.deadline_checker import DeadlineChecker
 
-NOW = datetime.now(timezone.utc)
+
+def _deadline_in(days: int) -> datetime:
+    """A deadline `days` out, anchored at NOON of that day.
+
+    The checker builds a window covering the whole UTC day that is N days from
+    *its own* now(). Anchoring at noon — and computing it per call rather than
+    once at import — keeps the value well inside that window no matter when in
+    the day the suite runs or how long it takes to reach this test.
+    """
+    target = datetime.now(timezone.utc) + timedelta(days=days)
+    return target.replace(hour=12, minute=0, second=0, microsecond=0)
 
 
 @pytest.fixture
@@ -39,6 +49,16 @@ def captured_triggers(monkeypatch) -> List[Dict[str, Any]]:
 
     monkeypatch.setattr(email_automation_service, "trigger_deadline_approaching", _record)
     return calls
+
+
+def _for_app(calls: List[Dict[str, Any]], application: Application) -> List[Dict[str, Any]]:
+    """Only the reminders for *application*.
+
+    Scoped rather than asserting on the total: check_submission_deadlines scans
+    every active config in the database, so a global count would couple this
+    test to whatever else happens to be seeded.
+    """
+    return [c for c in calls if c["application_id"] == application.id]
 
 
 async def _seed_student(db: AsyncSession, nycu_id: str) -> User:
@@ -72,7 +92,7 @@ async def _seed_config(
         config_code=f"dl_cfg_{suffix}",
         config_name=f"Deadline cfg {suffix}",
         academic_year=114,
-        application_start_date=NOW - timedelta(days=30),
+        application_start_date=datetime.now(timezone.utc) - timedelta(days=30),
         application_end_date=application_end_date,
         renewal_application_end_date=renewal_application_end_date,
         amount=0,
@@ -114,46 +134,45 @@ async def _seed_app(
 @pytest.mark.asyncio
 async def test_draft_is_reminded_three_days_before_general_deadline(db: AsyncSession, captured_triggers):
     student = await _seed_student(db, "dl_hit")
-    cfg = await _seed_config(db, suffix="hit", application_end_date=NOW + timedelta(days=3))
+    cfg = await _seed_config(db, suffix="hit", application_end_date=_deadline_in(3))
     app = await _seed_app(db, student=student, config=cfg, suffix="hit")
 
     await DeadlineChecker(db).check_submission_deadlines()
 
-    assert len(captured_triggers) == 1
-    call = captured_triggers[0]
-    assert call["application_id"] == app.id
-    assert call["deadline_type"] == "submission"
-    assert call["days_remaining"] == "3"
+    mine = _for_app(captured_triggers, app)
+    assert len(mine) == 1
+    assert mine[0]["deadline_type"] == "submission"
+    assert mine[0]["days_remaining"] == "3"
 
 
 @pytest.mark.asyncio
 async def test_no_reminder_seven_days_out(db: AsyncSession, captured_triggers):
     student = await _seed_student(db, "dl_seven")
-    cfg = await _seed_config(db, suffix="seven", application_end_date=NOW + timedelta(days=7))
-    await _seed_app(db, student=student, config=cfg, suffix="seven")
+    cfg = await _seed_config(db, suffix="seven", application_end_date=_deadline_in(7))
+    app = await _seed_app(db, student=student, config=cfg, suffix="seven")
 
     await DeadlineChecker(db).check_submission_deadlines()
 
-    assert captured_triggers == []
+    assert _for_app(captured_triggers, app) == []
 
 
 @pytest.mark.asyncio
 async def test_no_reminder_one_day_out(db: AsyncSession, captured_triggers):
     student = await _seed_student(db, "dl_one")
-    cfg = await _seed_config(db, suffix="one", application_end_date=NOW + timedelta(days=1))
-    await _seed_app(db, student=student, config=cfg, suffix="one")
+    cfg = await _seed_config(db, suffix="one", application_end_date=_deadline_in(1))
+    app = await _seed_app(db, student=student, config=cfg, suffix="one")
 
     await DeadlineChecker(db).check_submission_deadlines()
 
-    assert captured_triggers == []
+    assert _for_app(captured_triggers, app) == []
 
 
 @pytest.mark.asyncio
 async def test_submitted_application_is_not_reminded(db: AsyncSession, captured_triggers):
     """Only 暫存未送出 qualifies — a submitted application already made it."""
     student = await _seed_student(db, "dl_submitted")
-    cfg = await _seed_config(db, suffix="submitted", application_end_date=NOW + timedelta(days=3))
-    await _seed_app(
+    cfg = await _seed_config(db, suffix="submitted", application_end_date=_deadline_in(3))
+    app = await _seed_app(
         db,
         student=student,
         config=cfg,
@@ -163,7 +182,7 @@ async def test_submitted_application_is_not_reminded(db: AsyncSession, captured_
 
     await DeadlineChecker(db).check_submission_deadlines()
 
-    assert captured_triggers == []
+    assert _for_app(captured_triggers, app) == []
 
 
 @pytest.mark.asyncio
@@ -176,18 +195,19 @@ async def test_renewal_draft_matches_renewal_deadline_only(db: AsyncSession, cap
     cfg = await _seed_config(
         db,
         suffix="split",
-        application_end_date=NOW + timedelta(days=30),
-        renewal_application_end_date=NOW + timedelta(days=3),
+        application_end_date=_deadline_in(30),
+        renewal_application_end_date=_deadline_in(3),
     )
     renewal_app = await _seed_app(db, student=renewal_student, config=cfg, suffix="renewal", is_renewal=True)
-    await _seed_app(db, student=general_student, config=cfg, suffix="general", is_renewal=False)
+    general_app = await _seed_app(db, student=general_student, config=cfg, suffix="general", is_renewal=False)
 
     await DeadlineChecker(db).check_submission_deadlines()
 
-    assert len(captured_triggers) == 1
-    call = captured_triggers[0]
-    assert call["application_id"] == renewal_app.id
-    assert call["deadline_type"] == "renewal_submission"
+    mine = _for_app(captured_triggers, renewal_app)
+    assert len(mine) == 1
+    assert mine[0]["deadline_type"] == "renewal_submission"
+    # The general draft under the same config must NOT be pulled in.
+    assert _for_app(captured_triggers, general_app) == []
 
 
 @pytest.mark.asyncio
@@ -196,14 +216,14 @@ async def test_general_draft_not_reminded_by_renewal_deadline(db: AsyncSession, 
     cfg = await _seed_config(
         db,
         suffix="cross",
-        application_end_date=NOW + timedelta(days=30),
-        renewal_application_end_date=NOW + timedelta(days=3),
+        application_end_date=_deadline_in(30),
+        renewal_application_end_date=_deadline_in(3),
     )
-    await _seed_app(db, student=student, config=cfg, suffix="cross", is_renewal=False)
+    app = await _seed_app(db, student=student, config=cfg, suffix="cross", is_renewal=False)
 
     await DeadlineChecker(db).check_submission_deadlines()
 
-    assert captured_triggers == []
+    assert _for_app(captured_triggers, app) == []
 
 
 @pytest.mark.asyncio
@@ -212,9 +232,9 @@ async def test_check_all_deadlines_runs_clean_with_a_matching_config(db: AsyncSe
     AttributeError as soon as any config's deadline landed on a boundary,
     which aborted the whole daily job."""
     student = await _seed_student(db, "dl_all")
-    cfg = await _seed_config(db, suffix="all", application_end_date=NOW + timedelta(days=3))
-    await _seed_app(db, student=student, config=cfg, suffix="all")
+    cfg = await _seed_config(db, suffix="all", application_end_date=_deadline_in(3))
+    app = await _seed_app(db, student=student, config=cfg, suffix="all")
 
     await DeadlineChecker(db).check_all_deadlines()
 
-    assert len(captured_triggers) == 1
+    assert len(_for_app(captured_triggers, app)) == 1

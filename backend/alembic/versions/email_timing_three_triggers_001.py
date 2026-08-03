@@ -1,7 +1,7 @@
 """Reduce automated email to the three agreed trigger points
 
 Revision ID: email_timing_three_triggers_001
-Revises: add_footer_links_001
+Revises: student_history_visibility_001
 Create Date: 2026-08-03 00:00:00.000000
 
 The system now mails exactly three events:
@@ -28,7 +28,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "email_timing_three_triggers_001"
-down_revision: Union[str, None] = "add_footer_links_001"
+down_revision: Union[str, None] = "student_history_visibility_001"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -47,6 +47,8 @@ CONDITION_QUERY = """
             """
 
 SUBJECT_TEMPLATE = "排名已送出 - {scholarship_name} {ranking_name}"
+
+RECIPIENT_OPTIONS_JSON = '[{"label": "學院承辦人", "value": "college"}]'
 
 BODY_TEMPLATE = """{college_name} 您好：
 
@@ -77,15 +79,22 @@ def upgrade() -> None:
             sa.text("SELECT id FROM email_templates WHERE key = :key"), {"key": TEMPLATE_KEY}
         ).first()
         if existing is None:
-            # requires_approval / sending_type carry Python-side defaults only,
-            # so a raw INSERT has to supply them explicitly.
+            # requires_approval / sending_type carry Python-side defaults only, so a
+            # raw INSERT has to supply them explicitly. recipient_options drives the
+            # 收件者選項 list in the admin manual-send UI — omitting it leaves an
+            # upgraded install with an empty picker where a seeded one has 學院承辦人.
             bind.execute(
                 sa.text(
                     "INSERT INTO email_templates "
-                    "(key, subject_template, body_template, sending_type, requires_approval) "
-                    "VALUES (:key, :subject, :body, 'single', false)"
+                    "(key, subject_template, body_template, sending_type, requires_approval, recipient_options) "
+                    "VALUES (:key, :subject, :body, 'single', false, CAST(:recipient_options AS JSON))"
                 ),
-                {"key": TEMPLATE_KEY, "subject": SUBJECT_TEMPLATE, "body": BODY_TEMPLATE},
+                {
+                    "key": TEMPLATE_KEY,
+                    "subject": SUBJECT_TEMPLATE,
+                    "body": BODY_TEMPLATE,
+                    "recipient_options": RECIPIENT_OPTIONS_JSON,
+                },
             )
 
     if "email_automation_rules" in tables:
