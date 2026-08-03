@@ -464,6 +464,12 @@ jobs:
       - name: Start new containers
         run: |
           cd ~/scholarship-production
+          # scholarship_prod_network is declared external so it keeps a stable,
+          # unprefixed name that the monitoring stack can join — compose never
+          # creates an external network, so make sure it exists first. The
+          # subnet is the one this stack has always used.
+          docker network inspect scholarship_prod_network >/dev/null 2>&1 || \
+            docker network create --subnet 172.24.0.0/16 scholarship_prod_network
           # --env-file is the single source of interpolation values; TAG and
           # IMAGE_OWNER come from the job env and intentionally take precedence.
           docker compose --env-file "${ENV_FILE}" down || true

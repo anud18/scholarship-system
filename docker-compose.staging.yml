@@ -166,7 +166,9 @@ services:
     volumes:
       - ./monitoring/config/alloy/staging-ap-vm.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./logs/nginx:/var/log/nginx:ro
+      # ./logs/nginx was mounted here but never read: the config's only log
+      # source is loki.source.docker. nginx now logs to stdout, which that
+      # source already collects, so the mount is gone rather than misleading.
     networks:
       - scholarship_staging_network
     command: run --server.http.listen-addr=0.0.0.0:12345 /etc/alloy/config.alloy
