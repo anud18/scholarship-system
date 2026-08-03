@@ -464,15 +464,24 @@ jobs:
       - name: Start new containers
         run: |
           cd ~/scholarship-production
-          # scholarship_prod_network is declared external so it keeps a stable,
-          # unprefixed name that the monitoring stack can join — compose never
-          # creates an external network, so make sure it exists first. The
-          # subnet is the one this stack has always used.
-          docker network inspect scholarship_prod_network >/dev/null 2>&1 || \
-            docker network create --subnet 172.24.0.0/16 scholarship_prod_network
           # --env-file is the single source of interpolation values; TAG and
           # IMAGE_OWNER come from the job env and intentionally take precedence.
           docker compose --env-file "${ENV_FILE}" down || true
+
+          # scholarship_prod_network is declared external so it keeps a stable,
+          # unprefixed name the monitoring stack can join — compose never
+          # creates an external network, so it has to exist before `up`.
+          #
+          # Order matters: this runs AFTER `down`. Revisions before the external
+          # switch declared the network inline, so it exists under the compose
+          # project prefix holding this very subnet, and creating the new one
+          # first fails with "Pool overlaps with other one on this address
+          # space". `down` detaches the containers; removing the legacy network
+          # then frees the address space. Both lines are no-ops once migrated.
+          docker network rm scholarship-production_scholarship_prod_network 2>/dev/null || true
+          docker network inspect scholarship_prod_network >/dev/null 2>&1 || \
+            docker network create --subnet 172.24.0.0/16 scholarship_prod_network
+
           docker compose --env-file "${ENV_FILE}" up -d
 
       - name: Validate and reload nginx config
