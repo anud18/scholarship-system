@@ -87,6 +87,31 @@ MANUAL_REMOVAL_PREFIX_LOCKED = "鎖定後移除"
 MANUAL_REMOVAL_PREFIX_RECONCILE = "比對分發移除"
 MANUAL_REMOVAL_PREFIXES = (MANUAL_REMOVAL_PREFIX_LOCKED, MANUAL_REMOVAL_PREFIX_RECONCILE)
 
+# 「排除造冊明細」(POST /{roster_id}/items/{item_id}/exclude) 的原因分類 →
+# 顯示標籤。寫入的 exclusion_reason 形如「學生繳回」或「其他: 補充說明」。
+MANUAL_EXCLUSION_CATEGORY_LABELS = {
+    "returned": "學生繳回",
+    "declined": "學生放棄",
+    "other": "其他",
+}
+
+# 「人為排除」= 管理員針對這位學生本身下的判斷（排除明細／鎖定後移除）。
+# 重建造冊時必須跨重建保留，否則已繳回／已放棄的學生會被重新納入造冊，
+# 並灌水該生的累計領取月份（博士 36 個月上限的依據）。
+#
+# 刻意「不」包含 MANUAL_REMOVAL_PREFIX_RECONCILE（比對分發移除）：那不是對學生的
+# 判斷，而是「不在分發名單」這個事實的推導結果，重建時會重新推導。一筆帶著該原因
+# 卻仍出現在重建名單中的申請，代表它已重新獲得分發——原因已然過期，保留它會讓
+# 學生卡在一個當下不成立的理由下。
+MANUAL_EXCLUSION_PREFIXES = (MANUAL_REMOVAL_PREFIX_LOCKED,) + tuple(MANUAL_EXCLUSION_CATEGORY_LABELS.values())
+
+
+def is_manual_exclusion(exclusion_reason: str | None) -> bool:
+    """該筆排除是否為管理員針對學生的人為決定，而非可重新推導的自動判定。"""
+    if not exclusion_reason:
+        return False
+    return exclusion_reason.startswith(MANUAL_EXCLUSION_PREFIXES)
+
 
 class PaymentRoster(Base):
     """造冊主檔"""

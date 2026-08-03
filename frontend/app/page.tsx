@@ -47,6 +47,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { DevLoginPage } from "@/components/dev-login-page";
 import { SSOLoginPage } from "@/components/sso-login-page";
 import { useAdminDashboard } from "@/hooks/use-admin";
+import { useStudentHistoryVisibility } from "@/hooks/use-student-history-visibility";
 import { User } from "@/types/user";
 import { verifySsoToken } from "@/lib/auth/verify-sso-token";
 import { logger } from "@/lib/utils/logger";
@@ -123,6 +124,11 @@ export default function ScholarshipManagementSystem() {
   // 使用語言偏好 Hook
   const { locale, changeLocale, isLanguageSwitchEnabled } =
     useLanguagePreference(user?.role || "student", "zh");
+
+  // 領獎紀錄查詢開放設定（管理者可分別關閉學生與學院的查詢入口）
+  const { visibility: studentHistoryVisibility } = useStudentHistoryVisibility(
+    isAuthenticated,
+  );
 
   // 使用 admin dashboard hook
   const {
@@ -259,8 +265,12 @@ export default function ScholarshipManagementSystem() {
     }
 
     if (user.role === "college") {
+      // 領獎紀錄查詢 is admin-gated; without it the college keeps two tabs.
+      const canQueryStudentHistory = studentHistoryVisibility.college_enabled;
       return (
-        <TabsList className="grid w-full grid-cols-3 bg-nycu-blue-50 border border-nycu-blue-200">
+        <TabsList
+          className={`grid w-full ${canQueryStudentHistory ? "grid-cols-3" : "grid-cols-2"} bg-nycu-blue-50 border border-nycu-blue-200`}
+        >
           <TabsTrigger
             value="main"
             className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
@@ -275,13 +285,15 @@ export default function ScholarshipManagementSystem() {
             <Upload className="h-4 w-4" />
             補充匯入
           </TabsTrigger>
-          <TabsTrigger
-            value="student-history"
-            className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
-          >
-            <History className="h-4 w-4" />
-            領獎紀錄查詢
-          </TabsTrigger>
+          {canQueryStudentHistory && (
+            <TabsTrigger
+              value="student-history"
+              className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
+            >
+              <History className="h-4 w-4" />
+              領獎紀錄查詢
+            </TabsTrigger>
+          )}
         </TabsList>
       );
     }
@@ -567,8 +579,8 @@ export default function ScholarshipManagementSystem() {
             </TabsContent>
           )}
 
-          {/* 領獎紀錄查詢 - college 角色；查詢範圍由後端限制在本學院學生 */}
-          {user.role === "college" && (
+          {/* 領獎紀錄查詢 - college 角色；需管理者開放，查詢範圍由後端限制在本學院學生 */}
+          {user.role === "college" && studentHistoryVisibility.college_enabled && (
             <TabsContent value="student-history" className="space-y-4">
               <StudentHistoryPanel variant="college" />
             </TabsContent>

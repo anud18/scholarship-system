@@ -195,19 +195,13 @@ class TestCriticalAuthorizationPaths:
 
         bulk_service = BulkApprovalService(db)
 
-        # Admin can approve
-        with patch.object(
-            bulk_service.notification_service,
-            "send_status_change_notification",
-            return_value=True,
-        ):
-            result = await bulk_service.bulk_approve_applications(
-                application_ids=[app.id],
-                approver_user_id=test_admin.id,
-                send_notifications=False,
-            )
+        # Admin can approve (bulk approval sends no student email at all)
+        result = await bulk_service.bulk_approve_applications(
+            application_ids=[app.id],
+            approver_user_id=test_admin.id,
+        )
 
-            assert len(result["successful_approvals"]) == 1
+        assert len(result["successful_approvals"]) == 1
 
 
 @pytest.mark.integration
@@ -269,18 +263,12 @@ class TestCriticalBusinessLogic:
 
         # Approve first 2 - should succeed
         bulk_service = BulkApprovalService(db)
-        with patch.object(
-            bulk_service.notification_service,
-            "send_status_change_notification",
-            return_value=True,
-        ):
-            result = await bulk_service.bulk_approve_applications(
-                application_ids=[apps[0].id, apps[1].id],
-                approver_user_id=1,
-                send_notifications=False,
-            )
+        result = await bulk_service.bulk_approve_applications(
+            application_ids=[apps[0].id, apps[1].id],
+            approver_user_id=1,
+        )
 
-            assert len(result["successful_approvals"]) == 2
+        assert len(result["successful_approvals"]) == 2
 
         # Check quota availability - should show 0 available
         from app.services.scholarship_configuration_service import ScholarshipConfigurationService

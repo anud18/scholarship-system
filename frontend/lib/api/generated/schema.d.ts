@@ -6642,7 +6642,7 @@ export interface paths {
          *     metadata, rather than being hard-deleted (#66).
          *
          *     Notes:
-         *       - Only admins may exclude items. Roster must NOT be LOCKED.
+         *       - Only admins / super admins may exclude items. Roster must NOT be LOCKED.
          *       - This does NOT decrement the student's cumulative received_months;
          *         if the funds are actually being returned, the admin should adjust
          *         received_months separately (it lives on CollegeRankingItem and the
@@ -6780,6 +6780,33 @@ export interface paths {
          *     touch quota.
          */
         post: operations["reconcile_roster_endpoint_api_v1_payment_rosters__roster_id__reconcile_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payment-rosters/{roster_id}/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Regenerate Roster Endpoint
+         * @description 重新生成造冊：依當下的分發名單、學生資料、獎學金規則與配置重建全部明細。
+         *
+         *     不需要人員有異動即可執行——「比對分發名單」(reconcile) 只在名單有差異時
+         *     才有動作可做，本端點則刷新每一筆明細的內容（金額、計畫編號、學籍驗證、
+         *     規則判定、郵局帳號…）並重新匯出 Excel。
+         *
+         *     管理員的人為排除／移除與人工銀行覆核狀態會跨重建保留。已鎖定的造冊不可
+         *     重新生成（400），請先解鎖。
+         */
+        post: operations["regenerate_roster_endpoint_api_v1_payment_rosters__roster_id__regenerate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7406,6 +7433,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/student-history/visibility": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Visibility
+         * @description Read both switches. Open to any authenticated user on purpose: the
+         *     student card and the college tab hide themselves when their switch is off,
+         *     which needs the flag BEFORE the gated request is attempted. The payload is
+         *     two booleans about the system, never about a person.
+         */
+        get: operations["get_visibility_api_v1_student_history_visibility_get"];
+        /**
+         * Update Visibility
+         * @description Admin-only. Each audience is decided separately — an omitted field keeps
+         *     its current value rather than being reset.
+         */
+        put: operations["update_visibility_api_v1_student_history_visibility_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/csp-report": {
         parameters: {
             query?: never;
@@ -7852,6 +7907,36 @@ export interface paths {
          *     回傳所有已分配學生，按 sub_type × allocation_year 分組。
          */
         get: operations["get_distribution_summary_api_v1_manual_distribution_distribution_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/distribution-summary/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Distribution Summary
+         * @description Export the 分發結果名單 as Excel (default) or PDF — 受獎名冊 layout.
+         *
+         *     Reads through the SAME ``_load_allocated_groups`` loader as the JSON
+         *     endpoint, so the file can never show a student the panel would not.
+         *
+         *     Carries no 身分證字號 and no 匯款帳號, but it is NOT the PII-free case the
+         *     college 分發結果 export is: on top of 學號/姓名/系所 it emits 國籍, 性別,
+         *     碩士畢業院/校/系所 and 首次註冊入學日期, plus three derived flags that label a
+         *     student as 在職生 / 陸港澳生 / 休學. That is personal data about identified
+         *     students leaving the system in bulk, so it writes a ``pii_access`` AuditLog
+         *     like the 學生資料彙整表 export does.
+         */
+        get: operations["export_distribution_summary_api_v1_manual_distribution_distribution_summary_export_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9098,12 +9183,6 @@ export interface components {
              * @description Optional approval notes
              */
             comments?: string | null;
-            /**
-             * Send Notifications
-             * @description Whether to notify applicants
-             * @default true
-             */
-            send_notifications: boolean;
         };
         /**
          * BulkRuleOperation
@@ -10046,6 +10125,17 @@ export interface components {
             roster_code?: string | null;
         };
         /**
+         * RegenerateRosterRequest
+         * @description Body for POST /payment-rosters/{roster_id}/regenerate.
+         */
+        RegenerateRosterRequest: {
+            /**
+             * Student Verification Enabled
+             * @description 本次是否重新驗證學籍（單次覆寫，不會寫回造冊設定）；未提供則沿用造冊原本的設定
+             */
+            student_verification_enabled?: boolean | null;
+        };
+        /**
          * RemoveLockedItemRequest
          * @description Body for DELETE /payment-rosters/{roster_id}/items/{item_id}
          */
@@ -10892,6 +10982,24 @@ export interface components {
              * @description 帳戶戶名
              */
             account_holder_name?: string | null;
+        };
+        /**
+         * StudentHistoryVisibilityUpdate
+         * @description Admin toggle body for PUT /student-history/visibility.
+         *
+         *     Both fields are optional and applied independently: omitting one leaves
+         *     that audience's setting untouched, so the two switches never clobber each
+         *     other. Sending neither is a 422 (nothing to do).
+         *
+         *     The response shape (both switches) is produced by
+         *     ``StudentHistoryVisibility.to_dict()`` in the service layer; endpoints in
+         *     this project return plain ApiResponse dicts, never a ``response_model``.
+         */
+        StudentHistoryVisibilityUpdate: {
+            /** Student Enabled */
+            student_enabled?: boolean | null;
+            /** College Enabled */
+            college_enabled?: boolean | null;
         };
         /**
          * StudentVerificationStatus
@@ -22315,6 +22423,41 @@ export interface operations {
             };
         };
     };
+    regenerate_roster_endpoint_api_v1_payment_rosters__roster_id__regenerate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roster_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RegenerateRosterRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_roster_schedules_api_v1_roster_schedules_get: {
         parameters: {
             query?: {
@@ -23497,6 +23640,59 @@ export interface operations {
             };
         };
     };
+    get_visibility_api_v1_student_history_visibility_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    update_visibility_api_v1_student_history_visibility_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudentHistoryVisibilityUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     csp_report_info_api_v1_csp_report_get: {
         parameters: {
             query?: never;
@@ -24032,6 +24228,41 @@ export interface operations {
                 scholarship_type_id: number;
                 academic_year: number;
                 semester: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_distribution_summary_api_v1_manual_distribution_distribution_summary_export_get: {
+        parameters: {
+            query: {
+                scholarship_type_id: number;
+                academic_year: number;
+                semester: string;
+                /** @description Output format: xlsx (default) or pdf */
+                format?: "xlsx" | "pdf";
             };
             header?: never;
             path?: never;

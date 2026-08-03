@@ -109,18 +109,15 @@ def test_bulk_approve_min_length_1():
         BulkApproveRequest(application_ids=[])
 
 
-def test_bulk_approve_send_notifications_defaults_true():
-    # Pin: send_notifications=True default. Admins expect approvals
-    # to notify the student by default. Flipping to False would
-    # silently approve applications without telling anyone.
+def test_bulk_approve_has_no_send_notifications_flag():
+    # Pin: bulk approval never emails the student, so there is no flag to set.
+    # Students receive mail on submission and on the 3-day draft reminder only.
+    assert "send_notifications" not in BulkApproveRequest.model_fields
+
+    # Extra keys are ignored rather than rejected, so assert on the model, not
+    # on a ValidationError: a stale caller still passing the flag gets no field.
     r = BulkApproveRequest(application_ids=[1, 2, 3])
-    assert r.send_notifications is True
-
-
-def test_bulk_approve_send_notifications_can_be_disabled():
-    # Pin: explicit opt-out works (silent bulk for migrations).
-    r = BulkApproveRequest(application_ids=[1], send_notifications=False)
-    assert r.send_notifications is False
+    assert not hasattr(r, "send_notifications")
 
 
 def test_bulk_approve_comments_optional():

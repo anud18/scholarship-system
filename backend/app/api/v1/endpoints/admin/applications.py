@@ -576,7 +576,6 @@ async def bulk_approve_applications_endpoint(
         application_ids=payload.application_ids,
         approver_user_id=current_user.id,
         approval_notes=payload.comments,
-        send_notifications=payload.send_notifications,
     )
 
     return {"success": True, "message": "Bulk approval processed successfully", "data": result}

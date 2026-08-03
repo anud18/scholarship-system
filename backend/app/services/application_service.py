@@ -3016,43 +3016,9 @@ class ApplicationService:
             await self.db.commit()
             await self.db.refresh(application)
 
-            # Send email via React Email HTML system (scheduled_emails queue)
-            if professor.email:
-                try:
-                    from app.core.config import settings
-                    from app.services.frontend_email_renderer import render_email_via_frontend
-
-                    student_name = application.student_data.get("std_cname") if application.student_data else "Unknown"
-                    email_context = {
-                        "app_id": application.app_id,
-                        "student_name": student_name,
-                        "scholarship_type": application.scholarship_name or "獎學金",
-                        "professor_name": professor.name,
-                        "professor_email": professor.email,
-                        "submit_date": application.updated_at.strftime("%Y-%m-%d") if application.updated_at else "",
-                        "system_url": getattr(settings, "FRONTEND_URL", "https://scholarship.nycu.edu.tw"),
-                    }
-                    html = await render_email_via_frontend(
-                        frontend_url=getattr(settings, "INTERNAL_FRONTEND_URL", "http://frontend:3000"),
-                        template_name="professor-review-request",
-                        context=email_context,
-                    )
-                    email_service = EmailService()
-                    await email_service.schedule_email(
-                        db=self.db,
-                        to=professor.email,
-                        subject=f"審查通知 - {student_name} 的 {application.scholarship_name or '獎學金'} 申請",
-                        body=f"申請編號 {application.app_id} 已指派給您進行教授推薦審查。",
-                        scheduled_for=datetime.now(timezone.utc),
-                        html_content=html,
-                        template_key="professor_review_notification",
-                        application_id=application.id,
-                        scholarship_type_id=application.scholarship_type_id,
-                        created_by_user_id=assigned_by.id,
-                    )
-                    logger.info(f"Scheduled HTML email to professor {professor.nycu_id}")
-                except Exception:
-                    logger.exception(f"Failed to send email to professor {professor.nycu_id}")
+            # No email on assignment: professors are only mailed when a student
+            # they supervise submits an application. The in-app notification below
+            # remains the channel for an admin/college-initiated assignment.
 
             # Create in-app notification (use info type which exists in DB enum)
             try:
@@ -3073,7 +3039,12 @@ class ApplicationService:
                     },
                     href=f"/professor/applications/{application.id}",
                     priority=NotificationPriority.high,
-                    channels=[NotificationChannel.in_app, NotificationChannel.email],
+                    # in_app ONLY. NotificationChannel.email here reaches
+                    # _send_email_notification -> FastMail directly, which bypasses the
+                    # scheduled_emails queue, the templates, email_history AND the
+                    # test-mode redirect — so it would both re-add assignment mail and
+                    # leak to real users while test mode is on.
+                    channels=[NotificationChannel.in_app],
                 )
                 logger.info(f"In-app notification created for professor {professor.nycu_id}")
             except Exception:

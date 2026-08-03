@@ -21,6 +21,8 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
+  RefreshCcw,
+  Lock,
 } from "lucide-react";
 import { RosterDetailDialog } from "./RosterDetailDialog";
 import { apiClient } from "@/lib/api";
@@ -74,6 +76,7 @@ export function RosterListTable({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [generating, setGenerating] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<number | null>(null);
+  const [regenerating, setRegenerating] = useState<number | null>(null);
 
   const formatDate = (dateStr: string | null | undefined) => {
     if (!dateStr) return "-";
@@ -186,6 +189,45 @@ export function RosterListTable({
     }
   };
 
+  /**
+   * 重新生成一份既有造冊的名單。
+   *
+   * 以 roster_id 定位（不是 period_label）：矩陣分發下同一個 period_label 底下
+   * 會有多份 (子類型 × 配額年度) 造冊，走 handleGenerateNow 的 config+期間鍵
+   * 會打到別份造冊。
+   */
+  const handleRegenerate = async (period: Period) => {
+    if (!period.roster_id) return;
+    if (
+      !window.confirm(
+        `確認重新生成「${period.label}${period.sub_type ? ` · ${period.sub_type}` : ""}」的造冊名單？\n\n` +
+          "系統會依當下的分發名單與學生資料重建全部明細並重新匯出 Excel；" +
+          "您先前的人為排除／移除會保留。"
+      )
+    )
+      return;
+
+    setRegenerating(period.roster_id);
+    try {
+      const response = await apiClient.paymentRosters.regenerateRoster(
+        period.roster_id
+      );
+      if (response.success) {
+        toast.success(response.message || "造冊已重新生成");
+        onRosterGenerated?.();
+      } else {
+        throw new Error(response.message || "重新生成造冊失敗");
+      }
+    } catch (error: unknown) {
+      logger.error("Failed to regenerate roster", { error: error });
+      toast.error(
+        error instanceof Error ? error.message : "重新生成造冊失敗"
+      );
+    } finally {
+      setRegenerating(null);
+    }
+  };
+
   const getRowClassName = (status: string) => {
     switch (status) {
       case "completed":
@@ -285,15 +327,19 @@ export function RosterListTable({
 
                     {/* 狀態 */}
                     <TableCell className="whitespace-nowrap">
-                      {period.status === "completed" ? (
+                      {/* 已鎖定要先判斷：cycle-status 把 LOCKED 與 COMPLETED 都
+                          折成 status="completed"，只看 status 會讓「已鎖定」永遠
+                          顯示成「已完成」——管理員就看不出為何沒有「重新生成」。 */}
+                      {period.roster_status === "locked" ||
+                      period.status === "locked" ? (
+                        <Badge variant="default" className="bg-slate-600">
+                          <Lock className="mr-1 h-3 w-3" />
+                          已鎖定
+                        </Badge>
+                      ) : period.status === "completed" ? (
                         <Badge variant="default" className="bg-green-600">
                           <CheckCircle2 className="mr-1 h-3 w-3" />
                           已完成
-                        </Badge>
-                      ) : period.status === "locked" ? (
-                        <Badge variant="default" className="bg-green-600">
-                          <CheckCircle2 className="mr-1 h-3 w-3" />
-                          已鎖定
                         </Badge>
                       ) : period.status === "failed" ? (
                         <Badge variant="destructive">
@@ -373,6 +419,28 @@ export function RosterListTable({
                             <Eye className="mr-1 h-4 w-4" />
                             查看名單
                           </Button>
+                          {/* 已鎖定的造冊不可重建（後端會擋），需先解鎖。
+                              必須看 roster_status：cycle-status 把 LOCKED 與
+                              COMPLETED 都折成 period.status="completed"，只有
+                              roster_status 帶真正的造冊狀態。 */}
+                          {period.roster_status !== "locked" && period.roster_id && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleRegenerate(period)}
+                              disabled={regenerating === period.roster_id}
+                              title="依當下的分發名單與學生資料重建名單（不需人員有異動）"
+                            >
+                              {regenerating === period.roster_id ? (
+                                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                              ) : (
+                                <RefreshCcw className="mr-1 h-4 w-4" />
+                              )}
+                              {regenerating === period.roster_id
+                                ? "生成中..."
+                                : "重新生成"}
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="default"
