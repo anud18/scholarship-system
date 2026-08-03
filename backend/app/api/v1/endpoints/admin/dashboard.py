@@ -255,44 +255,50 @@ async def debug_nycu_employee_api(
         }
 
     except NYCUEmpAuthenticationError as e:
+        logger.warning("NYCU Employee API authentication error during debug request", exc_info=True)
         debug_info["test_results"] = {
             "status": "authentication_error",
-            "error": str(e),
+            "error": "Authentication with NYCU Employee API failed",
             "type": "NYCUEmpAuthenticationError",
             "suggestion": "Check NYCU_EMP_ACCOUNT and NYCU_EMP_KEY_HEX/NYCU_EMP_KEY_RAW",
         }
     except NYCUEmpConnectionError as e:
+        logger.warning("NYCU Employee API connection error during debug request", exc_info=True)
         debug_info["test_results"] = {
             "status": "connection_error",
-            "error": str(e),
+            "error": "Unable to connect to NYCU Employee API",
             "type": "NYCUEmpConnectionError",
             "suggestion": "Check NYCU_EMP_ENDPOINT and network connectivity",
         }
     except NYCUEmpTimeoutError as e:
+        logger.warning("NYCU Employee API timeout during debug request", exc_info=True)
         debug_info["test_results"] = {
             "status": "timeout_error",
-            "error": str(e),
+            "error": "NYCU Employee API request timed out",
             "type": "NYCUEmpTimeoutError",
             "suggestion": "Consider increasing NYCU_EMP_TIMEOUT value",
         }
     except NYCUEmpValidationError as e:
+        logger.warning("NYCU Employee API validation error during debug request", exc_info=True)
         debug_info["test_results"] = {
             "status": "validation_error",
-            "error": str(e),
+            "error": "Invalid NYCU Employee API request parameters",
             "type": "NYCUEmpValidationError",
             "suggestion": "Check page and status parameter values",
         }
     except NYCUEmpError as e:
+        logger.warning("NYCU Employee API error during debug request", exc_info=True)
         debug_info["test_results"] = {
             "status": "api_error",
-            "error": str(e),
+            "error": "NYCU Employee API returned an error",
             "type": type(e).__name__,
             "suggestion": "Check API endpoint and credentials",
         }
     except Exception as e:
+        logger.exception("Unexpected error during NYCU Employee API debug request")
         debug_info["test_results"] = {
             "status": "unexpected_error",
-            "error": str(e),
+            "error": "An unexpected error occurred while testing NYCU Employee API",
             "type": type(e).__name__,
             "suggestion": "Check system logs for more details",
         }
