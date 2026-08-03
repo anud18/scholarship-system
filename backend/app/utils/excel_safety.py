@@ -65,7 +65,7 @@ def neutralise_worksheet(ws, *, min_row: int = 1) -> int:
     ``min_row`` exists for ROUND-TRIPPED sheets. Some templates this system
     generates are filled in by staff and re-uploaded, and the importer matches
     columns by exact header string (see
-    ``batch_import_service._build_submitted_form_data``'s ``custom_field_mapping``).
+    ``batch_import_service.build_submitted_form_data``'s ``custom_field_mapping``).
     Prefixing an apostrophe onto such a header makes it match nothing on
     re-upload and every value in that column is silently dropped — so pass
     ``min_row=2`` to leave the header row byte-identical. Only do that where the

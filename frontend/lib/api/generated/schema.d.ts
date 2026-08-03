@@ -4748,30 +4748,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college-review/rankings/{ranking_id}/supplementary-import": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Supplementary Import
-         * @description College upload: import new students via 學生資料彙整表 Excel after distribution.
-         *
-         *     The supplementary-import flag is read from the matching ScholarshipConfiguration
-         *     (one flag per scholarship_type/academic_year/semester) — admin toggles it from
-         *     系統管理 → 獎學金配置.
-         */
-        post: operations["supplementary_import_api_v1_college_review_rankings__ranking_id__supplementary_import_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/college-review/quota-status": {
         parameters: {
             query?: never;
@@ -5231,7 +5207,7 @@ export interface paths {
          *     3. 返回預覽資料與驗證摘要
          *     4. 待確認後執行匯入
          *
-         *     **權限**: 僅限 college 角色
+         *     **權限**: 僅限管理員角色
          */
         post: operations["upload_batch_import_data_api_v1_college_review_batch_import_upload_data_post"];
         delete?: never;
@@ -5262,7 +5238,7 @@ export interface paths {
          *     2. 更新指定索引的記錄
          *     3. 返回更新結果
          *
-         *     **權限**: College 角色僅能編輯自己上傳的批次
+         *     **權限**: 一般管理員僅能編輯自己上傳的批次
          */
         patch: operations["update_batch_record_api_v1_college_review_batch_import__batch_id__records_patch"];
         trace?: never;
@@ -5286,7 +5262,7 @@ export interface paths {
          *     3. 更新 parsed_data 中的錯誤列表
          *     4. 返回驗證摘要
          *
-         *     **權限**: College 角色僅能驗證自己上傳的批次
+         *     **權限**: 一般管理員僅能驗證自己上傳的批次
          */
         post: operations["revalidate_batch_import_api_v1_college_review_batch_import__batch_id__validate_post"];
         delete?: never;
@@ -5315,7 +5291,7 @@ export interface paths {
          *     3. 更新總筆數
          *     4. 返回刪除結果
          *
-         *     **權限**: College 角色僅能刪除自己上傳的批次中的記錄
+         *     **權限**: 一般管理員僅能刪除自己上傳的批次中的記錄
          */
         delete: operations["delete_batch_record_api_v1_college_review_batch_import__batch_id__records__record_index__delete"];
         options?: never;
@@ -5352,7 +5328,7 @@ export interface paths {
          *     4. 上傳文件到 MinIO
          *     5. 建立 ApplicationFile 記錄
          *
-         *     **權限**: College 角色僅能為自己的批次上傳文件
+         *     **權限**: 一般管理員僅能為自己的批次上傳文件
          */
         post: operations["upload_batch_documents_api_v1_college_review_batch_import__batch_id__documents_post"];
         delete?: never;
@@ -5376,11 +5352,11 @@ export interface paths {
          *
          *     **流程**:
          *     1. 驗證批次記錄
-         *     2. 檢查權限（College 角色僅能確認自己上傳的批次，Super Admin 可確認所有批次）
+         *     2. 檢查權限（一般管理員僅能確認自己上傳的批次，Super Admin 可確認所有批次）
          *     3. 建立所有申請記錄
          *     4. 更新批次狀態
          *
-         *     **權限**: College 角色僅能確認自己上傳的批次，Super Admin 可確認所有批次
+         *     **權限**: 一般管理員僅能確認自己上傳的批次，Super Admin 可確認所有批次
          */
         post: operations["confirm_batch_import_api_v1_college_review_batch_import__batch_id__confirm_post"];
         delete?: never;
@@ -5400,7 +5376,7 @@ export interface paths {
          * Get Batch Import History
          * @description 查詢批次匯入歷史記錄
          *
-         *     **權限**: College 角色僅能查看自己上傳的記錄，Super Admin 可查看所有記錄
+         *     **權限**: 一般管理員僅能查看自己上傳的記錄，Super Admin 可查看所有記錄
          */
         get: operations["get_batch_import_history_api_v1_college_review_batch_import_history_get"];
         put?: never;
@@ -5422,7 +5398,7 @@ export interface paths {
          * Get Batch Import Details
          * @description 查詢批次匯入詳細資訊
          *
-         *     **權限**: College 角色僅能查看自己上傳的記錄，Super Admin 可查看所有記錄
+         *     **權限**: 一般管理員僅能查看自己上傳的記錄，Super Admin 可查看所有記錄
          */
         get: operations["get_batch_import_details_api_v1_college_review_batch_import__batch_id__details_get"];
         put?: never;
@@ -5444,7 +5420,7 @@ export interface paths {
          * Download Batch Import File
          * @description 下載批次匯入的原始 Excel 檔案
          *
-         *     **權限**: College 角色僅能下載自己上傳的檔案，Super Admin 可下載所有檔案
+         *     **權限**: 一般管理員僅能下載自己上傳的檔案，Super Admin 可下載所有檔案
          */
         get: operations["download_batch_import_file_api_v1_college_review_batch_import__batch_id__download_get"];
         put?: never;
@@ -5469,7 +5445,7 @@ export interface paths {
          * Delete Batch Import
          * @description 刪除批次匯入記錄及其所有相關申請
          *
-         *     **權限**: College 角色僅能刪除自己上傳的批次，Admin/Super Admin 可刪除所有批次
+         *     **權限**: Admin / Super Admin 皆可刪除所有批次（不限自己上傳的）
          */
         delete: operations["delete_batch_import_api_v1_college_review_batch_import__batch_id__delete"];
         options?: never;
@@ -5496,7 +5472,7 @@ export interface paths {
          *
          *     **注意**: 系所代碼會自動從學籍系統獲取，不需要在檔案中提供
          *
-         *     **權限**: 僅限 college 角色
+         *     **權限**: 僅限管理員角色
          */
         get: operations["download_batch_import_template_api_v1_college_review_batch_import_template_get"];
         put?: never;
@@ -5609,6 +5585,82 @@ export interface paths {
         get: operations["download_renewal_import_template_api_v1_college_review_renewal_import_template_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/supplementary-import/availability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Supplementary Import Availability
+         * @description 查詢某學年期是否已開放補充匯入。
+         *
+         *     不因未開放而回 403 — 回傳 allowed=false 讓前端顯示說明，避免學院上傳後才被擋。
+         *
+         *     **權限**: 僅限學院角色
+         */
+        get: operations["get_supplementary_import_availability_api_v1_college_review_supplementary_import_availability_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/supplementary-import/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Supplementary Import Template
+         * @description 下載補充匯入範本。
+         *
+         *     內容與管理員的批次匯入範例檔完全相同（同一個產生器），因為兩者讀的是同一種
+         *     檔案格式。不受 allow_supplementary_import 限制 — 學院可先準備資料，等管理員
+         *     開放再上傳。
+         *
+         *     **權限**: 僅限學院角色
+         */
+        get: operations["download_supplementary_import_template_api_v1_college_review_supplementary_import_template_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/supplementary-import/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Supplementary Import
+         * @description 學院上傳批次匯入格式的 Excel，為新的申請學生建立申請。
+         *
+         *     接受的檔案與管理員的批次匯入完全相同（同一個解析器），從本頁下載的範本即可。
+         *     建立的是一般「已送出」申請：不帶名次、不寫入排名名單，學生依一般流程進入
+         *     教授審查與學院排名。
+         *
+         *     **權限**: 僅限學院角色，且該學年期需由管理員開放補充匯入
+         */
+        post: operations["upload_supplementary_import_api_v1_college_review_supplementary_import_upload_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8949,11 +9001,6 @@ export interface components {
             /** Sub Type */
             sub_type: string;
         };
-        /** Body_supplementary_import_api_v1_college_review_rankings__ranking_id__supplementary_import_post */
-        Body_supplementary_import_api_v1_college_review_rankings__ranking_id__supplementary_import_post: {
-            /** File */
-            file: string;
-        };
         /** Body_update_matrix_quota_api_v1_scholarship_configurations_matrix_quota_put */
         Body_update_matrix_quota_api_v1_scholarship_configurations_matrix_quota_put: {
             /** Sub Type */
@@ -9015,6 +9062,14 @@ export interface components {
             /**
              * File
              * @description 續領生 Excel 或 CSV 檔案
+             */
+            file: string;
+        };
+        /** Body_upload_supplementary_import_api_v1_college_review_supplementary_import_upload_post */
+        Body_upload_supplementary_import_api_v1_college_review_supplementary_import_upload_post: {
+            /**
+             * File
+             * @description 批次匯入格式的 Excel (.xlsx)
              */
             file: string;
         };
@@ -19408,41 +19463,6 @@ export interface operations {
             };
         };
     };
-    supplementary_import_api_v1_college_review_rankings__ranking_id__supplementary_import_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ranking_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["Body_supplementary_import_api_v1_college_review_rankings__ranking_id__supplementary_import_post"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_quota_status_api_v1_college_review_quota_status_get: {
         parameters: {
             query: {
@@ -20543,6 +20563,114 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_supplementary_import_availability_api_v1_college_review_supplementary_import_availability_get: {
+        parameters: {
+            query: {
+                /** @description 獎學金類型代碼 */
+                scholarship_type: string;
+                /** @description 學年度 */
+                academic_year: number;
+                /** @description 學期 */
+                semester?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_supplementary_import_template_api_v1_college_review_supplementary_import_template_get: {
+        parameters: {
+            query: {
+                /** @description 獎學金類型代碼 */
+                scholarship_type: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_supplementary_import_api_v1_college_review_supplementary_import_upload_post: {
+        parameters: {
+            query: {
+                /** @description 獎學金類型代碼 */
+                scholarship_type: string;
+                /** @description 學年度 */
+                academic_year: number;
+                /** @description 學期 */
+                semester?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_supplementary_import_api_v1_college_review_supplementary_import_upload_post"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

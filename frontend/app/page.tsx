@@ -36,6 +36,7 @@ import { CollegeDashboard } from "@/components/college/CollegeManagementShell";
 import { AdminDashboard } from "@/components/admin-dashboard";
 import { RosterManagementDashboard } from "@/components/roster-management-dashboard";
 import { BatchImportPanel } from "@/components/batch-import-panel";
+import { SupplementaryImportPanel } from "@/components/supplementary-import-panel";
 import { StudentHistoryPanel } from "@/components/admin/student-history/StudentHistoryPanel";
 import { RenewalImportPanel } from "@/components/renewal-import-panel";
 import { Header } from "@/components/header";
@@ -268,11 +269,11 @@ export default function ScholarshipManagementSystem() {
             審核管理
           </TabsTrigger>
           <TabsTrigger
-            value="batch-import"
+            value="supplementary-import"
             className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
           >
             <Upload className="h-4 w-4" />
-            批次匯入
+            補充匯入
           </TabsTrigger>
           <TabsTrigger
             value="student-history"
@@ -552,10 +553,17 @@ export default function ScholarshipManagementSystem() {
             </TabsContent>
           )}
 
-          {/* 批次匯入 - college、admin 和 super_admin 角色可見 */}
-          {(user.role === "college" || user.role === "admin" || user.role === "super_admin") && (
+          {/* 批次匯入 - 只有 admin 和 super_admin 可見；學院改用補充匯入 */}
+          {(user.role === "admin" || user.role === "super_admin") && (
             <TabsContent value="batch-import" className="space-y-4">
               <BatchImportPanel locale={locale} />
+            </TabsContent>
+          )}
+
+          {/* 補充匯入 - college 角色；匯入範圍由後端限制在本學院學生 */}
+          {user.role === "college" && (
+            <TabsContent value="supplementary-import" className="space-y-4">
+              <SupplementaryImportPanel locale={locale} />
             </TabsContent>
           )}
 

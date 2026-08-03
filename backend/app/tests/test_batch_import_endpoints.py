@@ -28,7 +28,7 @@ BASE = "/api/v1/college-review/batch-import"
 def _override_user(user: User):
     """Override the get_current_user dependency to return the given user.
 
-    require_college_role still executes (so role gating is preserved); only the
+    require_admin_role still executes (so role gating is preserved); only the
     underlying get_current_user dependency is replaced. The conftest `client`
     fixture clears all overrides at teardown.
     """
@@ -39,14 +39,17 @@ class TestBatchImportEndpoints:
     """Test cases for batch import API endpoints"""
 
     @pytest.fixture
-    async def college_user(self, db: AsyncSession):
-        """Create a college role user for testing"""
+    async def importer_user(self, db: AsyncSession):
+        """Create the admin user that drives 批次匯入.
+
+        Colleges lost access to this router — they import through 補充匯入 —
+        so every caller here is an admin.
+        """
         user = User(
-            nycu_id="college_test",
-            name="College Test User",
-            email="college@test.com",
-            role=UserRole.college,
-            college_code="E",
+            nycu_id="admin_importer_test",
+            name="Admin Importer",
+            email="importer@test.com",
+            role=UserRole.admin,
             user_type="employee",
         )
         db.add(user)
@@ -111,10 +114,10 @@ class TestBatchImportEndpoints:
 
     @pytest.mark.asyncio
     async def test_upload_batch_import_success(
-        self, client: AsyncClient, college_user: User, test_scholarship: ScholarshipType, valid_excel_file
+        self, client: AsyncClient, importer_user: User, test_scholarship: ScholarshipType, valid_excel_file
     ):
         """Test successful batch import upload"""
-        _override_user(college_user)
+        _override_user(importer_user)
         response = await client.post(
             f"{BASE}/upload-data",
             params={
@@ -140,11 +143,11 @@ class TestBatchImportEndpoints:
 
     @pytest.mark.asyncio
     async def test_upload_batch_import_surfaces_eligibility_warnings(
-        self, client: AsyncClient, college_user: User, test_scholarship: ScholarshipType, valid_excel_file
+        self, client: AsyncClient, importer_user: User, test_scholarship: ScholarshipType, valid_excel_file
     ):
         """Eligibility/professor warnings from bulk_check_eligibility must
         surface in the upload response's validation_summary.warnings."""
-        _override_user(college_user)
+        _override_user(importer_user)
 
         fake_warning = {
             "row_number": 2,
@@ -181,13 +184,13 @@ class TestBatchImportEndpoints:
 
     @pytest.mark.asyncio
     async def test_upload_batch_import_file_too_large(
-        self, client: AsyncClient, college_user: User, test_scholarship: ScholarshipType
+        self, client: AsyncClient, importer_user: User, test_scholarship: ScholarshipType
     ):
         """Test file size validation"""
         # Create a file larger than 10MB
         large_file = b"x" * (11 * 1024 * 1024)  # 11MB
 
-        _override_user(college_user)
+        _override_user(importer_user)
         response = await client.post(
             f"{BASE}/upload-data",
             params={
@@ -209,14 +212,14 @@ class TestBatchImportEndpoints:
 
     @pytest.mark.asyncio
     async def test_upload_batch_import_invalid_file_type(
-        self, client: AsyncClient, college_user: User, test_scholarship: ScholarshipType
+        self, client: AsyncClient, importer_user: User, test_scholarship: ScholarshipType
     ):
         """Test file type validation"""
         # PNG magic header -> libmagic reports image/png, which is not an allowed
         # Excel/CSV MIME type.
         invalid_file = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
 
-        _override_user(college_user)
+        _override_user(importer_user)
         response = await client.post(
             f"{BASE}/upload-data",
             params={
@@ -231,20 +234,21 @@ class TestBatchImportEndpoints:
         assert "不支援的檔案格式" in response.json()["message"]
 
     @pytest.mark.asyncio
-    async def test_upload_batch_import_no_college_code(
+    async def test_upload_rejects_college_role(
         self, client: AsyncClient, test_scholarship: ScholarshipType, valid_excel_file
     ):
-        """Test upload fails when user has no college code"""
-        user_without_college = User(
+        """Colleges no longer use 批次匯入 — they import via 補充匯入, so the
+        batch-import router must reject them even though they once had access."""
+        college_caller = User(
             id=999,
-            nycu_id="no_college",
-            name="No College User",
-            email="nocollege@test.com",
+            nycu_id="college_caller",
+            name="College Caller",
+            email="college@test.com",
             role=UserRole.college,
-            college_code=None,
+            college_code="E",
         )
 
-        _override_user(user_without_college)
+        _override_user(college_caller)
         response = await client.post(
             f"{BASE}/upload-data",
             params={
@@ -261,15 +265,14 @@ class TestBatchImportEndpoints:
             },
         )
 
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "未設定學院代碼" in response.json()["message"]
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     @pytest.mark.asyncio
-    async def test_confirm_batch_import_success(self, client: AsyncClient, db: AsyncSession, college_user: User):
+    async def test_confirm_batch_import_success(self, client: AsyncClient, db: AsyncSession, importer_user: User):
         """Test successful batch import confirmation"""
         # Create a batch import record
         batch_import = BatchImport(
-            importer_id=college_user.id,
+            importer_id=importer_user.id,
             college_code="E",
             scholarship_type_id=1,
             academic_year=113,
@@ -289,7 +292,7 @@ class TestBatchImportEndpoints:
         await db.refresh(batch_import)
 
         # Mock service so no real application creation runs
-        _override_user(college_user)
+        _override_user(importer_user)
         with patch("app.api.v1.endpoints.batch_import.BatchImportService") as mock_service_class:
             mock_service = Mock()
             mock_service.create_applications_from_batch = AsyncMock(return_value=([1, 2], []))
@@ -307,10 +310,10 @@ class TestBatchImportEndpoints:
         assert data["failed_count"] == 0
 
     @pytest.mark.asyncio
-    async def test_confirm_rejects_renewal_batch(self, client: AsyncClient, db: AsyncSession, college_user: User):
+    async def test_confirm_rejects_renewal_batch(self, client: AsyncClient, db: AsyncSession, importer_user: User):
         """A renewal-type batch must not be confirmable via the application endpoint -> 404."""
         batch_import = BatchImport(
-            importer_id=college_user.id,
+            importer_id=importer_user.id,
             college_code="E",
             scholarship_type_id=1,
             academic_year=113,
@@ -325,7 +328,7 @@ class TestBatchImportEndpoints:
         await db.commit()
         await db.refresh(batch_import)
 
-        _override_user(college_user)
+        _override_user(importer_user)
         response = await client.post(
             f"{BASE}/{batch_import.id}/confirm",
             json={"batch_id": batch_import.id, "confirm": True},
@@ -335,7 +338,7 @@ class TestBatchImportEndpoints:
 
     @pytest.mark.asyncio
     async def test_confirm_batch_import_keeps_review_flow_status(
-        self, client: AsyncClient, db: AsyncSession, college_user: User
+        self, client: AsyncClient, db: AsyncSession, importer_user: User
     ):
         """Regression (review-flow parity): the confirm endpoint must NOT
         mutate the status the service sets. A stale
@@ -365,7 +368,7 @@ class TestBatchImportEndpoints:
         )
 
         batch = BatchImport(
-            importer_id=college_user.id,
+            importer_id=importer_user.id,
             college_code="E",
             scholarship_type_id=scholarship.id,
             academic_year=114,
@@ -389,7 +392,7 @@ class TestBatchImportEndpoints:
         await db.commit()
         await db.refresh(batch)
 
-        _override_user(college_user)
+        _override_user(importer_user)
         # Neutralize SIS so no network call — the endpoint builds its own
         # BatchImportService(db) internally, so patch the StudentService it
         # constructs rather than injecting a stub.
@@ -413,10 +416,10 @@ class TestBatchImportEndpoints:
         assert created.review_stage == ReviewStage.student_submitted
 
     @pytest.mark.asyncio
-    async def test_confirm_batch_import_cancel(self, client: AsyncClient, db: AsyncSession, college_user: User):
+    async def test_confirm_batch_import_cancel(self, client: AsyncClient, db: AsyncSession, importer_user: User):
         """Test batch import cancellation"""
         batch_import = BatchImport(
-            importer_id=college_user.id,
+            importer_id=importer_user.id,
             college_code="E",
             scholarship_type_id=1,
             academic_year=113,
@@ -430,7 +433,7 @@ class TestBatchImportEndpoints:
         await db.commit()
         await db.refresh(batch_import)
 
-        _override_user(college_user)
+        _override_user(importer_user)
         response = await client.post(
             f"{BASE}/{batch_import.id}/confirm",
             json={"batch_id": batch_import.id, "confirm": False},
@@ -445,10 +448,10 @@ class TestBatchImportEndpoints:
         assert batch_import.import_status == BatchImportStatus.cancelled
 
     @pytest.mark.asyncio
-    async def test_confirm_batch_import_wrong_status(self, client: AsyncClient, db: AsyncSession, college_user: User):
+    async def test_confirm_batch_import_wrong_status(self, client: AsyncClient, db: AsyncSession, importer_user: User):
         """Test confirming batch with wrong status"""
         batch_import = BatchImport(
-            importer_id=college_user.id,
+            importer_id=importer_user.id,
             college_code="E",
             scholarship_type_id=1,
             academic_year=113,
@@ -462,7 +465,7 @@ class TestBatchImportEndpoints:
         await db.commit()
         await db.refresh(batch_import)
 
-        _override_user(college_user)
+        _override_user(importer_user)
         response = await client.post(
             f"{BASE}/{batch_import.id}/confirm",
             json={"batch_id": batch_import.id, "confirm": True},
@@ -472,11 +475,11 @@ class TestBatchImportEndpoints:
         assert "無法再次確認" in response.json()["message"]
 
     @pytest.mark.asyncio
-    async def test_get_batch_import_history_college(self, client: AsyncClient, db: AsyncSession, college_user: User):
-        """Test getting batch import history as college user"""
+    async def test_get_batch_import_history_admin(self, client: AsyncClient, db: AsyncSession, importer_user: User):
+        """Test getting batch import history as the importing admin"""
         # Create batch imports (only confirmed statuses appear in history)
         batch1 = BatchImport(
-            importer_id=college_user.id,
+            importer_id=importer_user.id,
             college_code="E",
             scholarship_type_id=1,
             academic_year=113,
@@ -486,7 +489,7 @@ class TestBatchImportEndpoints:
             import_status=BatchImportStatus.completed,
         )
         batch2 = BatchImport(
-            importer_id=college_user.id,
+            importer_id=importer_user.id,
             college_code="E",
             scholarship_type_id=1,
             academic_year=113,
@@ -498,7 +501,7 @@ class TestBatchImportEndpoints:
         db.add_all([batch1, batch2])
         await db.commit()
 
-        _override_user(college_user)
+        _override_user(importer_user)
         response = await client.get(f"{BASE}/history")
 
         assert response.status_code == status.HTTP_200_OK
@@ -508,12 +511,12 @@ class TestBatchImportEndpoints:
 
     @pytest.mark.asyncio
     async def test_get_batch_import_history_super_admin(
-        self, client: AsyncClient, db: AsyncSession, college_user: User, super_admin_user: User
+        self, client: AsyncClient, db: AsyncSession, importer_user: User, super_admin_user: User
     ):
         """Test super admin can see all batch imports"""
         # Create batch from college user (confirmed status so it shows in history)
         batch = BatchImport(
-            importer_id=college_user.id,
+            importer_id=importer_user.id,
             college_code="E",
             scholarship_type_id=1,
             academic_year=113,
@@ -533,10 +536,10 @@ class TestBatchImportEndpoints:
         assert data["total"] >= 1  # Should see college user's batch
 
     @pytest.mark.asyncio
-    async def test_get_batch_import_details(self, client: AsyncClient, db: AsyncSession, college_user: User):
+    async def test_get_batch_import_details(self, client: AsyncClient, db: AsyncSession, importer_user: User):
         """Test getting batch import details"""
         batch = BatchImport(
-            importer_id=college_user.id,
+            importer_id=importer_user.id,
             college_code="E",
             scholarship_type_id=1,
             academic_year=113,
@@ -552,7 +555,7 @@ class TestBatchImportEndpoints:
         await db.commit()
         await db.refresh(batch)
 
-        _override_user(college_user)
+        _override_user(importer_user)
         response = await client.get(f"{BASE}/{batch.id}/details")
 
         assert response.status_code == status.HTTP_200_OK
@@ -563,9 +566,9 @@ class TestBatchImportEndpoints:
         assert data["failed_count"] == 2
 
     @pytest.mark.asyncio
-    async def test_download_template(self, client: AsyncClient, college_user: User, test_scholarship: ScholarshipType):
+    async def test_download_template(self, client: AsyncClient, importer_user: User, test_scholarship: ScholarshipType):
         """Test template download"""
-        _override_user(college_user)
+        _override_user(importer_user)
         response = await client.get(
             f"{BASE}/template",
             params={"scholarship_type": test_scholarship.code},
@@ -599,12 +602,12 @@ class TestBatchImportEndpoints:
 
     @pytest.mark.asyncio
     async def test_upload_accepts_empty_semester_for_yearly(
-        self, client: AsyncClient, college_user: User, test_scholarship: ScholarshipType, valid_excel_file
+        self, client: AsyncClient, importer_user: User, test_scholarship: ScholarshipType, valid_excel_file
     ):
         """Yearly scholarships have no semester part in their period, so the
         UI sends semester="" — that must normalize to None (yearly), not die
         in the query-pattern check with a generic 422 "Validation failed"."""
-        _override_user(college_user)
+        _override_user(importer_user)
         response = await client.post(
             f"{BASE}/upload-data",
             params={"scholarship_type": test_scholarship.code, "academic_year": 114, "semester": ""},
@@ -621,7 +624,7 @@ class TestBatchImportEndpoints:
 
     @pytest.mark.asyncio
     async def test_downloaded_template_round_trips_through_upload(
-        self, client: AsyncClient, college_user: User, test_scholarship: ScholarshipType
+        self, client: AsyncClient, importer_user: User, test_scholarship: ScholarshipType
     ):
         """下載的範本必須「原樣可匯入」：GET /template 的檔案直接餵回
         upload-data 不得產生任何驗證錯誤。
@@ -631,7 +634,7 @@ class TestBatchImportEndpoints:
         code itself as the column header — the parser must accept it, or
         every sample row dies with missing_sub_type.
         """
-        _override_user(college_user)
+        _override_user(importer_user)
 
         template_resp = await client.get(f"{BASE}/template", params={"scholarship_type": test_scholarship.code})
         assert template_resp.status_code == status.HTTP_200_OK
@@ -657,10 +660,10 @@ class TestBatchImportEndpoints:
         assert all(row["sub_types"] for row in data["preview_data"])
 
     @pytest.mark.asyncio
-    async def test_upload_requires_college_role(
+    async def test_upload_requires_admin_role(
         self, client: AsyncClient, test_scholarship: ScholarshipType, valid_excel_file
     ):
-        """Test upload endpoint requires college or super_admin role"""
+        """Test upload endpoint requires admin or super_admin role"""
         student_user = User(
             id=999,
             nycu_id="student_test",

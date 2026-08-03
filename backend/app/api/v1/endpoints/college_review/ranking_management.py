@@ -13,7 +13,7 @@ import logging
 from typing import Any, Dict, List, Literal, Optional, Tuple
 from urllib.parse import quote as _url_quote
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +24,6 @@ from app.core.security import require_college, require_scholarship_manager
 from app.db.deps import get_db
 from app.models.audit_log import AuditAction, AuditLog
 from app.models.college_review import CollegeRanking, CollegeRankingItem
-from app.models.enums import Semester
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.student import Department
 from app.models.user import User, UserRole
@@ -42,8 +41,6 @@ from app.services.college_review_service import (
     RankingNotFoundError,
 )
 from app.services.review_service import ReviewService
-from app.utils.application_helpers import get_college_code_from_data
-from app.services.supplementary_import_service import SupplementaryImportService
 
 from .application_summary_export import XLSX_MEDIA_TYPE
 from ._helpers import (
@@ -181,9 +178,6 @@ async def get_rankings(
                     "college_quota": college_quota,
                     "allocated_count": ranking.allocated_count,
                     "is_finalized": ranking.is_finalized,
-                    # Read flag from matching scholarship configuration (one flag per config,
-                    # applies to all colleges' rankings under it)
-                    "allow_supplementary_import": bool(config and config.allow_supplementary_import),
                     "allow_college_view_distribution": bool(config and config.allow_college_view_distribution),
                     "ranking_status": ranking.ranking_status,
                     "distribution_executed": ranking.distribution_executed,
@@ -573,9 +567,6 @@ async def get_ranking(
                 "college_quota_breakdown": college_quota_breakdown,
                 "allocated_count": ranking.allocated_count,
                 "is_finalized": ranking.is_finalized,
-                # Read flag from matching scholarship configuration (one flag per config,
-                # applies to all colleges' rankings under it)
-                "allow_supplementary_import": bool(config and config.allow_supplementary_import),
                 "allow_college_view_distribution": bool(config and config.allow_college_view_distribution),
                 "ranking_status": ranking.ranking_status,
                 "distribution_executed": ranking.distribution_executed,
@@ -1355,212 +1346,5 @@ async def export_ranking_excel(
         headers={
             "Content-Disposition": f"attachment; filename*=UTF-8''{encoded}",
             "Content-Length": str(len(payload)),
-        },
-    )
-
-
-@router.post("/rankings/{ranking_id}/supplementary-import")
-async def supplementary_import(
-    ranking_id: int,
-    file: UploadFile = File(...),
-    current_user: User = Depends(require_college),
-    db: AsyncSession = Depends(get_db),
-):
-    """College upload: import new students via 學生資料彙整表 Excel after distribution.
-
-    The supplementary-import flag is read from the matching ScholarshipConfiguration
-    (one flag per scholarship_type/academic_year/semester) — admin toggles it from
-    系統管理 → 獎學金配置.
-    """
-    # Load ranking with items and scholarship_type
-    stmt = (
-        select(CollegeRanking)
-        .options(
-            selectinload(CollegeRanking.items),
-            selectinload(CollegeRanking.creator),
-            selectinload(CollegeRanking.scholarship_type).selectinload(ScholarshipType.sub_type_configs),
-        )
-        .where(CollegeRanking.id == ranking_id)
-    )
-    result = await db.execute(stmt)
-    ranking = result.scalar_one_or_none()
-    if not ranking:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
-
-    # Authorize BEFORE reading the config flag, so a cross-college caller gets a clear
-    # "no permission" 403 (not a misleading "feature not open") and we don't leak another
-    # college's allow_supplementary_import state. College users may only import to their
-    # own college's ranking; authorize on the authoritative ranking.college_code.
-    assert_can_manage_ranking(ranking, current_user)
-
-    # Look up the matching scholarship configuration to read the flag.
-    # Normalize semester via the canonical helper so "yearly" / Semester.yearly /
-    # NULL all resolve consistently (see CollegeReviewService.assert_ranking_within_deadline).
-    normalized_semester = CollegeReviewService._normalize_semester_value(ranking.semester)
-    cfg_conditions = [
-        ScholarshipConfiguration.scholarship_type_id == ranking.scholarship_type_id,
-        ScholarshipConfiguration.academic_year == ranking.academic_year,
-        ScholarshipConfiguration.is_active.is_(True),
-    ]
-    if normalized_semester is None:
-        # Yearly cycles store semester as either NULL or "yearly" — match both
-        # (same rule as CollegeReviewService.assert_ranking_within_deadline).
-        cfg_conditions.append(
-            or_(
-                ScholarshipConfiguration.semester.is_(None),
-                ScholarshipConfiguration.semester == Semester.yearly.value,
-            )
-        )
-    else:
-        cfg_conditions.append(ScholarshipConfiguration.semester == normalized_semester)
-
-    cfg_stmt = select(ScholarshipConfiguration).where(and_(*cfg_conditions)).limit(1)
-    cfg = (await db.execute(cfg_stmt)).scalar_one_or_none()
-    if not cfg or not cfg.allow_supplementary_import:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="補充匯入功能尚未開放")
-
-    # Build label→code map from scholarship sub_type_configs. Loop variable must
-    # NOT be named "cfg" — that name is the resolved ScholarshipConfiguration
-    # above, which is passed to create_applications_and_items below.
-    label_to_code = {
-        stc.name: stc.sub_type_code
-        for stc in (getattr(ranking.scholarship_type, "sub_type_configs", None) or [])
-        if stc.name and stc.sub_type_code
-    }
-
-    # Load dynamic fields (same query as export)
-    dynamic_fields, _, _, _ = await load_export_aux_data(
-        db,
-        scholarship_type=ranking.scholarship_type,
-        applications=[],
-    )
-    dynamic_field_names = [f.field_name for f in dynamic_fields]
-
-    # Parse Excel
-    allowed_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    if file.content_type and file.content_type != allowed_mime:
-        raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail="只接受 .xlsx 檔案",
-        )
-    file_bytes = await file.read()
-    MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
-    if len(file_bytes) > MAX_UPLOAD_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="檔案大小不能超過 10 MB",
-        )
-    rows, parse_errors = SupplementaryImportService.parse_excel(file_bytes, label_to_code, dynamic_field_names)
-    if parse_errors:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="\n".join(parse_errors),
-        )
-
-    service = SupplementaryImportService(db)
-
-    # Validate no duplicate applications
-    semester_for_check = ranking.semester if ranking.semester else "yearly"
-    conflicts = await service.validate_no_duplicate_applications(
-        rows,
-        scholarship_type_id=ranking.scholarship_type_id,
-        academic_year=ranking.academic_year,
-        semester=semester_for_check,
-    )
-    if conflicts:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"以下學號已有申請記錄：{', '.join(conflicts)}",
-        )
-
-    # Fetch student data from SIS API
-    student_ids = [r.student_id for r in rows]
-    student_data_map, missing_ids = await service.fetch_student_data_bulk(
-        student_ids,
-        academic_year=ranking.academic_year,
-        semester=ranking.semester,
-    )
-    if missing_ids:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"學籍系統查無以下學號：{', '.join(missing_ids)}",
-        )
-
-    # Each ranking belongs to one college (via its creator). Reject any student
-    # whose SIS-reported college doesn't match — colleges may only import their
-    # own students even when admin opens the toggle for the whole config.
-    # Use the canonical extractor so we honor std_academyno → academy_code →
-    # college_code → std_college precedence (some SIS records carry the field
-    # under a different key).
-    # Use the ranking's authoritative college_code (immutable snapshot), consistent
-    # with the authorization check above and stable if the creator is reassigned.
-    expected_college = (ranking.college_code or "").strip()
-    if expected_college:
-        mismatched = []
-        for sid, data in student_data_map.items():
-            student_college = (get_college_code_from_data(data) or "").strip()
-            if student_college != expected_college:
-                mismatched.append(f"{sid}({student_college or '無學院'})")
-        if mismatched:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=(f"以下學生不屬於本學院（{expected_college}），無法匯入：" f"{', '.join(mismatched)}"),
-            )
-
-    # Compute max existing rank for offset
-    existing_ranks = [item.rank_position for item in ranking.items]
-    max_existing_rank = max(existing_ranks) if existing_ranks else 0
-
-    # Find or create users
-    user_map = await service.find_or_create_users(student_data_map)
-
-    # Upsert user profiles (bank_account, advisor_name)
-    await service.upsert_user_profiles(user_map, rows)
-
-    # Create applications + ranking items. Pass the resolved configuration so
-    # every application carries scholarship_configuration_id — roster rule
-    # validation depends on it (issue #1213).
-    imported_count = await service.create_applications_and_items(
-        rows, user_map, student_data_map, ranking, max_existing_rank, cfg
-    )
-    ranking.total_applications = len(ranking.items) + imported_count
-    await db.commit()
-
-    logger.info(
-        "Supplementary import: ranking_id=%s imported=%s by user=%s",
-        ranking_id,
-        imported_count,
-        current_user.id,
-    )
-
-    try:
-        audit_log = AuditLog.create_log(
-            user_id=current_user.id,
-            action=AuditAction.pii_access.value,  # closest fit — Application/User/UserProfile rows created with PII
-            resource_type="college_ranking",
-            resource_id=str(ranking_id),
-            description=f"補充匯入：建立 {imported_count} 筆申請",
-            new_values={
-                "ranking_id": ranking_id,
-                "imported_count": imported_count,
-                "student_ids": [r.student_id for r in rows],
-                "max_existing_rank": max_existing_rank,
-            },
-            status="success",
-        )
-        db.add(audit_log)
-        await db.commit()
-    except Exception as exc:  # audit failure must not block the import
-        logger.warning("Failed to record supplementary import audit log: %s", exc, exc_info=True)
-        await db.rollback()
-
-    return ApiResponse(
-        success=True,
-        message=f"補充匯入成功，共新增 {imported_count} 位學生",
-        data={
-            "ranking_id": ranking_id,
-            "imported_count": imported_count,
-            "max_existing_rank": max_existing_rank,
-            "new_rank_range": f"{max_existing_rank + 1}–{max_existing_rank + imported_count}",
         },
     )

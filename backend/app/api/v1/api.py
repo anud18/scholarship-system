@@ -34,6 +34,7 @@ from app.api.v1.endpoints import (
     scholarships,
     student_bank_accounts,
     student_history,
+    supplementary_import,
     system_settings,
     user_profiles,
     users,
@@ -72,6 +73,11 @@ api_router.include_router(college_review.router, prefix="/college-review", tags=
 api_router.include_router(reviews.router, prefix="/reviews", tags=["Reviews"])
 api_router.include_router(batch_import.router, prefix="/college-review/batch-import", tags=["Batch Import"])
 api_router.include_router(renewal_import.router, prefix="/college-review/renewal-import", tags=["Renewal Import"])
+api_router.include_router(
+    supplementary_import.router,
+    prefix="/college-review/supplementary-import",
+    tags=["Supplementary Import"],
+)
 api_router.include_router(email_management.router, prefix="/email-management", tags=["Email Management"])
 api_router.include_router(email_automation.router, prefix="/email-automation", tags=["Email Automation"])
 api_router.include_router(nycu_employee.router, prefix="/nycu-employee", tags=["NYCU Employee"])
