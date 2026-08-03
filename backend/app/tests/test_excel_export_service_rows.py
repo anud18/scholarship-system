@@ -208,7 +208,7 @@ def test_row_data_bank_code_always_700(service: ExcelExportService) -> None:
 
 def test_row_data_fixed_columns_contract(service: ExcelExportService) -> None:
     """Pin the small set of fixed-value columns the accounting system
-    expects EXACTLY: 職別="學生", 身份別代碼="1", 單位="次", 數量="1",
+    expects EXACTLY: 職別="學生", 身份別代碼="1", 單位="元", 數量="1",
     個人身分別="1" (本國人), 居留天數="是". Any drift triggers
     an audit kickback from the bank batch import."""
     roster = _make_roster()
@@ -219,7 +219,7 @@ def test_row_data_fixed_columns_contract(service: ExcelExportService) -> None:
     row = data[0]
     assert row["職別(稱)"] == "學生"
     assert row["身份別代碼"] == "1"
-    assert row["單位(ex:時,月,次...)"] == "次"
+    assert row["單位(ex:時,月,次...)"] == "元"
     assert row["數量"] == "1"
     assert row["個人身分別(1:本國人,2:外國人,3:大陸人)"] == "1"
     assert row["居留天數是否滿183天(是/否)"] == "是"
