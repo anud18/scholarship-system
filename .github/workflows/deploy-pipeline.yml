@@ -186,11 +186,31 @@ jobs:
             cp -r nginx ~/scholarship-staging/
             echo "Nginx config copied"
           fi
+          # These trees are copied as the runner user and are therefore owned by
+          # it, so a plain rm replaces them. sudo -n is only a fallback for hosts
+          # left with root-owned copies by an earlier deploy; -n so a VM WITHOUT
+          # passwordless sudo fails with the message below instead of blocking on
+          # a password prompt no one can answer.
+          replace_dir() {
+            rm -rf "$HOME/scholarship-staging/$1" 2>/dev/null && return 0
+            sudo -n rm -rf "$HOME/scholarship-staging/$1" 2>/dev/null && return 0
+            echo "::error::Cannot replace ~/scholarship-staging/$1 — it is owned by root"
+            echo "::error::and this runner has no passwordless sudo. Clear it once on the VM:"
+            echo "::error::  sudo rm -rf ~/scholarship-staging/$1"
+            return 1
+          }
           if [ -d monitoring ]; then
-            # Remove old monitoring directory if it exists (may have wrong permissions)
-            sudo rm -rf ~/scholarship-staging/monitoring
+            replace_dir monitoring
             cp -r monitoring ~/scholarship-staging/
             echo "Monitoring config copied"
+          fi
+          # scripts/logrotate.conf is the logrotate service's config. Without
+          # this copy Docker materialises the mount source as a directory and
+          # logrotate reports "Handling 0 logs" while rotating nothing.
+          if [ -d scripts ]; then
+            replace_dir scripts
+            cp -r scripts ~/scholarship-staging/
+            echo "Scripts copied"
           fi
           cd ~/scholarship-staging
           echo "Deployment files prepared"
