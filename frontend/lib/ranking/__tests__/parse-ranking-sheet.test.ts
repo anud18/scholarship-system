@@ -44,9 +44,7 @@ describe("parseRankingSheet", () => {
 
   it("errors when the rank cell is blank (data row = index + 3)", () => {
     const { errors } = parseRankingSheet([rowOf("310460099", "王小明", "")]);
-    expect(errors).toEqual([
-      "第 3 行排名欄位為空（學號：310460099）",
-    ]);
+    expect(errors).toEqual(["第 3 行排名欄位為空（學號：310460099）"]);
   });
 
   it("errors on a non-positive-integer rank", () => {
@@ -67,7 +65,9 @@ describe("parseRankingSheet", () => {
       rowOf("310460099", "王小明", 1),
       rowOf("310460100", "李小華", 1),
     ]);
-    expect(errors.some(e => e.includes("排名 1 重複出現"))).toBe(true);
+    expect(errors).toContain(
+      "排名 1 重複出現（2 次），排名數字不可重複、不可跳號"
+    );
   });
 
   it("errors when integer ranks are not consecutive from 1", () => {
@@ -75,7 +75,9 @@ describe("parseRankingSheet", () => {
       rowOf("310460099", "王小明", 1),
       rowOf("310460100", "李小華", 3),
     ]);
-    expect(errors.some(e => e.includes("排名不連續"))).toBe(true);
+    expect(errors).toContain(
+      "排名不連續：缺少第 2 名，排名數字不可重複、不可跳號"
+    );
   });
 
   it("does not treat N as a gap: ranks 1,2 + one N are consecutive", () => {
