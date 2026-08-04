@@ -1,0 +1,841 @@
+{
+	"@programName": "ZAP",
+	"@version": "2.17.0",
+	"@generated": "Tue, 4 Aug 2026 04:37:41",
+	"created": "2026-08-04T04:37:41.505955Z",
+	"insights":[
+		{
+			"level": "Low",
+			"reason": "Warning",
+			"site": "",
+			"key": "insight.log.warn",
+			"description": "ZAP warnings logged - see the zap.log file for details",
+			"statistic": "24"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "",
+			"key": "insight.network.failure",
+			"description": "Percentage of network failures",
+			"statistic": "23"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:3100",
+			"key": "insight.code.2xx",
+			"description": "Percentage of responses with status code 2xx",
+			"statistic": "92"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:3100",
+			"key": "insight.code.4xx",
+			"description": "Percentage of responses with status code 4xx",
+			"statistic": "8"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:3100",
+			"key": "insight.endpoint.ctype.application/javascript",
+			"description": "Percentage of endpoints with content type application/javascript",
+			"statistic": "65"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:3100",
+			"key": "insight.endpoint.ctype.image/svg+xml",
+			"description": "Percentage of endpoints with content type image/svg+xml",
+			"statistic": "8"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:3100",
+			"key": "insight.endpoint.ctype.text/css",
+			"description": "Percentage of endpoints with content type text/css",
+			"statistic": "13"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:3100",
+			"key": "insight.endpoint.ctype.text/html",
+			"description": "Percentage of endpoints with content type text/html",
+			"statistic": "13"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:3100",
+			"key": "insight.endpoint.method.GET",
+			"description": "Percentage of endpoints with method GET",
+			"statistic": "100"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:3100",
+			"key": "insight.endpoint.total",
+			"description": "Count of total endpoints",
+			"statistic": "23"
+		}
+	],
+	"site":[ 
+		{
+			"@name": "http://localhost:3100",
+			"@host": "localhost",
+			"@port": "3100",
+			"@ssl": "false",
+			"alerts": [ 
+				{
+					"pluginid": "90004",
+					"alertRef": "90004-2",
+					"alert": "Cross-Origin-Embedder-Policy Header Missing or Invalid",
+					"name": "Cross-Origin-Embedder-Policy Header Missing or Invalid",
+					"riskcode": "1",
+					"confidence": "2",
+					"riskdesc": "Low (Medium)",
+					"desc": "<p>Cross-Origin-Embedder-Policy header is a response header that prevents a document from loading any cross-origin resources that don't explicitly grant the document permission (using CORP or CORS).</p>",
+					"instances":[ 
+						{
+							"id": "34",
+							"uri": "http://localhost:3100",
+							"nodeName": "http:\/\/localhost:3100",
+							"method": "GET",
+							"param": "Cross-Origin-Embedder-Policy",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						}
+					],
+					"count": "1",
+					"systemic": false,
+					"solution": "<p>Ensure that the application/web server sets the Cross-Origin-Embedder-Policy header appropriately, and that it sets the Cross-Origin-Embedder-Policy header to 'require-corp' for documents.</p><p>If possible, ensure that the end user uses a standards-compliant and modern web browser that supports the Cross-Origin-Embedder-Policy header (https://caniuse.com/mdn-http_headers_cross-origin-embedder-policy).</p>",
+					"otherinfo": "",
+					"reference": "<p>https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cross-Origin-Embedder-Policy</p>",
+					"cweid": "693",
+					"wascid": "14",
+					"sourceid": "6"
+				},
+				{
+					"pluginid": "90004",
+					"alertRef": "90004-3",
+					"alert": "Cross-Origin-Opener-Policy Header Missing or Invalid",
+					"name": "Cross-Origin-Opener-Policy Header Missing or Invalid",
+					"riskcode": "1",
+					"confidence": "2",
+					"riskdesc": "Low (Medium)",
+					"desc": "<p>Cross-Origin-Opener-Policy header is a response header that allows a site to control if others included documents share the same browsing context. Sharing the same browsing context with untrusted documents might lead to data leak.</p>",
+					"instances":[ 
+						{
+							"id": "35",
+							"uri": "http://localhost:3100",
+							"nodeName": "http:\/\/localhost:3100",
+							"method": "GET",
+							"param": "Cross-Origin-Opener-Policy",
+							"attack": "",
+							"evidence": "same-origin-allow-popups",
+							"otherinfo": ""
+						}
+					],
+					"count": "1",
+					"systemic": false,
+					"solution": "<p>Ensure that the application/web server sets the Cross-Origin-Opener-Policy header appropriately, and that it sets the Cross-Origin-Opener-Policy header to 'same-origin' for documents.</p><p>'same-origin-allow-popups' is considered as less secured and should be avoided.</p><p>If possible, ensure that the end user uses a standards-compliant and modern web browser that supports the Cross-Origin-Opener-Policy header (https://caniuse.com/mdn-http_headers_cross-origin-opener-policy).</p>",
+					"otherinfo": "",
+					"reference": "<p>https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cross-Origin-Opener-Policy</p>",
+					"cweid": "693",
+					"wascid": "14",
+					"sourceid": "6"
+				},
+				{
+					"pluginid": "90004",
+					"alertRef": "90004-1",
+					"alert": "Cross-Origin-Resource-Policy Header Missing or Invalid",
+					"name": "Cross-Origin-Resource-Policy Header Missing or Invalid",
+					"riskcode": "1",
+					"confidence": "2",
+					"riskdesc": "Low (Medium)",
+					"desc": "<p>Cross-Origin-Resource-Policy header is an opt-in header designed to counter side-channels attacks like Spectre. Resource should be specifically set as shareable amongst different origins.</p>",
+					"instances":[ 
+						{
+							"id": "32",
+							"uri": "http://localhost:3100/_next/static/chunks/webpack-83f5c9926880dbaa.js",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/chunks\/webpack-83f5c9926880dbaa.js",
+							"method": "GET",
+							"param": "Cross-Origin-Resource-Policy",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "27",
+							"uri": "http://localhost:3100/_next/static/css/86498b921adc386d.css",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/css\/86498b921adc386d.css",
+							"method": "GET",
+							"param": "Cross-Origin-Resource-Policy",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "14",
+							"uri": "http://localhost:3100/_next/static/css/f6de2bba3bf22cdd.css",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/css\/f6de2bba3bf22cdd.css",
+							"method": "GET",
+							"param": "Cross-Origin-Resource-Policy",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "13",
+							"uri": "http://localhost:3100/icon.svg",
+							"nodeName": "http:\/\/localhost:3100\/icon.svg",
+							"method": "GET",
+							"param": "Cross-Origin-Resource-Policy",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "29",
+							"uri": "http://localhost:3100/nycu-favicon.svg",
+							"nodeName": "http:\/\/localhost:3100\/nycu-favicon.svg",
+							"method": "GET",
+							"param": "Cross-Origin-Resource-Policy",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						}
+					],
+					"count": "5",
+					"systemic": true,
+					"solution": "<p>Ensure that the application/web server sets the Cross-Origin-Resource-Policy header appropriately, and that it sets the Cross-Origin-Resource-Policy header to 'same-origin' for all web pages.</p><p>'same-site' is considered as less secured and should be avoided.</p><p>If resources must be shared, set the header to 'cross-origin'.</p><p>If possible, ensure that the end user uses a standards-compliant and modern web browser that supports the Cross-Origin-Resource-Policy header (https://caniuse.com/mdn-http_headers_cross-origin-resource-policy).</p>",
+					"otherinfo": "",
+					"reference": "<p>https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cross-Origin-Embedder-Policy</p>",
+					"cweid": "693",
+					"wascid": "14",
+					"sourceid": "25"
+				},
+				{
+					"pluginid": "10063",
+					"alertRef": "10063-1",
+					"alert": "Permissions Policy Header Not Set",
+					"name": "Permissions Policy Header Not Set",
+					"riskcode": "1",
+					"confidence": "2",
+					"riskdesc": "Low (Medium)",
+					"desc": "<p>Permissions Policy Header is an added layer of security that helps to restrict from unauthorized access or usage of browser/client features by web resources. This policy ensures the user privacy by limiting or specifying the features of the browsers can be used by the web resources. Permissions Policy provides a set of standard HTTP headers that allow website owners to limit which features of browsers can be used by the page such as camera, microphone, location, full screen etc.</p>",
+					"instances":[ 
+						{
+							"id": "52",
+							"uri": "http://localhost:3100/_next/static/chunks/3406-370eb1fc915831be.js",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/chunks\/3406-370eb1fc915831be.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "55",
+							"uri": "http://localhost:3100/_next/static/chunks/7681-e1021e52cde3b535.js",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/chunks\/7681-e1021e52cde3b535.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "51",
+							"uri": "http://localhost:3100/_next/static/chunks/app/layout-79f6ab5cc9330e6a.js",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/chunks\/app\/layout-79f6ab5cc9330e6a.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "45",
+							"uri": "http://localhost:3100/_next/static/chunks/main-app-d3ce311ae5167d41.js",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/chunks\/main-app-d3ce311ae5167d41.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "31",
+							"uri": "http://localhost:3100/_next/static/chunks/webpack-83f5c9926880dbaa.js",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/chunks\/webpack-83f5c9926880dbaa.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						}
+					],
+					"count": "5",
+					"systemic": true,
+					"solution": "<p>Ensure that your web server, application server, load balancer, etc. is configured to set the Permissions-Policy header.</p>",
+					"otherinfo": "",
+					"reference": "<p>https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Permissions-Policy</p><p>https://developer.chrome.com/blog/feature-policy/</p><p>https://scotthelme.co.uk/a-new-security-header-feature-policy/</p><p>https://w3c.github.io/webappsec-feature-policy/</p><p>https://www.smashingmagazine.com/2018/12/feature-policy/</p>",
+					"cweid": "693",
+					"wascid": "15",
+					"sourceid": "35"
+				},
+				{
+					"pluginid": "10021",
+					"alertRef": "10021",
+					"alert": "X-Content-Type-Options Header Missing",
+					"name": "X-Content-Type-Options Header Missing",
+					"riskcode": "1",
+					"confidence": "2",
+					"riskdesc": "Low (Medium)",
+					"desc": "<p>The Anti-MIME-Sniffing header X-Content-Type-Options was not set to 'nosniff'. This allows older versions of Internet Explorer and Chrome to perform MIME-sniffing on the response body, potentially causing the response body to be interpreted and displayed as a content type other than the declared content type. Current (early 2014) and legacy versions of Firefox will use the declared content type (if one is set), rather than performing MIME-sniffing.</p>",
+					"instances":[ 
+						{
+							"id": "18",
+							"uri": "http://localhost:3100/_next/static/chunks/webpack-83f5c9926880dbaa.js",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/chunks\/webpack-83f5c9926880dbaa.js",
+							"method": "GET",
+							"param": "x-content-type-options",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": "This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.\nAt \"High\" threshold this scan rule will not alert on client or server error responses."
+						},
+						{
+							"id": "2",
+							"uri": "http://localhost:3100/_next/static/css/86498b921adc386d.css",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/css\/86498b921adc386d.css",
+							"method": "GET",
+							"param": "x-content-type-options",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": "This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.\nAt \"High\" threshold this scan rule will not alert on client or server error responses."
+						},
+						{
+							"id": "0",
+							"uri": "http://localhost:3100/_next/static/css/f6de2bba3bf22cdd.css",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/css\/f6de2bba3bf22cdd.css",
+							"method": "GET",
+							"param": "x-content-type-options",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": "This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.\nAt \"High\" threshold this scan rule will not alert on client or server error responses."
+						},
+						{
+							"id": "1",
+							"uri": "http://localhost:3100/icon.svg",
+							"nodeName": "http:\/\/localhost:3100\/icon.svg",
+							"method": "GET",
+							"param": "x-content-type-options",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": "This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.\nAt \"High\" threshold this scan rule will not alert on client or server error responses."
+						},
+						{
+							"id": "17",
+							"uri": "http://localhost:3100/nycu-favicon.svg",
+							"nodeName": "http:\/\/localhost:3100\/nycu-favicon.svg",
+							"method": "GET",
+							"param": "x-content-type-options",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": "This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.\nAt \"High\" threshold this scan rule will not alert on client or server error responses."
+						}
+					],
+					"count": "5",
+					"systemic": true,
+					"solution": "<p>Ensure that the application/web server sets the Content-Type header appropriately, and that it sets the X-Content-Type-Options header to 'nosniff' for all web pages.</p><p>If possible, ensure that the end user uses a standards-compliant and modern web browser that does not perform MIME-sniffing at all, or that can be directed by the web application/web server to not perform MIME-sniffing.</p>",
+					"otherinfo": "<p>This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.</p><p>At \"High\" threshold this scan rule will not alert on client or server error responses.</p>",
+					"reference": "<p>https://learn.microsoft.com/en-us/previous-versions/windows/internet-explorer/ie-developer/compatibility/gg622941(v=vs.85)</p><p>https://owasp.org/www-community/Security_Headers</p>",
+					"cweid": "693",
+					"wascid": "15",
+					"sourceid": "25"
+				},
+				{
+					"pluginid": "10094",
+					"alertRef": "10094-3",
+					"alert": "Base64 Disclosure",
+					"name": "Base64 Disclosure",
+					"riskcode": "0",
+					"confidence": "2",
+					"riskdesc": "Informational (Medium)",
+					"desc": "<p>Base64 encoded data was disclosed by the application/web server. Note: in the interests of performance not all base64 strings in the response were analyzed individually, the entire response should be looked at by the analyst/security team/developer(s).</p>",
+					"instances":[ 
+						{
+							"id": "66",
+							"uri": "http://localhost:3100/_next/static/chunks/464-3ff7eaf4cad45a55.js",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/chunks\/464-3ff7eaf4cad45a55.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+							"otherinfo": "\\x0000\\x0010\uFFFD\\x0010Q\uFFFD \uFFFD\uFFFD0\u04CFA\\x0014\uFFFDQU\uFFFDa\uFFFD\uFFFDq\u05DF\uFFFD\\x0018\uFFFD\uFFFDY\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\u06EF\uFFFD\\x001c\uFFFD\uFFFD]\uFFFD\u37BB\uFFFD\u07FF"
+						},
+						{
+							"id": "67",
+							"uri": "http://localhost:3100/_next/static/chunks/efff166f-6eb7ea9dd6bb56a5.js",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/chunks\/efff166f-6eb7ea9dd6bb56a5.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "T1RUTwALAIAAAwAwQ0ZGIDHtZg4AAAOYAAAAgUZGVE1lkzZwAAAEHAAAABxHREVGABQAFQAABDgAAAAeT1MvMlYNYwkAAAEgAAAAYGNtYXABDQLUAAACNAAAAUJoZWFk/xVFDQAAALwAAAA2aGhlYQdkA+oAAAD0AAAAJGhtdHgD6AAAAAAEWAAAAAZtYXhwAAJQAAAAARgAAAAGbmFtZVjmdH4AAAGAAAAAsXBvc3T/hgAzAAADeAAAACAAAQAAAAEAALZRFsRfDzz1AAsD6AAAAADOBOTLAAAAAM4KHDwAAAAAA+gDIQAAAAgAAgAAAAAAAAABAAADIQAAAFoD6AAAAAAD6AABAAAAAAAAAAAAAAAAAAAAAQAAUAAAAgAAAAQD6AH0AAUAAAKKArwAAACMAooCvAAAAeAAMQECAAACAAYJAAAAAAAAAAAAAQAAAAAAAAAAAAAAAFBmRWQAwAAuAC4DIP84AFoDIQAAAAAAAQAAAAAAAAAAACAAIAABAAAADgCuAAEAAAAAAAAAAQAAAAEAAAAAAAEAAQAAAAEAAAAAAAIAAQAAAAEAAAAAAAMAAQAAAAEAAAAAAAQAAQAAAAEAAAAAAAUAAQAAAAEAAAAAAAYAAQAAAAMAAQQJAAAAAgABAAMAAQQJAAEAAgABAAMAAQQJAAIAAgABAAMAAQQJAAMAAgABAAMAAQQJAAQAAgABAAMAAQQJAAUAAgABAAMAAQQJAAYAAgABWABYAAAAAAAAAwAAAAMAAAAcAAEAAAAAADwAAwABAAAAHAAEACAAAAAEAAQAAQAAAC7//wAAAC7////TAAEAAAAAAAABBgAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMAAAAAAAD/gwAyAAAAAQAAAAAAAAAAAAAAAAAAAAABAAQEAAEBAQJYAAEBASH4DwD4GwHEAvgcA/gXBIwMAYuL+nz5tQXkD5j3CBLnEQACAQEBIVhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYAAABAQAADwACAQEEE/t3Dov6fAH6fAT+fPp8+nwHDosMCvm1Cvm1DAz6fBQAAAAAAAABAAAAAMmJbzEAAAAAzgTjFQAAAADOBOQpAAEAAAAAAAAADAAUAAQAAAABAAAAAgABAAAAAAAAAAAD6AAAAAAAAA==",
+							"otherinfo": "OTTO\\x0000\\x000b\\x0000\uFFFD\\x0000\\x0003\\x00000CFF 1\uFFFDf\\x000e\\x0000\\x0000\\x0003\uFFFD\\x0000\\x0000\\x0000\uFFFDFFTMe\uFFFD6p\\x0000\\x0000\\x0004\\x001c\\x0000\\x0000\\x0000\\x001cGDEF\\x0000\\x0014\\x0000\\x0015\\x0000\\x0000\\x00048\\x0000\\x0000\\x0000\\x001eOS/2V\rc\t\\x0000\\x0000\\x0001 \\x0000\\x0000\\x0000`cmap\\x0001\r\\x0002\uFFFD\\x0000\\x0000\\x00024\\x0000\\x0000\\x0001Bhead\uFFFD\\x0015E\r\\x0000\\x0000\\x0000\uFFFD\\x0000\\x0000\\x00006hhea\\x0007d\\x0003\uFFFD\\x0000\\x0000\\x0000\uFFFD\\x0000\\x0000\\x0000$hmtx\\x0003\uFFFD\\x0000\\x0000\\x0000\\x0000\\x0004X\\x0000\\x0000\\x0000\\x0006maxp\\x0000\\x0002P\\x0000\\x0000\\x0000\\x0001\\x0018\\x0000\\x0000\\x0000\\x0006nameX\uFFFDt~\\x0000\\x0000\\x0001\uFFFD\\x0000\\x0000\\x0000\uFFFDpost\uFFFD\uFFFD\\x00003\\x0000\\x0000\\x0003x\\x0000\\x0000\\x0000 \\x0000\\x0001\\x0000\\x0000\\x0000\\x0001\\x0000\\x0000\uFFFDQ\\x0016\uFFFD_\\x000f<\uFFFD\\x0000\\x000b\\x0003\uFFFD\\x0000\\x0000\\x0000\\x0000\uFFFD\\x0004\uFFFD\uFFFD\\x0000\\x0000\\x0000\\x0000\uFFFD\n\\x001c<\\x0000\\x0000\\x0000\\x0000\\x0003\uFFFD\\x0003!\\x0000\\x0000\\x0000\\x0008\\x0000\\x0002\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0001\\x0000\\x0000\\x0003!\\x0000\\x0000\\x0000Z\\x0003\uFFFD\\x0000\\x0000\\x0000\\x0000\\x0003\uFFFD\\x0000\\x0001\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0001\\x0000\\x0000P\\x0000\\x0000\\x0002\\x0000\\x0000\\x0000\\x0004\\x0003\uFFFD\\x0001\uFFFD\\x0000\\x0005\\x0000\\x0000\\x0002\uFFFD\\x0002\uFFFD\\x0000\\x0000\\x0000\uFFFD\\x0002\uFFFD\\x0002\uFFFD\\x0000\\x0000\\x0001\uFFFD\\x00001\\x0001\\x0002\\x0000\\x0000\\x0002\\x0000\\x0006\t\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0001\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000PfEd\\x0000\uFFFD\\x0000.\\x0000.\\x0003 \uFFFD8\\x0000Z\\x0003!\\x0000\\x0000\\x0000\\x0000\\x0000\\x0001\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000 \\x0000 \\x0000\\x0001\\x0000\\x0000\\x0000\\x000e\\x0000\uFFFD\\x0000\\x0001\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0001\\x0000\\x0000\\x0000\\x0001\\x0000\\x0000\\x0000\\x0000\\x0000\\x0001\\x0000\\x0001\\x0000\\x0000\\x0000\\x0001\\x0000\\x0000\\x0000\\x0000\\x0000\\x0002\\x0000\\x0001\\x0000\\x0000\\x0000\\x0001\\x0000\\x0000\\x0000\\x0000\\x0000\\x0003\\x0000\\x0001\\x0000\\x0000\\x0000\\x0001\\x0000\\x0000\\x0000\\x0000\\x0000\\x0004\\x0000\\x0001\\x0000\\x0000\\x0000\\x0001\\x0000\\x0000\\x0000\\x0000\\x0000\\x0005\\x0000\\x0001\\x0000\\x0000\\x0000\\x0001\\x0000\\x0000\\x0000\\x0000\\x0000\\x0006\\x0000\\x0001\\x0000\\x0000\\x0000\\x0003\\x0000\\x0001\\x0004\t\\x0000\\x0000\\x0000\\x0002\\x0000\\x0001\\x0000\\x0003\\x0000\\x0001\\x0004\t\\x0000\\x0001\\x0000\\x0002\\x0000\\x0001\\x0000\\x0003\\x0000\\x0001\\x0004\t\\x0000\\x0002\\x0000\\x0002\\x0000\\x0001\\x0000\\x0003\\x0000\\x0001\\x0004\t\\x0000\\x0003\\x0000\\x0002\\x0000\\x0001\\x0000\\x0003\\x0000\\x0001\\x0004\t\\x0000\\x0004\\x0000\\x0002\\x0000\\x0001\\x0000\\x0003\\x0000\\x0001\\x0004\t\\x0000\\x0005\\x0000\\x0002\\x0000\\x0001\\x0000\\x0003\\x0000\\x0001\\x0004\t\\x0000\\x0006\\x0000\\x0002\\x0000\\x0001X\\x0000X\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0003\\x0000\\x0000\\x0000\\x0003\\x0000\\x0000\\x0000\\x001c\\x0000\\x0001\\x0000\\x0000\\x0000\\x0000\\x0000<\\x0000\\x0003\\x0000\\x0001\\x0000\\x0000\\x0000\\x001c\\x0000\\x0004\\x0000 \\x0000\\x0000\\x0000\\x0004\\x0000\\x0004\\x0000\\x0001\\x0000\\x0000\\x0000.\uFFFD\uFFFD\\x0000\\x0000\\x0000.\uFFFD\uFFFD\uFFFD\uFFFD\\x0000\\x0001\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0001\\x0006\\x0000\\x0000\\x0001\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0001\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0003\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\uFFFD\uFFFD\\x00002\\x0000\\x0000\\x0000\\x0001\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0001\\x0000\\x0004\\x0004\\x0000\\x0001\\x0001\\x0001\\x0002X\\x0000\\x0001\\x0001\\x0001!\uFFFD\\x000f\\x0000\uFFFD\\x001b\\x0001\uFFFD\\x0002\uFFFD\\x001c\\x0003\uFFFD\\x0017\\x0004\uFFFD\\x000c\\x0001\uFFFD\uFFFD\uFFFD|\uFFFD\uFFFD\\x0005\uFFFD\\x000f\uFFFD\uFFFD\\x0008\\x0012\uFFFD\\x0011\\x0000\\x0002\\x0001\\x0001\\x0001!XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\\x0000\\x0000\\x0001\\x0001\\x0000\\x0000\\x000f\\x0000\\x0002\\x0001\\x0001\\x0004\\x0013\uFFFDw\\x000e\uFFFD\uFFFD|\\x0001\uFFFD|\\x0004\uFFFD|\uFFFD|\uFFFD|\\x0007\\x000e\uFFFD\\x000c\n\uFFFD\uFFFD\n\uFFFD\uFFFD\\x000c\\x000c\uFFFD|\\x0014\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0001\\x0000\\x0000\\x0000\\x0000\u0249o1\\x0000\\x0000\\x0000\\x0000\uFFFD\\x0004\uFFFD\\x0015\\x0000\\x0000\\x0000\\x0000\uFFFD\\x0004\uFFFD)\\x0000\\x0001\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x000c\\x0000\\x0014\\x0000\\x0004\\x0000\\x0000\\x0000\\x0001\\x0000\\x0000\\x0000\\x0002\\x0000\\x0001\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000\\x0003\uFFFD\\x0000\\x0000\\x0000\\x0000\\x0000\\x0000"
+						}
+					],
+					"count": "2",
+					"systemic": false,
+					"solution": "<p>Manually confirm that the Base64 data does not leak sensitive information, and that the data cannot be aggregated/used to exploit other vulnerabilities.</p>",
+					"otherinfo": "<p>\\x0000\\x0010\uFFFD\\x0010Q\uFFFD \uFFFD\uFFFD0\u04CFA\\x0014\uFFFDQU\uFFFDa\uFFFD\uFFFDq\u05DF\uFFFD\\x0018\uFFFD\uFFFDY\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\u06EF\uFFFD\\x001c\uFFFD\uFFFD]\uFFFD\u37BB\uFFFD\u07FF</p>",
+					"reference": "<p>https://projects.webappsec.org/w/page/13246936/Information%20Leakage</p>",
+					"cweid": "319",
+					"wascid": "13",
+					"sourceid": "52"
+				},
+				{
+					"pluginid": "10109",
+					"alertRef": "10109",
+					"alert": "Modern Web Application",
+					"name": "Modern Web Application",
+					"riskcode": "0",
+					"confidence": "2",
+					"riskdesc": "Informational (Medium)",
+					"desc": "<p>The application appears to be a modern web application. If you need to explore it automatically then the Client Spider may well be more effective than the standard one.</p>",
+					"instances":[ 
+						{
+							"id": "19",
+							"uri": "http://localhost:3100",
+							"nodeName": "http:\/\/localhost:3100",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "<script src=\"/_next/static/chunks/96e575d4-ad22827a4801cd80.js\" async=\"\" nonce=\"OBqieOZhQhnqkoFhIEjyzw==\"></script>",
+							"otherinfo": "No links have been found while there are scripts, which is an indication that this is a modern web application."
+						},
+						{
+							"id": "20",
+							"uri": "http://localhost:3100",
+							"nodeName": "http:\/\/localhost:3100",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "<script src=\"/_next/static/chunks/96e575d4-ad22827a4801cd80.js\" async=\"\" nonce=\"V+UiJ6yfLntg4om5X1/qGw==\"></script>",
+							"otherinfo": "No links have been found while there are scripts, which is an indication that this is a modern web application."
+						},
+						{
+							"id": "63",
+							"uri": "http://localhost:3100/",
+							"nodeName": "http:\/\/localhost:3100\/",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "<script src=\"/_next/static/chunks/96e575d4-ad22827a4801cd80.js\" async=\"\" nonce=\"CvyIqUK9xOSIJxZskM1dOQ==\"></script>",
+							"otherinfo": "No links have been found while there are scripts, which is an indication that this is a modern web application."
+						},
+						{
+							"id": "16",
+							"uri": "http://localhost:3100/robots.txt",
+							"nodeName": "http:\/\/localhost:3100\/robots.txt",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "<script src=\"/_next/static/chunks/96e575d4-ad22827a4801cd80.js\" async=\"\" nonce=\"LpP704BafXMvd3WzDwcWMg==\"></script>",
+							"otherinfo": "No links have been found while there are scripts, which is an indication that this is a modern web application."
+						},
+						{
+							"id": "15",
+							"uri": "http://localhost:3100/sitemap.xml",
+							"nodeName": "http:\/\/localhost:3100\/sitemap.xml",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "<script src=\"/_next/static/chunks/96e575d4-ad22827a4801cd80.js\" async=\"\" nonce=\"H60iQeE0/C4S9c8h9gWZow==\"></script>",
+							"otherinfo": "No links have been found while there are scripts, which is an indication that this is a modern web application."
+						}
+					],
+					"count": "5",
+					"systemic": false,
+					"solution": "<p>This is an informational alert and so no changes are required.</p>",
+					"otherinfo": "<p>No links have been found while there are scripts, which is an indication that this is a modern web application.</p>",
+					"reference": "",
+					"cweid": "-1",
+					"wascid": "-1",
+					"sourceid": "6"
+				},
+				{
+					"pluginid": "10049",
+					"alertRef": "10049-1",
+					"alert": "Non-Storable Content",
+					"name": "Non-Storable Content",
+					"riskcode": "0",
+					"confidence": "2",
+					"riskdesc": "Informational (Medium)",
+					"desc": "<p>The response contents are not storable by caching components such as proxy servers. If the response does not contain sensitive, personal or user-specific information, it may benefit from being stored and cached, to improve performance.</p>",
+					"instances":[ 
+						{
+							"id": "33",
+							"uri": "http://localhost:3100",
+							"nodeName": "http:\/\/localhost:3100",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "no-store",
+							"otherinfo": ""
+						},
+						{
+							"id": "39",
+							"uri": "http://localhost:3100/robots.txt",
+							"nodeName": "http:\/\/localhost:3100\/robots.txt",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "no-store",
+							"otherinfo": ""
+						},
+						{
+							"id": "40",
+							"uri": "http://localhost:3100/sitemap.xml",
+							"nodeName": "http:\/\/localhost:3100\/sitemap.xml",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "no-store",
+							"otherinfo": ""
+						}
+					],
+					"count": "3",
+					"systemic": false,
+					"solution": "<p>The content may be marked as storable by ensuring that the following conditions are satisfied:</p><p>The request method must be understood by the cache and defined as being cacheable (\"GET\", \"HEAD\", and \"POST\" are currently defined as cacheable)</p><p>The response status code must be understood by the cache (one of the 1XX, 2XX, 3XX, 4XX, or 5XX response classes are generally understood)</p><p>The \"no-store\" cache directive must not appear in the request or response header fields</p><p>For caching by \"shared\" caches such as \"proxy\" caches, the \"private\" response directive must not appear in the response</p><p>For caching by \"shared\" caches such as \"proxy\" caches, the \"Authorization\" header field must not appear in the request, unless the response explicitly allows it (using one of the \"must-revalidate\", \"public\", or \"s-maxage\" Cache-Control response directives)</p><p>In addition to the conditions above, at least one of the following conditions must also be satisfied by the response:</p><p>It must contain an \"Expires\" header field</p><p>It must contain a \"max-age\" response directive</p><p>For \"shared\" caches such as \"proxy\" caches, it must contain a \"s-maxage\" response directive</p><p>It must contain a \"Cache Control Extension\" that allows it to be cached</p><p>It must have a status code that is defined as cacheable by default (200, 203, 204, 206, 300, 301, 404, 405, 410, 414, 501).</p>",
+					"otherinfo": "",
+					"reference": "<p>https://datatracker.ietf.org/doc/html/rfc7234</p><p>https://datatracker.ietf.org/doc/html/rfc7231</p><p>https://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html</p>",
+					"cweid": "524",
+					"wascid": "13",
+					"sourceid": "6"
+				},
+				{
+					"pluginid": "90005",
+					"alertRef": "90005-3",
+					"alert": "Sec-Fetch-Dest Header is Missing",
+					"name": "Sec-Fetch-Dest Header is Missing",
+					"riskcode": "0",
+					"confidence": "3",
+					"riskdesc": "Informational (High)",
+					"desc": "<p>Specifies how and where the data would be used. For instance, if the value is audio, then the requested resource must be audio data and not any other type of resource.</p>",
+					"instances":[ 
+						{
+							"id": "24",
+							"uri": "http://localhost:3100/_next/static/css/86498b921adc386d.css",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/css\/86498b921adc386d.css",
+							"method": "GET",
+							"param": "Sec-Fetch-Dest",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "8",
+							"uri": "http://localhost:3100/_next/static/css/f6de2bba3bf22cdd.css",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/css\/f6de2bba3bf22cdd.css",
+							"method": "GET",
+							"param": "Sec-Fetch-Dest",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "7",
+							"uri": "http://localhost:3100/icon.svg",
+							"nodeName": "http:\/\/localhost:3100\/icon.svg",
+							"method": "GET",
+							"param": "Sec-Fetch-Dest",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						}
+					],
+					"count": "3",
+					"systemic": false,
+					"solution": "<p>Ensure that Sec-Fetch-Dest header is included in request headers.</p>",
+					"otherinfo": "",
+					"reference": "<p>https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Sec-Fetch-Dest</p>",
+					"cweid": "352",
+					"wascid": "9",
+					"sourceid": "18"
+				},
+				{
+					"pluginid": "90005",
+					"alertRef": "90005-2",
+					"alert": "Sec-Fetch-Mode Header is Missing",
+					"name": "Sec-Fetch-Mode Header is Missing",
+					"riskcode": "0",
+					"confidence": "3",
+					"riskdesc": "Informational (High)",
+					"desc": "<p>Allows to differentiate between requests for navigating between HTML pages and requests for loading resources like images, audio etc.</p>",
+					"instances":[ 
+						{
+							"id": "23",
+							"uri": "http://localhost:3100/_next/static/css/86498b921adc386d.css",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/css\/86498b921adc386d.css",
+							"method": "GET",
+							"param": "Sec-Fetch-Mode",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "6",
+							"uri": "http://localhost:3100/_next/static/css/f6de2bba3bf22cdd.css",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/css\/f6de2bba3bf22cdd.css",
+							"method": "GET",
+							"param": "Sec-Fetch-Mode",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "5",
+							"uri": "http://localhost:3100/icon.svg",
+							"nodeName": "http:\/\/localhost:3100\/icon.svg",
+							"method": "GET",
+							"param": "Sec-Fetch-Mode",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						}
+					],
+					"count": "3",
+					"systemic": false,
+					"solution": "<p>Ensure that Sec-Fetch-Mode header is included in request headers.</p>",
+					"otherinfo": "",
+					"reference": "<p>https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Sec-Fetch-Mode</p>",
+					"cweid": "352",
+					"wascid": "9",
+					"sourceid": "18"
+				},
+				{
+					"pluginid": "90005",
+					"alertRef": "90005-1",
+					"alert": "Sec-Fetch-Site Header is Missing",
+					"name": "Sec-Fetch-Site Header is Missing",
+					"riskcode": "0",
+					"confidence": "3",
+					"riskdesc": "Informational (High)",
+					"desc": "<p>Specifies the relationship between request initiator's origin and target's origin.</p>",
+					"instances":[ 
+						{
+							"id": "22",
+							"uri": "http://localhost:3100/_next/static/css/86498b921adc386d.css",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/css\/86498b921adc386d.css",
+							"method": "GET",
+							"param": "Sec-Fetch-Site",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "3",
+							"uri": "http://localhost:3100/_next/static/css/f6de2bba3bf22cdd.css",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/css\/f6de2bba3bf22cdd.css",
+							"method": "GET",
+							"param": "Sec-Fetch-Site",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "4",
+							"uri": "http://localhost:3100/icon.svg",
+							"nodeName": "http:\/\/localhost:3100\/icon.svg",
+							"method": "GET",
+							"param": "Sec-Fetch-Site",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						}
+					],
+					"count": "3",
+					"systemic": false,
+					"solution": "<p>Ensure that Sec-Fetch-Site header is included in request headers.</p>",
+					"otherinfo": "",
+					"reference": "<p>https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Sec-Fetch-Site</p>",
+					"cweid": "352",
+					"wascid": "9",
+					"sourceid": "18"
+				},
+				{
+					"pluginid": "90005",
+					"alertRef": "90005-4",
+					"alert": "Sec-Fetch-User Header is Missing",
+					"name": "Sec-Fetch-User Header is Missing",
+					"riskcode": "0",
+					"confidence": "3",
+					"riskdesc": "Informational (High)",
+					"desc": "<p>Specifies if a navigation request was initiated by a user.</p>",
+					"instances":[ 
+						{
+							"id": "25",
+							"uri": "http://localhost:3100/_next/static/css/86498b921adc386d.css",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/css\/86498b921adc386d.css",
+							"method": "GET",
+							"param": "Sec-Fetch-User",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "10",
+							"uri": "http://localhost:3100/_next/static/css/f6de2bba3bf22cdd.css",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/css\/f6de2bba3bf22cdd.css",
+							"method": "GET",
+							"param": "Sec-Fetch-User",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "9",
+							"uri": "http://localhost:3100/icon.svg",
+							"nodeName": "http:\/\/localhost:3100\/icon.svg",
+							"method": "GET",
+							"param": "Sec-Fetch-User",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						}
+					],
+					"count": "3",
+					"systemic": false,
+					"solution": "<p>Ensure that Sec-Fetch-User header is included in user initiated requests.</p>",
+					"otherinfo": "",
+					"reference": "<p>https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Sec-Fetch-User</p>",
+					"cweid": "352",
+					"wascid": "9",
+					"sourceid": "18"
+				},
+				{
+					"pluginid": "10049",
+					"alertRef": "10049-3",
+					"alert": "Storable and Cacheable Content",
+					"name": "Storable and Cacheable Content",
+					"riskcode": "0",
+					"confidence": "2",
+					"riskdesc": "Informational (Medium)",
+					"desc": "<p>The response contents are storable by caching components such as proxy servers, and may be retrieved directly from the cache, rather than from the origin server by the caching servers, in response to similar requests from other users. If the response data is sensitive, personal or user-specific, this may result in sensitive information being leaked. In some cases, this may even result in a user gaining complete control of the session of another user, depending on the configuration of the caching components in use in their environment. This is primarily an issue where \"shared\" caching servers such as \"proxy\" caches are configured on the local network. This configuration is typically found in corporate or educational environments, for instance.</p>",
+					"instances":[ 
+						{
+							"id": "44",
+							"uri": "http://localhost:3100/_next/static/chunks/main-app-d3ce311ae5167d41.js",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/chunks\/main-app-d3ce311ae5167d41.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "max-age=31536000",
+							"otherinfo": ""
+						},
+						{
+							"id": "30",
+							"uri": "http://localhost:3100/_next/static/chunks/webpack-83f5c9926880dbaa.js",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/chunks\/webpack-83f5c9926880dbaa.js",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "max-age=31536000",
+							"otherinfo": ""
+						},
+						{
+							"id": "41",
+							"uri": "http://localhost:3100/_next/static/css/551b8e253753964c.css",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/css\/551b8e253753964c.css",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "max-age=31536000",
+							"otherinfo": ""
+						},
+						{
+							"id": "26",
+							"uri": "http://localhost:3100/_next/static/css/86498b921adc386d.css",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/css\/86498b921adc386d.css",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "max-age=31536000",
+							"otherinfo": ""
+						},
+						{
+							"id": "12",
+							"uri": "http://localhost:3100/_next/static/css/f6de2bba3bf22cdd.css",
+							"nodeName": "http:\/\/localhost:3100\/_next\/static\/css\/f6de2bba3bf22cdd.css",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "max-age=31536000",
+							"otherinfo": ""
+						}
+					],
+					"count": "5",
+					"systemic": true,
+					"solution": "<p>Validate that the response does not contain sensitive, personal or user-specific information. If it does, consider the use of the following HTTP response headers, to limit, or prevent the content being stored and retrieved from the cache by another user:</p><p>Cache-Control: no-cache, no-store, must-revalidate, private</p><p>Pragma: no-cache</p><p>Expires: 0</p><p>This configuration directs both HTTP 1.0 and HTTP 1.1 compliant caching servers to not store the response, and to not retrieve the response (without validation) from the cache, in response to a similar request.</p>",
+					"otherinfo": "",
+					"reference": "<p>https://datatracker.ietf.org/doc/html/rfc7234</p><p>https://datatracker.ietf.org/doc/html/rfc7231</p><p>https://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html</p>",
+					"cweid": "524",
+					"wascid": "13",
+					"sourceid": "38"
+				},
+				{
+					"pluginid": "10049",
+					"alertRef": "10049-2",
+					"alert": "Storable but Non-Cacheable Content",
+					"name": "Storable but Non-Cacheable Content",
+					"riskcode": "0",
+					"confidence": "2",
+					"riskdesc": "Informational (Medium)",
+					"desc": "<p>The response contents are storable by caching components such as proxy servers, but will not be retrieved directly from the cache, without validating the request upstream, in response to similar requests from other users.</p>",
+					"instances":[ 
+						{
+							"id": "11",
+							"uri": "http://localhost:3100/icon.svg",
+							"nodeName": "http:\/\/localhost:3100\/icon.svg",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "max-age=0",
+							"otherinfo": ""
+						},
+						{
+							"id": "28",
+							"uri": "http://localhost:3100/nycu-favicon.svg",
+							"nodeName": "http:\/\/localhost:3100\/nycu-favicon.svg",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "max-age=0",
+							"otherinfo": ""
+						}
+					],
+					"count": "2",
+					"systemic": false,
+					"solution": "",
+					"otherinfo": "",
+					"reference": "<p>https://datatracker.ietf.org/doc/html/rfc7234</p><p>https://datatracker.ietf.org/doc/html/rfc7231</p><p>https://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html</p>",
+					"cweid": "524",
+					"wascid": "13",
+					"sourceid": "21"
+				}
+			]
+		}
+	],
+	"sequences":[
+	]
+
+}
